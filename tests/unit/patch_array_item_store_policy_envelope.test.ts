@@ -38,6 +38,8 @@ describe("patch_array_item maps StorePolicyDeniedError like its correct() siblin
     expect(nextRoute, "could not bound the /patch_array_item handler").toBeGreaterThan(routeStart);
     const handler = source.slice(routeStart, nextRoute);
 
+    expect(handler).toMatch(/^app\.post\("\/patch_array_item", writeRateLimit,/);
+
     expect(
       handler.includes("StorePolicyDeniedError"),
       "the /patch_array_item catch block must branch on StorePolicyDeniedError " +

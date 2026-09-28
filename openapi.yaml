@@ -1510,6 +1510,10 @@ components:
         last_observation_at:
           type: string
           format: date-time
+        entity_version:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: Opaque CAS token that changes for every committed observation.
         canonical_name:
           type: string
           nullable: true
@@ -8174,7 +8178,7 @@ paths:
                     Optional entity-level optimistic-concurrency precondition.
                     When supplied, the correction is refused with
                     `409 ERR_FIELD_VERSION_CONFLICT` if the entity's current
-                    `last_observation_at` no longer matches this value (unless
+                    collision-safe `entity_version` no longer matches this value (unless
                     `overwrite` is also true). Omitted: zero behavior change
                     from the legacy unconditional-insert path. Entity-scoped
                     (any field changing trips it) — use `/patch_array_item`
@@ -8208,6 +8212,13 @@ paths:
                   value: {}
                   message:
                     type: string
+                  replayed:
+                    type: boolean
+                    description: True when this is the exact result of an earlier committed request with the same idempotency key.
+                  entity_version:
+                    type: string
+                    pattern: "^[a-f0-9]{64}$"
+                    description: Fresh entity-level CAS token after the committed correction.
                   success:
                     type: boolean
                     description: |
@@ -8261,6 +8272,9 @@ paths:
             the caller-supplied `entity_type` differs from the target entity's
             authoritative stored type; no observation is written. Other
             validation errors use the generic `ErrorEnvelope`.
+            `ERR_IDEMPOTENCY_MISMATCH` means the key already committed a
+            different canonical correction payload; the original result is
+            unchanged and no new observation is written.
           content:
             application/json:
               schema:
@@ -8290,8 +8304,8 @@ paths:
             the other owner's identity or fields.
 
             `ERR_FIELD_VERSION_CONFLICT` — the caller supplied
-            `expected_version` and the entity's current `last_observation_at`
-            no longer matches. No observation is written. The envelope
+            `expected_version` and it no longer matches the entity's current
+            collision-safe `entity_version`. No observation is written. The envelope
             details carry `entity_id`, `field`, `stored_version`, and
             `expected_version` so the caller can re-read and retry. Entity-
             scoped (any field changing trips it); use `/patch_array_item` for
@@ -8371,10 +8385,16 @@ paths:
                     `key_field` for the write to be reflected in the
                     snapshot's reducer output.
                 key_value:
-                  description: Non-null JSON scalar identifying the row.
+                  description: |
+                    Portable non-null JSON scalar identifying the row. Numbers
+                    must be finite safe integers. The reducer preserves older
+                    rows with non-scalar or unsafe-number keys as unkeyed legacy
+                    rows, but new patches cannot create them.
                   oneOf:
                     - type: string
                     - type: number
+                      minimum: -9007199254740991
+                      maximum: 9007199254740991
                     - type: boolean
                 item:
                   type: object
@@ -8389,11 +8409,19 @@ paths:
                   description: |
                     Content-hash version of the item as last observed by the
                     caller (returned as `item_version` by a prior patch, or
-                    computable client-side by the same stable-serialization
-                    rule). When supplied and stale, the patch is refused with
+                    computable client-side as SHA-256 over UTF-8 stable
+                    serialization: object keys sort lexicographically, arrays
+                    preserve order, and scalar values use JSON spellings).
+                    When supplied and stale, the patch is refused with
                     `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
                     Omit to always last-write-win on this one row (still
                     scoped — never touches other keys).
+                expected_item_absent:
+                  type: boolean
+                  description: |
+                    When true, create only if no item with `key_value` exists.
+                    Concurrent creators for the same key produce one success
+                    and one `409 ERR_ARRAY_ITEM_CONFLICT` with the committed item.
                 idempotency_key:
                   type: string
                 user_id:
@@ -8433,12 +8461,17 @@ paths:
                     description: Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races.
                   array_length:
                     type: integer
+                  replayed:
+                    type: boolean
+                    description: True when this response replays the exact prior committed result for the idempotency key.
         "400":
           description: |
             Validation failed, the supplied entity type or key field does not
             match the stored/schema-declared value, the field is not an array
             with an active `merge_array_by_key` policy, or the instance store
-            policy denied the write. No observation is written.
+            policy denied the write. `ERR_IDEMPOTENCY_MISMATCH` means the key
+            already committed a different canonical request payload. No
+            observation is written.
           content:
             application/json:
               schema:
@@ -8463,6 +8496,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429":
+          description: |
+            Shared authenticated write-rate limit exceeded. Keyed-item patches
+            use the same bounded write bucket as `/store` so
+            repeated full-array observations cannot grow without a time bound.
+          content:
+            text/plain:
+              schema:
+                type: string
         "503":
           description: |
             `ERR_STORE_POLICY_UNAVAILABLE` — the instance could not read its

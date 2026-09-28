@@ -93,9 +93,10 @@ For a field whose schema declares `strategy: "merge_array_by_key"`, patch one it
 
 ```bash
 neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"in_review"}'
+neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"queued"}' --expected-item-absent
 ```
 
-`keyValue` must be a non-null JSON scalar (string, number, or boolean). A stale `--expected-item-version` (from a prior patch's `item_version`) returns a structured conflict (exit code non-zero, `status: "conflict"` with `current_item` / `current_item_version` in the JSON output) instead of overwriting; re-apply your change against `current_item` and retry with the fresh version. See `docs/developer/mcp/instructions.md` [ENTITY & RELATIONSHIP LIFECYCLE] "Patching structured array fields" for the full contract (why this exists, same-key vs disjoint-key semantics, and the `correct` `expected_version` sibling for non-array fields).
+`keyValue` must be a string, boolean, or finite JSON number within the safe-integer range. A stale `--expected-item-version` (from a prior patch's `item_version`) returns a structured conflict (exit code non-zero, `status: "conflict"` with `current_item` / `current_item_version` in the JSON output) instead of overwriting; re-apply your change against `current_item` and retry with the fresh version. `--expected-item-absent` makes creation race-safe: exactly one concurrent creator succeeds. For non-array fields, read `entity_version` with `neotoma entities get`, then pass it to `neotoma corrections create <id> --expected-version <token>`; `--entity-type` is optional because the CLI resolves the stored type. See `docs/developer/mcp/instructions.md` [ENTITY & RELATIONSHIP LIFECYCLE] "Patching structured array fields" for the full contract.
 
 ## Pre-check before storing (CLI backup)
 

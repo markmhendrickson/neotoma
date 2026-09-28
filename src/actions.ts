@@ -700,23 +700,28 @@ const WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
   Number.parseInt(process.env.NEOTOMA_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 120
 );
-const writeRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: WRITE_RATE_LIMIT_PER_MIN,
-  keyGenerator: (req) => {
-    const userId =
-      ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
-        | string
-        | undefined) || "";
-    if (userId) return `u:${userId}`;
-    // Use the library-provided IPv6-safe key helper; keying directly on
-    // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
-    return `ip:${ipKeyGenerator(req.ip || "")}`;
-  },
-  skip: isInternalSeedRequest,
-  message: "Write rate limit exceeded, please slow down",
-  ...rateLimitOptions,
-});
+/** Build the shared write limiter; exported so its limiting effect is testable without a listener. */
+export function createWriteRateLimit(max: number = WRITE_RATE_LIMIT_PER_MIN) {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    max,
+    keyGenerator: (req) => {
+      const userId =
+        ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
+          | string
+          | undefined) || "";
+      if (userId) return `u:${userId}`;
+      // Use the library-provided IPv6-safe key helper; keying directly on
+      // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
+      return `ip:${ipKeyGenerator(req.ip || "")}`;
+    },
+    skip: isInternalSeedRequest,
+    message: "Write rate limit exceeded, please slow down",
+    ...rateLimitOptions,
+  });
+}
+
+const writeRateLimit = createWriteRateLimit();
 
 // SECURITY: guest-capable write routes (issue submission / thread append,
 // subscribe / unsubscribe) should not share the broader `/store` bucket.
@@ -12404,8 +12409,10 @@ app.post("/correct", async (req, res) => {
         entity_id,
         entity_type,
         field,
-        value,
+        value: result.value,
         isUnknownField,
+        replayed: result.replayed,
+        entity_version: result.entity_version,
       }),
     });
   } catch (error) {
@@ -12416,6 +12423,7 @@ app.post("/correct", async (req, res) => {
     const {
       CorrectionSchemaNotFoundError,
       CorrectionEntityTypeMismatchError,
+      CorrectionIdempotencyMismatchError,
       FieldVersionConflictError,
     } = await import("./services/correction.js");
     if (error instanceof CorrectionSchemaNotFoundError) {
@@ -12434,6 +12442,14 @@ app.post("/correct", async (req, res) => {
         })
       );
     }
+    if (error instanceof CorrectionIdempotencyMismatchError) {
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          idempotency_key: error.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct correction payload.",
+        })
+      );
+    }
     // Waxwing ADR: stale expected_version on /correct. Nothing was written —
     // the precondition check runs before createCorrection. Flat standard
     // envelope (error_code/message/details), matching the OpenAPI contract
@@ -12448,7 +12464,7 @@ app.post("/correct", async (req, res) => {
           field: error.field,
           stored_version: error.storedVersion,
           expected_version: error.expectedVersion,
-          hint: "Re-read the entity snapshot and retry with its current last_observation_at as expected_version.",
+          hint: "Re-read the entity snapshot and retry with its current entity_version as expected_version.",
         })
       );
     }
@@ -12476,7 +12492,7 @@ app.post("/correct", async (req, res) => {
 // POST /patch_array_item - Atomically patch one item of a structured array
 // field by key (Waxwing ADR, ent_4b41bb83a4faf4428a73bfc8). Sibling of
 // /correct; see openapi.yaml for the full contract.
-app.post("/patch_array_item", async (req, res) => {
+app.post("/patch_array_item", writeRateLimit, async (req, res) => {
   const parsed = PatchArrayItemRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:patch_array_item", req, { issues: parsed.error.issues });
@@ -12485,8 +12501,16 @@ app.post("/patch_array_item", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const { entity_id, entity_type, field, key_field, key_value, item, expected_item_version } =
-      parsed.data;
+    const {
+      entity_id,
+      entity_type,
+      field,
+      key_field,
+      key_value,
+      item,
+      expected_item_version,
+      expected_item_absent,
+    } = parsed.data;
 
     // Resolve the authoritative entity type under the authenticated user
     // before capability/protected-type checks. The request's entity_type is a
@@ -12519,6 +12543,7 @@ app.post("/patch_array_item", async (req, res) => {
       key_value,
       item,
       expected_item_version,
+      expected_item_absent,
       idempotency_key: parsed.data.idempotency_key,
     });
 
@@ -12537,6 +12562,7 @@ app.post("/patch_array_item", async (req, res) => {
             current_item: result.conflict?.current_item ?? null,
             current_item_version: result.conflict?.current_item_version ?? null,
             expected_item_version: result.conflict?.expected_item_version ?? null,
+            expected_item_absent: expected_item_absent ?? false,
             hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
           }
         )
@@ -12554,10 +12580,20 @@ app.post("/patch_array_item", async (req, res) => {
       item: result.item,
       item_version: result.item_version,
       array_length: result.array_length,
+      replayed: result.replayed ?? false,
     });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Entity not found")) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
+    }
+    const { CorrectionIdempotencyMismatchError } = await import("./services/correction.js");
+    if (error instanceof CorrectionIdempotencyMismatchError) {
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          idempotency_key: error.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct patch payload.",
+        })
+      );
     }
     if (error instanceof EntityOwnerConflictError) {
       return res.status(409).json({ error: error.toErrorEnvelope() });

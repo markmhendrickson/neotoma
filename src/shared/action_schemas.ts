@@ -856,7 +856,7 @@ export const CorrectEntityRequestSchema = z.object({
    * Optional entity-level optimistic-concurrency precondition (Waxwing ADR,
    * ent_4b41bb83a4faf4428a73bfc8). When supplied, the correction is refused
    * with `ERR_FIELD_VERSION_CONFLICT` if the entity's current
-   * `last_observation_at` no longer matches — unless `overwrite` is also
+   * collision-safe `entity_version` no longer matches — unless `overwrite` is also
    * true. Omitted (the default): zero behavior change from the legacy
    * unconditional-insert path.
    */
@@ -876,9 +876,15 @@ export const PatchArrayItemRequestSchema = z.object({
   key_field: z.string().min(1),
   // Keyed reduction treats null/missing as an unkeyed legacy item, so the
   // write surface accepts only non-null JSON scalars as stable identities.
-  key_value: z.union([z.string(), z.number(), z.boolean()]),
+  key_value: z.union([
+    z.string(),
+    z.number().finite().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    z.boolean(),
+  ]),
   item: z.record(z.unknown()),
   expected_item_version: z.string().optional(),
+  /** Refuse if the keyed item already exists; used for race-safe creation. */
+  expected_item_absent: z.boolean().optional(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
 });

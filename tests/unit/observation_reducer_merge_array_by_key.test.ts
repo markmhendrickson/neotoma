@@ -15,7 +15,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
+import {
+  MAX_MERGE_ARRAY_BY_KEY_ITEMS,
+  MergeArrayByKeyLimitError,
+  ObservationReducer,
+  type Observation,
+} from "../../src/reducers/observation_reducer.js";
 
 vi.mock("../../src/services/schema_registry.js", () => ({
   DEFAULT_OBSERVATION_SOURCE_PRIORITY: [
@@ -305,5 +310,28 @@ describe("ObservationReducer - merge_array_by_key", () => {
 
     const snapshot = await reducer.computeSnapshot(testEntityId, [first, second]);
     expect(snapshot!.snapshot.tasks_claimed).toEqual([item]);
+  });
+
+  it("treats historical non-scalar and unsafe-number keys as unkeyed legacy rows", async () => {
+    const rows = [
+      { claim_id: { legacy: 1 }, status: "object-key" },
+      { claim_id: Number.MAX_SAFE_INTEGER + 1, status: "unsafe-number" },
+      { claim_id: "portable", status: "scalar" },
+    ];
+    const snapshot = await reducer.computeSnapshot(testEntityId, [
+      makeObs({ id: "obs_legacy_keys", fields: { tasks_claimed: rows } }),
+    ]);
+    expect(snapshot!.snapshot.tasks_claimed).toEqual([rows[2], rows[0], rows[1]]);
+  });
+
+  it("fails deterministically when repeated full arrays exceed the reduction budget", async () => {
+    const oversized = Array.from({ length: MAX_MERGE_ARRAY_BY_KEY_ITEMS + 1 }, (_, index) => ({
+      claim_id: `row-${index}`,
+    }));
+    await expect(
+      reducer.computeSnapshot(testEntityId, [
+        makeObs({ id: "obs_oversized", fields: { tasks_claimed: oversized } }),
+      ])
+    ).rejects.toBeInstanceOf(MergeArrayByKeyLimitError);
   });
 });

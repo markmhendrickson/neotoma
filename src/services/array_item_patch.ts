@@ -20,9 +20,9 @@
  *   `merge_array_by_key`'s latest-observed_at-wins semantics, or refused as a
  *   conflict when the caller supplies `expected_item_version`.
  *
- * Relationship to `batch_correction.ts`: that module's `expected_
- *   last_observation_at` CAS is entity-scoped (any field changed since load
- *   → conflict). This module reuses its `stableSerialize` helper to compute
+ * Relationship to entity CAS: `/correct`'s opaque `entity_version` is
+ *   entity-scoped (any field changed since load → conflict). This module
+ *   reuses the same `stableSerialize` primitive to compute
  *   a content-hash `expected_item_version` scoped to ONE array item, so two
  *   writers touching different rows never spuriously conflict — the actual
  *   gap `applyBatchCorrection` cannot close for this access pattern.
@@ -33,10 +33,14 @@
  */
 import { createHash } from "node:crypto";
 import { getDb } from "../repositories/db/connection.js";
-import { createCorrection } from "./correction.js";
+import {
+  createCorrection,
+  emitCommittedCorrection,
+  findCommittedCorrectionReplay,
+} from "./correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { loadCodeDefinedSchemaEntry, schemaRegistry } from "./schema_registry.js";
-import { stableSerialize } from "./stable_serialize.js";
+import { canonicalizePortableScalarKey, stableSerialize } from "./stable_serialize.js";
 
 /**
  * Thrown when a `patch_array_item` call's `key_field` does not match the
@@ -189,7 +193,11 @@ export interface ArrayItemPatchOptions {
    * scoped — it never touches other keys).
    */
   expected_item_version?: string | null;
+  /** Refuse if the keyed item already exists; race-safe create semantics. */
+  expected_item_absent?: boolean;
   idempotency_key: string;
+  /** @internal rollback fault injection for publication tests. */
+  before_commit?: () => void | Promise<void>;
 }
 
 export type ArrayItemPatchStatus = "applied" | "conflict";
@@ -214,6 +222,7 @@ export interface ArrayItemPatchResult {
   array_length?: number;
   conflict?: ArrayItemPatchConflict;
   snapshot?: Record<string, unknown> | null;
+  replayed?: boolean;
 }
 
 /** Deterministic content-hash version token for one array item. Reuses the
@@ -227,7 +236,22 @@ export function computeItemVersion(item: unknown): string {
 function keyMatches(item: unknown, keyField: string, keyValue: unknown): boolean {
   if (item === null || typeof item !== "object" || Array.isArray(item)) return false;
   const candidate = (item as Record<string, unknown>)[keyField];
-  return stableSerialize(candidate) === stableSerialize(keyValue);
+  const candidateKey = canonicalizePortableScalarKey(candidate);
+  const requestedKey = canonicalizePortableScalarKey(keyValue);
+  return candidateKey !== null && candidateKey === requestedKey;
+}
+
+function patchIdempotencyPayload(options: ArrayItemPatchOptions): Record<string, unknown> {
+  return {
+    entity_id: options.entity_id,
+    entity_type: options.entity_type ?? null,
+    field: options.field,
+    key_field: options.key_field,
+    key_value: options.key_value,
+    item: options.item,
+    expected_item_version: options.expected_item_version ?? null,
+    expected_item_absent: options.expected_item_absent ?? false,
+  };
 }
 
 export async function loadArrayItemPatchTarget(params: {
@@ -278,9 +302,42 @@ export async function patchArrayItem(
   // either inserts, which is conflict detection in name only. Queries made
   // through the shared `db` handle inside this callback join this transaction
   // via the driver's AsyncLocalStorage routing.
-  return database.transaction(async () => {
+  const result = await database.transaction(async () => {
     const { entity_id, user_id, field, key_field, key_value, item, expected_item_version } =
       options;
+
+    const replay = await findCommittedCorrectionReplay({
+      entity_id,
+      entity_type: options.entity_type ?? "unknown",
+      user_id,
+      field,
+      value: null,
+      schema_version: "1.0",
+      idempotency_key: options.idempotency_key,
+      idempotency_operation: "patch_array_item",
+      idempotency_payload: patchIdempotencyPayload(options),
+    });
+    if (replay) {
+      const replayArray = Array.isArray(replay.value) ? replay.value : [];
+      const replayItem = replayArray.find((entry) => keyMatches(entry, key_field, key_value));
+      if (replayItem === undefined || replayItem === null || typeof replayItem !== "object") {
+        throw new Error("Committed patch replay does not contain its keyed item");
+      }
+      return {
+        status: "applied" as const,
+        entity_id,
+        entity_type: options.entity_type ?? "unknown",
+        field,
+        key_field,
+        key_value,
+        observation_id: replay.observation_id,
+        item: replayItem as Record<string, unknown>,
+        item_version: computeItemVersion(replayItem),
+        array_length: replayArray.length,
+        snapshot: replay.snapshot,
+        replayed: true,
+      };
+    }
 
     const current = await getEntityWithProvenance(entity_id, false, user_id);
     if (!current) throw new Error(`Entity not found: ${entity_id}`);
@@ -340,6 +397,23 @@ export async function patchArrayItem(
       existingIndex >= 0 ? (currentArray[existingIndex] as Record<string, unknown>) : null;
     const existingVersion = existingItem ? computeItemVersion(existingItem) : null;
 
+    if (options.expected_item_absent === true && existingItem !== null) {
+      return {
+        status: "conflict" as const,
+        entity_id,
+        entity_type,
+        field,
+        key_field,
+        key_value,
+        snapshot,
+        conflict: {
+          current_item: existingItem,
+          current_item_version: existingVersion,
+          expected_item_version: null,
+        },
+      };
+    }
+
     // A caller that supplies expected_item_version is asserting "I expect the
     // stored item to have exactly this version" — including the case where
     // existingVersion is null (the row does not exist yet), which mirrors
@@ -348,7 +422,7 @@ export async function patchArrayItem(
     // null vs. a supplied string) refuses rather than overwrites/creates.
     if (typeof expected_item_version === "string" && existingVersion !== expected_item_version) {
       return {
-        status: "conflict",
+        status: "conflict" as const,
         entity_id,
         entity_type,
         field,
@@ -384,10 +458,16 @@ export async function patchArrayItem(
       schema_version: schemaVersion,
       user_id,
       idempotency_key: options.idempotency_key,
+      idempotency_operation: "patch_array_item",
+      idempotency_payload: patchIdempotencyPayload(options),
+      defer_substrate_events: true,
+      in_transaction: true,
     });
 
+    await options.before_commit?.();
+
     return {
-      status: "applied",
+      status: "applied" as const,
       entity_id,
       entity_type,
       field,
@@ -398,6 +478,18 @@ export async function patchArrayItem(
       item_version: computeItemVersion(mergedItem),
       array_length: nextArray.length,
       snapshot: (result.snapshot as Record<string, unknown>) ?? null,
+      replayed: false,
+      ...(result.deferred_substrate_event
+        ? { deferred_substrate_event: result.deferred_substrate_event }
+        : {}),
     };
   });
+  const deferred = (
+    result as ArrayItemPatchResult & {
+      deferred_substrate_event?: Parameters<typeof emitCommittedCorrection>[0];
+    }
+  ).deferred_substrate_event;
+  if (deferred) emitCommittedCorrection(deferred);
+  if (deferred) delete (result as Record<string, unknown>).deferred_substrate_event;
+  return result;
 }

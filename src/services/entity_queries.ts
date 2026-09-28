@@ -8,6 +8,7 @@ import {
   isCursorEligibleSort,
   type CursorPayload,
 } from "./entity_cursor.js";
+import { computeEntityVersion } from "./entity_version.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -128,6 +129,8 @@ export interface EntityWithProvenance {
   raw_fragments?: Record<string, unknown>; // Unvalidated fields not yet in schema
   observation_count: number;
   last_observation_at: string;
+  /** Opaque CAS token that advances for every committed observation. */
+  entity_version: string;
   provenance: Record<string, unknown>;
   computed_at?: string;
   merged_to_entity_id?: string | null;
@@ -862,6 +865,8 @@ export async function queryEntities(
     const rawFragments = rawFragmentsByEntity.get(entity.id);
     const snapshotData = (snapshot?.snapshot ?? {}) as Record<string, unknown>;
     const lightweightStatus = snapshotData["status"];
+    const observationCount = snapshot?.observation_count || 0;
+    const lastObservationAt = snapshot?.last_observation_at || entity.created_at;
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
@@ -876,8 +881,13 @@ export async function queryEntities(
         includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
           ? rawFragments
           : undefined,
-      observation_count: snapshot?.observation_count || 0,
-      last_observation_at: snapshot?.last_observation_at || entity.created_at,
+      observation_count: observationCount,
+      last_observation_at: lastObservationAt,
+      entity_version: computeEntityVersion({
+        entity_id: entity.id,
+        observation_count: observationCount,
+        last_observation_at: lastObservationAt,
+      }),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,
@@ -1113,6 +1123,8 @@ export async function getEntityWithProvenance(
     );
   }
 
+  const observationCount = effectiveSnapshot?.observation_count || 0;
+  const lastObservationAt = effectiveSnapshot?.last_observation_at || entity.created_at;
   return {
     entity_id: entity.id,
     entity_type: entity.entity_type,
@@ -1120,8 +1132,13 @@ export async function getEntityWithProvenance(
     schema_version: effectiveSnapshot?.schema_version || "1.0",
     snapshot: effectiveSnapshot?.snapshot || {},
     raw_fragments: Object.keys(rawFragments).length > 0 ? rawFragments : undefined,
-    observation_count: effectiveSnapshot?.observation_count || 0,
-    last_observation_at: effectiveSnapshot?.last_observation_at || entity.created_at,
+    observation_count: observationCount,
+    last_observation_at: lastObservationAt,
+    entity_version: computeEntityVersion({
+      entity_id: entity.id,
+      observation_count: observationCount,
+      last_observation_at: lastObservationAt,
+    }),
     provenance: effectiveSnapshot?.provenance || {},
     computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,

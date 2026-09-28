@@ -15921,6 +15921,8 @@ correctionsCommand
   .option("--corrected-value <value>", "Corrected value (required)")
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .option("--expected-version <version>", "Entity version read from the current snapshot")
+  .option("--overwrite", "Apply even when --expected-version is stale")
   .action(
     async (
       entityIdArg: string | undefined,
@@ -15931,6 +15933,8 @@ correctionsCommand
         correctedValue?: string;
         userId?: string;
         idempotencyKey?: string;
+        expectedVersion?: string;
+        overwrite?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -15945,24 +15949,92 @@ correctionsCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
+      let entityType = opts.entityType;
+      if (!entityType) {
+        const {
+          data: entityData,
+          error: entityError,
+          response: entityResponse,
+        } = await api.GET("/entities/{id}", {
+          params: { path: { id: entityId }, query: { user_id: opts.userId } } as any,
+        });
+        if (entityError) {
+          throw new Error(
+            `Failed to resolve entity type: ${entityResponse?.status ?? ""} ${formatApiError(entityError)}`
+          );
+        }
+        entityType = (entityData as { entity_type?: string } | undefined)?.entity_type;
+        if (!entityType) throw new Error("Entity response did not include entity_type");
+      }
       const idempotencyKey =
         opts.idempotencyKey ||
         createIdempotencyKey({ entityId, field: opts.fieldName, value: parsedCorrectedValue });
-      const { data, error } = await api.POST("/correct", {
+      const { data, error, response } = await api.POST("/correct", {
         body: {
           entity_id: entityId,
-          entity_type: opts.entityType ?? "unknown",
+          entity_type: entityType,
           field: opts.fieldName,
           value: parsedCorrectedValue,
           idempotency_key: idempotencyKey,
           user_id: opts.userId,
+          expected_version: opts.expectedVersion,
+          overwrite: opts.overwrite,
         },
       });
-      if (error) throw new Error("Failed to create correction");
+      if (error) {
+        const envelope = error as unknown as {
+          error_code?: string;
+          message?: string;
+          details?: Record<string, unknown>;
+        };
+        if (response?.status === 409) {
+          writeOutput(
+            {
+              success: false,
+              status: "conflict",
+              error_code: envelope.error_code ?? "ERR_FIELD_VERSION_CONFLICT",
+              entity_id: entityId,
+              field: opts.fieldName,
+              stored_version: envelope.details?.stored_version ?? null,
+              expected_version: envelope.details?.expected_version ?? opts.expectedVersion ?? null,
+              hint: envelope.details?.hint ?? null,
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        if (envelope.error_code === "ERR_IDEMPOTENCY_MISMATCH") {
+          writeOutput(
+            {
+              success: false,
+              status: "error",
+              error_code: envelope.error_code,
+              message: envelope.message,
+              details: envelope.details ?? {},
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        throw new Error(
+          `Failed to create correction: ${response?.status ?? ""} ${formatApiError(error)}`
+        );
+      }
       const result = data as any;
-      const correctionId = result?.observation?.id ?? result?.correction_id ?? idempotencyKey;
       writeOutput(
-        { correction_id: correctionId, entity_id: entityId, success: result?.success ?? true },
+        {
+          success: result?.success ?? true,
+          status: "applied",
+          observation_id: result?.observation_id,
+          entity_id: entityId,
+          entity_type: entityType,
+          field: opts.fieldName,
+          value: result?.value,
+          entity_version: result?.entity_version,
+          replayed: result?.replayed ?? false,
+        },
         outputMode
       );
     }
@@ -16000,6 +16072,10 @@ arrayItemCommand
     "--expected-item-version <version>",
     "Content-hash version of the item as last observed (from a prior patch's item_version). Stale value refuses with a conflict instead of overwriting."
   )
+  .option(
+    "--expected-item-absent",
+    "Create only when no item with this key exists; concurrent creators yield one conflict"
+  )
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
   .action(
@@ -16012,6 +16088,7 @@ arrayItemCommand
       opts: {
         itemJson?: string;
         expectedItemVersion?: string;
+        expectedItemAbsent?: boolean;
         userId?: string;
         idempotencyKey?: string;
       }
@@ -16059,6 +16136,7 @@ arrayItemCommand
           key_value: keyValue,
           item,
           expected_item_version: opts.expectedItemVersion,
+          expected_item_absent: opts.expectedItemAbsent,
           idempotency_key: idempotencyKey,
           user_id: opts.userId,
         },
@@ -16066,6 +16144,11 @@ arrayItemCommand
 
       if (error) {
         const status = response?.status;
+        const envelope = error as unknown as {
+          error_code?: string;
+          message?: string;
+          details?: Record<string, unknown>;
+        };
         if (status === 409) {
           // Standard envelope shape (buildErrorEnvelope): { error_code,
           // message, details, trace_id, timestamp } at the top level — NOT
@@ -16095,6 +16178,20 @@ arrayItemCommand
               )
             );
           }
+          process.exitCode = 1;
+          return;
+        }
+        if (envelope.error_code === "ERR_IDEMPOTENCY_MISMATCH") {
+          writeOutput(
+            {
+              success: false,
+              status: "error",
+              error_code: envelope.error_code,
+              message: envelope.message,
+              details: envelope.details ?? {},
+            },
+            outputMode
+          );
           process.exitCode = 1;
           return;
         }

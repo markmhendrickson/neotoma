@@ -16,3 +16,25 @@ export function stableSerialize(v: unknown): string {
   const parts = keys.map((k) => `${JSON.stringify(k)}:${stableSerialize(obj[k])}`);
   return `{${parts.join(",")}}`;
 }
+
+/** Portable key domain shared by the public patch contract and reducer. */
+export type PortableScalarKey = string | number | boolean;
+
+export function isPortableScalarKey(value: unknown): value is PortableScalarKey {
+  if (typeof value === "string" || typeof value === "boolean") return true;
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= Number.MAX_SAFE_INTEGER
+  );
+}
+
+/**
+ * Cross-language key representation: a type tag followed by stable JSON.
+ * The tag keeps `"1"`, `1`, and `true` distinct. JSON intentionally gives
+ * `-0` and `0` the same identity.
+ */
+export function canonicalizePortableScalarKey(value: unknown): string | null {
+  if (!isPortableScalarKey(value)) return null;
+  return `${typeof value}:${stableSerialize(value)}`;
+}
