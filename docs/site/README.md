@@ -8,4 +8,9 @@
 
 **Locales:** English (`en`) is required per route. Spanish (`es`) siblings exist for thin hybrid shells and hand-maintained pages (see `docs/developer/site_mdx_documentation.md` invariant on locale shells). Regenerate coverage with `tsx scripts/mdx_site_translation_audit.ts` (writes `docs/site/generated/translation_audit.md`).
 
-**Also see:** `MIGRATION_BATCHES.md` (migration status), `site_doc_manifest.yaml` (reconciliation with longer-form repo docs under `docs/`), and `generated/ROUTE_INVENTORY.md` (machine-generated route classification).
+**Also see:** `MIGRATION_BATCHES.md` (migration status), `site_doc_manifest.yaml` (reconciliation with longer-form repo docs under `docs/` plus the claim-level public-source contract), and `generated/ROUTE_INVENTORY.md` (machine-generated route classification).
+
+Run `npm run validate:site-claims` after changing a source named by the
+claim-level contract. Required claims fail closed when the source path, digest,
+immutable link, freshness policy, transform, fallback, or public classification
+drifts without a reviewed manifest update.
