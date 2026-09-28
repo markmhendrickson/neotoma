@@ -59,10 +59,14 @@ export type AgentCapabilityOp =
 
 export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;
-  /** Allowed entity types for this op. `"*"` widens to any entity_type. */
+  /**
+   * Allowed entity types for this op. `"*"` widens to any entity_type.
+   * For `create_relationship`, the same entry must cover both endpoint types.
+   */
   entity_types: string[];
   /**
-   * Allowed relationship types for `register_relationship_type`. `"*"` widens.
+   * Allowed relationship types for `create_relationship` and
+   * `register_relationship_type`. `"*"` widens.
    *
    * A PARALLEL field rather than an overload of `entity_types`, deliberately:
    * `entity_types` already means one vocabulary, and making it mean two
@@ -70,8 +74,9 @@ export interface AgentCapabilityEntry {
    * grants written before this field simply carry no relationship capability,
    * which is the correct default for a governance op.
    *
-   * The special value `"global"` is required IN ADDITION to a type match to
-   * register at instance-wide scope.
+   * Absent or empty denies relationship writes. The special value `"global"`
+   * is required IN ADDITION to a type match to register at instance-wide
+   * scope.
    */
   relationship_types?: string[];
   /**
@@ -553,6 +558,80 @@ export function enforceAgentCapability(
       entity_types: distinctTypes,
       agent_label: ctx.agentLabel,
       admitted: false,
+    })
+  );
+  throw err;
+}
+
+/**
+ * Enforce a relationship write against one capability entry.
+ *
+ * Relationship admission is the intersection of three bounds on the same
+ * `create_relationship` entry: operation, every endpoint entity type, and the
+ * relationship type. Keeping those bounds on one entry prevents two partial
+ * grants from composing into authority neither grant declared. An absent or
+ * empty `relationship_types` list grants no edge writes.
+ */
+export function enforceAgentRelationshipCapability(
+  relationshipType: string,
+  endpointEntityTypes: string[],
+  ctx: AgentCapabilityContext
+): void {
+  const distinctEndpointTypes = Array.from(
+    new Set(endpointEntityTypes.filter((type) => typeof type === "string" && type.length > 0))
+  );
+
+  // Reuse the ordinary capability path for ceiling handling, default-deny,
+  // and endpoint type admission. This also preserves the rollout behaviour
+  // for an unadmitted identity when default-deny is disabled.
+  enforceAgentCapability("create_relationship", distinctEndpointTypes, ctx);
+
+  const ceiling = ceilingOf(ctx);
+  if (ceiling.kind !== "grant") return;
+
+  const allowed =
+    relationshipType.length > 0 &&
+    endpointEntityTypes.length === 2 &&
+    endpointEntityTypes.every((type) => typeof type === "string" && type.length > 0) &&
+    distinctEndpointTypes.length > 0 &&
+    ceiling.capabilities.some((cap) => {
+      if (!grantOpMatchesRequested(cap.op, "create_relationship")) return false;
+      if (!Array.isArray(cap.entity_types) || !Array.isArray(cap.relationship_types)) return false;
+      const coversEndpoints = distinctEndpointTypes.every(
+        (entityType) => cap.entity_types.includes("*") || cap.entity_types.includes(entityType)
+      );
+      const relationshipTypes = cap.relationship_types;
+      const coversRelationship =
+        relationshipTypes.includes("*") || relationshipTypes.includes(relationshipType);
+      return coversEndpoints && coversRelationship;
+    });
+
+  if (allowed) return;
+
+  const entityType = distinctEndpointTypes[0] ?? "unknown";
+  const err = new AgentCapabilityError({
+    op: "create_relationship",
+    entityType,
+    agentLabel: ctx.agentLabel,
+    hint:
+      `Admitted agent "${ctx.agentLabel}" has no single create_relationship capability ` +
+      `covering relationship_type "${relationshipType || "unknown"}" and endpoint ` +
+      `entity_types [${distinctEndpointTypes.map((type) => `"${type}"`).join(", ")}]. ` +
+      `Edit the grant in Inspector → Agents → Grants and add ` +
+      `{ op: "create_relationship", entity_types: [` +
+      `${distinctEndpointTypes.map((type) => `"${type}"`).join(", ")}], ` +
+      `relationship_types: ["${relationshipType || "<relationship_type>"}"] }.` +
+      ` Absent or empty relationship_types denies edge writes.`,
+  });
+  logger.warn(
+    JSON.stringify({
+      event: "agent_capability_denied",
+      reason: "relationship_scope_out_of_scope",
+      op: "create_relationship",
+      relationship_type: relationshipType || null,
+      entity_types: distinctEndpointTypes,
+      agent_label: ctx.agentLabel,
+      admitted: true,
     })
   );
   throw err;

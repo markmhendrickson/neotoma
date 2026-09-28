@@ -20,6 +20,7 @@ import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
+  enforceAgentRelationshipCapability,
 } from "../../src/services/agent_capabilities.js";
 import { createAgentIdentity } from "../../src/crypto/agent_identity.js";
 import {
@@ -107,6 +108,60 @@ describe("agent capabilities (integration: admission → action boundary)", () =
           expect((err as AgentCapabilityError).code).toBe("capability_denied");
           expect((err as AgentCapabilityError).entityType).toBe("task");
         }
+      },
+    );
+  });
+
+  it("admits only the relationship type and endpoint types attached to the grant", async () => {
+    const identity = createAgentIdentity({
+      publicKey: '{"kty":"EC","crv":"P-256","alg":"ES256"}',
+      thumbprint: "tp-checkpoint",
+      algorithm: "ES256",
+      sub: "dispatcher@swarm.example",
+      iss: "https://swarm.example",
+    });
+    const checkpointGrant = {
+      admitted: true as const,
+      user_id: "usr_owner",
+      grant_id: "ent_grant_checkpoint",
+      agent_label: "dispatcher@swarm.example",
+      capabilities: [
+        { op: "store_structured" as const, entity_types: ["checkpoint_brief"] },
+        { op: "retrieve" as const, entity_types: ["task"] },
+        {
+          op: "create_relationship" as const,
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: ["REFERS_TO"],
+        },
+      ],
+      reason: "admitted" as const,
+    };
+
+    await runWithRequestContext(
+      { agentIdentity: identity, aauthAdmission: checkpointGrant },
+      async () => {
+        const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
+        expect(() =>
+          enforceAgentRelationshipCapability(
+            "REFERS_TO",
+            ["checkpoint_brief", "task"],
+            ctx,
+          ),
+        ).not.toThrow();
+        expect(() =>
+          enforceAgentRelationshipCapability(
+            "PART_OF",
+            ["checkpoint_brief", "task"],
+            ctx,
+          ),
+        ).toThrow(AgentCapabilityError);
+        expect(() =>
+          enforceAgentRelationshipCapability(
+            "REFERS_TO",
+            ["checkpoint_brief", "issue"],
+            ctx,
+          ),
+        ).toThrow(AgentCapabilityError);
       },
     );
   });

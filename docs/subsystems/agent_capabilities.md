@@ -77,7 +77,11 @@ the source of truth):
   "match_iss": "https://agent.example.com",  // optional; descriptive
   "capabilities": [
     { "op": "store",               "entity_types": ["neotoma_feedback"] },
-    { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
+    {
+      "op": "create_relationship",
+      "entity_types": ["neotoma_feedback", "task"],
+      "relationship_types": ["REFERS_TO"]
+    },
     { "op": "correct",             "entity_types": ["neotoma_feedback"] },
     { "op": "retrieve",            "entity_types": ["neotoma_feedback"] }
   ],
@@ -198,6 +202,22 @@ today. Give an agent that needs a grant a long-lived signing key
 
 `entity_types` is a string array of permitted entity types for that op.
 Use `["*"]` to widen to every type — only do this for trusted grants.
+
+For `create_relationship`, one capability entry must cover both endpoint
+entity types and the requested type in `relationship_types`. The two bounds
+are evaluated on the same entry so partial grants cannot combine into a wider
+permission. Missing or empty `relationship_types` denies relationship writes.
+For example, this permits `REFERS_TO` only when both endpoints are a
+`checkpoint_brief` or `task`; it does not permit `PART_OF`, nor an edge with an
+`issue` endpoint:
+
+```json
+{
+  "op": "create_relationship",
+  "entity_types": ["checkpoint_brief", "task"],
+  "relationship_types": ["REFERS_TO"]
+}
+```
 
 ### Matching order
 

@@ -55,6 +55,8 @@ import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
+  enforceAgentRelationshipCapability,
+  type AgentCapabilityContext,
 } from "./services/agent_capabilities.js";
 import {
   assertGuestWriteAllowed,
@@ -7685,6 +7687,82 @@ type StoreRelationshipRef = {
   metadata?: Record<string, unknown>;
 };
 
+/**
+ * Resolve and authorize every relationship in a structured store before the
+ * first entity write. Index references take their type from the incoming
+ * entity batch; explicit IDs are resolved owner-scoped from the entity table.
+ * An unresolved endpoint fails closed instead of reducing the capability
+ * check to whichever half happened to resolve.
+ */
+async function enforceStoreRelationshipCapabilities(params: {
+  userId: string;
+  entities: Record<string, unknown>[];
+  relationships: StoreRelationshipRef[];
+  capabilityCtx: AgentCapabilityContext;
+}): Promise<void> {
+  const explicitIds = Array.from(
+    new Set(
+      params.relationships.flatMap((relationship) =>
+        [relationship.source_entity_id, relationship.target_entity_id].filter(
+          (entityId): entityId is string => typeof entityId === "string" && entityId.length > 0
+        )
+      )
+    )
+  );
+  const entityTypesById = new Map<string, string>();
+
+  if (explicitIds.length > 0) {
+    const { data, error } = await db
+      .from("entities")
+      .select("id, entity_type")
+      .in("id", explicitIds)
+      .eq("user_id", params.userId);
+    if (error) {
+      throw new Error(`Failed to resolve relationship endpoint types: ${error.message}`);
+    }
+    for (const row of data ?? []) {
+      if (typeof row.id === "string" && typeof row.entity_type === "string") {
+        entityTypesById.set(row.id, row.entity_type);
+      }
+    }
+  }
+
+  const typeAtIndex = (index: number | undefined): string | undefined => {
+    if (typeof index !== "number") return undefined;
+    const entityType = params.entities[index]?.entity_type;
+    return typeof entityType === "string" && entityType.length > 0 ? entityType : undefined;
+  };
+
+  for (const relationship of params.relationships) {
+    const sourceEntityType =
+      typeof relationship.source_entity_id === "string"
+        ? entityTypesById.get(relationship.source_entity_id)
+        : typeAtIndex(relationship.source_index);
+    const targetEntityType =
+      typeof relationship.target_entity_id === "string"
+        ? entityTypesById.get(relationship.target_entity_id)
+        : typeAtIndex(relationship.target_index);
+
+    if (!sourceEntityType || !targetEntityType) {
+      throw new AgentCapabilityError({
+        op: "create_relationship",
+        entityType: sourceEntityType ?? targetEntityType ?? "unknown",
+        agentLabel: params.capabilityCtx.agentLabel,
+        hint:
+          `Relationship capability could not be evaluated for relationship_type ` +
+          `"${relationship.relationship_type}" because one or both endpoint entity types ` +
+          `did not resolve for this owner. The edge was denied before any entity write.`,
+      });
+    }
+
+    enforceAgentRelationshipCapability(
+      relationship.relationship_type,
+      [sourceEntityType, targetEntityType],
+      params.capabilityCtx
+    );
+  }
+}
+
 function normalizeInterpretationConfig(
   configInput?: Record<string, unknown>
 ): Record<string, unknown> {
@@ -7834,9 +7912,13 @@ export async function storeStructuredForApi(params: {
       .map((entity) => entity?.entity_type)
       .filter((t): t is string => typeof t === "string" && t.length > 0);
     enforceAgentCapability("store", entityTypes, capabilityCtx);
-    const relationshipOp = Array.isArray(relationships) && relationships.length > 0;
-    if (relationshipOp) {
-      enforceAgentCapability("create_relationship", entityTypes, capabilityCtx);
+    if (Array.isArray(relationships) && relationships.length > 0) {
+      await enforceStoreRelationshipCapabilities({
+        userId,
+        entities,
+        relationships,
+        capabilityCtx,
+      });
     }
   }
 

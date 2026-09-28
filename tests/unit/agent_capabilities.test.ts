@@ -23,6 +23,7 @@ import {
   capabilityCeilingFromAdmission,
   contextFromAgentIdentity,
   enforceAgentCapability,
+  enforceAgentRelationshipCapability,
   enforceRelationshipTypeCapability,
   isAgentDefaultDenyEnabled,
   getAgentCapabilitiesSource,
@@ -270,6 +271,108 @@ describe("agent_capabilities", () => {
       expect(() =>
         enforceAgentCapability("store_structured", [], admittedCtx()),
       ).not.toThrow();
+    });
+  });
+
+  describe("enforceAgentRelationshipCapability (admitted)", () => {
+    const checkpointCtx = () =>
+      admittedCtx([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: ["REFERS_TO"],
+        },
+      ]);
+
+    it("allows the scoped checkpoint REFERS_TO task edge", () => {
+      expect(() =>
+        enforceAgentRelationshipCapability(
+          "REFERS_TO",
+          ["checkpoint_brief", "task"],
+          checkpointCtx(),
+        ),
+      ).not.toThrow();
+    });
+
+    it("denies an unrelated relationship type", () => {
+      expect(() =>
+        enforceAgentRelationshipCapability(
+          "PART_OF",
+          ["checkpoint_brief", "task"],
+          checkpointCtx(),
+        ),
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it("denies an unrelated endpoint entity type", () => {
+      expect(() =>
+        enforceAgentRelationshipCapability(
+          "REFERS_TO",
+          ["checkpoint_brief", "issue"],
+          checkpointCtx(),
+        ),
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it.each([undefined, []] as const)(
+      "denies absent or empty relationship_types (%s)",
+      (relationshipTypes) => {
+        const capability = {
+          op: "create_relationship" as const,
+          entity_types: ["checkpoint_brief", "task"],
+          ...(relationshipTypes === undefined
+            ? {}
+            : { relationship_types: relationshipTypes as unknown as string[] }),
+        };
+        expect(() =>
+          enforceAgentRelationshipCapability(
+            "REFERS_TO",
+            ["checkpoint_brief", "task"],
+            admittedCtx([capability]),
+          ),
+        ).toThrow(AgentCapabilityError);
+      },
+    );
+
+    it("denies a malformed runtime relationship_types value", () => {
+      const ctx = admittedCtx([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: "REFERS_TO" as never,
+        },
+      ]);
+
+      expect(() =>
+        enforceAgentRelationshipCapability(
+          "REFERS_TO",
+          ["checkpoint_brief", "task"],
+          ctx,
+        ),
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it("does not combine relationship and endpoint scopes from different entries", () => {
+      const ctx = admittedCtx([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief"],
+          relationship_types: ["REFERS_TO"],
+        },
+        {
+          op: "create_relationship",
+          entity_types: ["task"],
+          relationship_types: ["PART_OF"],
+        },
+      ]);
+
+      expect(() =>
+        enforceAgentRelationshipCapability(
+          "REFERS_TO",
+          ["checkpoint_brief", "task"],
+          ctx,
+        ),
+      ).toThrow(AgentCapabilityError);
     });
   });
 
