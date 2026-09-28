@@ -162,4 +162,25 @@ describe("broadcastSubstrateEventToSse dead-client eviction", () => {
       unregisterGood();
     }
   });
+
+  it("closes and evicts a client whose credential is no longer authorized", async () => {
+    const res = fakeRes() as ReturnType<typeof fakeRes> & { ended: boolean; end(): void };
+    res.ended = false;
+    res.end = () => {
+      res.ended = true;
+      res.writableEnded = true;
+    };
+    registerSseClient({
+      ...client(issueSub("expired-credential"), res),
+      authorize: async () => false,
+    });
+
+    await broadcastSubstrateEventToSse(issueEvent(), "1");
+
+    expect(res.writes).toHaveLength(0);
+    expect(res.ended).toBe(true);
+    res.revive();
+    await broadcastSubstrateEventToSse(issueEvent(), "2");
+    expect(res.writes).toHaveLength(0);
+  });
 });

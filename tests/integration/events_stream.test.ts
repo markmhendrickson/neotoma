@@ -130,6 +130,31 @@ async function readSseEvent(
   throw new Error("Timed out waiting for matching SSE event");
 }
 
+async function expectSseClosedWithoutEvent(
+  response: Response,
+  eventId: string,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("SSE response did not expose a readable body");
+  const decoder = new TextDecoder();
+  let body = "";
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const read = await Promise.race([
+      reader.read(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 25)),
+    ]);
+    if (read === null) continue;
+    if (read.done) {
+      expect(body).not.toContain(eventId);
+      return;
+    }
+    body += decoder.decode(read.value, { stream: true });
+  }
+  throw new Error("SSE stream stayed open after its guest credential became invalid");
+}
+
 describe("GET /events/stream", () => {
   afterEach(async () => {
     await tracker.cleanup();
@@ -333,6 +358,89 @@ describe("GET /events/stream", () => {
       });
       controller.abort();
       await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+  });
+
+  it("closes an established guest stream before delivery after token expiry", async () => {
+    const previousTtl = process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS;
+    process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS = "1";
+    try {
+      await withHttpServer(async (baseUrl) => {
+        const entityId = await seedOwnedEntity("sp009-events-expiry", "expiry");
+        tracker.trackEntity(entityId);
+        const token = await guestTokenFor("sp009-events-expiry", [entityId]);
+        const created = await subscribe(baseUrl, token, {
+          entity_ids: [entityId],
+          delivery_method: "sse",
+        });
+        const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        expect(response.status).toBe(200);
+
+        await new Promise((resolve) => setTimeout(resolve, 1_050));
+        const event: SubstrateEvent = {
+          event_id: `evt_expired_${randomUUID()}`,
+          event_type: "entity.updated",
+          timestamp: new Date().toISOString(),
+          user_id: "sp009-events-expiry",
+          entity_id: entityId,
+          entity_type: "note",
+          action: "updated",
+        };
+        await handleSubstrateEventForSubscriptions(event);
+        await expectSseClosedWithoutEvent(response, event.event_id);
+      });
+    } finally {
+      if (previousTtl === undefined) delete process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS;
+      else process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS = previousTtl;
+    }
+  });
+
+  it("closes an established guest stream before delivery after token revocation", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const userId = "sp009-events-revoked";
+      const entityId = await seedOwnedEntity(userId, "revoked");
+      tracker.trackEntity(entityId);
+      const token = await guestTokenFor(userId, [entityId]);
+      const tokenEntityId = `guest_token_${hashGuestAccessToken(token).slice(0, 16)}`;
+      const created = await subscribe(baseUrl, token, {
+        entity_ids: [entityId],
+        delivery_method: "sse",
+      });
+      const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(response.status).toBe(200);
+
+      const revokedAt = new Date(Date.now() + 1_000).toISOString();
+      await db.from("observations").insert({
+        id: randomUUID(),
+        entity_id: tokenEntityId,
+        entity_type: "guest_access_token",
+        user_id: userId,
+        fields: {
+          token_hash: hashGuestAccessToken(token),
+          entity_ids: [entityId],
+          created_at: revokedAt,
+          ttl_seconds: 30 * 24 * 60 * 60,
+          revoked_at: revokedAt,
+        },
+        observed_at: revokedAt,
+        source_priority: 100,
+      });
+
+      const event: SubstrateEvent = {
+        event_id: `evt_revoked_${randomUUID()}`,
+        event_type: "entity.updated",
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        entity_id: entityId,
+        entity_type: "note",
+        action: "updated",
+      };
+      await handleSubstrateEventForSubscriptions(event);
+      await expectSseClosedWithoutEvent(response, event.event_id);
     });
   });
 });
