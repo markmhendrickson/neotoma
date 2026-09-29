@@ -34,6 +34,10 @@ function makeSource(names: string[]): void {
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "skmirror-"));
   sourceDir = path.join(root, "src-skills");
+  // The fixture reuses the real retired names, but seeds them WITHOUT
+  // `deprecated: true`: here they are ordinary active skills. Only the tests
+  // that exercise retirement mark them deprecated, so this fixture does not
+  // mirror the shipped frontmatter under `skills/`.
   makeSource(["end", "status", "query-memory", "store-data", "remember-codebase"]);
 });
 
@@ -215,7 +219,7 @@ describe("deprecated skills", () => {
     expect(fs.lstatSync(path.join(skillsDir, "end")).isSymbolicLink()).toBe(true);
   });
 
-  it("does not unlink a deprecated skill an existing install had already linked", () => {
+  it("prunes a per-skill link to a skill that became deprecated, keeping active and foreign entries", () => {
     // First sync happens before the skill is marked deprecated, and must land
     // in per-skill mode (not whole-dir) so this test actually exercises
     // mirrorPerSkill's prune logic rather than an untouched whole-dir
@@ -230,15 +234,22 @@ describe("deprecated skills", () => {
     const linkPath = path.join(root, ".codex", "skills", "to-be-retired");
     expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
 
-    // Now mark it deprecated and re-sync: pruning only removes links whose
-    // source skill was removed entirely, not ones that became deprecated.
+    // Now mark it deprecated and re-sync: retirement means the same thing in
+    // per-skill mode as in whole-dir mode, so the existing link is removed.
     fs.writeFileSync(
       path.join(sourceDir, "to-be-retired", "SKILL.md"),
       "---\nname: to-be-retired\ndeprecated: true\n---\n"
     );
     const second = mirrorToHarness("codex", { cwd: root, scope: "project", sourceDir });
     expect(second.mode).toBe("per-skill-symlink");
-    expect(fs.existsSync(path.join(linkPath, "SKILL.md"))).toBe(true);
+    expect(second.changed).toBe(true);
+    expect(fs.existsSync(linkPath)).toBe(false);
+    expect(() => fs.lstatSync(linkPath)).toThrow();
+    // The source file itself stays on disk for external links.
+    expect(fs.existsSync(path.join(sourceDir, "to-be-retired", "SKILL.md"))).toBe(true);
+    // Active skills and foreign content are untouched.
+    expect(fs.existsSync(path.join(root, ".codex", "skills", "end", "SKILL.md"))).toBe(true);
+    expect(fs.readFileSync(path.join(codexSkills, "SKILL.md"), "utf-8")).toBe("foreign");
   });
 
   it("removes both retired wrappers from a pre-existing whole-dir install while preserving workflows", () => {

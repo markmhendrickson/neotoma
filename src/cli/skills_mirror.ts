@@ -27,12 +27,14 @@
  *
  * Deprecated skills: a skill whose `SKILL.md` frontmatter declares
  * `deprecated: true` is a retired primitive wrapper kept on disk only for
- * link/URL compatibility (existing symlinks, SkillHub listings, GitHub blob
- * links). It is excluded from `listSkillNames`'s default (installable) view,
- * and its presence in the source forces per-skill mode so the exclusion is
- * enforceable — a whole-dir symlink cannot omit one subdirectory. Fresh
- * installs and `available_skills` therefore never advertise it, while the
- * file (and any pre-existing symlink to it) keeps resolving.
+ * link/URL compatibility (SkillHub listings, GitHub blob links, which point at
+ * the repo file). It is excluded from `listSkillNames`'s default (installable)
+ * view, and its presence in the source forces per-skill mode so the exclusion
+ * is enforceable — a whole-dir symlink cannot omit one subdirectory. Both
+ * install modes converge on the same result after a re-sync: a pre-existing
+ * whole-dir symlink is converted to per-skill links, and any per-skill link a
+ * prior sync created to a now-deprecated skill is pruned. Harness skill
+ * directories and `available_skills` therefore never advertise it.
  */
 
 import {
@@ -266,13 +268,14 @@ export function mirrorPerSkill(
   const linked: string[] = [];
   const errors: Array<{ skill: string; reason: string }> = [];
 
-  // Prune stale links pointing into our source for skills that were removed
-  // from the source entirely. A skill that merely became deprecated (absent
-  // from `skillNames` but its directory still exists in `sourceDir`) is left
-  // alone: an existing per-skill link a prior sync already created is kept
-  // resolving for compatibility (existing symlinks, SkillHub listings, GitHub
-  // blob links) — only fresh links to it are withheld, by the "ensure each
-  // current skill is linked" loop below never adding one in the first place.
+  // Prune our own links pointing into the source for any skill not in the
+  // current set: skills removed from the source entirely AND skills that
+  // became deprecated (their directory stays in `sourceDir`, but they are
+  // absent from `skillNames`). Retirement therefore means the same thing in
+  // per-skill mode as in whole-dir mode: after a re-sync the harness no longer
+  // resolves the skill, so its stale `description:`/`triggers:` stop being
+  // advertised. External references (SkillHub listings, GitHub blob links)
+  // point at the repo file, which stays on disk, not at harness links.
   for (const name of (() => {
     try {
       return readdirSync(targetDir);
@@ -285,7 +288,7 @@ export function mirrorPerSkill(
     if (!isSymlink(entry)) continue;
     try {
       const resolved = resolve(targetDir, readlinkSync(entry));
-      if (resolved.startsWith(resolve(sourceDir)) && !existsSync(join(sourceDir, name))) {
+      if (resolved.startsWith(resolve(sourceDir))) {
         unlinkSync(entry);
         changed = true;
       }

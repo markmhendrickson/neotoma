@@ -65,8 +65,16 @@ const disabledId = newId("dis");
 const malformedId = newId("mal");
 const injectionId = newId("inj");
 const hostileNameId = newId("host");
+const retiredNameId = newId("ret");
 
-const allIds = [enabledId, disabledId, malformedId, injectionId, hostileNameId];
+/**
+ * A graph-stored row reusing the name of a package skill retired with
+ * `deprecated: true` (skills/store-data/SKILL.md). Package skills win on name
+ * collision, so it must not re-advertise the retired skill.
+ */
+const RETIRED_PACKAGE_NAME = "store-data";
+
+const allIds = [enabledId, disabledId, malformedId, injectionId, hostileNameId, retiredNameId];
 
 /**
  * Invoke the server's real `initialize` handler.
@@ -174,6 +182,11 @@ describe("instance skills reach the agent through MCP initialize (#2046)", () =>
       description: "Name is not an identifier.",
       enabled: true,
     });
+    await seedSkill(retiredNameId, RETIRED_PACKAGE_NAME, {
+      name: RETIRED_PACKAGE_NAME,
+      description: "Graph row reusing a retired package skill name.",
+      enabled: true,
+    });
 
     server = new NeotomaServer();
   });
@@ -222,6 +235,32 @@ describe("instance skills reach the agent through MCP initialize (#2046)", () =>
       available?.includes(ENABLED_SKILL),
       `available_skills did not include the seeded skill; got ${JSON.stringify(available)}`
     ).toBe(true);
+  });
+
+  it("omits retired package skills from available_skills while keeping active ones", async () => {
+    const result = await callInitialize(server);
+    const available = result.serverInfo._neotoma?.available_skills ?? [];
+
+    // The two retired primitive wrappers declare `deprecated: true` and must
+    // not be offered to a connected agent.
+    expect(available, `got ${JSON.stringify(available)}`).not.toContain("query-memory");
+    expect(available, `got ${JSON.stringify(available)}`).not.toContain("store-data");
+    // Guard against a filter that drops everything: active package skills and
+    // the seeded instance skill are still listed.
+    expect(available).toContain("ensure-neotoma");
+    expect(available).toContain("remember-codebase");
+    expect(available).toContain(ENABLED_SKILL);
+  });
+
+  it("does not let a graph-stored skill row re-advertise a retired package skill name", async () => {
+    const result = await callInitialize(server);
+    const instructions = result.instructions ?? "";
+
+    expect(result.serverInfo._neotoma?.available_skills ?? []).not.toContain(RETIRED_PACKAGE_NAME);
+    expect(
+      instructions.split("\n").some((l) => l.startsWith(`- ${RETIRED_PACKAGE_NAME}`)),
+      "a graph row named after a retired package skill was rendered in [INSTANCE SKILLS]"
+    ).toBe(false);
   });
 
   it("does not surface a disabled skill", async () => {

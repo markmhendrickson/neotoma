@@ -1,6 +1,6 @@
 ---
 name: store-data
-description: Store structured entities or files in Neotoma memory with proper provenance and relationship linking.
+description: "[Deprecated] Do not use. Storing data follows the live Neotoma MCP instructions; no skill is needed."
 deprecated: true
 triggers:
   - store this

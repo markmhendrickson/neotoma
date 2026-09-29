@@ -1,6 +1,6 @@
 ---
 name: query-memory
-description: Search and retrieve entities, relationships, and timeline events from Neotoma memory.
+description: "[Deprecated] Do not use. Retrieval follows the live Neotoma MCP instructions; no skill is needed."
 deprecated: true
 triggers:
   - what do you know about
