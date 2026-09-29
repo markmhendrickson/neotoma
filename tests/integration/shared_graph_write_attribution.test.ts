@@ -1,31 +1,34 @@
 /**
- * #2240 — every write records the signed-in person who made it, alongside the
- * shared graph it lands in.
+ * #2240 — writes record the signed-in member who made them, alongside the
+ * shared graph they land in.
  *
  * On a shared-graph instance (`NEOTOMA_SHARED_GRAPH_USER_ID`) every member
  * reads and writes one graph `user_id`. #2228 made the signed-in identity
  * survive sign-in onto the session and connection row, but nothing recorded it
- * on a write: every member's observation carried only the shared `user_id`, so
- * the stored record could not say who contributed it.
+ * on a write, so the stored record could not say who contributed it.
  *
  * The carrier is write provenance: the request-scoped attribution context
- * that already stamps the AAuth agent identity and the external actor into
- * every observation, relationship, timeline event, source and interpretation
- * now also carries the signed-in person, stamped as
- * `provenance.authenticated_user_id` — the signer's own per-email user_id,
- * deliberately not the email address.
+ * that already stamps the AAuth agent identity and the external actor now also
+ * carries the signed-in member, stamped as `provenance.authenticated_actor_id`.
+ * The value is the member's per-instance write-attribution id — a random UUID
+ * held in `member_attribution_ids` — NOT the member's local-auth user id, which
+ * is an unkeyed hash of their email and would let anyone holding the team's
+ * addresses re-identify authors, and would link a person across instances.
  *
  * These tests drive the REAL Express app through the REAL Google sign-in flow
  * (only Google's JWKS and code-exchange endpoints are stubbed), then write on
- * each surface with its natural call shape and read the stored observation
- * rows back. They assert the stored value, never just the response:
+ * each surface with its natural call shape and read the stored rows back:
  *
  *   - two members writing to one shared graph produce observations attributed
  *     to each, on REST `/store`, REST `/correct`, MCP stateless `store` and
- *     MCP session `store`; both land on the same graph `user_id`;
+ *     `correct`, and MCP session `store`; all land on the shared graph;
+ *   - the recorded id is not derivable from the email: it is not the email
+ *     hash, and re-minting after the mapping row is deleted yields a new id;
+ *   - guests never see it: a guest-token read of an attributed entity returns
+ *     no `authenticated_actor_id`, while a member's read of the same entity does;
  *   - fail closed: a static-token write, a local no-auth write, and a write
  *     under a connection row that predates identity recording carry NO
- *     `authenticated_user_id` — never the graph owner's, never a member's.
+ *     `authenticated_actor_id` — never the graph owner's, never a member's.
  */
 
 import { createServer } from "node:http";
@@ -36,6 +39,10 @@ import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import { createLocalAuthUser } from "../../src/services/local_auth.js";
+import {
+  generateGuestAccessToken,
+  hashGuestAccessToken,
+} from "../../src/services/guest_access_token.js";
 import {
   createGoogleSignInHarness,
   perEmailUserId,
@@ -56,7 +63,11 @@ const ENV_KEYS = [
   "NEOTOMA_APPROVED_EMAILS",
   "NEOTOMA_SHARED_GRAPH_USER_ID",
   "NEOTOMA_BEARER_TOKEN",
+  "NEOTOMA_ACCESS_POLICY_NOTE",
 ] as const;
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ACTOR_KEY = "authenticated_actor_id";
 
 type ObservationRow = {
   id: string;
@@ -145,6 +156,44 @@ async function mcpStatelessStore(accessToken: string, label: string, id: number)
   return firstEntityId(toolResultJson(reply.body));
 }
 
+async function mcpStatelessCorrect(
+  accessToken: string,
+  entityId: string,
+  value: string,
+  id: number
+): Promise<void> {
+  const reply = await modernPost(
+    apiBase,
+    {
+      id,
+      method: "tools/call",
+      params: {
+        name: "correct",
+        arguments: {
+          entity_id: entityId,
+          entity_type: "note",
+          field: "content",
+          value,
+          idempotency_key: `write-attribution-mcp-correct-${randomUUID()}`,
+        },
+      },
+    },
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  expect(reply.status, reply.text).toBe(200);
+  expect(reply.body?.result?.isError, reply.text).not.toBe(true);
+}
+
+/** The attribution id this instance minted for a member, read from storage. */
+async function memberActorId(email: string): Promise<string> {
+  const rowDb = await getDb();
+  const row = (await rowDb
+    .prepare("SELECT attribution_id FROM member_attribution_ids WHERE local_user_id = ?")
+    .get(await perEmailUserId(email))) as { attribution_id?: string } | undefined;
+  expect(row?.attribution_id, `no attribution id minted for ${email}`).toBeTruthy();
+  return row!.attribution_id!;
+}
+
 /** Parse a legacy Streamable HTTP reply, which may arrive as JSON or SSE. */
 async function readRpc(res: Response): Promise<Record<string, any>> {
   const text = await res.text();
@@ -208,17 +257,13 @@ async function mcpSessionStore(accessToken: string, label: string): Promise<stri
   return firstEntityId(toolResultJson(reply as never));
 }
 
-/** Every observation on the entity names `principal` and lands on `graph`. */
-async function expectAttributedTo(
-  entityId: string,
-  principal: string,
-  graph: string
-): Promise<void> {
+/** Every observation on the entity names `actorId` and lands on `graph`. */
+async function expectAttributedTo(entityId: string, actorId: string, graph: string): Promise<void> {
   const rows = await observationsFor(entityId);
   expect(rows.length, "the write should have produced an observation").toBeGreaterThan(0);
   for (const row of rows) {
     expect(row.user_id).toBe(graph);
-    expect(provenanceOf(row).authenticated_user_id).toBe(principal);
+    expect(provenanceOf(row)[ACTOR_KEY]).toBe(actorId);
   }
 }
 
@@ -227,6 +272,7 @@ async function expectUnattributed(entityId: string): Promise<void> {
   const rows = await observationsFor(entityId);
   expect(rows.length, "the write should have produced an observation").toBeGreaterThan(0);
   for (const row of rows) {
+    expect(provenanceOf(row)).not.toHaveProperty(ACTOR_KEY);
     expect(provenanceOf(row)).not.toHaveProperty("authenticated_user_id");
   }
 }
@@ -281,6 +327,7 @@ describe("#2240 shared-graph write attribution", () => {
     process.env.NEOTOMA_APPROVED_EMAILS = [MEMBER_A_EMAIL, MEMBER_B_EMAIL].join(",");
     process.env.NEOTOMA_SHARED_GRAPH_USER_ID = SHARED_GRAPH_USER_ID;
     delete process.env.NEOTOMA_BEARER_TOKEN;
+    delete process.env.NEOTOMA_ACCESS_POLICY_NOTE;
     await seedGraphOwner();
   });
 
@@ -296,32 +343,63 @@ describe("#2240 shared-graph write attribution", () => {
   it("REST /store: two members' writes to one shared graph are attributed to each", async () => {
     const a = await harness.signIn(MEMBER_A_EMAIL);
     const b = await harness.signIn(MEMBER_B_EMAIL);
-    const principalA = await perEmailUserId(MEMBER_A_EMAIL);
-    const principalB = await perEmailUserId(MEMBER_B_EMAIL);
-    expect(principalA).not.toBe(principalB);
-    expect(principalA).not.toBe(SHARED_GRAPH_USER_ID);
 
     const writeA = await restStore({ Authorization: `Bearer ${a.accessToken}` }, "rest member a");
     const writeB = await restStore({ Authorization: `Bearer ${b.accessToken}` }, "rest member b");
     expect(writeA.status, writeA.text).toBe(200);
     expect(writeB.status, writeB.text).toBe(200);
 
+    const actorA = await memberActorId(MEMBER_A_EMAIL);
+    const actorB = await memberActorId(MEMBER_B_EMAIL);
+    expect(actorA).not.toBe(actorB);
+
     // Same graph, different authors — the distinction the stored record
     // could not make before #2240.
-    await expectAttributedTo(writeA.entityId!, principalA, SHARED_GRAPH_USER_ID);
-    await expectAttributedTo(writeB.entityId!, principalB, SHARED_GRAPH_USER_ID);
+    await expectAttributedTo(writeA.entityId!, actorA, SHARED_GRAPH_USER_ID);
+    await expectAttributedTo(writeB.entityId!, actorB, SHARED_GRAPH_USER_ID);
 
-    // The subject id is recorded, never the address.
-    for (const row of await observationsFor(writeA.entityId!)) {
-      expect(JSON.stringify(provenanceOf(row))).not.toContain(MEMBER_A_EMAIL);
-    }
+    // A second write by the same member carries the same id.
+    const writeA2 = await restStore({ Authorization: `Bearer ${a.accessToken}` }, "rest member a2");
+    await expectAttributedTo(writeA2.entityId!, actorA, SHARED_GRAPH_USER_ID);
+  });
+
+  it("records a random per-instance id, not anything derivable from the member's email", async () => {
+    const a = await harness.signIn(MEMBER_A_EMAIL);
+    // The test database outlives a run; start from no mapping so the first
+    // write below mints under the code being tested.
+    const localId = await perEmailUserId(MEMBER_A_EMAIL);
+    const rowDb = await getDb();
+    await rowDb.prepare("DELETE FROM member_attribution_ids WHERE local_user_id = ?").run(localId);
+
+    const write = await restStore({ Authorization: `Bearer ${a.accessToken}` }, "not derivable");
+    expect(write.status, write.text).toBe(200);
+
+    const [row] = await observationsFor(write.entityId!);
+    const recorded = provenanceOf(row!)[ACTOR_KEY] as string;
+    expect(recorded).toMatch(UUID_SHAPE);
+    // Not the local-auth id, which is an unkeyed hash of the email.
+    expect(recorded).not.toBe(localId);
+    // Nothing in provenance carries the email or the email-derived id.
+    const blob = JSON.stringify(provenanceOf(row!));
+    expect(blob).not.toContain(MEMBER_A_EMAIL);
+    expect(blob).not.toContain(localId);
+
+    // Minted, not computed: drop the mapping and the next resolution mints a
+    // DIFFERENT id for the same member and the same email. A value derived
+    // from the email (hashed, keyed or not) would come back identical.
+    await rowDb.prepare("DELETE FROM member_attribution_ids WHERE local_user_id = ?").run(localId);
+    const again = await restStore({ Authorization: `Bearer ${a.accessToken}` }, "re-minted");
+    expect(again.status, again.text).toBe(200);
+    const [againRow] = await observationsFor(again.entityId!);
+    const reminted = provenanceOf(againRow!)[ACTOR_KEY] as string;
+    expect(reminted).toMatch(UUID_SHAPE);
+    expect(reminted).not.toBe(recorded);
+    expect(reminted).toBe(await memberActorId(MEMBER_A_EMAIL));
   });
 
   it("REST /correct: a correction is attributed to the member who made it, not the entity's author", async () => {
     const a = await harness.signIn(MEMBER_A_EMAIL);
     const b = await harness.signIn(MEMBER_B_EMAIL);
-    const principalA = await perEmailUserId(MEMBER_A_EMAIL);
-    const principalB = await perEmailUserId(MEMBER_B_EMAIL);
 
     const writeA = await restStore({ Authorization: `Bearer ${a.accessToken}` }, "correct target");
     expect(writeA.status, writeA.text).toBe(200);
@@ -340,36 +418,85 @@ describe("#2240 shared-graph write attribution", () => {
     expect(correctRes.status, await correctRes.clone().text()).toBe(200);
 
     const rows = await observationsFor(writeA.entityId!);
-    const principals = rows.map((row) => provenanceOf(row).authenticated_user_id);
-    expect(principals).toContain(principalA);
-    expect(principals).toContain(principalB);
+    const actors = rows.map((row) => provenanceOf(row)[ACTOR_KEY]);
+    expect(actors).toContain(await memberActorId(MEMBER_A_EMAIL));
+    expect(actors).toContain(await memberActorId(MEMBER_B_EMAIL));
     for (const row of rows) expect(row.user_id).toBe(SHARED_GRAPH_USER_ID);
   });
 
-  it("MCP stateless store: two members' writes are attributed to each", async () => {
+  it("MCP stateless store and correct: each member's write is attributed to them", async () => {
     const a = await harness.signIn(MEMBER_A_EMAIL);
     const b = await harness.signIn(MEMBER_B_EMAIL);
-    const principalA = await perEmailUserId(MEMBER_A_EMAIL);
-    const principalB = await perEmailUserId(MEMBER_B_EMAIL);
 
     const entityA = await mcpStatelessStore(a.accessToken, "mcp stateless member a", 101);
     const entityB = await mcpStatelessStore(b.accessToken, "mcp stateless member b", 102);
+    const actorA = await memberActorId(MEMBER_A_EMAIL);
+    const actorB = await memberActorId(MEMBER_B_EMAIL);
 
-    await expectAttributedTo(entityA, principalA, SHARED_GRAPH_USER_ID);
-    await expectAttributedTo(entityB, principalB, SHARED_GRAPH_USER_ID);
+    await expectAttributedTo(entityA, actorA, SHARED_GRAPH_USER_ID);
+    await expectAttributedTo(entityB, actorB, SHARED_GRAPH_USER_ID);
+
+    // B corrects A's entity over MCP: the correction names B.
+    await mcpStatelessCorrect(b.accessToken, entityA, `mcp corrected by b ${randomUUID()}`, 103);
+    const actors = (await observationsFor(entityA)).map((row) => provenanceOf(row)[ACTOR_KEY]);
+    expect(actors).toContain(actorA);
+    expect(actors).toContain(actorB);
   });
 
   it("MCP session store: two members' writes are attributed to each", async () => {
     const a = await harness.signIn(MEMBER_A_EMAIL);
     const b = await harness.signIn(MEMBER_B_EMAIL);
-    const principalA = await perEmailUserId(MEMBER_A_EMAIL);
-    const principalB = await perEmailUserId(MEMBER_B_EMAIL);
 
     const entityA = await mcpSessionStore(a.accessToken, "mcp session member a");
     const entityB = await mcpSessionStore(b.accessToken, "mcp session member b");
 
-    await expectAttributedTo(entityA, principalA, SHARED_GRAPH_USER_ID);
-    await expectAttributedTo(entityB, principalB, SHARED_GRAPH_USER_ID);
+    await expectAttributedTo(entityA, await memberActorId(MEMBER_A_EMAIL), SHARED_GRAPH_USER_ID);
+    await expectAttributedTo(entityB, await memberActorId(MEMBER_B_EMAIL), SHARED_GRAPH_USER_ID);
+  });
+
+  it("a guest-token read of an attributed entity never returns the member id", async () => {
+    process.env.NEOTOMA_ACCESS_POLICY_NOTE = "read_only";
+    const a = await harness.signIn(MEMBER_A_EMAIL);
+    const write = await restStore({ Authorization: `Bearer ${a.accessToken}` }, "guest shared");
+    expect(write.status, write.text).toBe(200);
+    const actorA = await memberActorId(MEMBER_A_EMAIL);
+
+    const guestToken = await generateGuestAccessToken({
+      entityIds: [write.entityId!],
+      userId: SHARED_GRAPH_USER_ID,
+    });
+    try {
+      // Control: a member's read of the same observations DOES carry it, so a
+      // clean guest response below is redaction, not an empty instrument.
+      const memberRead = await fetch(`${apiBase}/entities/${write.entityId}/observations`, {
+        headers: { Authorization: `Bearer ${a.accessToken}` },
+      });
+      expect(memberRead.status).toBe(200);
+      expect(await memberRead.text()).toContain(actorA);
+
+      for (const path of [
+        `/entities/${write.entityId}/observations`,
+        `/entities/${write.entityId}`,
+      ]) {
+        const guestRead = await fetch(
+          `${apiBase}${path}?access_token=${encodeURIComponent(guestToken)}`
+        );
+        const text = await guestRead.text();
+        expect(guestRead.status, `${path}: ${text}`).toBe(200);
+        expect(text, path).not.toContain(ACTOR_KEY);
+        expect(text, path).not.toContain(actorA);
+      }
+      // The guest still gets the observations themselves.
+      const guestObs = await fetch(
+        `${apiBase}/entities/${write.entityId}/observations?access_token=${encodeURIComponent(guestToken)}`
+      );
+      const body = (await guestObs.json()) as { observations?: unknown[] };
+      expect(body.observations?.length ?? 0).toBeGreaterThan(0);
+    } finally {
+      const tokenEntityId = `guest_token_${hashGuestAccessToken(guestToken).slice(0, 16)}`;
+      await db.from("observations").delete().eq("entity_id", tokenEntityId);
+      await db.from("entities").delete().eq("id", tokenEntityId);
+    }
   });
 
   describe("fails closed: no verified sign-in means no person", () => {

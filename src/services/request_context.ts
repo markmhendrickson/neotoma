@@ -72,9 +72,10 @@ export interface RequestContext {
    */
   mcpConnectionId?: string | null;
   /**
-   * The signed-in person whose session this request runs under (#2240),
+   * The signed-in member whose session this request runs under (#2240),
    * resolved by the auth layer from a verified sign-in recorded on the OAuth
-   * connection row. Stamped into write provenance as `authenticated_user_id`.
+   * connection row, as their per-instance attribution id. Stamped into write
+   * provenance as `authenticated_actor_id`.
    * Provenance only — never an input to data scoping. Null or absent whenever
    * no verified sign-in stands behind the request (static tokens, local
    * no-auth, AAuth grants, pre-identity connection rows): the write is then

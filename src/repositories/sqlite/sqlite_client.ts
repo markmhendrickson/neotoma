@@ -605,6 +605,22 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
     await addColumnIfMissing(db, "sources", "mtime", "TEXT");
 
+    // #2240: per-member write-attribution ids. A random id minted the first
+    // time a signed-in member's session is resolved, and the ONLY member
+    // identifier stamped into write provenance. Random rather than derived, so
+    // it cannot be recomputed from an email address and differs per instance.
+    // Deleting a row severs the link between that member and every record
+    // carrying the id (the records themselves are untouched).
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS member_attribution_ids (
+      local_user_id TEXT PRIMARY KEY,
+      attribution_id TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    )`
+      )
+      .run();
+
     await db
       .prepare(
         `CREATE TABLE IF NOT EXISTS sandbox_sessions (

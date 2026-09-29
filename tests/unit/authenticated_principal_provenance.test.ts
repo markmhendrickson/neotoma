@@ -1,6 +1,6 @@
 /**
  * #2240 — the signed-in person rides the request-scoped attribution context
- * into write provenance as `authenticated_user_id`.
+ * into write provenance as `authenticated_actor_id`.
  *
  * Unit-level contract for the carrier. The end-to-end effect (two members'
  * stored observations differ; static-token and pre-identity writes name no
@@ -23,7 +23,7 @@ import {
   runWithRequestContext,
 } from "../../src/services/request_context.js";
 
-const PRINCIPAL = { userId: "11111111-2240-4111-8111-111111111111" };
+const PRINCIPAL = { actorId: "11111111-2240-4111-8111-111111111111" };
 
 const ACTOR: ExternalActor = {
   provider: "github",
@@ -34,28 +34,28 @@ const ACTOR: ExternalActor = {
 };
 
 describe("toAttributionProvenance with an authenticated principal (#2240)", () => {
-  it("records the principal as authenticated_user_id even without an agent identity", () => {
+  it("records the principal as authenticated_actor_id even without an agent identity", () => {
     expect(toAttributionProvenance(null, null, PRINCIPAL)).toEqual({
-      authenticated_user_id: PRINCIPAL.userId,
+      authenticated_actor_id: PRINCIPAL.actorId,
     });
   });
 
   it("records the principal alongside, not instead of, the agent and external actor", () => {
     const identity = createAgentIdentity({ clientName: "probe-client" });
     const prov = toAttributionProvenance(identity, ACTOR, PRINCIPAL);
-    expect(prov.authenticated_user_id).toBe(PRINCIPAL.userId);
+    expect(prov.authenticated_actor_id).toBe(PRINCIPAL.actorId);
     expect(prov.attribution_tier).toBe("unverified_client");
     expect(prov.client_name).toBe("probe-client");
     expect(prov.external_actor).toEqual(ACTOR);
   });
 
-  it("emits no authenticated_user_id key when there is no principal", () => {
+  it("emits no authenticated_actor_id key when there is no principal", () => {
     const identity = createAgentIdentity({ clientName: "probe-client" });
     expect(toAttributionProvenance(identity, null, null)).not.toHaveProperty(
-      "authenticated_user_id"
+      "authenticated_actor_id"
     );
-    expect(toAttributionProvenance(identity)).not.toHaveProperty("authenticated_user_id");
-    expect(toAttributionProvenance(null, null, { userId: "" })).toEqual({});
+    expect(toAttributionProvenance(identity)).not.toHaveProperty("authenticated_actor_id");
+    expect(toAttributionProvenance(null, null, { actorId: "" })).toEqual({});
   });
 });
 
@@ -64,7 +64,7 @@ describe("request context carries the principal (#2240)", () => {
     expect(getCurrentAuthenticatedPrincipal()).toBeNull();
     await runWithRequestContext({ agentIdentity: null }, () => {
       expect(getCurrentAuthenticatedPrincipal()).toBeNull();
-      expect(getCurrentAttribution()).not.toHaveProperty("authenticated_user_id");
+      expect(getCurrentAttribution()).not.toHaveProperty("authenticated_actor_id");
     });
   });
 
@@ -85,7 +85,7 @@ describe("request context carries the principal (#2240)", () => {
           expect(ctx?.aauthAdmission).toBe(admission);
           expect(ctx?.externalActor).toBe(ACTOR);
           expect(ctx?.mcpConnectionId).toBe("conn-2240");
-          expect(getCurrentAttribution().authenticated_user_id).toBe(PRINCIPAL.userId);
+          expect(getCurrentAttribution().authenticated_actor_id).toBe(PRINCIPAL.actorId);
         })
     );
   });
@@ -94,7 +94,7 @@ describe("request context carries the principal (#2240)", () => {
     await runWithAuthenticatedPrincipal(PRINCIPAL, () =>
       runWithExternalActor(ACTOR, () => {
         const prov = getCurrentAttribution();
-        expect(prov.authenticated_user_id).toBe(PRINCIPAL.userId);
+        expect(prov.authenticated_actor_id).toBe(PRINCIPAL.actorId);
         expect(prov.external_actor).toEqual(ACTOR);
       })
     );
@@ -104,7 +104,7 @@ describe("request context carries the principal (#2240)", () => {
     await runWithAuthenticatedPrincipal(PRINCIPAL, () =>
       runWithAuthenticatedPrincipal(null, () => {
         expect(getCurrentAuthenticatedPrincipal()).toBeNull();
-        expect(getCurrentAttribution()).not.toHaveProperty("authenticated_user_id");
+        expect(getCurrentAttribution()).not.toHaveProperty("authenticated_actor_id");
       })
     );
   });
