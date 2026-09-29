@@ -137,7 +137,9 @@ import {
   type AAuthRequestContext,
   type AgentIdentity,
   type AttributionDecisionDiagnostics,
+  type AuthenticatedPrincipal,
 } from "./crypto/agent_identity.js";
+import { getOrCreateMemberAttributionId } from "./services/member_attribution.js";
 import {
   composeClientInstructions,
   extractFirstFencedCodeBlock,
@@ -283,6 +285,18 @@ export class NeotomaServer {
   private readonly mcpServer: McpServer;
   private autoEnhancementCleanup?: () => void;
   private authenticatedUserId: string | null = null;
+  /**
+   * #2240: the signed-in member behind this server's authenticated identity —
+   * their per-instance write-attribution id — paired with the graph user_id it
+   * was resolved alongside. Every change of identity goes through
+   * {@link setAuthenticatedIdentity}, which sets or clears the two together,
+   * so a principal cannot survive an identity change it was not resolved with.
+   * Only {@link adoptConnectionIdentity} (a verified sign-in recorded on an
+   * OAuth connection row) ever supplies one. {@link currentAuthenticatedPrincipal}
+   * additionally refuses a principal whose graph no longer matches, as a
+   * second line against a direct field write.
+   */
+  private authenticatedPrincipal: { graphUserId: string; actorId: string } | null = null;
   private sessionToken: string | null = null;
   private requestAuth: Map<string, { userId: string; token: string }> = new Map();
   /** Connection ID set from HTTP layer so handlers get auth even when SDK does not pass requestInfo */
@@ -564,14 +578,17 @@ export class NeotomaServer {
     requestId: string;
   }): Promise<"authenticated" | "unauthenticated" | "invalid_connection"> {
     const { connectionId, isHTTPTransport, requestId } = input;
+    // #2240: a fresh resolution starts with no person. Only the OAuth
+    // connection branch below can set one.
+    this.setAuthenticatedIdentity(this.authenticatedUserId, null);
 
     if (connectionId) {
       // In test environment, allow test connection ID to bypass authentication
       const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
       if (connectionId === "test-connection-bypass" && isTestEnv) {
-        this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
+        this.setAuthenticatedIdentity("00000000-0000-0000-0000-000000000000", null);
         this.requestAuth.set(requestId, {
-          userId: this.authenticatedUserId,
+          userId: "00000000-0000-0000-0000-000000000000",
           token: "test-bypass-token",
         });
         logger.info(
@@ -582,9 +599,9 @@ export class NeotomaServer {
 
       // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
       if (connectionId === "dev-local-http") {
-        this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
+        this.setAuthenticatedIdentity("00000000-0000-0000-0000-000000000000", null);
         this.requestAuth.set(requestId, {
-          userId: this.authenticatedUserId,
+          userId: "00000000-0000-0000-0000-000000000000",
           token: "dev-local-http",
         });
         logger.info(
@@ -596,9 +613,9 @@ export class NeotomaServer {
       // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
       if (connectionId === "dev-local") {
         const devUser = await ensureLocalDevUser();
-        this.authenticatedUserId = devUser.id;
+        this.setAuthenticatedIdentity(devUser.id, null);
         this.requestAuth.set(requestId, {
-          userId: this.authenticatedUserId,
+          userId: devUser.id,
           token: "dev-local",
         });
         logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
@@ -608,11 +625,12 @@ export class NeotomaServer {
       // OAuth flow - check if connection ID is valid
       try {
         const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-        const { accessToken, userId } = await getAccessTokenForConnection(connectionId);
+        const { accessToken, userId, authenticatedUserId } =
+          await getAccessTokenForConnection(connectionId);
 
         // Store auth per request (for HTTP) and at instance level (for stdio)
         this.requestAuth.set(requestId, { userId, token: accessToken });
-        this.authenticatedUserId = userId;
+        await this.adoptConnectionIdentity(userId, authenticatedUserId);
         this.sessionToken = accessToken;
 
         logger.info(
@@ -640,9 +658,9 @@ export class NeotomaServer {
             "[MCP Server] Stdio with encryption off: falling back to dev-local (no auth required)."
           );
           const devUser = await ensureLocalDevUser();
-          this.authenticatedUserId = devUser.id;
+          this.setAuthenticatedIdentity(devUser.id, null);
           this.requestAuth.set(requestId, {
-            userId: this.authenticatedUserId,
+            userId: devUser.id,
             token: "dev-local",
           });
           return "authenticated";
@@ -678,7 +696,7 @@ export class NeotomaServer {
     // authenticate as B's user_id (owner pivot).
     const admission = getCurrentAAuthAdmission();
     if (admission?.admitted && admission.user_id) {
-      this.authenticatedUserId = admission.user_id;
+      this.setAuthenticatedIdentity(admission.user_id, null);
       this.requestAuth.set(requestId, {
         userId: admission.user_id,
         token: `aauth:${admission.grant_id ?? "admitted"}`,
@@ -865,6 +883,47 @@ export class NeotomaServer {
   }
 
   /**
+   * The single setter for this server's identity (#2240). Sets the graph
+   * user_id and the signed-in member together, so every path that changes
+   * who this server acts as also decides — explicitly — whether a member
+   * stands behind it. Paths with no verified sign-in pass null.
+   */
+  private setAuthenticatedIdentity(userId: string | null, actorId: string | null): void {
+    this.authenticatedUserId = userId;
+    this.authenticatedPrincipal = userId && actorId ? { graphUserId: userId, actorId } : null;
+  }
+
+  /**
+   * Adopt an identity resolved from an OAuth connection row: the graph scope
+   * every read and write uses, plus — when a verified sign-in recorded one on
+   * the row — the member who signed in, as their per-instance attribution id
+   * (#2240). A missing or unresolvable member stays missing; it is never
+   * filled in from the graph user_id, which on a shared graph names the owner
+   * rather than the author.
+   */
+  private async adoptConnectionIdentity(
+    userId: string,
+    signerLocalUserId: string | undefined
+  ): Promise<void> {
+    const actorId = signerLocalUserId
+      ? await getOrCreateMemberAttributionId(signerLocalUserId)
+      : null;
+    this.setAuthenticatedIdentity(userId, actorId);
+  }
+
+  /**
+   * The signed-in member for write attribution, or null. Fails closed: a
+   * principal resolved alongside a different graph user_id than the one now
+   * authenticated is discarded rather than stamped (#2240).
+   */
+  private currentAuthenticatedPrincipal(): AuthenticatedPrincipal | null {
+    const principal = this.authenticatedPrincipal;
+    if (!principal || !this.authenticatedUserId) return null;
+    if (principal.graphUserId !== this.authenticatedUserId) return null;
+    return { actorId: principal.actorId };
+  }
+
+  /**
    * Listing-handler fallback matching initialize's order: when no
    * connection id resolved a user, a request the /mcp gate admitted via AAuth
    * authenticates as the grant owner (never a request-supplied id).
@@ -872,7 +931,7 @@ export class NeotomaServer {
   private userIdFromCurrentAdmission(): string | null {
     const admission = getCurrentAAuthAdmission();
     if (admission?.admitted && admission.user_id) {
-      this.authenticatedUserId = admission.user_id;
+      this.setAuthenticatedIdentity(admission.user_id, null);
       return admission.user_id;
     }
     return null;
@@ -1014,12 +1073,12 @@ export class NeotomaServer {
     try {
       if (connectionId === "dev-local") {
         const devUser = await ensureLocalDevUser();
-        this.authenticatedUserId = devUser.id;
+        this.setAuthenticatedIdentity(devUser.id, null);
         return devUser.id;
       }
       const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-      const { userId } = await getAccessTokenForConnection(connectionId);
-      this.authenticatedUserId = userId;
+      const { userId, authenticatedUserId } = await getAccessTokenForConnection(connectionId);
+      await this.adoptConnectionIdentity(userId, authenticatedUserId);
       logger.info(`[MCP Server] initialize fallback resolved userId: ${userId}`);
       return userId;
     } catch (error: unknown) {
@@ -2279,14 +2338,17 @@ export class NeotomaServer {
 
         if (connectionId) {
           try {
+            let principalUserId: string | undefined;
             if (connectionId === "dev-local") {
               userId = (await ensureLocalDevUser()).id;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-              const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+              const { userId: resolvedUserId, authenticatedUserId } =
+                await getAccessTokenForConnection(connectionId);
               userId = resolvedUserId;
+              principalUserId = authenticatedUserId;
             }
-            this.authenticatedUserId = userId;
+            await this.adoptConnectionIdentity(userId, principalUserId);
             logger.info(`[MCP Server] listTools fallback resolved userId: ${userId}`);
           } catch (error: any) {
             // Check if error is a connection not found error (invalid/expired X-Connection-Id)
@@ -2405,8 +2467,16 @@ export class NeotomaServer {
         // `getCurrentAAuthAdmission()`) binds for AAuth-admitted MCP sessions.
         // Without this the nested scope shadows the admission to null and the
         // gate silently no-ops.
+        // #2240: carry the signed-in person, when one stands behind this
+        // session, so writes record who made them alongside the graph they
+        // land in. Null for every non-sign-in auth path.
         const result = await runWithRequestContext(
-          { agentIdentity: identity, attributionDecision, aauthAdmission: admissionForThisRequest },
+          {
+            agentIdentity: identity,
+            attributionDecision,
+            aauthAdmission: admissionForThisRequest,
+            authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+          },
           () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
@@ -2531,7 +2601,8 @@ export class NeotomaServer {
     args: unknown,
     userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    this.authenticatedUserId = userId;
+    // Local CLI dispatch carries no verified sign-in: no person (#2240).
+    this.setAuthenticatedIdentity(userId, null);
     // Mirror the CallToolRequestSchema dispatch: wrap in the request-scoped
     // context so CLI-over-MCP callers (see src/cli/core/operations.ts and
     // openclaw_entry.ts) stamp attribution just like HTTP `/mcp`. When no
@@ -2544,7 +2615,12 @@ export class NeotomaServer {
     // not grant-based AAuth). Pass null so the capability gate is a no-op
     // for CLI callers, matching prior behaviour.
     return runWithRequestContext(
-      { agentIdentity: identity, attributionDecision, aauthAdmission: null },
+      {
+        agentIdentity: identity,
+        attributionDecision,
+        aauthAdmission: null,
+        authenticatedPrincipal: null,
+      },
       () => this.executeTool(name, args)
     );
   }
@@ -2711,14 +2787,17 @@ export class NeotomaServer {
 
         if (connectionId) {
           try {
+            let principalUserId: string | undefined;
             if (connectionId === "dev-local") {
               userId = (await ensureLocalDevUser()).id;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-              const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+              const { userId: resolvedUserId, authenticatedUserId } =
+                await getAccessTokenForConnection(connectionId);
               userId = resolvedUserId;
+              principalUserId = authenticatedUserId;
             }
-            this.authenticatedUserId = userId;
+            await this.adoptConnectionIdentity(userId, principalUserId);
             logger.info(`[MCP Server] listResources fallback resolved userId: ${userId}`);
           } catch (error: any) {
             // Check if error is a connection not found error (invalid/expired X-Connection-Id)

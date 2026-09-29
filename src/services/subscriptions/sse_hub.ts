@@ -39,6 +39,8 @@ export interface SseClient {
   subscription: SubscriptionRecord;
   res: Response;
   lastEventId: string | undefined;
+  /** Revalidate short-lived credentials immediately before live delivery. */
+  authorize?: () => Promise<boolean>;
 }
 
 const clients: SseClient[] = [];
@@ -51,7 +53,10 @@ export function registerSseClient(client: SseClient): () => void {
   };
 }
 
-export function broadcastSubstrateEventToSse(event: SubstrateEvent, eventRingId: string): void {
+export async function broadcastSubstrateEventToSse(
+  event: SubstrateEvent,
+  eventRingId: string
+): Promise<void> {
   // Collect dead clients to evict after the pass. A client whose socket is gone
   // (e.g. a daemon that dropped without `req.on("close")` firing — common on
   // `incomplete chunked read` disconnects) would otherwise linger in `clients`
@@ -60,12 +65,39 @@ export function broadcastSubstrateEventToSse(event: SubstrateEvent, eventRingId:
   // long-running process. Prune them so delivery stays healthy across the
   // lifetime of the server, not just after a restart.
   const dead: SseClient[] = [];
-  for (const c of clients) {
+  // Iterate a snapshot: the per-client authorization check below awaits, and
+  // a client that unregisters (or registers) during that await would
+  // otherwise shift the live array under the iterator and make the next
+  // client silently miss this event.
+  for (const c of [...clients]) {
     if (c.subscription.delivery_method !== "sse") continue;
     if (!subscriptionMatchesEvent(c.subscription, event)) continue;
     if (c.res.writableEnded || c.res.destroyed) {
       dead.push(c);
       continue;
+    }
+    if (c.authorize) {
+      let authorized = false;
+      try {
+        authorized = await c.authorize();
+      } catch (err) {
+        logger.warn("[subscriptions] sse authorization check failed; evicting client", {
+          subscription_id: c.subscription.subscription_id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (!authorized) {
+        dead.push(c);
+        try {
+          c.res.end();
+        } catch {
+          // The client is removed below even if its socket cannot be closed.
+        }
+        continue;
+      }
+      // The client may have disconnected and unregistered while its check
+      // was pending; do not write to a stream that is no longer registered.
+      if (!clients.includes(c) || c.res.writableEnded || c.res.destroyed) continue;
     }
     try {
       c.res.write(`id: ${eventRingId}\n`);

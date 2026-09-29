@@ -92,6 +92,17 @@ describe("contract mappings", () => {
     }
   });
 
+  it("exposes the SSE subscription stream through the natural CLI request surface", () => {
+    expect(
+      OPENAPI_OPERATION_MAPPINGS.find((entry) => entry.operationId === "eventsStream")
+    ).toMatchObject({
+      method: "get",
+      path: "/events/stream",
+      adapter: "cli",
+      cliCommand: "request --operation eventsStream",
+    });
+  });
+
   it("ensures MCP tool mappings resolve to OpenAPI operationIds", () => {
     const operationIdSet = new Set(
       OPENAPI_OPERATION_MAPPINGS.map((mapping) => mapping.operationId)

@@ -7,6 +7,7 @@
 import { getDb } from "../repositories/db/connection.js";
 import { getSharedGraphUserId } from "./google_oidc.js";
 import { getLocalAuthUserById } from "./local_auth.js";
+import { getOrCreateMemberAttributionId } from "./member_attribution.js";
 
 export interface ValidatedUser {
   /**
@@ -26,6 +27,17 @@ export interface ValidatedUser {
   authenticatedUserId?: string;
   /** True when this session's graph scope was remapped by shared-graph mode. */
   sharedGraph?: boolean;
+  /**
+   * Write-attribution id of the signed-in member behind this session (#2240):
+   * the random per-instance id `getOrCreateMemberAttributionId` maps to the
+   * per-email user id a verified sign-in recorded on the connection row. Set
+   * whether or not the signer differs from the graph scope, because a write
+   * needs to name its author either way. Absent when the row carries no
+   * recorded sign-in (key-entry or bearer-gate sign-ins, rows that predate
+   * identity recording) or the id cannot be resolved — never back-filled from
+   * `userId`, which on a shared graph names the owner, not the author.
+   */
+  actorId?: string;
 }
 
 /**
@@ -108,8 +120,11 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
     Boolean(authenticatedUserId && authenticatedUserId !== connection.user_id) ||
     (isSharedGraphScope && !authenticatedEmail);
 
+  const actorId = await getOrCreateMemberAttributionId(authenticatedUserId);
+
   return {
     userId: connection.user_id,
+    ...(actorId ? { actorId } : {}),
     ...(email ? { email } : {}),
     ...(sharedGraph
       ? {
