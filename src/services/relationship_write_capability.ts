@@ -24,6 +24,11 @@
  * The check is the same one everywhere, so a sibling path cannot drift from
  * the one that was fixed: that drift is the defect this module exists to
  * close.
+ *
+ * Identity is read from the request-scoped context. Every in-process caller
+ * that writes an edge on an agent's behalf must therefore run inside that
+ * agent's request context; work replayed outside it (a background job) sees
+ * no identity and is not gated here.
  */
 
 import { db } from "../db.js";
@@ -55,7 +60,8 @@ export interface RelationshipWriteRef {
  * Mirrors the rule `storeStructuredForApi` already applied to store: callers
  * with no agent identity are not capability-gated (attribution policy still
  * governs them), and an AAuth-verified caller that was not admitted by a grant
- * is a guest governed by access policy instead. Keeping that rule here, once,
+ * is a guest governed by access policy instead — unless its admission reason
+ * yields the `deny` ceiling, which is enforced. Keeping that rule here, once,
  * is what makes the REST and MCP store paths and the standalone routes agree.
  */
 export function currentRelationshipCapabilityContext(): AgentCapabilityContext | null {
@@ -64,7 +70,12 @@ export function currentRelationshipCapabilityContext(): AgentCapabilityContext |
   if (!capabilityCtx) return null;
   const admission = getCurrentAAuthAdmission();
   const isGuest = identity?.thumbprint != null && (!admission || !admission.admitted);
-  if (isGuest) return null;
+  // A signature that names a revoked, suspended, unbound, invalid or
+  // pin-conflicting grant is not a guest: it produces the `deny` ceiling, and
+  // `enforceAgentCapability` refuses it. Only an unrecognised signer (the
+  // `none` ceiling) is left to access policy — the same split the MCP store
+  // gate applies.
+  if (isGuest && capabilityCtx.ceiling?.kind !== "deny") return null;
   return capabilityCtx;
 }
 

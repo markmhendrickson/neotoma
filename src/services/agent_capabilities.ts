@@ -617,7 +617,8 @@ export function enforceAgentRelationshipCapability(
       `Admitted agent "${ctx.agentLabel}" has no single create_relationship capability ` +
       `covering relationship_type "${relationshipType || "unknown"}" and endpoint ` +
       `entity_types [${distinctEndpointTypes.map((type) => `"${type}"`).join(", ")}]. ` +
-      `Edit the grant in Inspector → Agents → Grants and add ` +
+      `Update the grant's capabilities (PATCH /agents/grants/{grant_id}, or correct ` +
+      `on the agent_grant entity) to include ` +
       `{ op: "create_relationship", entity_types: [` +
       `${distinctEndpointTypes.map((type) => `"${type}"`).join(", ")}], ` +
       `relationship_types: ["${relationshipType || "<relationship_type>"}"] }.` +

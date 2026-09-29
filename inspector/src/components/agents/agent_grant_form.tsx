@@ -3,7 +3,9 @@
  *
  * The form keeps the capability list small and explicit: each row is one
  * `{op, entity_types}` entry that mirrors the wire shape used by the
- * REST API and `enforceAgentCapability` on the server.
+ * REST API and `enforceAgentCapability` on the server. A
+ * `relationship_types` list on an entry is carried through unchanged (see
+ * `agent_grant_capabilities.ts`).
  */
 
 import { useEffect, useState } from "react";
@@ -26,6 +28,7 @@ import type {
   AgentGrantCreateRequest,
   AgentGrantUpdateRequest,
 } from "@/types/api";
+import { capabilitiesForForm, capabilitiesForPayload } from "./agent_grant_capabilities";
 
 const CAPABILITY_OPS: ReadonlyArray<{ value: AgentCapabilityOp; label: string }> = [
   { value: "store_structured", label: "store_structured" },
@@ -84,13 +87,7 @@ function buildInitialState(
     match_thumbprint:
       initial?.match_thumbprint ?? identityHint?.thumbprint ?? "",
     notes: initial?.notes ?? "",
-    capabilities:
-      initial?.capabilities && initial.capabilities.length > 0
-        ? initial.capabilities.map((c) => ({
-            op: c.op,
-            entity_types: c.entity_types.length > 0 ? [...c.entity_types] : ["*"],
-          }))
-        : [emptyCapability()],
+    capabilities: capabilitiesForForm(initial?.capabilities) ?? [emptyCapability()],
   };
 }
 
@@ -146,12 +143,7 @@ export function AgentGrantForm({
       const t = value.trim();
       return t === "" ? null : t;
     };
-    const capabilities = state.capabilities.map((c) => ({
-      op: c.op,
-      entity_types: (Array.isArray(c.entity_types) ? c.entity_types : [])
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0),
-    }));
+    const capabilities = capabilitiesForPayload(state.capabilities);
     const payload: AgentGrantCreateRequest | AgentGrantUpdateRequest = {
       label: state.label.trim(),
       capabilities,

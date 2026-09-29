@@ -236,8 +236,24 @@ drift from another:
 Endpoint types are resolved within the authenticated owner's scope; an
 endpoint that does not resolve fails closed. Edges the server derives from a
 registered schema (reference-field auto-linking, derived-entity extraction)
-take their type from the schema, not the caller, and are not re-gated; the
-store that triggered them is.
+are gated the same way: the schema that picks their type can be registered by
+the caller, so the grant must cover them too. A refused schema-derived edge is
+reported as not linked (`linked: false` / `skipped`); the store that triggered
+it still succeeds.
+
+A signature whose grant is revoked, suspended, unbound, invalid or in a pin
+conflict is refused on every edge write, as it is on `store`. Only a signer no
+grant recognises is treated as a guest and left to access policy.
+
+**Migration.** A `create_relationship` entry written before this field
+existed has no `relationship_types` and now grants no edge writes. To restore
+edge writes, update the grant's capabilities to name the relationship types the
+agent needs, with `PATCH /agents/grants/{grant_id}` or a `correct` on the
+`agent_grant` entity. The Inspector grant form and `neotoma agents grants
+import` preserve an existing `relationship_types` list; the form does not yet
+edit it. The repo default registry (`config/agent_capabilities.default.json`)
+no longer grants `create_relationship` to the feedback forwarder, which writes
+no edges.
 
 ### Matching order
 

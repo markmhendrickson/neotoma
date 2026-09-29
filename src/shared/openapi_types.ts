@@ -3334,6 +3334,15 @@ export interface components {
        *     Neotoma-native ops.
        */
       repos?: string[];
+      /**
+       * @description Relationship types this entry may write. Required for
+       *     `create_relationship` edge writes: one entry must cover the
+       *     relationship type AND both endpoint entity types
+       *     (`entity_types`). Absent or empty grants no edge writes. The
+       *     single string `*` wildcards any relationship type. Also the
+       *     scope for `register_relationship_type`.
+       */
+      relationship_types?: string[];
     };
     /**
      * @description First-class persistent grant that admits a verified AAuth

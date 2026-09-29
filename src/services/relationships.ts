@@ -209,14 +209,6 @@ export class RelationshipsService {
     source_peer_id?: string;
     metadata?: Record<string, unknown>;
     user_id: string;
-    /**
-     * Set ONLY by server-side schema machinery (reference-field auto-linking
-     * and derived-entity extraction), whose edge type comes from the
-     * registered schema rather than from the caller. Every caller-requested
-     * edge leaves this unset and is capability-gated below. Never populate
-     * it from request input.
-     */
-    system_derived?: boolean;
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
     await this.assertRegisteredType(params.relationship_type, params.user_id);
@@ -228,18 +220,21 @@ export class RelationshipsService {
     // MCP create_relationship(s), both store paths, interpretations, CLI and
     // in-process callers cannot drift apart. Placed after the ownership check
     // so a missing endpoint keeps its not-found answer, and before any write.
-    if (!params.system_derived) {
-      await enforceCurrentAgentRelationshipWrites({
-        userId: params.user_id,
-        relationships: [
-          {
-            relationship_type: params.relationship_type,
-            source_entity_id: params.source_entity_id,
-            target_entity_id: params.target_entity_id,
-          },
-        ],
-      });
-    }
+    // Schema-driven edges (reference-field auto-links, derived-entity links)
+    // are gated too: the schema that picks their type is itself caller-
+    // registrable, so an edge type chosen by a schema is not outside the
+    // caller's control. Those callers catch the refusal and report the link
+    // as not created rather than failing the triggering store.
+    await enforceCurrentAgentRelationshipWrites({
+      userId: params.user_id,
+      relationships: [
+        {
+          relationship_type: params.relationship_type,
+          source_entity_id: params.source_entity_id,
+          target_entity_id: params.target_entity_id,
+        },
+      ],
+    });
     await this.assertAcyclicWrite(params);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;

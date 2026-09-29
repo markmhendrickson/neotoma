@@ -1242,6 +1242,17 @@ components:
             strings. The single string `*` wildcards any repo. Only
             meaningful for `github_harness:*` ops; ignored for
             Neotoma-native ops.
+        relationship_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Relationship types this entry may write. Required for
+            `create_relationship` edge writes: one entry must cover the
+            relationship type AND both endpoint entity types
+            (`entity_types`). Absent or empty grants no edge writes. The
+            single string `*` wildcards any relationship type. Also the
+            scope for `register_relationship_type`.
     AgentGrant:
       type: object
       description: |

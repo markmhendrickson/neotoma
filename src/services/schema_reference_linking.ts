@@ -504,9 +504,6 @@ export async function autoLinkReferenceFields(
           auto_link_entity_type: params.entityType,
         } satisfies AutoLinkMetadata,
         user_id: params.userId,
-        // Edge type comes from the registered schema's reference field, not
-        // from the caller; the store that triggered it was capability-gated.
-        system_derived: true,
       });
 
       const changedTargetRetraction = await retractStaleAutoLinkedEdges(
@@ -550,6 +547,14 @@ export async function autoLinkReferenceFields(
       }
     } catch (err) {
       result.skipped++;
+      result.details.push({
+        field: ref.field,
+        target_entity_type: ref.target_entity_type,
+        target_canonical_name: candidate,
+        target_entity_id: targetEntityId,
+        relationship_type: relationshipType,
+        linked: false,
+      });
       logger.warn(
         `[SCHEMA_REF_LINK] Failed to auto-link ${params.entityType}.${ref.field} -> ` +
           `${ref.target_entity_type}(${candidate}): ${

@@ -83,6 +83,7 @@ import type { AAuthAdmissionContext } from "../../src/services/protected_entity_
 import { relationshipTypeRegistry } from "../../src/services/relationship_types/registry.js";
 import { RelationshipsService } from "../../src/services/relationships.js";
 import { runWithRequestContext } from "../../src/services/request_context.js";
+import { schemaRegistry } from "../../src/services/schema_registry.js";
 
 /**
  * The checkpoint grant from the review: store both types, and create only
@@ -164,6 +165,23 @@ async function edgesOfTypeTo(type: string, target: string): Promise<number> {
 }
 
 function runAdmitted<T>(fn: () => Promise<T>): Promise<T> {
+  return runWithAdmission(
+    {
+      admitted: true,
+      reason: "admitted",
+      user_id: USER_ID,
+      grant_id: "ent_test_rel_cap_grant",
+      agent_label: "relationship capability surfaces grant",
+      capabilities: CHECKPOINT_CAPABILITIES,
+    },
+    fn
+  );
+}
+
+function runWithAdmission<T>(
+  aauthAdmission: AAuthAdmissionContext,
+  fn: () => Promise<T>
+): Promise<T> {
   const agentIdentity: AgentIdentity = {
     sub: "dispatcher@swarm.test",
     iss: "https://swarm.test",
@@ -171,14 +189,6 @@ function runAdmitted<T>(fn: () => Promise<T>): Promise<T> {
     algorithm: "ES256",
     publicKey: '{"kty":"EC"}',
     tier: "software",
-  };
-  const aauthAdmission: AAuthAdmissionContext = {
-    admitted: true,
-    reason: "admitted",
-    user_id: USER_ID,
-    grant_id: "ent_test_rel_cap_grant",
-    agent_label: "relationship capability surfaces grant",
-    capabilities: CHECKPOINT_CAPABILITIES,
   };
   return runWithRequestContext({ agentIdentity, attributionDecision: null, aauthAdmission }, fn);
 }
@@ -638,6 +648,144 @@ describe("relationship-write capability: every entrance, every surface", () => {
       expect(refused.map((r) => r.relationship_type)).toEqual([OUT_OF_SCOPE]);
       expect(await edgeExists(OUT_OF_SCOPE, checkpointId, taskId)).toBe(false);
       expect(await edgeExists(IN_SCOPE, checkpointId, taskId)).toBe(true);
+    });
+  });
+  // --------------------------------------------- deny ceiling is not a guest
+  describe("a signer whose grant is revoked or suspended", () => {
+    it.each(["grant_revoked", "grant_suspended"] as const)(
+      "is refused on MCP create_relationship (%s) and the edge does not exist",
+      async (reason) => {
+        const error = await capture(() =>
+          runWithAdmission({ admitted: false, reason }, () =>
+            tool(
+              mcp,
+              "createRelationship"
+            )({
+              relationship_type: OUT_OF_SCOPE,
+              source_entity_id: checkpointId,
+              target_entity_id: taskId,
+            })
+          )
+        );
+        expect(error, String((error as Error | undefined)?.message)).toBeInstanceOf(
+          AgentCapabilityError
+        );
+        expect(await edgeExists(OUT_OF_SCOPE, checkpointId, taskId)).toBe(false);
+      }
+    );
+
+    it("is refused on MCP create_relationships and no edge is written", async () => {
+      const result = await runWithAdmission({ admitted: false, reason: "grant_revoked" }, () =>
+        tool(
+          mcp,
+          "createRelationships"
+        )({
+          relationships: [
+            {
+              relationship_type: IN_SCOPE,
+              source_entity_id: checkpointId,
+              target_entity_id: taskId,
+            },
+          ],
+        })
+      );
+      const body = JSON.parse(result.content[0].text) as { created_count?: number };
+      expect(body.created_count ?? 0).toBe(0);
+      expect(await edgeExists(IN_SCOPE, checkpointId, taskId)).toBe(false);
+    });
+  });
+
+  // ------------------------------------- schema-chosen edge types are gated
+  describe("edges whose type a registered schema chooses", () => {
+    const PROBE_TYPE = "rel_cap_autolink_probe";
+    const PROBE_CAPABILITIES: AgentCapabilityEntry[] = [
+      { op: "store", entity_types: [PROBE_TYPE, "task"] },
+      { op: "retrieve", entity_types: ["*"] },
+      {
+        op: "create_relationship",
+        entity_types: [PROBE_TYPE, "task"],
+        relationship_types: [IN_SCOPE],
+      },
+    ];
+
+    beforeAll(async () => {
+      if (!(await schemaRegistry.loadActiveSchema(PROBE_TYPE, USER_ID))) {
+        await schemaRegistry.register({
+          entity_type: PROBE_TYPE,
+          schema_version: "1.0",
+          schema_definition: {
+            fields: {
+              title: { type: "string", required: false },
+              lease_task: { type: "string", required: false },
+              ref_task: { type: "string", required: false },
+            },
+            canonical_name_fields: ["title"],
+            reference_fields: [
+              { field: "lease_task", target_entity_type: "task", relationship_type: OUT_OF_SCOPE },
+              { field: "ref_task", target_entity_type: "task", relationship_type: IN_SCOPE },
+            ],
+          },
+          reducer_config: { merge_policies: {} },
+          user_id: USER_ID,
+          user_specific: true,
+          activate: true,
+        });
+      }
+    });
+
+    it("refuses the out-of-grant auto-link, keeps the in-grant one, and the store succeeds", async () => {
+      const admission: AAuthAdmissionContext = {
+        admitted: true,
+        reason: "admitted",
+        user_id: USER_ID,
+        grant_id: "ent_test_rel_cap_probe_grant",
+        agent_label: "relationship capability probe grant",
+        capabilities: PROBE_CAPABILITIES,
+      };
+      const storeAs = (args: Record<string, unknown>) =>
+        runWithAdmission(admission, () => tool(mcp, "store")(args));
+      const entityIdOf = (result: ToolResult): string => {
+        const body = JSON.parse(result.content[0].text) as {
+          entities?: Array<{ entity_id?: string }>;
+        };
+        const id = body.entities?.[0]?.entity_id;
+        if (!id) throw new Error(`store returned no entity id: ${result.content[0].text}`);
+        createdEntityIds.push(id);
+        return id;
+      };
+
+      const targetTaskId = entityIdOf(
+        await storeAs({
+          user_id: USER_ID,
+          idempotency_key: `rel-cap-autolink-target-${randomUUID()}`,
+          entities: [{ entity_type: "task", title: `autolink target ${randomUUID()}` }],
+        })
+      );
+      const { data: targetSnapshot } = await db
+        .from("entity_snapshots")
+        .select("canonical_name")
+        .eq("entity_id", targetTaskId)
+        .single();
+      const targetName = (targetSnapshot as { canonical_name?: string } | null)?.canonical_name;
+      expect(targetName, "target task has a canonical_name").toBeTruthy();
+
+      const probeId = entityIdOf(
+        await storeAs({
+          user_id: USER_ID,
+          idempotency_key: `rel-cap-autolink-probe-${randomUUID()}`,
+          entities: [
+            {
+              entity_type: PROBE_TYPE,
+              title: `probe ${randomUUID()}`,
+              lease_task: targetName,
+              ref_task: targetName,
+            },
+          ],
+        })
+      );
+
+      expect(await edgeExists(OUT_OF_SCOPE, probeId, targetTaskId)).toBe(false);
+      expect(await edgeExists(IN_SCOPE, probeId, targetTaskId)).toBe(true);
     });
   });
 });
