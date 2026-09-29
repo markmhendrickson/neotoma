@@ -236,8 +236,7 @@ drift from another:
 Endpoint types are resolved within the authenticated owner's scope; an
 endpoint that does not resolve fails closed. Edges the server derives from a
 registered schema (reference-field auto-linking, derived-entity extraction)
-are gated the same way: the schema that picks their type can be registered by
-the caller, so the grant must cover them too. A refused schema-derived edge is
+are gated the same way: the grant must cover them too. A refused schema-derived edge is
 reported as not linked (`linked: false` / `skipped`); the store that triggered
 it still succeeds.
 

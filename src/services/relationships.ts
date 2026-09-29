@@ -221,10 +221,9 @@ export class RelationshipsService {
     // in-process callers cannot drift apart. Placed after the ownership check
     // so a missing endpoint keeps its not-found answer, and before any write.
     // Schema-driven edges (reference-field auto-links, derived-entity links)
-    // are gated too: the schema that picks their type is itself caller-
-    // registrable, so an edge type chosen by a schema is not outside the
-    // caller's control. Those callers catch the refusal and report the link
-    // as not created rather than failing the triggering store.
+    // are gated the same way as every other edge: the grant must cover them.
+    // Those callers catch the refusal and report the link as not created
+    // rather than failing the triggering store.
     await enforceCurrentAgentRelationshipWrites({
       userId: params.user_id,
       relationships: [
