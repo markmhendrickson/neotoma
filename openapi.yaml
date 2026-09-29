@@ -828,11 +828,14 @@ components:
     AgentAttribution:
       type: object
       description: |
-        Agent-identity provenance recorded on every durable write-path record
+        Write-attribution provenance recorded on durable write-path records
         (observations, relationships, sources, interpretations, timeline
-        events). Fields are stamped additively into the existing provenance
-        JSON blob on each record so no schema migration was required; the
-        shape below documents the keys consumers can rely on.
+        events). Most keys describe the software that wrote the record (the
+        AAuth agent and MCP client); `authenticated_actor_id` instead
+        identifies the signed-in member whose session made the write. Fields
+        are stamped additively into the existing provenance JSON blob on each
+        record so no schema migration was required; the shape below documents
+        the keys consumers can rely on.
 
         When AAuth is active the `agent_*` keys carry the cryptographically
         verified identity; `client_name`/`client_version` come from the MCP
@@ -877,6 +880,24 @@ components:
           type: string
           format: date-time
           description: ISO-8601 timestamp when the attribution block was stamped.
+        authenticated_actor_id:
+          type: string
+          description: |
+            The signed-in member whose session made this write, as their
+            write-attribution id: a random UUID minted on this instance the
+            first time the member's session is resolved. It is pseudonymous —
+            not derived from the email address or the member's `user_id`, so it
+            cannot be recomputed from a list of addresses, and the same person
+            has a different id on every instance. Only this instance's
+            `member_attribution_ids` table maps it back to a member; no API
+            exposes that mapping yet. It is not the same value as `/me`'s
+            `authenticated_user_id` and does not join to it. Provenance only —
+            it never affects which graph is read or written. Absent when no
+            verified sign-in stands behind the request (static bearer token,
+            key-derived MCP token, local no-auth, AAuth grant, or a connection
+            that predates identity recording); consumers MUST read absence as
+            "unknown", never as the graph owner. Withheld from responses to
+            guest (entity-scoped token) readers.
     AttributionPolicySnapshot:
       type: object
       description: |

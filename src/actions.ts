@@ -71,10 +71,12 @@ import {
   getCurrentAttribution,
   getCurrentExternalActor,
   getRequestContext,
+  runWithAuthenticatedPrincipal,
   runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
+import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
   createAgentIdentity as buildAgentIdentity,
   type ExternalActor,
@@ -4651,6 +4653,12 @@ app.use(async (req, res, next) => {
   //      userId (getUserIdFromBearerToken) is a real principal; a bare
   //      auto-registered key resolves to `undefined` and must fall through to the
   //      reject path — never to a caller-supplied `user_id` in getAuthenticatedUserId.
+  // #2240: the signed-in person behind a session bearer, for write
+  // attribution. Set ONLY from a verified sign-in recorded on the connection
+  // row; every other auth path above (static tokens, key-derived token, local
+  // no-auth, AAuth grant, sandbox) leaves it unset, so their writes carry no
+  // person rather than defaulting to one.
+  let sessionActorId: string | undefined;
   const registered = ensurePublicKeyRegistered(bearerToken);
   const registeredUserId = registered ? getUserIdFromBearerToken(bearerToken) : undefined;
   const { signature: ed25519Signature } = parseAuthHeader(headerAuth);
@@ -4689,6 +4697,7 @@ app.use(async (req, res, next) => {
       (req as any).signedInUserId = validated.authenticatedUserId;
       (req as any).signedInSharedGraph = validated.sharedGraph === true;
       (req as any).bearerToken = bearerToken;
+      sessionActorId = validated.actorId;
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
@@ -4725,11 +4734,33 @@ app.use(async (req, res, next) => {
     }
   }
 
+  if (sessionActorId) {
+    // Carry the person into the request-scoped attribution context so every
+    // write-path service stamps it into provenance as `authenticated_actor_id`
+    // (#2240). Provenance only: the stamped graph principal above still
+    // decides which graph is read and written.
+    return runWithAuthenticatedPrincipal({ actorId: sessionActorId }, () => next());
+  }
   return next();
 });
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+
+// #2240: member write-attribution (`provenance.authenticated_actor_id`) is for
+// members of the graph, not for a guest holding an entity-scoped token. Wrap
+// res.json for every request and redact at send time when the principal is a
+// guest — decided at send time because some routes stamp the guest principal
+// inside the handler (resolveRoutePrincipal), after this middleware runs.
+// Registered after encryptResponseMiddleware so it runs first on send.
+app.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = ((body?: unknown) =>
+    sendJson(
+      requestPrincipal(req)?.kind === "guest" ? redactMemberAttribution(body) : body
+    )) as typeof res.json;
+  next();
+});
 
 // Sandbox-mode write gate: destructive routes blocked + tighter per-IP rate
 // limit on all write methods. No-op outside sandbox.
@@ -12743,7 +12774,9 @@ app.get("/events/stream", async (req, res) => {
     const writeEvent = (id: string, ev: SubstrateEvent): void => {
       res.write(`id: ${id}\n`);
       res.write(`event: ${ev.event_type}\n`);
-      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      // #2240: a guest stream never carries member write-attribution.
+      const payload = principal.kind === "guest" ? redactMemberAttribution(ev) : ev;
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
     if (lastEventId !== undefined && !ringHasId(lastEventId)) {

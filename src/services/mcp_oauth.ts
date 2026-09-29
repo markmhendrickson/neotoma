@@ -1712,9 +1712,17 @@ export async function handleOAuthCallback(
  * const { accessToken, userId } = await getAccessTokenForConnection("cursor-2025-01-27-abc123");
  * // Use accessToken for authenticated requests
  */
-export async function getAccessTokenForConnection(
-  connectionId: string
-): Promise<{ accessToken: string; userId: string }> {
+export async function getAccessTokenForConnection(connectionId: string): Promise<{
+  accessToken: string;
+  /** Graph scope — the user_id this connection's reads and writes use. */
+  userId: string;
+  /**
+   * The signed-in person a verified sign-in recorded on this connection
+   * (#2228 column), for write attribution (#2240). Absent when the row
+   * carries none; callers must not substitute `userId`.
+   */
+  authenticatedUserId?: string;
+}> {
   // Validate input
   validateConnectionId(connectionId);
 
@@ -1736,6 +1744,7 @@ export async function getAccessTokenForConnection(
       return {
         accessToken: connection.access_token,
         userId: connection.user_id,
+        ...principalOf(connection),
       };
     }
 
@@ -1762,6 +1771,7 @@ export async function getAccessTokenForConnection(
     return {
       accessToken,
       userId: connection.user_id,
+      ...principalOf(connection),
     };
   }
 
@@ -1795,6 +1805,7 @@ export async function getAccessTokenForConnection(
     return {
       accessToken: connection.access_token,
       userId: connection.user_id,
+      ...principalOf(connection),
     };
   }
 
@@ -1835,7 +1846,16 @@ export async function getAccessTokenForConnection(
   return {
     accessToken: tokens.accessToken,
     userId: connection.user_id,
+    ...principalOf(connection),
   };
+}
+
+/** The recorded signer on a connection row, as an optional spread (#2240). */
+function principalOf(connection: { authenticated_user_id?: string | null }): {
+  authenticatedUserId?: string;
+} {
+  const id = connection.authenticated_user_id;
+  return typeof id === "string" && id.length > 0 ? { authenticatedUserId: id } : {};
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokenResponse> {
