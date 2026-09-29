@@ -79,7 +79,8 @@ export function repoNotAllowedError(): IssueTransportError {
   return new IssueTransportError({
     code: "ERR_ISSUE_REPO_NOT_ALLOWED",
     status: 403,
-    message: "This repository is not permitted for issue sync on this instance.",
+    message:
+      "This repository is not enabled for issue sync on this server. Ask the operator to add it to the allowed list.",
     hint: `An operator can permit it by adding it to ${ALLOWED_REPOS_ENV} (or issues.allowed_repos) on the server.`,
   });
 }

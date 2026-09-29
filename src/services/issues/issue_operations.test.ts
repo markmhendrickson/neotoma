@@ -1843,6 +1843,63 @@ describe("Issue Operations (Neotoma-canonical)", () => {
 
         expect(mockAddIssueComment).toHaveBeenCalledWith(7, "Follow-up", { repo: "test/repo" });
       });
+
+      describe("forward to the operator's target_url", () => {
+        const TARGET = "https://neotoma.example.com";
+
+        beforeEach(() => {
+          mockAddMessageToRemote.mockResolvedValue({ message_entity_id: "remote-msg-1" });
+        });
+
+        it("forwards a row that belongs to the configured repo", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+          useSnapshot(mirroredSnapshot({ repo: "test/repo" }));
+
+          await addIssueMessage(ops, { entity_id: "ent-configured", body: "Follow-up" });
+
+          expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+          expect(mockAddMessageToRemote.mock.calls[0]?.[0]).toMatchObject({
+            body: "Follow-up",
+            githubIssueNumber: 7,
+          });
+        });
+
+        it("forwards a legacy row with no stored repo (it belongs to the configured repo)", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+          useSnapshot(mirroredSnapshot({ repo: undefined }));
+
+          await addIssueMessage(ops, { entity_id: "ent-legacy", body: "Follow-up" });
+
+          expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+        });
+
+        it("does not forward a row from an allowlisted other repo, but still posts to that repo", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+          useSnapshot(mirroredSnapshot());
+
+          const result = await addIssueMessage(ops, { entity_id: "ent-other", body: "Follow-up" });
+
+          expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+          expect(mockAddIssueComment).toHaveBeenCalledWith(7, "Follow-up", { repo: OTHER });
+          expect(result.remote_submission_error).toBeNull();
+        });
+
+        it("does not forward a row from a repo that is not permitted, and records it locally", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [] });
+          useSnapshot(mirroredSnapshot());
+
+          const result = await addIssueMessage(ops, {
+            entity_id: "ent-blocked",
+            body: "Follow-up",
+          });
+
+          expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+          expect(mockAddIssueComment).not.toHaveBeenCalled();
+          expect(result.pushed_to_github).toBe(false);
+          expect(result.remote_submission_error).toBeNull();
+          expect(mockStore).toHaveBeenCalled();
+        });
+      });
     });
 
     describe("get_issue_status", () => {

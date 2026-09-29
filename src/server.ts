@@ -2036,12 +2036,16 @@ export class NeotomaServer {
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
-      // A malformed repo, or one outside the configured allowlist, is a caller error
-      // (InvalidParams), not a server fault. The message is the service's own and does
-      // not disclose whether the repo exists or is reachable.
+      // Only caller errors map to InvalidParams: a malformed repo, and a repo outside the
+      // configured allowlist. Upstream GitHub failures (401, 404, rate limits) and other
+      // transport errors are not caller errors and fall through to InternalError. The
+      // message is the service's own and does not disclose whether the repo exists.
       const { isIssueValidationError, isIssueTransportError } =
         await import("./services/issues/errors.js");
-      if (isIssueValidationError(err) || (isIssueTransportError(err) && err.status < 500)) {
+      if (
+        isIssueValidationError(err) ||
+        (isIssueTransportError(err) && err.code === "ERR_ISSUE_REPO_NOT_ALLOWED")
+      ) {
         throw new McpError(
           ErrorCode.InvalidParams,
           `sync_issues failed: ${err.message}`,

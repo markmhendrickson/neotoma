@@ -799,7 +799,7 @@ describe("syncIssuesFromGitHub", () => {
       expect(messages).toHaveLength(2);
       expect(messages[0]).toBe(messages[1]);
       expect(messages[0]).not.toContain("other/");
-      expect(messages[0]).toContain("not permitted");
+      expect(messages[0]).toContain("not enabled for issue sync");
     });
 
     it("lets a listed repo proceed", async () => {

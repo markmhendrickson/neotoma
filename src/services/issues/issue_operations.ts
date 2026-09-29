@@ -40,6 +40,7 @@ import {
   structuredEntities,
   structuredEntityIdAt,
 } from "../submitted_thread/submitted_thread.js";
+import { repoSlugsEqual } from "../../shared/repo_slug.js";
 import { decodeOverEscapedBody } from "./body_newline_decode.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
@@ -1183,8 +1184,15 @@ export async function addIssueMessage(
         ? snapshot.guest_access_token.trim()
         : undefined;
 
-  // Push to remote Neotoma instance (canonical)
-  if (issuesTargetUrl) {
+  // Push to remote Neotoma instance (canonical). The target instance mirrors the configured
+  // repo and keys its thread on that repo, so a message is forwarded only for a row that
+  // belongs to the configured repo and is permitted. A row from any other repo (permitted or
+  // not) stays on this instance: forwarding it would file it under the configured repo's
+  // same-numbered issue there.
+  const forwardToTarget = Boolean(
+    issuesTargetUrl && githubAllowed && repoSlugsEqual(issueRepo, config.repo)
+  );
+  if (forwardToTarget) {
     remoteSubmissionAttempted = true;
     try {
       const remoteResult = await neotomaClient.addMessageToRemote({

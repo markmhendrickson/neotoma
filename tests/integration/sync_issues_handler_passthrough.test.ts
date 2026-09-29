@@ -29,15 +29,15 @@ const { mockSync, realSync, mockListIssues, mockListIssueComments, mockCreateIss
 );
 
 vi.mock("../../src/services/issues/sync_issues_from_github.js", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("../../src/services/issues/sync_issues_from_github.js")
-  >();
+  const actual =
+    await importOriginal<typeof import("../../src/services/issues/sync_issues_from_github.js")>();
   realSync.fn = actual.syncIssuesFromGitHub as unknown as (...args: unknown[]) => Promise<unknown>;
   return { ...actual, syncIssuesFromGitHub: (...args: unknown[]) => mockSync(...args) };
 });
 
 vi.mock("../../src/services/issues/github_client.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/services/issues/github_client.js")>();
+  const actual =
+    await importOriginal<typeof import("../../src/services/issues/github_client.js")>();
   return {
     ...actual,
     listIssues: (...args: unknown[]) => mockListIssues(...args),
@@ -171,9 +171,26 @@ describe("sync_issues handler pass-through (#2536)", () => {
       expect(res.status).toBe(403);
       const text = await res.text();
       expect(text).toContain("ERR_ISSUE_REPO_NOT_ALLOWED");
-      expect(text).toContain("not permitted");
+      expect(text).toContain("not enabled for issue sync");
       expect(text).not.toContain("other/private-thing");
       expectNoGitHubAccess();
+    });
+
+    it("lets an allowlisted repo through the real handler and reads that repo, not the configured one", async () => {
+      process.env.NEOTOMA_ISSUES_ALLOWED_REPOS = "acme/widgets";
+      try {
+        mockSync.mockImplementation((...args: unknown[]) => realSync.fn!(...args));
+        mockListIssues.mockResolvedValue([]);
+
+        const res = await postSync({ repo: "acme/widgets", commit: false, push: false });
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ repo: "acme/widgets", dry_run: true });
+        expect(mockListIssues).toHaveBeenCalledTimes(1);
+        expect(mockListIssues.mock.calls[0]?.[1]).toMatchObject({ repo: "acme/widgets" });
+      } finally {
+        delete process.env.NEOTOMA_ISSUES_ALLOWED_REPOS;
+      }
     });
   });
 
@@ -225,9 +242,42 @@ describe("sync_issues handler pass-through (#2536)", () => {
       )) as { code?: number; message?: string };
 
       expect(err.code).toBe(-32602); // ErrorCode.InvalidParams
-      expect(err.message).toContain("not permitted");
+      expect(err.message).toContain("not enabled for issue sync");
       expect(err.message).not.toContain("other/private-thing");
       expectNoGitHubAccess();
+    });
+
+    it("lets an allowlisted repo through the real handler and reads that repo, not the configured one", async () => {
+      process.env.NEOTOMA_ISSUES_ALLOWED_REPOS = "acme/widgets";
+      try {
+        mockSync.mockImplementation((...args: unknown[]) => realSync.fn!(...args));
+        mockListIssues.mockResolvedValue([]);
+
+        const out = await callMcp({ repo: "acme/widgets", commit: false, push: false });
+
+        expect(out).toMatchObject({ repo: "acme/widgets", dry_run: true });
+        expect(mockListIssues).toHaveBeenCalledTimes(1);
+        expect(mockListIssues.mock.calls[0]?.[1]).toMatchObject({ repo: "acme/widgets" });
+      } finally {
+        delete process.env.NEOTOMA_ISSUES_ALLOWED_REPOS;
+      }
+    });
+
+    it("reports an upstream GitHub 404 or 401 as an internal error, not as a caller error", async () => {
+      const { IssueTransportError } = await import("../../src/services/issues/errors.js");
+      for (const status of [401, 404]) {
+        mockSync.mockRejectedValueOnce(
+          new IssueTransportError({
+            code: "ERR_GITHUB_UPSTREAM",
+            status,
+            message: "upstream said no",
+          })
+        );
+        const err = (await callMcp({ repo: "acme/widgets" }).catch((e: unknown) => e)) as {
+          code?: number;
+        };
+        expect(err.code).toBe(-32603); // ErrorCode.InternalError
+      }
     });
   });
 });
