@@ -2213,7 +2213,11 @@ export interface paths {
      *     Entity-scoped guests must authenticate with their guest bearer token,
      *     provide a non-empty `entity_ids` filter, and keep every requested entity
      *     inside that token's current grant. Empty, mixed, or out-of-grant guest
-     *     filters are rejected without creating a subscription.
+     *     filters are rejected without creating a subscription. Guests may only
+     *     use `delivery_method: sse`, which is revalidated against the guest
+     *     credential on every delivery; a guest request for `webhook` delivery or
+     *     with a `sync_peer_id` is rejected with 403 without creating a
+     *     subscription.
      */
     post: operations["subscribe"];
     delete?: never;
@@ -8782,7 +8786,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Guest entity filter is empty or extends outside the token grant */
+      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
       403: {
         headers: {
           [name: string]: unknown;

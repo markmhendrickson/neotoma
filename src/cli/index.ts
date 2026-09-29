@@ -16603,7 +16603,7 @@ program
   .option("--path <json>", "JSON path override")
   .option(
     "--guest-access-token <token>",
-    "Authenticate subscription operations with an entity-scoped guest access token"
+    "Authenticate this request with an entity-scoped guest access token instead of the configured credential"
   )
   .option("--skip-auth", "Skip auth token for public endpoints")
   .option(

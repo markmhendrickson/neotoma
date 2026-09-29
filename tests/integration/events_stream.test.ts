@@ -446,4 +446,54 @@ describe("GET /events/stream", () => {
       await expectSseClosedWithoutEvent(response, event.event_id);
     });
   });
+
+  it("closes an established guest stream before delivery after its grant narrows", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const userId = "sp009-events-narrowed";
+      const entityId = await seedOwnedEntity(userId, "narrowed");
+      const otherEntityId = await seedOwnedEntity(userId, "narrowed-other");
+      tracker.trackEntity(entityId);
+      tracker.trackEntity(otherEntityId);
+      const token = await guestTokenFor(userId, [entityId]);
+      const tokenEntityId = `guest_token_${hashGuestAccessToken(token).slice(0, 16)}`;
+      const created = await subscribe(baseUrl, token, {
+        entity_ids: [entityId],
+        delivery_method: "sse",
+      });
+      const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(response.status).toBe(200);
+
+      // A later token observation re-scopes the grant away from the
+      // subscribed entity without revoking or expiring the token.
+      const narrowedAt = new Date(Date.now() + 1_000).toISOString();
+      await db.from("observations").insert({
+        id: randomUUID(),
+        entity_id: tokenEntityId,
+        entity_type: "guest_access_token",
+        user_id: userId,
+        fields: {
+          token_hash: hashGuestAccessToken(token),
+          entity_ids: [otherEntityId],
+          created_at: narrowedAt,
+          ttl_seconds: 30 * 24 * 60 * 60,
+        },
+        observed_at: narrowedAt,
+        source_priority: 100,
+      });
+
+      const event: SubstrateEvent = {
+        event_id: `evt_narrowed_${randomUUID()}`,
+        event_type: "entity.updated",
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        entity_id: entityId,
+        entity_type: "note",
+        action: "updated",
+      };
+      await handleSubstrateEventForSubscriptions(event);
+      await expectSseClosedWithoutEvent(response, event.event_id);
+    });
+  });
 });

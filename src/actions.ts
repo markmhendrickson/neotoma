@@ -12397,6 +12397,26 @@ app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
           "Guest access token does not grant entity_ids for this subscription"
         );
       }
+      // Guest delivery must stay bound to the guest credential's lifetime.
+      // Only SSE delivery revalidates the token on every event; webhook and
+      // peer-sync delivery run server-side with no credential attached, so a
+      // guest may not create them.
+      if (parsed.data.delivery_method !== "sse") {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access tokens may only create subscriptions with delivery_method sse"
+        );
+      }
+      if (parsed.data.sync_peer_id !== undefined) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access tokens may not attach a subscription to a sync peer"
+        );
+      }
     }
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     const result = await subscribeUser({

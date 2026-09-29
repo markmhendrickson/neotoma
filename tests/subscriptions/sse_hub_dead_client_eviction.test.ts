@@ -183,4 +183,33 @@ describe("broadcastSubstrateEventToSse dead-client eviction", () => {
     await broadcastSubstrateEventToSse(issueEvent(), "2");
     expect(res.writes).toHaveLength(0);
   });
+
+  it("still delivers to the next client when a pending authorization check unregisters its own client", async () => {
+    const first = fakeRes();
+    const second = fakeRes();
+    const third = fakeRes();
+    let unregisterFirst: () => void = () => {};
+    // The first client's connection closes while its check is pending: its
+    // close handler unregisters it mid-fan-out.
+    unregisterFirst = registerSseClient({
+      ...client(issueSub("closes-during-authorize"), first),
+      authorize: async () => {
+        unregisterFirst();
+        return true;
+      },
+    });
+    const unregisterSecond = registerSseClient(client(issueSub("owner-stream"), second));
+    const unregisterThird = registerSseClient(client(issueSub("third-stream"), third));
+    try {
+      await broadcastSubstrateEventToSse(issueEvent(), "1");
+      // The client that unregistered itself is not written to.
+      expect(first.writes).toHaveLength(0);
+      // Its removal must not shift the next client out of this pass.
+      expect(second.writes).toHaveLength(3);
+      expect(third.writes).toHaveLength(3);
+    } finally {
+      unregisterSecond();
+      unregisterThird();
+    }
+  });
 });

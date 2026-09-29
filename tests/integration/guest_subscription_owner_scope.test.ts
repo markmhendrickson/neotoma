@@ -411,4 +411,58 @@ describe("guest subscription routes must not escalate to the token owner's whole
       expect(ownerUnsubscribe.success).toBe(true);
     });
   });
+
+  it("refuses guest webhook and peer-sync subscriptions that would outlive the guest credential", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const ownerId = `test-owner-scope-${randomUUID()}`;
+      const grantedEntity = await seedOwnedEntity(ownerId, "delivery-granted");
+      const guestToken = await guestTokenScopedTo(ownerId, [grantedEntity]);
+
+      const deniedBodies: Record<string, unknown>[] = [
+        {
+          entity_ids: [grantedEntity],
+          delivery_method: "webhook",
+          webhook_url: "http://127.0.0.1:9/guest-webhook-test",
+        },
+        {
+          entity_ids: [grantedEntity],
+          delivery_method: "sse",
+          sync_peer_id: "peer-guest-test",
+        },
+      ];
+      for (const body of deniedBodies) {
+        const denied = await postJson<ErrorEnvelope & Partial<SubscribeResponse>>(
+          baseUrl,
+          "/subscribe",
+          guestToken,
+          body
+        );
+        expect(denied.response.status).toBe(403);
+        expect(denied.body).toMatchObject({ error_code: "FORBIDDEN" });
+        if (denied.body.entity_id) tracker.trackEntity(denied.body.entity_id);
+      }
+
+      // Nothing was written: the guest (and its owner) hold no subscription.
+      const listed = await postJson<ListSubscriptionsResponse>(
+        baseUrl,
+        "/list_subscriptions",
+        guestToken,
+        {}
+      );
+      expect(listed.body.subscriptions).toEqual([]);
+      const server = new NeotomaServer();
+      const ownerList = parseToolResponse<ListSubscriptionsResponse>(
+        await subscriptionTools(server).handleListSubscriptions(ownerId)
+      );
+      expect(ownerList.subscriptions).toEqual([]);
+
+      // The same guest may still create the SSE subscription, which is
+      // revalidated against the credential on every delivery.
+      const created = await subscribeAs(baseUrl, guestToken, ownerId, {
+        entity_ids: [grantedEntity],
+        delivery_method: "sse",
+      });
+      expect(created.subscription_id).toBeTruthy();
+    });
+  });
 });

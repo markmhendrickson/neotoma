@@ -8,6 +8,7 @@ import {
   hashGuestAccessToken,
 } from "../../src/services/guest_access_token.js";
 import { db } from "../../src/db.js";
+import { subscribeUser } from "../../src/services/subscriptions/subscription_actions.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 const tracker = new TestIdTracker();
@@ -74,7 +75,7 @@ async function postJson<T>(
   baseUrl: string,
   path: string,
   token: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown>
 ): Promise<{ response: Response; body: T }> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
@@ -90,7 +91,7 @@ async function postJson<T>(
 async function subscribe(
   baseUrl: string,
   token: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown>
 ): Promise<SubscribeResponse> {
   const result = await postJson<SubscribeResponse>(baseUrl, "/subscribe", token, body);
   expect(result.response.status).toBe(200);
@@ -99,7 +100,12 @@ async function subscribe(
 }
 
 async function list(baseUrl: string, token: string): Promise<ListSubscriptionsResponse> {
-  const result = await postJson<ListSubscriptionsResponse>(baseUrl, "/list_subscriptions", token, {});
+  const result = await postJson<ListSubscriptionsResponse>(
+    baseUrl,
+    "/list_subscriptions",
+    token,
+    {}
+  );
   expect(result.response.status).toBe(200);
   return result.body;
 }
@@ -165,12 +171,18 @@ describe("POST /list_subscriptions", () => {
       const entityId = await seedOwnedEntity(userId, "redact");
       tracker.trackEntity(entityId);
       const token = await guestTokenFor(userId, [entityId]);
-      const created = await subscribe(baseUrl, token, {
-        entity_ids: [entityId],
-        delivery_method: "webhook",
-        webhook_url: "http://127.0.0.1:9/subscription-list-test",
-        webhook_secret: "super-secret-test-value",
+      // Guests may not create webhook subscriptions, so the owner creates it;
+      // the in-grant guest then lists it.
+      const created = await subscribeUser({
+        userId,
+        input: {
+          entity_ids: [entityId],
+          delivery_method: "webhook",
+          webhook_url: "http://127.0.0.1:9/subscription-list-test",
+          webhook_secret: "super-secret-test-value",
+        },
       });
+      tracker.trackEntity(created.entity_id);
       expect(created.webhook_secret).toBe("super-secret-test-value");
 
       const body = await list(baseUrl, token);

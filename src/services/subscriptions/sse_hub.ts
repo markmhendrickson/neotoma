@@ -65,7 +65,11 @@ export async function broadcastSubstrateEventToSse(
   // long-running process. Prune them so delivery stays healthy across the
   // lifetime of the server, not just after a restart.
   const dead: SseClient[] = [];
-  for (const c of clients) {
+  // Iterate a snapshot: the per-client authorization check below awaits, and
+  // a client that unregisters (or registers) during that await would
+  // otherwise shift the live array under the iterator and make the next
+  // client silently miss this event.
+  for (const c of [...clients]) {
     if (c.subscription.delivery_method !== "sse") continue;
     if (!subscriptionMatchesEvent(c.subscription, event)) continue;
     if (c.res.writableEnded || c.res.destroyed) {
@@ -91,6 +95,9 @@ export async function broadcastSubstrateEventToSse(
         }
         continue;
       }
+      // The client may have disconnected and unregistered while its check
+      // was pending; do not write to a stream that is no longer registered.
+      if (!clients.includes(c) || c.res.writableEnded || c.res.destroyed) continue;
     }
     try {
       c.res.write(`id: ${eventRingId}\n`);
