@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **655**
-- Backend and repo Vitest files: **619**
+- Total automated test files: **662**
+- Backend and repo Vitest files: **626**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 180 |
-| Vitest service tests | 46 |
+| Vitest unit tests | 181 |
+| Vitest service tests | 51 |
 | Source-adjacent tests | 66 |
 | Vitest integration tests | 195 |
 | Vitest CLI tests | 79 |
-| Vitest contract tests | 20 |
+| Vitest contract tests | 21 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 6 |
 | Vitest agent tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (180):**
+**Files (181):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -145,6 +145,7 @@ flowchart TD
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
+- `tests/unit/cli_agent_instructions_relationship_types.test.ts`
 - `tests/unit/cli_bug_fixes.test.ts`
 - `tests/unit/cli_observation_source_flag.test.ts`
 - `tests/unit/cli_schema_register_reducer_config.test.ts`
@@ -296,9 +297,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (46):**
+**Files (51):**
+- `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
+- `tests/services/by_id_write_ownership_conflict.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
@@ -306,8 +309,11 @@ flowchart TD
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
+- `tests/services/entity_resolution_cross_owner_conflict.test.ts`
+- `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
+- `tests/services/entity_split_cross_owner_conflict.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
 - `tests/services/entity_submission_validation.test.ts`
 - `tests/services/entity_type_equivalence.test.ts`
@@ -710,7 +716,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (20):**
+**Files (21):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -729,6 +735,7 @@ flowchart TD
 - `tests/contract/relationship_type_enum_parity.test.ts`
 - `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
+- `tests/contract/security_gates_ci_wiring.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
 
