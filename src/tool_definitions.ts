@@ -1,4 +1,5 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
+import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
 
 export type ToolInputSchema = Record<string, unknown>;
 
@@ -1367,8 +1368,9 @@ export function buildToolDefinitions(
           },
           repo: {
             type: "string",
+            pattern: REPO_SLUG_PATTERN,
             description:
-              "GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`). A malformed value is rejected before any GitHub request or write.",
+              "GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Must be the configured repo or be listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or `issues.allowed_repos`). A malformed or non-permitted value is rejected before any GitHub request or write.",
           },
           push: {
             type: "boolean",

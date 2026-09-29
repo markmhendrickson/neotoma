@@ -16,6 +16,15 @@
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
 
+/**
+ * The same rule as {@link isValidRepoSlug} as an ECMA-262 pattern, for the JSON Schema
+ * `pattern` on the MCP tool input schema and the OpenAPI request body so clients can reject
+ * a bad slug before calling. A test pins it to the function over a table of accepted and
+ * rejected slugs. Server-side validation remains the authority.
+ */
+export const REPO_SLUG_PATTERN =
+  "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\\.{1,2}$)[A-Za-z0-9._-]{1,100}$";
+
 export const REPO_SLUG_FORMAT_MESSAGE =
   "repo must be a GitHub repository in owner/name format (for example `acme/widgets`).";
 

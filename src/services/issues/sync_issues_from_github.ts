@@ -43,6 +43,8 @@ import * as github from "./github_client.js";
 import { githubIssueThreadConversationId } from "./github_issue_thread.js";
 import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "./github_thread_keys.js";
 import { runRedactionGuard } from "./redaction_guard.js";
+import { IssueValidationError } from "./errors.js";
+import { assertRepoAllowed, type RepoAllowlistConfig } from "./repo_allowlist.js";
 import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
 import { MAX_QUERY_OFFSET } from "../entity_query_limits.js";
 import {
@@ -114,16 +116,29 @@ export interface SyncResult {
   plan?: SyncPlan;
 }
 
-/** Thrown for a malformed `repo` before any GitHub request or local write. */
-export class InvalidSyncRepoError extends Error {
+/**
+ * Thrown for a malformed `repo` before any GitHub request or local write. An
+ * {@link IssueValidationError}, so REST answers 400 and MCP answers InvalidParams.
+ */
+export class InvalidSyncRepoError extends IssueValidationError {
   constructor(value: unknown) {
-    super(`${REPO_SLUG_FORMAT_MESSAGE} Received: ${JSON.stringify(value)}.`);
+    super({
+      code: "ERR_INVALID_REPO",
+      message: `${REPO_SLUG_FORMAT_MESSAGE} Received: ${JSON.stringify(value)}.`,
+      required_fields: ["repo"],
+    });
     this.name = "InvalidSyncRepoError";
   }
 }
 
 /**
  * Resolve the effective target repo, push flag and dry-run flag for a sync call.
+ *
+ * A caller-supplied `repo` must be a well-formed slug AND be the configured repo or on the
+ * allowlist (see `repo_allowlist.ts`). Both checks run here, before any GitHub request and
+ * before any local read or write, and they apply equally to pull, push and dry run.
+ * A repo that fails the allowlist is rejected with an error that does not disclose whether
+ * it exists or is reachable with the server's credential.
  *
  * `push` default: true only for the configured default repo. Reasoning: the push leg
  * creates public GitHub issues from local records that were never bound to any repo, so
@@ -134,11 +149,13 @@ export class InvalidSyncRepoError extends Error {
  */
 export function resolveSyncTarget(
   params: IssueSyncParams | undefined,
-  defaultRepo: string
+  config: RepoAllowlistConfig
 ): { repo: string; isDefaultRepo: boolean; push: boolean; dryRun: boolean } {
+  const defaultRepo = config.repo;
   let repo = defaultRepo;
   if (params?.repo !== undefined) {
     if (!isValidRepoSlug(params.repo)) throw new InvalidSyncRepoError(params.repo);
+    assertRepoAllowed(params.repo, config);
     repo = params.repo;
   }
   const isDefaultRepo = repoSlugsEqual(repo, defaultRepo);
@@ -168,7 +185,7 @@ export async function syncIssuesFromGitHub(
   params?: IssueSyncParams
 ): Promise<SyncResult> {
   const config = await loadIssuesConfig();
-  const target = resolveSyncTarget(params, config.repo);
+  const target = resolveSyncTarget(params, config);
   const { repo, dryRun } = target;
   const ghOpts = { repo };
 
@@ -609,22 +626,32 @@ export async function isSyncStale(lastSyncedAt: string | null): Promise<boolean>
 
 /**
  * Sync a single issue by number if it's stale.
+ *
+ * `repo` is the repository the issue lives in (the mirrored entity's own `repo`); it
+ * defaults to the configured repo. It must be the configured repo or on the allowlist,
+ * checked before any GitHub request, so a refresh can never read from (or store under) a
+ * repo the operator has not approved.
  */
 export async function syncIssueIfStale(
   ops: Operations,
   issueNumber: number,
-  lastSyncedAt: string | null
+  lastSyncedAt: string | null,
+  repo?: string
 ): Promise<boolean> {
   const stale = await isSyncStale(lastSyncedAt);
   if (!stale) return false;
 
   const config = await loadIssuesConfig();
-  const issue = await github.getIssue(issueNumber);
-  await syncSingleIssue(ops, issue, config.repo);
+  const targetRepo = repo ?? config.repo;
+  assertRepoAllowed(targetRepo, config);
+  const ghOpts = { repo: targetRepo };
 
-  const comments = await github.listIssueComments(issueNumber);
+  const issue = await github.getIssue(issueNumber, ghOpts);
+  await syncSingleIssue(ops, issue, targetRepo);
+
+  const comments = await github.listIssueComments(issueNumber, undefined, ghOpts);
   for (const comment of comments) {
-    await syncSingleComment(ops, comment, issue, config.repo);
+    await syncSingleComment(ops, comment, issue, targetRepo);
   }
 
   return true;

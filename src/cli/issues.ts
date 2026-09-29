@@ -435,6 +435,10 @@ export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): P
     );
     if (row.push_enabled) {
       process.stdout.write(`Pushed ${row.issues_pushed ?? 0} local issue(s) to GitHub.\n`);
+    } else {
+      process.stdout.write(
+        `Push leg off: local issues were not exported to GitHub (pass --push to opt in).\n`
+      );
     }
   }
   if (!opts.json) {

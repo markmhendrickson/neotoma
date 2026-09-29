@@ -2036,6 +2036,18 @@ export class NeotomaServer {
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
+      // A malformed repo, or one outside the configured allowlist, is a caller error
+      // (InvalidParams), not a server fault. The message is the service's own and does
+      // not disclose whether the repo exists or is reachable.
+      const { isIssueValidationError, isIssueTransportError } =
+        await import("./services/issues/errors.js");
+      if (isIssueValidationError(err) || (isIssueTransportError(err) && err.status < 500)) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `sync_issues failed: ${err.message}`,
+          err.toErrorEnvelopeDetails()
+        );
+      }
       throw new McpError(ErrorCode.InternalError, `sync_issues failed: ${err?.message ?? err}`);
     }
   }

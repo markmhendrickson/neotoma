@@ -7899,7 +7899,7 @@ export interface operations {
           state?: "open" | "closed" | "all";
           labels?: string[];
           /**
-           * @description GitHub repository to mirror, `owner/name` (for example `acme/widgets`). Defaults to the server-configured repo. A malformed value is rejected with a 400 before any GitHub request or write.
+           * @description GitHub repository to mirror, `owner/name` (for example `acme/widgets`). Defaults to the server-configured repo. Must be the configured repo or be listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or `issues.allowed_repos`). A malformed value is rejected with a 400 and a repo that is not permitted with a 403, both before any GitHub request or write.
            * @example acme/widgets
            */
           repo?: string;
@@ -7951,9 +7951,16 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist) */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

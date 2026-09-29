@@ -125,6 +125,13 @@ export interface IssuesConfig {
   target_url: string | null;
   /** Optional author label for private/local issues when GitHub user is unavailable. */
   author_alias?: string | null;
+  /**
+   * Additional GitHub repos (`owner/name`) that `sync_issues` and the per-issue GitHub calls
+   * may target besides `repo`, which is always allowed. Env `NEOTOMA_ISSUES_ALLOWED_REPOS`
+   * (comma-separated) wins over `issues.allowed_repos` in the config file. Case-insensitive,
+   * no wildcards; unset or empty means the configured repo only.
+   */
+  allowed_repos?: string[];
 }
 
 /** Canonical issue submission URL when env and stored `issues.target_url` are unset or blank. */

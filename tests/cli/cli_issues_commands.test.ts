@@ -419,6 +419,41 @@ describe("CLI issues commands", () => {
     });
   });
 
+  it.each([
+    [false, /Push leg off: local issues were not exported/],
+    [true, /Pushed 2 local issue\(s\) to GitHub/],
+  ])("issues sync summary always states the push leg (push_enabled=%s) (#2536)", async (pushEnabled, expected) => {
+    await withTempHome(async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          new Response(
+            JSON.stringify({
+              repo: "acme/widgets",
+              dry_run: false,
+              push_enabled: pushEnabled,
+              issues_synced: 1,
+              messages_synced: 0,
+              issues_pushed: pushEnabled ? 2 : 0,
+              errors: [],
+              push_errors: [],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      );
+
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "issues", "sync", "--repo", "acme/widgets"]);
+      } finally {
+        stdout.restore();
+      }
+      expect(stdout.output.join("")).toMatch(expected);
+    });
+  });
+
   it("issues sync rejects a malformed --repo locally without calling the server (#2536)", async () => {
     await withTempHome(async () => {
       const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));

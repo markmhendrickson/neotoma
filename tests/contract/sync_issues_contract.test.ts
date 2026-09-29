@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { buildToolDefinitions } from "../../src/tool_definitions.js";
 import { getOpenApiInputSchemaForOperationId } from "../../src/shared/openapi_schema.js";
 import { IssuesSyncRequestSchema } from "../../src/shared/action_schemas.js";
+import { REPO_SLUG_PATTERN } from "../../src/shared/repo_slug.js";
 
 function keys(schema: unknown): string[] {
   return Object.keys((schema as { properties?: Record<string, unknown> }).properties ?? {})
@@ -43,5 +44,22 @@ describe("sync_issues request field parity", () => {
     const props = (openApi as { properties: Record<string, { description?: string }> }).properties;
     expect(props.push?.description).toMatch(/default false for any other `repo`/);
     expect(tool!.description).toMatch(/NEOTOMA_ISSUES_GITHUB_TOKEN/);
+  });
+
+  it("MCP tool and OpenAPI declare the same machine-readable repo pattern", () => {
+    const toolRepo = (tool!.inputSchema as { properties: Record<string, { pattern?: string }> })
+      .properties.repo;
+    const openApiRepo = (openApi as { properties: Record<string, { pattern?: string }> })
+      .properties.repo;
+    expect(toolRepo?.pattern).toBe(REPO_SLUG_PATTERN);
+    expect(openApiRepo?.pattern).toBe(REPO_SLUG_PATTERN);
+  });
+
+  it("documents the repo allowlist on both surfaces", () => {
+    const props = (openApi as { properties: Record<string, { description?: string }> }).properties;
+    expect(props.repo?.description).toMatch(/NEOTOMA_ISSUES_ALLOWED_REPOS/);
+    const toolProps = (tool!.inputSchema as { properties: Record<string, { description?: string }> })
+      .properties;
+    expect(toolProps.repo?.description).toMatch(/NEOTOMA_ISSUES_ALLOWED_REPOS/);
   });
 });

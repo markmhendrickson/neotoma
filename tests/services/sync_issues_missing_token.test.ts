@@ -32,7 +32,11 @@ describe("sync_issues with no GitHub token (#2536)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveToken.mockResolvedValue(null);
-    mockLoadIssuesConfig.mockResolvedValue({ repo: "test/repo", sync_staleness_ms: 300_000 });
+    mockLoadIssuesConfig.mockResolvedValue({
+      repo: "test/repo",
+      allowed_repos: ["acme/widgets"],
+      sync_staleness_ms: 300_000,
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
