@@ -1,6 +1,6 @@
 # Test coverage review — v0.24.0
 
-Reviewed range: v0.23.1..HEAD (165 files, +19098/-2061)
+Reviewed range (rc2): v0.23.1..HEAD (165 files, +19098/-2061). rc3 (2026-09-29) rebuilt the release on current `main`, adding eight commits; see **rc3 delta** at the end of this file. rc3 range: 237 files, +27353/-2423.
 
 ## Surface-by-surface coverage
 
@@ -29,7 +29,7 @@ No single test proves a successful `register_relationship_type` call end-to-end 
 
 ### Schema-registry scope-precedence fix (`SchemaRegistryService.activate`)
 
-**Covers user-observable behavior end-to-end.** `tests/integration/schema_scope_resolution_parity.test.ts` calls the real, unmocked `schemaRegistry.activate()` (backed by real SQLite rows) with the exact vulnerability shape — two distinct principals, a version string colliding only with a foreign private override, no global row and no owned row at that version — and asserts `activate()` throws `Schema not found` rather than falling through to `candidates[0]` and mutating the foreign row; separately asserts the foreign row's `active` flag is untouched. `tests/integration/schema_scope_surface_parity.test.ts` extends this to real HTTP (`GET /schemas`) and MCP tool calls, confirming all read surfaces agree. `tests/services/schema_registry_incremental.test.ts` is a fully mocked companion (branch-coverage only, not independent proof of the fix — the module-level `db.js` mock means every assertion only confirms the expected query-chain shape, not that real SQLite honors the filter).
+**Covers user-observable behavior end-to-end.** `tests/integration/schema_scope_resolution_parity.test.ts` calls the real, unmocked `schemaRegistry.activate()` against real SQLite rows owned by two distinct principals and asserts that activation resolves only the caller's own or the global row, fails closed with `Schema not found` otherwise, and leaves the other principal's row unchanged. `tests/integration/schema_scope_surface_parity.test.ts` extends this to real HTTP (`GET /schemas`) and MCP tool calls, confirming all read surfaces agree. `tests/services/schema_registry_incremental.test.ts` is a fully mocked companion (branch-coverage only, not independent proof of the fix — the module-level `db.js` mock means every assertion only confirms the expected query-chain shape, not that real SQLite honors the filter).
 
 ### POST /mcp stateless transport (2026-07-28)
 
@@ -197,7 +197,7 @@ No findings requiring action. Every new response field (`shared_graph`, `authent
 
 ### Phase 5c — Documentation completeness
 
-Strong overall, with three gaps. New error codes (`ERR_SCHEMA_SCOPE_MISMATCH`, the `MCP_*` transport error family) are documented in both `docs/subsystems/errors.md` and `docs/reference/error_codes.md` with response-shape examples — but the relationship-refusal codes are not (ADVISORY above). `docs/developer/mcp/tool_descriptions.yaml` is correctly updated for `register_relationship_type`/`list_relationship_types` (notable because this exact file was called out in code comments as having drifted before — it previously advertised 8 relationship types while the schema had 28), but `docs/specs/MCP_SPEC.md`'s own tool catalog (§3.30) was not updated for the same two tools (ADVISORY above). `docs/developer/mcp/instructions.md` and `docs/developer/cli_agent_instructions.md` carry identical new sections for the relationship-type material — this satisfies substantive parity but violates the required canonical-plus-pointer mechanism (BLOCKING above); the endpoint-ownership and schema-scope-mismatch additions in the same diff correctly use the pointer pattern instead. `docs/subsystems/relationships.md` §6.1 is well updated for ownership/refusal semantics, but §8 (Cycle Detection) was left describing the removed pre-fix mechanism (BLOCKING above). `docs/developer/cli_reference.md` is missing the new command family entirely (BLOCKING above, confirmed independently twice). One open item carried from the security review (not re-derived, flagging for completeness): the schema-activation cross-tenant fallback fix (a genuine pre-v0.23.1 vulnerability, fixed in this range) has not yet had a disclosed security advisory filed under `docs/security/advisories/` as of this review — the security review's own sign-off records this as an outstanding, non-blocking caveat for the release owner's decision before or shortly after this release ships.
+Strong overall, with three gaps. New error codes (`ERR_SCHEMA_SCOPE_MISMATCH`, the `MCP_*` transport error family) are documented in both `docs/subsystems/errors.md` and `docs/reference/error_codes.md` with response-shape examples — but the relationship-refusal codes are not (ADVISORY above). `docs/developer/mcp/tool_descriptions.yaml` is correctly updated for `register_relationship_type`/`list_relationship_types` (notable because this exact file was called out in code comments as having drifted before — it previously advertised 8 relationship types while the schema had 28), but `docs/specs/MCP_SPEC.md`'s own tool catalog (§3.30) was not updated for the same two tools (ADVISORY above). `docs/developer/mcp/instructions.md` and `docs/developer/cli_agent_instructions.md` carry identical new sections for the relationship-type material — this satisfies substantive parity but violates the required canonical-plus-pointer mechanism (BLOCKING above); the endpoint-ownership and schema-scope-mismatch additions in the same diff correctly use the pointer pattern instead. `docs/subsystems/relationships.md` §6.1 is well updated for ownership/refusal semantics, but §8 (Cycle Detection) was left describing the removed pre-fix mechanism (BLOCKING above). `docs/developer/cli_reference.md` is missing the new command family entirely (BLOCKING above, confirmed independently twice). Disclosure for the schema-activation scope fix is handled through the project's private advisory process (see `security_review.md` finding 7) and is out of scope for this file.
 
 ## Supplement accuracy (informational — no supplement-gating check performed per task scope, but spot-checked since one already exists)
 
@@ -226,4 +226,66 @@ Should address in follow-up:
 - Add the two new relationship-type MCP tools to `docs/specs/MCP_SPEC.md` §3.30's own catalog table, per that section's stated update obligation.
 - Add the relationship-refusal error codes (`RELATIONSHIP_ENDPOINT_NOT_FOUND`, `RELATIONSHIP_REFERENCE_UNRESOLVED`, etc.) to `docs/reference/error_codes.md`.
 - File a follow-up issue for the pre-existing SSRF gap in webhook URL validation (no private-IP/metadata-endpoint blocking) — not a regression, but newly adjacent to touched code.
-- File the disclosed security advisory for the schema-activation cross-tenant fallback fix (already tracked as an outstanding item in `docs/releases/in_progress/v0.24.0/security_review.md`'s own sign-off caveat).
+- Schema-activation scope fix: disclosure sequenced by the advisory owner (see `security_review.md`).
+
+
+## rc3 delta (2026-09-29)
+
+Branch `release/v0.24.0-rc3` = `origin/main` at `4578f8e2e` plus the rc2 release commit, cherry-picked cleanly. Eight commits were added relative to rc2: #2513, #2472, #2516, #2474, #2520, #2163, #2519 and #2514. Each surface below was classified by reading the named test bodies' cases, not by file existence.
+
+### Resolution of the four rc2 BLOCKING findings
+
+All four were fixed in the rc2 release commit and carry forward unchanged into rc3:
+
+- `docs/subsystems/relationships.md` §8 now describes the opt-in `acyclic` flag, type- and tenant-scoped, depth-bounded check in `RelationshipsService.assertAcyclicWrite`.
+- `docs/developer/cli_reference.md` documents `neotoma relationship-types`.
+- `create_relationship`'s ownership refusal carries the structured hint on both REST (`src/actions.ts`) and MCP (`src/server.ts`); `tests/contract/legacy_payloads/v0.23.x/create_relationship_unowned_target.outcome.yaml` asserts it via `hint_match`.
+- `docs/developer/cli_agent_instructions.md` now points at the canonical section in `docs/developer/mcp/instructions.md` instead of duplicating it.
+
+The rc2 verdict below (`NEEDS-CHANGES`) is therefore superseded by the rc3 verdict at the end of this section.
+
+### Entity-write ownership (#2519)
+
+**Covers user-observable behavior at the service choke points; HTTP/MCP envelope covered for grant writes.** `tests/services/entity_resolution_cross_owner_conflict.test.ts` drives `resolveEntityWithTrace` for a heuristic match and an explicit `target_id` on another owner's entity (both refused, the owner's snapshot unchanged), plan mode (`commit:false`) refusing identically, same-owner merge still working, and adoption of null-owner and legacy-test-owner rows; it also calls `createObservation` and `createCorrection` directly with another owner's id. `tests/services/by_id_write_ownership_conflict.test.ts` covers `resolveSyncConflict` (manual), `applyBatchCorrection` (including an empty change set) and `loadEntityForEdit`, asserting the refusal is indistinguishable from a missing id. `tests/services/entity_split_cross_owner_conflict.test.ts` and `tests/services/agent_grant_cross_owner_conflict.test.ts` cover split and grant writes; `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts` is the no-false-positive control. [NON-BLOCKING] test-coverage: no test asserts the REST `409` / MCP `InvalidRequest` envelope for `entity_owner_conflict` on `POST /store` / `POST /correct` for a non-grant entity; the service-layer refusal is proven, the transport mapping is proven only for grants.
+
+### AAuth key-bound identity and pin uniqueness (#2513)
+
+**Covers user-observable behavior end-to-end.** `tests/integration/agent_grant_thumbprint_pin_uniqueness.test.ts` exercises the grants service (create, update, same-owner re-pin allowed, revoked and suspended grants keep their pin), REST `/agents/grants` create and update (`409`), REST `/store` and `/correct`, MCP `store` and `correct`, and grants import. `tests/unit/aauth_key_bound_identity.test.ts` and `tests/integration/aauth_tier_resolution.test.ts` cover tier resolution from the pinning grant and the thumbprint allowlist; `tests/unit/agent_grant_pin_checks.test.ts` covers returning a grant to service (status restore, `_deleted: false` correction) under another owner's pin and the bounded identity-lookup cache; `restore_entity`, `merge_entities` and `split_entity` refusals are exercised in the integration suite above.
+
+### Loopback-default HTTP bind (#2472)
+
+**Covers user-observable behavior end-to-end.** `tests/security/http_listener_bind_host.test.ts` binds a real socket and reads back the bound address: default `127.0.0.1`, explicit `0.0.0.0` opt-in, ephemeral-port readback, and undefined / empty / whitespace host values all failing safe at the sink. `tests/security/sandbox_mode_resolver.test.ts` covers the posture derivation.
+
+### Development proxy bind (#2474)
+
+**Covers user-observable behavior.** `tests/security/proxy_bind_host.test.ts` covers `resolveProxyBindHost()` default and opt-in. Dev tooling only.
+
+### MCP OAuth local-backend code binding (#2520)
+
+**Covers user-observable behavior end-to-end.** `tests/integration/mcp_oauth_token_endpoint.test.ts` drives the real token endpoint: bare connection id refused, mismatched verifier refused and the code consumed, replay refused, missing verifier refused, correct pair issues a working token exactly once, refresh-token grant still works, and the OpenAI Custom GPT no-PKCE flow completes only for the exact callback. `tests/integration/mcp_oauth_local_login_preflight_gate.test.ts` covers the credential preflight on both entry routes. [NON-BLOCKING] docs: `openapi.yaml`'s `code_verifier` description says "Required with grant_type=authorization_code" without naming the Custom GPT exception the code and tests implement.
+
+### Outbound host guard (#2163)
+
+**Covers user-observable behavior end-to-end.** `tests/security/ssrf_sink_wiring.test.ts` asserts each of the five sinks refuses before fetching in hosted mode (stubbed `fetch`); `tests/integration/ssrf_guard_cross_surface_parity.test.ts` asserts MCP and HTTP `subscribe` reject the same internal webhook URL, accept a public one, and that `add_peer` stays store-time permissive with the guard applied at fetch time; `tests/security/ssrf_guarded_fetch_redirects.test.ts` and `tests/security/ssrf_outbound_host_guard.test.ts` cover redirects and the hostname classifier. This discharges the rc2 follow-up about webhook URL validation.
+
+### `neotoma mcp config` deliberate-entry guard (#2516)
+
+**Covers user-observable behavior.** `tests/cli/cli_mcp_commands.test.ts` covers the classifier (command, args, env and URL-transport entries), refusal under `assumeYes` and `rewriteExistingNeotoma`, the backup, and installing a missing slot alongside an untouched deliberate entry.
+
+### `security_gates` CI wiring (#2514)
+
+**Covers the contract it names.** `tests/contract/security_gates_ci_wiring.test.ts` fails on each of the four regression shapes (per the commit, each was reverted locally and confirmed red).
+
+### Legacy-payload corpus
+
+[NON-BLOCKING] contract: the rc3 tightenings (`entity_owner_conflict`, `agent_grant_pin_conflict`, `/mcp/oauth/token` without `code_verifier`) have no fixture under `tests/contract/legacy_payloads/`, and `CHANGES.md` has no v0.24.0 line for them. The cross-owner cases need two seeded users, which the corpus runner cannot express (the existing `create_relationship_unowned_target` fixture documents the same limitation); the missing-verifier case is expressible and should be added in a follow-up. All three are named, with migration notes, in the supplement's Breaking changes section, which is the part of the obligation that gates release.
+
+### rc3 gate evidence
+
+- `security:classify-diff --base v0.23.1 --head HEAD`: `sensitive=true`.
+- `security:lint`: 0 errors, 136 warnings (one new, see `security_review.md` finding 19).
+- `security:manifest:check`: in sync, 123 routes.
+- `openapi:bc-diff --base v0.23.1 --head HEAD`: the same 9 `oneOf` false positives as rc2; `--base <rc2 release commit> --head HEAD`: no breaking changes detected. The request-side tightenings above are not modelled by the diff tool and are declared by hand.
+- Local Vitest could not run in the release-prep sandbox (read-only test database; ambient `NEOTOMA_ENV=production` makes the harness's `NEOTOMA_FORCE_MODE` refuse at boot). CI on the rc3 PR head is the authoritative run of the suites named above.
+
+Verdict (rc3): PASS-WITH-ADVISORIES — 0 blocking, 3 non-blocking (listed above). Contingent on the CI test lanes being green on the rc3 head.
