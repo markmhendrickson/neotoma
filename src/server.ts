@@ -104,7 +104,11 @@ import {
   resolveConfiguredSessionOrigin,
   type SessionOriginInfo,
 } from "./services/session_info.js";
-import { getActiveStandingRulesResult, type StandingRule } from "./services/standing_rules.js";
+import {
+  getActiveStandingRulesResult,
+  renderStandingRulesSection,
+  type StandingRule,
+} from "./services/standing_rules.js";
 import {
   getInstanceSkillsResult,
   renderInstanceSkillsSection,
@@ -140,6 +144,7 @@ import {
 import {
   composeClientInstructions,
   extractFirstFencedCodeBlock,
+  prependClientInstructionsSection,
   readMcpInstructionsMarkdown,
   resolveNeotomaPackageRoot,
 } from "./mcp_instruction_doc.js";
@@ -1100,12 +1105,35 @@ export class NeotomaServer {
         "Treat its skills as unknown, retry on a later connection, and check the server logs for " +
         "the `[instance_skills]` warning if this persists."
       : renderInstanceSkillsSection(instanceSkills, config.mcpCompactInstructions);
-    // Nested rather than variadic: `composeClientInstructions` takes one
-    // section, and each call no-ops on an empty one, so an instance with no
-    // policy and no skill rows gets byte-identical instructions to before.
-    const instructions = composeClientInstructions(
-      composeClientInstructions(baseInstructions, policySection),
-      skillsSection
+    // Standing rules were delivered ONLY via `serverInfo._neotoma`, which
+    // general MCP clients drop — they surface `instructions` to the model and
+    // ignore unknown `serverInfo` keys. Rules that an operator had enabled
+    // therefore reached no session, while the instance policy (which does ride
+    // `instructions`) arrived fine (#2187). Render them into the prose too.
+    //
+    // A failed lookup is stated rather than rendered as silence, for the same
+    // reason it is for skills: an agent told nothing concludes "no rules",
+    // which is the one inference that must never follow from a broken read.
+    const standingRulesSection = standingRulesLookupFailed
+      ? "[STANDING RULES]\nThis instance's standing rules could not be read for this session. " +
+        "Do NOT tell the user this instance has no standing rules, and do not proceed as though " +
+        "none are in force. Treat them as unknown, retry on a later connection, and check the " +
+        "server logs for the `[standing_rules]` error if this persists."
+      : renderStandingRulesSection(standingRules);
+    // Nested rather than variadic: each helper takes one section and no-ops on
+    // an empty one, so an instance with no policy, no rules and no skill rows
+    // gets byte-identical instructions to before.
+    //
+    // Standing rules go FIRST, not appended with the other sections: the base
+    // block is well over 100KB and clients truncate long `instructions`, so an
+    // appended rule is the first thing cut. Operator-set rules are the
+    // must-follow content in this payload; they lead it.
+    const instructions = prependClientInstructionsSection(
+      composeClientInstructions(
+        composeClientInstructions(baseInstructions, policySection),
+        skillsSection
+      ),
+      standingRulesSection
     );
 
     return {
