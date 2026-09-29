@@ -32,6 +32,12 @@ describe("published digest skill identity", () => {
     expect(existsSync(statusPath)).toBe(false);
   });
 
+  it("keeps /end from naming skills retired as loadable (store-data, query-memory)", () => {
+    const end = readFileSync(join(repoRoot, "skills", "end", "SKILL.md"), "utf8");
+    expect(end).not.toContain("store-data");
+    expect(end).not.toContain("query-memory");
+  });
+
   it("publishes digest, not status, through the harness mirror", () => {
     const harnessRoot = mkdtempSync(join(tmpdir(), "digest-mirror-"));
 
@@ -43,9 +49,16 @@ describe("published digest skill identity", () => {
         sourceDir: join(repoRoot, "skills"),
       });
 
-      expect(result.mode).toBe("whole-dir-symlink");
+      // The package `skills/` source ships `deprecated: true` stubs (query-memory,
+      // store-data; see #2523). A whole-dir symlink cannot leave a subdirectory out,
+      // so the mirror publishes per skill whenever any stub is present. The mode is
+      // therefore not what this test guards: it guards that `digest` is published,
+      // `status` is not, and the retired skills stay unpublished.
+      expect(result.mode).toBe("per-skill-symlink");
       expect(existsSync(join(harnessRoot, ".codex", "skills", "digest", "SKILL.md"))).toBe(true);
       expect(existsSync(join(harnessRoot, ".codex", "skills", "status", "SKILL.md"))).toBe(false);
+      expect(entryPresent(join(harnessRoot, ".codex", "skills", "query-memory"))).toBe(false);
+      expect(entryPresent(join(harnessRoot, ".codex", "skills", "store-data"))).toBe(false);
     } finally {
       rmSync(harnessRoot, { recursive: true, force: true });
     }
