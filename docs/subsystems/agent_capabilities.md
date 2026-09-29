@@ -247,10 +247,11 @@ grant recognises is treated as a guest and left to access policy.
 **Migration.** A `create_relationship` entry written before this field
 existed has no `relationship_types` and now grants no edge writes. To restore
 edge writes, update the grant's capabilities to name the relationship types the
-agent needs, with `PATCH /agents/grants/{grant_id}` or a `correct` on the
-`agent_grant` entity. The Inspector grant form and `neotoma agents grants
-import` preserve an existing `relationship_types` list; the form does not yet
-edit it. The repo default registry (`config/agent_capabilities.default.json`)
+agent needs: in the Inspector grant form, with `PATCH /agents/grants/{grant_id}`,
+or with a `correct` on the `agent_grant` entity. The form edits the list on
+`create_relationship` rows and warns on any such row whose list is empty,
+including rows saved before this field existed; `neotoma agents grants import`
+preserves an existing list. The repo default registry (`config/agent_capabilities.default.json`)
 no longer grants `create_relationship` to the feedback forwarder, which writes
 no edges.
 
