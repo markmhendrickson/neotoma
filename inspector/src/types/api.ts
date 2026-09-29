@@ -102,11 +102,11 @@ export interface AgentAttribution {
    */
   attestation?: AgentAttestationOutcome | null;
   /**
-   * Source of an `operator_attested` tier promotion: whether the
-   * issuer alone was on the operator allowlist or whether the
-   * `iss:sub` composite was. Mirrors `decision.operator_allowlist_source`.
+   * Source of an `operator_attested` tier promotion: the signing key's
+   * thumbprint, or the issuer / `iss:sub` composite recorded on the
+   * grant that pins the key. Mirrors `decision.operator_allowlist_source`.
    */
-  operator_allowlist_source?: "issuer" | "issuer_subject" | null;
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject" | null;
 }
 
 export interface Entity {
@@ -405,7 +405,7 @@ export interface AgentDirectoryEntry {
    * v0.9.0+ may stamp it once per-row attestation enrichment ships.
    */
   attestation?: AgentAttestationOutcome | null;
-  operator_allowlist_source?: "issuer" | "issuer_subject" | null;
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject" | null;
 }
 
 export interface AgentsListResponse {
@@ -653,8 +653,20 @@ export type ServerMode =
   | "refuse";
 
 export interface UserInfo {
+  /**
+   * Graph scope — the user_id whose graph is being read and written. Under
+   * shared-graph mode this is the shared owner, not the signed-in person.
+   */
   user_id: string;
+  /** Email of the signed-in user (the teammate, under shared-graph mode). */
   email?: string;
+  /**
+   * Per-email user_id of the signed-in user. Present only when it differs from
+   * `user_id`, i.e. when a shared graph is being operated on (#2228).
+   */
+  authenticated_user_id?: string;
+  /** True when the graph being operated on is not the signed-in user's own. */
+  shared_graph?: boolean;
   storage?: {
     storage_backend: string;
     data_dir?: string;

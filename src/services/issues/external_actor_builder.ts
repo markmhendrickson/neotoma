@@ -88,6 +88,43 @@ export function buildExternalActor(params: {
   };
 }
 
+/**
+ * Normalise an external actor supplied in a request body to an unverified
+ * claim.
+ *
+ * A request body can assert who authored an upstream artifact, but it carries
+ * no proof of that assertion. The stronger `verified_via` tiers
+ * (`linked_attestation`, `oauth_link`, `webhook_signature`) are assigned only
+ * by server-side paths that performed the check themselves: the GitHub
+ * webhook route after verifying the delivery signature, AAuth token claims,
+ * and grant linkage. Whatever tier the caller names, the result is recorded
+ * as `claim`, and `delivery_id` — which only accompanies a signature-checked
+ * webhook delivery — is not carried over.
+ */
+export function externalActorFromCallerInput(input: {
+  provider: "github";
+  login: string;
+  id: number;
+  type?: string;
+  verified_via?: ExternalActorVerifiedVia;
+  delivery_id?: string;
+  event_type?: string;
+  repository?: string;
+  event_id?: number;
+  comment_id?: number;
+}): ExternalActor {
+  return buildExternalActor({
+    login: input.login,
+    id: input.id,
+    type: input.type,
+    verified_via: "claim",
+    event_type: input.event_type,
+    repository: input.repository,
+    event_id: input.event_id,
+    comment_id: input.comment_id,
+  });
+}
+
 function normaliseGithubUserType(type: string | undefined): "User" | "Bot" | "Organization" {
   if (!type) return "User";
   const lower = type.toLowerCase();

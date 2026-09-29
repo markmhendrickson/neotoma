@@ -33,6 +33,7 @@ describe("CLI command coverage guard", () => {
       "processes",
       "recent",
       "relationships",
+      "relationship-types", // relationship_types_cli.test.ts
       "schemas",
       "servers",
       "setup",

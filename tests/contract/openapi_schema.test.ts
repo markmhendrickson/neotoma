@@ -45,12 +45,22 @@ describe("OpenAPI tool schemas", () => {
       );
     });
 
-    it("enumerates canonical relationship_type values including EMBEDS", () => {
+    it("declares relationship_type as an open string pointing at the registry", () => {
+      // REWRITTEN for #1972 / G25, same reason as the list_relationships case
+      // below: the vocabulary is a runtime registry, so an enum in the
+      // contract is a second copy that goes stale on the next registration —
+      // and a spec-driven client would then refuse locally a call the server
+      // accepts, which is exactly the one-way door #1972 was opened about.
       const rel = schema?.properties?.relationship_type;
       expect(rel?.type).toBe("string");
-      expect(rel?.enum).toEqual(
-        expect.arrayContaining(["PART_OF", "CORRECTS", "REFERS_TO", "DEPENDS_ON", "EMBEDS"])
-      );
+      expect(
+        rel?.enum,
+        "create_relationship must not enumerate relationship types in the contract"
+      ).toBeUndefined();
+      expect(
+        rel?.description ?? "",
+        "the contract must tell a client how to discover the vocabulary"
+      ).toContain("list_relationship_types");
     });
 
     it("declares optional metadata, source_id, user_id alongside required fields", () => {
@@ -105,22 +115,22 @@ describe("OpenAPI tool schemas", () => {
       );
     });
 
-    it("constrains relationship_type to the closed enum matching the handler", () => {
+    it("declares relationship_type as an open string pointing at the registry", () => {
+      // REWRITTEN for #1972 / G25. This used to assert a CLOSED enum containing
+      // a sample of the 28 built-ins. That assertion pinned the bug rather than
+      // the fix: the vocabulary is a runtime registry, so an enum in the
+      // contract goes stale the moment a type is registered, and a
+      // spec-driven client would refuse locally a call the server accepts.
       const rel = schema?.properties?.relationship_type;
       expect(rel?.type).toBe("string");
-      // Sample of canonical + lowercase relationship types; full list must
-      // match RelationshipTypeSchema in src/shared/action_schemas.ts.
-      expect(rel?.enum).toEqual(
-        expect.arrayContaining([
-          "PART_OF",
-          "CORRECTS",
-          "REFERS_TO",
-          "DEPENDS_ON",
-          "EMBEDS",
-          "works_at",
-          "invested_in",
-        ])
-      );
+      expect(
+        rel?.enum,
+        "openapi.yaml must not enumerate relationship types — the vocabulary is a registry"
+      ).toBeUndefined();
+      expect(
+        rel?.description ?? "",
+        "the contract must tell a client how to discover the vocabulary"
+      ).toContain("list_relationship_types");
     });
 
     // Note: the openapi.yaml schema declares an `anyOf` constraint requiring
@@ -194,6 +204,78 @@ describe("OpenAPI tool schemas", () => {
           "StorePolicyDeniedErrorEnvelope"
         );
       }
+    });
+  });
+
+  describe("relationships_created / relationships_refused declared on every schema that returns them", () => {
+    // HTTP POST /interpretations/create and MCP create_interpretation return
+    // relationships_refused (src/actions.ts, src/server.ts createInterpretation)
+    // whenever a relationship in the request could not be created, and
+    // relationships_created always. Both response paths (store's structured
+    // response and create_interpretation's) share one implementation
+    // (src/services/store_relationships.ts), so the contract must declare the
+    // same typed shape on both response schemas rather than leaving one as an
+    // untyped additionalProperties bag. Reads openapi.yaml directly, not the
+    // generated types, for the same reason as the policy-unavailable block
+    // above: the generator could silently drop this, so asserting against its
+    // output would only prove the generator agrees with itself.
+    const rawSpec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: {
+        schemas?: Record<
+          string,
+          {
+            properties?: Record<string, { items?: Record<string, unknown> }>;
+          }
+        >;
+      };
+    };
+    const schemas = rawSpec.components?.schemas ?? {};
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s declares relationships_created and relationships_refused",
+      (schemaName) => {
+        const props = schemas[schemaName]?.properties ?? {};
+        expect(props.relationships_created, `${schemaName}.relationships_created`).toBeTruthy();
+        expect(props.relationships_refused, `${schemaName}.relationships_refused`).toBeTruthy();
+      }
+    );
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s.relationships_created items are the shared typed RelationshipCreated component, not an untyped bag",
+      (schemaName) => {
+        const items = schemas[schemaName]?.properties?.relationships_created?.items as
+          | { $ref?: string; additionalProperties?: boolean }
+          | undefined;
+        expect(items, `${schemaName}.relationships_created.items`).toBeTruthy();
+        expect(
+          items?.additionalProperties,
+          `${schemaName}.relationships_created.items must not be an untyped additionalProperties bag`
+        ).not.toBe(true);
+        expect(
+          items?.$ref,
+          `${schemaName}.relationships_created.items must $ref a shared component`
+        ).toBe("#/components/schemas/RelationshipCreated");
+      }
+    );
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s.relationships_refused items are the shared typed RelationshipRefusal component",
+      (schemaName) => {
+        const items = schemas[schemaName]?.properties?.relationships_refused?.items as
+          | { $ref?: string; additionalProperties?: boolean }
+          | undefined;
+        expect(items, `${schemaName}.relationships_refused.items`).toBeTruthy();
+        expect(
+          items?.$ref,
+          `${schemaName}.relationships_refused.items must $ref a shared component`
+        ).toBe("#/components/schemas/RelationshipRefusal");
+      }
+    );
+
+    it("keeps the shared RelationshipCreated and RelationshipRefusal components defined", () => {
+      // A $ref to a deleted schema is a spec that parses and lies.
+      expect(schemas.RelationshipCreated).toBeTruthy();
+      expect(schemas.RelationshipRefusal).toBeTruthy();
     });
   });
 });

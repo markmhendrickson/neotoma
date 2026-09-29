@@ -723,6 +723,19 @@
       ]
     },
     {
+      "path": "/list_relationship_types",
+      "method": "POST",
+      "operation_id": "listRelationshipTypes",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/list_relationships",
       "method": "POST",
       "operation_id": "listRelationshipsForEntity",
@@ -739,6 +752,19 @@
       "path": "/list_subscriptions",
       "method": "POST",
       "operation_id": "listSubscriptions",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp",
+      "method": "POST",
+      "operation_id": "mcpStreamableHttpPost",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
@@ -1112,6 +1138,19 @@
       "path": "/record_activity",
       "method": "GET",
       "operation_id": "getRecordActivity",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/register_relationship_type",
+      "method": "POST",
+      "operation_id": "registerRelationshipType",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [

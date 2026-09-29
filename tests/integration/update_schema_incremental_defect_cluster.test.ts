@@ -29,7 +29,13 @@ type TestServer = NeotomaServer & {
 };
 
 async function activeRows(entityType: string): Promise<
-  Array<{ id: string; schema_version: string; scope: string | null; user_id: string | null; active: boolean }>
+  Array<{
+    id: string;
+    schema_version: string;
+    scope: string | null;
+    user_id: string | null;
+    active: boolean;
+  }>
 > {
   const { data } = await db
     .from("schema_registry")
@@ -171,8 +177,28 @@ describe("update_schema_incremental defect cluster", () => {
       expect(fields).toHaveProperty("lead_band"); // added by call 2 — must coexist, not replace
     });
 
-    it("an explicit user_specific: false still overrides and writes global, coexisting with the user override", async () => {
+    it("an explicit user_specific: false extends the GLOBAL row, coexisting with the user override and never copying its fields", async () => {
       server.authenticatedUserId = TEST_USER_ID;
+
+      // A global row exists alongside the user override, with a field the
+      // override does not carry. An explicit `user_specific: false` means
+      // "target global": the new global version must be built from THIS row.
+      // Built from the caller's resolved (user) row instead, it would drop
+      // `global_baseline_field` from the active global schema and publish the
+      // override's private fields (`lead_band`) to every user.
+      await schemaRegistry.register({
+        entity_type: ENTITY_TYPE,
+        schema_version: "1.0.0",
+        schema_definition: {
+          fields: {
+            name: { type: "string", required: true },
+            global_baseline_field: { type: "string" },
+          },
+          canonical_name_fields: ["name"],
+        },
+        reducer_config: { merge_policies: {} },
+        activate: true,
+      });
 
       const result = await server.executeToolForCli(
         "update_schema_incremental",
@@ -188,13 +214,39 @@ describe("update_schema_incremental defect cluster", () => {
       expect(body.success).toBe(true);
       expect(body.scope).toBe("global");
 
-      // Now TWO active rows legitimately coexist: the pre-existing user
-      // override, and the new explicit global row. This is the capability
+      // Two active rows legitimately coexist: the pre-existing user override
+      // (untouched) and the new global version. This is the capability
       // #2374's acceptance criteria requires to remain reachable.
       const rows = await activeRows(ENTITY_TYPE);
       expect(rows).toHaveLength(2);
       const scopes = rows.map((r) => r.scope).sort();
       expect(scopes).toEqual(["global", "user"]);
+
+      const globalRow = rows.find((r) => r.scope === "global")!;
+      expect(globalRow.schema_version).not.toBe("1.0.0");
+      const { data: globalData } = await db
+        .from("schema_registry")
+        .select("schema_definition")
+        .eq("id", globalRow.id)
+        .single();
+      const globalFields = (globalData?.schema_definition as { fields?: Record<string, unknown> })
+        ?.fields;
+      expect(globalFields).toHaveProperty("global_only_field");
+      expect(globalFields).toHaveProperty("global_baseline_field");
+      expect(globalFields).not.toHaveProperty("lead_band");
+      expect(globalFields).not.toHaveProperty("lead_next_step");
+
+      // The user override is unchanged by a global-targeted call.
+      const userRow = rows.find((r) => r.scope === "user")!;
+      const { data: userData } = await db
+        .from("schema_registry")
+        .select("schema_definition")
+        .eq("id", userRow.id)
+        .single();
+      const userFields = (userData?.schema_definition as { fields?: Record<string, unknown> })
+        ?.fields;
+      expect(userFields).toHaveProperty("lead_band");
+      expect(userFields).not.toHaveProperty("global_only_field");
     });
   });
 
@@ -382,7 +434,9 @@ describe("update_schema_incremental defect cluster", () => {
       expect(body.migration_result).toBeDefined();
       expect(body.migration_result.migrated_count).toBe(0);
       expect(
-        body.migration_result.skipped.some((s: { reason: string }) => s.reason === "no_entity_resolution")
+        body.migration_result.skipped.some(
+          (s: { reason: string }) => s.reason === "no_entity_resolution"
+        )
       ).toBe(true);
     });
 
@@ -424,10 +478,15 @@ describe("update_schema_incremental defect cluster", () => {
       expect(body.migrated_existing).toBe(true);
       expect(body.migration_result.migrated_count).toBeGreaterThan(0);
 
-      const { data: obs } = await db.from("observations").select("fields").eq("entity_id", entityId);
+      const { data: obs } = await db
+        .from("observations")
+        .select("fields")
+        .eq("entity_id", entityId);
       const promoted = (obs ?? []).some((o: { fields?: unknown }) => {
         const f = typeof o.fields === "string" ? JSON.parse(o.fields) : o.fields;
-        return typeof f === "object" && f !== null && "undeclared_note" in (f as Record<string, unknown>);
+        return (
+          typeof f === "object" && f !== null && "undeclared_note" in (f as Record<string, unknown>)
+        );
       });
       expect(promoted).toBe(true);
     });
@@ -580,9 +639,7 @@ describe("update_schema_incremental defect cluster", () => {
         )
       ).rejects.toThrow(/appears to be plural/);
       const rowsAfterReject = await activeRows(PLURAL_TYPE);
-      expect(
-        (rowsAfterReject[0]?.schema_version ?? "").length
-      ).toBeGreaterThan(0); // still on the original version — no field added
+      expect((rowsAfterReject[0]?.schema_version ?? "").length).toBeGreaterThan(0); // still on the original version — no field added
       const { data: rowData } = await db
         .from("schema_registry")
         .select("schema_definition")

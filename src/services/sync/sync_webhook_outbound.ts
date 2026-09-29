@@ -1,3 +1,4 @@
+import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { signWebhookBody, stableStringify } from "../subscriptions/webhook_delivery.js";
 import { createCorrection } from "../correction.js";
 import type { SubstrateEvent } from "../../events/types.js";
@@ -40,6 +41,11 @@ export async function postOutboundSyncWebhook(params: {
     }
     headers["X-Neotoma-Sync-Signature-256"] = signWebhookBody(params.sharedSecret, rawBody);
   }
+  // SSRF: peer webhook URLs are caller-registered. Guard before either
+  // transport branch so the AAuth path cannot bypass the check.
+  if (!isPublicFetchUrlAllowed(url)) {
+    return { ok: false, error: "peer_url_not_public" };
+  }
   try {
     const request = {
       method: "POST",
@@ -47,10 +53,15 @@ export async function postOutboundSyncWebhook(params: {
       body: rawBody,
       signal: AbortSignal.timeout(10_000),
     };
+    // guardedFetch re-checks every redirect hop, not just `url` above. The
+    // AAuth transport (postWithCliAAuth) delegates to a request-signing
+    // library that does not accept redirect:"manual" and would need to
+    // re-sign each hop with the new URL — not done here; see the guard's own
+    // note in postWithCliAAuth.
     const res =
       params.authMethod === "aauth"
         ? await postWithCliAAuth(url, request)
-        : await fetch(url, request);
+        : await guardedFetch(url, request);
     if (!res.ok) {
       return { ok: false, status: res.status, error: `http_${res.status}` };
     }
@@ -79,6 +90,11 @@ export async function postOutboundSyncEntitiesRequest(params: {
 }> {
   const rawBody = stableStringify(params.payload);
   const url = `${params.peerUrlBase.replace(/\/$/, "")}/sync/entities`;
+  // SSRF: same guard as the webhook sink above. This is a separate exported
+  // entry point in the same module, so it needs its own check.
+  if (!isPublicFetchUrlAllowed(url)) {
+    return { ok: false, error: "peer_url_not_public" };
+  }
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -94,10 +110,12 @@ export async function postOutboundSyncEntitiesRequest(params: {
       body: rawBody,
       signal: AbortSignal.timeout(15_000),
     };
+    // guardedFetch: same redirect re-check as postOutboundSyncWebhook above,
+    // and the same AAuth-transport residual gap (see postWithCliAAuth).
     const res =
       params.authMethod === "aauth"
         ? await postWithCliAAuth(url, request)
-        : await fetch(url, request);
+        : await guardedFetch(url, request);
     if (!res.ok) return { ok: false, status: res.status, error: `http_${res.status}` };
     const body = (await res.json()) as { rows?: unknown };
     const rows = Array.isArray(body.rows)
@@ -115,6 +133,18 @@ export async function postOutboundSyncEntitiesRequest(params: {
   }
 }
 
+/**
+ * KNOWN RESIDUAL SSRF GAP (AAuth transport only): `cliSignedFetch` does not
+ * accept `redirect: "manual"` and delegates to a request-signing library
+ * that follows redirects automatically — a redirect response is not the
+ * request that was signed, so re-signing each hop against its own URL would
+ * be required to apply the same {@link guardedFetch} treatment used by every
+ * other sink in this file. The shared_secret transport (the caller of this
+ * function's sibling branch) is fully guarded; this one is not. The initial
+ * URL still passes {@link isPublicFetchUrlAllowed} before either transport
+ * branch runs (see the two call sites above), so this gap is redirect-only,
+ * not a bypass of the base check.
+ */
 async function postWithCliAAuth(
   url: string,
   request: {

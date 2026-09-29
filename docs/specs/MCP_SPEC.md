@@ -1525,14 +1525,14 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES' | 'EMBEDS'; // Required
+  relationship_type: string; // Required. Any type registered on the instance; read via list_relationship_types.
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
   metadata?: Record<string, any>; // Optional: Relationship-specific metadata (e.g. caption, order for EMBEDS)
 }
 ```
 
-**Relationship types:** `PART_OF` (source is part of target), `CORRECTS`, `REFERS_TO`, `SETTLES`, `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment). See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
+**Relationship types:** the vocabulary is a runtime registry — call `list_relationship_types` to read what an instance accepts, and `register_relationship_type` to add to it. `PART_OF` (source is part of target) and `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment) are two of the built-ins. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
 
 **Response Schema:**
 
@@ -1615,14 +1615,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  relationship_type: "PART_OF" |
-    "CORRECTS" |
-    "REFERS_TO" |
-    "SETTLES" |
-    "DUPLICATE_OF" |
-    "DEPENDS_ON" |
-    "SUPERSEDES" |
-    "EMBEDS"; // Required
+  relationship_type: string; // Required. Any type registered on the instance; read via list_relationship_types.
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
 }
@@ -2162,6 +2155,8 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `get_peer_status` | No | `peer_id`. |
 | `sync_peer` | Yes | Bounded fan-out; requires peer + public base URL configuration. |
 | `resolve_sync_conflict` | Yes | Strategy enum + entity/observation selectors per OpenAPI. |
+| `register_relationship_type` | Yes | Runtime relationship-type registry. `relationship_type`, optional `description`, `scope` (`user` default, `global` requires an explicit grant), `acyclic`, `inverse`, `symmetric`, `source_entity_types`, `target_entity_types`. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md). |
+| `list_relationship_types` | No | Optional `keyword`, `scope`, `include_edge_counts`. Empty result carries `empty_reason` (`registry_unseeded` or `filtered_to_empty`) rather than being ambiguous with "no vocabulary exists." |
 
 When adding or renaming an MCP tool, update **this catalog**, **`NEOTOMA_TOOL_NAMES`**, and the change-guardrails checklist in [`docs/architecture/change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc).
 

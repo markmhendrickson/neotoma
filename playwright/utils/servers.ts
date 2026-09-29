@@ -9,6 +9,7 @@ import { generateX25519KeyPair, generateEd25519KeyPair, deriveBearerToken } from
 import { exportKeyPairs } from '../../src/crypto/export.js';
 import type { KeyExport, X25519KeyPair, Ed25519KeyPair } from '../../src/crypto/types.js';
 import type { LocalRecord } from '../../frontend/src/store/types';
+import { resolveHarnessForceMode } from '../../src/shared/harness_force_mode.js';
 // import { buildSampleRecords } from '../../frontend/src/sample-data/sample-records';
 
 const execFileAsync = promisify(execFile);
@@ -171,6 +172,13 @@ export function buildBackendEnv(
     CONNECTOR_SECRET_KEY: connectorSecret,
     CONNECTOR_SECRETS_KEY: connectorSecret,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
+    // Pin sandbox mode. Several Playwright specs (e.g.
+    // inspector-graph-render.spec.ts) send no Authorization header and rely
+    // on the "local request, no Bearer -> LOCAL_DEV_USER_ID" fallback,
+    // passing that same nil-UUID explicitly as `user_id` in the request
+    // body. See resolveHarnessForceMode — without this pin, loopback-only
+    // bind activates local_sandbox and /store 500s on user_id mismatch.
+    NEOTOMA_FORCE_MODE: resolveHarnessForceMode(process.env),
   };
 }
 

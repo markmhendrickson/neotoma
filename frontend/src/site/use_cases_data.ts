@@ -44,7 +44,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-amber-600 dark:text-amber-400",
     accentBg: "bg-amber-500/5",
     accentBorder: "border-amber-500/20",
-    skills: ["remember-email", "store-data"],
+    skills: ["remember-email", "ensure-neotoma"],
   },
   {
     href: "/crm",
@@ -70,7 +70,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-indigo-600 dark:text-indigo-400",
     accentBg: "bg-indigo-500/5",
     accentBorder: "border-indigo-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/diligence",
@@ -83,7 +83,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-sky-600 dark:text-sky-400",
     accentBg: "bg-sky-500/5",
     accentBorder: "border-sky-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/portfolio",
@@ -96,7 +96,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-violet-600 dark:text-violet-400",
     accentBg: "bg-violet-500/5",
     accentBorder: "border-violet-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/cases",
@@ -109,7 +109,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-cyan-600 dark:text-cyan-400",
     accentBg: "bg-cyan-500/5",
     accentBorder: "border-cyan-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/financial-ops",
@@ -135,7 +135,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-orange-600 dark:text-orange-400",
     accentBg: "bg-orange-500/5",
     accentBorder: "border-orange-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/agent-auth",
@@ -155,7 +155,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-blue-600 dark:text-blue-400",
     accentBg: "bg-blue-500/5",
     accentBorder: "border-blue-500/20",
-    skills: ["store-data"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/healthcare",
@@ -168,7 +168,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-rose-600 dark:text-rose-400",
     accentBg: "bg-rose-500/5",
     accentBorder: "border-rose-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/government",
@@ -181,7 +181,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-slate-600 dark:text-slate-400",
     accentBg: "bg-slate-500/5",
     accentBorder: "border-slate-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/customer-ops",
@@ -194,7 +194,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-pink-600 dark:text-pink-400",
     accentBg: "bg-pink-500/5",
     accentBorder: "border-pink-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/logistics",
@@ -207,7 +207,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-lime-600 dark:text-lime-400",
     accentBg: "bg-lime-500/5",
     accentBorder: "border-lime-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/personal-data",
@@ -242,7 +242,7 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-emerald-600 dark:text-emerald-400",
     accentBg: "bg-emerald-500/5",
     accentBorder: "border-emerald-500/20",
-    skills: ["store-data", "query-memory"],
+    skills: ["ensure-neotoma"],
   },
   {
     href: "/crypto-engineering",
@@ -255,6 +255,6 @@ export const USE_CASES: UseCaseCard[] = [
     accent: "text-orange-600 dark:text-orange-400",
     accentBg: "bg-orange-500/5",
     accentBorder: "border-orange-500/20",
-    skills: ["remember-codebase", "store-data"],
+    skills: ["remember-codebase", "ensure-neotoma"],
   },
 ];

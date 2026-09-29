@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { isApiUrlConfigured } from "@/api/client";
-import { useRelationships } from "@/hooks/use_relationships";
+import { useRelationships, useRelationshipTypes } from "@/hooks/use_relationships";
 import { useCreateRelationship } from "@/hooks/use_mutations";
 import { PageShell } from "@/components/layout/page_shell";
 import { ApiNotConfiguredState } from "@/components/shared/api_not_configured_state";
@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { RELATIONSHIP_TYPES } from "@/lib/constants";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { formatDate } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
@@ -27,6 +26,7 @@ import type { RelationshipSnapshot } from "@/types/api";
 
 export default function RelationshipsPage() {
   const relationships = useRelationships();
+  const relationshipTypes = useRelationshipTypes();
   const createMut = useCreateRelationship();
 
   const [createType, setCreateType] = useState("");
@@ -104,7 +104,22 @@ export default function RelationshipsPage() {
                 <Select value={createType} onValueChange={setCreateType}>
                   <SelectTrigger><SelectValue placeholder="Select type…" /></SelectTrigger>
                   <SelectContent>
-                    {RELATIONSHIP_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    {/* Registry-backed. No hardcoded fallback: a fallback list
+                        would silently offer a vocabulary the server may not
+                        have, which is the bug #1972 removed. */}
+                    {relationshipTypes.isError ? (
+                      <div className="px-2 py-1.5 text-sm text-destructive">
+                        Could not load the relationship-type registry.
+                      </div>
+                    ) : relationshipTypes.isLoading ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading…</div>
+                    ) : (
+                      (relationshipTypes.data?.relationship_types ?? []).map((t) => (
+                        <SelectItem key={t.relationship_type} value={t.relationship_type}>
+                          {t.relationship_type}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

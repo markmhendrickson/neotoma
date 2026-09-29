@@ -131,4 +131,93 @@ describe("oauth_key_gate", () => {
       expect(store.getBoundUser(token, createdAt + 5_000)).toBeUndefined();
     });
   });
+
+  /**
+   * #2228 — a binding carries the graph scope AND who signed in. Before this,
+   * only a bare user_id was bound, so under shared-graph mode the verified
+   * Google email had nowhere to live and was simply dropped.
+   */
+  describe("identity binding alongside graph scope (#2228)", () => {
+    it("returns graph scope and signed-in identity as distinct values", async () => {
+      const mod = await loadOauthKeyGateModule(String(Date.now() + 10));
+      const store = new mod.OAuthKeySessionStore(10);
+      const createdAt = Date.now();
+      const token = store.create(createdAt, 60_000);
+
+      expect(
+        store.bindUser(
+          token,
+          {
+            graphUserId: "shared-graph-owner",
+            authenticatedUserId: "per-email-teammate",
+            authenticatedEmail: "teammate@example.com",
+          },
+          createdAt
+        )
+      ).toBe(true);
+
+      // getBoundUser answers "which graph", not "who" — data scoping depends on
+      // it continuing to mean the scope.
+      expect(store.getBoundUser(token, createdAt + 1_000)).toBe("shared-graph-owner");
+
+      const identity = store.getBoundIdentity(token, createdAt + 1_000);
+      expect(identity).toEqual({
+        graphUserId: "shared-graph-owner",
+        authenticatedUserId: "per-email-teammate",
+        authenticatedEmail: "teammate@example.com",
+      });
+    });
+
+    it("still accepts a bare user_id as the graph scope", async () => {
+      const mod = await loadOauthKeyGateModule(String(Date.now() + 11));
+      const store = new mod.OAuthKeySessionStore(10);
+      const createdAt = Date.now();
+      const token = store.create(createdAt, 60_000);
+
+      store.bindUser(token, "solo-user", createdAt);
+
+      expect(store.getBoundUser(token, createdAt + 1_000)).toBe("solo-user");
+      expect(store.getBoundIdentity(token, createdAt + 1_000)).toEqual({
+        graphUserId: "solo-user",
+      });
+    });
+
+    it("expires the identity with the session, not just the graph scope", async () => {
+      const mod = await loadOauthKeyGateModule(String(Date.now() + 12));
+      const store = new mod.OAuthKeySessionStore(10);
+      const createdAt = Date.now();
+      const token = store.create(createdAt, 1_000);
+      store.bindUser(
+        token,
+        {
+          graphUserId: "shared-graph-owner",
+          authenticatedUserId: "per-email-teammate",
+          authenticatedEmail: "teammate@example.com",
+        },
+        createdAt
+      );
+
+      expect(store.getBoundIdentity(token, createdAt + 500)).toBeDefined();
+      // An expired session must not keep answering with a stale email.
+      expect(store.getBoundIdentity(token, createdAt + 1_001)).toBeUndefined();
+      expect(store.getBoundUser(token, createdAt + 1_001)).toBeUndefined();
+    });
+
+    it("does not let a caller mutate the stored binding through the returned object", async () => {
+      const mod = await loadOauthKeyGateModule(String(Date.now() + 13));
+      const store = new mod.OAuthKeySessionStore(10);
+      const createdAt = Date.now();
+      const token = store.create(createdAt, 60_000);
+      store.bindUser(
+        token,
+        { graphUserId: "shared-graph-owner", authenticatedEmail: "teammate@example.com" },
+        createdAt
+      );
+
+      const identity = store.getBoundIdentity(token, createdAt + 1_000)!;
+      identity.graphUserId = "attacker-controlled";
+
+      expect(store.getBoundUser(token, createdAt + 1_000)).toBe("shared-graph-owner");
+    });
+  });
 });

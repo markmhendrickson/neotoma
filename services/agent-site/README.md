@@ -51,7 +51,7 @@ for data model and retry policy.
 | `AGENT_SITE_AAUTH_TOKEN_TTL_SEC`     | no (default `300`)         | Lifetime of the minted agent token (min 30s enforced by the signer). |
 | `CF_ACCESS_CLIENT_ID`                | yes (if Access enabled)    | Cloudflare Access service-token client id |
 | `CF_ACCESS_CLIENT_SECRET`            | yes (if Access enabled)    | Cloudflare Access service-token secret |
-| `AGENT_SITE_NEOTOMA_AGENT_LABEL`     | no (default `agent-site@neotoma.io`) | Self-reported identifier stamped onto every forward via `X-Agent-Label`; Neotoma cross-checks it against the AAuth `sub` when the label is listed in `NEOTOMA_STRICT_AAUTH_SUBS`. |
+| `AGENT_SITE_NEOTOMA_AGENT_LABEL`     | no (default `agent-site@neotoma.io`) | Self-reported identifier stamped onto every forward via `X-Agent-Label`; when the label is listed in `NEOTOMA_STRICT_AAUTH_SUBS`, Neotoma requires the signing key to be pinned by an active `agent_grant` whose `match_sub` is the label. |
 | `NEOTOMA_FEEDBACK_FORWARD_TIMEOUT_MS`| no (default `2000`)        | Per-request timeout for the inline forward; higher values risk slowing submit responses |
 
 #### Generating an AAuth key pair

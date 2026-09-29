@@ -31,11 +31,14 @@ export function AauthAttestationPage() {
           <code>hardware</code>.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          Else, if the verified <code>iss</code> (or <code>iss:sub</code>{" "}
-          composite) is in the operator allowlist (
+          Else, if the signing key is listed in{" "}
+          <code>NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS</code>, or is pinned
+          by an active grant whose <code>match_iss</code> (or{" "}
+          <code>match_iss:match_sub</code>) is in the operator allowlist (
           <code>NEOTOMA_OPERATOR_ATTESTED_ISSUERS</code> /{" "}
           <code>NEOTOMA_OPERATOR_ATTESTED_SUBS</code>), resolve to{" "}
-          <code>operator_attested</code>.
+          <code>operator_attested</code>. The agent token&apos;s own{" "}
+          <code>iss</code> / <code>sub</code> are not matched directly.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           Else, resolve to <code>software</code>.
@@ -506,16 +509,25 @@ export function AauthAttestationPage() {
           <strong className="text-foreground">
             <code>NEOTOMA_OPERATOR_ATTESTED_ISSUERS</code>
           </strong>{" "}
-         , CSV of <code>iss</code> values. Promotes verified AAuth
-          signatures whose <code>iss</code> matches to{" "}
-          <code>operator_attested</code>.
+         , CSV of <code>iss</code> values. Promotes a verified signature
+          to <code>operator_attested</code> when its key is pinned by an
+          active grant whose <code>match_iss</code> is listed.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">
             <code>NEOTOMA_OPERATOR_ATTESTED_SUBS</code>
           </strong>{" "}
-         , CSV of <code>iss:sub</code> composite values. Same as above but
-          pinned to a specific <code>(iss, sub)</code> pair.
+         , CSV of <code>iss:sub</code> composite values. Same as above,
+          matched against the pinned grant&apos;s{" "}
+          <code>match_iss:match_sub</code>.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">
+            <code>NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS</code>
+          </strong>{" "}
+         , CSV of RFC 7638 key thumbprints. Promotes verified AAuth
+          signatures made by a listed key to{" "}
+          <code>operator_attested</code>.
         </li>
       </ul>
       <p className="text-[15px] leading-7 mb-6">

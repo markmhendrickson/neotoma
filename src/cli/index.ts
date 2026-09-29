@@ -1405,6 +1405,61 @@ export function hintOf(error: unknown): string | undefined {
   return undefined;
 }
 
+/** Preserve a REST ErrorEnvelope when a CLI command crosses the API boundary. */
+function cliApiError(error: unknown): Error {
+  const detail = formatApiError(error);
+  const serverCode = errorCodeOf(error);
+  if (!serverCode) return new Error(detail);
+  return new CliHintError(detail, {
+    code: serverCode,
+    message: detail,
+    ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+  });
+}
+
+/**
+ * #2228: the `/me` payload separates "who you are" (`email`) from "whose
+ * graph you operate on" (`user_id`). Under shared-graph mode those describe
+ * different people, so the CLI must not let a bare `user_id` read as the
+ * signer's own identity. Pure formatting logic pulled out of the `auth login`
+ * already-signed-in branch so it is covered without driving the network/
+ * filesystem side effects the rest of that command performs.
+ */
+export function formatAlreadySignedIn(
+  me: {
+    user_id?: string;
+    email?: string;
+    authenticated_user_id?: string;
+    shared_graph?: boolean;
+  },
+  outputMode: "json" | "text"
+): { json: Record<string, unknown> } | { text: string } {
+  if (outputMode === "json") {
+    return {
+      json: {
+        message: "Already signed in",
+        user_id: me.user_id,
+        email: me.email,
+        ...(me.shared_graph
+          ? {
+              shared_graph: true,
+              ...(me.authenticated_user_id
+                ? { authenticated_user_id: me.authenticated_user_id }
+                : {}),
+            }
+          : {}),
+      },
+    };
+  }
+  let text = "Already signed in";
+  if (me.user_id ?? me.email) {
+    const scope = me.shared_graph ? `shared graph ${me.user_id}` : me.user_id;
+    text += ` (${[me.email, scope].filter(Boolean).join(", ")})`;
+  }
+  text += ".\n";
+  return { text };
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -1418,6 +1473,17 @@ function formatApiError(error: unknown): string {
     }
   }
   return String(error);
+}
+
+function formatRequestError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const envelope = error as { error_code?: unknown; message?: unknown };
+    if (typeof envelope.error_code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      return `${envelope.error_code}${message}`;
+    }
+  }
+  return formatApiError(error);
 }
 
 function parseOptionalJson(value?: string): unknown {
@@ -1522,15 +1588,18 @@ async function startOAuthCallbackServer(): Promise<{
 
 async function exchangeToken(
   baseUrl: string,
-  code: string
+  code: string,
+  codeVerifier: string
 ): Promise<{
   access_token: string;
   token_type?: string;
   expires_in?: number;
+  connection_id?: string;
 }> {
   const body = new URLSearchParams();
   body.set("grant_type", "authorization_code");
   body.set("code", code);
+  body.set("code_verifier", codeVerifier);
 
   const response = await fetch(`${baseUrl}/mcp/oauth/token`, {
     method: "POST",
@@ -1547,6 +1616,7 @@ async function exchangeToken(
     access_token: string;
     token_type?: string;
     expires_in?: number;
+    connection_id?: string;
   };
 }
 
@@ -1576,16 +1646,25 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   if (returnedState !== state) {
     throw new Error("OAuth state mismatch");
   }
-  const token = await exchangeToken(baseUrl, code);
+  const token = await exchangeToken(baseUrl, code, verifier);
   const expiresAt = token.expires_in
     ? new Date(Date.now() + token.expires_in * 1000).toISOString()
     : undefined;
+  if (!token.connection_id) {
+    // Every server new enough to check code_verifier also returns
+    // connection_id in the token response (see getTokenResponseForConnection).
+    // `code` itself is now a single-use secret, never the connection_id — do
+    // not fall back to it for X-Connection-Id.
+    throw new Error(
+      "Token response did not include connection_id; server may be running an outdated OAuth token endpoint."
+    );
+  }
   await writeConfig({
     base_url: baseUrl,
     access_token: token.access_token,
     token_type: token.token_type,
     expires_at: expiresAt,
-    connection_id: code,
+    connection_id: token.connection_id,
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {
@@ -7396,23 +7475,21 @@ const authLoginCommand = authCommand
       try {
         const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
-          const me = (await res.json()) as { user_id?: string; email?: string };
-          if (outputMode === "json") {
-            writeOutput(
-              {
-                message: "Already signed in",
-                base_url: baseUrl,
-                user_id: me.user_id,
-                email: me.email,
-              },
-              outputMode
-            );
+          // #2228: `email` is who is signed in; `user_id` is the graph being
+          // operated on. Under shared-graph mode they describe different
+          // people, so print the scope rather than letting the id read as the
+          // signer's own.
+          const me = (await res.json()) as {
+            user_id?: string;
+            email?: string;
+            authenticated_user_id?: string;
+            shared_graph?: boolean;
+          };
+          const formatted = formatAlreadySignedIn(me, outputMode === "json" ? "json" : "text");
+          if ("json" in formatted) {
+            writeOutput({ ...formatted.json, base_url: baseUrl }, outputMode);
           } else {
-            process.stdout.write("Already signed in");
-            if (me.user_id ?? me.email) {
-              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
-            }
-            process.stdout.write(".\n");
+            process.stdout.write(formatted.text);
           }
           return;
         }
@@ -12549,6 +12626,62 @@ devCommand
 const entitiesCommand = program.command("entities").description("Entity commands");
 const sourcesCommand = program.command("sources").description("Source commands");
 const observationsCommand = program.command("observations").description("Observation commands");
+const relationshipTypesCommand = program
+  .command("relationship-types")
+  .description("Discover and register relationship types");
+relationshipTypesCommand
+  .command("list")
+  .option("--keyword <text>", "Filter names and descriptions")
+  .option("--scope <scope>", "Filter user or global scope")
+  .option("--include-edge-count", "Include counts of written edge rows")
+  .action(async (opts) => {
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/list_relationship_types", {
+      body: {
+        keyword: opts.keyword,
+        scope: opts.scope,
+        include_edge_counts: opts.includeEdgeCount,
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
+relationshipTypesCommand
+  .command("register")
+  .requiredOption("--relationship-type <type>", "Type to register")
+  .option("--description <text>", "Meaning of the edge")
+  .option("--scope <scope>", "user or global (global requires explicit permission)", "user")
+  .option("--acyclic", "Refuse cycles for this type")
+  .option("--inverse <type>", "Advisory inverse type")
+  .option("--symmetric", "Advisory symmetry")
+  .option("--source-entity-types <types>", "Comma-separated advisory source types")
+  .option("--target-entity-types <types>", "Comma-separated advisory target types")
+  .action(async (opts) => {
+    if (!["user", "global"].includes(opts.scope)) throw new Error("--scope must be user or global");
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/register_relationship_type", {
+      body: {
+        relationship_type: opts.relationshipType,
+        description: opts.description,
+        scope: opts.scope,
+        acyclic: opts.acyclic,
+        inverse: opts.inverse,
+        symmetric: opts.symmetric,
+        source_entity_types: opts.sourceEntityTypes?.split(","),
+        target_entity_types: opts.targetEntityTypes?.split(","),
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
 const relationshipsCommand = program.command("relationships").description("Relationship commands");
 const timelineCommand = program.command("timeline").description("Timeline commands");
 const schemasCommand = program.command("schemas").description("Schema commands");
@@ -13753,15 +13886,7 @@ relationshipsCommand
       const effectiveUserId = resolveEffectiveUserId(opts.userId);
       const { data, error } = await api.POST("/relationships/snapshot", {
         body: {
-          relationship_type: relationshipType as
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS",
+          relationship_type: relationshipType,
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
@@ -15341,7 +15466,7 @@ program
     ];
 
     const relationships: Array<{
-      relationship_type: "PART_OF" | "REFERS_TO";
+      relationship_type: string;
       source_index: number;
       target_index: number;
     }> = [
@@ -16476,6 +16601,10 @@ program
   .option("--body <json>", "JSON body override")
   .option("--query <json>", "JSON query override")
   .option("--path <json>", "JSON path override")
+  .option(
+    "--guest-access-token <token>",
+    "Authenticate this request with an entity-scoped guest access token instead of the configured credential"
+  )
   .option("--skip-auth", "Skip auth token for public endpoints")
   .option(
     "--aauth",
@@ -16493,6 +16622,9 @@ program
     }
 
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    if (opts.guestAccessToken && (opts.skipAuth || opts.aauth)) {
+      throw new Error("--guest-access-token cannot be combined with --skip-auth or --aauth");
+    }
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
@@ -16506,7 +16638,8 @@ program
         );
       }
     }
-    const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
+    const token =
+      opts.skipAuth || opts.aauth ? undefined : opts.guestAccessToken || (await getCliToken());
     const api = createApiClient({
       baseUrl,
       token,
@@ -16541,6 +16674,48 @@ program
       };
     }
 
+    if (operation.path === "/events/stream") {
+      if (opts.aauth) {
+        throw new Error("eventsStream does not support --aauth; use bearer authentication");
+      }
+      const url = new URL(operation.path, baseUrl);
+      const queryParams = (requestParams.params as { query?: Record<string, unknown> } | undefined)
+        ?.query;
+      for (const [key, value] of Object.entries(queryParams ?? {})) {
+        if (Array.isArray(value)) {
+          for (const item of value) url.searchParams.append(key, String(item));
+        } else if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/event-stream",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        const error = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+        throw new Error("Request failed: " + formatRequestError(error));
+      }
+      if (!response.body) {
+        throw new Error("eventsStream response did not include a stream body");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        process.stdout.write(decoder.decode(value, { stream: true }));
+      }
+      const trailing = decoder.decode();
+      if (trailing) process.stdout.write(trailing);
+      return;
+    }
+
     const method = operation.method.toUpperCase();
     const handler = (api as unknown as Record<string, unknown>)[method] as
       | ((
@@ -16558,7 +16733,7 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      throw new Error("Request failed: " + formatApiError(error));
+      throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);
   });

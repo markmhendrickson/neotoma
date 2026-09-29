@@ -226,6 +226,30 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     metadata TEXT
   )`,
+  // Relationship-type registry (#1972 / G25). APPEND-ONLY: every registration,
+  // re-registration and deregistration is an INSERT and `state` is a value on
+  // the row, never a column updated in place — unlike `schema_registry` above,
+  // whose `active INTEGER` is flipped by an UPDATE. Resolution reads the latest
+  // row per (relationship_type, scope, user_id). See
+  // src/services/relationship_types/registry.ts for the full rationale.
+  //
+  // `relationship_type` carries no CHECK: the naming rule lives in the service
+  // where it can produce a structured error, exactly as entity-type naming does
+  // in entity_type_guard.ts. `relationship_snapshots.relationship_type` is
+  // likewise unconstrained TEXT, so widening the vocabulary needs no data
+  // migration — existing edges are untouched.
+  `CREATE TABLE IF NOT EXISTS relationship_type_registry (
+    id TEXT PRIMARY KEY,
+    relationship_type TEXT NOT NULL,
+    registry_version TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT,
+    created_by TEXT,
+    user_id TEXT,
+    scope TEXT,
+    metadata TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_state (
     id TEXT PRIMARY KEY,
     state TEXT NOT NULL,
@@ -238,8 +262,35 @@ const SCHEMA_STATEMENTS = [
     expires_at TEXT,
     user_id TEXT,
     scope TEXT,
-    final_redirect_uri TEXT
+    final_redirect_uri TEXT,
+    authorization_code_provenance TEXT NOT NULL DEFAULT 'client_pkce'
   )`,
+  // Single-use authorization code minted at authorization completion (local
+  // and remote backends alike) and redeemed exactly once at /mcp/oauth/token.
+  // Deliberately distinct from `connection_id`: the code is a bearer secret
+  // that must not be guessable or reusable, while `connection_id` is a stable
+  // handle a client may hold indefinitely and expose in logs/URLs. Redemption
+  // deletes the row (single-use) and, unless the row carries the explicit
+  // OpenAI Custom GPT no-PKCE provenance, checks the caller-supplied
+  // code_verifier against `code_challenge` (PKCE, RFC 7636) before issuing a
+  // token. The default provenance is strict PKCE so old and unknown rows fail
+  // closed.
+  `CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    connection_id TEXT NOT NULL,
+    client_id TEXT,
+    created_at TEXT,
+    expires_at TEXT,
+    authorization_code_provenance TEXT NOT NULL DEFAULT 'client_pkce'
+  )`,
+  // `user_id` is the GRAPH SCOPE principal — the user_id every read and write
+  // is scoped to. Under NEOTOMA_SHARED_GRAPH_USER_ID it is the shared graph
+  // owner, not the person who signed in. `authenticated_user_id` /
+  // `authenticated_email` carry WHO SIGNED IN alongside that scope (#2228);
+  // they are NULL on non-shared-graph and pre-migration rows, where identity
+  // is resolved from `user_id` exactly as before.
   `CREATE TABLE IF NOT EXISTS mcp_oauth_connections (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -250,7 +301,9 @@ const SCHEMA_STATEMENTS = [
     client_name TEXT,
     last_used_at TEXT,
     created_at TEXT,
-    revoked_at TEXT
+    revoked_at TEXT,
+    authenticated_user_id TEXT,
+    authenticated_email TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_client_state (
     id TEXT PRIMARY KEY,
@@ -461,6 +514,29 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     // support fast collapse_by grouping on retrieve_entities.
     await addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
     await addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    // #2228: signed-in identity carried alongside the graph-scope user_id.
+    // Existing rows get NULLs and keep resolving identity from user_id.
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_user_id", "TEXT");
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_email", "TEXT");
+    await addColumnIfMissing(
+      db,
+      "mcp_oauth_state",
+      "authorization_code_provenance",
+      "TEXT NOT NULL DEFAULT 'client_pkce'"
+    );
+    await addColumnIfMissing(
+      db,
+      "mcp_oauth_codes",
+      "authorization_code_provenance",
+      "TEXT NOT NULL DEFAULT 'client_pkce'"
+    );
+    // Redemption lookup for the single-use authorization code (mcp_oauth_codes).
+    // `code` is looked up on every /mcp/oauth/token call with grant_type=
+    // authorization_code, so this index keeps redemption an indexed point
+    // lookup rather than a table scan as codes accumulate pre-expiry-cleanup.
+    await db
+      .prepare("CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_code ON mcp_oauth_codes(code)")
+      .run();
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
@@ -529,6 +605,22 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
     await addColumnIfMissing(db, "sources", "mtime", "TEXT");
 
+    // #2240: per-member write-attribution ids. A random id minted the first
+    // time a signed-in member's session is resolved, and the ONLY member
+    // identifier stamped into write provenance. Random rather than derived, so
+    // it cannot be recomputed from an email address and differs per instance.
+    // Deleting a row severs the link between that member and every record
+    // carrying the id (the records themselves are untouched).
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS member_attribution_ids (
+      local_user_id TEXT PRIMARY KEY,
+      attribution_id TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    )`
+      )
+      .run();
+
     await db
       .prepare(
         `CREATE TABLE IF NOT EXISTS sandbox_sessions (
@@ -595,6 +687,30 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await db
       .prepare(
         "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+      )
+      .run();
+
+    // Relationship-type registry (#1972 / G25). Two indexes, and neither is
+    // optional: `schema_registry` has NO index at all, so every registry read
+    // there is a full table scan — and this registry is read on the
+    // relationship WRITE path, not just at boot.
+    //
+    // The UNIQUE index is the one `schema_registry` lacks. Without it nothing
+    // prevents two rows for the same key, which is why
+    // schema_registry_bootstrap.ts's `isDuplicateRegistrationError` (matching
+    // "duplicate key" / "unique constraint" / "already exists") is dead code on
+    // SQLite: the concurrent-boot race it claims to absorb is real and
+    // unhandled there. Here a racing double-seed hits a real constraint.
+    await db
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_type_registry_unique " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, registry_version)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_type_registry_resolve " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, created_at)"
       )
       .run();
 

@@ -58,7 +58,7 @@ export interface SessionAttribution {
     client_info_raw_name?: string;
     client_info_normalised_to_null_reason?: string;
     attestation?: SessionAttestationOutcome | null;
-    operator_allowlist_source?: "issuer" | "issuer_subject" | null;
+    operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject" | null;
   } | null;
 }
 

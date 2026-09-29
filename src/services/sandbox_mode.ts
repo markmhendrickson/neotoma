@@ -199,6 +199,105 @@ export function buildSandboxBootBannerLines(inputs: {
 }
 
 /**
+ * Classify a `server.address()` readback for the post-bind posture check in
+ * `src/actions.ts`.
+ *
+ * `net.Server#address()` returns `null` before `listen`/after `close`, and
+ * (per Node's own types) can in principle hand back something that isn't a
+ * plain `{address, port}` object. The pre-fix code treated any such value as
+ * "matches the intended host" — i.e. it defaulted an UNKNOWN bound address to
+ * the SAME loopback classification as whatever the operator asked for. That
+ * is backwards: an address we could not read is not evidence the bind is
+ * safe, it is an evidence gap. This resolver keeps "unknown" and "loopback"
+ * distinct so a caller can fail closed on "unknown" under `enforce` instead
+ * of silently inheriting the intended posture.
+ *
+ * Returns `null` (unknown) when the address cannot be read as a host string;
+ * otherwise returns the host string exactly as reported.
+ */
+export function extractBoundHost(addr: unknown): string | null {
+  if (
+    addr &&
+    typeof addr === "object" &&
+    typeof (addr as { address?: unknown }).address === "string"
+  ) {
+    return (addr as { address: string }).address;
+  }
+  return null;
+}
+
+/**
+ * Decide what a post-bind posture reconciliation should do once the actual
+ * bound address is known (or could not be determined at all).
+ *
+ * `boundHost === null` means `extractBoundHost()` could not classify the live
+ * socket — this must NOT be treated as "loopback" (safe) or silently ignored.
+ * Under `enforce` it is treated the same as an unresolvable/refuse posture:
+ * the caller should close the socket and exit rather than keep serving on an
+ * unknown topology. Under `warn` it stays loud (the caller logs) but
+ * non-fatal, consistent with every other `refuse`+`warn` path in this file.
+ */
+export interface PostureReconciliationDecision {
+  /** True when the caller must close the listening socket and exit(1). */
+  shouldRefuseAndClose: boolean;
+  /** Human-readable reason, for logging. */
+  reason: string;
+}
+
+export function decidePostureReconciliation(inputs: {
+  boundHost: string | null;
+  intendedHost: string;
+  refusePolicy: "warn" | "enforce";
+  /**
+   * Injected rather than imported: `isLoopbackHost` lives in `src/actions.ts`,
+   * which imports THIS module, so importing it back here would be a cycle.
+   * Injecting it also keeps this function honest about using the SAME
+   * classifier the caller binds sockets with, rather than a second copy that
+   * could drift from it — drift between two copies of this exact check is
+   * the bug class the whole PR closes.
+   */
+  isLoopbackHost: (host: string) => boolean;
+  resolve: (loopbackBindOnly: boolean) => ResolveSandboxModeResult;
+}): PostureReconciliationDecision & { verdict: ResolveSandboxModeResult | null } {
+  const { boundHost, intendedHost, refusePolicy, resolve } = inputs;
+
+  if (boundHost === null) {
+    // The live socket's address could not be classified at all. This is
+    // strictly worse than "bound non-loopback" (at least that is a known
+    // topology) — treat it as an unresolvable posture rather than assuming
+    // it matches operator intent.
+    const reason =
+      `post-bind address could not be read from server.address() (expected ` +
+      `intended host "${intendedHost}"); posture is UNKNOWN, not assumed safe`;
+    return {
+      shouldRefuseAndClose: refusePolicy === "enforce",
+      reason,
+      verdict: null,
+    };
+  }
+
+  const actualLoopbackBindOnly = inputs.isLoopbackHost(boundHost);
+  const intendedLoopbackBindOnly = inputs.isLoopbackHost(intendedHost);
+  if (actualLoopbackBindOnly === intendedLoopbackBindOnly) {
+    return {
+      shouldRefuseAndClose: false,
+      reason: "bound host matches intended posture",
+      verdict: null,
+    };
+  }
+
+  const verdict = resolve(actualLoopbackBindOnly);
+  return {
+    shouldRefuseAndClose: verdict.shouldRefuseBoot,
+    reason:
+      `bind posture mismatch: intended host "${intendedHost}" (loopbackBindOnly=${intendedLoopbackBindOnly}) ` +
+      `but server.address() reports "${boundHost}" (loopbackBindOnly=${actualLoopbackBindOnly}); ` +
+      `reconciled mode="${verdict.mode}" shouldRefuseBoot=${verdict.shouldRefuseBoot}`,
+    verdict,
+  };
+}
+
+/**
  * Read NEOTOMA_REFUSE_MODE from env. Defaults to "warn" for the first cut so
  * upgrades do not regress existing self-host configs. Operators flip to
  * "enforce" once they have confirmed their topology.

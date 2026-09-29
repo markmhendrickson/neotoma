@@ -1519,6 +1519,194 @@ function filterConfigsByInstallChoice(
   return [];
 }
 
+/**
+ * AAuth-related env var keys that mark an entry's env as a deliberate signed
+ * setup rather than an unsigned local dev shim. Matches by substring so a
+ * differently-cased or slightly renamed key (e.g. a future
+ * `NEOTOMA_AAUTH_TOKEN`) still counts — this is a safety classifier, so a
+ * false positive (an extra confirmation prompt) is the acceptable failure
+ * mode, not a false negative (a silent clobber).
+ */
+const AAUTH_ENV_KEY_PATTERN = /aauth/i;
+
+/**
+ * Heuristic for "this command is a Neotoma source-checkout or installed-CLI
+ * launcher" — i.e. something `neotomaServerEntriesForTransport` /
+ * `neotomaProxyServerEntries` itself would generate. Used to recognize the
+ * INVERSE: a command that does NOT look like one of ours, which is a strong
+ * signal the entry was hand-configured against something else entirely (a
+ * hosted wrapper, a packaged binary, a wrapper script outside any checkout).
+ */
+function looksLikeNeotomaLauncherCommand(command: string): boolean {
+  const normalized = command.replace(/\\/g, "/").toLowerCase();
+  return (
+    normalized.includes("run_neotoma_mcp") ||
+    (normalized.includes("/dist/") &&
+      (normalized.includes("index.js") || normalized.includes("cli/index.js"))) ||
+    normalized === "node" ||
+    normalized.endsWith("/node") ||
+    normalized.endsWith("\\node.exe")
+  );
+}
+
+/**
+ * Heuristic for "this URL is one Neotoma's own installer/CLI would have
+ * generated" — the URL-transport mirror of `looksLikeNeotomaLauncherCommand`
+ * above. Deliberately mirrors BOTH halves of `detectNeotomaServers`' own
+ * recognition rule (the URL branch around line 380 in this file): a local
+ * loopback `/mcp` URL at any port (dev/prod slots move between 3080/3180 and
+ * whatever `NEOTOMA_SESSION_*_PORT` picks), or the hosted Fly production
+ * URL `neotoma.fly.dev/mcp`. Anything else — a different host, a
+ * different path, a non-loopback IP — is NOT something our own tooling would
+ * have written, so it is presumed deliberate.
+ */
+function looksLikeNeotomaGeneratedUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  const isFlyProd = parsed.hostname === "neotoma.fly.dev";
+  const hasMcpPath = parsed.pathname === "/mcp" || parsed.pathname.endsWith("/mcp");
+  return hasMcpPath && (isLoopback || isFlyProd);
+}
+
+/**
+ * Detect whether an existing mcpServers[id] entry is a deliberate, non-dev
+ * setup that offerInstall must not silently overwrite: a hosted/signed
+ * wrapper or hosted URL the operator configured by hand rather than
+ * something Neotoma's own installer would generate.
+ *
+ * Signals, any one of which qualifies (task: "a command not under a neotoma
+ * source checkout, or args containing --aauth, or AAuth env keys" — extended
+ * per neotoma#2516 review to cover the URL-transport shape, which the first
+ * cut of this classifier missed entirely: it only inspected `command`/
+ * `args`/`env` and unconditionally returned false for any entry with no
+ * `command`, so a hosted `url`/`serverUrl` entry — with or without auth
+ * `headers` — was still silently clobbered. Same incident, different
+ * transport):
+ *   1. `command` does not look like a Neotoma launcher (see above) — e.g. an
+ *      absolute path to a hosted wrapper script, or a packaged binary name.
+ *   2. `args` contains a literal `--aauth` flag.
+ *   3. `env` has any key matching /aauth/i (case-insensitive, substring).
+ *   4. `url` or `serverUrl` is set and does NOT look like a Neotoma-generated
+ *      URL (see `looksLikeNeotomaGeneratedUrl` above) — a hosted endpoint on
+ *      a different host, or any non-loopback/non-Fly-prod URL.
+ *   5. `headers` is set and non-empty — a URL-transport entry carrying its
+ *      own auth headers (e.g. `Authorization`) is by construction a
+ *      hand-configured, signed setup, regardless of what the URL looks like.
+ *
+ * Deliberately over-inclusive: this exists to stop a silent clobber of a
+ * signed AAuth or hosted setup (the incident that motivated it — a
+ * user-level ~/.cursor/mcp.json `neotoma` entry pointing at a hosted wrapper
+ * or hosted URL was repeatedly overwritten with a worktree's unsigned dev
+ * shim). A false positive costs one extra confirmation prompt; a false
+ * negative reproduces the incident.
+ */
+export function isDeliberateNonDevMcpEntry(entry: {
+  command?: string;
+  args?: unknown;
+  env?: Record<string, unknown>;
+  url?: unknown;
+  serverUrl?: unknown;
+  headers?: unknown;
+}): boolean {
+  const command = typeof entry.command === "string" ? entry.command : "";
+  const args = Array.isArray(entry.args) ? entry.args.map((a) => String(a)) : [];
+  const env = entry.env && typeof entry.env === "object" ? entry.env : {};
+  const url = typeof entry.url === "string" ? entry.url : "";
+  const serverUrl = typeof entry.serverUrl === "string" ? entry.serverUrl : "";
+  const headers =
+    entry.headers && typeof entry.headers === "object" ? (entry.headers as object) : {};
+
+  if (args.includes("--aauth")) return true;
+  if (Object.keys(env).some((k) => AAUTH_ENV_KEY_PATTERN.test(k))) return true;
+  if (command && !looksLikeNeotomaLauncherCommand(command)) return true;
+  if (url && !looksLikeNeotomaGeneratedUrl(url)) return true;
+  if (serverUrl && !looksLikeNeotomaGeneratedUrl(serverUrl)) return true;
+  if (Object.keys(headers).length > 0) return true;
+
+  return false;
+}
+
+/**
+ * Write a timestamped backup of an existing mcpServers[id] entry before
+ * offerInstall overwrites it, alongside the config file. Best-effort: a
+ * backup failure must never block on its own, but it also must never be
+ * silently skipped when the caller is about to destroy the only copy of a
+ * deliberate non-dev entry, so callers should surface (not swallow) a
+ * rejection from this function for that case.
+ */
+export async function backupMcpConfigEntry(
+  configPath: string,
+  serverId: string,
+  entry: unknown
+): Promise<string> {
+  const dir = path.dirname(configPath);
+  const base = path.basename(configPath);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = path.join(dir, `.${base}.${serverId}.${stamp}.bak.json`);
+  await fs.writeFile(backupPath, JSON.stringify({ [serverId]: entry }, null, 2) + "\n");
+  return backupPath;
+}
+
+/**
+ * Ask, specifically, whether it's OK to replace an existing deliberate
+ * non-dev MCP entry. Unlike the generic yes/no prompts elsewhere in this
+ * file, this one refuses to answer "yes" on behalf of the operator under any
+ * non-interactive circumstance: no `--yes`, no `assumeYes`, no default. The
+ * only way to get a `true` back is a live human at a live TTY typing "y" to
+ * THIS question, about THIS entry. See the task/incident this guards
+ * against: a CLI invocation running with assumeYes (or a non-TTY default)
+ * is exactly how the AAuth entry was destroyed three times.
+ */
+/**
+ * Refusal message for the non-interactive (or answered "no") path: no TTY,
+ * `assumeYes`, and `--yes` never authorize replacing a deliberate entry, so
+ * this is the message most operators will actually see. It must say how to
+ * proceed, not just what was refused — an operator who genuinely wants the
+ * dev shim needs a next step, not a dead end.
+ */
+function keptDeliberateEntryMessage(serverId: string, configPath: string): string {
+  return (
+    `Kept existing "${serverId}" entry in ${configPath} (looks like a deliberate, ` +
+    "non-dev setup; not confirmed). To replace it, run `neotoma mcp config` " +
+    'interactively from a real terminal and answer "y" to the confirmation prompt, ' +
+    "or edit/remove the entry in the config file yourself first.\n"
+  );
+}
+
+async function confirmOverwriteDeliberateEntry(
+  configPath: string,
+  serverId: string,
+  existing: {
+    command?: string;
+    args?: unknown;
+    env?: Record<string, unknown>;
+    url?: unknown;
+    serverUrl?: unknown;
+    headers?: unknown;
+  }
+): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  process.stdout.write(
+    "\n" +
+      `⚠ ${configPath} already has a "${serverId}" entry that looks like a deliberate, ` +
+      "non-dev setup (not a Neotoma checkout launcher/URL, configured for AAuth signing, " +
+      "or a hosted URL with its own auth headers):\n" +
+      `    ${JSON.stringify(existing)}\n` +
+      "  Replacing it will remove that signing/hosted setup. A backup will be written " +
+      "alongside the config file.\n" +
+      "  To skip this prompt and always replace it, remove the entry from the config " +
+      'file first, or answer "y" here.\n'
+  );
+  return promptYesNo(`  Replace the existing "${serverId}" entry in ${configPath}?`, {
+    defaultYes: false,
+  });
+}
+
 /** Rewrite localhost MCP URL to use the given port. */
 function rewriteMcpUrlToPort(url: string, port: number): string {
   try {
@@ -2039,27 +2227,73 @@ export async function offerInstall(
       if (!vsParsed.servers) vsParsed.servers = {};
       if (!selectedEnv || selectedEnv === "dev") {
         if (forceRewriteNeotoma || !config.hasDev) {
-          const e = entries["neotoma-dev"];
-          if ("command" in e) {
-            vsParsed.servers["neotoma-dev"] = {
-              type: "stdio",
-              command: e.command,
-              ...(e.args ? { args: e.args } : {}),
-              ...(e.env ? { env: e.env } : {}),
-            };
+          const existingVs = vsParsed.servers["neotoma-dev"] as
+            | {
+                command?: string;
+                args?: unknown;
+                env?: Record<string, unknown>;
+                url?: unknown;
+                serverUrl?: unknown;
+                headers?: unknown;
+              }
+            | undefined;
+          const canWrite =
+            !existingVs || !isDeliberateNonDevMcpEntry(existingVs)
+              ? true
+              : await confirmOverwriteDeliberateEntry(config.path, "neotoma-dev", existingVs);
+          if (!canWrite) {
+            if (!options?.silent) {
+              process.stdout.write(keptDeliberateEntryMessage("neotoma-dev", config.path));
+            }
+          } else {
+            if (existingVs && isDeliberateNonDevMcpEntry(existingVs)) {
+              await backupMcpConfigEntry(config.path, "neotoma-dev", existingVs);
+            }
+            const e = entries["neotoma-dev"];
+            if ("command" in e) {
+              vsParsed.servers["neotoma-dev"] = {
+                type: "stdio",
+                command: e.command,
+                ...(e.args ? { args: e.args } : {}),
+                ...(e.env ? { env: e.env } : {}),
+              };
+            }
           }
         }
       }
       if (!selectedEnv || selectedEnv === "prod") {
         if (forceRewriteNeotoma || !config.hasProd) {
-          const e = entries.neotoma;
-          if ("command" in e) {
-            vsParsed.servers["neotoma"] = {
-              type: "stdio",
-              command: e.command,
-              ...(e.args ? { args: e.args } : {}),
-              ...(e.env ? { env: e.env } : {}),
-            };
+          const existingVs = vsParsed.servers["neotoma"] as
+            | {
+                command?: string;
+                args?: unknown;
+                env?: Record<string, unknown>;
+                url?: unknown;
+                serverUrl?: unknown;
+                headers?: unknown;
+              }
+            | undefined;
+          const canWrite =
+            !existingVs || !isDeliberateNonDevMcpEntry(existingVs)
+              ? true
+              : await confirmOverwriteDeliberateEntry(config.path, "neotoma", existingVs);
+          if (!canWrite) {
+            if (!options?.silent) {
+              process.stdout.write(keptDeliberateEntryMessage("neotoma", config.path));
+            }
+          } else {
+            if (existingVs && isDeliberateNonDevMcpEntry(existingVs)) {
+              await backupMcpConfigEntry(config.path, "neotoma", existingVs);
+            }
+            const e = entries.neotoma;
+            if ("command" in e) {
+              vsParsed.servers["neotoma"] = {
+                type: "stdio",
+                command: e.command,
+                ...(e.args ? { args: e.args } : {}),
+                ...(e.env ? { env: e.env } : {}),
+              };
+            }
           }
         }
       }
@@ -2080,15 +2314,52 @@ export async function offerInstall(
       applyClaudeDesktopServerIdMigration(parsed.mcpServers);
     }
 
-    // Add or replace Neotoma servers (only selected env when selectedEnv is set)
+    // Add or replace Neotoma servers (only selected env when selectedEnv is set).
+    // Before overwriting an EXISTING entry, check whether it looks like a deliberate,
+    // non-dev setup (hosted/signed wrapper) rather than something our own installer
+    // would have written — see isDeliberateNonDevMcpEntry. Only a live interactive
+    // "yes" to confirmOverwriteDeliberateEntry can authorize replacing one; assumeYes,
+    // --yes, and non-TTY defaults never count (this is exactly the gap the incident
+    // exploited: a CLI run with assumeYes/non-interactive defaults silently clobbered
+    // a hand-configured AAuth entry).
     if (!selectedEnv || selectedEnv === "dev") {
       if (forceRewriteNeotoma || !config.hasDev) {
-        parsed.mcpServers[neotomaServerIdForConfig(config.path, "dev")] = entries["neotoma-dev"];
+        const devId = neotomaServerIdForConfig(config.path, "dev");
+        const existingDev = parsed.mcpServers[devId];
+        const canWrite =
+          !existingDev || !isDeliberateNonDevMcpEntry(existingDev)
+            ? true
+            : await confirmOverwriteDeliberateEntry(config.path, devId, existingDev);
+        if (!canWrite) {
+          if (!options?.silent) {
+            process.stdout.write(keptDeliberateEntryMessage(devId, config.path));
+          }
+        } else {
+          if (existingDev && isDeliberateNonDevMcpEntry(existingDev)) {
+            await backupMcpConfigEntry(config.path, devId, existingDev);
+          }
+          parsed.mcpServers[devId] = entries["neotoma-dev"];
+        }
       }
     }
     if (!selectedEnv || selectedEnv === "prod") {
       if (forceRewriteNeotoma || !config.hasProd) {
-        parsed.mcpServers[neotomaServerIdForConfig(config.path, "prod")] = entries.neotoma;
+        const prodId = neotomaServerIdForConfig(config.path, "prod");
+        const existingProd = parsed.mcpServers[prodId];
+        const canWrite =
+          !existingProd || !isDeliberateNonDevMcpEntry(existingProd)
+            ? true
+            : await confirmOverwriteDeliberateEntry(config.path, prodId, existingProd);
+        if (!canWrite) {
+          if (!options?.silent) {
+            process.stdout.write(keptDeliberateEntryMessage(prodId, config.path));
+          }
+        } else {
+          if (existingProd && isDeliberateNonDevMcpEntry(existingProd)) {
+            await backupMcpConfigEntry(config.path, prodId, existingProd);
+          }
+          parsed.mcpServers[prodId] = entries.neotoma;
+        }
       }
     }
 

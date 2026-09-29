@@ -19,7 +19,11 @@
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { deleteSnapshot, recomputeSnapshot } from "./snapshot_computation.js";
-import { entityIdTenantSalt, generateEntityId } from "./entity_resolution.js";
+import {
+  assertNoOwnerConflict,
+  entityIdTenantSalt,
+  generateEntityId,
+} from "./entity_resolution.js";
 import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 /**
@@ -246,6 +250,28 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
     );
   }
 
+  // Fail-closed ownership guard (neotoma security fix, entity_resolution.ts):
+  // a caller-supplied target_entity_id must not let this write re-point
+  // observations onto an entity owned by a DIFFERENT user. Without this, the
+  // insert-and-tolerate-"already exists" pattern below silently proceeded to
+  // rewrite observations.entity_id onto any existing id the caller named,
+  // regardless of who owned it — this entrance was flagged as unreproduced
+  // during the entity-resolution security review and closed here with the
+  // same guard used at every other write entrance.
+  const { data: targetEntityRow } = await db
+    .from("entities")
+    .select("user_id")
+    .eq("id", newEntityId)
+    .maybeSingle();
+  if (targetEntityRow) {
+    assertNoOwnerConflict({
+      entityId: newEntityId,
+      entityType: newEntity.entity_type,
+      existingOwnerUserId: (targetEntityRow as { user_id: string | null }).user_id,
+      writerUserId: userId,
+    });
+  }
+
   // Select candidate observations and filter by predicate in-process. Doing
   // the filter in code keeps the predicate surface small and DB-agnostic
   // (the shipped merge flow uses the same "one SQL update per eq" pattern).
@@ -273,6 +299,18 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
       "Split predicate matched every observation on the source entity; " +
         "a split that leaves the source empty is a rename — use correct or merge instead."
     );
+  }
+
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // A split re-points observations (and any match_thumbprint they carry)
+  // onto another entity, so the source grant's pins must be ones no other
+  // owner holds. Checked before anything is written.
+  if (
+    (sourceEntity as { entity_type?: string }).entity_type === "agent_grant" ||
+    newEntity.entity_type === "agent_grant"
+  ) {
+    const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+    await assertGrantEntityPinsUnique(userId, sourceEntityId);
   }
 
   // Ensure the new entity row exists before re-pointing FKs. Use insert with

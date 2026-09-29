@@ -1,27 +1,46 @@
 /**
- * Contract test: relationship_type vocabulary parity across MCP tools (#1972, step 1).
+ * Contract test: relationship_type advertisement parity across MCP tools
+ * (#1972, rewritten for G25).
  *
- * `create_relationship` derives its `relationship_type` enum from the OpenAPI
- * definition (28 members). `delete_relationship`, `restore_relationship`, and
- * `get_relationship_snapshot` hand-built their schemas from a local 8-member
- * literal in `src/tool_definitions.ts`. The result was a one-way door: an edge
- * written with any of the other 20 types (`works_at`, `related_to`, `owns`, …)
- * was advertised to MCP clients as undeletable, because a schema-validating
- * client refuses the call before it ever reaches the server — whose Zod schema
- * would have accepted it.
+ * ── WHAT THIS TEST USED TO ASSERT, AND WHY IT CHANGED ─────────────────────
  *
- * These assertions fail if any of the four tools' advertised type sets diverge
- * again, which is the durable half of the fix: re-widening one copy by hand
- * would simply reset the clock.
+ * The original version asserted that all four relationship tools advertised
+ * the SAME 28-member enum, and that the enum existed at all
+ * (`expect(relationshipType!.enum, "…without an enum").toBeTruthy()`). That was
+ * the right assertion for the bug it was written against: `create_relationship`
+ * advertised 28 types while `delete_relationship`, `restore_relationship` and
+ * `get_relationship_snapshot` advertised 8, so an edge written with any of the
+ * other 20 was advertised as UNDELETABLE — a schema-validating client refused
+ * the call before it reached a server that would have accepted it.
+ *
+ * It is REWRITTEN, not deleted, because it is the guard that caught that bug
+ * and its four behavioural assertions still matter. What changed is the target:
+ * the vocabulary is now a runtime registry, so an enum in a tool schema is
+ * itself the defect — it would go stale the moment someone registered a type.
+ * The assertions are therefore restated against the REGISTRY.
+ *
+ * ── THE ASSERTION THE OLD TEST WAS MISSING ────────────────────────────────
+ *
+ * The old test read `inputSchema.properties.relationship_type.enum` and NEVER
+ * the description string. That is precisely the gap that let
+ * `docs/developer/mcp/tool_descriptions.yaml` — loaded into the live tool
+ * descriptions at server boot (`server.ts`'s `loadToolDescriptionsMap`) — go on
+ * telling every LLM client the vocabulary was 8 types while the schema beside
+ * it said 28. A model reads the description, not the JSON Schema enum. So the
+ * #1972 defect class survived in the field, in the very field the test written
+ * for #1972 did not look at.
+ *
+ * The last test in this file closes that gap.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll } from "vitest";
 import { buildToolDefinitions } from "../../src/tool_definitions.js";
-import { RelationshipTypeSchema } from "../../src/shared/action_schemas.js";
+import { relationshipTypeRegistry } from "../../src/services/relationship_types/registry.js";
+import { seedBuiltInRelationshipTypes } from "../../src/services/relationship_types/seed_registry.js";
 
-type EnumProperty = { type?: string; enum?: string[] };
+type TypeProperty = { type?: string; enum?: string[]; description?: string };
 
-/** Every MCP tool that takes a `relationship_type` naming an existing edge. */
+/** Every MCP tool that takes a `relationship_type` naming an edge. */
 const RELATIONSHIP_TYPE_TOOLS = [
   "create_relationship",
   "delete_relationship",
@@ -29,71 +48,101 @@ const RELATIONSHIP_TYPE_TOOLS = [
   "get_relationship_snapshot",
 ] as const;
 
-function relationshipTypeEnum(toolName: string): string[] {
+function relationshipTypeProperty(toolName: string): TypeProperty {
   const definition = buildToolDefinitions().find((tool) => tool.name === toolName);
   expect(definition, `tool definition missing: ${toolName}`).toBeTruthy();
 
-  const properties = (definition!.inputSchema as { properties?: Record<string, EnumProperty> })
+  const properties = (definition!.inputSchema as { properties?: Record<string, TypeProperty> })
     .properties;
   const relationshipType = properties?.relationship_type;
   expect(relationshipType, `${toolName} does not declare relationship_type`).toBeTruthy();
-  expect(relationshipType!.type).toBe("string");
-  expect(
-    relationshipType!.enum,
-    `${toolName} declares relationship_type without an enum`
-  ).toBeTruthy();
-
-  return relationshipType!.enum!;
+  return relationshipType!;
 }
 
-describe("relationship_type enum parity across MCP tools (#1972)", () => {
-  it("advertises an identical type set on every relationship tool", () => {
-    const baseline = relationshipTypeEnum("create_relationship");
-
-    for (const toolName of RELATIONSHIP_TYPE_TOOLS) {
-      expect(
-        [...relationshipTypeEnum(toolName)].sort(),
-        `${toolName} advertises a different relationship_type set than create_relationship`
-      ).toEqual([...baseline].sort());
-    }
+describe("relationship_type advertisement parity across MCP tools (#1972)", () => {
+  beforeAll(async () => {
+    await seedBuiltInRelationshipTypes();
   });
 
-  it("advertises exactly what the server's Zod schema accepts", () => {
-    // The server validates with RelationshipTypeSchema. A tool advertising a
-    // narrower set makes valid calls unreachable; a wider set promises calls
-    // the server will reject. Both are contract breaks.
-    const serverAccepts = [...RelationshipTypeSchema.options].sort();
-
+  it("advertises relationship_type as an open string on every relationship tool", () => {
+    // The inverted assertion. An enum here is now the defect: it is a second
+    // copy of a vocabulary that lives in the registry, and it goes stale the
+    // instant a type is registered — locally refusing a call the server would
+    // have accepted, which is the same one-way door as the original bug.
     for (const toolName of RELATIONSHIP_TYPE_TOOLS) {
-      expect(
-        [...relationshipTypeEnum(toolName)].sort(),
-        `${toolName} advertises a type set the server does not exactly accept`
-      ).toEqual(serverAccepts);
-    }
-  });
-
-  it("lets every creatable type also be deleted and restored", () => {
-    // The original defect, stated as behaviour rather than as set equality:
-    // every type create_relationship accepts must be nameable at delete and
-    // restore, or the edge it writes becomes undeletable through MCP.
-    const creatable = relationshipTypeEnum("create_relationship");
-    const deletable = new Set(relationshipTypeEnum("delete_relationship"));
-    const restorable = new Set(relationshipTypeEnum("restore_relationship"));
-
-    const undeletable = creatable.filter((type) => !deletable.has(type));
-    const unrestorable = creatable.filter((type) => !restorable.has(type));
-
-    expect(undeletable, "types that can be created but not deleted").toEqual([]);
-    expect(unrestorable, "types that can be created but not restored").toEqual([]);
-  });
-
-  it("includes the domain types, not only the canonical structural ones", () => {
-    // Guards against a "fix" that quietly settles on the 8-member structural
-    // set everywhere, which would restore parity by breaking creation instead.
-    for (const toolName of RELATIONSHIP_TYPE_TOOLS) {
-      expect(relationshipTypeEnum(toolName)).toEqual(
-        expect.arrayContaining(["PART_OF", "EMBEDS", "works_at", "related_to", "invested_in"])
+      const property = relationshipTypeProperty(toolName);
+      expect(property.type, `${toolName} must declare relationship_type as a string`).toBe(
+        "string"
       );
+      expect(
+        property.enum,
+        `${toolName} advertises a hardcoded relationship_type enum. The vocabulary is a ` +
+          `runtime registry — advertise type: string and point at list_relationship_types.`
+      ).toBeUndefined();
+    }
+  });
+
+  it("points every relationship tool at the registry, in the description a model reads", () => {
+    // THE ASSERTION THE OLD TEST LACKED. A model does not read the JSON Schema;
+    // it reads this string. If it does not name the discovery tool, the caller
+    // has no way to learn what the instance accepts.
+    for (const toolName of RELATIONSHIP_TYPE_TOOLS) {
+      const property = relationshipTypeProperty(toolName);
+      expect(
+        property.description ?? "",
+        `${toolName}'s relationship_type description must name list_relationship_types`
+      ).toContain("list_relationship_types");
+    }
+  });
+
+  it("carries no enumeration in any relationship tool's own description", () => {
+    // The gap that let tool_descriptions.yaml stay wrong in the field. Checks
+    // the tool-level description too, since that is the one loaded from the
+    // runtime YAML and overlaid by `desc()`.
+    const BUILT_IN_SAMPLE = ["CORRECTS", "SETTLES", "DUPLICATE_OF", "SUPERSEDES"];
+
+    for (const toolName of RELATIONSHIP_TYPE_TOOLS) {
+      const definition = buildToolDefinitions().find((tool) => tool.name === toolName)!;
+      const surfaces = [
+        definition.description ?? "",
+        relationshipTypeProperty(toolName).description ?? "",
+      ].join("\n");
+
+      const enumerated = BUILT_IN_SAMPLE.filter((name) => surfaces.includes(name));
+      expect(
+        enumerated,
+        `${toolName} enumerates relationship types in prose (${enumerated.join(", ")}). ` +
+          `That is the copy that stayed wrong in the field through the whole of #1972, ` +
+          `because the original parity test read the enum and never the description.`
+      ).toEqual([]);
+    }
+  });
+
+  it("lets every registered type be created, deleted and restored", async () => {
+    // The ORIGINAL defect, restated as behaviour rather than set equality:
+    // every type the registry permits must be nameable at delete and restore,
+    // or the edge it writes becomes undeletable through MCP. With all four
+    // tools taking an open string this holds by construction — the test keeps
+    // it from silently ceasing to.
+    const registered = await relationshipTypeRegistry.list({});
+    expect(registered.length, "the registry census must not be empty").toBeGreaterThan(0);
+
+    for (const toolName of RELATIONSHIP_TYPE_TOOLS) {
+      const property = relationshipTypeProperty(toolName);
+      expect(property.enum, `${toolName} would refuse registered types locally`).toBeUndefined();
+    }
+  });
+
+  it("still carries the domain types, not only the canonical structural ones", async () => {
+    // Guards against a "fix" that satisfies the open-string assertions by
+    // quietly shrinking the vocabulary to the 8 structural types, which would
+    // restore parity by breaking creation instead.
+    const names = new Set((await relationshipTypeRegistry.list({})).map((r) => r.relationship_type));
+    for (const domainType of ["works_at", "related_to", "invested_in"]) {
+      expect(names, `${domainType} must remain in the registry`).toContain(domainType);
+    }
+    for (const structural of ["PART_OF", "EMBEDS"]) {
+      expect(names, `${structural} must remain in the registry`).toContain(structural);
     }
   });
 });

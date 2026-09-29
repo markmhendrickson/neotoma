@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
@@ -11,6 +11,10 @@ const TEST_USER_ID = "test-user-cli-rel";
 
 describe("CLI relationship commands", () => {
   const tracker = new TestIdTracker();
+  // The shared endpoints outlive each test, so they are cleaned up once at the
+  // end rather than by the per-test tracker: a relationship endpoint must be
+  // an existing entity the caller owns.
+  const sharedTracker = new TestIdTracker();
   let sourceEntityId: string;
   let targetEntityId: string;
 
@@ -21,18 +25,22 @@ describe("CLI relationship commands", () => {
       canonical_name: "Source Person",
       user_id: TEST_USER_ID,
     });
-    tracker.trackEntity(sourceEntityId);
+    sharedTracker.trackEntity(sourceEntityId);
 
     targetEntityId = await createTestEntity({
       entity_type: "company",
       canonical_name: "Target Company",
       user_id: TEST_USER_ID,
     });
-    tracker.trackEntity(targetEntityId);
+    sharedTracker.trackEntity(targetEntityId);
   });
 
   afterEach(async () => {
     await tracker.cleanup();
+  });
+
+  afterAll(async () => {
+    await sharedTracker.cleanup();
   });
 
   describe("relationships create", () => {

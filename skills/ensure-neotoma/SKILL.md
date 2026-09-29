@@ -17,7 +17,7 @@ Meta skill that installs and configures Neotoma so other memory skills can run. 
 
 ## When to use
 
-- Before running any `remember-*` or `store-data` skill for the first time.
+- Before running any `remember-*` skill for the first time.
 - When the user says "install neotoma", "set up memory", or similar.
 - When another skill fails because Neotoma MCP is not connected.
 
@@ -74,7 +74,9 @@ Report the result:
 - MCP connectivity status
 - Attribution tier
 
-State that the user can now run any `remember-*` skill or `store-data` / `query-memory`.
+State that the user can now run any `remember-*` skill, and that ordinary
+storage and retrieval (store, query, recall) work directly through the live
+MCP tool instructions without loading a separate skill.
 
 ## Do not
 

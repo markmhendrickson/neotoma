@@ -168,6 +168,28 @@ async function seedSchemas(): Promise<void> {
   }
 
   console.log("\n[seed_schemas_entry] Schema seeding complete.");
+
+  // Relationship-type vocabulary (#1972 / G25). Seeded on the SAME deploy path
+  // as entity schemas and for the same reason: `createRelationship` now
+  // validates against the registry, so an instance whose
+  // relationship_type_registry table was never seeded refuses every edge —
+  // including PART_OF. The server also seeds idempotently at boot
+  // (src/actions.ts), covering deploy paths that do not go through Fly.
+  // Running both is harmless: whichever gets there first registers, and the
+  // other reports every type as preserved.
+  const { seedBuiltInRelationshipTypes } =
+    await import("./services/relationship_types/seed_registry.js");
+  const relSummary = await seedBuiltInRelationshipTypes();
+  console.log(
+    `[seed_schemas_entry] Relationship types: ${relSummary.registered.length} registered, ` +
+      `${relSummary.preserved.length} preserved, ${relSummary.failed.length} failed.`
+  );
+  if (relSummary.failed.length > 0) {
+    for (const f of relSummary.failed) {
+      console.error(`  - ${f.relationship_type}: ${f.error}`);
+    }
+    throw new Error(`${relSummary.failed.length} relationship type(s) failed to seed`);
+  }
 }
 
 seedSchemas()

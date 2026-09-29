@@ -183,7 +183,7 @@
 
 ### Relationship
 
-**Definition:** Typed connection between two [entities](#entity) (e.g., PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF). [Relationships](#relationship) are immutable and include [provenance](#provenance) metadata.
+**Definition:** Typed connection between two [entities](#entity) (for example `PART_OF`). The type vocabulary is a runtime registry read via `list_relationship_types`. [Relationships](#relationship) are immutable and include [provenance](#provenance) metadata.
 
 **Use:** "[Relationships](#relationship) connect [entities](#entity) in the [memory graph](#memory-graph) with typed edges."
 

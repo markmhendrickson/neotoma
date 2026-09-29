@@ -98,6 +98,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+     * @description Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+     *     protocol eras on the same route (#2070):
+     *
+     *     - **Modern (2026-07-28, stateless).** Selected when the request carries no
+     *       `Mcp-Session-Id`, is not an `initialize` request, and its
+     *       `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+     *       request is resolved on its own: protocol version and client capabilities
+     *       come from `_meta`, and the caller's identity comes only from the
+     *       credentials on that request. No session is minted and no server state is
+     *       retained, so any API instance can serve any request behind a plain
+     *       round-robin load balancer. `server/discover` is served on this path.
+     *       `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+     *       `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+     *       the body.
+     *     - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+     *       request carrying `Mcp-Session-Id`, is served by the session transport
+     *       exactly as before (session mint on initialize, recover-in-place for a
+     *       stale session id, `404` for an unknown session on GET/DELETE).
+     *
+     *     `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+     *     tool/resource/prompt name. A value shaped like a credential or personal
+     *     data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+     *     `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+     *     and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+     *     sessions; those are not modelled here.
+     */
+    post: operations["mcpStreamableHttpPost"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp/oauth/initiate": {
     parameters: {
       query?: never;
@@ -786,9 +830,11 @@ export interface paths {
     /**
      * Create an agent grant
      * @description Creates a new `agent_grant` for the authenticated user. At least
-     *     one of `match_sub` or `match_thumbprint` must be supplied. The
-     *     grant's `capabilities` follow the same shape used by the
-     *     admitted-request authorization check.
+     *     one of `match_sub` or `match_thumbprint` must be supplied. Only
+     *     `match_thumbprint` admits signed requests; a grant created without
+     *     it is accepted but inert, and the response carries a `warnings`
+     *     entry saying so. The grant's `capabilities` follow the same shape
+     *     used by the admitted-request authorization check.
      */
     post: operations["createAgentGrant"];
     delete?: never;
@@ -815,7 +861,10 @@ export interface paths {
      * Update editable fields on an agent grant
      * @description Patches `label`, `capabilities`, `notes`, or any of the
      *     `match_*` identity fields. Status transitions go through the
-     *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+     *     dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+     *     `match_thumbprint` is how a key is pinned to an existing grant;
+     *     the admission cache is cleared so the pin applies to the next
+     *     request.
      */
     patch: operations["updateAgentGrant"];
     trace?: never;
@@ -1916,6 +1965,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/register_relationship_type": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Register a relationship type
+     * @description Add a relationship type to this instance's vocabulary (#1972 / G25). The vocabulary is a runtime registry rather than a closed enum, so a caller needing an edge type the substrate does not already know registers it here instead of bending an existing type or simulating the edge as a field on an entity. Read the vocabulary back with list_relationship_types.
+     *
+     *     Registration is APPEND-ONLY: re-registering a type inserts a newer row that supersedes the prior one, and deregistering appends a deactivated row. Nothing is updated in place and nothing is deleted, so the history of what was registered when stays readable.
+     *
+     *     Scope defaults to "user". Registering at "global" scope changes the vocabulary for every tenant on the instance and requires an explicit register_relationship_type capability naming the type (or "*").
+     *
+     *     source_entity_types, target_entity_types, inverse and symmetric are ADVISORY ONLY and are not enforced at write time, mirroring how entity schemas treat unknown fields. acyclic is the one exception and IS enforced.
+     */
+    post: operations["registerRelationshipType"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/list_relationship_types": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * List registered relationship types
+     * @description The registry census: relationship types this instance PERMITS, which is not the same as types that HAVE edges. A type registered a moment ago with zero edges written appears here, which is exactly what a caller discovering what it may write BEFORE writing it needs.
+     *
+     *     edge_count, when present, means "rows written" and is never evidence of registration.
+     */
+    post: operations["listRelationshipTypes"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/register_schema": {
     parameters: {
       query?: never;
@@ -2110,7 +2207,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create a substrate event subscription (webhook or SSE) */
+    /**
+     * Create a substrate event subscription (webhook or SSE)
+     * @description Authenticated owners may subscribe to filters within their own graph.
+     *     Entity-scoped guests must authenticate with their guest bearer token,
+     *     provide a non-empty `entity_ids` filter, and keep every requested entity
+     *     inside that token's current grant. Empty, mixed, or out-of-grant guest
+     *     filters are rejected without creating a subscription. Guests may only
+     *     use `delivery_method: sse`, which is revalidated against the guest
+     *     credential on every delivery; a guest request for `webhook` delivery or
+     *     with a `sync_peer_id` is rejected with 403 without creating a
+     *     subscription.
+     */
     post: operations["subscribe"];
     delete?: never;
     options?: never;
@@ -2127,7 +2235,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Deactivate a subscription */
+    /**
+     * Deactivate a subscription
+     * @description Owners may deactivate their own subscriptions. Guests may deactivate only
+     *     subscriptions whose complete `watch_entity_ids` set remains inside the
+     *     guest token's current entity grant; denial leaves the subscription active.
+     */
     post: operations["unsubscribe"];
     delete?: never;
     options?: never;
@@ -2144,7 +2257,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** List active subscriptions for the current user */
+    /**
+     * List active subscriptions for the current user
+     * @description Owners receive their active subscriptions. Guests receive only subscriptions
+     *     whose complete `watch_entity_ids` set is inside the token's current entity
+     *     grant; subscriptions outside or spanning the grant are omitted.
+     */
     post: operations["listSubscriptions"];
     delete?: never;
     options?: never;
@@ -2161,7 +2279,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Get subscription delivery status */
+    /**
+     * Get subscription delivery status
+     * @description Owners may inspect their subscriptions. A guest receives the status only
+     *     when the subscription's complete `watch_entity_ids` set is inside its
+     *     current grant; an inaccessible subscription is returned as `null`.
+     */
     post: operations["getSubscriptionStatus"];
     delete?: never;
     options?: never;
@@ -2176,7 +2299,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Server-sent events stream for a subscription */
+    /**
+     * Server-sent events stream for a subscription
+     * @description Opens the SSE stream for an active SSE subscription. Owners retain their
+     *     normal authenticated access. Guests may connect only when the subscription's
+     *     complete entity filter is inside the token grant. Guest credentials are
+     *     revalidated while the connection is established: expiry, revocation, or
+     *     grant narrowing closes the stream before another event is delivered.
+     */
     get: operations["eventsStream"];
     put?: never;
     post?: never;
@@ -2294,6 +2424,85 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+     *     (#2070). Operational metadata only: never persisted, never logged in full.
+     */
+    McpRequestMeta: {
+      /**
+       * @description Protocol version for this request. Required on the modern path.
+       * @example 2026-07-28
+       */
+      "io.modelcontextprotocol/protocolVersion"?: string;
+      /** @description Client capabilities relevant to this request. Required on the modern path. */
+      "io.modelcontextprotocol/clientCapabilities"?: {
+        [key: string]: unknown;
+      };
+      /** @description Self-reported client name and version (unverified; attribution fallback only). */
+      "io.modelcontextprotocol/clientInfo"?: {
+        name?: string;
+        version?: string;
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcRequest: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number;
+      /** @description JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy). */
+      method: string;
+      params?: {
+        _meta?: components["schemas"]["McpRequestMeta"];
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcResponse: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number | null;
+      result?: {
+        [key: string]: unknown;
+      };
+      error?: {
+        code: number;
+        message: string;
+        data?: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+     *     protocol versions, this server's declared capabilities, its identity and its
+     *     instructions: no tenant data, no caller identity, no instance topology.
+     */
+    McpServerDiscoverResult: {
+      /** @enum {string} */
+      resultType: "complete";
+      supportedVersions: string[];
+      capabilities: {
+        [key: string]: unknown;
+      };
+      /** @description Agent-facing MCP instructions plus this instance's declared data policy. */
+      instructions?: string;
+      ttlMs?: number;
+      /** @enum {string} */
+      cacheScope?: "public" | "private";
+      _meta?: {
+        "io.modelcontextprotocol/serverInfo"?: {
+          name?: string;
+          version?: string;
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    };
     /** @description Result of the /ready database probe. */
     ReadinessResult: {
       /** @description True only when the database completed the probe read. */
@@ -2323,6 +2532,49 @@ export interface components {
       trace_id?: string;
       /** Format: date-time */
       timestamp?: string;
+    };
+    /**
+     * @description Nested canonical error envelope returned by schema-registry tools
+     *     (`update_schema_incremental`, and matching MCP tool responses) on HTTP 200
+     *     when the call cannot proceed. Distinct from the flat `ErrorEnvelope` used
+     *     by most REST routes — callers must read `error.error_code`.
+     */
+    SchemaRegistryToolErrorResponse: {
+      error: {
+        /**
+         * @description `ERR_SCHEMA_SCOPE_MISMATCH` — an active schema exists for the
+         *     entity_type, but in a different scope than this call checked
+         *     (`details.guard_scope` vs `details.found_scope`). Hint directs
+         *     the caller to retry with the correct `user_specific` and MUST
+         *     NOT recommend `register_schema`.
+         *     `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` — no schema in any scope; hint
+         *     recommends `register_schema`.
+         * @enum {string}
+         */
+        error_code:
+          | "ERR_SCHEMA_SCOPE_MISMATCH"
+          | "ERR_NO_SCHEMA_FOR_ENTITY_TYPE"
+          | "ERR_SCHEMA_MISSING_IDENTITY_CONFIG";
+        message: string;
+        hint?: string;
+        details?: {
+          entity_type?: string;
+          /**
+           * @description Scope the existence guard checked (`global` or `user`).
+           * @enum {string}
+           */
+          guard_scope?: "global" | "user";
+          /**
+           * @description Scope where an active schema was found (scope-mismatch only).
+           * @enum {string}
+           */
+          found_scope?: "global" | "user";
+          /** @description Present on genuine cold-start (`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`). */
+          no_schema_for_entity_type?: boolean;
+        } & {
+          [key: string]: unknown;
+        };
+      };
     };
     RecentConversationRelatedEntity: {
       entity_id?: string;
@@ -2375,7 +2627,8 @@ export interface components {
         | "ERR_CANONICAL_NAME_UNRESOLVED"
         | "ERR_MERGE_REFUSED"
         | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
-        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT"
+        | "entity_owner_conflict";
       message?: string;
       /**
        * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
@@ -2773,11 +3026,14 @@ export interface components {
       replayed: boolean;
     };
     /**
-     * @description Agent-identity provenance recorded on every durable write-path record
+     * @description Write-attribution provenance recorded on durable write-path records
      *     (observations, relationships, sources, interpretations, timeline
-     *     events). Fields are stamped additively into the existing provenance
-     *     JSON blob on each record so no schema migration was required; the
-     *     shape below documents the keys consumers can rely on.
+     *     events). Most keys describe the software that wrote the record (the
+     *     AAuth agent and MCP client); `authenticated_actor_id` instead
+     *     identifies the signed-in member whose session made the write. Fields
+     *     are stamped additively into the existing provenance JSON blob on each
+     *     record so no schema migration was required; the shape below documents
+     *     the keys consumers can rely on.
      *
      *     When AAuth is active the `agent_*` keys carry the cryptographically
      *     verified identity; `client_name`/`client_version` come from the MCP
@@ -2817,6 +3073,24 @@ export interface components {
        * @description ISO-8601 timestamp when the attribution block was stamped.
        */
       attributed_at?: string;
+      /**
+       * @description The signed-in member whose session made this write, as their
+       *     write-attribution id: a random UUID minted on this instance the
+       *     first time the member's session is resolved. It is pseudonymous —
+       *     not derived from the email address or the member's `user_id`, so it
+       *     cannot be recomputed from a list of addresses, and the same person
+       *     has a different id on every instance. Only this instance's
+       *     `member_attribution_ids` table maps it back to a member; no API
+       *     exposes that mapping yet. It is not the same value as `/me`'s
+       *     `authenticated_user_id` and does not join to it. Provenance only —
+       *     it never affects which graph is read or written. Absent when no
+       *     verified sign-in stands behind the request (static bearer token,
+       *     key-derived MCP token, local no-auth, AAuth grant, or a connection
+       *     that predates identity recording); consumers MUST read absence as
+       *     "unknown", never as the graph owner. Withheld from responses to
+       *     guest (entity-scoped token) readers.
+       */
+      authenticated_actor_id?: string;
     };
     /**
      * @description Active attribution policy for the Neotoma instance. Governs how
@@ -2894,12 +3168,16 @@ export interface components {
       } | null;
       /**
        * @description Set when the operator allowlist promoted the request to
-       *     `operator_attested`. `"issuer"` means a hit on
+       *     `operator_attested`. The tier is bound to the verified signing
+       *     key. `"thumbprint"` means the key's thumbprint is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`; `"issuer"` means the
+       *     `match_iss` of the active grant pinning the key is listed in
        *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-       *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+       *     that grant's `match_iss:match_sub` is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
        * @enum {string}
        */
-      operator_allowlist_source?: "issuer" | "issuer_subject";
+      operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
     };
     /**
      * @description Resolved attribution and policy for the current session. Returned
@@ -2926,7 +3204,14 @@ export interface components {
        *     that signature to one of this user's `agent_grant` entities
        *     and is treating the caller as authenticated. The two are
        *     independent: a verified-but-unmatched signature stays
-       *     attribution-only and `admitted` is `false`.
+       *     attribution-only and `admitted` is `false`. Admission is
+       *     key-bound: a grant admits only when its `match_thumbprint`
+       *     equals the signing key's thumbprint. `grant_key_unbound`
+       *     means a grant matched sub/iss but pins no key; capability-gated
+       *     writes carrying that signature are refused until the grant is
+       *     pinned, whatever authenticated the request. Pin
+       *     `match_thumbprint` to admit the agent (see
+       *     docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
        */
       aauth: {
         verified: boolean;
@@ -2937,8 +3222,10 @@ export interface components {
           | "admitted"
           | "no_grants_for_user"
           | "no_match"
+          | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
+          | "grant_pin_conflict"
           | "strict_rejected"
           | "aauth_disabled"
           | "not_signed"
@@ -3307,6 +3594,44 @@ export interface components {
       target_entity_type?: string | null;
       target_entity_type_label?: string | null;
     };
+    /**
+     * @description A relationship from a request's `relationships` array that was
+     *     written. Shared by `StoreStructuredResponse.relationships_created`
+     *     and `CreateInterpretationResponse.relationships_created`. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipCreated: {
+      relationship_type: string;
+      source_entity_id: string;
+      target_entity_id: string;
+    };
+    /**
+     * @description A relationship from a request's `relationships` array that was not
+     *     written. The entities in the call are still stored. Shared by
+     *     `StoreStructuredResponse.relationships_refused` and
+     *     `CreateInterpretationResponse.relationships_refused`. An endpoint
+     *     that does not exist and one owned by another user are both reported
+     *     as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipRefusal: {
+      /** @description Position of the relationship in the request's `relationships` array. */
+      relationship_index: number;
+      relationship_type: string;
+      source_entity_id?: string;
+      target_entity_id?: string;
+      source_index?: number;
+      target_index?: number;
+      /**
+       * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+       *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+       *     `RELATIONSHIP_INVALID_ENTITY_ID`,
+       *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+       */
+      code: string;
+      reason: string;
+      hint?: string;
+    };
     TimelineEvent: {
       id?: string;
       event_type?: string;
@@ -3446,9 +3771,18 @@ export interface components {
        *     data.
        */
       hint?: string;
-      relationships_created?: {
-        [key: string]: unknown;
-      }[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. See
+       *     docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
     };
     /** @description Aggregate usage statistics computed from local data only. */
     UsageStats: {
@@ -3512,36 +3846,8 @@ export interface components {
     };
     StoreRelationshipInput:
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Index into the entities array for the target entity. */
@@ -3551,36 +3857,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Existing target entity ID. */
@@ -3590,36 +3868,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Index into the entities array for the target entity. */
@@ -3629,36 +3879,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Existing target entity ID. */
@@ -3683,10 +3905,18 @@ export interface components {
        */
       type?: "User" | "Bot" | "Organization";
       /**
+       * @description Accepted for compatibility, but a request body can only assert an
+       *     external actor: the stored value is always `claim`. The stronger
+       *     tiers are assigned by server-side verification paths (the signed
+       *     GitHub webhook route, AAuth token claims, grant linkage).
        * @default claim
        * @enum {string}
        */
       verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+      /**
+       * @description Not carried over from a request body; set only by the signed
+       *     GitHub webhook route.
+       */
       delivery_id?: string;
       event_type?: string;
       repository?: string;
@@ -3912,6 +4142,19 @@ export interface components {
         observation_index?: number;
         entity_id?: string;
       })[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. An endpoint that
+       *     does not exist and one owned by another user are both reported as
+       *     `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
       /**
        * @description Schema-driven non-fatal warnings emitted when a stored observation
        *     omits all fields listed by a schema's `store_warnings` rule. Used
@@ -4239,36 +4482,8 @@ export interface components {
       canonical_name?: string | null;
     };
     GetRelationshipSnapshotRequest: {
-      /** @enum {string} */
-      relationship_type:
-        | "PART_OF"
-        | "CORRECTS"
-        | "REFERS_TO"
-        | "SETTLES"
-        | "DUPLICATE_OF"
-        | "DEPENDS_ON"
-        | "SUPERSEDES"
-        | "EMBEDS"
-        | "works_at"
-        | "owns"
-        | "manages"
-        | "part_of"
-        | "related_to"
-        | "depends_on"
-        | "references"
-        | "transacted_with"
-        | "member_of"
-        | "reports_to"
-        | "located_at"
-        | "created_by"
-        | "funded_by"
-        | "acquired_by"
-        | "subsidiary_of"
-        | "partner_of"
-        | "competitor_of"
-        | "supplies_to"
-        | "contracted_with"
-        | "invested_in";
+      /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+      relationship_type: string;
       source_entity_id: string;
       target_entity_id: string;
       /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
@@ -4446,6 +4661,94 @@ export interface operations {
       };
     };
   };
+  mcpStreamableHttpPost: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`. */
+        "MCP-Protocol-Version"?: string;
+        /** @description Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data. */
+        "Mcp-Method"?: string;
+        /**
+         * @description Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+         *     `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+         *     sentinel. Never a credential or personal data.
+         */
+        "Mcp-Name"?: string;
+        /** @description Legacy-era session id. Its presence selects the legacy session path. */
+        "Mcp-Session-Id"?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["McpJsonRpcRequest"];
+      };
+    };
+    responses: {
+      /**
+       * @description JSON-RPC response. On the modern path every result carries
+       *     `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+       *     a `server/discover` result has the `McpServerDiscoverResult` shape.
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+          "text/event-stream": string;
+        };
+      };
+      /** @description JSON-RPC notification accepted (no body). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+       *     `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+       *     `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Authentication required or credential invalid (`-32001`). On the
+       *     2026-07-28 path this includes a credential that passed the gate but
+       *     resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+       *     or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+       *     (`-32001`, re-initialize).
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+    };
+  };
   mcpOAuthInitiate: {
     parameters: {
       query?: never;
@@ -4556,6 +4859,9 @@ export interface operations {
         "application/x-www-form-urlencoded": {
           grant_type?: string;
           code?: string;
+          /** @description PKCE verifier (RFC 7636). Required with grant_type= authorization_code; the server rejects a code redemption whose SHA-256/base64url digest does not match the code_challenge presented at /mcp/oauth/authorize. */
+          code_verifier?: string;
+          refresh_token?: string;
         };
       };
     };
@@ -4602,8 +4908,14 @@ export interface operations {
         };
         content: {
           "application/json": {
+            /** @description Graph scope: the user_id all reads and writes are scoped to. Under shared-graph mode this is the shared graph owner, not the signed-in user. */
             user_id?: string;
+            /** @description Email of the signed-in user when known. Under shared-graph mode this is the verified address of the teammate who signed in, not the graph owner's. May be absent when the signed-in identity was never recorded (pre-migration shared-graph residual); consumers must treat absence as unknown, not as the graph owner. */
             email?: string;
+            /** @description Per-email user_id of the signed-in user. Present only when it differs from user_id (fully remapped shared-graph session). Omitted on non-shared-graph sessions and on degraded shared-graph residuals that have no recorded signer (shared_graph may still be true). */
+            authenticated_user_id?: string;
+            /** @description True when this session operates on a shared graph. May be true without authenticated_user_id when the connection row predates identity columns (degraded residual until re-auth). Omitted on non-shared-graph sessions. */
+            shared_graph?: boolean;
             storage?: {
               /** @enum {string} */
               storage_backend?: "local";
@@ -5541,6 +5853,24 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
+      /**
+       * @description `entity_owner_conflict` — `new_entity.target_entity_id` names an
+       *     existing entity owned by a different, non-null user than the
+       *     writer. No observations are re-pointed. The source entity's own
+       *     ownership is already covered by the `404` above (a source owned
+       *     by another user reads as not-found); this refusal is for the
+       *     split's OTHER caller-supplied id, the merge target. The envelope
+       *     details carry `entity_id` and `entity_type`; never the other
+       *     owner's identity or fields.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSources: {
@@ -5858,6 +6188,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -5933,6 +6269,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -6510,7 +6852,11 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+       *     `StoreResolutionErrorEnvelope` shape; one of its per-observation
+       *     `issues[].code` values is `entity_owner_conflict` — resolution
+       *     landed on an existing entity owned by a different, non-null
+       *     user, and the write was refused before anything was persisted
+       *     (see `StoreResolutionIssue.code`). `ERR_CONSTRAINT_VIOLATION` is
        *     returned when one or more observations fail a declarative write-time
        *     value constraint (constraint `policy: "reject"`); its envelope carries
        *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
@@ -6698,42 +7044,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /**
-           * @description Typed relationship category. Canonical structural types are
-           *     `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
-           *     `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
-           *     types (e.g. `works_at`, `owns`, `manages`) are also accepted.
-           * @enum {string}
-           */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing entity id at the source end of the edge. */
           source_entity_id: string;
           /** @description Existing entity id at the target end of the edge. */
@@ -6781,36 +7093,8 @@ export interface operations {
       content: {
         "application/json": {
           relationships: {
-            /** @enum {string} */
-            relationship_type:
-              | "PART_OF"
-              | "CORRECTS"
-              | "REFERS_TO"
-              | "SETTLES"
-              | "DUPLICATE_OF"
-              | "DEPENDS_ON"
-              | "SUPERSEDES"
-              | "EMBEDS"
-              | "works_at"
-              | "owns"
-              | "manages"
-              | "part_of"
-              | "related_to"
-              | "depends_on"
-              | "references"
-              | "transacted_with"
-              | "member_of"
-              | "reports_to"
-              | "located_at"
-              | "created_by"
-              | "funded_by"
-              | "acquired_by"
-              | "subsidiary_of"
-              | "partner_of"
-              | "competitor_of"
-              | "supplies_to"
-              | "contracted_with"
-              | "invested_in";
+            /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+            relationship_type: string;
             source_entity_id: string;
             target_entity_id: string;
             source_id?: string;
@@ -6874,41 +7158,8 @@ export interface operations {
                * @enum {string}
                */
               direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
-              /**
-               * @description Optional relationship_type filter. Closed enum matching the handler's
-               *     accepted values; spec-driven clients passing any other value will be
-               *     rejected at runtime with a Zod validation error.
-               * @enum {string}
-               */
-              relationship_type?:
-                | "PART_OF"
-                | "CORRECTS"
-                | "REFERS_TO"
-                | "SETTLES"
-                | "DUPLICATE_OF"
-                | "DEPENDS_ON"
-                | "SUPERSEDES"
-                | "EMBEDS"
-                | "works_at"
-                | "owns"
-                | "manages"
-                | "part_of"
-                | "related_to"
-                | "depends_on"
-                | "references"
-                | "transacted_with"
-                | "member_of"
-                | "reports_to"
-                | "located_at"
-                | "created_by"
-                | "funded_by"
-                | "acquired_by"
-                | "subsidiary_of"
-                | "partner_of"
-                | "competitor_of"
-                | "supplies_to"
-                | "contracted_with"
-                | "invested_in";
+              /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+              relationship_type?: string;
               /**
                * @description Maximum number of relationships to return.
                * @default 100
@@ -7738,36 +7989,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -7813,36 +8036,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -8012,32 +8207,151 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Schema updated */
+      /**
+       * @description Schema updated on success. On a structured schema-registry client
+       *     error (`ERR_SCHEMA_SCOPE_MISMATCH` or `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`)
+       *     the same 200 response carries the nested canonical envelope
+       *     `{ error: { error_code, message, hint, details } }` — matching the
+       *     MCP tool response so CLI/HTTP/MCP handlers can pattern-match the
+       *     code uniformly (see docs/reference/error_codes.md Schema Registry).
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | ({
+                success?: boolean;
+                entity_type?: string;
+                schema_version?: string;
+                fields_added?: string[];
+                fields_removed?: string[];
+                /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
+                canonical_name_fields?:
+                  | (
+                      | string
+                      | {
+                          composite: string[];
+                        }
+                    )[]
+                  | null;
+                activated?: boolean;
+                migrated_existing?: boolean;
+                scope?: string;
+              } & {
+                [key: string]: unknown;
+              })
+            | components["schemas"]["SchemaRegistryToolErrorResponse"];
+        };
+      };
+    };
+  };
+  registerRelationshipType: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Identifier-shaped name, 1-64 characters, matching ^[A-Za-z][A-Za-z0-9_]*$. Casing-agnostic. A new name that differs from an existing active type only by case is rejected; the pre-existing PART_OF/part_of and DEPENDS_ON/depends_on pairs are grandfathered. */
+          relationship_type: string;
+          description?: string;
+          /**
+           * @description Defaults to "user" — the safe branch. This deliberately inverts register_schema, whose user_specific defaults to false and whose default branch is therefore both the widest blast radius and the one that records no identity.
+           * @default user
+           * @enum {string}
+           */
+          scope?: "user" | "global";
+          /** @description Advisory only. Not enforced at write time. */
+          source_entity_types?: string[];
+          /** @description Advisory only. Not enforced at write time. */
+          target_entity_types?: string[];
+          /** @description Advisory only. Name of the inverse edge. */
+          inverse?: string;
+          /** @description Advisory only. Whether the edge reads the same both ways. */
+          symmetric?: boolean;
+          /** @description ENFORCED. When true, create_relationship refuses an edge of this type that would close a loop among edges OF THIS TYPE within this tenant. Opt-in: a type whose semantics permit cycles should leave this unset. */
+          acyclic?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Relationship type registered */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": {
-            success?: boolean;
-            entity_type?: string;
-            schema_version?: string;
-            fields_added?: string[];
-            fields_removed?: string[];
-            /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
-            canonical_name_fields?:
-              | (
-                  | string
-                  | {
-                      composite: string[];
-                    }
-                )[]
-              | null;
-            activated?: boolean;
-            migrated_existing?: boolean;
-            scope?: string;
-          } & {
-            [key: string]: unknown;
+            success: boolean;
+            relationship_type: string;
+            scope: string;
+            state: string;
+            registry_version?: string;
+            registered_at?: string;
+          };
+        };
+      };
+    };
+  };
+  listRelationshipTypes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Case-insensitive filter over name and description. */
+          keyword?: string;
+          /** @enum {string} */
+          scope?: "user" | "global";
+          /** @default false */
+          include_deactivated?: boolean;
+          /**
+           * @description Include edge_count per type. Costs one aggregate query; "rows written", never evidence of registration.
+           * @default false
+           */
+          include_edge_counts?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Registered relationship types */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            relationship_types: {
+              relationship_type?: string;
+              scope?: string;
+              state?: string;
+              description?: string;
+              registry_version?: string;
+              registered_at?: string;
+              source_entity_types?: string[];
+              target_entity_types?: string[];
+              inverse?: string;
+              symmetric?: boolean;
+              acyclic?: boolean;
+              edge_count?: number;
+            }[];
+            total: number;
+            /**
+             * @description Present only when relationship_types is empty. Never infer "no vocabulary exists" from an empty array alone. registry_unseeded means the instance's relationship-type registry (including the built-in vocabulary) failed to seed and is a registry/seed failure that self-repairs on a subsequent read, not a permanent state; call list_relationship_types again rather than concluding no types are available. filtered_to_empty means a supplied keyword matched nothing against an otherwise-populated registry; retry without keyword to see the full vocabulary. Absent when relationship_types is non-empty.
+             * @enum {string}
+             */
+            empty_reason?: "registry_unseeded" | "filtered_to_empty";
+            /** @description Present only alongside empty_reason. Human/agent-readable elaboration of empty_reason and the recommended next call; never present when relationship_types is non-empty. */
+            hint?: string;
           };
         };
       };
@@ -8191,6 +8505,24 @@ export interface operations {
        *     details carry `field_name`, `agent_role`, and `entity_id`.
        */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `entity_owner_conflict` — `entity_id` resolves to an existing
+       *     entity owned by a different, non-null user than the writer. No
+       *     observation is written. `correct()` is the raw entity-store
+       *     surface: a caller names `entity_id` directly with no resolution
+       *     step in between, so this is the only refusal point for a
+       *     correction that would otherwise land on another user's entity.
+       *     The envelope details carry `entity_id` and `entity_type`; never
+       *     the other owner's identity or fields.
+       */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -8466,6 +8798,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   unsubscribe: {
@@ -8494,6 +8844,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription is not wholly inside the guest entity grant */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSubscriptions: {
@@ -8518,6 +8886,15 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8548,6 +8925,15 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   eventsStream: {
@@ -8566,7 +8952,27 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription does not exist or is outside the guest entity grant */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
       };
     };
   };

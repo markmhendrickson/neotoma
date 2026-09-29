@@ -8,10 +8,10 @@ Each decision records: the question, the decision, the date, the rationale, the 
 
 ## SD-001: Non-Technical GUI and Zero-Config Install
 
-**Date:** 2026-04-09 · **Amended:** 2026-09-15
-**Status:** Decided — **Partially superseded.** The *non-technical consumer GUI* remains out of scope. The *install experience* is no longer out of scope: revisit condition 1 has been met and a **guided installation with branded UI** is now the intended onboarding path. See "Amendment" below before applying anything in this decision.
+**Date:** 2026-04-09 · **Amended:** 2026-09-15 · **Revisit condition 1 recorded as met:** 2026-09-16
+**Status:** Decided — **Partially superseded.** The non-technical graphical **management** UI remains out of scope on rationales 2, 3, and 4, which are unaffected. The **install and onboarding** half is reopened: revisit condition 1 is satisfied and a guided installation is the **intended** path. See the amendment below before applying anything in this decision.
 
-### Amendment (2026-09-15): the install half of this decision is superseded
+### Amendment (2026-09-15, extended 2026-09-16): the install half of this decision is superseded
 
 SD-001 bundled two questions that have now been answered differently. Read it as two decisions:
 
@@ -20,9 +20,27 @@ SD-001 bundled two questions that have now been answered differently. Read it as
 | Non-technical graphical **management** UI for non-developer end users | **Still out of scope.** Rationale 2, 3, and 4 hold unchanged. |
 | **Install and onboarding** experience | **Superseded.** A guided installation with branded UI is the intended path. |
 
-**Why the install half fell.** This decision's own revisit condition 1 — *"field evidence shows the ICP is bottlenecked by install friction rather than category confusion"* — is met. `docs/icp/general_release_criteria.md` records **0 of 3** round-2 fresh-install attempts clearing the install-path gate, all three by evaluators who wanted the product. That is the condition SD-001 named in advance.
+### Revisit condition 1 is satisfied (2026-09-16)
 
-**What this does not concede.** Rationale 3 argued that privacy-first and local-first are at odds with zero-config, where zero-config means "sign up and we handle the server." That argument is correct and is **not** overturned: Neotoma still runs on the user's machine, and a guided installer is not a hosted offering. **Guided install is not zero-install.** "Cloud-hosted turnkey offerings" remains out of scope below, and so does account creation as a precondition for using a local instance.
+Revisit condition 1 reads: *"Field evidence shows the ICP is bottlenecked by install friction rather than category confusion."* Two independent readings in [`../icp/general_release_criteria.md`](../icp/general_release_criteria.md) now meet it:
+
+- Gate 3's evidence basis records that round-2 fresh-install attempts **"failed 0/3 to activate unassisted."**
+- The Gate 4 sub-gate `gate4_install_path_friction` reads **"Failing — 0/3 round-2 fresh-install attempts met threshold."**
+
+Both describe evaluators who wanted the product and did not clear the install. That is bottleneck evidence about the delivery path, not about category comprehension — which is exactly the distinction condition 1 was written to draw. The condition is recorded as met; this section records the consequence and nothing further.
+
+#### The seam this opens
+
+Reopening the install half does **not** unbind the out-of-scope list. The seam is narrow and SD-001's own carve-outs define it. Two items already in "What Stays In Scope" bless the ingredients:
+
+- **A *technical* inspector / admin UI for power users** to browse the graph, observations, and provenance — a GUI that reveals architecture rather than concealing it.
+- **Agent-assisted install flows** — a flow in which something else performs the setup on the user's behalf.
+
+What those two jointly permit is an **architecture-revealing installer**: a visual preview of exactly what will be written, where data will live, and which agents will hold access, with an explicit Apply step — a visual `--dry-run` with an Apply button. The user sees the architecture before consenting to it.
+
+What remains banned is the **black-box** installer. The load-bearing clause in "One-click installers that hide architecture from the user" is **hiding the architecture**, not the click count. An installer that completes in one click while showing the user what it did is inside the seam; one that completes in ten steps while concealing where the data went is outside it.
+
+**Rationale 3 is not overturned — and this is the honesty bound.** Privacy-first and local-first remain at odds with "sign up and we handle the server." That argument is correct and is **not** overturned: **cloud-hosted turnkey offerings stay out of scope**, as does account creation as a precondition for using a local instance. **Guided installation is not zero-install** — a download and a local runtime remain, the user still installs software on their own machine, and the user still decides where their data lives. And as of this revision the shipped install path is **npm plus the CLI**; a guided path is **intended and not shipped**. No surface should describe Neotoma as zero-install, or describe guided install as something a user can use today.
 
 **What is superseded, precisely.**
 
@@ -74,7 +92,7 @@ Absence of a non-technical **management** GUI is a **feature for this persona**,
 
 - Consumer-style onboarding wizards, account creation, or sign-up flows.
 - Graphical memory management targeted at non-technical users.
-- Installers that **hide the architecture** from the user — where data lives, what runs locally, and which agents hold access must be explicit. (Narrowed 2026-09-15: a *guided* installer is in scope; an architecture-concealing one is not.)
+- Installers that **hide the architecture** from the user — where data lives, what runs locally, and which agents hold access must be explicit. (Narrowed 2026-09-16: the load-bearing clause is *hiding the architecture*, not the click count. An architecture-revealing installer is inside the seam recorded above; a black-box one is not.)
 - Cloud-hosted turnkey offerings.
 - Personality customization, chat UI, or other consumer-assistant features.
 - User-facing push notifications, reminders, or strategy-level "should I notify?" decisions. **Note:** Substrate-level event emission and webhook delivery to registered agent consumers ARE in scope — see [SD-002](#sd-002-substrate-event-emission-and-webhook-delivery) for the boundary between strategy-level notifications (rejected here) and substrate-level signaling (accepted there).
@@ -83,7 +101,7 @@ Absence of a non-technical **management** GUI is a **feature for this persona**,
 
 Reopen this decision if any of the following become true:
 
-1. Field evidence shows the ICP is bottlenecked by install friction rather than category confusion.
+1. Field evidence shows the ICP is bottlenecked by install friction rather than category confusion. **— MET 2026-09-16.** See "Revisit condition 1 is satisfied" above; the install half of this decision is reopened on this basis.
 2. A credible agent-assisted install pattern emerges that is genuinely zero-config without violating privacy-first.
 3. Neotoma's commercial model shifts in a direction that requires broader reach than the builder/operator ICP can provide.
 4. A partner or distribution channel emerges that solves the consumer UX problem without Neotoma owning it.

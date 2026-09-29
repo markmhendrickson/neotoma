@@ -61,22 +61,22 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **618**
-- Backend and repo Vitest files: **582**
+- Total automated test files: **671**
+- Backend and repo Vitest files: **635**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 171 |
-| Vitest service tests | 44 |
+| Vitest unit tests | 185 |
+| Vitest service tests | 51 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 179 |
-| Vitest CLI tests | 78 |
-| Vitest contract tests | 19 |
-| Vitest security tests | 9 |
-| Vitest subscription tests | 6 |
+| Vitest integration tests | 198 |
+| Vitest CLI tests | 80 |
+| Vitest contract tests | 21 |
+| Vitest security tests | 17 |
+| Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (171):**
+**Files (185):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -118,6 +118,8 @@ flowchart TD
 - `tests/unit/aauth_attestation_verifier.test.ts`
 - `tests/unit/aauth_attestation_webauthn_packed.test.ts`
 - `tests/unit/aauth_authority_normalization.test.ts`
+- `tests/unit/aauth_grant_key_binding.test.ts`
+- `tests/unit/aauth_key_bound_identity.test.ts`
 - `tests/unit/aauth_operator_allowlist.test.ts`
 - `tests/unit/aauth_sdk_and_capability_flags.test.ts`
 - `tests/unit/aauth_signer_jwk_override.test.ts`
@@ -126,12 +128,14 @@ flowchart TD
 - `tests/unit/action_schemas_observation_source.test.ts`
 - `tests/unit/action_schemas_validation.test.ts`
 - `tests/unit/agent_capabilities.test.ts`
+- `tests/unit/agent_grant_pin_checks.test.ts`
 - `tests/unit/agent_grants_service.test.ts`
 - `tests/unit/agent_identity.test.ts`
 - `tests/unit/agent_memory.test.ts`
 - `tests/unit/agents_grants_import.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
+- `tests/unit/authenticated_principal_provenance.test.ts`
 - `tests/unit/backfill_canonical_names_field_guard.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
@@ -142,6 +146,7 @@ flowchart TD
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
+- `tests/unit/cli_agent_instructions_relationship_types.test.ts`
 - `tests/unit/cli_bug_fixes.test.ts`
 - `tests/unit/cli_observation_source_flag.test.ts`
 - `tests/unit/cli_schema_register_reducer_config.test.ts`
@@ -190,6 +195,7 @@ flowchart TD
 - `tests/unit/github_webhook.test.ts`
 - `tests/unit/google_oidc_identity_resolution.test.ts`
 - `tests/unit/google_oidc.test.ts`
+- `tests/unit/harness_force_mode.test.ts`
 - `tests/unit/hook_feedback_accumulator.test.ts`
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
@@ -203,17 +209,21 @@ flowchart TD
 - `tests/unit/manage_bundles_tool.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
+- `tests/unit/mcp_header_screen_names.test.ts`
 - `tests/unit/mcp_initialize_skills.test.ts`
 - `tests/unit/mcp_initialize_version.test.ts`
 - `tests/unit/mcp_instance_skill_hints.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instruction_token_budget.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
+- `tests/unit/mcp_instructions_schema_scope_mismatch.test.ts`
 - `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
+- `tests/unit/mcp_server_authenticated_principal.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
 - `tests/unit/mcp_sse_keepalive.test.ts`
+- `tests/unit/member_attribution.test.ts`
 - `tests/unit/mirror_profiles.test.ts`
 - `tests/unit/mirror_rebuild_auth.test.ts`
 - `tests/unit/mirror_writeback_integration.test.ts`
@@ -242,6 +252,7 @@ flowchart TD
 - `tests/unit/request_context.test.ts`
 - `tests/unit/root_landing_git_sha.test.ts`
 - `tests/unit/root_landing_harness_snippets.test.ts`
+- `tests/unit/root_landing_production_env.test.ts`
 - `tests/unit/root_landing_site_nav_drift.test.ts`
 - `tests/unit/safe_request_log_format.test.ts`
 - `tests/unit/sandbox_boot_banner.test.ts`
@@ -259,8 +270,10 @@ flowchart TD
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
+- `tests/unit/shared_environment.test.ts`
 - `tests/unit/sign_in_session_wiring.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
+- `tests/unit/skill_deprecation.test.ts`
 - `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/sqlite_connection_pragmas.test.ts`
@@ -280,6 +293,7 @@ flowchart TD
 - `tests/unit/usage_digest_redaction.test.ts`
 - `tests/unit/usage_digest_schema.test.ts`
 - `tests/unit/usage_stats.test.ts`
+- `tests/unit/webhook_url_allowed.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
@@ -287,9 +301,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (44):**
+**Files (51):**
+- `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
+- `tests/services/by_id_write_ownership_conflict.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
@@ -297,8 +313,11 @@ flowchart TD
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
+- `tests/services/entity_resolution_cross_owner_conflict.test.ts`
+- `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
+- `tests/services/entity_split_cross_owner_conflict.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
 - `tests/services/entity_submission_validation.test.ts`
 - `tests/services/entity_type_equivalence.test.ts`
@@ -318,6 +337,8 @@ flowchart TD
 - `tests/services/raw_fragments_isolation.test.ts`
 - `tests/services/raw_storage_mime_map.test.ts`
 - `tests/services/raw_storage.test.ts`
+- `tests/services/relationship_type_registration.test.ts`
+- `tests/services/relationship_type_security.test.ts`
 - `tests/services/schema_definitions_agent_runtime.test.ts`
 - `tests/services/schema_definitions.test.ts`
 - `tests/services/schema_recommendation.test.ts`
@@ -411,7 +432,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (179):**
+**Files (198):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -424,6 +445,7 @@ flowchart TD
 - `tests/integration/aauth_tpm2_e2e.test.ts`
 - `tests/integration/aauth_webauthn_packed_e2e.test.ts`
 - `tests/integration/agent_capabilities_store.test.ts`
+- `tests/integration/agent_grant_thumbprint_pin_uniqueness.test.ts`
 - `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
@@ -452,6 +474,7 @@ flowchart TD
 - `tests/integration/describe_instance_policy_auth.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/embed_cross_origin_http.test.ts`
+- `tests/integration/empty_registry_builtin_repair_e2e.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
@@ -467,6 +490,7 @@ flowchart TD
 - `tests/integration/graph_neighborhood_pagination.test.ts`
 - `tests/integration/graph_neighborhood_source_branch.test.ts`
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
+- `tests/integration/guest_subscription_owner_scope.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
@@ -494,16 +518,23 @@ flowchart TD
 - `tests/integration/mcp_actions_matrix.test.ts`
 - `tests/integration/mcp_auto_enhancement.test.ts`
 - `tests/integration/mcp_auto_schema_creation.test.ts`
+- `tests/integration/mcp_connection_identity_gate_decision.test.ts`
 - `tests/integration/mcp_correction_variations.test.ts`
+- `tests/integration/mcp_development_connection_identity.test.ts`
 - `tests/integration/mcp_entity_creation.test.ts`
 - `tests/integration/mcp_entity_variations.test.ts`
 - `tests/integration/mcp_get_entity_type_counts.test.ts`
 - `tests/integration/mcp_graph_variations.test.ts`
 - `tests/integration/mcp_handler_cross_user_scoping.test.ts`
+- `tests/integration/mcp_http_connection_id_logging.test.ts`
+- `tests/integration/mcp_http_method_name_headers.test.ts`
+- `tests/integration/mcp_http_server_discover.test.ts`
+- `tests/integration/mcp_http_stateless_auth_resolution.test.ts`
 - `tests/integration/mcp_invalid_bearer_auth.test.ts`
 - `tests/integration/mcp_list_relationships_entity_filters.test.ts`
 - `tests/integration/mcp_npm_check_update_capability_delta.test.ts`
 - `tests/integration/mcp_npm_check_update.test.ts`
+- `tests/integration/mcp_oauth_local_login_preflight_gate.test.ts`
 - `tests/integration/mcp_oauth_token_endpoint.test.ts`
 - `tests/integration/mcp_oauth_trusted_callback.test.ts`
 - `tests/integration/mcp_query_variations.test.ts`
@@ -513,9 +544,11 @@ flowchart TD
 - `tests/integration/mcp_retrieval_reliability.test.ts`
 - `tests/integration/mcp_schema_actions.test.ts`
 - `tests/integration/mcp_schema_variations.test.ts`
+- `tests/integration/mcp_server_process_listeners.test.ts`
 - `tests/integration/mcp_session_404_reconnect.test.ts`
 - `tests/integration/mcp_session_recover_in_place.test.ts`
 - `tests/integration/mcp_stdio_attribution.test.ts`
+- `tests/integration/mcp_stdio_server_discover.test.ts`
 - `tests/integration/mcp_store_attribution_policy.test.ts`
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_intra_batch_relationships.test.ts`
@@ -554,10 +587,15 @@ flowchart TD
 - `tests/integration/sandbox_seed_token_bypass.test.ts`
 - `tests/integration/sandbox_stale_bearer_fallback.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
+- `tests/integration/schema_scope_resolution_parity.test.ts`
+- `tests/integration/schema_scope_surface_parity.test.ts`
 - `tests/integration/seed_then_works_at_e2e.test.ts`
 - `tests/integration/session_introspection.test.ts`
+- `tests/integration/shared_graph_identity.test.ts`
+- `tests/integration/shared_graph_write_attribution.test.ts`
 - `tests/integration/snapshot_ingestion_cutoff.test.ts`
 - `tests/integration/snapshot_seam_callers.test.ts`
+- `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
@@ -586,9 +624,11 @@ flowchart TD
 - `tests/integration/tunnel_discovery.test.ts`
 - `tests/integration/turn_summary_mcp_apps.test.ts`
 - `tests/integration/turn_summary.test.ts`
+- `tests/integration/unhandled_abandoned_abort_containment.test.ts`
 - `tests/integration/update_schema_incremental_cold_start.test.ts`
 - `tests/integration/update_schema_incremental_defect_cluster.test.ts`
 - `tests/integration/update_schema_incremental_envelope.test.ts`
+- `tests/integration/update_schema_incremental_scope_mismatch.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`
 
@@ -597,7 +637,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (78):**
+**Files (80):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -663,7 +703,9 @@ flowchart TD
 - `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
 - `tests/cli/processes_command.test.ts`
+- `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
+- `tests/cli/request_guest_subscription.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/schemas_repair_plural_types.test.ts`
@@ -682,7 +724,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (19):**
+**Files (21):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -699,7 +741,9 @@ flowchart TD
 - `tests/contract/package_contents.test.ts`
 - `tests/contract/package_scripts.test.ts`
 - `tests/contract/relationship_type_enum_parity.test.ts`
+- `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
+- `tests/contract/security_gates_ci_wiring.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
 
@@ -708,15 +752,23 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/security`
 **Requirements:** Use alongside the dedicated security validation scripts when changing auth or route protection.
-**Files (9):**
+**Files (17):**
 - `tests/security/auth_topology_matrix.test.ts`
 - `tests/security/cross_user_read_scoping.test.ts`
 - `tests/security/ed25519_forged_key_auth_bypass.test.ts`
+- `tests/security/http_listener_bind_host.test.ts`
 - `tests/security/mcp_resource_tenant_isolation.test.ts`
+- `tests/security/provenance_read_scoping.test.ts`
+- `tests/security/proxy_bind_host.test.ts`
 - `tests/security/rendered_page_csp.test.ts`
 - `tests/security/sandbox_mode_resolver.test.ts`
 - `tests/security/schemas_per_type_scope_guard.test.ts`
+- `tests/security/scoped_source_and_relationship_reads.test.ts`
 - `tests/security/sort_by_sql_injection.test.ts`
+- `tests/security/ssrf_guarded_fetch_redirects.test.ts`
+- `tests/security/ssrf_outbound_host_guard.test.ts`
+- `tests/security/ssrf_sink_wiring.test.ts`
+- `tests/security/store_external_actor_claim.test.ts`
 - `tests/security/tenant_isolation_matrix.test.ts`
 
 ### Vitest subscription tests
@@ -724,8 +776,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (6):**
+**Files (7):**
 - `tests/subscriptions/durable_event_log.test.ts`
+- `tests/subscriptions/guest_scope.test.ts`
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
 - `tests/subscriptions/sse_hub_dead_client_eviction.test.ts`
 - `tests/subscriptions/sse_ring_gap_detection.test.ts`

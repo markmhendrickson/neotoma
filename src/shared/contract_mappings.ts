@@ -84,6 +84,17 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
       "clients into the #2049 dead end.",
   },
   {
+    operationId: "mcpStreamableHttpPost",
+    method: "post",
+    path: "/mcp",
+    adapter: "infra",
+    notes:
+      "The MCP Streamable HTTP transport itself, dual-era (#2070). Carries the " +
+      "`server/discover` JSON-RPC method (2026-07-28) on the stateless path; legacy " +
+      "`initialize` + `Mcp-Session-Id` clients use the session path on the same route. " +
+      "HTTP-only by design: stdio never carried sessions and needs no discover probe here.",
+  },
+  {
     operationId: "mcpOAuthInitiate",
     method: "post",
     path: "/mcp/oauth/initiate",
@@ -677,6 +688,22 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas register",
   },
   {
+    operationId: "registerRelationshipType",
+    method: "post",
+    path: "/register_relationship_type",
+    adapter: "both",
+    mcpTool: "register_relationship_type",
+    cliCommand: "relationship-types register",
+  },
+  {
+    operationId: "listRelationshipTypes",
+    method: "post",
+    path: "/list_relationship_types",
+    adapter: "both",
+    mcpTool: "list_relationship_types",
+    cliCommand: "relationship-types list",
+  },
+  {
     operationId: "correct",
     method: "post",
     path: "/correct",
@@ -869,8 +896,9 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "eventsStream",
     method: "get",
     path: "/events/stream",
-    adapter: "infra",
-    notes: "SSE stream for subscription_id; long-lived HTTP clients only.",
+    adapter: "cli",
+    cliCommand: "request --operation eventsStream",
+    notes: "Raw SSE stream for subscription_id; the CLI preserves frames until closure.",
   },
 ];
 
@@ -910,6 +938,8 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   get_schema_recommendations: "getSchemaRecommendations",
   update_schema_incremental: "updateSchemaIncremental",
   register_schema: "registerSchema",
+  register_relationship_type: "registerRelationshipType",
+  list_relationship_types: "listRelationshipTypes",
   correct: "correct",
   get_authenticated_user: "getAuthenticatedUser",
   get_session_identity: "getSessionInfo",

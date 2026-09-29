@@ -53,6 +53,14 @@ const REASON_LABEL: Record<AttestationFailureReason, string> = {
   not_present: "No envelope on this agent",
 };
 
+function allowlistSourceLabel(
+  source: "thumbprint" | "issuer" | "issuer_subject" | null | undefined
+): string {
+  if (source === "issuer_subject") return "iss + sub";
+  if (source === "thumbprint") return "key thumbprint";
+  return "iss";
+}
+
 export interface AttestationEnvelopePanelProps {
   attestation?: AgentAttestationOutcome | null;
   /**
@@ -61,7 +69,7 @@ export interface AttestationEnvelopePanelProps {
    * attestation verification are the two paths into elevated tiers and
    * users debugging tier resolution want both visible at once.
    */
-  operatorAllowlistSource?: "issuer" | "issuer_subject" | null;
+  operatorAllowlistSource?: "thumbprint" | "issuer" | "issuer_subject" | null;
 }
 
 export function AttestationEnvelopePanel({
@@ -86,7 +94,7 @@ export function AttestationEnvelopePanel({
         <CardContent className="text-sm text-muted-foreground">
           No cryptographic attestation envelope on this agent. Tier was
           promoted via the operator allowlist (
-          {operatorAllowlistSource === "issuer_subject" ? "iss + sub" : "iss"}
+          {allowlistSourceLabel(operatorAllowlistSource)}
           ).
         </CardContent>
       </Card>
@@ -147,9 +155,7 @@ export function AttestationEnvelopePanel({
               <dt className="text-muted-foreground">Operator allowlist</dt>
               <dd>
                 <Badge variant="outline">
-                  {operatorAllowlistSource === "issuer_subject"
-                    ? "iss + sub"
-                    : "iss"}
+                  {allowlistSourceLabel(operatorAllowlistSource)}
                 </Badge>
               </dd>
             </>

@@ -42,6 +42,11 @@ function makeGrant(partial: Partial<AgentGrant>): AgentGrant {
 }
 
 vi.mock("../../src/services/agent_grants.js", () => ({
+  // Stub mirrors the real helper's contract (covered for real in
+  // aauth_grant_key_binding.test.ts): one warning when no key is pinned.
+  grantAdmissionWarnings: vi.fn((g: { match_thumbprint?: string | null; status?: string }) =>
+    g.status !== "revoked" && !g.match_thumbprint ? ["pins no match_thumbprint"] : [],
+  ),
   createGrant: vi.fn(async (userId: string, draft) => {
     const g = makeGrant({
       user_id: userId,
@@ -287,5 +292,26 @@ describe("formatImportResult", () => {
     expect(text).toContain("+ created  alpha");
     expect(text).toContain("~ updated  beta  (capabilities)");
     expect(text).toContain("- skipped  gamma  (no fields differ)");
+  });
+
+  it("prints a warning under a created or updated grant that pins no key", () => {
+    const unpinned = makeGrant({ grant_id: "ent_grant_unpinned", match_thumbprint: null });
+    const pinned = makeGrant({ grant_id: "ent_grant_pinned", match_thumbprint: "tp-pinned" });
+    const text = formatImportResult({
+      source: "json",
+      total: 2,
+      created: 2,
+      updated: 0,
+      skipped: 0,
+      outcomes: [
+        { kind: "created", grant: unpinned, label: "unpinned" },
+        { kind: "created", grant: pinned, label: "pinned" },
+      ],
+    });
+    const lines = text.split("\n");
+    const unpinnedIdx = lines.findIndex((l) => l.includes("+ created  unpinned"));
+    const pinnedIdx = lines.findIndex((l) => l.includes("+ created  pinned"));
+    expect(lines[unpinnedIdx + 1]).toContain("! pins no match_thumbprint");
+    expect(lines[pinnedIdx + 1] ?? "").not.toContain("!");
   });
 });

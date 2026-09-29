@@ -16,6 +16,8 @@ import {
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
 import { enforceOverridePolicy } from "./override_validation.js";
+import { assertAgentGrantFieldValid } from "./agent_grants.js";
+import { assertNoOwnerConflict } from "./entity_resolution.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
 
 /**
@@ -89,6 +91,13 @@ export async function createObservation(
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
+  // Pre-persist shape guard for agent_grant fields (no-op for every other
+  // entity_type). Throws before any row is written — see
+  // assertAgentGrantFieldValid's doc comment for why this must sit at this
+  // specific choke point rather than only in the grants CRUD helpers.
+  for (const [field, value] of Object.entries(params.fields)) {
+    assertAgentGrantFieldValid(params.entity_type, field, value);
+  }
   await enforceOverridePolicy({
     entityType: params.entity_type,
     entityId: params.entity_id,
@@ -98,6 +107,41 @@ export async function createObservation(
     userId: params.user_id,
     db,
   });
+  // Fail-closed ownership guard (belt-and-suspenders): resolveEntityWithTrace
+  // already refuses a cross-owner match before returning an entity_id, but
+  // this is the ultimate choke point every observation insert passes through
+  // regardless of how entity_id was obtained — including a caller that
+  // supplies entity_id directly rather than going through resolution. Never
+  // skip this because an upstream caller "already checked". Runs BEFORE the
+  // pin-uniqueness check below: ownership answers "is this the writer's
+  // entity at all", which must hold before asking whether the write's pin
+  // is still unique on it.
+  {
+    const { data: targetEntity } = await db
+      .from("entities")
+      .select("user_id")
+      .eq("id", params.entity_id)
+      .maybeSingle();
+    if (targetEntity) {
+      assertNoOwnerConflict({
+        entityId: params.entity_id,
+        entityType: params.entity_type,
+        existingOwnerUserId: (targetEntity as { user_id: string | null }).user_id,
+        writerUserId: params.user_id,
+      });
+    }
+  }
+
+  if (params.entity_type === "agent_grant") {
+    // A key thumbprint may be pinned by agent_grants under one owner only.
+    const { assertGrantWriteKeepsPinUnique } = await import("./agent_grants.js");
+    await assertGrantWriteKeepsPinUnique({
+      userId: params.user_id,
+      entityType: params.entity_type,
+      fields: params.fields,
+      entityId: params.entity_id,
+    });
+  }
   const observationId = generateObservationId(
     params.source_id,
     params.interpretation_id,

@@ -73,6 +73,16 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     throw new EntityAlreadyMergedError("Target entity already merged");
   }
 
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // Merging moves the source's observations (and any match_thumbprint they
+  // carry) onto the target, so both sides must hold only pins no other
+  // owner holds.
+  if (fromEntity.entity_type === "agent_grant" || toEntity.entity_type === "agent_grant") {
+    const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+    await assertGrantEntityPinsUnique(userId, fromEntityId);
+    await assertGrantEntityPinsUnique(userId, toEntityId);
+  }
+
   // --- Atomic mutation sequence ---
 
   const sqliteDb = await getDb();

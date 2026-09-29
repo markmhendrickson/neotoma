@@ -13,6 +13,8 @@ import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
+import { getActiveRelationshipTypeNames } from "./relationship_types/registry.js";
+import { assertEntitiesOwned } from "./scoped_reads.js";
 
 /** Minimal shape of a `relationship_observations` row needed for liveness. */
 interface RelationshipObservationRow {
@@ -48,35 +50,23 @@ export function isRelationshipLive(observations: RelationshipObservationRow[]): 
   return winner?.metadata?._deleted !== true;
 }
 
-export type RelationshipType =
-  | "PART_OF"
-  | "CORRECTS"
-  | "REFERS_TO"
-  | "SETTLES"
-  | "DUPLICATE_OF"
-  | "DEPENDS_ON"
-  | "SUPERSEDES"
-  | "EMBEDS"
-  | "works_at"
-  | "owns"
-  | "manages"
-  | "part_of"
-  | "related_to"
-  | "depends_on"
-  | "references"
-  | "transacted_with"
-  | "member_of"
-  | "reports_to"
-  | "located_at"
-  | "created_by"
-  | "funded_by"
-  | "acquired_by"
-  | "subsidiary_of"
-  | "partner_of"
-  | "competitor_of"
-  | "supplies_to"
-  | "contracted_with"
-  | "invested_in";
+/**
+ * A relationship type name.
+ *
+ * This was a 28-member closed union until #1972 (G25). It is now `string`,
+ * because the vocabulary is a RUNTIME REGISTRY
+ * (`relationship_types/registry.ts`) rather than a compile-time literal —
+ * membership is decided against registered rows at write time, in
+ * `createRelationship` below, which remains the single enforcement point.
+ *
+ * The union was not enforcement in any useful sense: `store`'s relationship
+ * leg reached this service through an explicit `as never` cast
+ * (`actions.ts:8056`), so the compiler was actively silenced about it, and
+ * `validTypes.has()` was the only thing between an arbitrary string and the
+ * database. Keeping the alias (rather than replacing every reference with
+ * `string`) preserves the documentary value of the name at ~16 call sites.
+ */
+export type RelationshipType = string;
 
 export interface Relationship {
   id: string;
@@ -105,37 +95,107 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/**
+ * Structured refusal for an unregistered relationship type.
+ *
+ * Replaces a bare `throw new Error("Invalid relationship type: X")`, which
+ * named no remedy — a caller learned the type was rejected but not that a
+ * registry exists, nor how to read it, nor how to add to it.
+ *
+ * #2482: the hint is built-in-aware. `getActiveRelationshipTypeNames` (via
+ * `resolveAllWithRepair`) already attempts a lazy reseed before this error can
+ * fire, so reaching here with a BUILT-IN name (`PART_OF`, `REFERS_TO`, ...)
+ * means the repair itself failed — most likely the registry table is
+ * unavailable — and the correct remedy is an operator seed/repair, never
+ * `register_relationship_type`: that tool registers a NEW type and refuses a
+ * built-in name from an ungranted caller (`enforceRelationshipTypeCapability`),
+ * which would otherwise read as a dead end. A genuinely unregistered CUSTOM
+ * name keeps the original discovery/registration hint.
+ */
+export class UnregisteredRelationshipTypeError extends Error {
+  readonly code = "unregistered_relationship_type";
+  readonly statusCode = 400;
+  readonly relationshipType: string;
+  readonly hint: string;
+
+  constructor(relationshipType: string, isBuiltIn = false) {
+    const hint = isBuiltIn
+      ? `"${relationshipType}" is a built-in relationship type that should always be registered; its ` +
+        `absence means the instance's relationship-type registry is unseeded or unavailable, not that ` +
+        `the type does not exist. Call list_relationship_types to see the current vocabulary and any ` +
+        `reported empty_reason/hint; do not call register_relationship_type for this name — an operator ` +
+        `seed/repair is the remedy, not registration.`
+      : `Call list_relationship_types to see the vocabulary this instance accepts, ` +
+        `or register_relationship_type to add "${relationshipType}" to it.`;
+    super(`Invalid relationship type: ${relationshipType}. ${hint}`);
+    this.name = "UnregisteredRelationshipTypeError";
+    this.relationshipType = relationshipType;
+    this.hint = hint;
+  }
+}
+
 export class RelationshipsService {
-  private validTypes: Set<RelationshipType> = new Set([
-    "PART_OF",
-    "CORRECTS",
-    "REFERS_TO",
-    "SETTLES",
-    "DUPLICATE_OF",
-    "DEPENDS_ON",
-    "SUPERSEDES",
-    "EMBEDS",
-    "works_at",
-    "owns",
-    "manages",
-    "part_of",
-    "related_to",
-    "depends_on",
-    "references",
-    "transacted_with",
-    "member_of",
-    "reports_to",
-    "located_at",
-    "created_by",
-    "funded_by",
-    "acquired_by",
-    "subsidiary_of",
-    "partner_of",
-    "competitor_of",
-    "supplies_to",
-    "contracted_with",
-    "invested_in",
-  ]);
+  /**
+   * Validate a relationship type against the registry.
+   *
+   * THIS IS THE SINGLE ENFORCEMENT POINT for the relationship vocabulary, and
+   * it was the single enforcement point before #1972 too — the difference is
+   * that it now reads registered rows instead of a hardcoded 28-member Set,
+   * so the vocabulary is data and the fifteen advertisement copies elsewhere
+   * in the tree have nothing left to drift from.
+   *
+   * Membership is resolved user-then-global: a type registered by this user
+   * shadows a global one of the same name, and another user's user-scoped
+   * registration is not visible here at all.
+   */
+  async assertRegisteredType(relationshipType: string, userId?: string): Promise<void> {
+    const names = await getActiveRelationshipTypeNames(userId);
+    if (!names.has(relationshipType)) {
+      const { BUILT_IN_RELATIONSHIP_TYPES } = await import("./relationship_types/seed_registry.js");
+      const isBuiltIn = BUILT_IN_RELATIONSHIP_TYPES.some(
+        (t) => t.relationship_type === relationshipType
+      );
+      throw new UnregisteredRelationshipTypeError(relationshipType, isBuiltIn);
+    }
+  }
+
+  /** Shared by MCP singular/batch, REST and store before the first edge write. */
+  private async assertAcyclicWrite(params: {
+    relationship_type: string;
+    source_entity_id: string;
+    target_entity_id: string;
+    user_id: string;
+  }): Promise<void> {
+    const { isRelationshipTypeAcyclic } = await import("./relationship_types/registry.js");
+    if (!(await isRelationshipTypeAcyclic(params.relationship_type, params.user_id))) return;
+    const edges = await this.getRelationshipsByType(
+      params.relationship_type,
+      false,
+      params.user_id
+    );
+    const graph = new Map<string, string[]>();
+    for (const edge of edges) {
+      const targets = graph.get(edge.source_entity_id) ?? [];
+      targets.push(edge.target_entity_id);
+      graph.set(edge.source_entity_id, targets);
+    }
+    const visited = new Set<string>();
+    const stack = [params.target_entity_id];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (node === params.source_entity_id) {
+        throw new Error(
+          `Creating this relationship would create a cycle among "${params.relationship_type}" edges.`
+        );
+      }
+      if (visited.has(node)) continue;
+      if (visited.size >= 1000) {
+        throw new Error("Acyclic relationship check exceeded its traversal bound; write refused.");
+      }
+      visited.add(node);
+      for (const next of graph.get(node) ?? []) if (!visited.has(next)) stack.push(next);
+    }
+  }
 
   /**
    * Create relationship (creates observation and snapshot)
@@ -150,9 +210,11 @@ export class RelationshipsService {
     user_id: string;
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
-    if (!this.validTypes.has(params.relationship_type)) {
-      throw new Error(`Invalid relationship type: ${params.relationship_type}`);
-    }
+    await this.assertRegisteredType(params.relationship_type, params.user_id);
+    // Both endpoints must be entities the caller owns. A missing entity and
+    // one owned by another user are refused with the same error.
+    await assertEntitiesOwned([params.source_entity_id, params.target_entity_id], params.user_id);
+    await this.assertAcyclicWrite(params);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;
     let sourceId = params.source_id || null;

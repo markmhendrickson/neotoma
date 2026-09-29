@@ -995,6 +995,45 @@ export function buildSchemaFromExtractedFields(entityData: Record<string, unknow
   };
 }
 
+/**
+ * Scope precedence for a simultaneously-active pair of `schema_registry` rows
+ * (#2356).
+ *
+ * Two rows CAN legitimately be active at once for one `entity_type`: a global
+ * row, and a user-scoped row that overrides it for one principal. That is the
+ * registry's multi-tenancy model, not corruption — `register` and `activate`
+ * deliberately partition their deactivation by scope, so activating a global
+ * version never touches a user's override and vice versa.
+ *
+ * What was NOT expressed anywhere is which of the two a reader should pick.
+ * `loadActiveSchema` encodes it procedurally (try user, fall back to global),
+ * while `listEntityTypes` collapsed the pair by arbitrary row order. This
+ * predicate states the rule once so every resolver can share it:
+ *
+ *   a user-scoped row belonging to THIS principal beats the global row;
+ *   anything else loses to what is already held.
+ *
+ * `candidate` wins over `incumbent` only when it is this principal's override.
+ * A foreign user's row never wins — it should not have been fetched at all, and
+ * treating it as lower precedence keeps this safe if it ever is.
+ */
+export function isHigherPrecedenceSchemaRow(
+  candidate: Pick<SchemaRegistryEntry, "scope" | "user_id">,
+  incumbent: Pick<SchemaRegistryEntry, "scope" | "user_id">,
+  userId?: string
+): boolean {
+  const isOwnOverride = (row: Pick<SchemaRegistryEntry, "scope" | "user_id">): boolean =>
+    row.scope === "user" && !!userId && row.user_id === userId;
+  // Only an own-override outranks an incumbent, and only when the incumbent is
+  // not itself one. Two active override rows for the same principal is a real
+  // data-integrity fault, and NOTHING raises on it: this adapter's `.single()`
+  // errors only on ZERO rows (`local_db_adapter.ts`, `expectSingle` returns
+  // `rows[0]` otherwise) and the SELECT carries no ORDER BY, so the resolver
+  // silently serves an arbitrary row. Keeping the first candidate here is at
+  // least deterministic within one call.
+  return isOwnOverride(candidate) && !isOwnOverride(incumbent);
+}
+
 export class SchemaRegistryService {
   /**
    * Register a new schema version
@@ -1099,6 +1138,136 @@ export class SchemaRegistryService {
 
     // 2. Fall back to global schema
     return await applyBuiltInSchemaIdentityDefaults(await this.loadGlobalSchema(entityType));
+  }
+
+  /**
+   * Report every `entity_type` that currently has BOTH an active global row and
+   * one or more active user-scoped overrides (#2356).
+   *
+   * This is deliberately READ-ONLY and reports rather than repairs. A user-scoped
+   * override shadowing a global row is a legitimate state — it is how the
+   * registry expresses per-tenant schema divergence — so a blanket "deactivate
+   * the user rows" sweep would destroy intentional configuration. Which
+   * overrides are intended and which are debris left by an
+   * `update_schema_incremental` that wrote to the other scope is a judgement only
+   * the operator can make, and the two are indistinguishable from the row data.
+   *
+   * What the resolver fix guarantees is that these pairs are no longer
+   * INCONSISTENT: every read path now applies the same precedence the write path
+   * uses, so an override shadows the global row uniformly instead of by row
+   * order. This audit exists so an operator can still find pairs they did not
+   * intend — in particular one whose override is OLDER than the global row,
+   * which is the shape that made a landed schema update look like a no-op.
+   *
+   * `overrides_older_than_global` flags exactly that suspicious case, comparing
+   * semver-ish version strings numerically per component so "1.18.0" sorts above
+   * "1.3.0" (a lexical compare gets that backwards, which is what made the
+   * original report's `person` row so confusing).
+   */
+  async auditDualActiveSchemas(): Promise<
+    Array<{
+      entity_type: string;
+      global_version: string;
+      /**
+       * Set only when this type has MORE THAN ONE active global row — a
+       * corrupt state, distinct from the intentional global/user pair this
+       * audit exists to report. While present, `global_version` is the highest
+       * of these and not necessarily the one the resolver serves, so
+       * `overrides_older_than_global` is unreliable for this type until the
+       * duplication is repaired.
+       */
+      duplicate_global_versions?: string[];
+      overrides: Array<{ user_id: string; schema_version: string; older_than_global: boolean }>;
+      overrides_older_than_global: boolean;
+    }>
+  > {
+    const { data, error } = await db
+      .from("schema_registry")
+      .select("entity_type, schema_version, user_id, scope")
+      .eq("active", true);
+    if (error) {
+      throw new Error(`Failed to audit dual-active schemas: ${error.message}`);
+    }
+
+    const rows = (data ?? []) as Array<
+      Pick<SchemaRegistryEntry, "entity_type" | "schema_version" | "user_id" | "scope">
+    >;
+
+    /** Compare dotted version strings component-wise; non-numeric parts fall back to string order. */
+    const compareVersions = (a: string, b: string): number => {
+      const pa = String(a).split(".");
+      const pb = String(b).split(".");
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const na = Number(pa[i] ?? 0);
+        const nb = Number(pb[i] ?? 0);
+        if (Number.isNaN(na) || Number.isNaN(nb)) {
+          const cmp = (pa[i] ?? "").localeCompare(pb[i] ?? "");
+          if (cmp !== 0) return cmp;
+          continue;
+        }
+        if (na !== nb) return na - nb;
+      }
+      return 0;
+    };
+
+    // Multiple ACTIVE global rows for one type is not a scope pair — it is
+    // unambiguous corruption, and it is the one state here that is safely
+    // auto-repairable (no per-tenant intent can be encoded in a duplicate
+    // within a single scope). It must be surfaced separately, and it must NOT
+    // be collapsed last-write-wins: the resolver serves whichever row the
+    // unordered SELECT returns first, so a last-write-wins `global_version`
+    // can disagree with what is actually served and mis-flag an override as
+    // stale against a version no caller ever sees.
+    //
+    // Collapse deterministically to the highest version so the reported
+    // `global_version` is stable across runs, and report the duplication.
+    const globalVersions = new Map<string, string[]>();
+    for (const r of rows) {
+      if (r.scope === "user") continue;
+      const list = globalVersions.get(r.entity_type) ?? [];
+      list.push(r.schema_version);
+      globalVersions.set(r.entity_type, list);
+    }
+    const globals = new Map<string, string>();
+    const duplicateGlobals = new Map<string, string[]>();
+    for (const [entityType, versions] of globalVersions) {
+      const sorted = [...versions].sort(compareVersions);
+      globals.set(entityType, sorted[sorted.length - 1]);
+      if (versions.length > 1) duplicateGlobals.set(entityType, sorted);
+    }
+
+    const byType = new Map<
+      string,
+      Array<{ user_id: string; schema_version: string; older_than_global: boolean }>
+    >();
+    for (const r of rows) {
+      if (r.scope !== "user" || !r.user_id) continue;
+      const globalVersion = globals.get(r.entity_type);
+      if (globalVersion === undefined) continue; // override with no global row: not a pair
+      const list = byType.get(r.entity_type) ?? [];
+      list.push({
+        user_id: r.user_id,
+        schema_version: r.schema_version,
+        older_than_global: compareVersions(r.schema_version, globalVersion) < 0,
+      });
+      byType.set(r.entity_type, list);
+    }
+
+    return [...byType.entries()]
+      .map(([entity_type, overrides]) => ({
+        entity_type,
+        global_version: globals.get(entity_type) as string,
+        // Present ONLY when this type has more than one active global row.
+        // While set, `global_version` is the highest of them, not necessarily
+        // the one the resolver serves — repair the duplication before acting
+        // on `overrides_older_than_global` for this type.
+        ...(duplicateGlobals.has(entity_type)
+          ? { duplicate_global_versions: duplicateGlobals.get(entity_type) as string[] }
+          : {}),
+        overrides,
+        overrides_older_than_global: overrides.some((o) => o.older_than_global),
+      }))
+      .sort((a, b) => a.entity_type.localeCompare(b.entity_type));
   }
 
   /**
@@ -1379,7 +1548,17 @@ export class SchemaRegistryService {
     // 1. Load current active schema (user-specific or global), then fall back to
     // code-defined ENTITY_SCHEMAS so incremental updates can materialize the
     // first registry row for built-in types (e.g. conversation_message).
-    let currentSchema = await this.loadActiveSchema(options.entity_type, options.user_id);
+    //
+    // Read scope (#2374): an EXPLICIT `user_specific: false` reads the global
+    // row only — the caller has said "target global", so the new global row
+    // must extend the current global row. Reading user-preferring here would
+    // build the new global row from the caller's private user override,
+    // replacing the global field set with the override's and dropping any
+    // field only the global row carried (#2378-class loss, on the global
+    // scope). Omitted or `true`: user-preferring with global fallback, so
+    // the write below can defer to whichever row this resolves.
+    const readUserId = options.user_specific === false ? undefined : options.user_id;
+    let currentSchema = await this.loadActiveSchema(options.entity_type, readUserId);
     if (!currentSchema) {
       const normalized = normalizeEntityTypeForSchema(options.entity_type);
       const codeDefined =
@@ -1636,13 +1815,12 @@ export class SchemaRegistryService {
     });
 
     // 6. Activate new version if requested (this deactivates other versions).
-    // #2374/#2389: pass the SAME resolved scope used for the write above, not
-    // an unscoped (entity_type, version) match. activate() deactivates by
-    // scope/user_id first (correct) but its final activation UPDATE has no
-    // predicate narrower than (entity_type, schema_version) unless told which
-    // row — passing effectiveUserId here is what lets it target only the row
-    // this call just registered, instead of reactivating every row that
-    // happens to share this version string across both scopes.
+    // #2374/#2356: pass the SAME resolved scope used for the write above.
+    // `effectiveUserId` is what register() just wrote to, so activate() selects
+    // exactly that row. Passing `options.user_specific ? userId : undefined`
+    // instead would re-derive scope from the caller's (possibly omitted) flag
+    // and, for a caller who omitted it while the read resolved a user row,
+    // activate the global row rather than the one this call registered.
     if (activateSchema) {
       await this.activate(options.entity_type, newVersion, effectiveUserId);
     }
@@ -2117,59 +2295,40 @@ export class SchemaRegistryService {
    * `userId`, when provided, disambiguates which row this call means when a
    * global row and a user-scoped row share the same `(entityType, version)`
    * pair — which happens routinely, since version strings are per-scope
-   * counters, not globally unique. Without it (#2389), the initial lookup
-   * used `.single()` with no scope predicate at all: ambiguous on any shared
-   * pair, and the final activation UPDATE matched only
-   * `(entity_type, schema_version)` with no scope/user_id narrowing, so it
-   * reactivated EVERY row sharing that pair — undoing the scoped deactivation
-   * three lines earlier and leaving both scopes simultaneously active. This
-   * was reproduced as a durable, not transient, state: 77 (entity_type,
-   * user_id) pairs carried more than one active row on a sampled instance.
+   * counters, not globally unique.
    *
-   * Fix: resolve the target row's `id` first — scoped by `userId` when given,
-   * so an ambiguous version string picks the caller's intended scope rather
-   * than whichever row a `.single()` happens to return — then target every
-   * subsequent query (deactivate siblings, activate self) by that `id`. An
-   * `id` predicate is unambiguous by construction; it cannot over-match a
-   * sibling row the way `(entity_type, schema_version)` can.
+   * Two defects are closed here:
+   *
+   * - #2356 / #2389: the lookup used `.single()` with no scope predicate and
+   *   the final activation UPDATE matched only `(entity_type,
+   *   schema_version)`, so it reactivated EVERY row sharing that pair —
+   *   undoing the scoped deactivation and leaving both scopes active.
+   * - #2356 follow-up (security): a `candidates[0]` catch-all fell through to
+   *   another principal's private user-scoped row on a version-string
+   *   collision. Selection is fail-closed: this principal's own row, else a
+   *   non-user (global) row, else nothing.
+   *
+   * The selected row's `id` then targets every later query (exclude self from
+   * the sibling deactivation, activate self). An `id` predicate cannot
+   * over-match a sibling row the way `(entity_type, schema_version)` can.
    */
   async activate(entityType: string, version: string, userId?: string): Promise<void> {
-    // Resolve the specific row this call means. Prefer the caller's scope
-    // when given (userId present → that user's row), otherwise the global
-    // row — matching the same precedence loadActiveSchema already applies,
-    // so activate() targets the row callers actually read/wrote against.
-    let lookupQuery = db
+    const { data: rows, error: lookupError } = await db
       .from("schema_registry")
       .select("id, scope, user_id")
       .eq("entity_type", entityType)
       .eq("schema_version", version);
-    lookupQuery = userId
-      ? lookupQuery.eq("scope", "user").eq("user_id", userId)
-      : lookupQuery.eq("scope", "global").is("user_id", null);
-
-    const { data: rows, error: lookupError } = await lookupQuery;
     if (lookupError) {
       throw new Error(`Failed to look up schema to activate: ${lookupError.message}`);
     }
-    // Scoped lookup found nothing — the caller may be activating a row
-    // registered before scope/user_id were populated, or a global row when
-    // no userId was passed but only a user row exists for this version (or
-    // vice versa). Fall back to the old unscoped lookup rather than failing
-    // outright, but still resolve to a SINGLE row's id up front so every
-    // later query stays id-targeted rather than reintroducing an unscoped
-    // multi-row match.
-    let schema = rows?.[0] as { id: string; scope: string | null; user_id: string | null } | undefined;
-    if (!schema) {
-      const { data: fallbackRows, error: fallbackError } = await db
-        .from("schema_registry")
-        .select("id, scope, user_id")
-        .eq("entity_type", entityType)
-        .eq("schema_version", version);
-      if (fallbackError) {
-        throw new Error(`Failed to look up schema to activate: ${fallbackError.message}`);
-      }
-      schema = fallbackRows?.[0] as { id: string; scope: string | null; user_id: string | null } | undefined;
-    }
+
+    const candidates = (rows ?? []) as Array<Pick<SchemaRegistryEntry, "id" | "scope" | "user_id">>;
+    // Fail closed: the caller always just registered the row it means to
+    // activate — either its own user-scoped override (`userId` set) or the
+    // global row. Never fall through to any other principal's row.
+    const schema =
+      candidates.find((r) => r.scope === "user" && !!userId && r.user_id === userId) ??
+      candidates.find((r) => r.scope !== "user");
 
     if (!schema) {
       throw new Error(`Schema not found: ${entityType} version ${version}`);
@@ -2194,13 +2353,10 @@ export class SchemaRegistryService {
 
     await deactivateQuery;
 
-    // Activate the ONE targeted row by id — never by (entity_type,
-    // schema_version) alone, which can match a sibling row in the other
-    // scope and reactivate it (#2389).
-    const { error } = await db
-      .from("schema_registry")
-      .update({ active: true })
-      .eq("id", schema.id);
+    // Activate the ONE selected row by id. No extra scope predicate: the id is
+    // already unambiguous, and a scope filter here could only turn activation
+    // of a legacy row with a null `scope` into a silent no-op.
+    const { error } = await db.from("schema_registry").update({ active: true }).eq("id", schema.id);
 
     if (error) {
       throw new Error(`Failed to activate schema: ${error.message}`);
@@ -2313,12 +2469,27 @@ export class SchemaRegistryService {
     // Get all active schemas from database. When a userId is supplied, return
     // only global schemas (user_id IS NULL) plus that user's own schemas, so a
     // user's private entity-type names/shapes are not disclosed cross-user.
+    //
+    // #2356: `scope` MUST be selected. Two rows can be simultaneously active for
+    // one entity_type — a global row and a user-scoped override — and without
+    // `scope` this method cannot tell them apart, so its Map dedupe collapsed
+    // them by arbitrary row order. That made list reads disagree with
+    // `loadActiveSchema` (and therefore with the write path, which resolves
+    // through the same scoped call) in BOTH directions depending on which row
+    // happened to arrive last.
     let query = db
       .from("schema_registry")
-      .select("entity_type, schema_version, schema_definition")
+      .select("entity_type, schema_version, schema_definition, user_id, scope")
       .eq("active", true);
     if (userId) {
       query = query.or(`user_id.is.null,user_id.eq.${userId}`);
+    } else {
+      // #2356: with no userId there is no principal whose override could apply,
+      // so only global rows are in scope. Previously this branch had NO filter,
+      // so an unscoped list returned every user's rows and let a foreign
+      // user-scoped row win the dedupe — both a wrong version and a cross-user
+      // disclosure of private entity-type names and shapes.
+      query = query.eq("scope", "global");
     }
 
     const { data: dbSchemas } = await query;
@@ -2329,7 +2500,15 @@ export class SchemaRegistryService {
 
     if (dbSchemas && dbSchemas.length > 0) {
       for (const schema of dbSchemas) {
-        allSchemas.set(schema.entity_type, schema as SchemaRegistryEntry);
+        // #2356: apply the SAME precedence `loadActiveSchema` uses — a
+        // user-scoped row for this principal overrides the global row for the
+        // same entity_type; otherwise the global row stands. Resolving by
+        // precedence rather than by arrival order is what makes list reads
+        // agree with per-type reads and with the write path.
+        const row = schema as SchemaRegistryEntry;
+        const existing = allSchemas.get(row.entity_type);
+        if (existing && !isHigherPrecedenceSchemaRow(row, existing, userId)) continue;
+        allSchemas.set(row.entity_type, row);
       }
     } else {
       // Use code-defined schemas as fallback

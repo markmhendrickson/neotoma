@@ -15,6 +15,20 @@ async function deleteExistingSourcesByContentHash(contentHash: string): Promise<
     .eq("content_hash", contentHash);
   const sourceIds = (existingSources ?? []).map((s) => s.id).filter(Boolean) as string[];
   if (sourceIds.length === 0) return;
+  // Asset entity ids are derived from content, so a prior run (possibly under
+  // another user) may have left the same entity row behind. Store responses
+  // only include entities the caller owns, so clear it for a clean baseline.
+  const { data: priorObservations } = await db
+    .from("observations")
+    .select("entity_id")
+    .in("source_id", sourceIds);
+  const entityIds = Array.from(
+    new Set((priorObservations ?? []).map((o) => o.entity_id).filter(Boolean) as string[])
+  );
+  if (entityIds.length > 0) {
+    await db.from("entity_snapshots").delete().in("entity_id", entityIds);
+    await db.from("entities").delete().in("id", entityIds);
+  }
   await db.from("observations").delete().in("source_id", sourceIds);
   await db.from("raw_fragments").delete().in("source_id", sourceIds);
   await db.from("sources").delete().in("id", sourceIds);
@@ -35,7 +49,9 @@ describe("Non-JSON CSV raw store behavior", () => {
     await deleteExistingSourcesByContentHash(contentHash);
     const idempotencyKey = `it-csv-raw-${randomUUID()}`;
 
-    const result = await (server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }).store({
+    const result = await (
+      server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }
+    ).store({
       user_id: TEST_USER_ID,
       file_content: Buffer.from(csvContent, "utf8").toString("base64"),
       mime_type: "text/csv",
@@ -68,9 +84,22 @@ describe("Non-JSON CSV raw store behavior", () => {
   it("still allows agent-supplied entities alongside a CSV file", async () => {
     const filePath = path.join(CSV_FIXTURES_DIR, "sample_contacts.csv");
     const csvContent = await fs.readFile(filePath, "utf8");
+    const contentHash = createHash("sha256").update(csvContent).digest("hex");
+    // This fixture's file_asset entity id is content-derived (global id, no
+    // tenant salt) and is ALSO stored by nonjson_fixtures_mcp_replay.test.ts
+    // under its own randomly-generated user. Without this cleanup, whichever
+    // suite runs second collides on the same entity id under a different
+    // owner than the one that created it — exactly the cross-owner write the
+    // entity-resolution security fix (EntityOwnerConflictError) now refuses,
+    // surfaced here as a real test-isolation gap rather than a false
+    // positive. Mirrors the cleanup already done for sample_transactions.csv
+    // above.
+    await deleteExistingSourcesByContentHash(contentHash);
     const idempotencyKey = `it-csv-combined-${randomUUID()}`;
 
-    const result = await (server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }).store({
+    const result = await (
+      server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }
+    ).store({
       user_id: TEST_USER_ID,
       idempotency_key: idempotencyKey,
       file_idempotency_key: `${idempotencyKey}-file`,

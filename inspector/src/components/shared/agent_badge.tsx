@@ -47,6 +47,7 @@ export function extractAgentAttribution(
       ? (p.attribution_tier as AgentAttributionTier)
       : undefined;
   const operatorSource =
+    p.operator_allowlist_source === "thumbprint" ||
     p.operator_allowlist_source === "issuer" ||
     p.operator_allowlist_source === "issuer_subject"
       ? p.operator_allowlist_source
@@ -233,7 +234,9 @@ export function AgentAttributionTooltipBody({
         ? "iss + sub"
         : attribution?.operator_allowlist_source === "issuer"
           ? "iss"
-          : undefined,
+          : attribution?.operator_allowlist_source === "thumbprint"
+            ? "key thumbprint"
+            : undefined,
     ],
     ["Attestation", att ? (att.verified ? "verified" : "failed") : undefined],
     ["Attestation format", att?.format ?? undefined],

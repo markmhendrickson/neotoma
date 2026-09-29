@@ -164,8 +164,11 @@ export function AgentGrantForm({
   }
 
   const matchHint =
-    "At least one of match_sub or match_thumbprint must be set. " +
-    "When match_iss is set, both sub and iss must match.";
+    "match_thumbprint is required for the grant to admit signed requests: " +
+    "paste the thumbprint that `neotoma auth session` prints on the agent's host. " +
+    "match_sub / match_iss are descriptive. A grant saved without a thumbprint " +
+    "stays inert, and capability-gated writes signed by an agent whose sub/iss " +
+    "match it are refused until a key is pinned.";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">

@@ -684,6 +684,17 @@ export async function runInterpretation(
         continue;
       }
 
+      if (entityType === "agent_grant") {
+        // A key thumbprint may be pinned by agent_grants under one owner only.
+        const { assertGrantWriteKeepsPinUnique } = await import("./agent_grants.js");
+        await assertGrantWriteKeepsPinUnique({
+          userId,
+          entityType,
+          fields: canonicalFields,
+          entityId,
+        });
+      }
+
       // Create observation with canonical fields and hash
       // Handle schema cache issues: if canonical_hash column not in cache, retry without it
       const observationData: Record<string, unknown> = {

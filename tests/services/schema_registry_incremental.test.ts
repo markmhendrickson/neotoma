@@ -86,13 +86,11 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     return mock;
   };
 
-  // Helper to mock activate() calls. #2389/#2374 fix: activate() now resolves
-  // its target row via one scoped, id-targeted lookup (array select, not
-  // .single()) instead of an unscoped .single() — so a shared version string
-  // in the other scope can no longer be ambiguous or get over-matched. The
-  // lookup mock below is consumed by whichever of the two branches
-  // activate() takes (scoped-by-userId, or the unscoped global branch), and
-  // resolves an array (`data: [...]`) rather than a single object.
+  // Helper to mock activate() calls (3 database calls: select, update
+  // deactivate, update activate). #2356/#2389: activate() awaits ALL candidate
+  // rows for (entity_type, schema_version) as an array — not .single() — picks
+  // one by fail-closed scope precedence, then targets the deactivate/activate
+  // updates by that row's id.
   const mockActivateCalls = (
     row: { id?: string; scope?: string; user_id?: string | null } = {}
   ) => {
@@ -124,11 +122,15 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     const mockUpdateActivate: any = {
       update: vi.fn(),
       eq: vi.fn(),
+      // #2356: the activate UPDATE is now scope-partitioned like the
+      // deactivation beside it, so it chains .is("user_id", null) for global.
+      is: vi.fn(),
       then: vi.fn((resolve: any) => Promise.resolve({ error: null }).then(resolve)),
       catch: vi.fn(),
     };
     mockUpdateActivate.update.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
+    mockUpdateActivate.is.mockReturnValue(mockUpdateActivate);
 
     return { mockSelect, mockUpdateDeactivate, mockUpdateActivate, resolvedRow };
   };
