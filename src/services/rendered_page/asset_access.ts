@@ -7,7 +7,8 @@
  * to exactly the sources the page's CURRENT content references, and nothing
  * else (least privilege):
  *
- *  - the token must be valid (unexpired, unrevoked) and have a recorded owner;
+ *  - the token must be valid (unexpired, unrevoked) and have a recorded owner,
+ *    and the access policy must allow guest reads of `rendered_page`;
  *  - the source must be referenced, as `/sources/<id>/content`, in the
  *    `html_body` or `custom_css` of a `rendered_page` that is in the token's
  *    `entity_ids` scope and owned by the token's owner;
@@ -53,6 +54,12 @@ export async function resolveGuestSourceReadGrant(
     if (!grant || grant.entity_ids.length === 0) return null;
     const ownerId = await getGuestTokenOwnerUserId(token);
     if (!ownerId) return null;
+
+    // Assets are never more open than the page itself: if the operator's
+    // access policy denies guest reads of rendered_page, so are its assets.
+    const { resolveGuestReadAccess } = await import("../access_policy.js");
+    const decision = await resolveGuestReadAccess("rendered_page", { accessToken: token });
+    if (!decision.allowed) return null;
 
     const { data: source } = await db
       .from("sources")

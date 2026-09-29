@@ -15,7 +15,11 @@ import {
 import { textReferencesSourceContent } from "../../src/services/rendered_page/asset_access.js";
 import { storeRawContent } from "../../src/services/raw_storage.js";
 
-const OWNER = "00000000-0000-0000-0000-000000000001";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+
+// Loopback requests without a Bearer resolve to the local dev user, which owns
+// every fixture below (pages via POST /store, sources, tokens).
+const OWNER = LOCAL_DEV_USER_ID;
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64"
@@ -43,17 +47,26 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
       provenance: {},
     } as never);
     sourceIds.push(r.sourceId);
+    // Test processes skip the raw upload; put the bytes where the route reads them.
+    const { data: row } = await db.from("sources").select("storage_url").eq("id", r.sourceId).single();
+    const { error } = await db.storage
+      .from("sources")
+      .upload(row!.storage_url as string, buf, { contentType: mime, upsert: true });
+    expect(error).toBeNull();
     return r.sourceId;
   }
 
-  async function seedPage(html: string): Promise<string> {
+  async function seedPage(
+    html: string,
+    title = `guest-asset-page-${Math.random().toString(36).slice(2)}`
+  ): Promise<string> {
     const resp = await fetch(`${base}/store`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user_id: OWNER,
         idempotency_key: `guest-asset-page-${Math.random().toString(36).slice(2)}`,
-        entities: [{ entity_type: "rendered_page", title: "t", html_body: html }],
+        entities: [{ entity_type: "rendered_page", title, html_body: html }],
       }),
     });
     expect(resp.status).toBe(200);
@@ -69,7 +82,12 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
     return t;
   }
 
+  let prevPolicy: string | undefined;
+
   beforeAll(async () => {
+    // Mirrors the seeded rendered_page schema policy (guest_access_policy).
+    prevPolicy = process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE;
+    process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE = "submitter_scoped";
     server = createServer(app);
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -88,6 +106,8 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
 
   afterAll(async () => {
     await new Promise<void>((r) => server.close(() => r()));
+    if (prevPolicy === undefined) delete process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE;
+    else process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE = prevPolicy;
     if (sourceIds.length) {
       await db.from("observations").delete().in("source_id", sourceIds);
       await db.from("sources").delete().in("id", sourceIds);
@@ -129,16 +149,14 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
   });
 
   it("does not open other source routes or writes to the guest token", async () => {
-    for (const [method, path] of [
-      ["GET", `/sources/${embeddedSource}`],
-      ["GET", `/sources/${embeddedSource}/relationships`],
-      ["GET", `/sources`],
-      ["DELETE", `/sources/${embeddedSource}/content`],
-      ["POST", `/sources/${embeddedSource}/content`],
-    ] as const) {
-      const r = await fetch(`${base}${path}?access_token=${pageToken}`, { method });
-      expect([401, 403, 404, 405], `${method} ${path}`).toContain(r.status);
+    // Loopback requests are locally trusted regardless of token, so the
+    // route-eligibility predicate is the authoritative check that a guest
+    // principal is never stamped on any other source route or on writes.
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      expect(routeAcceptsGuestPrincipal({ method, path: `/sources/${embeddedSource}/content` })).toBe(false);
     }
+    expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}/relationships` })).toBe(false);
+    expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}/content/extra` })).toBe(false);
     expect(routeAcceptsGuestPrincipal({ method: "GET", path: "/sources" })).toBe(false);
     expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}` })).toBe(false);
     expect(routeAcceptsGuestPrincipal({ method: "POST", path: `/sources/${embeddedSource}/content` })).toBe(false);
@@ -146,27 +164,27 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
   });
 
   it("stops serving an asset once the page no longer references it (no stale scope)", async () => {
-    const pid = await seedPage(`<img src="/sources/${embeddedSource}/content">`);
+    const title = `guest-asset-edit-${Math.random().toString(36).slice(2)}`;
+    const pid = await seedPage(`<img src="/sources/${embeddedSource}/content">`, title);
     const tok = await mint([pid]);
     expect(
       (await fetch(`${base}/sources/${embeddedSource}/content?access_token=${tok}`)).status
     ).toBe(200);
-    const corr = await fetch(`${base}/correct`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: OWNER,
-        entity_id: pid,
-        entity_type: "rendered_page",
-        field: "html_body",
-        value: "<p>removed</p>",
-        idempotency_key: `guest-asset-corr-${Date.now()}`,
-      }),
-    });
-    expect(corr.status).toBe(200);
+    // Same title resolves to the same entity; the new observation replaces html_body.
+    expect(await seedPage("<p>removed</p>", title)).toBe(pid);
     expect(
       (await fetch(`${base}/sources/${embeddedSource}/content?access_token=${tok}`)).status
     ).toBe(401);
+  });
+
+  it("denies assets when the operator policy closes guest reads of rendered_page", async () => {
+    process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE = "closed";
+    try {
+      const r = await fetch(`${base}/sources/${embeddedSource}/content?access_token=${pageToken}`);
+      expect(r.status).toBe(401);
+    } finally {
+      process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE = "submitter_scoped";
+    }
   });
 
   it("serves the page under a CSP that allows same-origin media only", async () => {
