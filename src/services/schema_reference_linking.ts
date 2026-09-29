@@ -504,6 +504,9 @@ export async function autoLinkReferenceFields(
           auto_link_entity_type: params.entityType,
         } satisfies AutoLinkMetadata,
         user_id: params.userId,
+        // Edge type comes from the registered schema's reference field, not
+        // from the caller; the store that triggered it was capability-gated.
+        system_derived: true,
       });
 
       const changedTargetRetraction = await retractStaleAutoLinkedEdges(

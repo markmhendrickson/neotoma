@@ -219,6 +219,26 @@ For example, this permits `REFERS_TO` only when both endpoints are a
 }
 ```
 
+The check is enforced at every entrance that writes an edge, from one shared
+module (`src/services/relationship_write_capability.ts`), so no surface can
+drift from another:
+
+- REST `/store` and MCP `store` authorize every requested edge up front, before
+  the first entity write; a denied edge refuses the whole call (REST answers
+  `403 capability_denied`).
+- `relationshipsService.createRelationship` enforces it per edge, which covers
+  REST and MCP `create_relationship` / `create_relationships`,
+  `/interpretations/create` and MCP `create_interpretation`, and the CLI and
+  in-process callers that reach those routes. In the batch and interpretation
+  paths a denied edge is reported in `errors` / `relationships_refused`.
+- REST and MCP `restore_relationship`: reviving an edge is an edge write.
+
+Endpoint types are resolved within the authenticated owner's scope; an
+endpoint that does not resolve fails closed. Edges the server derives from a
+registered schema (reference-field auto-linking, derived-entity extraction)
+take their type from the schema, not the caller, and are not re-gated; the
+store that triggered them is.
+
 ### Matching order
 
 Admission resolves the verified identity to at most one grant:

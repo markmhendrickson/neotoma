@@ -15,6 +15,7 @@ import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 import { getActiveRelationshipTypeNames } from "./relationship_types/registry.js";
 import { assertEntitiesOwned } from "./scoped_reads.js";
+import { enforceCurrentAgentRelationshipWrites } from "./relationship_write_capability.js";
 
 /** Minimal shape of a `relationship_observations` row needed for liveness. */
 interface RelationshipObservationRow {
@@ -208,12 +209,37 @@ export class RelationshipsService {
     source_peer_id?: string;
     metadata?: Record<string, unknown>;
     user_id: string;
+    /**
+     * Set ONLY by server-side schema machinery (reference-field auto-linking
+     * and derived-entity extraction), whose edge type comes from the
+     * registered schema rather than from the caller. Every caller-requested
+     * edge leaves this unset and is capability-gated below. Never populate
+     * it from request input.
+     */
+    system_derived?: boolean;
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
     await this.assertRegisteredType(params.relationship_type, params.user_id);
     // Both endpoints must be entities the caller owns. A missing entity and
     // one owned by another user are refused with the same error.
     await assertEntitiesOwned([params.source_entity_id, params.target_entity_id], params.user_id);
+    // Relationship-type + endpoint-type capability (neotoma#2524). Enforced
+    // here, at the one sink every edge-creating entrance reaches, so REST and
+    // MCP create_relationship(s), both store paths, interpretations, CLI and
+    // in-process callers cannot drift apart. Placed after the ownership check
+    // so a missing endpoint keeps its not-found answer, and before any write.
+    if (!params.system_derived) {
+      await enforceCurrentAgentRelationshipWrites({
+        userId: params.user_id,
+        relationships: [
+          {
+            relationship_type: params.relationship_type,
+            source_entity_id: params.source_entity_id,
+            target_entity_id: params.target_entity_id,
+          },
+        ],
+      });
+    }
     await this.assertAcyclicWrite(params);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;

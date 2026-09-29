@@ -491,6 +491,22 @@ export async function restoreRelationship(
     };
   }
 
+  // Reviving an edge makes it live again, so it is an edge write under the
+  // same relationship-type + endpoint-type capability as creating it
+  // (neotoma#2524). After the not-found check so absence keeps its answer.
+  const { enforceCurrentAgentRelationshipWrites } =
+    await import("./relationship_write_capability.js");
+  await enforceCurrentAgentRelationshipWrites({
+    userId,
+    relationships: [
+      {
+        relationship_type: relationshipType,
+        source_entity_id: sourceEntityId,
+        target_entity_id: targetEntityId,
+      },
+    ],
+  });
+
   const restoredAt = timestamp || new Date().toISOString();
 
   // Create deterministic observation ID

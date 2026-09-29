@@ -217,6 +217,14 @@ jobs:
       - name: Run schema-scope parity (#2356)
         run: npx vitest run --no-file-parallelism tests/integration/schema_scope_surface_parity.test.ts tests/integration/schema_scope_resolution_parity.test.ts
 
+      # #2524 relationship-write capability, every entrance. The first fix
+      # gated REST /store only; MCP store and the standalone relationship
+      # routes kept writing any edge. This drives each surface (REST over HTTP,
+      # MCP tool methods) as a REFERS_TO-scoped agent and asserts the effect: an
+      # out-of-scope edge is refused and absent, the in-scope edge still lands.
+      - name: Run relationship-write capability surface parity (#2524)
+        run: npx vitest run --no-file-parallelism tests/integration/relationship_write_capability_surfaces.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline

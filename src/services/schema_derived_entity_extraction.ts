@@ -172,6 +172,9 @@ export async function extractDerivedEntities(
             derived_from_entity_type: params.entityType,
           },
           user_id: params.userId,
+          // Edge type comes from the registered schema's derivation rule, not
+          // from the caller; the derived store above was capability-gated.
+          system_derived: true,
         });
 
         result.created++;

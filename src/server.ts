@@ -76,6 +76,7 @@ import {
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
+import { AgentCapabilityError } from "./services/agent_capabilities.js";
 import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
 import {
   relationshipRefusalFromError,
@@ -3833,12 +3834,30 @@ export class NeotomaServer {
     // Use authenticated user_id
     const userId = this.getAuthenticatedUserId();
 
+    // Relationship capability (neotoma#2524) before the source row below is
+    // written, so a refused edge leaves nothing behind. The service re-checks
+    // at the edge write; this only moves the refusal ahead of the source.
+    const { enforceCurrentAgentRelationshipWrites } =
+      await import("./services/relationship_write_capability.js");
+    await enforceCurrentAgentRelationshipWrites({
+      userId,
+      relationships: [
+        {
+          relationship_type: parsed.relationship_type,
+          source_entity_id: parsed.source_entity_id,
+          target_entity_id: parsed.target_entity_id,
+        },
+      ],
+    });
+
     try {
-      // Create a source for this relationship
+      // Create a source for this relationship. The hash carries a UUID as well
+      // as the timestamp: two calls in the same millisecond otherwise collide on
+      // UNIQUE(content_hash, user_id) and the second fails as a server error.
       const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
-          content_hash: `relationship_${Date.now()}`,
+          content_hash: `relationship_${Date.now()}_${randomUUID()}`,
           mime_type: "application/json",
           storage_url: `internal://relationship/${parsed.relationship_type}`,
           file_size: 0, // No file for direct relationship creation
@@ -3890,6 +3909,11 @@ export class NeotomaServer {
       }
       // Check for specific error types
       if (error instanceof McpError) {
+        throw error;
+      }
+      // A relationship capability refusal propagates as itself, exactly as the
+      // MCP `store` capability gate's does — never re-labelled a server fault.
+      if (error instanceof AgentCapabilityError) {
         throw error;
       }
       throw new McpError(
@@ -6168,6 +6192,21 @@ export class NeotomaServer {
       for (const type of new Set(relationships.map((rel) => rel.relationship_type))) {
         await relationshipsService.assertRegisteredType(type, userId);
       }
+    }
+
+    // Relationship capability (neotoma#2524), before any entity/source
+    // mutation. This MCP store core is an implementation independent of
+    // `storeStructuredForApi`, so the REST gate never reached it: an agent
+    // scoped to `REFERS_TO` could call MCP `store` with any other edge type and
+    // get the edge. Same shared check REST `/store` runs, batch-authorized up
+    // front so a denied edge refuses the whole call before the first write
+    // rather than leaving the entities written and the edge reported refused.
+    // The per-edge gate inside `relationshipsService.createRelationship`
+    // still applies in the relationship loops below.
+    if (relationships?.length) {
+      const { enforceCurrentAgentRelationshipWrites } =
+        await import("./services/relationship_write_capability.js");
+      await enforceCurrentAgentRelationshipWrites({ userId, entities, relationships });
     }
 
     // Reject flat-packed rows early so MCP clients get a clear error instead
