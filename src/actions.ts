@@ -3952,6 +3952,13 @@ function explicitGuestAccessTokenFromRequest(req: express.Request): string | und
  */
 export const RESERVED_ENTITY_PATH_SEGMENTS = new Set(["duplicates", "merge", "split", "query"]);
 
+const SOURCE_CONTENT_PATH_RE = /^\/sources\/[^/]+\/content$/;
+
+/** `GET /sources/:id/content` — the only source route a guest token may reach (neotoma#1696). */
+export function isSourceContentPath(path: string): boolean {
+  return SOURCE_CONTENT_PATH_RE.test(path);
+}
+
 /** Exported for unit tests: routes where guest (AAuth / guest token) may be stamped before handlers run. */
 export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" | "path">): boolean {
   const path = req.path;
@@ -3972,6 +3979,10 @@ export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" |
   }
   if (req.method === "GET") {
     if (path === "/events/stream") return true;
+    // neotoma#1696: embedded-asset read for rendered_page guest tokens. Reads
+    // of ONE source's content only; the handler enforces that the token's page
+    // references that exact source. Never sources list/detail/relationships.
+    if (isSourceContentPath(path)) return true;
     const match = /^\/entities\/([^/]+)(?:\/(?:observations|relationships|html))?$/.exec(path);
     if (!match) return false;
     // Fail closed: a reserved static segment is a route, not an entity id, so it
@@ -4098,6 +4109,10 @@ function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | 
 
 async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> {
   if (!routeAcceptsGuestPrincipal(req)) return false;
+  // Source content is reachable by a guest ONLY via an explicit page guest
+  // token (query/body). AAuth-thumbprint-only or Bearer-borne guests keep the
+  // pre-existing behaviour for this route (no guest stamping).
+  if (isSourceContentPath(req.path) && !explicitGuestAccessTokenFromRequest(req)) return false;
   const guestPrincipal = buildGuestPrincipalFromRequest(req);
   if (!guestPrincipal) {
     // No AAuth signature and no guest token: for issue submission this is the
@@ -5458,6 +5473,8 @@ app.get("/entities/:id/html", async (req, res) => {
         "script-src 'none'",
         "style-src 'unsafe-inline'",
         "img-src 'self' data:",
+        // neotoma#1696: same-origin media only (embedded /sources/:id/content).
+        "media-src 'self'",
         "font-src 'self' data:",
         "base-uri 'none'",
         "form-action 'none'",
@@ -7186,11 +7203,34 @@ app.get("/sources/:id/relationships", async (req, res) => {
 });
 
 // GET /api/sources/:id/content - Download raw source file content
-// REQUIRES AUTHENTICATION - verifies source belongs to authenticated user
+// REQUIRES AUTHENTICATION - verifies source belongs to authenticated user, OR a
+// rendered_page guest access_token whose page references this exact source
+// (neotoma#1696; see services/rendered_page/asset_access.ts).
 app.get("/sources/:id/content", async (req, res) => {
   try {
-    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const sourceId = req.params.id;
+    const existingPrincipal = requestPrincipal(req);
+    const principal: RoutePrincipal =
+      existingPrincipal?.kind === "user"
+        ? existingPrincipal
+        : await resolveRoutePrincipal(req, ["user", "guest"]);
+    let userId: string;
+    const isGuest = principal.kind === "guest";
+    if (principal.kind === "guest") {
+      const token = principal.guestId.accessToken;
+      const { resolveGuestSourceReadGrant } = await import(
+        "./services/rendered_page/asset_access.js"
+      );
+      const grant = token ? await resolveGuestSourceReadGrant(token, sourceId) : null;
+      if (!grant) {
+        return sendError(res, 401, "AUTH_REQUIRED", "Guest token does not grant access to this source", {
+          hint: "A rendered_page guest token can only read sources that the page itself embeds as /sources/<id>/content.",
+        });
+      }
+      userId = grant.userId;
+    } else {
+      userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    }
 
     const { data: source, error } = await db
       .from("sources")
@@ -7257,7 +7297,17 @@ app.get("/sources/:id/content", async (req, res) => {
       else if (f.endsWith(".gif")) mimeType = "image/gif";
       else if (f.endsWith(".webp")) mimeType = "image/webp";
     }
-    const inline = /^(application\/pdf|text\/|image\/|audio\/)/i.test(mimeType);
+    let inline = /^(application\/pdf|text\/|image\/|audio\/|video\/)/i.test(mimeType);
+    if (isGuest) {
+      // Guest reads are for embeds only: never render active content (HTML,
+      // SVG, XML, scripts) inline from this origin.
+      inline =
+        /^(application\/pdf|audio\/|video\/|image\/)/i.test(mimeType) &&
+        !/svg|xml/i.test(mimeType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      res.setHeader("Cache-Control", "private, no-store");
+    }
 
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Length", buffer.length);

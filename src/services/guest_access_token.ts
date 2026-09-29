@@ -167,3 +167,20 @@ export async function tokenGrantsAccessTo(token: string, entityId: string): Prom
   if (!validated) return false;
   return validated.entity_ids.includes(entityId);
 }
+
+/**
+ * Resolve the owner (`user_id`) recorded on a guest token's backing entity.
+ * Returns null when the token is invalid/expired/revoked or has no recorded
+ * owner. Unlike the route-level `resolveGuestUserId`, there is deliberately no
+ * local-dev fallback: callers that grant content access must fail closed.
+ */
+export async function getGuestTokenOwnerUserId(token: string): Promise<string | null> {
+  if (!(await validateGuestAccessToken(token))) return null;
+  const { data } = await db
+    .from("entities")
+    .select("user_id")
+    .eq("id", deriveTokenEntityId(token))
+    .maybeSingle();
+  const userId = (data as { user_id?: unknown } | null)?.user_id;
+  return typeof userId === "string" && userId ? userId : null;
+}
