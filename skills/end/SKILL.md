@@ -226,7 +226,7 @@ Both `/end` and `store-neotoma` MUST emit a **succinct affected-records list** i
 
 ## Relationship to other skills
 
-- **`store-data`** — per-entity/per-file store primitive. `/end` calls the underlying `store` MCP tool for each gap in Phase 2.
+- **`store` (MCP tool)** — per-entity/per-file store primitive. `/end` calls it directly for each gap in Phase 2.
 - **`store-neotoma`** — full chat-transcript persistence. `/end` delegates to it when the conversation is not yet fully persisted, and (per user preference) invokes it **without a confirmation gate**, expecting it to emit the succinct affected-records list above.
 - **`update-tasks`** — field/priority guidance for the task entities `/end` files in Phase 4.1.
 - **`learn`** — converts accepted automation proposals into durable rules, skills, and hooks. `/end` proposes and files (Phase 3); `/learn` builds. For Phase 3b, `/end` captures voice into the `style_guide` entity + memory directly, and routes page-craft deltas to `/learn` as tasks so `/learn` folds them into the `draft-rendered-page` skill's `content`.

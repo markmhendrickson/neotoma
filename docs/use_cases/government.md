@@ -26,8 +26,7 @@ Government determinations — benefit eligibility, permit approvals, enforcement
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured determinations, policy versions, and case records |
-| `query-memory` | Reconstructs decision context under specific policy versions |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

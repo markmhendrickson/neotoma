@@ -26,8 +26,7 @@ Supply chain decisions involve complex constraint evaluation — carrier availab
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists constraint snapshots, routing decisions, and inventory state |
-| `query-memory` | Reconstructs decision context and constraint state at any routing point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

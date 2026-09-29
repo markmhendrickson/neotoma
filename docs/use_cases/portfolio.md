@@ -26,8 +26,7 @@ Fund managers need to track portfolio company performance, valuation changes, mi
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured portfolio metrics, valuations, and commitments |
-| `query-memory` | Reconstructs portfolio state at any investment decision point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 
