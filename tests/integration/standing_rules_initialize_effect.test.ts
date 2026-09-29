@@ -49,6 +49,7 @@ const entityId = `ent_test_sr_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
  * That keeps this an effect test rather than a call to a private method.
  */
 async function callInitialize(server: NeotomaServer): Promise<{
+  instructions?: string;
   serverInfo: {
     _neotoma?: {
       standing_rules?: Array<{ entity_id: string; title: string; rule_text: string }>;
@@ -151,6 +152,36 @@ describe("standing rules reach the agent through MCP initialize (#2131)", () => 
 
     expect(seeded?.rule_text).toBe(RULE_TEXT);
     expect(seeded?.title).toBe(RULE_TITLE);
+  });
+
+  it("delivers the rule's full text in the instructions prose, not only serverInfo (#2187)", async () => {
+    const result = await callInitialize(server);
+
+    // The #2187 failure mode: rules rode ONLY `serverInfo._neotoma`, which
+    // general MCP clients drop, so an operator's enabled rules reached no
+    // session. `instructions` is the surface clients actually show the model.
+    expect(result.instructions, "initialize returned no instructions").toBeDefined();
+    expect(
+      result.instructions,
+      "standing rules section missing from instructions — rules ship only via serverInfo again"
+    ).toMatch(/standing rules? in force/);
+
+    // Title alone is not delivery: before this fix two rule titles appeared in
+    // the prose purely because a human had typed them into the instance
+    // policy text, which is what made the gap look closed. Assert the BODY.
+    expect(
+      result.instructions,
+      "rule title reached the prose but its text did not — that is a mention, not delivery"
+    ).toContain(RULE_TEXT);
+
+    // Delivery also depends on position. The base block is well over 100KB and
+    // clients truncate long `instructions`, so a rule appended after it is cut
+    // before the model sees it. The rules must lead the payload.
+    const at = result.instructions!.indexOf(RULE_TEXT);
+    expect(
+      at,
+      `rule text starts at char ${at} — behind the base block, where clients truncate`
+    ).toBeLessThan(4096);
   });
 
   it("does not flag rules as unavailable when the lookup succeeds", async () => {

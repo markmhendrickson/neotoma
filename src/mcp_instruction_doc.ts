@@ -74,3 +74,22 @@ export function composeClientInstructions(
   if (!policySection || policySection.trim().length === 0) return globalInstructions;
   return `${globalInstructions}\n\n${policySection.trim()}\n`;
 }
+
+/**
+ * Place a must-follow section AHEAD of the composed instructions.
+ *
+ * {@link composeClientInstructions} appends, which suits descriptive sections.
+ * It does not suit operator-set rules: the default global block is well over
+ * 100KB, and MCP clients truncate long `instructions`, so anything appended
+ * after it is the first thing a client cuts. A rule the client never shows the
+ * model has not been delivered (#2187).
+ *
+ * Empty or absent `section` returns `instructions` byte-for-byte unchanged.
+ */
+export function prependClientInstructionsSection(
+  instructions: string,
+  section: string | null | undefined
+): string {
+  if (!section || section.trim().length === 0) return instructions;
+  return `${section.trim()}\n\n${instructions}`;
+}
