@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
 import { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "../services/entity_query_limits.js";
 
 export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
@@ -1071,15 +1072,35 @@ export const IssuesGetStatusRequestSchema = z
     { message: "Provide entity_id or issue_number" }
   );
 
+/**
+ * Validated `owner/name` GitHub repository slug for `sync_issues` (HTTP + CLI + MCP).
+ * Strict on purpose: see `src/shared/repo_slug.ts`.
+ */
+export const IssuesSyncRepoSchema = z
+  .string()
+  .refine((v) => isValidRepoSlug(v), { message: REPO_SLUG_FORMAT_MESSAGE });
+
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),
   state: z.enum(["open", "closed", "all"]).optional(),
   labels: z.array(z.string()).optional(),
   /**
-   * When true (default), local public issues with no github_number are pushed to GitHub
-   * before the pull leg runs. Pass false to disable the push leg.
+   * GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo
+   * (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Validated before any GitHub call or write.
+   */
+  repo: IssuesSyncRepoSchema.optional(),
+  /**
+   * Push leg (local public issues with no github_number -> GitHub). When omitted it
+   * defaults to true for the configured default repo and to false for any other `repo`.
+   * Pass true to opt in explicitly.
    */
   push: z.boolean().optional(),
+  /**
+   * When false, run as a dry run: read GitHub and local state, report what would be
+   * created, updated and pushed, and write nothing (no local store/correct, no GitHub
+   * create). Default true.
+   */
+  commit: z.boolean().optional(),
   user_id: z.string().optional(),
 });

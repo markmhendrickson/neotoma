@@ -133,7 +133,7 @@ These keys are stable so `syncIssuesFromGitHub` can replay GitHub state without 
 
 Neotoma can **pull** state from the configured **issue mirror** (today: GitHub Issues via `github_client`) into local `issue` / `conversation` / `conversation_message` rows. This is mirror ingest, not peer sync; see [`peer_sync.md`](peer_sync.md) for cross-instance replication.
 
-Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels? })`:
+Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels?, repo?, push?, commit? })`:
 
 1. List remote issues matching the filter (mirror API).
 2. For each issue, list remote comments.
@@ -143,6 +143,14 @@ Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels? })`:
 
 `syncIssueIfStale({ entity_id })` performs the same flow scoped to a single issue and is invoked transparently by `getIssueStatus` / `addIssueMessage` whenever the cache is older than `sync_staleness_ms`.
 
+### Target repo, push opt-in and dry run
+
+- **`repo`** (`owner/name`, validated) selects the GitHub repo for one call. The server-config value (`NEOTOMA_ISSUES_REPO` / `issues.repo`) stays the default and is not changed by a call that passes `repo`, so pointing one sync at another repo does not retarget every other sync on the instance. A malformed value is rejected (REST/MCP validation error; CLI exits 1) before any GitHub request or local write. The check is stricter than `submit_issue`'s `target_repo`: one slash, GitHub owner/name character rules, no `.`/`..` segment.
+- **`push`** (the Neotoma to GitHub leg) defaults to **true when `repo` is omitted or equals the configured default repo, and false for any other `repo`**. Rationale: the push leg creates public GitHub issues from local `visibility: "public"` records that carry no repo binding, so a sync aimed at a different repo must not export them there unless the caller says so (`push: true` / `--push`). The default repo keeps push-on because that is the repo the operator configured to receive them and the scheduled `neotoma issues sync` job relies on it; a global default-off would silently stop that mirror. When a push does go to a non-default repo, `repo` is written back onto the local issue so its `github_number` stays unambiguous.
+- **`commit: false`** (CLI `--dry-run`) is a dry run: it reads GitHub and local state, performs no `store`, no `correct` and no GitHub create, and returns `plan` with `issues_to_create`, `issues_to_update` (local `last_synced_at` behind GitHub `updated_at`), `issues_unchanged`, `messages_to_sync`, `issues_to_push` and `warnings`. `issues_synced`, `messages_synced` and `issues_pushed` are 0 in a dry run.
+- Every result reports the resolved `repo`, `dry_run` and `push_enabled`.
+- **Missing token:** the error names the `NEOTOMA_ISSUES_GITHUB_TOKEN` setting and that it is read from the environment of the process running the Neotoma server (or `gh auth login` as that user), not the caller's shell.
+
 **MCP vs CLI vs HTTP:** `sync_issues` (MCP), `POST /issues/sync`, and `neotoma issues sync` all call `syncIssuesFromGitHub` in `src/services/issues/sync_issues_from_github.ts` via the HTTP handlers in `src/actions.ts` (CLI uses the typed API client).
 
 ## Mirror credentials
@@ -151,7 +159,7 @@ When `visibility: "public"` or when read/append paths touch the mirror, Neotoma 
 
 `gh_auth.resolveGitHubToken` order:
 
-1. `NEOTOMA_GH_TOKEN` env var (CI / bot deployments).
+1. `NEOTOMA_ISSUES_GITHUB_TOKEN` env var (CI / bot deployments), read from the server process environment.
 2. `gh auth token` shell-out (developer machines using the GitHub CLI).
 3. Configured machine agent — `IssuesConfig.github_auth = "bot"` (literal enum) plus a server-side credential resolver registered out-of-band.
 4. Otherwise, throw — public issue actions that require the mirror cannot proceed.
@@ -169,7 +177,7 @@ Canonical programmatic surface for full issue lifecycle (see [`docs/specs/MCP_SP
 - `submit_issue({ title, body, labels?, visibility?, reporter_git_sha?, ... })`.
 - `add_issue_message({ entity_id, body, guest_access_token? })` — optional `guest_access_token` when the local row mirrors a remote operator issue and the token is not stored on the issue snapshot. If remote append fails after local/GitHub side effects are recorded, the result carries `remote_submission_error` so callers avoid duplicate fallback comments.
 - `get_issue_status({ entity_id, skip_sync?, guest_access_token? })` — optional `guest_access_token` for the same read-through case.
-- `sync_issues({ since?, state?, labels? })`.
+- `sync_issues({ since?, state?, labels?, repo?, push?, commit? })` — `repo` is `owner/name`; `push` defaults to false for any repo other than the configured default; `commit: false` is a dry run.
 - `bulk_close_issues({ entity_ids: string[], reason?: string })` — closes multiple `issue` entities in one call, mirrors `POST /issues/bulk_close`, and is what the Inspector bulk-close action drives.
 - `bulk_remove_issues({ entity_ids: string[], reason?: string })` — soft-deletes multiple `issue` entities (via `deleteEntity` observations), mirrors `POST /issues/bulk_remove`. Use this for triage clean-up; restoration goes through `restore_entity`, not a bulk-restore tool.
 
@@ -181,7 +189,7 @@ Operator and agent backup (see `openapi.yaml` operationIds `issuesSubmit`, `issu
 - `neotoma issues message [number] --body <b>` (GitHub issue number) or `neotoma issues message --entity-id <id> --body <b>` — calls `POST /issues/add_message` → `addIssueMessage`.
 - `neotoma issues status --entity-id <id> [--skip-sync] [--guest-access-token <t>]` — calls `POST /issues/status` → `getIssueStatus`.
 - `neotoma issues list [--state open|closed|all] [--labels csv] [--since <iso>]` — GitHub list only (no MCP twin).
-- `neotoma issues sync [--since <iso>] [--state ...] [--labels csv]` — calls `POST /issues/sync` → `syncIssuesFromGitHub`.
+- `neotoma issues sync [--since <iso>] [--state ...] [--labels csv] [--repo <owner/name>] [--push|--no-push] [--dry-run]` — calls `POST /issues/sync` → `syncIssuesFromGitHub`.
 - `neotoma issues config [--repo <slug>] [--mode proactive|consent|off] [--sync-staleness-ms <n>]`.
 - `neotoma issues auth` — runs `verifyGhAuth` and reports the resolved auth method.
 

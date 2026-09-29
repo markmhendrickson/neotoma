@@ -70,6 +70,7 @@ import {
   UpdateSchemaIncrementalRequestSchema,
   RegisterSchemaRequestSchema,
   IntakeHintSchema,
+  IssuesSyncRepoSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
@@ -2015,7 +2016,9 @@ export class NeotomaServer {
       state: z.enum(["open", "closed", "all"]).optional(),
       labels: z.array(z.string()).optional(),
       since: z.string().optional(),
+      repo: IssuesSyncRepoSchema.optional(),
       push: z.boolean().optional(),
+      commit: z.boolean().optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -2027,7 +2030,9 @@ export class NeotomaServer {
         state: parsed.state,
         labels: parsed.labels,
         since: parsed.since,
+        repo: parsed.repo,
         push: parsed.push,
+        commit: parsed.commit,
       });
       return this.buildTextResponse(result);
     } catch (err: any) {

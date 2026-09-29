@@ -85,10 +85,22 @@ export interface IssueSyncParams {
   state?: "open" | "closed" | "all";
   labels?: string[];
   /**
-   * When true (default), local public issues with no github_number are pushed to GitHub
-   * before the pull leg runs. Set to false to pull-only.
+   * GitHub repository to mirror, `owner/name`. Defaults to the configured repo
+   * (`NEOTOMA_ISSUES_REPO` / `issues.repo`). A malformed value is rejected before
+   * any GitHub request or local write.
+   */
+  repo?: string;
+  /**
+   * Push leg (local public issues with no github_number -> GitHub). When omitted:
+   * true for the configured default repo (unchanged historical behaviour), false for
+   * any other `repo`. An explicit value always wins.
    */
   push?: boolean;
+  /**
+   * When false, dry run: report what would be created, updated and pushed and write
+   * nothing (no local store/correct, no GitHub create). Default true.
+   */
+  commit?: boolean;
 }
 
 export interface IssueStatusParams {

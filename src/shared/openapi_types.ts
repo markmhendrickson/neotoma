@@ -1789,7 +1789,7 @@ export interface paths {
     put?: never;
     /**
      * Sync issues bidirectionally with GitHub
-     * @description Bidirectional sync between local Neotoma and the configured GitHub repo. Push leg (default on): local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. Pull leg: GitHub issues and their comments are pulled into local entities. MCP sync_issues parity.
+     * @description Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their comments are pulled into local entities. Push leg: local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. The target repo defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`); `repo` overrides it for this call only. The push leg is on by default only for the configured default repo and off for any other `repo` unless `push: true` is passed. `commit: false` runs a dry run that reports what would be created, updated and pushed and writes nothing. A GitHub token is required: `NEOTOMA_ISSUES_GITHUB_TOKEN` in the server environment (or `gh auth login` on the server host). MCP sync_issues parity.
      */
     post: operations["issuesSync"];
     delete?: never;
@@ -2424,6 +2424,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description A GitHub issue a `/issues/sync` dry run would create or update locally. */
+    IssuesSyncPlanIssue: {
+      github_number: number;
+      title: string;
+    };
     /**
      * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
      *     (#2070). Operational metadata only: never persisted, never logged in full.
@@ -7893,25 +7898,61 @@ export interface operations {
           /** @enum {string} */
           state?: "open" | "closed" | "all";
           labels?: string[];
-          /** @description When false, skip the push leg (local public → GitHub). Default true. */
+          /**
+           * @description GitHub repository to mirror, `owner/name` (for example `acme/widgets`). Defaults to the server-configured repo. A malformed value is rejected with a 400 before any GitHub request or write.
+           * @example acme/widgets
+           */
+          repo?: string;
+          /** @description Run the push leg (local public -> GitHub). Default true when `repo` is omitted or equals the configured default repo; default false for any other `repo`. Pass true to opt in for another repo. */
           push?: boolean;
+          /** @description When false, dry run: report what would be created, updated and pushed in `plan` and write nothing locally or on GitHub. Default true. */
+          commit?: boolean;
           user_id?: string;
         };
       };
     };
     responses: {
-      /** @description Sync counts and errors */
+      /** @description Sync counts, errors and, for a dry run, the plan */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": {
+            /** @description Target GitHub repo (`owner/name`) this run mirrored. */
+            repo: string;
+            /** @description True when the run was a dry run (`commit: false`); nothing was written. */
+            dry_run: boolean;
+            /** @description Whether the push leg was enabled (resolved from `push` and `repo`). */
+            push_enabled: boolean;
             issues_synced: number;
             messages_synced: number;
             errors: string[];
             issues_pushed: number;
             push_errors: string[];
+            /** @description Present only on a dry run. */
+            plan?: {
+              issues_to_create: components["schemas"]["IssuesSyncPlanIssue"][];
+              issues_to_update: components["schemas"]["IssuesSyncPlanIssue"][];
+              issues_unchanged: number;
+              messages_to_sync: number;
+              issues_to_push: {
+                entity_id: string;
+                title: string;
+              }[];
+              warnings: string[];
+            };
+          };
+        };
+      };
+      /** @description Validation error (for example a malformed `repo`) */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
           };
         };
       };

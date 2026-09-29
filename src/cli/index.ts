@@ -9776,6 +9776,19 @@ issuesCommand
   .option("--since <date>", "Only sync issues updated after this ISO date")
   .option("--state <state>", "Filter by state: open, closed, all", "all")
   .option("--labels <labels>", "Comma-separated label filter (passed to GitHub list)")
+  .option(
+    "--repo <owner/name>",
+    "GitHub repo to mirror for this run (default: the server-configured repo)"
+  )
+  .option(
+    "--push",
+    "Run the push leg (local public issues -> GitHub). Default: on for the configured repo, off for any other --repo"
+  )
+  .option("--no-push", "Skip the push leg (pull-only)")
+  .option(
+    "--dry-run",
+    "Report what would be created, updated and pushed; write nothing locally or on GitHub"
+  )
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
