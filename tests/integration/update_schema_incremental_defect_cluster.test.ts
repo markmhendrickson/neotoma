@@ -11,10 +11,13 @@
  * persisted/reported effect, not just a 200/success envelope.
  */
 
+import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { app } from "../../src/actions.js";
 import { NeotomaServer } from "../../src/server.js";
 import { db } from "../../src/db.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 
 const TEST_USER_ID = "00000000-0000-0000-0000-000000002374";
 const OTHER_USER_ID = "00000000-0000-0000-0000-000000002375";
@@ -28,7 +31,9 @@ type TestServer = NeotomaServer & {
   authenticatedUserId?: string | null;
 };
 
-async function activeRows(entityType: string): Promise<
+async function activeRows(
+  entityType: string
+): Promise<
   Array<{
     id: string;
     schema_version: string;
@@ -671,6 +676,135 @@ describe("update_schema_incremental defect cluster", () => {
       expect(
         (rowDataAfter?.schema_definition as { fields?: Record<string, unknown> })?.fields
       ).toHaveProperty("extra_field");
+    });
+  });
+  // ------------------------------------------------------------------
+  // REST over real HTTP. The MCP-path tests above never reach the Express
+  // handlers in actions.ts, so these drive them directly.
+  // ------------------------------------------------------------------
+  describe("REST routes over HTTP", () => {
+    const API_PORT = 18246;
+    const API_BASE = `http://127.0.0.1:${API_PORT}`;
+    let httpServer: ReturnType<typeof createServer>;
+    const REG_TYPE = `issue_2446_rest_register_${Date.now()}`;
+    const MIG_TYPE = `issue_2446_rest_migrate_${Date.now()}`;
+
+    beforeAll(async () => {
+      await cleanupType(REG_TYPE);
+      await cleanupType(MIG_TYPE);
+      await db.from("raw_fragments").delete().eq("entity_type", MIG_TYPE);
+      httpServer = createServer(app);
+      await new Promise<void>((resolve, reject) => {
+        httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+        httpServer.once("error", reject);
+      });
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+      await cleanupType(REG_TYPE);
+      await cleanupType(MIG_TYPE);
+      await db.from("raw_fragments").delete().eq("entity_type", MIG_TYPE);
+    });
+
+    it("POST /register_schema with user_specific + activate activates the caller's new row, never a same-version global row", async () => {
+      // Global 1.0 exists but is INACTIVE; global 2.0 is the active global
+      // schema. A user-scoped registration at version "1.0" (the route's own
+      // default) must not touch the global partition. If the route's second
+      // activate() call resolves the version without the caller's scope, it
+      // picks global 1.0, deactivates global 2.0, and flips every user's
+      // global schema back to 1.0.
+      const base = {
+        entity_type: REG_TYPE,
+        schema_definition: {
+          fields: { name: { type: "string", required: true } },
+          canonical_name_fields: ["name"],
+        },
+        reducer_config: { merge_policies: {} },
+      };
+      await schemaRegistry.register({ ...base, schema_version: "1.0", activate: false });
+      await schemaRegistry.register({ ...base, schema_version: "2.0", activate: true });
+
+      const httpRes = await fetch(`${API_BASE}/register_schema`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          schema_version: "1.0",
+          user_specific: true,
+          activate: true,
+        }),
+      });
+      expect(httpRes.status).toBe(200);
+
+      const { data } = await db
+        .from("schema_registry")
+        .select("schema_version, scope, user_id, active")
+        .eq("entity_type", REG_TYPE);
+      const rows = (data ?? []) as Array<{
+        schema_version: string;
+        scope: string | null;
+        user_id: string | null;
+        active: boolean;
+      }>;
+      const globalV1 = rows.find((r) => r.scope === "global" && r.schema_version === "1.0");
+      const globalV2 = rows.find((r) => r.scope === "global" && r.schema_version === "2.0");
+      const userV1 = rows.find((r) => r.scope === "user" && r.schema_version === "1.0");
+      expect(userV1?.active).toBe(true);
+      expect(userV1?.user_id).toBe(LOCAL_DEV_USER_ID);
+      expect(globalV2?.active).toBe(true);
+      expect(globalV1?.active).toBe(false);
+    });
+
+    it("POST /update_schema_incremental reports migrated_existing from the actual result, with migration_result (#2379)", async () => {
+      await schemaRegistry.register({
+        entity_type: MIG_TYPE,
+        schema_version: "1.0.0",
+        schema_definition: {
+          fields: { name: { type: "string", required: true } },
+          canonical_name_fields: ["name"],
+        },
+        reducer_config: { merge_policies: {} },
+        activate: true,
+      });
+      // An orphan fragment for the HTTP caller: requested for migration, but
+      // it cannot promote (no entity to attach to).
+      await db.from("raw_fragments").insert({
+        entity_type: MIG_TYPE,
+        fragment_key: "evidence_grade",
+        fragment_value: "A",
+        source_id: `orphan-source-http-${Date.now()}`,
+        interpretation_id: null,
+        entity_id: null,
+        user_id: LOCAL_DEV_USER_ID,
+      });
+
+      const httpRes = await fetch(`${API_BASE}/update_schema_incremental`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entity_type: MIG_TYPE,
+          fields_to_add: [{ field_name: "evidence_grade", field_type: "string" }],
+          migrate_existing: true,
+        }),
+      });
+      expect(httpRes.status).toBe(200);
+      const body = (await httpRes.json()) as {
+        success?: boolean;
+        migrated_existing?: boolean;
+        scope?: string;
+        migration_result?: {
+          migrated_count: number;
+          skipped: Array<{ field_name: string; reason: string; count: number }>;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.scope).toBe("global");
+      expect(body.migrated_existing).toBe(false);
+      expect(body.migration_result?.migrated_count).toBe(0);
+      expect(body.migration_result?.skipped.some((g) => g.reason === "no_entity_resolution")).toBe(
+        true
+      );
     });
   });
 });

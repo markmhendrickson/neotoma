@@ -14299,7 +14299,18 @@ schemasCommand
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
   .option("--schema-version <version>", "New schema version (auto-increments if not provided)")
-  .option("--user-specific", "Create user-specific schema variant", false)
+  // #2374: no default. Omitted, the request carries no user_specific and the
+  // server writes to whichever scope your schema resolves to (your user
+  // override if you have one, else global). A `false` default here sent an
+  // explicit "global" on every CLI call, so the CLI never got that behavior.
+  .option(
+    "--user-specific",
+    "Write to your user-specific schema variant (omit to write to the scope your schema resolves to)"
+  )
+  .option(
+    "--no-user-specific",
+    "Write to the global schema, even if you have a user-specific variant"
+  )
   .action(
     async (
       entityTypeArg: string | undefined,

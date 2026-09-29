@@ -8196,13 +8196,21 @@ export interface operations {
               }
           )[];
           schema_version?: string;
-          /** @default false */
+          /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global schema. The response's `scope` reports the scope actually written. */
           user_specific?: boolean;
           user_id?: string;
           /** @default true */
           activate?: boolean;
-          /** @default false */
+          /**
+           * @description Promote existing raw_fragments for the added fields into observations (historical backfill). A request with migrate_existing true can legitimately promote nothing; see `migrated_existing` and `migration_result` in the response.
+           * @default false
+           */
           migrate_existing?: boolean;
+          /**
+           * @description Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Use when entity_type is rejected with a message naming "force: true" as the remedy. Does not affect any other validation.
+           * @default false
+           */
+          force?: boolean;
         };
       };
     };
@@ -8237,8 +8245,30 @@ export interface operations {
                     )[]
                   | null;
                 activated?: boolean;
+                /** @description True only when this call actually promoted at least one raw_fragment (`migration_result.migrated_count > 0`). Never an echo of the `migrate_existing` request flag. */
                 migrated_existing?: boolean;
-                scope?: string;
+                /** @description Present only when `migrate_existing` was requested. The actual migration outcome, including every fragment group that did not promote and why. */
+                migration_result?: {
+                  migrated_count: number;
+                  skipped: {
+                    field_name: string;
+                    /** @enum {string} */
+                    reason:
+                      | "no_entity_resolution"
+                      | "no_active_schema"
+                      | "observation_insert_failed"
+                      | "already_promoted"
+                      | "unexpected_error";
+                    count: number;
+                  }[];
+                };
+                /**
+                 * @description The scope this call actually wrote to, read from the persisted row rather than re-derived from the request.
+                 * @enum {string}
+                 */
+                scope?: "global" | "user";
+                /** @description Present only when `scope` is `user`: which user's row was written. */
+                user_id?: string | null;
               } & {
                 [key: string]: unknown;
               })
@@ -8381,6 +8411,11 @@ export interface operations {
           user_id?: string;
           /** @default false */
           activate?: boolean;
+          /**
+           * @description Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Use when entity_type is rejected with a message naming "force: true" as the remedy. Does not affect any other validation.
+           * @default false
+           */
+          force?: boolean;
         };
       };
     };

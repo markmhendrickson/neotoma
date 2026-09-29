@@ -411,5 +411,13 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     const cli = readFileSync(join(here, "..", "..", "src", "cli", "index.ts"), "utf8");
     expect(cli).toContain('.option("--user-specific"');
     expect(cli).toContain("user_specific: opts.userSpecific");
+    // #2374: `schemas update` must not default the flag to false — that sent
+    // an explicit "global" on every call. `--no-user-specific` is the
+    // explicit-global form.
+    const updateCmd = cli.slice(cli.indexOf('.command("update")'));
+    const updateOptions = updateCmd.slice(0, updateCmd.indexOf(".action("));
+    expect(updateOptions).toMatch(/\.option\(\s*"--no-user-specific"/);
+    expect(updateOptions).toMatch(/\.option\(\s*"--user-specific",\s*"[^"]*"\s*\)/);
+    expect(updateOptions).not.toMatch(/\.option\(\s*"--user-specific",\s*"[^"]*",\s*false\s*\)/);
   });
 });

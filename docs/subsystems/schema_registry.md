@@ -455,13 +455,38 @@ class SchemaRegistry {
     }>;
     fields_to_remove?: string[]; // Field names to remove from schema
     schema_version?: string; // Auto-increments if not provided
-    user_specific?: boolean; // Create user-specific schema variant
-    user_id?: string; // Required if user_specific=true
+    user_specific?: boolean; // Explicit scope override; omit to write to the resolved scope
+    user_id?: string; // The caller; scopes the read and any user-scoped write
     activate?: boolean; // Default: true - activate immediately
     migrate_existing?: boolean; // Default: false - only for historical data backfill
-  }): Promise<SchemaRegistryEntry>;
+    force?: boolean; // Bypass the entity-type naming guards for this call only
+  }): Promise<SchemaRegistryEntry & {
+    migration_result?: { migrated_count: number; skipped: SkippedMigrationGroup[] };
+  }>;
 }
 ```
+
+**Write scope agrees with read scope (#2374):** the update reads the current
+schema with the §4.4 resolution order and writes the new version to the scope
+of the row it read, so one call can never leave a second active row in the
+other scope.
+
+- `user_specific` omitted: read user-first with global fallback; write to the
+  scope of the row read (the caller's override if one exists, else global).
+- `user_specific: true`: read user-first with global fallback; write a
+  user-scoped version for the caller (creating the override from global if
+  none exists).
+- `user_specific: false`: read the global row only; write a global version.
+  The new global version extends the current global schema, never the
+  caller's override. Promoting user fields to global is schema
+  reconciliation (§4.4), not a side effect of an update. If the type has no
+  global schema but does have a user-scoped one, the call returns
+  `ERR_SCHEMA_SCOPE_MISMATCH`.
+
+The response reports the scope actually written (`scope`, plus `user_id` when
+user-scoped). With `migrate_existing`, `migrated_existing` is true only when at
+least one fragment was promoted, and `migration_result.skipped` names every
+fragment group that did not promote and why.
 
 **Key Features:**
 - **Add fields without full replacement**: Merge new fields with existing schema
