@@ -1475,6 +1475,17 @@ function formatApiError(error: unknown): string {
   return String(error);
 }
 
+function formatRequestError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const envelope = error as { error_code?: unknown; message?: unknown };
+    if (typeof envelope.error_code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      return `${envelope.error_code}${message}`;
+    }
+  }
+  return formatApiError(error);
+}
+
 function parseOptionalJson(value?: string): unknown {
   if (!value) {
     return undefined;
@@ -16590,6 +16601,10 @@ program
   .option("--body <json>", "JSON body override")
   .option("--query <json>", "JSON query override")
   .option("--path <json>", "JSON path override")
+  .option(
+    "--guest-access-token <token>",
+    "Authenticate this request with an entity-scoped guest access token instead of the configured credential"
+  )
   .option("--skip-auth", "Skip auth token for public endpoints")
   .option(
     "--aauth",
@@ -16607,6 +16622,9 @@ program
     }
 
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    if (opts.guestAccessToken && (opts.skipAuth || opts.aauth)) {
+      throw new Error("--guest-access-token cannot be combined with --skip-auth or --aauth");
+    }
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
@@ -16620,7 +16638,8 @@ program
         );
       }
     }
-    const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
+    const token =
+      opts.skipAuth || opts.aauth ? undefined : opts.guestAccessToken || (await getCliToken());
     const api = createApiClient({
       baseUrl,
       token,
@@ -16655,6 +16674,48 @@ program
       };
     }
 
+    if (operation.path === "/events/stream") {
+      if (opts.aauth) {
+        throw new Error("eventsStream does not support --aauth; use bearer authentication");
+      }
+      const url = new URL(operation.path, baseUrl);
+      const queryParams = (requestParams.params as { query?: Record<string, unknown> } | undefined)
+        ?.query;
+      for (const [key, value] of Object.entries(queryParams ?? {})) {
+        if (Array.isArray(value)) {
+          for (const item of value) url.searchParams.append(key, String(item));
+        } else if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/event-stream",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        const error = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+        throw new Error("Request failed: " + formatRequestError(error));
+      }
+      if (!response.body) {
+        throw new Error("eventsStream response did not include a stream body");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        process.stdout.write(decoder.decode(value, { stream: true }));
+      }
+      const trailing = decoder.decode();
+      if (trailing) process.stdout.write(trailing);
+      return;
+    }
+
     const method = operation.method.toUpperCase();
     const handler = (api as unknown as Record<string, unknown>)[method] as
       | ((
@@ -16672,7 +16733,7 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      throw new Error("Request failed: " + formatApiError(error));
+      throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);
   });

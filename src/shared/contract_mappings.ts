@@ -896,8 +896,9 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "eventsStream",
     method: "get",
     path: "/events/stream",
-    adapter: "infra",
-    notes: "SSE stream for subscription_id; long-lived HTTP clients only.",
+    adapter: "cli",
+    cliCommand: "request --operation eventsStream",
+    notes: "Raw SSE stream for subscription_id; the CLI preserves frames until closure.",
   },
 ];
 

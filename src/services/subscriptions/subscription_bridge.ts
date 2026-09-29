@@ -29,7 +29,7 @@ export async function handleSubstrateEventForSubscriptions(event: SubstrateEvent
       durableSeq !== null
         ? pushSubstrateEventToRing(event, String(durableSeq))
         : pushSubstrateEventToRing(event);
-    broadcastSubstrateEventToSse(event, ringId);
+    await broadcastSubstrateEventToSse(event, ringId);
 
     if (event.entity_type === SUBSCRIPTION_ENTITY_TYPE) {
       await refreshSubscriptionInIndex(event.entity_id);

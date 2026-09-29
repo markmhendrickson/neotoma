@@ -2207,7 +2207,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create a substrate event subscription (webhook or SSE) */
+    /**
+     * Create a substrate event subscription (webhook or SSE)
+     * @description Authenticated owners may subscribe to filters within their own graph.
+     *     Entity-scoped guests must authenticate with their guest bearer token,
+     *     provide a non-empty `entity_ids` filter, and keep every requested entity
+     *     inside that token's current grant. Empty, mixed, or out-of-grant guest
+     *     filters are rejected without creating a subscription. Guests may only
+     *     use `delivery_method: sse`, which is revalidated against the guest
+     *     credential on every delivery; a guest request for `webhook` delivery or
+     *     with a `sync_peer_id` is rejected with 403 without creating a
+     *     subscription.
+     */
     post: operations["subscribe"];
     delete?: never;
     options?: never;
@@ -2224,7 +2235,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Deactivate a subscription */
+    /**
+     * Deactivate a subscription
+     * @description Owners may deactivate their own subscriptions. Guests may deactivate only
+     *     subscriptions whose complete `watch_entity_ids` set remains inside the
+     *     guest token's current entity grant; denial leaves the subscription active.
+     */
     post: operations["unsubscribe"];
     delete?: never;
     options?: never;
@@ -2241,7 +2257,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** List active subscriptions for the current user */
+    /**
+     * List active subscriptions for the current user
+     * @description Owners receive their active subscriptions. Guests receive only subscriptions
+     *     whose complete `watch_entity_ids` set is inside the token's current entity
+     *     grant; subscriptions outside or spanning the grant are omitted.
+     */
     post: operations["listSubscriptions"];
     delete?: never;
     options?: never;
@@ -2258,7 +2279,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Get subscription delivery status */
+    /**
+     * Get subscription delivery status
+     * @description Owners may inspect their subscriptions. A guest receives the status only
+     *     when the subscription's complete `watch_entity_ids` set is inside its
+     *     current grant; an inaccessible subscription is returned as `null`.
+     */
     post: operations["getSubscriptionStatus"];
     delete?: never;
     options?: never;
@@ -2273,7 +2299,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Server-sent events stream for a subscription */
+    /**
+     * Server-sent events stream for a subscription
+     * @description Opens the SSE stream for an active SSE subscription. Owners retain their
+     *     normal authenticated access. Guests may connect only when the subscription's
+     *     complete entity filter is inside the token grant. Guest credentials are
+     *     revalidated while the connection is established: expiry, revocation, or
+     *     grant narrowing closes the stream before another event is delivered.
+     */
     get: operations["eventsStream"];
     put?: never;
     post?: never;
@@ -2993,11 +3026,14 @@ export interface components {
       replayed: boolean;
     };
     /**
-     * @description Agent-identity provenance recorded on every durable write-path record
+     * @description Write-attribution provenance recorded on durable write-path records
      *     (observations, relationships, sources, interpretations, timeline
-     *     events). Fields are stamped additively into the existing provenance
-     *     JSON blob on each record so no schema migration was required; the
-     *     shape below documents the keys consumers can rely on.
+     *     events). Most keys describe the software that wrote the record (the
+     *     AAuth agent and MCP client); `authenticated_actor_id` instead
+     *     identifies the signed-in member whose session made the write. Fields
+     *     are stamped additively into the existing provenance JSON blob on each
+     *     record so no schema migration was required; the shape below documents
+     *     the keys consumers can rely on.
      *
      *     When AAuth is active the `agent_*` keys carry the cryptographically
      *     verified identity; `client_name`/`client_version` come from the MCP
@@ -3037,6 +3073,24 @@ export interface components {
        * @description ISO-8601 timestamp when the attribution block was stamped.
        */
       attributed_at?: string;
+      /**
+       * @description The signed-in member whose session made this write, as their
+       *     write-attribution id: a random UUID minted on this instance the
+       *     first time the member's session is resolved. It is pseudonymous —
+       *     not derived from the email address or the member's `user_id`, so it
+       *     cannot be recomputed from a list of addresses, and the same person
+       *     has a different id on every instance. Only this instance's
+       *     `member_attribution_ids` table maps it back to a member; no API
+       *     exposes that mapping yet. It is not the same value as `/me`'s
+       *     `authenticated_user_id` and does not join to it. Provenance only —
+       *     it never affects which graph is read or written. Absent when no
+       *     verified sign-in stands behind the request (static bearer token,
+       *     key-derived MCP token, local no-auth, AAuth grant, or a connection
+       *     that predates identity recording); consumers MUST read absence as
+       *     "unknown", never as the graph owner. Withheld from responses to
+       *     guest (entity-scoped token) readers.
+       */
+      authenticated_actor_id?: string;
     };
     /**
      * @description Active attribution policy for the Neotoma instance. Governs how
@@ -8744,6 +8798,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   unsubscribe: {
@@ -8772,6 +8844,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription is not wholly inside the guest entity grant */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSubscriptions: {
@@ -8796,6 +8886,15 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8826,6 +8925,15 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   eventsStream: {
@@ -8844,7 +8952,27 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription does not exist or is outside the guest entity grant */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
       };
     };
   };
