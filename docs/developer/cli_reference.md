@@ -257,7 +257,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 
 ### Instance Policy
 
-Inspect and configure this instance's data policy (#1974/#1975) — what the instance is *for*, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
+Inspect and configure this instance's data policy (#1974/#1975) — what the instance is _for_, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
 
 - `neotoma instance-policy show`: Show the instance data policy, or report that none is configured (`{"policy": null}` — unrestricted, not deny-all).
 - `neotoma instance-policy set --file <path> [--enforce | --advisory] [--dry-run]`: Create or update the instance policy from a JSON file (fields: `purpose`, `out_of_scope_entity_types`, `require_lawful_basis`, `require_provenance`, `max_sensitivity_class`). `--enforce` sets `enforcement: "enforced"` (reject violating writes); `--advisory` sets `enforcement: "advisory"` (declare only, do not reject — the default when unset on a new policy). `--enforce` and `--advisory` are mutually exclusive. `--dry-run` prints what would be written without persisting it.
@@ -1130,7 +1130,10 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
   - `--body <json>`: JSON body override.
   - `--query <json>`: JSON query override.
   - `--path <json>`: JSON path override.
+  - `--guest-access-token <token>`: Use an entity-scoped guest bearer token instead of the configured owner token. It cannot be combined with `--skip-auth` or `--aauth`.
   - `--skip-auth`: Skip auth token for public endpoints.
+  - `--aauth`: Sign the request with the configured AAuth key instead of a bearer token.
+  - `eventsStream` writes raw SSE frames to stdout until the server closes the stream. Example: `neotoma request --operation eventsStream --guest-access-token <token> --query '{"subscription_id":"<id>"}'`.
 
 ## Configuration and storage paths
 

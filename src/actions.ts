@@ -62,6 +62,7 @@ import {
   type GuestIdentity,
 } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
+import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
 import { externalActorFromCallerInput } from "./services/issues/external_actor_builder.js";
 import {
@@ -70,10 +71,12 @@ import {
   getCurrentAttribution,
   getCurrentExternalActor,
   getRequestContext,
+  runWithAuthenticatedPrincipal,
   runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
+import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
   createAgentIdentity as buildAgentIdentity,
   type ExternalActor,
@@ -4240,6 +4243,75 @@ export async function resolveGuestUserId(
   );
 }
 
+/**
+ * Subscription and event-stream routes are guest-capable (`routeAcceptsGuestPrincipal`),
+ * but a guest access token is only ever minted scoped to specific `entity_ids`
+ * (the issue thread it opened, the rendered page it was handed — see
+ * `generateGuestAccessToken` call sites). `resolveGuestUserId` resolves the
+ * TOKEN OWNER's account id so the subscription/event services can query by
+ * `user_id`, but that account id is not itself a permission — a guest must
+ * still be confined to the entity_ids its own token names, not the rest of
+ * that account's subscriptions and events.
+ *
+ * Returns the resolved owner `userId` plus the guest's granted `entity_ids`
+ * (`null` for a non-guest principal, or for the local-dev fallback where
+ * there is no real token grant to narrow — those callers already run with
+ * full local trust). Throws if a guest principal has no entity-scoped grant:
+ * there is nothing to scope to, so the safe default is to refuse rather than
+ * silently fall back to the owner's whole graph.
+ */
+async function resolveGuestSubscriptionScope(
+  req: express.Request,
+  principal: RoutePrincipal
+): Promise<{ userId: string; entityIds: string[] | null }> {
+  if (principal.kind !== "guest") {
+    const userId = await getAuthenticatedUserId(
+      req,
+      ((req.body as { user_id?: string } | undefined)?.user_id ??
+        (req.query.user_id as string | undefined)) as string | undefined
+    );
+    return { userId, entityIds: null };
+  }
+
+  const authenticatedUserId = (req as any).authenticatedUserId;
+  if (authenticatedUserId) {
+    // Resolved via verified AAuth admission, not a per-entity guest token —
+    // treat as the local trust boundary already vetted upstream.
+    return { userId: authenticatedUserId, entityIds: null };
+  }
+
+  if (principal.guestId.accessToken) {
+    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+    const tokenGrant = await validateGuestAccessToken(principal.guestId.accessToken);
+    if (!tokenGrant) {
+      throw new Error("Not authenticated - invalid guest access token");
+    }
+    const userId = await resolveGuestUserId(req, principal);
+    if (!userId) {
+      throw new Error("Not authenticated - guest access token did not resolve an owner");
+    }
+    if (!tokenGrant.entity_ids.length) {
+      throw new Error(
+        "Guest access token grants no entity scope; subscription and event routes require a token minted with entity_ids"
+      );
+    }
+    return { userId, entityIds: tokenGrant.entity_ids };
+  }
+
+  const headerAuth = (req.headers.authorization || "") as string;
+  if (isLocalRequest(req) && !headerAuth.startsWith("Bearer ")) {
+    const userId = await resolveGuestUserId(req, principal);
+    if (!userId) {
+      throw new Error("Not authenticated - local guest fallback did not resolve an owner");
+    }
+    return { userId, entityIds: null };
+  }
+
+  throw new Error(
+    "Not authenticated - guest principal cannot resolve a subscription scope: no valid token grant and not a local request"
+  );
+}
+
 async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
   const accessToken = principal.guestId.accessToken;
   if (!accessToken) return;
@@ -4581,6 +4653,12 @@ app.use(async (req, res, next) => {
   //      userId (getUserIdFromBearerToken) is a real principal; a bare
   //      auto-registered key resolves to `undefined` and must fall through to the
   //      reject path — never to a caller-supplied `user_id` in getAuthenticatedUserId.
+  // #2240: the signed-in person behind a session bearer, for write
+  // attribution. Set ONLY from a verified sign-in recorded on the connection
+  // row; every other auth path above (static tokens, key-derived token, local
+  // no-auth, AAuth grant, sandbox) leaves it unset, so their writes carry no
+  // person rather than defaulting to one.
+  let sessionActorId: string | undefined;
   const registered = ensurePublicKeyRegistered(bearerToken);
   const registeredUserId = registered ? getUserIdFromBearerToken(bearerToken) : undefined;
   const { signature: ed25519Signature } = parseAuthHeader(headerAuth);
@@ -4619,6 +4697,7 @@ app.use(async (req, res, next) => {
       (req as any).signedInUserId = validated.authenticatedUserId;
       (req as any).signedInSharedGraph = validated.sharedGraph === true;
       (req as any).bearerToken = bearerToken;
+      sessionActorId = validated.actorId;
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
@@ -4655,11 +4734,33 @@ app.use(async (req, res, next) => {
     }
   }
 
+  if (sessionActorId) {
+    // Carry the person into the request-scoped attribution context so every
+    // write-path service stamps it into provenance as `authenticated_actor_id`
+    // (#2240). Provenance only: the stamped graph principal above still
+    // decides which graph is read and written.
+    return runWithAuthenticatedPrincipal({ actorId: sessionActorId }, () => next());
+  }
   return next();
 });
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+
+// #2240: member write-attribution (`provenance.authenticated_actor_id`) is for
+// members of the graph, not for a guest holding an entity-scoped token. Wrap
+// res.json for every request and redact at send time when the principal is a
+// guest — decided at send time because some routes stamp the guest principal
+// inside the handler (resolveRoutePrincipal), after this middleware runs.
+// Registered after encryptResponseMiddleware so it runs first on send.
+app.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = ((body?: unknown) =>
+    sendJson(
+      requestPrincipal(req)?.kind === "guest" ? redactMemberAttribution(body) : body
+    )) as typeof res.json;
+  next();
+});
 
 // Sandbox-mode write gate: destructive routes blocked + tighter per-IP rate
 // limit on all write methods. No-op outside sandbox.
@@ -12312,9 +12413,45 @@ app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
+    if (guestScope !== null) {
+      // A scoped guest may only subscribe to entity_ids its own token names —
+      // never a type-/event-only firehose over the owner's whole graph, and
+      // never an entity_id outside its grant (issue: guest-capable
+      // subscription routes must scope to the token owner's own subscriptions
+      // and event feed).
+      const requested = parsed.data.entity_ids ?? [];
+      const granted = new Set(guestScope);
+      const withinScope = requested.length > 0 && requested.every((id) => granted.has(id));
+      if (!withinScope) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access token does not grant entity_ids for this subscription"
+        );
+      }
+      // Guest delivery must stay bound to the guest credential's lifetime.
+      // Only SSE delivery revalidates the token on every event; webhook and
+      // peer-sync delivery run server-side with no credential attached, so a
+      // guest may not create them.
+      if (parsed.data.delivery_method !== "sse") {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access tokens may only create subscriptions with delivery_method sse"
+        );
+      }
+      if (parsed.data.sync_peer_id !== undefined) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access tokens may not attach a subscription to a sync peer"
+        );
+      }
+    }
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     const result = await subscribeUser({
       userId,
@@ -12354,10 +12491,23 @@ app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
-    const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
+    const { unsubscribeUser, getSubscriptionStatus } =
+      await import("./services/subscriptions/subscription_actions.js");
+    if (guestScope !== null) {
+      const target = await getSubscriptionStatus({
+        userId,
+        subscription_id: parsed.data.subscription_id,
+      });
+      if (!target || !subscriptionWithinGuestScope(guestScope, target.watch_entity_ids)) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access token does not grant access to this subscription"
+        );
+      }
+    }
     await unsubscribeUser({ userId, subscription_id: parsed.data.subscription_id });
     return res.json({ success: true });
   } catch (error) {
@@ -12381,13 +12531,15 @@ app.post("/list_subscriptions", async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
     const { listSubscriptionsForUser, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const rows = await listSubscriptionsForUser(userId);
-    return res.json({ subscriptions: rows.map(redactSubscriptionForClient) });
+    const scoped =
+      guestScope === null
+        ? rows
+        : rows.filter((row) => subscriptionWithinGuestScope(guestScope, row.watch_entity_ids));
+    return res.json({ subscriptions: scoped.map(redactSubscriptionForClient) });
   } catch (error) {
     return handleApiError(
       req,
@@ -12412,16 +12564,17 @@ app.post("/get_subscription_status", async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
     const { getSubscriptionStatus, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const row = await getSubscriptionStatus({
       userId,
       subscription_id: parsed.data.subscription_id,
     });
-    if (!row) {
+    if (
+      !row ||
+      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, row.watch_entity_ids))
+    ) {
       return res.json({ subscription: null });
     }
     return res.json({ subscription: redactSubscriptionForClient(row) });
@@ -12561,9 +12714,7 @@ app.get("/events/stream", async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, req.query.user_id as string | undefined));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
     const { registerSseClient, getRingEntriesAfter, ringHasId } =
@@ -12574,7 +12725,10 @@ app.get("/events/stream", async (req, res) => {
       await import("./services/subscriptions/event_log.js");
 
     const sub = await getSubscriptionStatus({ userId, subscription_id });
-    if (!sub) {
+    if (
+      !sub ||
+      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, sub.watch_entity_ids))
+    ) {
       return sendError(res, 404, "NOT_FOUND", "subscription not found");
     }
     if (!sub.active) {
@@ -12588,6 +12742,19 @@ app.get("/events/stream", async (req, res) => {
         "subscription must use delivery_method sse for this endpoint"
       );
     }
+
+    const guestAccessToken = principal.kind === "guest" ? principal.guestId.accessToken : undefined;
+    const authorize = guestAccessToken
+      ? async (): Promise<boolean> => {
+          const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+          const grant = await validateGuestAccessToken(guestAccessToken);
+          return (
+            grant !== null &&
+            grant.entity_ids.length > 0 &&
+            subscriptionWithinGuestScope(grant.entity_ids, sub.watch_entity_ids)
+          );
+        }
+      : undefined;
 
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -12610,7 +12777,9 @@ app.get("/events/stream", async (req, res) => {
     const writeEvent = (id: string, ev: SubstrateEvent): void => {
       res.write(`id: ${id}\n`);
       res.write(`event: ${ev.event_type}\n`);
-      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      // #2240: a guest stream never carries member write-attribution.
+      const payload = principal.kind === "guest" ? redactMemberAttribution(ev) : ev;
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
     if (lastEventId !== undefined && !ringHasId(lastEventId)) {
@@ -12670,16 +12839,26 @@ app.get("/events/stream", async (req, res) => {
       subscription: sub,
       res,
       lastEventId: lastEventId ?? undefined,
+      ...(authorize ? { authorize } : {}),
     };
     const unregister = registerSseClient(client);
 
     const heartbeat = setInterval(() => {
-      try {
-        res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
-      } catch {
-        clearInterval(heartbeat);
-        unregister();
-      }
+      void (async () => {
+        try {
+          if (authorize && !(await authorize())) {
+            clearInterval(heartbeat);
+            unregister();
+            res.end();
+            return;
+          }
+          res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
+        } catch {
+          clearInterval(heartbeat);
+          unregister();
+          res.end();
+        }
+      })();
     }, 25_000);
 
     req.on("close", () => {

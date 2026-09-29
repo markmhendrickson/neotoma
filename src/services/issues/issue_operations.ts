@@ -673,6 +673,7 @@ export async function submitGuestIssue(
             attributionDecision: currentContext?.attributionDecision ?? null,
             aauthAdmission: currentContext?.aauthAdmission ?? null,
             externalActor: currentContext?.externalActor ?? null,
+            authenticatedPrincipal: currentContext?.authenticatedPrincipal ?? null,
             bypassGuestStoreAccessPolicy: true,
           },
           () => ops.store(input)
