@@ -25,6 +25,7 @@ import type {
   AgentIdentity,
   AttributionDecisionDiagnostics,
   AttributionProvenance,
+  AuthenticatedPrincipal,
   ExternalActor,
 } from "../crypto/agent_identity.js";
 import { toAttributionProvenance } from "../crypto/agent_identity.js";
@@ -70,6 +71,16 @@ export interface RequestContext {
    * Absent outside the `/mcp` HTTP route (stdio, REST).
    */
   mcpConnectionId?: string | null;
+  /**
+   * The signed-in person whose session this request runs under (#2240),
+   * resolved by the auth layer from a verified sign-in recorded on the OAuth
+   * connection row. Stamped into write provenance as `authenticated_user_id`.
+   * Provenance only — never an input to data scoping. Null or absent whenever
+   * no verified sign-in stands behind the request (static tokens, local
+   * no-auth, AAuth grants, pre-identity connection rows): the write is then
+   * left unattributed rather than attributed to a default person.
+   */
+  authenticatedPrincipal?: AuthenticatedPrincipal | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -106,7 +117,37 @@ export function getCurrentAgentIdentity(): AgentIdentity | null {
  */
 export function getCurrentAttribution(): AttributionProvenance {
   const store = storage.getStore();
-  return toAttributionProvenance(store?.agentIdentity ?? null, store?.externalActor ?? null);
+  return toAttributionProvenance(
+    store?.agentIdentity ?? null,
+    store?.externalActor ?? null,
+    store?.authenticatedPrincipal ?? null
+  );
+}
+
+/**
+ * Return the signed-in person for the active request (#2240), or `null` when
+ * no verified sign-in stands behind it.
+ */
+export function getCurrentAuthenticatedPrincipal(): AuthenticatedPrincipal | null {
+  return storage.getStore()?.authenticatedPrincipal ?? null;
+}
+
+/**
+ * Run `fn` with the signed-in person attached to the current request context.
+ * Clones the active context so every other slot is preserved, the same way
+ * {@link runWithExternalActor} composes. Passing `null` clears the slot, which
+ * is how a caller asserts "no verified person" for a nested scope.
+ */
+export function runWithAuthenticatedPrincipal<T>(
+  principal: AuthenticatedPrincipal | null,
+  fn: () => Promise<T> | T
+): Promise<T> | T {
+  const existing = storage.getStore();
+  const merged: RequestContext = {
+    ...(existing ?? { agentIdentity: null }),
+    authenticatedPrincipal: principal,
+  };
+  return storage.run(merged, fn);
 }
 
 /**
@@ -157,6 +198,7 @@ export function runWithExternalActor<T>(
     externalActor: actor,
     bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
     mcpConnectionId: existing?.mcpConnectionId ?? null,
+    authenticatedPrincipal: existing?.authenticatedPrincipal ?? null,
   };
   return storage.run(merged, fn);
 }

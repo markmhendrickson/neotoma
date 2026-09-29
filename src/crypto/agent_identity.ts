@@ -66,6 +66,30 @@ export interface ExternalActor {
 }
 
 /**
+ * The person whose authenticated session made a write (#2240).
+ *
+ * Distinct from both identity channels above: the AAuth agent identity says
+ * which software signed, the external actor says who authored an upstream
+ * artifact, and this says which signed-in person's session the write was made
+ * under. On a shared-graph instance every member writes into one graph
+ * `user_id`, so without this the stored record cannot say who contributed it.
+ *
+ * `userId` is the signer's own per-email `user_id` as recorded on the OAuth
+ * connection row by a verified sign-in — a stable subject id, deliberately not
+ * the email address, so attribution does not copy an address into every
+ * provenance blob. It is provenance only: it never scopes a read or a write,
+ * which stay on the graph `user_id`.
+ *
+ * Only a verified sign-in produces one. A static bearer token, the key-derived
+ * MCP token, a local no-auth request, an AAuth grant, or a connection row that
+ * predates identity recording all yield none, and the write carries no
+ * `authenticated_user_id` rather than being attributed to anyone by default.
+ */
+export interface AuthenticatedPrincipal {
+  userId: string;
+}
+
+/**
  * Trust tier shown in the Inspector and surfaced in API responses.
  *
  * - `hardware` — AAuth verified AND a `cnf.attestation` envelope was
@@ -320,6 +344,14 @@ export interface AttributionProvenance {
   attributed_at?: string;
   /** External actor provenance — who authored the upstream artifact. */
   external_actor?: ExternalActor;
+  /**
+   * The signed-in person whose session made this write (#2240): their own
+   * per-email `user_id`, which on a shared graph differs from the row's graph
+   * `user_id`. Absent when no verified sign-in stands behind the request —
+   * absence means "unknown", never "the graph owner". See
+   * {@link AuthenticatedPrincipal}.
+   */
+  authenticated_user_id?: string;
 }
 
 /**
@@ -329,12 +361,16 @@ export interface AttributionProvenance {
  * When an {@link ExternalActor} is provided it is attached under the
  * `external_actor` key. This keeps the two identity channels (AAuth agent
  * vs upstream artifact author) distinct in the persisted JSON.
+ *
+ * When an {@link AuthenticatedPrincipal} is provided its `userId` is recorded
+ * as `authenticated_user_id` — the third channel, the signed-in person (#2240).
  */
 export function toAttributionProvenance(
   identity: AgentIdentity | null | undefined,
-  externalActor?: ExternalActor | null
+  externalActor?: ExternalActor | null,
+  principal?: AuthenticatedPrincipal | null
 ): AttributionProvenance {
-  if (!identity && !externalActor) return {};
+  if (!identity && !externalActor && !principal?.userId) return {};
   const out: AttributionProvenance = {};
   if (identity) {
     out.attribution_tier = identity.tier;
@@ -350,6 +386,9 @@ export function toAttributionProvenance(
   }
   if (externalActor) {
     out.external_actor = externalActor;
+  }
+  if (principal?.userId) {
+    out.authenticated_user_id = principal.userId;
   }
   return out;
 }

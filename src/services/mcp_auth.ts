@@ -26,6 +26,16 @@ export interface ValidatedUser {
   authenticatedUserId?: string;
   /** True when this session's graph scope was remapped by shared-graph mode. */
   sharedGraph?: boolean;
+  /**
+   * The signed-in person behind this session, for write attribution (#2240):
+   * the per-email user_id a verified sign-in recorded on the connection row.
+   * Unlike `authenticatedUserId` it is set whether or not it differs from the
+   * graph scope, because a write needs to name its author either way. Absent
+   * when the row carries no recorded sign-in (key-entry or bearer-gate
+   * sign-ins, rows that predate identity recording) — never back-filled from
+   * `userId`, which on a shared graph names the owner, not the author.
+   */
+  principalUserId?: string;
 }
 
 /**
@@ -110,6 +120,7 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
 
   return {
     userId: connection.user_id,
+    ...(authenticatedUserId ? { principalUserId: authenticatedUserId } : {}),
     ...(email ? { email } : {}),
     ...(sharedGraph
       ? {

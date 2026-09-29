@@ -77,6 +77,17 @@ Data scoping (`getAuthenticatedUserId`, store/retrieve) continues to use `user_i
 
 Integrators and UI must treat missing `email` under `shared_graph: true` as “unknown — re-authenticate,” not as “the graph owner.”
 
+### Write attribution (`provenance.authenticated_user_id`)
+
+Every durable write — observations (store and correct), relationships, timeline events, sources, interpretations — records the signed-in person alongside the graph it lands in (#2240). The record's `user_id` is the graph; `provenance.authenticated_user_id` is the person whose session made the write, so two teammates writing to one shared graph produce distinguishable records.
+
+- **Carrier.** The request-scoped attribution context (`src/services/request_context.ts`) that already stamps the AAuth agent identity and `external_actor` carries an `authenticatedPrincipal`, and `toAttributionProvenance` writes it as `authenticated_user_id` (declared on `AgentAttribution` in `openapi.yaml`). REST resolves it in the auth middleware from the session bearer; MCP resolves it from the OAuth connection in `NeotomaServer` and passes it into each tool call's context.
+- **Value.** The signer's per-email `user_id` recorded on the connection row by a verified Google sign-in — a stable subject id, not the email address, so attribution never copies an address into provenance. On a single-user instance it equals `user_id`.
+- **Fails closed.** Only a verified sign-in produces one. A static bearer token (`NEOTOMA_BEARER_TOKEN`), the key-derived MCP token, local no-auth, an AAuth grant, sandbox sessions, local CLI dispatch, and a connection row with no recorded sign-in all write **no** `authenticated_user_id`. It is never back-filled from `user_id`, which on a shared graph names the owner. Read absence as “unknown”.
+- **Provenance only.** It is not an authorization input: `getAuthenticatedUserId` and every query stay on `user_id`.
+- **Forward only.** Records written before this change carry no `authenticated_user_id`; they are not rewritten.
+- **Not signing.** It says which person's session made the write, not which agent signed it — that is `agent_sub` / `attribution_tier` (#2256). The two are independent and a record can carry both.
+
 ## Authorization
 
 **Per-user isolation is enforced today, in application code, on every user-scoped read.** This is not a future RLS aspiration — it ships and is regression-tested.
