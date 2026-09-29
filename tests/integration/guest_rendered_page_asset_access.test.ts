@@ -48,7 +48,11 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
     } as never);
     sourceIds.push(r.sourceId);
     // Test processes skip the raw upload; put the bytes where the route reads them.
-    const { data: row } = await db.from("sources").select("storage_url").eq("id", r.sourceId).single();
+    const { data: row } = await db
+      .from("sources")
+      .select("storage_url")
+      .eq("id", r.sourceId)
+      .single();
     const { error } = await db.storage
       .from("sources")
       .upload(row!.storage_url as string, buf, { contentType: mime, upsert: true });
@@ -93,7 +97,11 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 
     embeddedSource = await seedSource(PNG, "image/png", "fig-embedded.png");
-    otherSource = await seedSource(Buffer.concat([PNG, Buffer.from("x")]), "image/png", "other.png");
+    otherSource = await seedSource(
+      Buffer.concat([PNG, Buffer.from("x")]),
+      "image/png",
+      "other.png"
+    );
     htmlSource = await seedSource(Buffer.from("<script>1</script>"), "text/html", "x.html");
 
     pageId = await seedPage(
@@ -132,7 +140,9 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
   });
 
   it("401s when a different page's token requests this page's asset", async () => {
-    const r = await fetch(`${base}/sources/${embeddedSource}/content?access_token=${otherPageToken}`);
+    const r = await fetch(
+      `${base}/sources/${embeddedSource}/content?access_token=${otherPageToken}`
+    );
     expect(r.status).toBe(401);
   });
 
@@ -153,13 +163,29 @@ describe("guest rendered_page token -> embedded asset access (#1696)", () => {
     // route-eligibility predicate is the authoritative check that a guest
     // principal is never stamped on any other source route or on writes.
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
-      expect(routeAcceptsGuestPrincipal({ method, path: `/sources/${embeddedSource}/content` })).toBe(false);
+      expect(
+        routeAcceptsGuestPrincipal({ method, path: `/sources/${embeddedSource}/content` })
+      ).toBe(false);
     }
-    expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}/relationships` })).toBe(false);
-    expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}/content/extra` })).toBe(false);
+    expect(
+      routeAcceptsGuestPrincipal({
+        method: "GET",
+        path: `/sources/${embeddedSource}/relationships`,
+      })
+    ).toBe(false);
+    expect(
+      routeAcceptsGuestPrincipal({
+        method: "GET",
+        path: `/sources/${embeddedSource}/content/extra`,
+      })
+    ).toBe(false);
     expect(routeAcceptsGuestPrincipal({ method: "GET", path: "/sources" })).toBe(false);
-    expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}` })).toBe(false);
-    expect(routeAcceptsGuestPrincipal({ method: "POST", path: `/sources/${embeddedSource}/content` })).toBe(false);
+    expect(routeAcceptsGuestPrincipal({ method: "GET", path: `/sources/${embeddedSource}` })).toBe(
+      false
+    );
+    expect(
+      routeAcceptsGuestPrincipal({ method: "POST", path: `/sources/${embeddedSource}/content` })
+    ).toBe(false);
     expect(isSourceContentPath(`/sources/${embeddedSource}/content`)).toBe(true);
   });
 

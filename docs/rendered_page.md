@@ -33,6 +33,17 @@ GET /entities/:id/html?access_token=<guest_token>
 
 The token is a `guest_access_token` scoped to that page's entity id.
 
+#### Embedded assets (images, audio, video)
+
+The same token can read the file-backed sources the page embeds, and nothing else. Reference an asset from `html_body` (or `custom_css`) as `/sources/<source_id>/content?access_token=<page token>` and `<img>`, `<audio>` and `<video>` load for a logged-out viewer:
+
+```html
+<img alt="Figure" src="/sources/<source_id>/content?access_token=<token>">
+<audio controls src="/sources/<source_id>/content?access_token=<token>"></audio>
+```
+
+Least-privilege rules: only `GET /sources/:id/content` is reachable with a page token (no source listing, metadata, relationships or writes); the source must be referenced by the page's current content and owned by the token's owner, so removing the reference revokes access immediately; a token for another page, or an unreferenced source, gets `401`; guest responses force `attachment` for HTML/SVG/XML and other non-media types. The page CSP allows same-origin `img-src`/`media-src` only, with scripts and external frames still blocked.
+
 ### The one-step path: `publish_rendered_page`
 
 Rather than minting the token by hand, call the **`publish_rendered_page`** MCP tool. It:

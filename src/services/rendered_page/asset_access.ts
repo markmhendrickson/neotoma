@@ -82,7 +82,10 @@ export async function resolveGuestSourceReadGrant(
       const snap = (current?.snapshot ?? {}) as Record<string, unknown>;
       const html = typeof snap.html_body === "string" ? snap.html_body : "";
       const css = typeof snap.custom_css === "string" ? snap.custom_css : "";
-      if (textReferencesSourceContent(html, sourceId) || textReferencesSourceContent(css, sourceId)) {
+      if (
+        textReferencesSourceContent(html, sourceId) ||
+        textReferencesSourceContent(css, sourceId)
+      ) {
         return { userId: ownerId };
       }
     }

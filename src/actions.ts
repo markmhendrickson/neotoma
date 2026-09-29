@@ -7218,14 +7218,19 @@ app.get("/sources/:id/content", async (req, res) => {
     const isGuest = principal.kind === "guest";
     if (principal.kind === "guest") {
       const token = principal.guestId.accessToken;
-      const { resolveGuestSourceReadGrant } = await import(
-        "./services/rendered_page/asset_access.js"
-      );
+      const { resolveGuestSourceReadGrant } =
+        await import("./services/rendered_page/asset_access.js");
       const grant = token ? await resolveGuestSourceReadGrant(token, sourceId) : null;
       if (!grant) {
-        return sendError(res, 401, "AUTH_REQUIRED", "Guest token does not grant access to this source", {
-          hint: "A rendered_page guest token can only read sources that the page itself embeds as /sources/<id>/content.",
-        });
+        return sendError(
+          res,
+          401,
+          "AUTH_REQUIRED",
+          "Guest token does not grant access to this source",
+          {
+            hint: "A rendered_page guest token can only read sources that the page itself embeds as /sources/<id>/content.",
+          }
+        );
       }
       userId = grant.userId;
     } else {
@@ -7302,8 +7307,7 @@ app.get("/sources/:id/content", async (req, res) => {
       // Guest reads are for embeds only: never render active content (HTML,
       // SVG, XML, scripts) inline from this origin.
       inline =
-        /^(application\/pdf|audio\/|video\/|image\/)/i.test(mimeType) &&
-        !/svg|xml/i.test(mimeType);
+        /^(application\/pdf|audio\/|video\/|image\/)/i.test(mimeType) && !/svg|xml/i.test(mimeType);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
       res.setHeader("Cache-Control", "private, no-store");
