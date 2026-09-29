@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **655**
-- Backend and repo Vitest files: **619**
+- Total automated test files: **664**
+- Backend and repo Vitest files: **628**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,13 +70,13 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 180 |
-| Vitest service tests | 46 |
+| Vitest service tests | 51 |
 | Source-adjacent tests | 66 |
-| Vitest integration tests | 195 |
-| Vitest CLI tests | 79 |
-| Vitest contract tests | 20 |
+| Vitest integration tests | 196 |
+| Vitest CLI tests | 80 |
+| Vitest contract tests | 21 |
 | Vitest security tests | 17 |
-| Vitest subscription tests | 6 |
+| Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -296,9 +296,11 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (46):**
+**Files (51):**
+- `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
+- `tests/services/by_id_write_ownership_conflict.test.ts`
 - `tests/services/capability_registry.test.ts`
 - `tests/services/company_resolution.test.ts`
 - `tests/services/converter_detection_unit.test.ts`
@@ -306,8 +308,11 @@ flowchart TD
 - `tests/services/embed_cross_origin.test.ts`
 - `tests/services/encryption_service.test.ts`
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
+- `tests/services/entity_resolution_cross_owner_conflict.test.ts`
+- `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
 - `tests/services/entity_resolution.test.ts`
+- `tests/services/entity_split_cross_owner_conflict.test.ts`
 - `tests/services/entity_submission_github_handler.test.ts`
 - `tests/services/entity_submission_validation.test.ts`
 - `tests/services/entity_type_equivalence.test.ts`
@@ -422,7 +427,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (195):**
+**Files (196):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -480,6 +485,7 @@ flowchart TD
 - `tests/integration/graph_neighborhood_pagination.test.ts`
 - `tests/integration/graph_neighborhood_source_branch.test.ts`
 - `tests/integration/guest_invalid_bearer_routes.test.ts`
+- `tests/integration/guest_subscription_owner_scope.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
@@ -624,7 +630,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (79):**
+**Files (80):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -692,6 +698,7 @@ flowchart TD
 - `tests/cli/processes_command.test.ts`
 - `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
+- `tests/cli/request_guest_subscription.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/schemas_repair_plural_types.test.ts`
@@ -710,7 +717,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (20):**
+**Files (21):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -729,6 +736,7 @@ flowchart TD
 - `tests/contract/relationship_type_enum_parity.test.ts`
 - `tests/contract/relationship_type_single_source.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
+- `tests/contract/security_gates_ci_wiring.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
 
@@ -761,8 +769,9 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (6):**
+**Files (7):**
 - `tests/subscriptions/durable_event_log.test.ts`
+- `tests/subscriptions/guest_scope.test.ts`
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
 - `tests/subscriptions/sse_hub_dead_client_eviction.test.ts`
 - `tests/subscriptions/sse_ring_gap_detection.test.ts`

@@ -2207,7 +2207,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create a substrate event subscription (webhook or SSE) */
+    /**
+     * Create a substrate event subscription (webhook or SSE)
+     * @description Authenticated owners may subscribe to filters within their own graph.
+     *     Entity-scoped guests must authenticate with their guest bearer token,
+     *     provide a non-empty `entity_ids` filter, and keep every requested entity
+     *     inside that token's current grant. Empty, mixed, or out-of-grant guest
+     *     filters are rejected without creating a subscription. Guests may only
+     *     use `delivery_method: sse`, which is revalidated against the guest
+     *     credential on every delivery; a guest request for `webhook` delivery or
+     *     with a `sync_peer_id` is rejected with 403 without creating a
+     *     subscription.
+     */
     post: operations["subscribe"];
     delete?: never;
     options?: never;
@@ -2224,7 +2235,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Deactivate a subscription */
+    /**
+     * Deactivate a subscription
+     * @description Owners may deactivate their own subscriptions. Guests may deactivate only
+     *     subscriptions whose complete `watch_entity_ids` set remains inside the
+     *     guest token's current entity grant; denial leaves the subscription active.
+     */
     post: operations["unsubscribe"];
     delete?: never;
     options?: never;
@@ -2241,7 +2257,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** List active subscriptions for the current user */
+    /**
+     * List active subscriptions for the current user
+     * @description Owners receive their active subscriptions. Guests receive only subscriptions
+     *     whose complete `watch_entity_ids` set is inside the token's current entity
+     *     grant; subscriptions outside or spanning the grant are omitted.
+     */
     post: operations["listSubscriptions"];
     delete?: never;
     options?: never;
@@ -2258,7 +2279,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Get subscription delivery status */
+    /**
+     * Get subscription delivery status
+     * @description Owners may inspect their subscriptions. A guest receives the status only
+     *     when the subscription's complete `watch_entity_ids` set is inside its
+     *     current grant; an inaccessible subscription is returned as `null`.
+     */
     post: operations["getSubscriptionStatus"];
     delete?: never;
     options?: never;
@@ -2273,7 +2299,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Server-sent events stream for a subscription */
+    /**
+     * Server-sent events stream for a subscription
+     * @description Opens the SSE stream for an active SSE subscription. Owners retain their
+     *     normal authenticated access. Guests may connect only when the subscription's
+     *     complete entity filter is inside the token grant. Guest credentials are
+     *     revalidated while the connection is established: expiry, revocation, or
+     *     grant narrowing closes the stream before another event is delivered.
+     */
     get: operations["eventsStream"];
     put?: never;
     post?: never;
@@ -8744,6 +8777,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   unsubscribe: {
@@ -8772,6 +8823,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription is not wholly inside the guest entity grant */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSubscriptions: {
@@ -8796,6 +8865,15 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8826,6 +8904,15 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   eventsStream: {
@@ -8844,7 +8931,27 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription does not exist or is outside the guest entity grant */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
       };
     };
   };
