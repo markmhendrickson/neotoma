@@ -488,19 +488,28 @@ async function mcp_create_relationship(
 ```
 ## 8. Cycle Detection
 ### 8.1 Preventing Cycles
-Relationships MUST NOT create cycles in certain types:
-- `PART_OF` relationships should not form cycles
-- `DEPENDS_ON` relationships should not form cycles
-**Cycle Detection:**
+Cycle checking is opt-in per registered relationship type via the `acyclic` field on the relationship-type registry (`src/services/relationship_types/registry.ts`) — it is not a blanket rule over `RelationshipType`. The built-in `PART_OF` and `DEPENDS_ON` types carry `acyclic: true`; a custom type registered without that flag is not cycle-checked. Discover a type's registration (including its `acyclic` flag) via `list_relationship_types`.
+
+The check is enforced in `RelationshipsService.assertAcyclicWrite` (`src/services/relationships.ts`), called from `createRelationship` before every write. It is:
+- **Type-scoped** — the traversal graph is built only from edges of the same `relationship_type` being written, not the whole relationship table.
+- **Tenant-scoped** — edges are read for the writing user only (`user_id` filter), so one tenant's edges cannot cause another tenant's write to be refused.
+- **Depth-bounded** — the DFS from the candidate target back toward the candidate source refuses the write once it has visited 1000 nodes, rather than risking an unbounded walk on a large graph.
+- **Fail-closed on a corrupt or unreadable registry row.** `isRelationshipTypeAcyclic` resolves a type's `acyclic` flag by parsing the registry row's `definition` column. A `definition` that fails to parse (malformed JSON, a partial write, a future migration) is treated as `{ acyclic: true }` — the restrictive branch — rather than `{}`, so a corrupt row can never silently disable cycle checking. The parse failure is logged; the write still proceeds if it passes the DFS check.
+
+**Cycle Detection (as implemented):**
 ```typescript
-async function detectCycle(
-  sourceId: string,
-  targetId: string,
-  type: RelationshipType
-): Promise<boolean> {
-  // Check if target is ancestor of source
-  const ancestors = await getAncestors(targetId, type);
-  return ancestors.includes(sourceId);
+// src/services/relationships.ts — RelationshipsService.assertAcyclicWrite
+private async assertAcyclicWrite(params: {
+  relationship_type: string;
+  source_entity_id: string;
+  target_entity_id: string;
+  user_id: string;
+}): Promise<void> {
+  if (!(await isRelationshipTypeAcyclic(params.relationship_type, params.user_id))) return;
+  const edges = await this.getRelationshipsByType(params.relationship_type, false, params.user_id);
+  // Build a same-type, same-tenant adjacency map, then DFS from target back
+  // toward source, refusing the write if source is reachable (a cycle would
+  // form) or if the traversal exceeds 1000 visited nodes.
 }
 ```
 

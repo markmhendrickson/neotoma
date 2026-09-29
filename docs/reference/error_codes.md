@@ -599,6 +599,18 @@ whose canonical content hash matches the prior call. See
 - `GRAPH_ORPHAN_NODE`: Entity or event created without record link
 - `GRAPH_EDGE_INVALID`: Invalid edge type (not in allowed set)
 
+### Relationship Refusal Codes
+
+Unlike the codes above, these appear inside a **2xx** response's `relationships_refused[].code` field (`StoreStructuredResponse` / `CreateInterpretationResponse` in `openapi.yaml`) — the overall call still succeeds, but one or more requested edges were not created. `POST /create_relationship`'s direct-call path (not via `store`/`create_interpretation`) surfaces the same conditions as a top-level 4xx/404 error instead; see [`docs/subsystems/relationships.md`](../subsystems/relationships.md) § 6.1.
+
+| Code                              | Meaning                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `unregistered_relationship_type`  | The relationship type is not registered on this instance. Call `list_relationship_types` and retry, or `register_relationship_type` if the meaning is genuinely new. |
+| `RELATIONSHIP_ENDPOINT_NOT_FOUND` | Source or target entity does not exist, or is not owned by the caller — both cases refuse identically so the refusal reveals nothing about other users' data. Store the missing entity first, then retry. |
+| `RELATIONSHIP_REFERENCE_UNRESOLVED` | An index-based endpoint reference (from the same `store` call) did not resolve to a stored entity. Fix the index. |
+| `RELATIONSHIP_INVALID_ENTITY_ID`  | A supplied endpoint id is not a well-formed entity id. |
+| `RELATIONSHIP_NOT_CREATED`        | Any other failure creating the edge, including a refused write from an `acyclic` type's cycle check. |
+
 ## Generic Errors
 
 | Code                  | HTTP | Retry? | Description                     |

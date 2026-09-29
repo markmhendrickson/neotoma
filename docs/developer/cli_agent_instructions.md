@@ -203,6 +203,11 @@ Load when configuring or documenting agent behavior, or when choosing between MC
 
 ## Relationship type discovery and registration
 
+This section is not part of the MCP instruction block (the fenced block that
+`neotoma instructions print` emits and MCP clients receive), so it is carried here
+in full for CLI-installed agents. It is kept verbatim with the section of the same
+name in `docs/developer/mcp/instructions.md`; edit both together.
+
 The vocabulary is instance data. Call `list_relationship_types` (CLI:
 `neotoma relationship-types list`) before using an unfamiliar edge type. If the
 meaning is absent, an authorized principal calls `register_relationship_type`
