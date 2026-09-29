@@ -26,8 +26,7 @@ Investment decisions are made on the basis of what was known at a specific momen
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured findings, assessments, and red flags |
-| `query-memory` | Reconstructs the diligence state at any decision point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

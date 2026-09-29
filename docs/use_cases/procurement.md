@@ -26,8 +26,7 @@ Procurement decisions involve multiple competing bids, internal approvals, and s
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured bid, supplier, and approval entities |
-| `query-memory` | Reconstructs procurement state at any decision point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

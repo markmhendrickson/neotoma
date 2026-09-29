@@ -24,6 +24,7 @@ import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
+import { filterInstallableSkillNames } from "./shared/skill_deprecation.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   MCP_META_SERVER_INFO,
@@ -413,8 +414,25 @@ export class NeotomaServer {
    * This is only one of two skill sources. Graph-stored `skill` entities are
    * read separately by `getInstanceSkills()` and unioned with this list in
    * {@link buildAuthenticatedInitializeResponse} (issue #2046).
+   *
+   * Excludes skills whose `SKILL.md` frontmatter declares `deprecated: true`
+   * (retired primitive wrappers kept on disk only for link compatibility —
+   * see `src/shared/skill_deprecation.ts`) so a session is never told to
+   * invoke a skill this instance no longer installs by default.
    */
   private getAvailableSkills(): string[] {
+    return this.getPackageSkills().installable;
+  }
+
+  /**
+   * Package skills split into the installable set (what
+   * {@link getAvailableSkills} returns) and the deprecated set. The deprecated
+   * set lets the `initialize` union drop a graph-stored `skill` row that reuses
+   * a retired package name: package skills win on name collision
+   * (`materializeInstanceSkills` never writes such a row locally), so
+   * advertising it would re-offer the retired skill under the same name.
+   */
+  private getPackageSkills(): { installable: string[]; deprecated: string[] } {
     const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
     const seen = new Set<string>();
     for (const root of roots) {
@@ -425,16 +443,17 @@ export class NeotomaServer {
       if (!existsSync(skillsDir)) continue;
       try {
         const entries = readdirSync(skillsDir, { withFileTypes: true });
-        const names = entries
-          .filter((d) => d.isDirectory())
-          .map((d) => d.name)
-          .sort();
-        if (names.length > 0) return names;
+        const all = entries.filter((d) => d.isDirectory()).map((d) => d.name);
+        const installable = filterInstallableSkillNames(skillsDir, all).sort();
+        if (installable.length > 0) {
+          const kept = new Set(installable);
+          return { installable, deprecated: all.filter((n) => !kept.has(n)).sort() };
+        }
       } catch {
         // Unreadable; try next root
       }
     }
-    return [];
+    return { installable: [], deprecated: [] };
   }
 
   /**
@@ -1141,9 +1160,15 @@ export class NeotomaServer {
       }
     }
 
-    const filesystemSkills = this.getAvailableSkills();
+    // A graph-stored skill row that reuses a retired package skill's name is
+    // dropped from both the instructions block and `available_skills`: package
+    // skills win on name collision, so the row never materializes locally and
+    // surfacing it would re-offer the retired skill under the same name.
+    const packageSkills = this.getPackageSkills();
+    const retiredPackageNames = new Set(packageSkills.deprecated);
+    instanceSkills = instanceSkills.filter((s) => !retiredPackageNames.has(s.name));
     const availableSkills = Array.from(
-      new Set([...filesystemSkills, ...instanceSkills.map((s) => s.name)])
+      new Set([...packageSkills.installable, ...instanceSkills.map((s) => s.name)])
     ).sort();
 
     // An instance with no skill rows is a complete no-op: the renderer returns
