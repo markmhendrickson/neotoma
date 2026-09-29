@@ -77,6 +77,12 @@ const SKILL_FIELDS: FieldSpec = [
       "When true the skill appears in the harness slash-command palette (Claude Code `user_invocable: true` frontmatter field).",
   },
   {
+    name: "side_effect_class",
+    type: "string",
+    description:
+      "Declared side-effect class of the skill: `read_only` (reads and reports only) or `state_changing` (writes, files, or dispatches). Absent or unrecognized values are treated as `state_changing` (fail closed). Mirrored as the `side_effect_class` SKILL.md frontmatter field; the trigger-safety contract forbids one trigger phrase from routing to skills with different classes.",
+  },
+  {
     name: "enabled",
     type: "boolean",
     description: "Whether the skill is active. Disabled skills are excluded from mirror output.",

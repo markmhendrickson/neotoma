@@ -42,11 +42,21 @@ function loadPublishedSkills(): PublishedSkill[] {
     });
 }
 
+/** Routing key: case-, whitespace- and trailing-punctuation-insensitive. */
+function triggerKey(phrase: string): string {
+  return phrase
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[?.!,;:]+$/, "")
+    .trim();
+}
+
 function routesFor(prompt: string, skills: PublishedSkill[]): PublishedSkill[] {
-  const normalized = prompt.trim().toLowerCase();
+  const normalized = triggerKey(prompt);
   return skills.filter((skill) =>
     skill.triggers.some((trigger) => {
-      const normalizedTrigger = trigger.trim().toLowerCase();
+      const normalizedTrigger = triggerKey(trigger);
       return (
         normalized === normalizedTrigger ||
         (normalizedTrigger.startsWith("/") && normalized.startsWith(`${normalizedTrigger} `))
@@ -62,7 +72,7 @@ function unsafeTriggerCollisions(skills: PublishedSkill[]): Array<{
   const owners = new Map<string, PublishedSkill[]>();
   for (const skill of skills) {
     for (const trigger of skill.triggers) {
-      const key = trigger.trim().toLowerCase();
+      const key = triggerKey(trigger);
       owners.set(key, [...(owners.get(key) ?? []), skill]);
     }
   }
@@ -83,6 +93,14 @@ describe("session status skills behavior contract", () => {
     expect(routesFor("where are we", skills).map((skill) => skill.name)).toEqual(["where"]);
     expect(byName.get("where")?.sideEffectClass).toBe("read_only");
     expect(byName.get("digest")?.sideEffectClass).toBe("state_changing");
+  });
+
+  it("normalizes punctuation and whitespace variants when routing and detecting collisions", () => {
+    expect(routesFor("Where  are we?", skills).map((skill) => skill.name)).toEqual(["where"]);
+    const where = byName.get("where")!;
+    const digest = byName.get("digest")!;
+    const planted = [where, { ...digest, triggers: [...digest.triggers, "Where are  we?"] }];
+    expect(unsafeTriggerCollisions(planted).map((c) => c.trigger)).toEqual(["where are we"]);
   });
 
   it("rejects repository-wide trigger collisions across side-effect classes", () => {
@@ -140,6 +158,47 @@ describe("session status skills behavior contract", () => {
     expect(digest).not.toContain("mcp__mcpsrv_neotoma__store");
   });
 
+  it("never tells where users that digest is read-only or limited to one bookkeeping write", () => {
+    const where = byName.get("where")?.body ?? "";
+
+    expect(where).not.toMatch(/`\/digest`[^|\n]*\bis read-only\b/);
+    expect(where).not.toMatch(/single permitted write is bookkeeping/);
+    expect(where).not.toMatch(/\|\s*one `session_digest`\s*\|/);
+    expect(where).toContain("it is NOT read-only");
+    expect(where).toContain(
+      "Run `/digest --report-only` for a verified read-out, or `/digest` to verify and act on it."
+    );
+    expect(where).toContain("that is `/digest --report-only project`");
+    expect(where).not.toMatch(/that is `\/digest project`/);
+    expect(where).toMatch(/MUST NOT describe `\/digest` as read-only/);
+  });
+
+  it("runs digest verification in both modes, outside the default-only bookkeeping section", () => {
+    const digest = byName.get("digest")?.body ?? "";
+    const sectionOf = (heading: string): string => {
+      const start = digest.indexOf(`\n## ${heading}\n`);
+      expect(start, heading).toBeGreaterThanOrEqual(0);
+      const next = digest.indexOf("\n## ", start + 4);
+      return digest.slice(start, next === -1 ? undefined : next);
+    };
+
+    const verify = sectionOf("Verify every claim (both modes)");
+    const defaultOnly = sectionOf("Session digest (default mode only)");
+
+    for (const marker of [
+      "### Check each claim live",
+      "### Tag each verdict `mutability`",
+      "### Report a verification scorecard",
+      "### Missing tooling is a DISTINCT state",
+    ]) {
+      expect(verify, marker).toContain(marker);
+      expect(defaultOnly, marker).not.toContain(marker);
+    }
+    expect(verify).toContain("runs identically in default mode and under `--report-only`");
+    expect(verify).toContain("Under `--report-only`, a tooling gap is report content only.");
+    expect(digest).toContain("`--report-only` MUST NOT skip verification");
+  });
+
   it("documents the breaking status-to-digest migration and stale-link behavior", () => {
     expect(existsSync(migrationPath)).toBe(true);
     const migration = readFileSync(migrationPath, "utf8");
@@ -188,6 +247,9 @@ describe("session status skills behavior contract", () => {
     ]);
     expect(reportOnly.forbidden_actions).toEqual(
       expect.arrayContaining(["dispatch", "store", "state_changing_question"])
+    );
+    expect(reportOnly.expected_actions).toEqual(
+      expect.arrayContaining(["verify_claims", "render_report", "report_verification_scorecard"])
     );
     expect(byName.get("digest")?.body).toContain("no action and no writes of any kind");
 

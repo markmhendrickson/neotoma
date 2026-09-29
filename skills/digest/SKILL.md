@@ -12,6 +12,7 @@ supported_harnesses:
   - claude-code
   - cursor
   - codex
+entity_id: ent_29d3ac327ecb8d7e0b16050f
 slug: digest
 ---
 
@@ -116,6 +117,53 @@ Before finalizing the order, ask explicitly: *what is currently gating the large
 
 Critically, **check whether the decision is still open before presenting it as open.** A plan often already records a resolution, or has narrowed to a smaller residual choice, and re-raising the original wide question wastes the operator's attention and can reopen something settled. Read the current state, then present only what is genuinely undecided. See [[feedback_elaborate_when_reposing_a_decision]].
 
+## Verify every claim (both modes)
+
+Verification is part of the read-out, not part of the bookkeeping, so it runs identically in default mode and under `--report-only`. Every checked claim in the report carries its verdict and `mutability` tag, and every run ends with the scorecard. The only difference between the modes is what happens after: default mode records the verdicts in `session_digest.tasks_claimed` and acts on them; `--report-only` reports them and writes nothing. A `--report-only` read-out that skipped these checks would be an unverified report presented as a verified one.
+
+### Check each claim live
+
+Every claim asserting something HAPPENED gets checked against its **system of record, live, now** — `gh` for PRs and issues, `gws` for mail, the Neotoma instance for entities, `git`/`ls` for files, a health endpoint for deploys. Batch by system (one `gh` pass, one `gws` pass) so this costs a handful of calls, not one per claim.
+
+**Check the SOURCE, never a cache of it.** Neotoma holds context — who a person is, what a thread was about, what was promised. It is not the system of record for whether an email was sent; Gmail's `labelIds` are. Reading stored state to verify a claim tells you only that the cache agrees with the claim, and both are frequently stale in the same direction because the same session wrote both. In one real run, 13 obligations recorded as "draft unsent" were all sent — the drafts had been consumed by sending, which only Gmail could reveal.
+
+Storing what you fetched is fine and useful. Checking the store *instead of* fetching is not.
+
+Pick the check from the claim's VERB, not its evidence type — the verb table in `/verify-work` governs, and conflating the two is the single largest source of false refutations (58% error rate on that class in one run).
+
+**A session may verify FACTS about systems of record. It may NOT confirm its own JUDGMENT.** "Filed #2067" is checkable. "The approach is sound" is not — that stays `narrative` and is never `confirmed`. A session grading its own reasoning is the actor checking itself; a session checking whether its PR merged is just reading GitHub.
+
+### Tag each verdict `mutability`
+
+A verified state has a shelf life, and two classes have wildly different ones:
+
+- **`immutable`** — cannot change once true: a merged PR, a closed issue, a commit that exists, a released tag, a deleted entity. Cache forever. Downstream re-verification SKIPS these.
+- **`perishable`** — true only as of `verified_at`: whether someone has replied, whether a draft is still unsent, whether an instance serves a given build, whether a working tree is clean, any count. Downstream re-verification MUST re-check these.
+
+Without this tag a `confirmed` from six days ago reads as current, which is the same staleness trap in a new place. "Nick has not replied" is true only until Nick types.
+
+### Report a verification scorecard
+
+End the prose report with this session's own numbers: `N claims · N confirmed · N refuted · N unverifiable (M blocked on tooling)`. This is what makes pipeline health answerable per session rather than only in aggregate — and an aggregate is how a coverage gap once hid 24 of 35 sessions.
+
+### Missing tooling is a DISTINCT state, and it is actionable
+
+Separate the two things `unverifiable` currently conflates:
+
+- **`unverifiable`** — the check ran and the record is genuinely ambiguous. Nothing to do.
+- **`blocked_on_tooling`** — the check could not run because the integration is absent, unauthorized, or missing a scope. **This is a work item, not a shrug.**
+
+In default mode, on `blocked_on_tooling`, do as much as can be done without the operator, then escalate the remainder (under `--report-only`, see the last paragraph of this section instead):
+
+1. **Determine what is actually needed** — name the workspace/account/scope, not just "Slack access".
+2. **Install and configure everything that does not require a human** — add the MCP server entry, write the config, prepare the auth URL. Never invent credentials, never guess at a token, and never touch a secret store to work around a missing grant.
+3. **Escalate the human-only remainder via Ateles** (`mcp__ateles__route_task`, resolved through the swarm roster) as a checkpoint naming: the exact capability wanted, the claims currently unverifiable without it, the precise operator action (which button, which consent screen), and what stays blocked until it lands.
+4. **Record it as an obligation** in `tasks_claimed` with `owner_hint: "operator"` so it survives the session even if the checkpoint is never actioned.
+
+**Under `--report-only`, a tooling gap is report content only.** Name the capability, the account or scope, the claims it blocks, and the operator action it would take, in the report and in the scorecard's `blocked_on_tooling` count. Do not write config, install anything, raise a checkpoint, or record an obligation: every one of those is a write the operator asked not to happen.
+
+**Escalate sparingly and specifically.** The operator's checkpoint queue is a scarce resource — one real queue held 26 pending items, 24 auto-generated with zero confidence and one titled "(untitled)". A tooling request that cannot say which claims it would unblock is noise and must not be filed. One checkpoint per capability per session, never per claim.
+
 ## Cross-session check (before acting)
 
 Other sessions run concurrently, and this session is not the only place work happens. **Before dispatching or recommending anything, check whether any outstanding item is already being worked by another session** — dispatching work that another session owns creates duplicate agents, conflicting edits, and in the worst case two sessions racing the same irreversible action. This check governs dispatch now, not merely what gets suggested — a duplicate dispatch is a worse failure than a duplicate suggestion once was, because nobody has to click it first.
@@ -208,7 +256,7 @@ Under `--report-only`, stop after the report and the "what would be dispatched" 
 
 ## Session digest (default mode only)
 
-Skip this entire section under `--report-only`: that mode MUST NOT write or update a `session_digest`. In default mode, after composing the prose report, store or update exactly ONE `session_digest` entity on the personal production Neotoma instance through the production Neotoma `store` capability; resolve its harness-specific tool name at runtime. `store` is the semantic capability, not a fixed MCP namespace. This is bookkeeping about the session itself — never domain data — and it is the skill's one dedicated bookkeeping write (dispatched tasks and their `PART_OF` links, filed per "Act on it" above, are the skill's domain-facing writes; both coexist now that `/digest` is no longer purely read-only). It derives from the SAME whole-session skeleton the prose report uses, never from the in-context tail alone: a digest built from the tail silently drops early-session claims, which is exactly what the downstream sweep exists to catch.
+Skip this entire section under `--report-only`: that mode MUST NOT write or update a `session_digest`. Verification is NOT in this section and still runs in that mode; see "Verify every claim (both modes)". In default mode, after composing the prose report, store or update exactly ONE `session_digest` entity on the personal production Neotoma instance through the production Neotoma `store` capability; resolve its harness-specific tool name at runtime. `store` is the semantic capability, not a fixed MCP namespace. This is bookkeeping about the session itself — never domain data — and it is the skill's one dedicated bookkeeping write (dispatched tasks and their `PART_OF` links, filed per "Act on it" above, are the skill's domain-facing writes; both coexist now that `/digest` is no longer purely read-only). It derives from the SAME whole-session skeleton the prose report uses, never from the in-context tail alone: a digest built from the tail silently drops early-session claims, which is exactly what the downstream sweep exists to catch.
 
 Schema v1.1.0 (registered; canonical_name derives from `session_key`):
 
@@ -223,48 +271,7 @@ Schema v1.1.0 (registered; canonical_name derives from `session_key`):
 - `topics`: workstream labels. `summary`: 3–6 factual sentences. Summarize, never transcribe sensitive content — the digest outlives the session.
 - `tasks_claimed`: array of `{claim, status_claimed, evidence_pointers, verification_state, verification_note, verified_at, mutability}`. `status_claimed` is one of `outstanding | complete | blocked | dropped`.
 
-  **`/digest` VERIFIES its own factual claims before writing — see "Verify before you write" below.** This reverses the skill's earlier rule that `/digest` may only write `intent`. Verifying at session end is strictly better than verifying at sweep time: the tool results are still in context, the session knows which PR it actually opened and which draft it actually sent, and it does not have to reconstruct any of that forensically days later. In one real sweep, forensic reconstruction produced a 51% no-locator rate and misdiagnosed the same file in two separate sessions.
-
-  ### Verify before you write
-
-  Every claim asserting something HAPPENED gets checked against its **system of record, live, now** — `gh` for PRs and issues, `gws` for mail, the Neotoma instance for entities, `git`/`ls` for files, a health endpoint for deploys. Batch by system (one `gh` pass, one `gws` pass) so this costs a handful of calls, not one per claim.
-
-  **Check the SOURCE, never a cache of it.** Neotoma holds context — who a person is, what a thread was about, what was promised. It is not the system of record for whether an email was sent; Gmail's `labelIds` are. Reading stored state to verify a claim tells you only that the cache agrees with the claim, and both are frequently stale in the same direction because the same session wrote both. In one real run, 13 obligations recorded as "draft unsent" were all sent — the drafts had been consumed by sending, which only Gmail could reveal.
-
-  Storing what you fetched is fine and useful. Checking the store *instead of* fetching is not.
-
-  Pick the check from the claim's VERB, not its evidence type — the verb table in `/verify-work` governs, and conflating the two is the single largest source of false refutations (58% error rate on that class in one run).
-
-  **A session may verify FACTS about systems of record. It may NOT confirm its own JUDGMENT.** "Filed #2067" is checkable. "The approach is sound" is not — that stays `narrative` and is never `confirmed`. A session grading its own reasoning is the actor checking itself; a session checking whether its PR merged is just reading GitHub.
-
-  ### Tag each verdict `mutability`
-
-  A verified state has a shelf life, and two classes have wildly different ones:
-
-  - **`immutable`** — cannot change once true: a merged PR, a closed issue, a commit that exists, a released tag, a deleted entity. Cache forever. Downstream re-verification SKIPS these.
-  - **`perishable`** — true only as of `verified_at`: whether someone has replied, whether a draft is still unsent, whether an instance serves a given build, whether a working tree is clean, any count. Downstream re-verification MUST re-check these.
-
-  Without this tag a `confirmed` from six days ago reads as current, which is the same staleness trap in a new place. "Nick has not replied" is true only until Nick types.
-
-  ### Report a verification scorecard
-
-  End the prose report with this session's own numbers: `N claims · N confirmed · N refuted · N unverifiable (M blocked on tooling)`. This is what makes pipeline health answerable per session rather than only in aggregate — and an aggregate is how a coverage gap once hid 24 of 35 sessions.
-
-  ### Missing tooling is a DISTINCT state, and it is actionable
-
-  Separate the two things `unverifiable` currently conflates:
-
-  - **`unverifiable`** — the check ran and the record is genuinely ambiguous. Nothing to do.
-  - **`blocked_on_tooling`** — the check could not run because the integration is absent, unauthorized, or missing a scope. **This is a work item, not a shrug.**
-
-  On `blocked_on_tooling`, do as much as can be done without the operator, then escalate the remainder:
-
-  1. **Determine what is actually needed** — name the workspace/account/scope, not just "Slack access".
-  2. **Install and configure everything that does not require a human** — add the MCP server entry, write the config, prepare the auth URL. Never invent credentials, never guess at a token, and never touch a secret store to work around a missing grant.
-  3. **Escalate the human-only remainder via Ateles** (`mcp__ateles__route_task`, resolved through the swarm roster) as a checkpoint naming: the exact capability wanted, the claims currently unverifiable without it, the precise operator action (which button, which consent screen), and what stays blocked until it lands.
-  4. **Record it as an obligation** in `tasks_claimed` with `owner_hint: "operator"` so it survives the session even if the checkpoint is never actioned.
-
-  **Escalate sparingly and specifically.** The operator's checkpoint queue is a scarce resource — one real queue held 26 pending items, 24 auto-generated with zero confidence and one titled "(untitled)". A tooling request that cannot say which claims it would unblock is noise and must not be filed. One checkpoint per capability per session, never per claim.
+  **`/digest` VERIFIES its own factual claims before writing — see "Verify every claim (both modes)" above; record each claim's verdict, `verified_at` and `mutability` here.** This reverses the skill's earlier rule that `/digest` may only write `intent`. Verifying at session end is strictly better than verifying at sweep time: the tool results are still in context, the session knows which PR it actually opened and which draft it actually sent, and it does not have to reconstruct any of that forensically days later. In one real sweep, forensic reconstruction produced a 51% no-locator rate and misdiagnosed the same file in two separate sessions.
 
   **Record OBLIGATIONS, not activity.** `tasks_claimed` holds what this session leaves OWED — to a person, a system, or a decision. What you *did* along the way belongs in `summary` prose. Full rule: runbook `ent_c720a067eae8b0b06338bd05`.
 
@@ -335,6 +342,7 @@ When the session is tied to a tracked plan, cross-reference it so Remaining refl
 - MUST link each filed task `PART_OF` the correct plan for its workstream, never a plan it does not belong to.
 - The closing MUST state what was dispatched or done directly (one line per item, by task entity id or action) and MUST NOT ask whether to proceed with that work — it has already proceeded. The closing MUST separately surface only the operator-gated remainder, through `AskUserQuestion` for decisions and a runnable-command block for operator-only actions.
 - `--report-only` MUST stop after the report and a one-line-per-item statement of what would have been dispatched; it MUST NOT file, dispatch, act, call a state-changing question tool, or write/update a `session_digest`, and MUST say plainly that action and bookkeeping were held back by request. Operator-gated items are still described in this mode, but only as report content.
+- Both modes MUST run "Verify every claim (both modes)": live checks against systems of record, a `mutability` tag on every verdict, and the verification scorecard. `--report-only` MUST NOT skip verification; it only skips the writes that follow it.
 - MUST distinguish items the agent can move from items requiring an operator decision, human sign-off, or an external party — never invent a next step for something that is genuinely the user's call, and never invent operator-gating for something the agent could in fact move.
 
 ## Master-plan-first reporting

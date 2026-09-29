@@ -9,7 +9,8 @@
  * Data shape assumed (see src/services/skills/seed_schema.ts and
  * docs/specs/MCP_SPEC.md EMBEDS convention):
  *   - `skill` entities carry name/description/triggers/content/slug/
- *     user_invocable/enabled/version/supported_harnesses/harness_config.
+ *     user_invocable/side_effect_class/enabled/version/supported_harnesses/
+ *     harness_config.
  *   - A skill may EMBEDS one or more `file_asset` entities (source=skill,
  *     target=file_asset), each carrying source_id/content_hash/mime_type/
  *     original_filename/file_size on its snapshot (set by
@@ -17,6 +18,19 @@
  */
 
 import type { NeotomaApiClient } from "../shared/api_client.js";
+
+export type SkillSideEffectClass = "read_only" | "state_changing";
+
+/**
+ * Normalize a snapshot `side_effect_class`. Only the two declared values pass;
+ * anything else (absent, empty, misspelled) returns undefined so no consumer
+ * can mistake a placeholder for a declared read-only class.
+ */
+export function normalizeSideEffectClass(value: unknown): SkillSideEffectClass | undefined {
+  if (typeof value !== "string") return undefined;
+  const v = value.trim().toLowerCase();
+  return v === "read_only" || v === "state_changing" ? v : undefined;
+}
 
 export interface InstanceSkillRow {
   entity_id: string;
@@ -26,6 +40,8 @@ export interface InstanceSkillRow {
   content?: string;
   slug?: string;
   user_invocable?: boolean;
+  /** `read_only` | `state_changing`; unrecognized values are dropped (fail closed downstream). */
+  side_effect_class?: SkillSideEffectClass;
   enabled?: boolean;
   version?: string;
   supported_harnesses?: string[];
@@ -96,6 +112,7 @@ export async function fetchEnabledInstanceSkills(
       slug: typeof snapshot.slug === "string" ? snapshot.slug : undefined,
       user_invocable:
         typeof snapshot.user_invocable === "boolean" ? snapshot.user_invocable : undefined,
+      side_effect_class: normalizeSideEffectClass(snapshot.side_effect_class),
       enabled: true,
       version: typeof snapshot.version === "string" ? snapshot.version : undefined,
       supported_harnesses: Array.isArray(snapshot.supported_harnesses)

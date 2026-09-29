@@ -1,9 +1,26 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { mirrorToHarness } from "../../src/cli/skills_mirror.ts";
+import { SKILL_FIELD_SPECS } from "../../src/services/skills/seed_schema.ts";
+
+/**
+ * `existsSync` follows symlinks, so it reports `false` for a dangling link
+ * that is still on disk. Pruning assertions must look at the link itself.
+ */
+function entryPresent(path: string): boolean {
+  return lstatSync(path, { throwIfNoEntry: false }) !== undefined;
+}
 
 const repoRoot = process.env.NEOTOMA_SKILL_ROOT ?? process.cwd();
 const digestPath = join(repoRoot, "skills", "digest", "SKILL.md");
@@ -41,6 +58,7 @@ describe("published digest skill identity", () => {
       const target = join(harnessRoot, ".codex", "skills");
       mkdirSync(join(target, "foreign-skill"), { recursive: true });
       symlinkSync(join(repoRoot, "skills", "status"), join(target, "status"), "junction");
+      expect(entryPresent(join(target, "status"))).toBe(true);
 
       const result = mirrorToHarness("codex", {
         cwd: harnessRoot,
@@ -49,12 +67,21 @@ describe("published digest skill identity", () => {
       });
 
       expect(result.mode).toBe("per-skill-symlink");
-      expect(existsSync(join(target, "status"))).toBe(false);
+      expect(entryPresent(join(target, "status"))).toBe(false);
       expect(existsSync(join(target, "digest", "SKILL.md"))).toBe(true);
-      expect(existsSync(join(target, "foreign-skill"))).toBe(true);
+      expect(entryPresent(join(target, "foreign-skill"))).toBe(true);
     } finally {
       rmSync(harnessRoot, { recursive: true, force: true });
     }
+  });
+
+  it("declares side_effect_class on the canonical skill schema", () => {
+    const field = SKILL_FIELD_SPECS.find((spec) => spec.name === "side_effect_class");
+    expect(field?.type).toBe("string");
+    expect(field?.required).not.toBe(true);
+    expect(field?.description).toContain("`read_only`");
+    expect(field?.description).toContain("`state_changing`");
+    expect(field?.description).toMatch(/treated as `state_changing` \(fail closed\)/);
   });
 
   it("declares the digest name, slug, trigger, and report-only mode", () => {

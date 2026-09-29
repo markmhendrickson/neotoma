@@ -15,8 +15,14 @@
       "id": "report_only_suppression",
       "prompt": "/digest --report-only",
       "expected_skill": "digest",
-      "expected_actions": ["render_report"],
-      "forbidden_actions": ["dispatch", "store", "state_changing_question"]
+      "expected_actions": ["verify_claims", "render_report", "report_verification_scorecard"],
+      "forbidden_actions": [
+        "dispatch",
+        "store",
+        "state_changing_question",
+        "raise_tooling_checkpoint",
+        "write_config"
+      ]
     },
     {
       "id": "natural_language_routing",

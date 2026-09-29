@@ -37,12 +37,14 @@ to prevent. They are ordered by **cost and confidence**, not by where they sit i
 | Skill | Coverage | Verification | Writes | When |
 |---|---|---|---|---|
 | **`/where`** | in-context, plus one scoped `task` read | **none** — everything unverified; stored task state is read, not checked | **none** | orientation, any time, often |
-| **`/digest`** | whole lineage, reconstructed from transcripts | every factual claim checked against its system of record | one `session_digest` | when the read-out must be trustworthy |
+| **`/digest`** | whole lineage, reconstructed from transcripts | every factual claim checked against its system of record | by default: files and dispatches agent-movable `task` entities plus one `session_digest`; **none** under `--report-only` | when the read-out must be trustworthy (`--report-only`), or when it must be trustworthy and acted on (`/digest`) |
 | **`/end`** | whole session | audits storage and modeling | files tasks, persists entities, refreshes hubs | the actual close-out |
 
-**`/digest` does NOT close a session.** It is read-only for domain data and is designed to run
-at any point mid-session; its single permitted write is bookkeeping about itself. `/end` is the
-closing skill — it files, persists, and audits. Do not describe `/digest` as a close-out, in this
+**`/digest` does NOT close a session, and it is NOT read-only.** By default it verifies and then
+acts: it files and dispatches every agent-movable item as a `task` and records one `session_digest`.
+`/digest --report-only` is its no-write mode: the same verified read-out, with no dispatch and no
+writes at all. Send an operator who wants a verified read-out and nothing else to
+`/digest --report-only`, never to bare `/digest`. `/end` is the closing skill — it files, persists, and audits. Do not describe `/digest` as a close-out, in this
 skill or in a report; a session that believes it is will reach for the wrong tool at the wrong
 moment.
 
@@ -60,7 +62,8 @@ that checks claims against systems of record while the tool results are still in
 **Escalate from `/where` to `/digest` when the read-out is about to be trusted rather than
 merely read** — a handoff to another session or person, a decision with a cost, anything that
 will be repeated as fact, or when a perishable claim below has aged past the point where you
-would bet on it.
+would bet on it. Escalate to `/digest --report-only` when only the verified read-out is wanted, and
+to bare `/digest` when the verified items should also be filed and dispatched.
 
 ## The verification boundary — the rule that makes this skill safe
 
@@ -82,7 +85,7 @@ State claims as beliefs with an age, not as findings:
   minutes later. A snapshot read as a standing state is a real, repeated failure mode here — it
   has reported swarm work as stalled while the swarm was actively working it.
 - **Head the report with its own limits, in one line**, so nobody has to infer them:
-  *"Unverified — from context plus stored task state as written, not checked against GitHub/Gmail. Run `/digest` for a verified read-out."*
+  *"Unverified — from context plus stored task state as written, not checked against GitHub/Gmail. Run `/digest --report-only` for a verified read-out, or `/digest` to verify and act on it."*
   Naming the task read in the header is required: it tells the operator which claims come from a
   record rather than the window, without implying anything was checked against a system of record.
 - **Never claim coverage.** `/where` sees the context window plus the scoped task read. If the
@@ -93,7 +96,7 @@ State claims as beliefs with an age, not as findings:
 If a specific claim genuinely matters right now and is cheap to check — one `gh pr view`, one
 entity read — check that one thing and mark it verified while leaving the rest as-is. Do not let
 this grow into a verification pass; the moment you are batching checks by system, you are running
-`/digest` and should say so.
+`/digest --report-only` and should say so.
 
 ## The one query — this session's tasks
 
@@ -271,13 +274,13 @@ one of them turns `/where` into a slower `/digest` with none of its guarantees.
 - **Cross-session checks** (`list_sessions`, `search_session_transcripts` for every remaining item).
   Dropped: too slow for a question asked hourly. **Consequence:** `/where` may name a next step
   another session already owns. When a next step is about to be *started* rather than merely named,
-  check first — or run `/digest`.
+  check first — or run `/digest --report-only`.
 - **Spin-out task chips** (`spawn_task`, KEEP-HERE/SPIN-OUT classification). Dropped: scoping a
   session's attention is a session-boundary decision, not an hourly one.
 - **The numbered "reply all or pick" closing list.** Dropped in favour of the per-workstream
   stop-or-continue call, which carries the same authorization question at a quarter of the length.
 - **`verbose` / `project` modes.** Dropped: a mode that makes `/where` longer defeats it. If the
-  plan's state is wanted, that is `/digest project`.
+  plan's state is wanted, that is `/digest --report-only project`.
 
 ## Constraints
 
@@ -295,8 +298,10 @@ one of them turns `/where` into a slower `/digest` with none of its guarantees.
 - MUST NOT write anything — no `session_digest`, no domain entities, no task filing, no plan
   corrections, no memory writes, and no correction to a task it read. `/where` is write-free,
   without exception; reading a task never licenses updating it, however stale the row looks.
-- MUST head the report with a one-line unverified disclosure naming `/digest` as the verified
-  alternative.
+- MUST head the report with a one-line unverified disclosure naming `/digest --report-only` as the
+  verified read-out and `/digest` as the verify-and-act route.
+- MUST NOT describe `/digest` as read-only or as limited to one bookkeeping write; only
+  `/digest --report-only` is write-free.
 - MUST mark every perishable claim as-of with when it was last observed, and MUST NOT restate a
   snapshot as a standing state. MUST NOT present any unverified claim as fact.
 - MUST state, in a clause, when the session has compacted and earlier work may be missing.
