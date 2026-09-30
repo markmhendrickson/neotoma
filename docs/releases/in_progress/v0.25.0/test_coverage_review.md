@@ -27,6 +27,7 @@ Advisory:
 - **A3: duplicated scope resolver in the MCP and REST schema handlers** (#2545). Both currently agree, and the defect-cluster tests exercise each surface. Filed, not blocking.
 - **A4: allowlist follow-ups.** `submit_issue` is not gated by the allowlist (#2540); a stored repo that is present but malformed falls back to the configured repo (#2542); the `issue_number` lookup is not repo-scoped (#2543); `neotoma issues config` does not show `allowed_repos` (#2544). All four are filed and none widens exposure beyond v0.24.0.
 - **A5: naming-guard messages still name server-side variables a caller cannot set** (#2548). `force` is now reachable, so they are no longer a dead end.
+- **A7: no wire-level test for the CLI `--user-specific` / `--no-user-specific` flags.** This is a listed Breaking change, so a follow-up should assert the request body the CLI sends for each of the three forms.
 - **A6: migration.** A backfill whose fragments have no resolvable entity still promotes nothing. This release makes the result truthful, not successful; `no_entity_resolution` is the signal.
 
 ## User-facing surfaces
@@ -37,8 +38,9 @@ Advisory:
 | Explicit `user_specific: false` with no global row returns `ERR_SCHEMA_SCOPE_MISMATCH`; omitted resolves user-first | `tests/integration/update_schema_incremental_scope_mismatch.test.ts` | Covers user-observable behavior end-to-end |
 | `migrated_existing` reflects promoted fragments; `migration_result.skipped` reasons | `tests/integration/update_schema_incremental_defect_cluster.test.ts` | Covers user-observable behavior end-to-end |
 | `force` reachable over MCP on both tools, and forwarded through the internal register call | `tests/contract/schema_tools_force_input_schema_2197.test.ts` (both `inputSchema` declarations) and the defect-cluster effect tests (MCP and both REST routes) | Covers user-observable behavior end-to-end |
-| CLI `schemas update` / `schemas register` `--force`, `--no-user-specific` | `tests/cli/schemas_force_flag.test.ts` (removing only the fallback-call forward turns exactly that test red) | Covers user-observable behavior end-to-end |
-| `sync_issues` `repo`, allowlist (403 / `InvalidParams`), dry run `plan`, push default | `tests/services/sync_issues_from_github.test.ts`, `src/services/issues/repo_allowlist.test.ts`, `tests/contract/sync_issues_contract.test.ts`, `tests/integration/sync_issues_handler_passthrough.test.ts` (an allowlisted repo through each real handler, upstream 401 and 404 mapped to internal errors). Nine reverts each turned tests red (per the PR's table). | Covers user-observable behavior end-to-end |
+| CLI `schemas update` / `schemas register` `--force` | `tests/cli/schemas_force_flag.test.ts` (removing only the fallback-call forward turns exactly that test red) | Covers user-observable behavior end-to-end |
+| CLI `--user-specific` / `--no-user-specific` (default removed) | A source-text check in `tests/integration/update_schema_incremental_scope_mismatch.test.ts` pins the removal of the `false` default. The flag-to-wire mapping (no flag sends no `user_specific`, `--user-specific` sends `true`, `--no-user-specific` sends `false`) was confirmed by running the CLI against a capture server in review, and has no wire-level assertion in the suite. Server-side scope behavior is covered end-to-end above. | Partial. Advisory A7 |
+| `sync_issues` `repo`, allowlist (403 / `InvalidParams`), dry run `plan`, push default | `tests/services/sync_issues_from_github.test.ts`, `src/services/issues/repo_allowlist.test.ts`, `tests/contract/sync_issues_contract.test.ts`, `tests/integration/sync_issues_handler_passthrough.test.ts` (an allowlisted repo through each real handler, upstream 401 and 404 mapped to internal errors). Nine reverts each turned tests red (per the PR's own table; four were reproduced during release review). | Covers user-observable behavior end-to-end |
 | CLI `issues sync --repo / --dry-run / --push / --no-push` | `tests/cli/cli_issues_commands.test.ts` | Covers user-observable behavior end-to-end |
 | Per-row repo for `get_issue_status`, `add_issue_message`, Inspector bulk close and remove | `src/services/issues/inspector_bulk.test.ts`, `tests/services/sync_issues_missing_token.test.ts`, issue operations suites | Covers user-observable behavior end-to-end |
 | `neotoma setup` / `skills sync` skip deprecated skills; whole-dir symlink conversion; pruning | `tests/cli/skills_mirror.test.ts` (real temp filesystem) | Covers user-observable behavior end-to-end |
@@ -51,7 +53,8 @@ No BLOCKING gaps.
 
 ## Tests run on the release head
 
-- The 26 touched test files (schema registry, issue sync, CLI, skills, initialize): 26 files passed, 463 tests passed, 1 todo.
+- The 19 test files changed in `v0.24.0..HEAD`: 19 files passed, 353 tests passed, 1 todo. With 12 neighbouring schema, initialize, skills and issue suites added: 31 files passed, 424 tests passed, 1 todo. `tests/unit/mcp_instructions_fallback_invariants.test.ts`: 15 passed.
+- Fix reverts re-run in a scratch copy during QA review, each turning tests red: write scope (6 tests), the allowlist assertion in `resolveSyncTarget` (9), whole-directory symlink teardown in the skills mirror (1), and CLI `--force` forwarding (1).
 - `npm run test:security:auth-matrix`: 18 passed, 1 skipped.
 - `npm run type-check`: passed. `npm run validate:capability-manifest`: up to date.
 - The full unit and integration suites run in the pre-commit hook on each commit, and in CI on the RC pull request.
