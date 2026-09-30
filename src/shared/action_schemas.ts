@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
 import { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "../services/entity_query_limits.js";
 
 export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
@@ -967,7 +968,15 @@ export const UpdateSchemaIncrementalRequestSchema = z
       .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
       .optional(),
     schema_version: z.string().optional(),
-    user_specific: z.boolean().default(false),
+    // #2374: stays OPTIONAL with no `.default()`. Whether the caller stated
+    // an explicit scope intent is itself meaningful — `updateSchemaIncremental`
+    // now defers to whatever scope its OWN read resolved when this is
+    // omitted, and only treats it as a hard override when present. A
+    // `.default(false)` here would erase that distinction before the
+    // service ever saw it, which is exactly how the write-scope bug
+    // shipped: every caller that didn't think about scope got `false`
+    // indistinguishable from a caller who explicitly wanted global.
+    user_specific: z.boolean().optional(),
     user_id: z.string().optional(),
     activate: z.boolean().default(true),
     migrate_existing: z.boolean().default(false),
@@ -1071,15 +1080,35 @@ export const IssuesGetStatusRequestSchema = z
     { message: "Provide entity_id or issue_number" }
   );
 
+/**
+ * Validated `owner/name` GitHub repository slug for `sync_issues` (HTTP + CLI + MCP).
+ * Strict on purpose: see `src/shared/repo_slug.ts`.
+ */
+export const IssuesSyncRepoSchema = z
+  .string()
+  .refine((v) => isValidRepoSlug(v), { message: REPO_SLUG_FORMAT_MESSAGE });
+
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),
   state: z.enum(["open", "closed", "all"]).optional(),
   labels: z.array(z.string()).optional(),
   /**
-   * When true (default), local public issues with no github_number are pushed to GitHub
-   * before the pull leg runs. Pass false to disable the push leg.
+   * GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo
+   * (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Validated before any GitHub call or write.
+   */
+  repo: IssuesSyncRepoSchema.optional(),
+  /**
+   * Push leg (local public issues with no github_number -> GitHub). When omitted it
+   * defaults to true for the configured default repo and to false for any other `repo`.
+   * Pass true to opt in explicitly.
    */
   push: z.boolean().optional(),
+  /**
+   * When false, run as a dry run: read GitHub and local state, report what would be
+   * created, updated and pushed, and write nothing (no local store/correct, no GitHub
+   * create). Default true.
+   */
+  commit: z.boolean().optional(),
   user_id: z.string().optional(),
 });

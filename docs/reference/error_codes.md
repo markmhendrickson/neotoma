@@ -143,11 +143,13 @@ Remediation: call `analyze_schema_candidates` for field suggestions, then
 `update_schema_incremental` once the baseline schema is registered.
 
 **`ERR_SCHEMA_SCOPE_MISMATCH`** — raised by `update_schema_incremental` when the
-existence guard's scope-limited lookup (`user_specific ? user : global`) finds
-no schema, but an active schema for the same `entity_type` exists in a
-**different** scope (typically: `describe_entity_type` resolved a user-scoped
-schema because it always passes `userId`, while the incremental call omitted
-`user_specific` and checked global only). Distinct from a genuine cold start.
+caller passed an explicit `user_specific: false`, so the existence guard checked
+global scope only and found no global registry row and no code-defined
+baseline, but an active schema for the same `entity_type` exists in the
+caller's **user** scope. When `user_specific` is
+omitted, the guard and the update both resolve user-scope-first (the same
+precedence `describe_entity_type` uses), so this error cannot arise (#2374).
+Distinct from a genuine cold start.
 
 Response shape (canonical envelope):
 
@@ -156,7 +158,7 @@ Response shape (canonical envelope):
   "error": {
     "error_code": "ERR_SCHEMA_SCOPE_MISMATCH",
     "message": "An active schema for entity_type \"<type>\" exists in \"user\" scope, but this call resolved schemas in \"global\" scope and found none there.",
-    "hint": "…retry update_schema_incremental with user_specific: true…",
+    "hint": "…retry update_schema_incremental without user_specific…, or with user_specific: true.",
     "details": {
       "entity_type": "<type>",
       "guard_scope": "global",
@@ -166,10 +168,20 @@ Response shape (canonical envelope):
 }
 ```
 
-Remediation: retry with the `user_specific` value that matches `details.found_scope`
-(`true` for user, `false`/omit for global). The hint MUST NOT recommend
-`register_schema` — registering a second schema for a type that already has an
-active row is how the dual-active-row condition in #2374/#2378 arises.
+Remediation: retry without `user_specific`, or with the value that matches
+`details.found_scope` (`true` for user). Retrying without the flag writes to the
+caller's **user-scoped override**, not to global, so it is not the same intent
+as the call that failed. The hint MUST NOT recommend `register_schema` —
+registering a second schema for a type that already has an active row is how
+the dual-active-row condition in #2374/#2378 arises.
+
+If the goal really is to change the **global** schema for a type that exists
+only as a user-scoped override, no retry of this call achieves it. Creating the
+first global row from an override is schema reconciliation (see
+`docs/subsystems/schema_registry.md` §4.4), a deliberate step the operator
+performs; an agent should report the situation rather than loop or register a
+second schema. In practice `guard_scope` is always `global` and `found_scope`
+is always `user` for this code.
 
 **`ERR_SCHEMA_MISSING_IDENTITY_CONFIG`** — raised when the existing schema for
 the target `entity_type` lacks both `canonical_name_fields` and

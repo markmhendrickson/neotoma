@@ -6,6 +6,7 @@ import type { GitHubComment, GitHubIssue } from "../../src/services/issues/types
 const mockListIssues = vi.fn();
 const mockListIssueComments = vi.fn();
 const mockCreateIssue = vi.fn();
+const mockGetIssue = vi.fn();
 
 const { mockLoadIssuesConfig } = vi.hoisted(() => ({
   mockLoadIssuesConfig: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("../../src/services/issues/github_client.js", () => ({
   listIssues: (...args: unknown[]) => mockListIssues(...args),
   listIssueComments: (...args: unknown[]) => mockListIssueComments(...args),
   createIssue: (...args: unknown[]) => mockCreateIssue(...args),
+  getIssue: (...args: unknown[]) => mockGetIssue(...args),
 }));
 
 vi.mock("../../src/services/issues/redaction_guard.js", () => ({
@@ -29,7 +31,10 @@ vi.mock("../../src/services/issues/redaction_guard.js", () => ({
   }),
 }));
 
-import { syncIssuesFromGitHub } from "../../src/services/issues/sync_issues_from_github.js";
+import {
+  syncIssueIfStale,
+  syncIssuesFromGitHub,
+} from "../../src/services/issues/sync_issues_from_github.js";
 
 function issue(number: number, title = `Issue ${number}`): GitHubIssue {
   return {
@@ -122,12 +127,15 @@ describe("syncIssuesFromGitHub", () => {
       since: "2026-05-01T00:00:00Z",
     });
 
-    expect(mockListIssues).toHaveBeenCalledWith({
-      state: "all",
-      labels: ["bug"],
-      since: "2026-05-01T00:00:00Z",
-      per_page: 100,
-    });
+    expect(mockListIssues).toHaveBeenCalledWith(
+      {
+        state: "all",
+        labels: ["bug"],
+        since: "2026-05-01T00:00:00Z",
+        per_page: 100,
+      },
+      { repo: "test/repo" }
+    );
     expect(mockListIssueComments).toHaveBeenCalledTimes(2);
     expect(store).toHaveBeenCalledTimes(5);
     expect(result).toMatchObject({ issues_synced: 2, messages_synced: 3, errors: [] });
@@ -286,7 +294,8 @@ describe("syncIssuesFromGitHub", () => {
         expect.objectContaining({
           title: "[redacted] Public bug",
           body: "[redacted] Details here",
-        })
+        }),
+        { repo: "test/repo" }
       );
       // #1610: write-back uses per-field correct() calls (field + value +
       // idempotency_key), NOT a `corrections` map (which fails Zod validation
@@ -456,8 +465,456 @@ describe("syncIssuesFromGitHub", () => {
         expect.objectContaining({
           title: "[redacted] Issue with PII name",
           body: "[redacted] Contact me at private@example.com",
-        })
+        }),
+        { repo: "test/repo" }
       );
+    });
+  });
+  describe("repo argument, dry run and push opt-in (#2536)", () => {
+    const publicUnpushed = {
+      entity_id: "ent-local-1",
+      snapshot: {
+        visibility: "public",
+        github_number: null,
+        title: "Local only",
+        body: "Never pushed",
+        labels: [],
+      },
+    };
+
+    /** A local mirror of `repo#number`, last synced at `lastSyncedAt`. */
+    function mirrored(repo: string, number: number, lastSyncedAt: string) {
+      return {
+        entity_id: `ent-mirror-${repo}-${number}`,
+        snapshot: {
+          visibility: "public",
+          repo,
+          github_number: number,
+          title: `Issue ${number}`,
+          last_synced_at: lastSyncedAt,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      mockLoadIssuesConfig.mockResolvedValue({
+        repo: "test/repo",
+        allowed_repos: ["acme/widgets"],
+        sync_staleness_ms: 300_000,
+      });
+      mockListIssues.mockResolvedValue([]);
+      mockCreateIssue.mockResolvedValue({
+        number: 77,
+        html_url: "https://github.com/other/repo/issues/77",
+        created_at: "2026-06-09T00:00:00Z",
+      });
+    });
+
+    describe("repo validation", () => {
+      it.each([
+        "notaslug",
+        "a/b/c",
+        "owner/",
+        "/name",
+        "owner/..",
+        "owner/.",
+        "own er/name",
+        "owner/na?me",
+        "owner/na#me",
+        "https://github.com/owner/name",
+        "-owner/name",
+        "owner-/name",
+        "",
+      ])("rejects malformed repo %j before any GitHub call or write", async (bad) => {
+        const { ops, store } = createOps();
+        await expect(syncIssuesFromGitHub(ops, { repo: bad })).rejects.toThrow(/owner\/name/);
+        expect(mockListIssues).not.toHaveBeenCalled();
+        expect(mockCreateIssue).not.toHaveBeenCalled();
+        expect(store).not.toHaveBeenCalled();
+        expect(ops.correct).not.toHaveBeenCalled();
+        expect(ops.retrieveEntities).not.toHaveBeenCalled();
+      });
+
+      it("accepts a well-formed repo and targets it on every GitHub call and stored key", async () => {
+        const { ops, store, seenIdempotencyKeys } = createOps();
+        mockListIssues.mockResolvedValue([issue(5)]);
+        mockListIssueComments.mockResolvedValue([comment(501)]);
+
+        const result = await syncIssuesFromGitHub(ops, { repo: "acme/widgets" });
+
+        expect(result.repo).toBe("acme/widgets");
+        expect(mockListIssues).toHaveBeenCalledWith(expect.anything(), { repo: "acme/widgets" });
+        expect(mockListIssueComments).toHaveBeenCalledWith(5, undefined, { repo: "acme/widgets" });
+        expect(store).toHaveBeenCalledTimes(2);
+        expect(seenIdempotencyKeys).toEqual(
+          new Set([
+            "issue-sync-acme/widgets-5-2026-05-01T00:00:00Z-m2",
+            "issue-comment-sync-acme/widgets-5-501-2026-05-01T00:00:00Z-m2",
+          ])
+        );
+        const issueEntity = store.mock.calls[0]?.[0]?.entities?.[0] as Record<string, unknown>;
+        expect(issueEntity.repo).toBe("acme/widgets");
+      });
+
+      it("falls back to the configured default repo when repo is omitted", async () => {
+        const { ops } = createOps();
+        const result = await syncIssuesFromGitHub(ops);
+        expect(result.repo).toBe("test/repo");
+        expect(mockListIssues).toHaveBeenCalledWith(expect.anything(), { repo: "test/repo" });
+      });
+    });
+
+    describe("push default", () => {
+      it("does NOT push for a repo that differs from the configured default", async () => {
+        const { ops } = createOps();
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { repo: "acme/widgets" });
+
+        expect(result.push_enabled).toBe(false);
+        expect(result.issues_pushed).toBe(0);
+        expect(mockCreateIssue).not.toHaveBeenCalled();
+        expect(ops.correct).not.toHaveBeenCalled();
+        // The pull leg still ran against the requested repo.
+        expect(mockListIssues).toHaveBeenCalledTimes(1);
+      });
+
+      it("treats the default repo case-insensitively (still pushes by default)", async () => {
+        const { ops } = createOps();
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { repo: "Test/Repo" });
+
+        expect(result.push_enabled).toBe(true);
+        expect(result.issues_pushed).toBe(1);
+      });
+
+      it("keeps the historical push-on default for the configured default repo", async () => {
+        const { ops } = createOps();
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops);
+
+        expect(result.push_enabled).toBe(true);
+        expect(result.issues_pushed).toBe(1);
+        expect(mockCreateIssue).toHaveBeenCalledTimes(1);
+      });
+
+      it("pushes to a non-default repo only with explicit push: true, and binds repo on write-back", async () => {
+        const { ops } = createOps();
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { repo: "acme/widgets", push: true });
+
+        expect(result.push_enabled).toBe(true);
+        expect(result.issues_pushed).toBe(1);
+        expect(mockCreateIssue).toHaveBeenCalledWith(expect.anything(), { repo: "acme/widgets" });
+        const byField = Object.fromEntries(
+          (ops.correct as ReturnType<typeof vi.fn>).mock.calls.map((c) => [
+            (c[0] as { field: string }).field,
+            (c[0] as { value: unknown }).value,
+          ])
+        );
+        expect(byField.repo).toBe("acme/widgets");
+        expect(byField.github_number).toBe(77);
+      });
+
+      it("honours an explicit push: false even for the default repo", async () => {
+        const { ops } = createOps();
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { push: false });
+
+        expect(result.push_enabled).toBe(false);
+        expect(mockCreateIssue).not.toHaveBeenCalled();
+        expect(ops.retrieveEntities).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("dry run (commit: false)", () => {
+      it("writes nothing: no store, no correct, no GitHub create", async () => {
+        const { ops, store } = createOps();
+        mockListIssues.mockResolvedValue([issue(1), issue(2)]);
+        mockListIssueComments.mockResolvedValue([comment(101)]);
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { commit: false });
+
+        expect(result.dry_run).toBe(true);
+        expect(store).not.toHaveBeenCalled();
+        expect(ops.correct).not.toHaveBeenCalled();
+        expect(mockCreateIssue).not.toHaveBeenCalled();
+        expect(result.issues_synced).toBe(0);
+        expect(result.messages_synced).toBe(0);
+        expect(result.issues_pushed).toBe(0);
+      });
+
+      it("reports what would be created, updated, left unchanged and pushed", async () => {
+        const { ops, store } = createOps();
+        mockListIssues.mockResolvedValue([
+          issue(1), // no local mirror -> create
+          { ...issue(2), updated_at: "2026-05-09T00:00:00Z" }, // local behind -> update
+          issue(3), // local current -> unchanged
+        ]);
+        mockListIssueComments.mockResolvedValue([comment(1), comment(2)]);
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [
+            mirrored("test/repo", 2, "2026-05-01T00:00:00Z"),
+            mirrored("test/repo", 3, "2026-05-01T00:00:00Z"),
+            // Same number in a different repo must not be mistaken for a mirror.
+            mirrored("other/repo", 1, "2026-05-01T00:00:00Z"),
+            publicUnpushed,
+          ],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { commit: false });
+
+        expect(result.plan).toEqual({
+          issues_to_create: [{ github_number: 1, title: "Issue 1" }],
+          issues_to_update: [{ github_number: 2, title: "Issue 2" }],
+          issues_unchanged: 1,
+          messages_to_sync: 6,
+          issues_to_push: [{ entity_id: "ent-local-1", title: "Local only" }],
+          warnings: [],
+        });
+        expect(result.push_enabled).toBe(true);
+        expect(store).not.toHaveBeenCalled();
+      });
+
+      it("combines with repo: previews a non-default repo, push off, still writes nothing", async () => {
+        const { ops, store } = createOps();
+        mockListIssues.mockResolvedValue([issue(9)]);
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, { repo: "acme/widgets", commit: false });
+
+        expect(result.repo).toBe("acme/widgets");
+        expect(result.push_enabled).toBe(false);
+        expect(result.plan?.issues_to_create).toEqual([{ github_number: 9, title: "Issue 9" }]);
+        expect(result.plan?.issues_to_push).toEqual([]);
+        expect(store).not.toHaveBeenCalled();
+        expect(mockCreateIssue).not.toHaveBeenCalled();
+      });
+
+      it("previews the push for a non-default repo when push: true is passed", async () => {
+        const { ops } = createOps();
+        (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+          entities: [publicUnpushed],
+        });
+
+        const result = await syncIssuesFromGitHub(ops, {
+          repo: "acme/widgets",
+          push: true,
+          commit: false,
+        });
+
+        expect(result.plan?.issues_to_push).toEqual([
+          { entity_id: "ent-local-1", title: "Local only" },
+        ]);
+        expect(mockCreateIssue).not.toHaveBeenCalled();
+        expect(ops.correct).not.toHaveBeenCalled();
+      });
+
+      it("a normal (commit-by-default) run has no plan and dry_run false", async () => {
+        const { ops } = createOps();
+        const result = await syncIssuesFromGitHub(ops);
+        expect(result.dry_run).toBe(false);
+        expect(result.plan).toBeUndefined();
+      });
+    });
+  });
+
+  describe("repo allowlist (#2536)", () => {
+    const mirroredOther = {
+      entity_id: "ent-local-1",
+      snapshot: { visibility: "public", github_number: null, title: "Local only", body: "b" },
+    };
+
+    function expectNoAccess(ops: Operations, store: ReturnType<typeof createOps>["store"]) {
+      expect(mockListIssues).not.toHaveBeenCalled();
+      expect(mockListIssueComments).not.toHaveBeenCalled();
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(mockGetIssue).not.toHaveBeenCalled();
+      expect(store).not.toHaveBeenCalled();
+      expect(ops.correct).not.toHaveBeenCalled();
+      expect(ops.retrieveEntities).not.toHaveBeenCalled();
+    }
+
+    beforeEach(() => {
+      mockListIssues.mockResolvedValue([issue(1)]);
+      mockListIssueComments.mockResolvedValue([]);
+      mockCreateIssue.mockResolvedValue({
+        number: 9,
+        html_url: "https://github.com/acme/widgets/issues/9",
+        created_at: "2026-06-09T00:00:00Z",
+      });
+    });
+
+    it.each([
+      ["pull", {}],
+      ["push", { push: true }],
+      ["dry run", { commit: false }],
+      ["dry run with push", { commit: false, push: true }],
+    ])("rejects a repo that is not on the allowlist for %s before any access", async (_n, extra) => {
+      mockLoadIssuesConfig.mockResolvedValue({
+        repo: "test/repo",
+        allowed_repos: ["acme/widgets"],
+        sync_staleness_ms: 300_000,
+      });
+      const { ops, store } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue({
+        entities: [mirroredOther],
+      });
+
+      await expect(
+        syncIssuesFromGitHub(ops, { repo: "other/private-thing", ...extra })
+      ).rejects.toMatchObject({ code: "ERR_ISSUE_REPO_NOT_ALLOWED", status: 403 });
+      expectNoAccess(ops, store);
+    });
+
+    it("gives the same rejection text for any repo outside the list and never echoes it", async () => {
+      const { ops } = createOps();
+      const messages: string[] = [];
+      for (const repo of ["other/exists", "other/does-not-exist-anywhere"]) {
+        try {
+          await syncIssuesFromGitHub(ops, { repo });
+        } catch (err) {
+          messages.push((err as Error).message);
+        }
+      }
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toBe(messages[1]);
+      expect(messages[0]).not.toContain("other/");
+      expect(messages[0]).toContain("not enabled for issue sync");
+    });
+
+    it("lets a listed repo proceed", async () => {
+      mockLoadIssuesConfig.mockResolvedValue({
+        repo: "test/repo",
+        allowed_repos: ["acme/widgets"],
+        sync_staleness_ms: 300_000,
+      });
+      const { ops, store } = createOps();
+      const result = await syncIssuesFromGitHub(ops, { repo: "acme/widgets" });
+      expect(result.repo).toBe("acme/widgets");
+      expect(mockListIssues).toHaveBeenCalledWith(expect.anything(), { repo: "acme/widgets" });
+      expect(store).toHaveBeenCalled();
+    });
+
+    it("always allows the configured repo, with the list unset, empty or elsewhere", async () => {
+      for (const allowed of [undefined, [], ["acme/widgets"]]) {
+        vi.clearAllMocks();
+        mockListIssues.mockResolvedValue([]);
+        mockLoadIssuesConfig.mockResolvedValue({
+          repo: "test/repo",
+          ...(allowed ? { allowed_repos: allowed } : {}),
+          sync_staleness_ms: 300_000,
+        });
+        const { ops } = createOps();
+        const result = await syncIssuesFromGitHub(ops, { repo: "test/repo" });
+        expect(result.repo).toBe("test/repo");
+        expect(mockListIssues).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it("treats an unset or empty list as the configured repo only (fail closed)", async () => {
+      for (const allowed of [undefined, []]) {
+        vi.clearAllMocks();
+        mockLoadIssuesConfig.mockResolvedValue({
+          repo: "test/repo",
+          ...(allowed ? { allowed_repos: allowed } : {}),
+          sync_staleness_ms: 300_000,
+        });
+        const { ops, store } = createOps();
+        await expect(syncIssuesFromGitHub(ops, { repo: "acme/widgets" })).rejects.toMatchObject({
+          code: "ERR_ISSUE_REPO_NOT_ALLOWED",
+        });
+        expectNoAccess(ops, store);
+      }
+    });
+
+    it("matches case-insensitively in both directions", async () => {
+      mockLoadIssuesConfig.mockResolvedValue({
+        repo: "Test/Repo",
+        allowed_repos: ["Acme/Widgets"],
+        sync_staleness_ms: 300_000,
+      });
+      mockListIssues.mockResolvedValue([]);
+      const { ops } = createOps();
+      await expect(syncIssuesFromGitHub(ops, { repo: "acme/widgets" })).resolves.toMatchObject({
+        repo: "acme/widgets",
+      });
+      await expect(syncIssuesFromGitHub(ops, { repo: "TEST/REPO" })).resolves.toMatchObject({
+        repo: "TEST/REPO",
+      });
+    });
+
+    it("does not treat a wildcard as a match", async () => {
+      mockLoadIssuesConfig.mockResolvedValue({
+        repo: "test/repo",
+        allowed_repos: ["acme/*"],
+        sync_staleness_ms: 300_000,
+      });
+      const { ops, store } = createOps();
+      await expect(syncIssuesFromGitHub(ops, { repo: "acme/widgets" })).rejects.toMatchObject({
+        code: "ERR_ISSUE_REPO_NOT_ALLOWED",
+      });
+      expectNoAccess(ops, store);
+    });
+  });
+
+  describe("syncIssueIfStale repo argument (#2536)", () => {
+    beforeEach(() => {
+      mockLoadIssuesConfig.mockResolvedValue({
+        repo: "test/repo",
+        allowed_repos: ["acme/widgets"],
+        sync_staleness_ms: 300_000,
+      });
+      mockGetIssue.mockResolvedValue(issue(7));
+      mockListIssueComments.mockResolvedValue([comment(701)]);
+    });
+
+    it("reads the issue and its comments from the given repo and stores them under it", async () => {
+      const { ops, store, seenIdempotencyKeys } = createOps();
+
+      const synced = await syncIssueIfStale(ops, 7, null, "acme/widgets");
+
+      expect(synced).toBe(true);
+      expect(mockGetIssue).toHaveBeenCalledWith(7, { repo: "acme/widgets" });
+      expect(mockListIssueComments).toHaveBeenCalledWith(7, undefined, { repo: "acme/widgets" });
+      const issueEntity = store.mock.calls[0]?.[0]?.entities?.[0] as Record<string, unknown>;
+      expect(issueEntity.repo).toBe("acme/widgets");
+      expect([...seenIdempotencyKeys].every((k) => k.includes("acme/widgets"))).toBe(true);
+    });
+
+    it("defaults to the configured repo when no repo is given", async () => {
+      const { ops } = createOps();
+      await syncIssueIfStale(ops, 7, null);
+      expect(mockGetIssue).toHaveBeenCalledWith(7, { repo: "test/repo" });
+    });
+
+    it("rejects a repo outside the allowlist before any GitHub request", async () => {
+      const { ops, store } = createOps();
+      await expect(syncIssueIfStale(ops, 7, null, "other/repo")).rejects.toMatchObject({
+        code: "ERR_ISSUE_REPO_NOT_ALLOWED",
+      });
+      expect(mockGetIssue).not.toHaveBeenCalled();
+      expect(mockListIssueComments).not.toHaveBeenCalled();
+      expect(store).not.toHaveBeenCalled();
     });
   });
 });

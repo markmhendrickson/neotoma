@@ -16,9 +16,13 @@
  *
  * The write-scope RESOLUTION mechanism itself (making the guard/update read
  * and write the same scope by default) is issue #2374/#2378, fixed in PR
- * #2446 (not duplicated here). This test instead covers the second half of
- * #2454: when the guard's scope-limited lookup comes up empty but a schema
- * for the entity_type is active in a DIFFERENT scope, the error must:
+ * #2446. Since then an omitted `user_specific` resolves user-scope-first on
+ * both the guard and the update, so it extends the user-scoped schema rather
+ * than missing it (pinned below on MCP and HTTP). The guard is scope-limited
+ * only when the caller passes an explicit `user_specific: false`, and this
+ * file covers the second half of #2454 for that case: when the global-only
+ * lookup comes up empty but a schema for the entity_type is active in the
+ * caller's user scope, the error must:
  *   1. name which lookup failed and in which scope, and
  *   2. NOT recommend `register_schema` — registering a second schema for a
  *      type that already has one is how the dual-active-row condition in
@@ -57,10 +61,7 @@ async function cleanupTestData(): Promise<void> {
   await db.from("raw_fragments").delete().eq("entity_type", USER_SCOPED_ONLY_TYPE);
   await db.from("raw_fragments").delete().eq("entity_type", GLOBAL_SCOPED_ONLY_TYPE);
   await db.from("raw_fragments").delete().eq("entity_type", HTTP_USER_SCOPED_ONLY_TYPE);
-  await db
-    .from("schema_registry")
-    .delete()
-    .eq("entity_type", "issue_2454_truly_unregistered_type");
+  await db.from("schema_registry").delete().eq("entity_type", "issue_2454_truly_unregistered_type");
   await db
     .from("schema_registry")
     .delete()
@@ -166,15 +167,15 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     expect(body.field_names).toContain("name");
   });
 
-  it("update_schema_incremental without user_specific reports a scope mismatch, not a missing schema, for a type that is active only in user scope", async () => {
+  it("update_schema_incremental with an explicit user_specific: false reports a scope mismatch, not a missing schema, for a type that is active only in user scope", async () => {
     const result = await server.executeToolForCli(
       "update_schema_incremental",
       {
         entity_type: USER_SCOPED_ONLY_TYPE,
         fields_to_add: [{ field_name: "status", field_type: "string" }],
-        // Deliberately omitted: user_specific. This is the common calling
-        // pattern (a caller extending a type it already knows exists,
-        // per describe_entity_type, without restating scope).
+        // Explicitly global. Since #2374 this is the only way the guard's
+        // lookup is narrowed to one scope; omitted resolves user-first.
+        user_specific: false,
         user_id: TEST_USER_ID,
       },
       TEST_USER_ID
@@ -211,6 +212,44 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
 
     // Must give an actionable, scope-correct path forward.
     expect(body.error?.hint).toContain("user_specific");
+  });
+
+  it("update_schema_incremental WITHOUT user_specific resolves the same user-scoped schema describe_entity_type saw, and extends it (#2374)", async () => {
+    const result = await server.executeToolForCli(
+      "update_schema_incremental",
+      {
+        entity_type: USER_SCOPED_ONLY_TYPE,
+        fields_to_add: [{ field_name: "priority", field_type: "string" }],
+        // Deliberately omitted: user_specific. The common calling pattern —
+        // a caller extending a type it already knows exists, per
+        // describe_entity_type, without restating scope.
+        user_id: TEST_USER_ID,
+      },
+      TEST_USER_ID
+    );
+    const body = JSON.parse(result.content[0].text) as {
+      success?: boolean;
+      error?: unknown;
+      scope?: string;
+      user_id?: string;
+    };
+    expect(body.error).toBeUndefined();
+    expect(body.success).toBe(true);
+    expect(body.scope).toBe("user");
+    expect(body.user_id).toBe(TEST_USER_ID);
+
+    const { data: activeRows } = await db
+      .from("schema_registry")
+      .select("scope, user_id, schema_definition")
+      .eq("entity_type", USER_SCOPED_ONLY_TYPE)
+      .eq("active", true);
+    expect(activeRows).toHaveLength(1);
+    expect(activeRows?.[0]?.scope).toBe("user");
+    expect(activeRows?.[0]?.user_id).toBe(TEST_USER_ID);
+    const fields = (activeRows?.[0]?.schema_definition as { fields?: Record<string, unknown> })
+      ?.fields;
+    expect(fields).toHaveProperty("priority");
+    expect(fields).toHaveProperty("name");
   });
 
   it("update_schema_incremental WITH user_specific: true resolves the same user-scoped schema describe_entity_type saw, and extends it", async () => {
@@ -281,13 +320,14 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     expect(body.error?.hint).toContain("register_schema");
   });
 
-  it("HTTP POST /update_schema_incremental without user_specific returns ERR_SCHEMA_SCOPE_MISMATCH for a user-scoped-only type", async () => {
+  it("HTTP POST /update_schema_incremental with an explicit user_specific: false returns ERR_SCHEMA_SCOPE_MISMATCH for a user-scoped-only type", async () => {
     const httpRes = await fetch(`${API_BASE}/update_schema_incremental`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         entity_type: HTTP_USER_SCOPED_ONLY_TYPE,
         fields_to_add: [{ field_name: "status", field_type: "string" }],
+        user_specific: false,
       }),
     });
     expect(httpRes.status).toBe(200);
@@ -305,6 +345,42 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     expect(body.error?.details?.found_scope).toBe("user");
     expect(body.error?.hint).toContain("user_specific");
     expect(body.error?.hint).not.toContain("register_schema");
+  });
+
+  it("HTTP POST /update_schema_incremental WITHOUT user_specific extends the caller's user-scoped schema instead of erroring or writing global (#2374)", async () => {
+    const httpRes = await fetch(`${API_BASE}/update_schema_incremental`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_type: HTTP_USER_SCOPED_ONLY_TYPE,
+        fields_to_add: [{ field_name: "priority", field_type: "string" }],
+      }),
+    });
+    expect(httpRes.status).toBe(200);
+    const body = (await httpRes.json()) as {
+      success?: boolean;
+      error?: unknown;
+      scope?: string;
+      user_id?: string;
+    };
+    expect(body.error).toBeUndefined();
+    expect(body.success).toBe(true);
+    expect(body.scope).toBe("user");
+    expect(body.user_id).toBe(LOCAL_DEV_USER_ID);
+
+    // Effect, not envelope: one active row, the caller's user row, carrying
+    // the new field. No global row was manufactured.
+    const { data: activeRows } = await db
+      .from("schema_registry")
+      .select("scope, user_id, schema_definition")
+      .eq("entity_type", HTTP_USER_SCOPED_ONLY_TYPE)
+      .eq("active", true);
+    expect(activeRows).toHaveLength(1);
+    expect(activeRows?.[0]?.scope).toBe("user");
+    expect(activeRows?.[0]?.user_id).toBe(LOCAL_DEV_USER_ID);
+    expect(
+      (activeRows?.[0]?.schema_definition as { fields?: Record<string, unknown> })?.fields
+    ).toHaveProperty("priority");
   });
 
   it("HTTP POST /update_schema_incremental cold-start still returns ERR_NO_SCHEMA_FOR_ENTITY_TYPE with register_schema hint", async () => {
@@ -335,5 +411,13 @@ describe("update_schema_incremental / describe_entity_type schema-lookup parity 
     const cli = readFileSync(join(here, "..", "..", "src", "cli", "index.ts"), "utf8");
     expect(cli).toContain('.option("--user-specific"');
     expect(cli).toContain("user_specific: opts.userSpecific");
+    // #2374: `schemas update` must not default the flag to false — that sent
+    // an explicit "global" on every call. `--no-user-specific` is the
+    // explicit-global form.
+    const updateCmd = cli.slice(cli.indexOf('.command("update")'));
+    const updateOptions = updateCmd.slice(0, updateCmd.indexOf(".action("));
+    expect(updateOptions).toMatch(/\.option\(\s*"--no-user-specific"/);
+    expect(updateOptions).toMatch(/\.option\(\s*"--user-specific",\s*"[^"]*"\s*\)/);
+    expect(updateOptions).not.toMatch(/\.option\(\s*"--user-specific",\s*"[^"]*",\s*false\s*\)/);
   });
 });

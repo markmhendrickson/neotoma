@@ -6,7 +6,9 @@
 import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
 import { softDeleteEntity } from "../deletion.js";
+import { loadIssuesConfig } from "./config.js";
 import { closeIssue } from "./github_client.js";
+import { resolveIssueRepo } from "./repo_allowlist.js";
 
 export type IssueBulkItemResult = {
   entity_id: string;
@@ -105,13 +107,33 @@ async function persistIssueFromSnapshot(
 }
 
 /**
- * Mark issues closed locally; when linked to GitHub (`github_number` > 0), PATCH GitHub first.
+ * Close the GitHub issue a row is linked to, in the row's own repo and only when that repo is
+ * permitted (the configured repo or on the allowlist). Returns false, without any GitHub call,
+ * when the row is not linked or its repo is not permitted, so the caller acts locally only.
+ * Never falls back to the configured repo: that would close a different repo's same-numbered issue.
+ */
+async function closeLinkedGithubIssue(
+  snapshot: Record<string, unknown>,
+  ghNum: number,
+  config: Awaited<ReturnType<typeof loadIssuesConfig>>
+): Promise<boolean> {
+  if (ghNum <= 0) return false;
+  const { repo, githubAllowed } = resolveIssueRepo(snapshot, config);
+  if (!githubAllowed) return false;
+  await closeIssue(ghNum, { repo });
+  return true;
+}
+
+/**
+ * Mark issues closed locally; when linked to GitHub (`github_number` > 0) and the row's repo is
+ * permitted, PATCH that repo's issue first. A row whose repo is not permitted is closed locally only.
  */
 export async function bulkCloseIssues(
   userId: string,
   entityIds: string[]
 ): Promise<{ results: IssueBulkItemResult[] }> {
   const results: IssueBulkItemResult[] = [];
+  const config = await loadIssuesConfig();
   for (const entityId of entityIds) {
     const snapshot = await loadOwnedIssueSnapshot(entityId, userId);
     if (!snapshot) {
@@ -128,8 +150,7 @@ export async function bulkCloseIssues(
     let githubClosed = false;
     if (ghNum > 0) {
       try {
-        await closeIssue(ghNum);
-        githubClosed = true;
+        githubClosed = await closeLinkedGithubIssue(snapshot, ghNum, config);
       } catch (err) {
         results.push({
           entity_id: entityId,
@@ -172,6 +193,7 @@ export async function bulkRemoveIssues(
   entityIds: string[]
 ): Promise<{ results: IssueBulkItemResult[] }> {
   const results: IssueBulkItemResult[] = [];
+  const config = await loadIssuesConfig();
   for (const entityId of entityIds) {
     const snapshot = await loadOwnedIssueSnapshot(entityId, userId);
     if (!snapshot) {
@@ -184,8 +206,7 @@ export async function bulkRemoveIssues(
     let githubClosed = false;
     if (ghNum > 0 && status === "open") {
       try {
-        await closeIssue(ghNum);
-        githubClosed = true;
+        githubClosed = await closeLinkedGithubIssue(snapshot, ghNum, config);
       } catch (err) {
         results.push({
           entity_id: entityId,

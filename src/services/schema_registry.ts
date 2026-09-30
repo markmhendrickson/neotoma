@@ -693,6 +693,23 @@ export interface SchemaRegistryEntry {
   metadata?: SchemaMetadata;
 }
 
+/**
+ * #2379: one raw_fragments group that `migrateRawFragmentsToObservations`
+ * did not promote to an observation, with a machine-readable reason so a
+ * caller (or `updateSchemaIncremental`'s response) can report truthfully
+ * rather than inferring success from the request flag alone.
+ */
+export interface SkippedMigrationGroup {
+  field_name: string;
+  reason:
+    | "no_entity_resolution"
+    | "no_active_schema"
+    | "observation_insert_failed"
+    | "already_promoted"
+    | "unexpected_error";
+  count: number;
+}
+
 export async function loadCodeDefinedSchemaEntry(
   entityType: string
 ): Promise<SchemaRegistryEntry | null> {
@@ -1506,7 +1523,20 @@ export class SchemaRegistryService {
     migrate_user_id?: string;
     activate?: boolean; // Default: true - activate immediately so new data uses updated schema
     force?: boolean;
-  }): Promise<SchemaRegistryEntry> {
+  }): Promise<
+    SchemaRegistryEntry & {
+      /**
+       * #2379: present only when `migrate_existing: true` was passed. The
+       * ACTUAL promotion outcome — never assume `migrate_existing: true`
+       * requested implies anything promoted. `migrated_count > 0` is the one
+       * fact `migrated_existing` in the HTTP/MCP response should be derived
+       * from; `skipped` names every fragment group that did not promote and
+       * why, so a truthful "zero promoted" response can still say what
+       * happened instead of just reporting success.
+       */
+      migration_result?: { migrated_count: number; skipped: SkippedMigrationGroup[] };
+    }
+  > {
     // Entity-type naming guards (forbidden-pattern + plural).
     enforceEntityTypeGuards(options.entity_type, {
       force: options.force,
@@ -1518,7 +1548,17 @@ export class SchemaRegistryService {
     // 1. Load current active schema (user-specific or global), then fall back to
     // code-defined ENTITY_SCHEMAS so incremental updates can materialize the
     // first registry row for built-in types (e.g. conversation_message).
-    let currentSchema = await this.loadActiveSchema(options.entity_type, options.user_id);
+    //
+    // Read scope (#2374): an EXPLICIT `user_specific: false` reads the global
+    // row only — the caller has said "target global", so the new global row
+    // must extend the current global row. Reading user-preferring here would
+    // build the new global row from the caller's private user override,
+    // replacing the global field set with the override's and dropping any
+    // field only the global row carried (#2378-class loss, on the global
+    // scope). Omitted or `true`: user-preferring with global fallback, so
+    // the write below can defer to whichever row this resolves.
+    const readUserId = options.user_specific === false ? undefined : options.user_id;
+    let currentSchema = await this.loadActiveSchema(options.entity_type, readUserId);
     if (!currentSchema) {
       const normalized = normalizeEntityTypeForSchema(options.entity_type);
       const codeDefined =
@@ -1636,6 +1676,50 @@ export class SchemaRegistryService {
     const userId =
       options.user_id && options.user_id !== defaultUserId ? options.user_id : undefined;
 
+    // #2374: the write scope must resolve to the SAME row `currentSchema` just
+    // came from, unless the caller explicitly states an intent to override it.
+    //
+    // Before this fix, the read above (loadActiveSchema) preferred a
+    // user-scoped row when one existed, while the write below was governed
+    // purely by `options.user_specific` — which every caller that didn't pass
+    // it explicitly defaults to `false` (both the REST Zod schema and the MCP
+    // request schema default it). So the common case — add a field, don't
+    // think about scope — read the user's v6.2.0 row and wrote a NEW v6.3.0
+    // GLOBAL row, leaving both active. Every read afterwards still resolved
+    // the untouched user row (loadActiveSchema prefers it again), so the
+    // update looked like a no-op even though it had, in fact, run and left
+    // manufactured debris. That silent split is also how #2378 happens: the
+    // NEXT incremental call reads the same stale user row again (never the
+    // global row this call just wrote), merges its own new field onto that
+    // stale field set, and the previous call's fields vanish from the result
+    // — not because the merge logic drops fields (it doesn't; see the
+    // mergedFields construction above, which is carry-forward-correct given
+    // whatever `currentSchema` it's handed), but because each call is fed an
+    // increasingly stale `currentSchema`.
+    //
+    // Fix: derive the effective write scope from the row `currentSchema`
+    // resolved to, not from the caller's possibly-defaulted `user_specific`.
+    // `options.user_specific` remains a real override — passing it explicitly
+    // still wins, so a caller that genuinely wants to create or target the
+    // other scope still can.
+    const explicitUserSpecific = options.user_specific;
+    const resolvedScopeIsUser = currentSchema.scope === "user" && !!currentSchema.user_id;
+    const effectiveUserSpecific =
+      explicitUserSpecific !== undefined ? explicitUserSpecific : resolvedScopeIsUser;
+    // When deferring to the resolved scope (no explicit override) and that
+    // scope is "user", the row we read from is the authoritative source of
+    // WHICH user's row this is — not `options.user_id`, which the HTTP/MCP
+    // layers may leave undefined for a nominally-global call even though the
+    // read above resolved a user row (see call sites). Only fall back to the
+    // caller-supplied `userId` when there is no resolved user row to anchor
+    // on (i.e. currentSchema is itself the code-defined baseline or a global
+    // row) or when the caller explicitly asked for a user-specific write.
+    const effectiveUserId = effectiveUserSpecific
+      ? resolvedScopeIsUser && explicitUserSpecific === undefined
+        ? (currentSchema.user_id as string)
+        : userId
+      : undefined;
+
     // Preserve schema-level declarations that aren't field-maps (canonical_name_fields,
     // temporal_fields, reference_fields, aliases) across incremental updates.
     // Prune any removed field names from these lists so they don't reference
@@ -1716,29 +1800,42 @@ export class SchemaRegistryService {
       schema_definition: { ...preserved, fields: mergedFields },
       reducer_config: { merge_policies: mergedReducerPolicies },
       metadata: mergedMetadata,
-      user_id: userId,
-      user_specific: options.user_specific,
+      user_id: effectiveUserId,
+      user_specific: effectiveUserSpecific,
       activate: false, // Register as inactive first
+      // #2197: without this, a caller who passed force: true to
+      // updateSchemaIncremental still hit ERR_PLURAL_ENTITY_TYPE /
+      // ERR_FORBIDDEN_ENTITY_TYPE here, because register() re-runs the same
+      // guard independently and was never told the override applies. The
+      // guard at the top of this function only protects the FIRST check;
+      // every internal call that re-validates the same entity_type must
+      // carry the same force through, or the override is real for one
+      // check and silently absent for the next.
+      force: options.force,
     });
 
-    // 6. Activate new version if requested (this deactivates other versions)
+    // 6. Activate new version if requested (this deactivates other versions).
+    // #2374/#2356: pass the SAME resolved scope used for the write above.
+    // `effectiveUserId` is what register() just wrote to, so activate() selects
+    // exactly that row. Passing `options.user_specific ? userId : undefined`
+    // instead would re-derive scope from the caller's (possibly omitted) flag
+    // and, for a caller who omitted it while the read resolved a user row,
+    // activate the global row rather than the one this call registered.
     if (activateSchema) {
-      // #2356: pass the principal so a user-scoped update activates THAT user's
-      // row. `activate` previously ignored its userId argument and resolved the
-      // scope from an unscoped lookup, so a user-scoped incremental update could
-      // activate the global row instead.
-      await this.activate(
-        options.entity_type,
-        newVersion,
-        options.user_specific ? userId : undefined
-      );
+      await this.activate(options.entity_type, newVersion, effectiveUserId);
     }
 
     logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Incrementally updated schema for ${options.entity_type} to version ${newVersion}`
     );
 
-    // 7. Migrate raw_fragments if requested (historical data backfill only)
+    // 7. Migrate raw_fragments if requested (historical data backfill only).
+    // #2379: capture the ACTUAL result and attach it to the response instead
+    // of firing the call and reporting success unconditionally. A request to
+    // migrate with nothing promoted is a legitimate outcome (e.g. every
+    // candidate fragment was already promoted by a prior call) — the caller
+    // needs to be able to tell that apart from "the tool did nothing."
+    let migrationResult: { migrated_count: number; skipped: SkippedMigrationGroup[] } | undefined;
     if (options.migrate_existing) {
       logSchemaRegistryInfo(
         `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`
@@ -1749,17 +1846,22 @@ export class SchemaRegistryService {
       ];
 
       if (fieldNamesToMigrate.length > 0) {
-        await this.migrateRawFragmentsToObservations({
+        migrationResult = await this.migrateRawFragmentsToObservations({
           entity_type: options.entity_type,
           field_names: fieldNamesToMigrate,
           // migrate_user_id takes precedence: for global schemas the caller passes
           // the authenticated user's id here while options.user_id is undefined.
           user_id: options.migrate_user_id ?? options.user_id,
         });
+      } else {
+        // migrate_existing: true with no fields named in THIS call — nothing
+        // was asked to migrate, so say so rather than leaving the caller to
+        // infer it from an absent field.
+        migrationResult = { migrated_count: 0, skipped: [] };
       }
     }
 
-    return newSchema;
+    return { ...newSchema, migration_result: migrationResult };
   }
 
   /**
@@ -1770,9 +1872,40 @@ export class SchemaRegistryService {
     entity_type: string;
     field_names: string[];
     user_id?: string;
-  }): Promise<{ migrated_count: number }> {
+  }): Promise<{
+    migrated_count: number;
+    /**
+     * #2379: every group of fragments that did NOT promote, with why. Every
+     * `continue` in the loop below used to be silent — a console.warn/error
+     * that never reached the caller — so `update_schema_incremental` reported
+     * `migrated_existing: true` whether or not a single value moved. This is
+     * the effect data that lets a caller (or `updateSchemaIncremental`, or a
+     * test) tell the two apart.
+     */
+    skipped: SkippedMigrationGroup[];
+  }> {
     const BATCH_SIZE = 100; // Smaller batch size for safety
     let totalMigrated = 0;
+    // Keyed by a JSON-encoded [field_name, reason] pair rather than a
+    // delimited string — a field name is caller-supplied and must not be
+    // assumed delimiter-safe.
+    const skippedByReason = new Map<
+      string,
+      { field_name: string; reason: SkippedMigrationGroup["reason"]; count: number }
+    >();
+    const recordSkip = (
+      fieldName: string,
+      reason: SkippedMigrationGroup["reason"],
+      count = 1
+    ): void => {
+      const key = JSON.stringify([fieldName, reason]);
+      const existing = skippedByReason.get(key);
+      if (existing) {
+        existing.count += count;
+      } else {
+        skippedByReason.set(key, { field_name: fieldName, reason, count });
+      }
+    };
 
     logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Starting migration for fields: ${options.field_names.join(", ")}`
@@ -1871,10 +2004,19 @@ export class SchemaRegistryService {
 
           if (!entityId) {
             // No existing observation found - skip this group
-            // This can happen if fragments were created but observations weren't
+            // This can happen if fragments were created but observations weren't,
+            // or (the common case for legacy/pre-declaration imports) the
+            // (source_id, interpretation_id) fallback resolved to zero or more
+            // than one entity, which this function deliberately refuses to
+            // guess between (#2379: an ambiguous promotion is worse than none).
             console.warn(
               `[SCHEMA_REGISTRY] No entity found for source ${sourceId}, interpretation ${interpretationId}, skipping migration`
             );
+            for (const fragment of groupFragments) {
+              if (options.field_names.includes(fragment.fragment_key)) {
+                recordSkip(fragment.fragment_key, "no_entity_resolution");
+              }
+            }
             continue;
           }
 
@@ -1882,6 +2024,11 @@ export class SchemaRegistryService {
           const currentSchema = await this.loadActiveSchema(options.entity_type, options.user_id);
           if (!currentSchema) {
             console.error(`[SCHEMA_REGISTRY] No active schema found for ${options.entity_type}`);
+            for (const fragment of groupFragments) {
+              if (options.field_names.includes(fragment.fragment_key)) {
+                recordSkip(fragment.fragment_key, "no_active_schema");
+              }
+            }
             continue;
           }
 
@@ -1894,7 +2041,7 @@ export class SchemaRegistryService {
           }
 
           if (Object.keys(promotedFields).length === 0) {
-            continue; // No fields to migrate for this entity
+            continue; // No fields named in THIS call applied to this entity — not a failure to report.
           }
 
           try {
@@ -1921,7 +2068,19 @@ export class SchemaRegistryService {
                   `[SCHEMA_REGISTRY] Failed to create observation for entity ${entityId}:`,
                   obsError.message
                 );
+                for (const fieldName of Object.keys(promotedFields)) {
+                  recordSkip(fieldName, "observation_insert_failed");
+                }
                 continue;
+              }
+              // 23505 = unique-violation: this exact observation was already
+              // inserted by a prior run of this same migration (idempotency).
+              // Not a failure and not migrated_count-worthy again, but it IS
+              // "already promoted" rather than silently nothing — record it
+              // distinctly so a re-run's response doesn't read as having
+              // found nothing to do when in fact everything was already done.
+              for (const fieldName of Object.keys(promotedFields)) {
+                recordSkip(fieldName, "already_promoted");
               }
             } else {
               totalMigrated += Object.keys(promotedFields).length;
@@ -1986,6 +2145,11 @@ export class SchemaRegistryService {
               `[SCHEMA_REGISTRY] Failed to migrate fields for entity ${entityId}:`,
               error.message
             );
+            for (const fragment of groupFragments) {
+              if (options.field_names.includes(fragment.fragment_key)) {
+                recordSkip(fragment.fragment_key, "unexpected_error");
+              }
+            }
             // Continue with next group - don't fail entire migration
           }
         }
@@ -2004,7 +2168,9 @@ export class SchemaRegistryService {
       `[SCHEMA_REGISTRY] Migration complete. Total fragments processed: ${totalMigrated}`
     );
 
-    return { migrated_count: totalMigrated };
+    const skipped: SkippedMigrationGroup[] = [...skippedByReason.values()];
+
+    return { migrated_count: totalMigrated, skipped };
   }
 
   /**
@@ -2121,38 +2287,45 @@ export class SchemaRegistryService {
   }
 
   /**
-   * Activate schema version
-   * Supports user-specific schemas: deactivates other versions for same entity_type and user_id/scope
+   * Activate schema version.
+   *
+   * Supports user-specific schemas: deactivates other versions for the same
+   * entity_type and user_id/scope, then activates the ONE targeted row.
+   *
+   * `userId`, when provided, disambiguates which row this call means when a
+   * global row and a user-scoped row share the same `(entityType, version)`
+   * pair — which happens routinely, since version strings are per-scope
+   * counters, not globally unique.
+   *
+   * Two defects are closed here:
+   *
+   * - #2356 / #2389: the lookup used `.single()` with no scope predicate and
+   *   the final activation UPDATE matched only `(entity_type,
+   *   schema_version)`, so it reactivated EVERY row sharing that pair —
+   *   undoing the scoped deactivation and leaving both scopes active.
+   * - #2356 follow-up (security): a `candidates[0]` catch-all fell through to
+   *   another principal's private user-scoped row on a version-string
+   *   collision. Selection is fail-closed: this principal's own row, else a
+   *   non-user (global) row, else nothing.
+   *
+   * The selected row's `id` then targets every later query (exclude self from
+   * the sibling deactivation, activate self). An `id` predicate cannot
+   * over-match a sibling row the way `(entity_type, schema_version)` can.
    */
   async activate(entityType: string, version: string, userId?: string): Promise<void> {
-    // Load the schema to get its scope and user_id.
-    //
-    // #2356: this used `.single()` on (entity_type, schema_version) alone, so
-    // when a global row and a user-scoped row shared a version string it
-    // silently resolved to whichever the unordered SELECT returned first.
-    // (It does NOT throw: `expectSingle` in this adapter errors only on zero
-    // rows.) The arbitrary-row resolution is the whole defect. `userId` was
-    // accepted and ignored (`_userId`), so a caller activating a user's override
-    // could not say so. Prefer this principal's own row when one exists at this
-    // version, and fall back to the global row, mirroring `loadActiveSchema`.
-    const { data: rows } = await db
+    const { data: rows, error: lookupError } = await db
       .from("schema_registry")
-      .select("scope, user_id")
+      .select("id, scope, user_id")
       .eq("entity_type", entityType)
       .eq("schema_version", version);
+    if (lookupError) {
+      throw new Error(`Failed to look up schema to activate: ${lookupError.message}`);
+    }
 
-    const candidates = (rows ?? []) as Array<Pick<SchemaRegistryEntry, "scope" | "user_id">>;
-    // Security (#2356 follow-up): the caller always just registered the row it
-    // means to activate — either its own user-scoped override (`userId` set)
-    // or the global row (`userId` undefined). Match only those two shapes.
-    // A prior `candidates[0]` catch-all fell through to *any* remaining row,
-    // including another principal's private `scope: "user"` override, when a
-    // caller-chosen version string collided with a foreign row and neither of
-    // the first two predicates matched. That let `POST /register_schema`
-    // mutate (deactivate) a foreign user's schema by version-string collision.
-    // Fail closed instead: if neither this principal's row nor a global row
-    // exists at this version, there is nothing this caller is authorized to
-    // activate.
+    const candidates = (rows ?? []) as Array<Pick<SchemaRegistryEntry, "id" | "scope" | "user_id">>;
+    // Fail closed: the caller always just registered the row it means to
+    // activate — either its own user-scoped override (`userId` set) or the
+    // global row. Never fall through to any other principal's row.
     const schema =
       candidates.find((r) => r.scope === "user" && !!userId && r.user_id === userId) ??
       candidates.find((r) => r.scope !== "user");
@@ -2164,12 +2337,13 @@ export class SchemaRegistryService {
     const scope = schema.scope || "global";
     const schemaUserId = schema.user_id;
 
-    // Deactivate all other versions for this entity type and scope/user_id
+    // Deactivate all other versions for this entity type and scope/user_id.
     let deactivateQuery = db
       .from("schema_registry")
       .update({ active: false })
       .eq("entity_type", entityType)
-      .eq("active", true);
+      .eq("active", true)
+      .not("id", "eq", schema.id);
 
     if (scope === "user" && schemaUserId) {
       deactivateQuery = deactivateQuery.eq("user_id", schemaUserId);
@@ -2179,28 +2353,10 @@ export class SchemaRegistryService {
 
     await deactivateQuery;
 
-    // Activate specified version — within the SAME scope partition the
-    // deactivation above used.
-    //
-    // #2356: this UPDATE was unscoped (`entity_type` + `schema_version` only)
-    // while the deactivation above is scope-partitioned. When a global row and
-    // a user-scoped row carry the same version string, activating either one
-    // activated BOTH, manufacturing exactly the dual-active pair that makes
-    // scoped and unscoped reads disagree. Mirror the partition so activation
-    // touches only the row it deactivated siblings for.
-    let activateQuery = db
-      .from("schema_registry")
-      .update({ active: true })
-      .eq("entity_type", entityType)
-      .eq("schema_version", version);
-
-    if (scope === "user" && schemaUserId) {
-      activateQuery = activateQuery.eq("scope", "user").eq("user_id", schemaUserId);
-    } else {
-      activateQuery = activateQuery.eq("scope", "global").is("user_id", null);
-    }
-
-    const { error } = await activateQuery;
+    // Activate the ONE selected row by id. No extra scope predicate: the id is
+    // already unambiguous, and a scope filter here could only turn activation
+    // of a legacy row with a null `scope` into a silent no-op.
+    const { error } = await db.from("schema_registry").update({ active: true }).eq("id", schema.id);
 
     if (error) {
       throw new Error(`Failed to activate schema: ${error.message}`);
