@@ -7418,7 +7418,18 @@ paths:
                   type: string
                 user_specific:
                   type: boolean
-                  default: false
+                  description: >-
+                    Explicit scope override, with no default. When omitted, the
+                    write goes to whichever scope the caller's own read of the
+                    schema resolved: the caller's user-scoped override if one
+                    exists, otherwise the global row. Pass true to create or
+                    extend a user-scoped override. Pass false to extend the
+                    global row: the new global version is built from the
+                    current global schema, never from the caller's override,
+                    and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type
+                    has no global registry row and no code-defined baseline
+                    (but has the caller's user-scoped schema). The response's
+                    `scope` reports the scope actually written.
                 user_id:
                   type: string
                 activate:
@@ -7427,6 +7438,20 @@ paths:
                 migrate_existing:
                   type: boolean
                   default: false
+                  description: >-
+                    Promote existing raw_fragments for the added fields into
+                    observations (historical backfill). A request with
+                    migrate_existing true can legitimately promote nothing; see
+                    `migrated_existing` and `migration_result` in the response.
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Bypass the entity-type naming guards (forbidden test-artifact
+                    patterns and the plural-name guard) for this call only. Use
+                    when entity_type is rejected with a message naming
+                    "force: true" as the remedy. Does not affect any other
+                    validation.
       responses:
         "200":
           description: |
@@ -7480,8 +7505,52 @@ paths:
                         type: boolean
                       migrated_existing:
                         type: boolean
+                        description: >-
+                          True only when this call actually promoted at least one
+                          raw_fragment (`migration_result.migrated_count > 0`).
+                          Never an echo of the `migrate_existing` request flag.
+                      migration_result:
+                        type: object
+                        description: >-
+                          Present only when `migrate_existing` was requested. The
+                          actual migration outcome, including every fragment group
+                          that did not promote and why.
+                        required: [migrated_count, skipped]
+                        properties:
+                          migrated_count:
+                            type: integer
+                            minimum: 0
+                          skipped:
+                            type: array
+                            items:
+                              type: object
+                              required: [field_name, reason, count]
+                              properties:
+                                field_name:
+                                  type: string
+                                reason:
+                                  type: string
+                                  enum:
+                                    - no_entity_resolution
+                                    - no_active_schema
+                                    - observation_insert_failed
+                                    - already_promoted
+                                    - unexpected_error
+                                count:
+                                  type: integer
+                                  minimum: 0
                       scope:
                         type: string
+                        enum: [global, user]
+                        description: >-
+                          The scope this call actually wrote to, read from the
+                          persisted row rather than re-derived from the request.
+                      user_id:
+                        type: string
+                        nullable: true
+                        description: >-
+                          Present only when `scope` is `user`: which user's row
+                          was written.
                     additionalProperties: true
                   - $ref: "#/components/schemas/SchemaRegistryToolErrorResponse"
 
@@ -7729,6 +7798,15 @@ paths:
                 activate:
                   type: boolean
                   default: false
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Bypass the entity-type naming guards (forbidden test-artifact
+                    patterns and the plural-name guard) for this call only. Use
+                    when entity_type is rejected with a message naming
+                    "force: true" as the remedy. Does not affect any other
+                    validation.
       responses:
         "200":
           description: Schema registered

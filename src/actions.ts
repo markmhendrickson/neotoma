@@ -11741,7 +11741,11 @@ app.post("/update_schema_incremental", async (req, res) => {
       fields_to_remove,
       canonical_name_fields,
       schema_version,
-      user_specific = false,
+      // #2374: no local `= false` default. `user_specific` stays
+      // `undefined` when the caller omitted it, so `updateSchemaIncremental`
+      // can defer to whichever scope its own read resolved instead of being
+      // told "global" by a default this route manufactured.
+      user_specific,
       activate = true,
       migrate_existing = false,
       force = false,
@@ -11750,21 +11754,23 @@ app.post("/update_schema_incremental", async (req, res) => {
     const { schemaRegistry, loadCodeDefinedSchemaEntry } =
       await import("./services/schema_registry.js");
 
-    // #2454 REST parity with MCP `updateSchemaIncremental`: the existence guard
-    // is scope-limited (`user_specific ? userId : undefined`). When that lookup
-    // misses but a schema is active in another scope, return
-    // ERR_SCHEMA_SCOPE_MISMATCH — never ERR_NO_SCHEMA_FOR_ENTITY_TYPE with a
-    // register_schema hint. Write-scope rematch itself remains #2446.
+    // #2454 / #2374 REST parity with the MCP handler: the existence guard
+    // resolves the SAME row `updateSchemaIncremental` will read —
+    // user-scope-preferred when `user_specific` is omitted or true,
+    // global-only when the caller explicitly passed `user_specific: false`.
+    // When the global-only lookup misses but a schema is active in the
+    // caller's user scope, return ERR_SCHEMA_SCOPE_MISMATCH — never
+    // ERR_NO_SCHEMA_FOR_ENTITY_TYPE with a register_schema hint.
     const registeredSchema = await schemaRegistry.loadActiveSchema(
       entity_type,
-      user_specific ? userId : undefined
+      user_specific === false ? undefined : userId
     );
     if (!registeredSchema) {
       const codeDefinedSchema = await loadCodeDefinedSchemaEntry(entity_type);
       if (!codeDefinedSchema) {
         const anyScopeSchema = await schemaRegistry.loadActiveSchema(entity_type, userId);
         if (anyScopeSchema) {
-          const guardScope = user_specific ? "user" : "global";
+          const guardScope = user_specific === false ? "global" : "user";
           const foundScope = anyScopeSchema.scope ?? "global";
           return res.status(200).json({
             error: {
@@ -11776,13 +11782,13 @@ app.post("/update_schema_incremental", async (req, res) => {
               hint:
                 `The existing SchemaDefinition for "${entity_type}" lives in ` +
                 `"${foundScope}" scope. This call did not check that scope because ` +
-                `user_specific was ${user_specific ? "true" : "not set (defaults to false)"}. ` +
+                `user_specific was ${user_specific === false ? "false" : "true"}. ` +
                 "This entity_type already has an active schema — creating a second one for it " +
                 "risks leaving two active schema_registry rows for the same entity_type (see " +
                 "#2374/#2378), after which the next incremental update can merge onto stale " +
-                "state and drop fields. Instead, retry update_schema_incremental with " +
-                `user_specific: ${foundScope === "user"} so the call resolves the scope the ` +
-                "schema actually lives in.",
+                "state and drop fields. Instead, retry update_schema_incremental without " +
+                "user_specific (the call then writes to whichever scope your schema resolves " +
+                `to), or with user_specific: ${foundScope === "user"}.`,
               details: {
                 entity_type,
                 guard_scope: guardScope,
@@ -11827,9 +11833,20 @@ app.post("/update_schema_incremental", async (req, res) => {
         canonical_name_fields,
         schema_version,
         user_specific,
+        // #2374: pass userId unconditionally — same reasoning as the MCP
+        // handler. The service resolves scope from its own read, not from
+        // whether this route pre-gated userId on user_specific.
         user_id: userId,
         activate,
         migrate_existing,
+        // migrate_existing must scope to the authenticated caller so
+        // raw_fragments stored by this user are promoted, matching the MCP
+        // handler's migrate_user_id wiring (#2379 note: REST previously
+        // relied solely on the service's `migrate_user_id ?? user_id`
+        // fallback, which happened to cover this route, but stating it
+        // explicitly here keeps the two surfaces in parity rather than
+        // coincidentally agreeing).
+        migrate_user_id: migrate_existing ? userId : undefined,
         force,
       });
     } catch (err) {
@@ -11840,22 +11857,40 @@ app.post("/update_schema_incremental", async (req, res) => {
       throw err;
     }
 
+    // #2379: derive migrated_existing from the ACTUAL result, never from
+    // the `migrate_existing` request flag.
+    const migrationResult = newSchema.migration_result;
+    // #2374: report the scope actually written, read off the persisted row.
+    const scopeWritten = newSchema.scope === "user" ? "user" : "global";
+
     logDebug("Success:update_schema_incremental", req, {
       entity_type,
       fields_added: (fields_to_add || []).length,
       fields_removed: (fields_to_remove || []).length,
       migrate_existing,
+      migrated_existing: (migrationResult?.migrated_count ?? 0) > 0,
+      scope: scopeWritten,
     });
     return res.json({
       success: true,
       schema: newSchema,
       schema_version: newSchema.schema_version,
+      fields_added: (fields_to_add || []).map((f) => f.field_name),
       fields_removed: fields_to_remove || [],
       // Echo the resolved identity rule so CLI/HTTP callers can confirm the
       // re-key without a second describe_entity_type round trip (#2020 ux).
       canonical_name_fields:
         (newSchema.schema_definition as { canonical_name_fields?: unknown })
           .canonical_name_fields ?? null,
+      activated: activate,
+      // #2379: true only when the migration actually promoted something.
+      migrated_existing: (migrationResult?.migrated_count ?? 0) > 0,
+      // Present only when migrate_existing was requested this call.
+      ...(migrationResult ? { migration_result: migrationResult } : {}),
+      // #2374: the scope this call actually wrote to, read off the
+      // persisted row rather than re-derived from the request.
+      scope: scopeWritten,
+      ...(scopeWritten === "user" ? { user_id: newSchema.user_id ?? null } : {}),
     });
   } catch (error) {
     return handleApiError(

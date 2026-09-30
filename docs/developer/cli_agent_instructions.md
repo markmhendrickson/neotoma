@@ -107,7 +107,9 @@ neotoma schemas audit-fragments contact         # one entity type
 
 It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
 
-**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** when `neotoma schemas update` reports this error and `found_scope` is `user`, retry with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
+**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** `neotoma schemas update` without `--user-specific` / `--no-user-specific` writes to whichever scope your schema resolves to. The error means `--no-user-specific` checked global only while the schema is user-scoped: retry without the flag, or with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
+
+**Naming guard (`force`):** when `neotoma schemas update` or `neotoma schemas register` rejects an entity type name as plural or test-artifact-like, `--force` bypasses only those two naming checks; it does not skip the existence, scope, or identity guards. Rename the type instead unless the name is deliberate.
 
 ## Retrieval command quick reference (CLI backup)
 

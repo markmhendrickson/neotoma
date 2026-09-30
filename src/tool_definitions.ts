@@ -940,8 +940,8 @@ export function buildToolDefinitions(
           },
           user_specific: {
             type: "boolean",
-            description: "Create user-specific schema variant (default: false)",
-            default: false,
+            description:
+              'Explicit scope override. Omit this to write to whichever scope your own read of the schema resolved (global row, or your user-scoped override if you have one) — the common case, and the safe default. Pass true to create or extend a user-specific override for you even if you currently resolve the global row. Pass false to extend the global row even if you have a user-scoped override: the new global version is built from the current global schema, never from your override; if the type has no global registry row and no code-defined baseline (but has your user-scoped schema), the call returns ERR_SCHEMA_SCOPE_MISMATCH. The response\'s "scope" field reports which scope was actually written.',
           },
           user_id: {
             type: "string",
@@ -956,7 +956,13 @@ export function buildToolDefinitions(
           migrate_existing: {
             type: "boolean",
             description:
-              "Migrate existing raw_fragments to observations for historical data backfill (default: false). Note: New data automatically uses updated schema after activation, migration is only for old data.",
+              'Migrate existing raw_fragments to observations for historical data backfill (default: false). Note: New data automatically uses updated schema after activation, migration is only for old data. The response\'s "migrated_existing" reflects whether anything actually promoted, and "migration_result.skipped" names any fragment groups that did not (e.g. ambiguous ownership, already promoted by a prior call) — a request with migrate_existing: true can legitimately promote zero fragments.',
+            default: false,
+          },
+          force: {
+            type: "boolean",
+            description:
+              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
             default: false,
           },
         },
@@ -989,6 +995,12 @@ export function buildToolDefinitions(
             description: "User ID for user-specific schema (required if user_specific=true)",
           },
           activate: { type: "boolean", default: false },
+          force: {
+            type: "boolean",
+            description:
+              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
+            default: false,
+          },
         },
         required: ["entity_type", "schema_definition", "reducer_config"],
       },
