@@ -14311,6 +14311,14 @@ schemasCommand
     "--no-user-specific",
     "Write to the global schema, even if you have a user-specific variant"
   )
+  // #2197: `force` bypasses the entity-type naming lints (test-artifact
+  // pattern, plural heuristic) only. It is declared on MCP and REST; the CLI
+  // is the surface a user is on when the guard's error says "pass force".
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -14324,6 +14332,7 @@ schemasCommand
         migrateExisting?: boolean;
         schemaVersion?: string;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -14419,6 +14428,7 @@ schemasCommand
             activate: true,
             user_id: opts.userId,
             user_specific: opts.userSpecific,
+            force: opts.force,
           },
         });
         if (error) throw new Error("Failed to update schema");
@@ -14447,6 +14457,7 @@ schemasCommand
         migrate_existing: opts.migrateExisting,
         schema_version: opts.schemaVersion,
         user_specific: opts.userSpecific,
+        force: opts.force,
       };
       if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
@@ -14488,6 +14499,11 @@ schemasCommand
   .option("--activate", "Activate schema immediately", false)
   .option("--migrate-existing", "Migrate existing data", false)
   .option("--user-specific", "Create user-specific schema", false)
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -14500,6 +14516,7 @@ schemasCommand
         activate?: boolean;
         migrateExisting?: boolean;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -14528,6 +14545,7 @@ schemasCommand
           activate: opts.activate,
           user_id: opts.userId,
           user_specific: opts.userSpecific,
+          force: opts.force,
         },
       });
       if (error) throw new Error("Failed to register schema");

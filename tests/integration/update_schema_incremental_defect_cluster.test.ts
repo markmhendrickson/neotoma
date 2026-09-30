@@ -31,9 +31,7 @@ type TestServer = NeotomaServer & {
   authenticatedUserId?: string | null;
 };
 
-async function activeRows(
-  entityType: string
-): Promise<
+async function activeRows(entityType: string): Promise<
   Array<{
     id: string;
     schema_version: string;
@@ -496,7 +494,7 @@ describe("update_schema_incremental defect cluster", () => {
       expect(promoted).toBe(true);
     });
 
-    it("REST route reports the same migrated_existing truthfulness as MCP (#2379 cross-surface parity)", async () => {
+    it("the service-level result carries the same migrated_existing truthfulness the MCP handler reports (#2379; the real REST route is covered in the HTTP block below)", async () => {
       const restType = `${ENTITY_TYPE}_rest`;
       await cleanupType(restType);
       await db.from("raw_fragments").delete().eq("entity_type", restType);
@@ -805,6 +803,100 @@ describe("update_schema_incremental defect cluster", () => {
       expect(body.migration_result?.skipped.some((g) => g.reason === "no_entity_resolution")).toBe(
         true
       );
+    });
+
+    // ----------------------------------------------------------------
+    // #2197 over HTTP: openapi.yaml declares `force` on both routes, so it is
+    // exercised on both, each in its natural call shape (JSON body). The naming
+    // guard only throws in production, so NODE_ENV is set for these two tests.
+    // ----------------------------------------------------------------
+    describe("#2197: force over HTTP on both routes", () => {
+      const originalEnv = process.env.NODE_ENV;
+      const originalTrust = process.env.NEOTOMA_TRUST_PROD_LOOPBACK;
+      // Must END in a plural-looking pattern for the guard to flag it.
+      const HTTP_PLURAL_TYPE = `issue_2197_http_${Date.now()}_probes`;
+
+      beforeAll(() => {
+        process.env.NODE_ENV = "production";
+        // Production refuses to trust loopback as the local dev user; this
+        // in-process test server is loopback-only, so opt in explicitly.
+        process.env.NEOTOMA_TRUST_PROD_LOOPBACK = "1";
+      });
+
+      afterAll(async () => {
+        process.env.NODE_ENV = originalEnv;
+        if (originalTrust === undefined) delete process.env.NEOTOMA_TRUST_PROD_LOOPBACK;
+        else process.env.NEOTOMA_TRUST_PROD_LOOPBACK = originalTrust;
+        await cleanupType(HTTP_PLURAL_TYPE);
+      });
+
+      const definition = {
+        fields: { name: { type: "string", required: true } },
+        canonical_name_fields: ["name"],
+      };
+
+      async function post(path: string, body: Record<string, unknown>) {
+        const res = await fetch(`${API_BASE}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return { status: res.status, json: (await res.json()) as Record<string, any> };
+      }
+
+      it("POST /register_schema rejects a plural-looking type without force and stores the row with force", async () => {
+        const base = {
+          entity_type: HTTP_PLURAL_TYPE,
+          schema_definition: definition,
+          reducer_config: { merge_policies: {} },
+          activate: true,
+        };
+        const rejected = await post("/register_schema", base);
+        expect(rejected.status).toBe(400);
+        expect(JSON.stringify(rejected.json)).toContain("ERR_PLURAL_ENTITY_TYPE");
+        expect(await activeRows(HTTP_PLURAL_TYPE)).toHaveLength(0);
+
+        const forced = await post("/register_schema", { ...base, force: true });
+        expect(forced.status).toBe(200);
+        const rows = await activeRows(HTTP_PLURAL_TYPE);
+        expect(rows).toHaveLength(1);
+      });
+
+      it("POST /update_schema_incremental rejects a plural-looking type without force and writes the field with force", async () => {
+        // The type now exists (registered with force above); the update route
+        // re-validates the name on every call.
+        const request = {
+          entity_type: HTTP_PLURAL_TYPE,
+          fields_to_add: [{ field_name: "extra_field", field_type: "string" }],
+        };
+        const rejected = await post("/update_schema_incremental", request);
+        expect(rejected.status).toBe(400);
+        expect(JSON.stringify(rejected.json)).toContain("ERR_PLURAL_ENTITY_TYPE");
+        const before = await activeRows(HTTP_PLURAL_TYPE);
+        expect(before).toHaveLength(1);
+        const { data: beforeRow } = await db
+          .from("schema_registry")
+          .select("schema_definition")
+          .eq("id", before[0].id)
+          .single();
+        expect(
+          (beforeRow?.schema_definition as { fields?: Record<string, unknown> })?.fields
+        ).not.toHaveProperty("extra_field");
+
+        const forced = await post("/update_schema_incremental", { ...request, force: true });
+        expect(forced.status).toBe(200);
+        expect(forced.json.success).toBe(true);
+        const after = await activeRows(HTTP_PLURAL_TYPE);
+        expect(after).toHaveLength(1);
+        const { data: afterRow } = await db
+          .from("schema_registry")
+          .select("schema_definition")
+          .eq("id", after[0].id)
+          .single();
+        expect(
+          (afterRow?.schema_definition as { fields?: Record<string, unknown> })?.fields
+        ).toHaveProperty("extra_field");
+      });
     });
   });
 });

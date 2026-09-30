@@ -1779,14 +1779,17 @@ This enables full explainability: for any fact in the system, you can trace it b
   }>;
   fields_to_remove?: string[]; // Optional: Field names to remove (triggers major version bump)
   schema_version?: string; // Optional: New schema version (auto-increments if not provided)
-  user_specific?: boolean; // Optional: Create user-specific schema variant (default: false)
+  user_specific?: boolean; // Optional, no default. Omitted: write to the scope the schema resolves to (your user-scoped override if you have one, else global), matching describe_entity_type. true: write to your user-specific variant. false: extend the global schema, even if you hold an override.
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: true)
   migrate_existing?: boolean; // Optional: Migrate existing raw_fragments (default: false)
+  force?: boolean; // Optional: Bypass the entity-type naming guards (test-artifact pattern, plural heuristic) for this call only (default: false)
 }
 ```
 
 At least one of `fields_to_add` or `fields_to_remove` must be provided and non-empty.
+
+**Scope resolution:** the write follows the same resolution as the read (user scope first, global fallback; `schema_registry.md` §4.4). An explicit `user_specific` is an override. An explicit `user_specific: false` reads and extends the global schema only; it never copies the caller's user-scoped override into a new global version. If no global schema exists for the type, that call returns `ERR_SCHEMA_SCOPE_MISMATCH` instead of promoting the override.
 
 **Response Schema:**
 
@@ -1798,8 +1801,17 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   fields_added: string[]; // List of field names added
   fields_removed: string[]; // List of field names removed
   activated: boolean; // Whether schema was activated
-  migrated_existing: boolean; // Whether historical data was migrated
-  scope: 'global' | 'user';
+  migrated_existing: boolean; // True only when this call actually promoted at least one raw_fragment (migration_result.migrated_count > 0); never an echo of the migrate_existing request flag
+  migration_result?: { // Present only when migrate_existing was requested
+    migrated_count: number;
+    skipped: Array<{
+      field_name: string;
+      reason: 'no_entity_resolution' | 'no_active_schema' | 'observation_insert_failed' | 'already_promoted' | 'unexpected_error';
+      count: number;
+    }>;
+  };
+  scope: 'global' | 'user'; // The scope actually written, read from the persisted row
+  user_id?: string; // Present only when scope is 'user': the user whose row was written
 }
 ```
 
@@ -1809,6 +1821,8 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid field definition or empty add/remove | No |
 | `SCHEMA_NOT_FOUND` | 404 | No active schema found for entity type | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
+| `ERR_SCHEMA_SCOPE_MISMATCH` | 200 (error envelope) | Explicit `user_specific: false`, but the type has no global schema and an active schema exists in the caller's user scope (`details.guard_scope` vs `details.found_scope`) | Yes: retry without `user_specific`, or with `user_specific: true`. Do not call `register_schema` for this code. See `docs/reference/error_codes.md`. |
+| `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema updates are atomic)
 **Determinism:** Yes (same fields + same schema version → same snapshot)
@@ -1852,6 +1866,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   user_specific?: boolean; // Optional (default: false)
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: false)
+  force?: boolean; // Optional: Bypass the entity-type naming guards (test-artifact pattern, plural heuristic) for this call only (default: false)
 }
 ```
 
@@ -1874,6 +1889,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid schema definition or reducer config | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
 | `SCHEMA_EXISTS` | 409 | Schema version already exists | No |
+| `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema registration is atomic)
 **Determinism:** Yes (same schema → same result)

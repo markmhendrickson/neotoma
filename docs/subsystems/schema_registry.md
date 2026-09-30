@@ -299,7 +299,7 @@ Schema versions use semantic versioning (major.minor.patch):
 - Snapshots are computed using the active schema, which can read observations from any version
 - Reducers handle missing fields gracefully (optional fields may be absent in old observations)
 ### 3.2 Active Schema
-Only one active schema version per entity_type at a time:
+Only one active schema version per entity_type per scope at a time (one global row, plus at most one user-scoped row per user; see §4.4 for how a reader resolves between them):
 ```sql
 SELECT * FROM schema_registry
 WHERE entity_type = 'invoice'
@@ -468,8 +468,9 @@ class SchemaRegistry {
 
 **Write scope agrees with read scope (#2374):** the update reads the current
 schema with the §4.4 resolution order and writes the new version to the scope
-of the row it read, so one call can never leave a second active row in the
-other scope.
+of the row it read, so a call can never leave a second active row in the
+other scope unless the caller explicitly asks for that scope (`user_specific:
+true` creating an override on purpose).
 
 - `user_specific` omitted: read user-first with global fallback; write to the
   scope of the row read (the caller's override if one exists, else global).
@@ -480,8 +481,10 @@ other scope.
   The new global version extends the current global schema, never the
   caller's override. Promoting user fields to global is schema
   reconciliation (§4.4), not a side effect of an update. If the type has no
-  global schema but does have a user-scoped one, the call returns
-  `ERR_SCHEMA_SCOPE_MISMATCH`.
+  global registry row and no code-defined baseline, but does have a
+  user-scoped schema, the call returns `ERR_SCHEMA_SCOPE_MISMATCH`. (With a
+  code-defined baseline, the update extends that baseline as the first global
+  row.)
 
 The response reports the scope actually written (`scope`, plus `user_id` when
 user-scoped). With `migrate_existing`, `migrated_existing` is true only when at
@@ -638,19 +641,19 @@ Load `docs/subsystems/schema_registry.md` when:
 - Performing schema migrations
 ### Constraints Agents Must Enforce
 1. **Schemas MUST be versioned** (no unversioned schemas)
-2. **Only one active schema per entity_type** (version switching required)
+2. **Only one active schema per entity_type per scope** (version switching required within a scope)
 3. **Schema changes MUST be versioned** (additive changes = minor bump, field removal = major bump)
 4. **Merge policies MUST be configured** (no ad-hoc merge logic)
 5. **At least one field MUST remain** after removal (cannot remove all fields)
 ### Forbidden Patterns
 - ❌ Unversioned schemas
-- ❌ Multiple active schemas per entity_type
+- ❌ Multiple active schemas per entity_type within the same scope
 - ❌ Unversioned schema changes (all changes must go through `updateSchemaIncremental` or `register`)
 - ❌ Ad-hoc merge policies (must use schema registry)
 - ❌ Removing all fields from a schema
 ### Validation Checklist
 - [ ] Schemas are versioned (semantic versioning)
-- [ ] Only one active schema per entity_type
+- [ ] Only one active schema per entity_type per scope
 - [ ] Schema changes are versioned (minor for additions, major for removals)
 - [ ] Merge policies configured for all fields
 - [ ] Schema registry integrated with observation creation
