@@ -21,7 +21,7 @@ This document does NOT cover:
 - Write attribution internals (see #2534 and #2537) and AAuth admission (see `docs/subsystems/agent_capabilities.md`).
 - Personal preferences that belong to one person's own instance rather than to a shared graph.
 
-Status: **proposed design**, 2026-09-30. Nothing described here as new is built. Section [Current state](#current-state-as-of-v0250) states what exists on `main` at v0.25.0.
+Status: **design, decisions ruled 2026-09-30** (see [Decisions](#decisions)). Nothing described here as new is built. Section [Current state](#current-state-as-of-v0250) states what exists on `main` at v0.25.0.
 
 ## Purpose
 Rules are the durable instructions an instance holds for the agents that use it. Three failures motivate this design.
@@ -110,7 +110,7 @@ flowchart LR
 |---|---|---|---|
 | `rule_key` | string | yes | Stable slug, unique on the instance. Identity field. Pattern `^[a-z0-9][a-z0-9-]{2,79}$`. `name_collision_policy: reject`, so a write can never merge into another rule's record. |
 | `title` | string | yes | The one line an index renders. At most 160 characters. |
-| `rule_text` | string | yes, unless `predicate` is set | The imperative text a reader applies. When a predicate is set and `rule_text` is empty, the renderer generates the sentence from the predicate. |
+| `rule_text` | string | yes, unless `predicate` is set | The imperative text a reader applies. Decided: this is the field name, and the resolver accepts the legacy names `instruction`, `content` and `rule`. When a predicate is set and `rule_text` is empty, the renderer generates the sentence from the predicate. |
 | `rule_kind` | enum `mandatory` \| `advisory` | yes on write | A missing or unknown stored value reads as `mandatory`. |
 | `status` | enum `proposed` \| `approved` \| `provisional` \| `retired` | yes | `proposed` binds nothing. `approved` and `provisional` are in force. `provisional` requires `effective_until` and reads as `retired` after it. |
 | `applies_when` | string | no, default `always` | The condition under which the rule matters. `always` places a mandatory rule in the preamble tier. Any other value is free text used for the index line. |
@@ -148,7 +148,7 @@ A policy carries no `enforcement`, `precedence`, `priority` or `rule_text` field
 Retiring a policy never retires its member rules. Deleting or retiring a grouping must not silently remove a mandatory rule from delivery.
 
 ### `member` entity
-Edges connect entities, and a member is not an entity today. The design adds a minimal core `member` type.
+Edges connect entities, and a member is not an entity today. Decided: the design adds a minimal core `member` type, keyed by the attribution id, and member-scoped rules are `GOVERNS` edges to it. The type and its schema ship in slice N1.
 | Field | Type | Meaning |
 |---|---|---|
 | `member_key` | string | Identity field. The member's `authenticated_actor_id` (the random per-instance id #2534 mints). |
@@ -156,7 +156,7 @@ Edges connect entities, and a member is not an entity today. The design adds a m
 
 A `member` record carries no name, address, or other personal data. Only someone with database access can map `member_key` back to a person, exactly as with attribution ids today. The server creates the `member` record when it first mints an attribution id. Clients cannot create or edit `member` records.
 
-Alternative considered: storing the attribution id directly in a `governs_member` field on the rule. That removes the entity, but it contradicts the edge model (scope is an edge), makes member rules invisible to graph traversal, and gives a rule a second scoping mechanism. Rejected.
+Alternative considered and rejected: storing the attribution id directly in a `governs_member` field on the rule. That removes the entity, but it contradicts the edge model (scope is an edge), makes member rules invisible to graph traversal, and gives a rule a second scoping mechanism.
 
 ### Edges
 | Edge | Direction | Meaning | Notes |
@@ -241,13 +241,13 @@ stateDiagram-v2
 1. **Authorship is server-stamped.** The first observation on a `rule` record fixes `authored_by_actor`. Later corrections by other actors do not change it.
 2. **A member's write is a proposal.** A write by a non-approver, or any write that sets `status` to `approved` without a distinct approver, is stored as `proposed`.
 3. **Approval requires a different attributed member.** The approving write must carry an attribution id that differs from `authored_by_actor`. The server compares the two ids and refuses an approval where they are equal or where either is missing.
-4. **Approver population.** Any member with an attributable identity on a shared instance may approve, except the author. This is the operator ruling of 2026-09-29 ("any partner but the author"). There is no separate partner role in v1.
+4. **Approver population.** Decided: any member with an attributable identity on a shared instance may approve, except the author. This is the operator ruling of 2026-09-29 ("any partner but the author"). There is no separate partner role in v1.
 5. **Until per-member identity is live on an instance, the instance operator gives every approval.** The server treats a write with no attribution id as an operator write, and records it as such. This depends on write attribution (#2534) and on binding legacy MCP sessions to the presented credential (#2537, item 5).
-6. **Single-member instances.** On an instance with one attributable member or without a shared graph, no second actor exists. The owner's direct write of `approved` is admitted. The server records that the approval was a self-approval on a single-member instance.
-7. **Editing an approved rule is a supersession.** A correction that changes a material field (`rule_text`, `rule_kind`, `predicate`, `applies_when`, effective dates, edges) of an `approved` rule is refused. The change is written as a new `proposed` rule with a `SUPERSEDES` edge to the approved one. The old rule stays in force until the new rule is approved. Non-material fields (`title`, `rationale`, `domain`, `priority`) may be corrected in place.
-8. **Retiring a mandatory rule is a loosening.** It takes the same two-party path. The first actor's retirement sets `retirement_proposed_by_actor` and the rule stays `approved`. A different actor's confirmation sets `status: retired`. Retiring an advisory rule needs one actor.
+6. **Single-member instances.** Decided: on an instance with one attributable member or without a shared graph, no second actor exists. The owner's direct write of `approved` is admitted. The server records that the approval was a self-approval on a single-member instance.
+7. **Editing an approved rule is a supersession.** Decided. A correction that changes a material field (`rule_text`, `rule_kind`, `predicate`, `applies_when`, effective dates, edges) of an `approved` rule is refused. The change is written as a new `proposed` rule with a `SUPERSEDES` edge to the approved one. The old rule stays in force until the new rule is approved. Non-material fields (`title`, `rationale`, `domain`, `priority`) may be corrected in place.
+8. **Retiring a mandatory rule is a loosening.** Decided. It takes the same two-party path. The first actor's retirement sets `retirement_proposed_by_actor` and the rule stays `approved`. A different actor's confirmation sets `status: retired`. Retiring an advisory rule needs one actor.
 9. **Agents do not approve.** An agent identity may propose a rule when its grant names the `rule` type. No grant capability lets an agent approve or confirm a retirement in v1.
-10. **Proposed rules are visible for review, not as instructions.** A `proposed` rule appears in the renderer output only as a labelled count and titles under a "Proposed, not in force" heading. Its text is served only by fetch-by-id to members who may approve it. This limits the prompt-injection surface: a member cannot place instruction text into other members' sessions by proposing it.
+10. **Proposed rules are visible for review, not as instructions.** Decided. A `proposed` rule appears in the renderer output only as a labelled count and titles under a "Proposed, not in force" heading. Its text is served only by fetch-by-id to members who may approve it. This limits the prompt-injection surface: a member cannot place instruction text into other members' sessions by proposing it.
 11. **Migration approvals.** Rules created by the migration ([Migration](#migration)) carry the instance operator's authority and are written `approved` with `migrated_from` set, because they were already in force.
 
 Where this is enforced: `rule` is a protected entity type. The guard runs at the structured store entry points and at the observation and correction insertion sites, as `assertCanWriteProtected` does for `agent_grant`, so an alternative write path cannot skip it.
@@ -340,7 +340,7 @@ A rules hook is a thin client. It does not select, order, filter, budget, saniti
 2. **Call the renderer.** Through `neotoma rules render` or the REST route, using credentials the harness already holds. It sends the session id and the last delivered digest so the server can return a delta and record a receipt.
 3. **Place the output.** It prints the rendered block to the channel the harness places in model context, unmodified. It never prints a credential and never logs rule text.
 4. **Confirm placement.** After printing, it calls `acknowledge_rules` with the digest. This marks the receipt `placed`.
-5. **Fail loudly.** When the renderer is unreachable, unauthorized, or returns `budget_insufficient`, the hook prints the UNKNOWN block from the renderer's fallback text (embedded in the hook package and generated from the same source) and, where the harness supports refusal, denies side-effecting tool calls until a render succeeds ([Delivery verification and fail-closed behavior](#delivery-verification-and-fail-closed-behavior)).
+5. **Fail loudly and deny until delivered.** Decided. When the renderer is unreachable, unauthorized, or returns `budget_insufficient`, the hook prints the UNKNOWN block from the renderer's fallback text (embedded in the hook package and generated from the same source). On harnesses that can refuse a tool call (level L1), the hook also denies side-effecting tool calls until the mandatory rules are confirmed delivered for the session, meaning the render succeeded and, where placement is confirmed, `acknowledge_rules` succeeded. Read-only tool calls stay allowed so the session can recover. The harness process itself stays fail-open: a hook fault never crashes the session, it produces the UNKNOWN block and the denial. This differs from downstream hook sets that fail open on every error, including refusal. Here the refusal is the point, and only the crash path is open ([Delivery verification and fail-closed behavior](#delivery-verification-and-fail-closed-behavior)).
 
 Rules for hook packages:
 - Fail-open for the harness process: a hook error never crashes a session, and always produces the UNKNOWN block.
@@ -362,7 +362,7 @@ A mandatory rule must reach the session, or the session must fail closed. Three 
 | Level | Mechanism | Guarantee |
 |---|---|---|
 | L0 | Notice only. The block states rules are unknown and to act restricted. | None beyond text the model may ignore. |
-| L1 | Hook refusal. A pre-tool hook denies side-effecting tool calls until a render succeeded for this session. | The harness cannot act on the world without the hook having attempted delivery. |
+| L1 | Hook refusal. A pre-tool hook denies side-effecting tool calls until the mandatory rules are confirmed delivered for this session. Read-only calls stay allowed. | The harness cannot act on the world until delivery of the mandatory set is confirmed. |
 | L2 | Server write gate. Writes to the instance are refused until the principal holds a current receipt. | Neotoma writes are never made by a principal that has not been served the mandatory set. |
 
 L2 covers Neotoma writes only. Actions outside Neotoma cannot be gated by the server. The design states this limit instead of implying broader coverage.
@@ -374,12 +374,25 @@ The digest is the first 12 hexadecimal characters of SHA-256 over the canonical 
 A receipt holds `(principal, agent identity, digest, profile, issued_at, state)`. State is `rendered` when the server served the render and `placed` when the client called `acknowledge_rules`. Receipts live in a dedicated table, like `member_attribution_ids`, not in the graph, so reads do not write graph observations.
 
 ### Level L2: server write gate
+Decided: the gate is opt-in and becomes default ON once the exit criteria below are met, for any instance that holds at least one approved mandatory rule. An instance with no approved mandatory rule is never gated. The operator break-glass setting exists from the first release that contains the gate.
+
 When the instance setting `require_rules_receipt` is enabled:
 - A write from a principal without a current receipt for its digest is refused with `ERR_RULES_NOT_ACKNOWLEDGED`. The refusal body contains the mandatory index and the `get_rules` call, so the refusal delivers the rules.
 - A hook profile must reach `placed`. A model-fetched profile (a connector client that calls `get_rules`) needs `rendered`.
 - When the mandatory set changes, the previous digest stays acceptable for a grace window (default 300 seconds, configurable, 0 disables) so a rule edit does not fail sessions mid-turn.
 - An operator break-glass setting disables the gate. Its use is logged.
 - The setting is server configuration, not a rule, and not a container-wide enforcement mode for rules. It gates write admission on delivery, the same class of setting as admission of anonymous writes.
+
+#### Exit criteria for the default
+The default flips to ON in one release, by changing the default of `require_rules_receipt` for instances that hold an approved mandatory rule, when all of the following hold. Evidence is dated, recorded in the repository, and newer than the most recent release of the client it covers.
+1. **Automated canary passes** for every harness the project lists as supported at L1: Claude Code, Codex CLI, and the Agent SDK adapters. Each passes the delivery case (the nonce appears in the reply), the unreachable-renderer case (the UNKNOWN block appears and side-effecting calls are denied), and the isolation case (a second principal's rules never appear).
+2. **Connector clients** (the desktop and web chat clients and ChatGPT, or their current equivalents) each have manual recorded evidence of the gate path: a write is refused with `ERR_RULES_NOT_ACKNOWLEDGED`, the refusal body delivers the mandatory index, the model calls `get_rules`, and the retry succeeds.
+3. **Harnesses without a passing result** are listed as L0 in the harness table, and their sessions are covered by the gate's refusal-delivers-the-rules behavior. A harness that cannot complete the gate path (for example one that cannot call tools) is documented as unable to write to an instance with mandatory rules and a gate on, and that outcome is accepted, not hidden.
+4. **Break-glass** is implemented, documented and tested, including that its use is logged and that turning it off restores the gate.
+5. **No open defect** in receipt issuance, digest computation or the refusal body, and the two-principal isolation test passes on every surface.
+6. **The grace window** behavior is tested: an old digest is accepted inside the window and refused after it.
+
+Slice N8 (#2563) owns these criteria and the evidence. The release that flips the default states in its notes which conformance results it relied on.
 
 Receipts prove that the server served a digest and that a client asserted placement. They do not prove the model read or followed the rules. Conformance testing covers the remaining gap ([Conformance testing](#conformance-testing)).
 
@@ -470,11 +483,11 @@ Rules are delivered to every session in scope and are stored in plain text on th
 Each slice is a separate public issue with acceptance criteria and a test requirement. Slices reference this document.
 | Slice | Issue | Title | Depends on |
 |---|---|---|---|
-| N1 | #2557 | Core `rule` and `policy` types, schemas, `GOVERNS` relationship | none |
+| N1 | #2557 | Core `rule`, `policy` and `member` types, schemas, `GOVERNS` relationship | none |
 | N2 | #2558 | Server rules renderer with a budgeted index, `get_rules`, and the shared dual-read resolver | N1 |
 | N3 | #2559 | Migration command and the transition window | N1, N2 |
 | N4 | #2560 | Per-rule predicate enforcement | N1 |
-| N5 | #2535 | Member and agent scope via `GOVERNS`, including the `member` type | N1, N2, #2534 |
+| N5 | #2535 | Member and agent scope delivery via `GOVERNS` | N1, N2, #2534 |
 | N6 | #2561 | Harness hook packages as thin clients of the renderer | N2 |
 | N7 | #2562 | Proposal and approval flow | N1, #2534, #2537 (item 5) |
 | N8 | #2563 | Delivery verification, receipts and per-harness conformance | N2, N6 |
@@ -514,13 +527,16 @@ Interim work. #2531 renders standing rules into the instructions prose and is a 
 | `docs/developer/rule_neotoma_sync.md` | Proposes syncing rule files into `standing_rule` and states that no new `rule` type should be created. N1 amends it: the sync target becomes `rule`. |
 | `docs/developer/mcp/instructions.md` | Its `[STANDING RULES]` section describes `serverInfo._neotoma` as the source. N2 rewrites it. |
 
-## Open design questions
-Each has a recommendation. None blocks N1.
-1. **Default for the server write gate.** Should `require_rules_receipt` default to on when an instance holds at least one mandatory rule, or stay opt-in? Recommendation: opt-in until N8 conformance passes for the supported harnesses, then default on for instances with mandatory rules, with the break-glass setting documented.
-2. **Approver population.** Is every attributable member an approver, or is a role needed? Recommendation: every attributable member in v1, matching the ruling, and revisit if instances with unequal members appear.
-3. **Self-approval on single-member instances.** Recommendation: admit and record, as specified.
-4. **Conflict detection for prose rules.** The design refuses conflicts only where they are mechanical (predicates compose, identity collisions are rejected). Prose conflicts are caught at approval. Recommendation: accept, and add a reviewer checklist item in the approval tool output.
-5. **Body field name.** The design uses `rule_text` (the current `standing_rule` field, and the key in the delivered structured mirror). A downstream design names the same field `rule`. Recommendation: `rule_text`, with the legacy names accepted by the resolver.
+## Decisions
+All design questions are decided. Decisions 1 to 4 were ruled by the operator on 2026-09-30. The others were proposed with a recommendation and accepted by default the same day.
+1. **Write gate default.** Opt-in, default ON once the per-harness delivery conformance results in [Exit criteria for the default](#exit-criteria-for-the-default) pass, for any instance that holds an approved mandatory rule, with an operator break-glass setting.
+2. **Member representation.** A minimal core `member` entity keyed by the attribution id. Member-scoped rules are `GOVERNS` edges to it. The type and schema ship in slice N1 (#2557). This settles the open question in #2535.
+3. **Safeguards.** An approved rule cannot be edited in place: a change is a new proposed rule that supersedes it. Retiring a mandatory rule takes two actors.
+4. **Hooks.** On harnesses that can refuse tool calls, hooks deny side-effecting calls until the mandatory rules are confirmed delivered (level L1). The harness process itself stays fail-open.
+5. **Proposed rule text.** Never placed in other sessions' instructions. Only a labelled count and titles are rendered.
+6. **Approver population.** No partner role in v1. The approver is any attributable member except the author. The owner may self-approve on a single-member instance.
+7. **Body field name.** `rule_text`, with the legacy names accepted by the resolver.
+8. **Conflict detection for prose rules.** Mechanical only (predicates compose, identity collisions are rejected). Prose conflicts are caught at approval, with a reviewer checklist item in the approval tool output.
 
 ## Testing requirements
 Each slice carries its own tests. Cross-cutting requirements:
