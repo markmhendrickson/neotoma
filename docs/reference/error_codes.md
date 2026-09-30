@@ -144,8 +144,9 @@ Remediation: call `analyze_schema_candidates` for field suggestions, then
 
 **`ERR_SCHEMA_SCOPE_MISMATCH`** — raised by `update_schema_incremental` when the
 caller passed an explicit `user_specific: false`, so the existence guard checked
-global scope only and found no schema, but an active schema for the same
-`entity_type` exists in the caller's **user** scope. When `user_specific` is
+global scope only and found no global registry row and no code-defined
+baseline, but an active schema for the same `entity_type` exists in the
+caller's **user** scope. When `user_specific` is
 omitted, the guard and the update both resolve user-scope-first (the same
 precedence `describe_entity_type` uses), so this error cannot arise (#2374).
 Distinct from a genuine cold start.

@@ -15,6 +15,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { runCli } from "../../src/cli/index.ts";
 
+const MISSING_TYPE = "force_flag_missing_probe";
+
 type Captured = { method: string; url: string; body: Record<string, unknown> };
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -34,6 +36,13 @@ describe("CLI schemas --force wiring (#2197)", () => {
       const body = await readBody(req);
       captured.push({ method: req.method ?? "", url: req.url ?? "", body });
       res.setHeader("Content-Type", "application/json");
+      if (req.method === "GET" && req.url?.startsWith(`/schemas/${MISSING_TYPE}`)) {
+        // No schema for this type: `schemas update` falls back to a
+        // /register_schema bootstrap call.
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: { error_code: "NOT_FOUND", message: "no schema" } }));
+        return;
+      }
       if (req.method === "GET" && req.url?.startsWith("/schemas/")) {
         // `schemas update` reads the existing schema first; report one so the
         // command takes the update_schema_incremental path.
@@ -84,6 +93,17 @@ describe("CLI schemas --force wiring (#2197)", () => {
 
     const without = await run(["schemas", "update", "force_flag_probe", "--fields", fields]);
     expect(without.url).toBe("/update_schema_incremental");
+    expect(without.body.force).toBe(false);
+  });
+
+  it("schemas update --force on a type with no schema forwards force: true on the /register_schema bootstrap call; omitted sends false", async () => {
+    const withFlag = await run(["schemas", "update", MISSING_TYPE, "--fields", fields, "--force"]);
+    expect(withFlag.url).toBe("/register_schema");
+    expect(withFlag.body.entity_type).toBe(MISSING_TYPE);
+    expect(withFlag.body.force).toBe(true);
+
+    const without = await run(["schemas", "update", MISSING_TYPE, "--fields", fields]);
+    expect(without.url).toBe("/register_schema");
     expect(without.body.force).toBe(false);
   });
 

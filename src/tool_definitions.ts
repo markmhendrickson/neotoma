@@ -940,7 +940,7 @@ export function buildToolDefinitions(
           user_specific: {
             type: "boolean",
             description:
-              'Explicit scope override. Omit this to write to whichever scope your own read of the schema resolved (global row, or your user-scoped override if you have one) — the common case, and the safe default. Pass true to create or extend a user-specific override for you even if you currently resolve the global row. Pass false to extend the global row even if you have a user-scoped override: the new global version is built from the current global schema, never from your override; if the type has no global schema, the call returns ERR_SCHEMA_SCOPE_MISMATCH. The response\'s "scope" field reports which scope was actually written.',
+              'Explicit scope override. Omit this to write to whichever scope your own read of the schema resolved (global row, or your user-scoped override if you have one) — the common case, and the safe default. Pass true to create or extend a user-specific override for you even if you currently resolve the global row. Pass false to extend the global row even if you have a user-scoped override: the new global version is built from the current global schema, never from your override; if the type has no global registry row and no code-defined baseline (but has your user-scoped schema), the call returns ERR_SCHEMA_SCOPE_MISMATCH. The response\'s "scope" field reports which scope was actually written.',
           },
           user_id: {
             type: "string",

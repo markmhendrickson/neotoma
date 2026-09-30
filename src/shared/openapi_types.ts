@@ -8196,7 +8196,7 @@ export interface operations {
               }
           )[];
           schema_version?: string;
-          /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global schema. The response's `scope` reports the scope actually written. */
+          /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global registry row and no code-defined baseline (but has the caller's user-scoped schema). The response's `scope` reports the scope actually written. */
           user_specific?: boolean;
           user_id?: string;
           /** @default true */

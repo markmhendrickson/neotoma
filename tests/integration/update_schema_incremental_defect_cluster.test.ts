@@ -350,7 +350,7 @@ describe("update_schema_incremental defect cluster", () => {
         .from("schema_registry")
         .update({ active: false })
         .in("id", [globalRow.id, userRow.id]);
-      let preRows = await activeRows(type);
+      const preRows = await activeRows(type);
       expect(preRows).toHaveLength(0); // sanity: both genuinely off before the call
 
       await schemaRegistry.activate(type, "2.0.0"); // global call — no userId
@@ -560,7 +560,8 @@ describe("update_schema_incremental defect cluster", () => {
     });
 
     afterAll(() => {
-      process.env.NODE_ENV = originalEnv;
+      if (originalEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalEnv;
     });
 
     // Must END in a plural-looking pattern for checkPluralEntityType to flag
@@ -824,7 +825,8 @@ describe("update_schema_incremental defect cluster", () => {
       });
 
       afterAll(async () => {
-        process.env.NODE_ENV = originalEnv;
+        if (originalEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = originalEnv;
         if (originalTrust === undefined) delete process.env.NEOTOMA_TRUST_PROD_LOOPBACK;
         else process.env.NEOTOMA_TRUST_PROD_LOOPBACK = originalTrust;
         await cleanupType(HTTP_PLURAL_TYPE);

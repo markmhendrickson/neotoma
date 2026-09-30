@@ -1789,7 +1789,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 At least one of `fields_to_add` or `fields_to_remove` must be provided and non-empty.
 
-**Scope resolution:** the write follows the same resolution as the read (user scope first, global fallback; `schema_registry.md` §4.4). An explicit `user_specific` is an override. An explicit `user_specific: false` reads and extends the global schema only; it never copies the caller's user-scoped override into a new global version. If no global schema exists for the type, that call returns `ERR_SCHEMA_SCOPE_MISMATCH` instead of promoting the override.
+**Scope resolution:** the write follows the same resolution as the read (user scope first, global fallback; `schema_registry.md` §4.4). An explicit `user_specific` is an override. An explicit `user_specific: false` reads and extends the global schema only; it never copies the caller's user-scoped override into a new global version. If the type has no global registry row and no code-defined baseline (but does have a user-scoped schema), that call returns `ERR_SCHEMA_SCOPE_MISMATCH` instead of promoting the override. With a code-defined baseline, the update extends that baseline as the first global row.
 
 **Response Schema:**
 
@@ -1821,7 +1821,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid field definition or empty add/remove | No |
 | `SCHEMA_NOT_FOUND` | 404 | No active schema found for entity type | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
-| `ERR_SCHEMA_SCOPE_MISMATCH` | 200 (error envelope) | Explicit `user_specific: false`, but the type has no global schema and an active schema exists in the caller's user scope (`details.guard_scope` vs `details.found_scope`) | Yes: retry without `user_specific`, or with `user_specific: true`. Do not call `register_schema` for this code. See `docs/reference/error_codes.md`. |
+| `ERR_SCHEMA_SCOPE_MISMATCH` | 200 (error envelope) | Explicit `user_specific: false`, but the type has no global registry row and no code-defined baseline, and an active schema exists in the caller's user scope (`details.guard_scope` vs `details.found_scope`) | Yes: retry without `user_specific`, or with `user_specific: true`. Do not call `register_schema` for this code. See `docs/reference/error_codes.md`. |
 | `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema updates are atomic)

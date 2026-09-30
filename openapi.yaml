@@ -7333,8 +7333,9 @@ paths:
                     global row: the new global version is built from the
                     current global schema, never from the caller's override,
                     and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type
-                    has no global schema. The response's `scope` reports the
-                    scope actually written.
+                    has no global registry row and no code-defined baseline
+                    (but has the caller's user-scoped schema). The response's
+                    `scope` reports the scope actually written.
                 user_id:
                   type: string
                 activate:
