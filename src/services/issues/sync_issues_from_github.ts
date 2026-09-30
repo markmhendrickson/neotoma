@@ -7,11 +7,20 @@
  *   - conversation_message entities (one per comment, PART_OF conversation);
  *     sender_kind is `user` here (GitHub mirror). MCP/CLI issue tooling uses `agent`.
  *
- * Push leg — Neotoma → GitHub (when `push` param is true, default):
+ * Push leg — Neotoma → GitHub (opt-in outside the configured default repo):
  *   - Finds local issue entities with `visibility: "public"` and no `github_number`
  *     (i.e. `sync_pending: true` or never pushed).
  *   - Runs `runRedactionGuard` (scan mode) on title+body before creating on GitHub.
  *   - Writes `github_number`, `github_url`, `sync_pending: false` back via `correct`.
+ *
+ * Target repo: `params.repo` (validated `owner/name`) overrides the configured default
+ * (`NEOTOMA_ISSUES_REPO` / `issues.repo`) for one call. `params.push` defaults to true only
+ * when the target IS the configured default; for any other repo it defaults to false so a
+ * mirror of a different repo never creates GitHub issues from unrelated local records.
+ *
+ * Dry run: `params.commit === false` reads GitHub and local state, reports what would be
+ * created / updated / pushed in `plan`, and performs no write (no `store`, no `correct`,
+ * no GitHub create).
  *
  * Identity: `issue` via github_number + repo; `conversation` thread via
  * `conversation_id` from {@link githubIssueThreadConversationId}; `conversation_message` via
@@ -34,7 +43,15 @@ import * as github from "./github_client.js";
 import { githubIssueThreadConversationId } from "./github_issue_thread.js";
 import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "./github_thread_keys.js";
 import { runRedactionGuard } from "./redaction_guard.js";
+import { IssueValidationError } from "./errors.js";
+import { assertRepoAllowed, type RepoAllowlistConfig } from "./repo_allowlist.js";
 import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
+import { MAX_QUERY_OFFSET } from "../entity_query_limits.js";
+import {
+  REPO_SLUG_FORMAT_MESSAGE,
+  isValidRepoSlug,
+  repoSlugsEqual,
+} from "../../shared/repo_slug.js";
 
 /**
  * One-time migration token folded into BOTH pull-leg sync idempotency keys
@@ -55,7 +72,39 @@ import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
  */
 const SYNC_KEY_MIGRATION = "m2";
 
+export interface SyncPlanIssue {
+  github_number: number;
+  title: string;
+}
+
+export interface SyncPlanPush {
+  entity_id: string;
+  title: string;
+}
+
+/** What a dry run (`commit: false`) reports instead of writing. */
+export interface SyncPlan {
+  /** GitHub issues with no local mirror for the target repo yet. */
+  issues_to_create: SyncPlanIssue[];
+  /** GitHub issues whose local mirror is behind GitHub's `updated_at`. */
+  issues_to_update: SyncPlanIssue[];
+  /** GitHub issues already mirrored at GitHub's current `updated_at`. */
+  issues_unchanged: number;
+  /** Comments that would be stored across created + updated + unchanged issues. */
+  messages_to_sync: number;
+  /** Local public issues with no github_number that the push leg would create on GitHub. */
+  issues_to_push: SyncPlanPush[];
+  /** Non-fatal caveats (for example a truncated local scan). */
+  warnings: string[];
+}
+
 export interface SyncResult {
+  /** Target GitHub repo (`owner/name`) this run mirrored. */
+  repo: string;
+  /** True when the run was a dry run (`commit: false`): nothing was written. */
+  dry_run: boolean;
+  /** Whether the push leg was enabled for this run (resolved from `push` + `repo`). */
+  push_enabled: boolean;
   issues_synced: number;
   messages_synced: number;
   errors: string[];
@@ -63,58 +112,166 @@ export interface SyncResult {
   issues_pushed: number;
   /** Per-issue push errors (non-fatal — pull leg still runs). */
   push_errors: string[];
+  /** Present only on a dry run. */
+  plan?: SyncPlan;
+}
+
+/**
+ * Thrown for a malformed `repo` before any GitHub request or local write. An
+ * {@link IssueValidationError}, so REST answers 400 and MCP answers InvalidParams.
+ */
+export class InvalidSyncRepoError extends IssueValidationError {
+  constructor(value: unknown) {
+    super({
+      code: "ERR_INVALID_REPO",
+      message: `${REPO_SLUG_FORMAT_MESSAGE} Received: ${JSON.stringify(value)}.`,
+      required_fields: ["repo"],
+    });
+    this.name = "InvalidSyncRepoError";
+  }
+}
+
+/**
+ * Resolve the effective target repo, push flag and dry-run flag for a sync call.
+ *
+ * A caller-supplied `repo` must be a well-formed slug AND be the configured repo or on the
+ * allowlist (see `repo_allowlist.ts`). Both checks run here, before any GitHub request and
+ * before any local read or write, and they apply equally to pull, push and dry run.
+ * A repo that fails the allowlist is rejected with an error that does not disclose whether
+ * it exists or is reachable with the server's credential.
+ *
+ * `push` default: true only for the configured default repo. Reasoning: the push leg
+ * creates public GitHub issues from local records that were never bound to any repo, so
+ * pointing a sync at a different repo must not export them there unless the caller says
+ * so. The default repo keeps its historical push-on behaviour so existing scheduled
+ * syncs do not silently stop pushing (a breaking change for no safety gain: the
+ * default target is the one the operator already configured to receive them).
+ */
+export function resolveSyncTarget(
+  params: IssueSyncParams | undefined,
+  config: RepoAllowlistConfig
+): { repo: string; isDefaultRepo: boolean; push: boolean; dryRun: boolean } {
+  const defaultRepo = config.repo;
+  let repo = defaultRepo;
+  if (params?.repo !== undefined) {
+    if (!isValidRepoSlug(params.repo)) throw new InvalidSyncRepoError(params.repo);
+    assertRepoAllowed(params.repo, config);
+    repo = params.repo;
+  }
+  const isDefaultRepo = repoSlugsEqual(repo, defaultRepo);
+  return {
+    repo,
+    isDefaultRepo,
+    push: params?.push ?? isDefaultRepo,
+    dryRun: params?.commit === false,
+  };
 }
 
 /**
  * Sync issues between Neotoma and GitHub.
  *
- * Push leg (default on): local public issues with no github_number are
- * sanitized and created on GitHub, then updated locally with the returned number/url.
+ * Push leg: local public issues with no github_number are sanitized and created on
+ * GitHub, then updated locally with the returned number/url. On by default only for the
+ * configured default repo; opt-in (`push: true`) for any other `repo`.
  *
  * Pull leg: GitHub issues and their comments are pulled into local entities.
  *
  * Both legs are idempotent. Push failures are non-fatal: the pull leg still runs.
+ *
+ * With `commit: false` neither leg writes; the result carries a `plan` instead.
  */
 export async function syncIssuesFromGitHub(
   ops: Operations,
   params?: IssueSyncParams
 ): Promise<SyncResult> {
   const config = await loadIssuesConfig();
+  const target = resolveSyncTarget(params, config);
+  const { repo, dryRun } = target;
+  const ghOpts = { repo };
+
   const result: SyncResult = {
+    repo,
+    dry_run: dryRun,
+    push_enabled: target.push,
     issues_synced: 0,
     messages_synced: 0,
     errors: [],
     issues_pushed: 0,
     push_errors: [],
   };
+  const plan: SyncPlan | undefined = dryRun
+    ? {
+        issues_to_create: [],
+        issues_to_update: [],
+        issues_unchanged: 0,
+        messages_to_sync: 0,
+        issues_to_push: [],
+        warnings: [],
+      }
+    : undefined;
+  if (plan) result.plan = plan;
+
+  // Local issue entities: needed by the push leg and, in a dry run, to tell created from
+  // updated. Loaded once per run.
+  let localIssues: Array<Record<string, unknown>> | undefined;
+  if (target.push || dryRun) {
+    const loaded = await loadLocalIssues(ops);
+    if (loaded.error) {
+      result.push_errors.push(
+        `Failed to retrieve local issues${target.push ? " for push" : ""}: ${loaded.error}`
+      );
+    }
+    if (loaded.truncated) {
+      plan?.warnings.push(
+        "Local issue scan was truncated at the server paging limit; created/updated counts may be overstated."
+      );
+    }
+    localIssues = loaded.entities;
+  }
 
   // Push leg: local public issues that have never been mirrored to GitHub.
-  if (params?.push !== false) {
-    await pushUnsyncedIssues(ops, config.repo, result);
+  if (target.push && localIssues) {
+    await pushUnsyncedIssues(ops, target, localIssues, result, plan);
   }
 
   // Pull leg: GitHub → Neotoma.
   let issues: GitHubIssue[];
   try {
-    issues = await github.listIssues({
-      state: params?.state ?? "all",
-      labels: params?.labels,
-      since: params?.since,
-      per_page: 100,
-    });
+    issues = await github.listIssues(
+      {
+        state: params?.state ?? "all",
+        labels: params?.labels,
+        since: params?.since,
+        per_page: 100,
+      },
+      ghOpts
+    );
   } catch (err) {
     result.errors.push(`Failed to list issues: ${(err as Error).message}`);
     return result;
   }
 
+  const localByNumber = plan ? indexLocalIssuesByNumber(localIssues ?? [], target) : undefined;
+
   for (const issue of issues) {
     try {
-      await syncSingleIssue(ops, issue, config.repo);
+      if (plan && localByNumber) {
+        const local = localByNumber.get(issue.number);
+        const entry = { github_number: issue.number, title: issue.title };
+        if (!local) plan.issues_to_create.push(entry);
+        else if (local.last_synced_at !== issue.updated_at) plan.issues_to_update.push(entry);
+        else plan.issues_unchanged++;
+        const comments = await github.listIssueComments(issue.number, undefined, ghOpts);
+        plan.messages_to_sync += comments.length;
+        continue;
+      }
+
+      await syncSingleIssue(ops, issue, repo);
       result.issues_synced++;
 
-      const comments = await github.listIssueComments(issue.number);
+      const comments = await github.listIssueComments(issue.number, undefined, ghOpts);
       for (const comment of comments) {
-        await syncSingleComment(ops, comment, issue, config.repo);
+        await syncSingleComment(ops, comment, issue, repo);
         result.messages_synced++;
       }
     } catch (err) {
@@ -125,30 +282,84 @@ export async function syncIssuesFromGitHub(
   return result;
 }
 
+const LOCAL_ISSUE_PAGE_SIZE = 500;
+
+/**
+ * Load local `issue` entities (with snapshots), paging up to the server offset ceiling.
+ * `truncated` is true when the last page was still full at that ceiling.
+ */
+async function loadLocalIssues(
+  ops: Operations
+): Promise<{ entities: Array<Record<string, unknown>>; truncated: boolean; error?: string }> {
+  const entities: Array<Record<string, unknown>> = [];
+  let offset = 0;
+  // We request a generous page and filter client-side because retrieveEntities does not
+  // support compound snapshot field filters.
+  for (;;) {
+    let raw: unknown;
+    try {
+      raw = await ops.retrieveEntities({
+        entity_type: "issue",
+        limit: LOCAL_ISSUE_PAGE_SIZE,
+        include_snapshots: true,
+        ...(offset > 0 ? { offset } : {}),
+      });
+    } catch (err) {
+      return { entities, truncated: false, error: (err as Error).message };
+    }
+    const page = extractEntitiesArray(raw);
+    entities.push(...page);
+    if (page.length < LOCAL_ISSUE_PAGE_SIZE) return { entities, truncated: false };
+    offset += LOCAL_ISSUE_PAGE_SIZE;
+    if (offset > MAX_QUERY_OFFSET) return { entities, truncated: true };
+  }
+}
+
+/**
+ * Index local mirrored issues (those with a github_number) for the target repo. A local
+ * issue with no `repo` is only treated as belonging to the configured default repo.
+ */
+function indexLocalIssuesByNumber(
+  entities: Array<Record<string, unknown>>,
+  target: { repo: string; isDefaultRepo: boolean }
+): Map<number, { last_synced_at: unknown }> {
+  const out = new Map<number, { last_synced_at: unknown }>();
+  for (const entity of entities) {
+    const snap = entity.snapshot as Record<string, unknown> | undefined;
+    if (!snap) continue;
+    const num = Number(snap["github_number"]);
+    if (!Number.isInteger(num) || num <= 0) continue;
+    const snapRepo = snap["repo"];
+    if (typeof snapRepo === "string" && snapRepo.length > 0) {
+      if (!repoSlugsEqual(snapRepo, target.repo)) continue;
+    } else if (!target.isDefaultRepo) {
+      continue;
+    }
+    out.set(num, { last_synced_at: snap["last_synced_at"] });
+  }
+  return out;
+}
+
 /**
  * Find local public issues with no github_number and push each to GitHub.
  * Redaction guard runs in scan mode before each create — PII is stripped, not blocked.
- * Updates the local entity with the returned github_number, github_url, sync_pending: false.
+ * Updates the local entity with the returned github_number, github_url, sync_pending: false
+ * (and `repo` when the target is not the configured default, so the record is bound to the
+ * repo it was exported to).
+ *
+ * In a dry run (`plan` set) nothing is created or written; candidates are listed in
+ * `plan.issues_to_push`.
  *
  * Errors per issue are accumulated in result.push_errors and do not abort other issues.
  */
 async function pushUnsyncedIssues(
   ops: Operations,
-  repo: string,
-  result: SyncResult
+  target: { repo: string; isDefaultRepo: boolean },
+  entities: Array<Record<string, unknown>>,
+  result: SyncResult,
+  plan: SyncPlan | undefined
 ): Promise<void> {
-  // Retrieve local public issues. We request a generous page and filter client-side
-  // because retrieveEntities does not support compound snapshot field filters.
-  let raw: unknown;
-  try {
-    raw = await ops.retrieveEntities({ entity_type: "issue", limit: 500, include_snapshots: true });
-  } catch (err) {
-    result.push_errors.push(`Failed to retrieve local issues for push: ${(err as Error).message}`);
-    return;
-  }
-
-  const entities = extractEntitiesArray(raw);
-
+  const repo = target.repo;
   for (const entity of entities) {
     const snap = entity.snapshot as Record<string, unknown> | undefined;
     if (!snap) continue;
@@ -164,16 +375,24 @@ async function pushUnsyncedIssues(
     const rawBody = String(snap["body"] ?? "");
     const labels = Array.isArray(snap["labels"]) ? (snap["labels"] as string[]) : [];
 
+    if (plan) {
+      plan.issues_to_push.push({ entity_id: entityId, title: rawTitle });
+      continue;
+    }
+
     // Strip PII from title and body before sending to GitHub.
     const guarded = runRedactionGuard({ title: rawTitle, body: rawBody, mode: "scan" });
 
     let created: GitHubIssue;
     try {
-      created = await github.createIssue({
-        title: guarded.title,
-        body: guarded.body,
-        labels,
-      });
+      created = await github.createIssue(
+        {
+          title: guarded.title,
+          body: guarded.body,
+          labels,
+        },
+        { repo }
+      );
     } catch (err) {
       result.push_errors.push(
         `Push failed for entity ${entityId} ("${rawTitle}"): ${(err as Error).message}`
@@ -199,6 +418,9 @@ async function pushUnsyncedIssues(
       // replayed sync re-applies the identical value under the same idempotency
       // key rather than tripping ERR_IDEMPOTENCY_MISMATCH.
       { field: "last_synced_at", value: created.created_at },
+      // A github_number is only meaningful with its repo. For the configured default
+      // repo the pull leg already binds it; for any other target bind it explicitly.
+      ...(target.isDefaultRepo ? [] : [{ field: "repo", value: repo }]),
     ];
 
     for (const { field, value } of writeBacks) {
@@ -404,22 +626,32 @@ export async function isSyncStale(lastSyncedAt: string | null): Promise<boolean>
 
 /**
  * Sync a single issue by number if it's stale.
+ *
+ * `repo` is the repository the issue lives in (the mirrored entity's own `repo`); it
+ * defaults to the configured repo. It must be the configured repo or on the allowlist,
+ * checked before any GitHub request, so a refresh can never read from (or store under) a
+ * repo the operator has not approved.
  */
 export async function syncIssueIfStale(
   ops: Operations,
   issueNumber: number,
-  lastSyncedAt: string | null
+  lastSyncedAt: string | null,
+  repo?: string
 ): Promise<boolean> {
   const stale = await isSyncStale(lastSyncedAt);
   if (!stale) return false;
 
   const config = await loadIssuesConfig();
-  const issue = await github.getIssue(issueNumber);
-  await syncSingleIssue(ops, issue, config.repo);
+  const targetRepo = repo ?? config.repo;
+  assertRepoAllowed(targetRepo, config);
+  const ghOpts = { repo: targetRepo };
 
-  const comments = await github.listIssueComments(issueNumber);
+  const issue = await github.getIssue(issueNumber, ghOpts);
+  await syncSingleIssue(ops, issue, targetRepo);
+
+  const comments = await github.listIssueComments(issueNumber, undefined, ghOpts);
   for (const comment of comments) {
-    await syncSingleComment(ops, comment, issue, config.repo);
+    await syncSingleComment(ops, comment, issue, targetRepo);
   }
 
   return true;

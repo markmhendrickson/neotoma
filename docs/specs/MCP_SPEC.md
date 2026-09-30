@@ -449,7 +449,7 @@ See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 | `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+).                           | Strong      | Partial       | Available |
 | `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
 | `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
-| `sync_issues`      | Bulk pull issues (and messages) from configured GitHub into local Neotoma                                                                                                           | Strong      | Partial       | Available |
+| `sync_issues`      | Bulk pull issues (and messages) from the configured or `repo`-selected GitHub repo into local Neotoma; push opt-in for non-default repos; `commit: false` dry run                   | Strong      | Partial       | Available |
 | `bulk_close_issues`| Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                          | Strong      | Yes           | Available |
 | `bulk_remove_issues`| Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.   | Strong      | Yes           | Available |
 
@@ -2142,7 +2142,7 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`. |
 | `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
 | `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
-| `sync_issues` | Yes | Optional `state`, `labels`, `since`. |
+| `sync_issues` | Yes | Optional `state`, `labels`, `since`, `repo` (`owner/name`, defaults to the configured repo), `push` (default true only for the configured repo, false for any other `repo`), `commit` (`false` = dry run, writes nothing). `repo` must be the configured repo or listed in `NEOTOMA_ISSUES_ALLOWED_REPOS`; otherwise `InvalidParams`. |
 | `bulk_close_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `bulk_remove_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |

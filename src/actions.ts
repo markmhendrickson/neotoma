@@ -11327,9 +11327,13 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
         since: parsed.data.since,
         state: parsed.data.state,
         labels: parsed.data.labels,
+        repo: parsed.data.repo,
         push: parsed.data.push,
+        commit: parsed.data.commit,
       });
       logDebug("Success:issues_sync", req, {
+        repo: result.repo,
+        dry_run: result.dry_run,
         issues_synced: result.issues_synced,
         messages_synced: result.messages_synced,
         issues_pushed: result.issues_pushed,

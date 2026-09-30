@@ -70,6 +70,7 @@ import {
   UpdateSchemaIncrementalRequestSchema,
   RegisterSchemaRequestSchema,
   IntakeHintSchema,
+  IssuesSyncRepoSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
@@ -2015,7 +2016,9 @@ export class NeotomaServer {
       state: z.enum(["open", "closed", "all"]).optional(),
       labels: z.array(z.string()).optional(),
       since: z.string().optional(),
+      repo: IssuesSyncRepoSchema.optional(),
       push: z.boolean().optional(),
+      commit: z.boolean().optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -2027,10 +2030,28 @@ export class NeotomaServer {
         state: parsed.state,
         labels: parsed.labels,
         since: parsed.since,
+        repo: parsed.repo,
         push: parsed.push,
+        commit: parsed.commit,
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
+      // Only caller errors map to InvalidParams: a malformed repo, and a repo outside the
+      // configured allowlist. Upstream GitHub failures (401, 404, rate limits) and other
+      // transport errors are not caller errors and fall through to InternalError. The
+      // message is the service's own and does not disclose whether the repo exists.
+      const { isIssueValidationError, isIssueTransportError } =
+        await import("./services/issues/errors.js");
+      if (
+        isIssueValidationError(err) ||
+        (isIssueTransportError(err) && err.code === "ERR_ISSUE_REPO_NOT_ALLOWED")
+      ) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `sync_issues failed: ${err.message}`,
+          err.toErrorEnvelopeDetails()
+        );
+      }
       throw new McpError(ErrorCode.InternalError, `sync_issues failed: ${err?.message ?? err}`);
     }
   }
