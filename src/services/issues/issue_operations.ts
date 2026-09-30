@@ -1184,13 +1184,26 @@ export async function addIssueMessage(
         ? snapshot.guest_access_token.trim()
         : undefined;
 
-  // Push to remote Neotoma instance (canonical). The target instance mirrors the configured
-  // repo and keys its thread on that repo, so a message is forwarded only for a row that
-  // belongs to the configured repo and is permitted. A row from any other repo (permitted or
-  // not) stays on this instance: forwarding it would file it under the configured repo's
-  // same-numbered issue there.
+  // Push to remote Neotoma instance (canonical). Two kinds of row are forwarded:
+  //  (a) a row with an explicit identity on the target: `remote_entity_id` plus either the
+  //      guest token (the post goes by entity id) or a stored `remote_conversation_id` (an
+  //      explicit thread). These were filed to the target instance (for example through
+  //      `submit_issue` with `target_repo`), so their follow-ups belong on that same record
+  //      whatever repo the row names. This leg uses no GitHub credential, so the allowlist
+  //      does not apply to it.
+  //  (b) a permitted row that belongs to the configured repo. Without an explicit identity the
+  //      client computes the thread key from the configured repo, so a row from any other repo
+  //      (permitted or not) would be filed under the configured repo's same-numbered issue.
+  // A row mirrored by sync carries no `remote_entity_id`, so it never counts as (a).
+  const hasRemoteIdentity =
+    typeof snapshot.remote_entity_id === "string" &&
+    snapshot.remote_entity_id.trim().length > 0 &&
+    (Boolean(guestForRemote) ||
+      (typeof snapshot.remote_conversation_id === "string" &&
+        snapshot.remote_conversation_id.trim().length > 0));
   const forwardToTarget = Boolean(
-    issuesTargetUrl && githubAllowed && repoSlugsEqual(issueRepo, config.repo)
+    issuesTargetUrl &&
+    (hasRemoteIdentity || (githubAllowed && repoSlugsEqual(issueRepo, config.repo)))
   );
   if (forwardToTarget) {
     remoteSubmissionAttempted = true;

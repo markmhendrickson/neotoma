@@ -1899,6 +1899,82 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           expect(result.remote_submission_error).toBeNull();
           expect(mockStore).toHaveBeenCalled();
         });
+
+        // Rows filed to the target through `submit_issue` with `target_repo` carry an explicit
+        // identity on that instance, so their follow-ups are forwarded by entity id whatever
+        // repo the row names and whether or not that repo is allowlisted.
+        describe("a row filed to the target instance (explicit remote identity)", () => {
+          it.each([
+            ["an allowlisted other repo", [OTHER]],
+            ["a repo that is not permitted", []],
+          ])(
+            "forwards by entity id for %s when it has a remote id and a token",
+            async (_label, allowed) => {
+              useConfig({ target_url: TARGET, allowed_repos: allowed });
+              useSnapshot(
+                mirroredSnapshot({
+                  remote_entity_id: "remote-ent-1",
+                  guest_access_token: "guest-token-1",
+                })
+              );
+
+              const result = await addIssueMessage(ops, {
+                entity_id: "ent-filed",
+                body: "Follow-up",
+              });
+
+              expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+              expect(mockAddMessageToRemote.mock.calls[0]?.[0]).toMatchObject({
+                body: "Follow-up",
+                issue_entity_id: "remote-ent-1",
+                guest_access_token: "guest-token-1",
+              });
+              expect(result.submitted_to_neotoma).toBe(true);
+              expect(result.remote_submission_error).toBeNull();
+            }
+          );
+
+          it("forwards a row with a remote id and a stored remote thread id but no token", async () => {
+            useConfig({ target_url: TARGET, allowed_repos: [] });
+            useSnapshot(
+              mirroredSnapshot({
+                remote_entity_id: "remote-ent-2",
+                remote_conversation_id: "remote-thread-2",
+              })
+            );
+
+            await addIssueMessage(ops, { entity_id: "ent-filed-thread", body: "Follow-up" });
+
+            expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+            expect(mockAddMessageToRemote.mock.calls[0]?.[0]).toMatchObject({
+              issue_entity_id: "remote-ent-2",
+              remote_conversation_id: "remote-thread-2",
+            });
+          });
+
+          it("does not forward a row with a remote id but neither a token nor a remote thread id", async () => {
+            useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+            useSnapshot(mirroredSnapshot({ remote_entity_id: "remote-ent-3" }));
+
+            const result = await addIssueMessage(ops, {
+              entity_id: "ent-no-identity",
+              body: "Follow-up",
+            });
+
+            expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+            expect(result.submitted_to_neotoma).toBe(false);
+            expect(result.remote_submission_error).toBeNull();
+          });
+
+          it("does not forward a sync-mirrored row (no remote id) even when it carries a token", async () => {
+            useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+            useSnapshot(mirroredSnapshot({ guest_access_token: "guest-token-4" }));
+
+            await addIssueMessage(ops, { entity_id: "ent-mirrored-token", body: "Follow-up" });
+
+            expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+          });
+        });
       });
     });
 
