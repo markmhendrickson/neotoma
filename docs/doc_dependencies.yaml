@@ -374,6 +374,15 @@ docs/subsystems/rules.md:
     - path: docs/developer/rule_neotoma_sync.md
       type: implicit
       reason: Rule file sync targets the rule type defined in the rules design
+    - path: docs/developer/cli_agent_instructions.md
+      type: restates
+      reason: CLI agent instructions restate rule delivery and the agent behavior contract and are rewritten with the MCP instructions
+    - path: docs/subsystems/relationships.md
+      type: implicit
+      reason: The rules design adds the GOVERNS relationship type and the SUPERSEDES effectiveness rules
+    - path: docs/subsystems/errors.md
+      type: implicit
+      reason: Each rules slice adds error codes (for example ERR_RULES_NOT_ACKNOWLEDGED) that errors.md must list
 
 docs/subsystems/schema_registry.md:
   downstream:
