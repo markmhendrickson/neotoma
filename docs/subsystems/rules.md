@@ -22,14 +22,14 @@ This document does NOT cover:
 - Write attribution internals (see #2534 and #2537) and AAuth admission (see `docs/subsystems/agent_capabilities.md`).
 - Personal preferences that belong to one person's own instance rather than to a shared graph.
 
-Status: **design**. Decisions 1 to 4 were ruled by the operator on 2026-09-30. Decisions 5, 7 and 8 were accepted by default. Decision 6 awaits confirmation. Decisions 9 to 15 are design choices settled in review, not operator rulings. See [Decisions](#decisions) and [Open decisions](#open-decisions). Nothing described here as new is built. Section [Current state](#current-state-as-of-v0250) states what exists on `main` at v0.25.0.
+Status: **design**. Decisions 1 to 4 were ruled by the operator on 2026-09-30. Decisions 5, 7 and 8 were accepted by default. Decision 6 awaits confirmation. Decisions 9 to 17 are design choices settled in review, not operator rulings. See [Decisions](#decisions) and [Open decisions](#open-decisions). Nothing described here as new is built. Section [Current state](#current-state-as-of-v0250) states what exists on `main` at v0.25.0.
 
 ## At a glance
 - **Types.** One `rule` per record with its own kind (`mandatory` or `advisory`), a grouping-only `policy`, and a minimal `member` entity that only scopes rules.
 - **Scope is an edge.** No `GOVERNS` edge means the whole instance. A member or agent edge narrows delivery and reads, and can only tighten.
 - **One renderer.** Every delivery surface is produced by one server-side renderer, and one content digest identifies the mandatory set a client received.
 - **Three delivery levels.** L0 notice, L1 hook refusal, L2 server write gate. Each harness uses the highest it supports.
-- **One guard.** Every path that changes a rule, policy, member or scope edge passes one governance choke point, so `approved` means approved.
+- **One guard.** Every path that changes a rule, policy, member or scope edge, and every legacy rule type during the transition window, passes one governance choke point, so `approved` means approved. The operator channel that repairs and approves when members cannot ships with it in N1.
 - **Slice order.** The minimal governance guard ships in N1, before anything that delivers or enforces rules ([Slice sequence](#slice-sequence)).
 
 ## Purpose
@@ -52,8 +52,8 @@ The design gives each rule its own record and kind, groups rules by edge, scopes
 8. **A rule reaches only the sessions it governs and the readers allowed to read it.** Delivery scope is derived from the authenticated principal on the server, never from a client-supplied parameter. Member and agent scoped rules are also withheld from generic graph reads ([Read confidentiality](#read-confidentiality)).
 9. **Determinism.** The same approved rule content, principal scope and profile produce byte-identical output and the same digest, regardless of observation ids, re-imports or cosmetic corrections ([Digest](#digest)).
 10. **Provenance.** Authorship and approval are recorded by the server from authenticated attribution, not by client-supplied fields, and no client write can set an in-force status by itself.
-11. **One guard.** Every path that creates, changes, deletes, restores, merges, splits or re-relates a governance record passes one server-side choke point ([Governance guard](#governance-guard)). A mutating path that skips it is a defect.
-12. **No lockout.** Rules never gate writes to governance types, and an operator channel that works when the rule system is unreadable or malformed always exists ([Operator channel and break-glass](#operator-channel-and-break-glass)).
+11. **One guard.** Every path that creates, changes, deletes, restores, merges, splits or re-relates a governance record passes one server-side choke point ([Governance guard](#governance-guard)). During the transition window the legacy rule-bearing types are governance records for this purpose ([Legacy rule types under the guard](#legacy-rule-types-under-the-guard)). A mutating path that skips it is a defect.
+12. **No lockout.** No rule or predicate gates writes to governance types. The receipt gate does not exempt a member's writes to governance types, because a member can always satisfy it by calling `get_rules`, but it always exempts the operator channel. An operator channel that works when the rule system is unreadable or malformed always exists ([Operator channel and break-glass](#operator-channel-and-break-glass)).
 
 ## Definitions
 - **Rule**: one atomic normative instruction held as one `rule` record. Its `rule_kind` is `mandatory` or `advisory`.
@@ -68,10 +68,10 @@ The design gives each rule its own record and kind, groups rules by edge, scopes
 - **Actor**: the holder of one attribution id, or the reserved `operator_channel` actor. An unattributed write is not an actor. Two unattributed writes are not two actors.
 - **Author**: the actor whose write first created a `rule` record.
 - **Approver**: an attributed member who is not the author of the record being approved, or the `operator_channel` actor.
-- **Single-member instance**: an instance with at most one `member` record whose status is `active`. Derived from the graph, not a setting. The **owner** is that one member. The word owner has no meaning on any other instance.
-- **Instance operator and operator channel**: the instance operator is whoever controls the operator channel. The operator channel is the server configuration, the local CLI on the instance host, and, on a hosted instance, the admin route verified by an instance admin credential that no member credential can substitute for. It is never a graph write, never an MCP tool, and never inferred from a missing attribution id ([Operator channel and break-glass](#operator-channel-and-break-glass)).
+- **Single-member instance**: an instance with at most one `member` record whose status is `active` and no admitted human credential that lacks a minted `member` record. Member records are minted at credential admission, not at first attributed write, so a second person who has been admitted but has not yet written reads as a second member, and the instance is multi-member. Derived from the graph and the admission records, not a setting. The **owner** is that one member. The word owner has no meaning on any other instance, and never applies to an agent identity.
+- **Instance operator and operator channel**: the instance operator is whoever controls the operator channel. The operator channel is the server configuration, the local CLI on the instance host, and, on a hosted instance, the admin route verified by an instance admin credential that no member credential can substitute for. It is never a graph write, never an MCP tool, and never inferred from a missing attribution id. Slice N1 delivers it ([Operator channel and break-glass](#operator-channel-and-break-glass)).
 - **Break-glass**: a temporary, logged operator-channel setting that suspends the receipt gate, the predicate check, or both. It never suspends the governance guard.
-- **Governance types**: `rule`, `policy`, `member` and `agent_grant`.
+- **Governance types**: `rule`, `policy`, `member` and `agent_grant`. During the transition window, the legacy rule-bearing types (`standing_rule`, `instance_policy` and configured legacy type names) are governance types for every rule in this document, including the guard and the predicate exemption, until the window closes ([Legacy rule types under the guard](#legacy-rule-types-under-the-guard)).
 - **Governance guard**: the server-side choke point every mutating path passes ([Governance guard](#governance-guard)).
 - **In force**: status `approved` or `provisional`, inside the effective window, not shadowed by an effective superseder, and in scope for the principal.
 - **Shadowed**: a rule that has an effective superseder ([Supersession semantics](#supersession-semantics)).
@@ -113,6 +113,7 @@ Findings that shape the design:
 - `GOVERNS` is not a built-in relationship type. `PART_OF`, `REFERS_TO` and `SUPERSEDES` are.
 - The protected-type guard (`assertCanWriteProtected`, protected types today `{agent_grant}`) is invoked from the structured store entry points, observation insertion and correction. Soft delete, restore, merge, split and relationship create, delete and restore are separate service paths (`softDeleteEntity`, `batchSoftDeleteEntities`, `restoreEntity`, `mergeEntities`, `splitEntity`, `createRelationship`, `softDeleteRelationship`, `restoreRelationship`) that do not call it.
 - The attribution id lives only in the `member_attribution_ids` table, not in the graph. Creating a `member` entity is therefore a new graph write made by the attribution resolver.
+- Any principal that can write a `standing_rule` row today changes what sessions receive, and any principal that can write the `instance_policy` record changes what is enforced, with no second actor. Only the design's own guard closes this ([Legacy rule types under the guard](#legacy-rule-types-under-the-guard)).
 - Guest responses are redacted by removing the `authenticated_actor_id` provenance key at send time (`src/services/attribution_redaction.ts`). No other key is redacted.
 - The instance-policy evaluator, given an unregistered type, still applies the entity-type lists but skips the person-data and sensitivity checks, because an unclassified type has made no claim to gate on. A schema lookup failure is a different case that the design treats separately ([Predicate model](#predicate-model)).
 - Reads on a shared graph are scoped to the graph owner, not to the member. No per-member read filter on entity, observation or relationship reads was found in the tree, and the design treats one as absent. Slice N5 confirms this before building the filter.
@@ -210,7 +211,7 @@ A `SUPERSEDES` edge from rule B to rule A follows these rules. They apply identi
 2. **Expiry and retirement reinstate A.** Shadowing is computed at read time. When B expires, lapses from `provisional`, or is retired, and no other superseder of A is effective, A is in force again. A permanent mandatory rule superseded by a time-bounded rule therefore returns at expiry, and the design never drops a mandatory rule silently through its superseder.
 3. **Retiring B is a retirement decision.** It needs the same two actors as retiring any mandatory rule. The confirming actor may choose to retire the shadowed chain in the same confirmation. Otherwise the predecessors are reinstated.
 4. **Scope containment.** B may supersede A only if B governs every principal A governs: B is instance-wide, or B's `GOVERNS` targets include all of A's targets. A narrower superseder is refused at approval with `ERR_RULE_SUPERSEDES_SCOPE`. To narrow a rule, retire it through the two-actor path and add the narrower rule beside it. A member or agent rule can therefore never remove an instance rule for other principals.
-5. **Loosening supersession.** A supersession that lowers `rule_kind` from `mandatory` to `advisory`, or removes or relaxes a predicate, is a loosening. It takes the same two distinct actors as a retirement, and the approval output names the loosening.
+5. **Loosening supersession.** A supersession that lowers `rule_kind` from `mandatory` to `advisory`, or removes or relaxes a predicate, is a loosening. It needs no actor beyond the two an ordinary approval already involves, the author and a different approver. What changes is the approval itself: the approval output names the loosening, and the approver must acknowledge it explicitly, so a loosening cannot be approved by accident.
 6. **No cycles.** A `SUPERSEDES` cycle is refused at write.
 7. **Several superseders.** A is shadowed while at least one superseder is effective.
 8. **Edges are material.** Creating, deleting or restoring a `SUPERSEDES` edge on an in-force rule is refused. The edge is written on the new `proposed` rule, before approval.
@@ -297,9 +298,9 @@ An approved or provisional rule that has an effective superseder stays stored an
 3. **Approval requires a different attributed actor.** The approving write must carry an attribution id that differs from `authored_by_actor`. The guard compares the two ids and refuses an approval where they are equal or where either is missing (`ERR_RULE_SELF_APPROVAL`, `ERR_RULE_APPROVER_UNATTRIBUTED`).
 4. **Approver population.** Decided: any attributed member of a shared instance may approve, except the author. This is the operator ruling of 2026-09-29, read as "any partner but the author", where partner means any attributable member. That reading awaits confirmation ([Open decisions](#open-decisions), decision A).
 5. **Unattributed writes fail closed.** A write without a verified attribution id is unverified. It is never an operator write, it is not an actor, and it cannot approve, confirm a retirement or set an in-force status. Per-member identity is partly live (#2537 lists write kinds still unattributed), so treating a missing id as the highest privilege would let any caller pick an unattributed path to skip approval. Authority for operator actions comes from the operator channel instead: an approval or retirement made through it is recorded under the reserved `operator_channel` actor, which is distinct from every member. The single exception is rule 6. This depends on write attribution (#2534) and on binding legacy MCP sessions to the presented credential (#2537, item 5).
-6. **Single-member instances.** Decided: on an instance with at most one active `member` record, no second actor exists. The owner's direct write of `approved` is admitted, whether or not it carries an attribution id, and the guard records `approval_path: single_member_self`. The owner may also retire a mandatory rule alone. When a second member appears, rules approved this way stay approved and every later change needs two actors.
+6. **Single-member instances.** Decided: on a single-member instance ([Definitions](#definitions)), no second actor exists. The owner's direct write of `approved` is admitted, whether or not it carries an attribution id, and the guard records `approval_path: single_member_self`. The owner may also retire a mandatory rule alone. The exception applies only to the owner's own human credential. It never applies to an agent identity, admitted or not, because rule 9 forbids agents to approve, and it never applies once any other human credential has been admitted, even before that person has written anything. When a second member appears, rules approved this way stay approved and every later change needs two actors.
 7. **Editing an approved rule is a supersession.** Decided. A correction that changes a material field (`rule_text`, `rule_kind`, `predicate`, `applies_when`, effective dates, `GOVERNS` and `SUPERSEDES` edges) of an `approved` or `provisional` rule is refused. The change is written as a new `proposed` rule with a `SUPERSEDES` edge to the approved one. The old rule stays in force until the new rule is in force. Non-material fields (`title`, `rationale`, `domain`, `priority`) may be corrected in place.
-8. **Retiring a mandatory rule is a loosening.** Decided. It takes a two-actor path. The first actor's retirement request sets `retirement_proposed_by_actor` and the rule stays in force. A different actor's confirmation sets `status: retired`. Retiring an advisory rule needs one actor. Deleting an in-force rule is a retirement request and follows the same path. A loosening supersession takes the same path ([Supersession semantics](#supersession-semantics), rule 5).
+8. **Retiring a mandatory rule is a loosening.** Decided. It takes a two-actor path. The first actor's retirement request sets `retirement_proposed_by_actor` and the rule stays in force. A different actor's confirmation sets `status: retired`. Retiring an advisory rule needs one actor. Deleting an in-force rule is a retirement request and follows the same path. A loosening supersession needs only its ordinary approval with an explicit acknowledgement of the loosening ([Supersession semantics](#supersession-semantics), rule 5).
 9. **Agents do not approve.** An agent identity may propose a rule when its grant names the `rule` type. No grant capability lets an agent approve or confirm a retirement in v1, and the approval and confirmation tools are not registered for sessions authenticated as an agent identity. An agent running under a member's own credential is a residual risk ([Residual risks](#residual-risks)).
 10. **Proposed rules are visible for review, not as instructions.** Decided. A `proposed` rule appears in instruction surfaces only as a labelled count. Its title and text are served only through the approval tools, to the author, to approvers, and to the operator channel. This limits the prompt-injection surface: a member cannot place instruction text, or a title, into other members' sessions by proposing it.
 11. **Migration approvals.** Rules created by the migration ([Migration](#migration)) are written `approved` through the operator channel with `approval_path: operator_migration` and `migrated_from` set, because they were already in force.
@@ -323,6 +324,7 @@ One server-side function, the governance guard, decides every change to a govern
 | Relationship delete and restore | `softDeleteRelationship`, `restoreRelationship` | Same as create. Deleting `GOVERNS` from an in-force rule would widen it and is refused. Deleting `SUPERSEDES` from an in-force superseder would revive the old rule and is refused. |
 | Schema changes | `register_schema`, `update_schema_incremental` | A change that touches a governance type, or that weakens its governance declaration, is refused except through the operator channel. |
 | Member creation | the attribution resolver | The only path. Clients are refused. |
+| Legacy rule-bearing types | every path above, applied to `standing_rule`, `instance_policy` and configured legacy type names during the transition window | The write is stored but is a pending change. It is not rendered or enforced until approved ([Legacy rule types under the guard](#legacy-rule-types-under-the-guard)). |
 
 Rules for the guard:
 - **Edges are material.** An edge change on an in-force rule is a material edit. It is refused, and the change is written as a new `proposed` rule that supersedes.
@@ -330,6 +332,18 @@ Rules for the guard:
 - **Fail closed.** If the guard cannot resolve attribution, the current status, or the in-force set, it refuses. The operator channel is the recovery path.
 - **The operator channel passes the guard.** It is not exempt from it. Its actions are recorded under the `operator_channel` actor and are subject to the same checks except where a rule names it as the second actor.
 - **Read filtering is separate.** Confidentiality of reads is a second choke point ([Read confidentiality](#read-confidentiality)).
+
+### Legacy rule types under the guard
+The transition window keeps accepting writes to the legacy rule-bearing types. Left outside the guard, a writer to `standing_rule`, `instance_policy` or a configured legacy type name could place mandatory text in every session in scope with no second actor, which is the capability the guard exists to protect. So during the window those types are governance types for the guard, from slice N1.
+1. **One function names them.** N1 introduces the function that returns the legacy type names (`standing_rule`, `instance_policy` and configured names). The guard calls it, and from N2 the shared resolver extends the same function with the mapping.
+2. **Approved state.** A legacy row has an approved state: the last state that passed an approval path. The renderer and the write evaluator read a legacy row only at its approved state. A legacy write by anyone other than the operator channel or the migration is stored as a pending change. It is not rendered and not evaluated, a new legacy row with no approved state binds nobody, and pending changes are listed in rules health.
+3. **Grandfathering.** On the first start of the N1 release, before it serves writes, the server records every existing legacy row's current state as approved with `approval_path: grandfathered`. Nothing new is admitted, because those rows are already in force, and the upgrade drops no mandatory rule. The grandfathered rows are listed in rules health for the operator to review.
+4. **Approval.** A pending change is approved through the same paths as a `rule`: a different attributed actor (through the N7 tools, and only the operator channel before N7), the single-member owner, or the migration.
+5. **Loosening.** A change that removes or weakens a legacy row is a loosening: `enabled: false`, deletion, `enforcement` from `enforced` to `advisory`, or removing a type-list entry or a sensitivity rule. It takes the two-actor path, and until it is confirmed the approved state stays in force. A strengthening also waits for approval before it is delivered.
+6. **Enforcement reads approved state.** The write evaluator reads the instance policy at its approved state, so a pending flip of `enforcement` or a pending edit of a type list does not weaken enforcement.
+7. **Migration.** The migration reads approved state. A pending change found at migration time is written as a `proposed` rule with a report entry.
+8. **Downstream stores.** Tooling that writes legacy type names finds its writes pending until they are approved or migrated. The response carries the deprecation warning and says so.
+9. **End.** The coverage ends when the legacy schemas are made read-only at the window's exit conditions, after which the legacy types accept no client writes at all.
 
 ## Operator channel and break-glass
 The operator channel is how the instance operator acts when a member cannot, and how the rule system is repaired when it is unreadable or malformed.
@@ -339,9 +353,13 @@ The operator channel is how the instance operator acts when a member cannot, and
 2. The local `neotoma` CLI run on the instance host with access to its configuration and data.
 3. On a hosted instance, an admin route verified by an instance admin credential. That credential is distinct from every member credential, is never accepted on MCP tools or member routes, and is what lets an operator without host access recover a hosted instance. Which credential verifies it is an open decision ([Open decisions](#open-decisions), decision B).
 
+**Who builds it.** Slice N1 delivers the operator channel: the configuration path, the local CLI, the reserved `operator_channel` actor, and the guard's recognition of both. It is the earliest slice that needs it, because N1's guard leaves the operator channel and the single-member owner as the only ways to put a rule in force. Every later slice (N3 migration, N4 predicate break-glass, N5 diagnostic, N7 approvals, N8 gate break-glass) builds on it. The hosted admin route (path 3) is a named later increment of N1, tracked in N1's issue and gated on decision B. It is needed no later than N8's exit criterion 4.
+
+**Hosted instances until decision B is ruled.** Path 3 does not exist yet, so the interim operator channel on a hosted instance is path 2, the local CLI, run on the instance host by whoever operates the deployment. Migration (N3) and operator approvals on a hosted instance run that way. A hosted operator without that access cannot use them, and the write gate stays opt-in there.
+
 **What it may do.** Give approvals and retirement confirmations (recorded as the `operator_channel` actor), run the migration, read and write governance types for repair, read every record including member-scoped ones, run the operator diagnostic, and set break-glass. It is never a graph write and never an MCP tool, so a rule cannot gate it.
 
-**Break-glass.** The setting `rules_break_glass` has three scopes: `receipt_gate`, `predicates` and `both`. It is off by default. It auto-expires after `break_glass_max_minutes` (starting value 60). Every activation, expiry and use is logged with time and channel, shown in rules health, and turning it off restores the gate and the predicates. It never suspends the governance guard, so approval integrity holds during an incident.
+**Break-glass.** The setting `rules_break_glass` has three scopes: `receipt_gate` (ships in N8), `predicates` (ships in N4) and `both`. It is off by default. It auto-expires after `break_glass_max_minutes` (starting value 60). Every activation, expiry and use is logged with time and channel, shown in rules health, and turning it off restores the gate and the predicates. It never suspends the governance guard, so approval integrity holds during an incident.
 
 ### Lockout matrix
 | Situation | Effect | Recovery |
@@ -375,12 +393,13 @@ Every new capability ships on every applicable surface in the same slice. Names 
 | Capability | MCP tool | REST route | CLI command | Slice |
 |---|---|---|---|---|
 | Render rules | `get_rules` | `POST /rules/render` | `neotoma rules render` | N2 |
-| Confirm placement | `acknowledge_rules` | `POST /rules/acknowledge` | `neotoma rules acknowledge` | N8 |
+| Confirm placement | `acknowledge_rules` | `POST /rules/acknowledge` | `neotoma rules acknowledge` | N2 |
 | Rules health | `rules_health` | `GET /rules/health` | `neotoma rules health` | N2 |
 | List and read proposals | `list_rule_proposals` | `GET /rules/proposals` | `neotoma rules proposals` | N7 |
 | Approve, reject, confirm retirement | `approve_rule`, `reject_rule`, `confirm_rule_retirement` | `POST /rules/{id}/approve`, `.../reject`, `.../retire` | `neotoma rules approve`, `reject`, `retire` | N7 |
 | Operator diagnostic | none (operator channel only) | admin route | `neotoma rules explain` | N5 |
 | Migration | none | admin route | `neotoma rules migrate` | N3 |
+| Operator channel | none | hosted admin route (increment of N1, gated on decision B) | local CLI on the instance host, and server configuration | N1 |
 
 Operator surfaces. The rules health output, the break-glass state and the operator diagnostic are read in the CLI (`neotoma rules health`, `neotoma rules explain`) and, for health and break-glass state, on a Rules page in the Inspector. The reviewer checklist item ([Decisions](#decisions), decision 8) appears in the output of the approval tools. A check an operator cannot find is not a check, so each slice lists its surface in its acceptance criteria.
 
@@ -497,6 +516,16 @@ The hook speaks to the person as well as to the model. The denial message is fix
 
 "Neotoma rules are not confirmed for this session, so this action was blocked. Read-only actions still work. Run `neotoma rules render` to retry, or check that the Neotoma instance is reachable."
 
+The same hook path also fires for other causes, and each has one short line so a person is not sent to check connectivity when the cause is elsewhere:
+- Renderer unreachable: "Neotoma could not be reached, so rules could not be confirmed. Check the connection to the instance."
+- Unauthorized: "Neotoma refused this session's credentials, so rules could not be fetched. Sign in again or check the credential this tool uses."
+- `budget_insufficient`: "The mandatory rules are too large for this tool's budget. Ask the instance operator to shorten them or raise the budget."
+
+Approval refusals carry one plain sentence per code, which slice N7 ships with the tools:
+- `ERR_RULE_SELF_APPROVAL`: "You wrote this rule, so someone else must approve it."
+- `ERR_RULE_APPROVER_UNATTRIBUTED`: "This approval cannot be tied to a member, so it was refused. Sign in as a member and try again."
+- `ERR_RULE_SUPERSEDES_SCOPE`: "This rule governs fewer people than the rule it replaces, so it cannot replace it. Retire the old rule instead and add this one beside it."
+
 Recovery when Neotoma is unreachable. Side-effecting calls stay denied for as long as delivery cannot be confirmed. Reading does not fix an outage, so the recovery is to restore connectivity and retry the render, after which the denial lifts in the same session without a restart. There is no server-side override for a hook. The hook is a control against the model, not against the local user: the person who owns the machine can always remove or disable the hook, and conformance reporting states the L1 guarantee with that boundary.
 
 ### Instructions field
@@ -520,7 +549,7 @@ L2 covers Neotoma writes only. Actions outside Neotoma cannot be gated by the se
 ### Digest
 One digest exists. It is the first 12 hexadecimal characters of SHA-256 over the canonical serialization of the sorted list of content hashes of the mandatory rules in force for the principal. It is computed over the caller-visible set only.
 
-The content hash of a rule is SHA-256 over the canonical JSON of the rule's approved content: `rule_kind`, `rule_text`, `predicate`, `applies_when`, `effective_from`, `effective_until`, and the sorted list of scope target keys (empty for instance scope). Canonical means keys sorted, UTF-8, Unicode NFC, line endings normalized to LF, surrounding whitespace trimmed and internal whitespace runs collapsed in text fields. The list is sorted by content hash, so order and identity do not matter.
+The content hash of a rule is SHA-256 over the canonical JSON of the rule's approved content: `rule_kind`, `rule_text`, `predicate`, `applies_when`, `effective_from`, `effective_until`, and the sorted list of scope target keys (empty for instance scope). Canonical means: keys sorted; UTF-8; Unicode NFC; line endings normalized to LF; surrounding whitespace trimmed and internal whitespace runs collapsed in text fields; dates written as `YYYY-MM-DD`, or as UTC RFC 3339 with seconds and no fractional part when a time is present; arrays that are sets (`types` in a predicate, scope target keys) sorted ascending and deduplicated; and a null, an empty string and a missing optional field treated as the same absent value, so an empty `rule_text` and an omitted one hash alike, and a missing `applies_when` equals `always`. The list is sorted by content hash, so order and identity do not matter.
 
 Excluded from the digest: `observation_id` and every observation, snapshot and provenance field; `rule_key`; `title`, `rationale`, `domain` and `priority`; `status` (membership in the list is the status signal); the server-stamped fields; `migrated_from`; and policy grouping and `REFERS_TO` edges.
 
@@ -531,9 +560,13 @@ Consequences:
 - Two principals with different mandatory sets have different digests, and a digest reveals nothing about rules outside the caller's scope.
 - Scope target keys are per instance, so a digest is comparable across instances only for instance-scoped rules.
 
-One function computes it. Slice N2 owns and defines it, the migration equality check (N3) and the receipts (N8) call it, and a second definition anywhere is a defect.
+The digest covers the mandatory set only. A dropped or changed advisory rule does not change it, so the migration check adds count checks for advisory rules ([Migration command](#migration-command)).
+
+One function computes it. Slice N2 owns and defines it, the migration equality check (N3) and the receipts (also N2) call it, and a second definition anywhere is a defect.
 
 ### Receipts
+Slice N2 owns receipts in full: the table, issuance of both states, `acknowledge_rules`, and the principal binding below. `get_rules` returns a receipt reference and accepts `since_digest` from N2, and the N6 hooks call `acknowledge_rules` from their first release, so the earliest consumer owns it. Slice N8 owns only the write gate and the conformance evidence that consume receipts.
+
 A receipt holds `(principal, agent identity, digest, profile, issued_at, state)`. State is `rendered` when the server served the render and `placed` when the client called `acknowledge_rules`. Receipts live in a dedicated table, like `member_attribution_ids`, not in the graph, so reads do not write graph observations.
 
 `since_digest` on `get_rules` and the digest in `acknowledge_rules` resolve only against receipts issued to the calling principal. An unknown digest yields a full render or a refusal (`ERR_RULES_DIGEST_UNKNOWN`), never a delta computed from another principal's set.
@@ -561,7 +594,7 @@ The default flips to ON in one release, by changing the default of `require_rule
 4. **Break-glass** is implemented, documented and tested, including that its use is logged, that it expires, that it works through the operator channel without host access on a hosted instance, and that turning it off restores the gate.
 5. **No open defect** in receipt issuance, digest computation or the refusal body, and the two-principal isolation test passes on every surface, including the read paths ([Read confidentiality](#read-confidentiality)).
 6. **The grace window** behavior is tested: an old digest is accepted inside the window and refused after it.
-7. **Rollback trigger.** The default flips back in the next release when an incident report shows the gate refused legitimate writes for a supported harness and break-glass was needed, or when a conformance result goes stale and is not renewed within one release.
+7. **Rollback trigger.** The default flips back in the next release when an incident report shows the gate refused legitimate writes for a supported harness and break-glass was needed, or when a fresh conformance run fails. A stale result is not a trigger. An ordinary client release, or the passing of the evidence age, marks that result stale and blocks the release checks that rely on it from claiming conformance, but it never flips a safety default by itself, because the gate's behavior does not depend on the evidence being current. Renewing the evidence is a release task.
 
 Slice N8 (#2563) owns these criteria and the evidence. The release that flips the default states in its notes which conformance results it relied on.
 
@@ -613,7 +646,7 @@ Every migrated rule carries `migrated_from` and is written `approved` through th
 2. Runs a pre-check that flags rows whose text may contain personal data, for review before migration (#2370).
 3. Writes new records deterministically, so a re-run creates no duplicates.
 4. Reads each written record back and asserts the specific fields written: `rule_key`, `rule_kind`, `status`, the body text, and the edges. A 2xx response is not evidence.
-5. Compares the digest ([Digest](#digest)) of the legacy mandatory set with the digest of the migrated set. The "before" value is computed by running each in-force legacy row through the mapping above and hashing the mapped content with the same function. The "after" value is computed over the written `rule` records read back, with the legacy rows shadowed. Because the content hash excludes `rule_key`, `observation_id` and `title`, the derived keys and new observation ids cannot cause a false difference, and any dropped, altered or added mandatory content does. The command stops on any difference.
+5. Compares the digest ([Digest](#digest)) of the legacy mandatory set with the digest of the migrated set. The comparison is over all scopes, the operator view, and not any one principal's view, because the migration is an instance-wide act and a per-principal digest would omit rules that principal cannot see. The "before" value is computed by running each legacy row in force through the adapter, at its approved state ([Legacy rule types under the guard](#legacy-rule-types-under-the-guard)), through the mapping above and hashing the mapped content with the same function. The "after" value is computed over the in-force `rule` records read back, plus every legacy row that stays in force through the adapter because no effective `rule` superseder shadows it. A legacy row left `proposed` because its agent scope could not be resolved is such a row, so it appears on both sides and cannot make the check fail on its own. Because the content hash excludes `rule_key`, `observation_id` and `title`, the derived keys and new observation ids cannot cause a false difference, and any dropped, altered or added mandatory content does. The digest covers the mandatory set only, so the command also asserts equal counts of advisory rules, and equal counts per source type mapped. It stops on any difference.
 6. Emits a report: counts by source type, rows left `proposed` with the reason, unresolved agent rows, and rows skipped.
 
 Required migration tests: idempotent re-run, read-back assertions, no-widening for agent-scoped rows, and a fixture that drops one mandatory rule from the written set and asserts that the run aborts. The abort test records its reverted-red run.
@@ -621,10 +654,10 @@ Required migration tests: idempotent re-run, read-back assertions, no-widening f
 ### Transition window
 The window is the period in which both the legacy type names and `rule` are read.
 - **Shared resolver.** One function returns the set of type names that carry rules (`rule`, `standing_rule`, and the configured legacy names) and the mapping from each source shape, including `instance_policy`, to rule form. Every reader calls it: the renderer, the write evaluator, `describe_instance_policy`, the CLI, the eval harness, and the first-party hook packages. A reader that hard-codes a type name is a defect.
-- **Dual-read.** The renderer reads all names in the set, maps each row through the mapping above, and shadows a legacy row only while an effective `rule` superseder exists ([Supersession semantics](#supersession-semantics)). It never drops a legacy row because a superseding record is missing, unreadable, not yet approved, expired or retired.
+- **Dual-read.** The renderer reads all names in the set, maps each row through the mapping above, and shadows a legacy row only while an effective `rule` superseder exists ([Supersession semantics](#supersession-semantics)). It reads each legacy row at its approved state, so an unapproved legacy write adds no delivered text. It never drops a legacy row because a superseding record is missing, unreadable, not yet approved, expired or retired.
 - **Legacy instance policy section.** The record is retained. Until a migrated set exists, `renderInstancePolicyInstructions` keeps rendering the legacy prose section. Once the migrated rules are in force, the legacy section is suppressed and the renderer produces the equivalent content, so it is delivered once and not twice. Each `sensitivity_rules` entry maps to one rule, so none is lost, and the digest equality check covers them.
 - **No mandatory rule dropped on a mismatch.** A legacy row whose type, field name, or value is not recognized is delivered as a `mandatory` index line and listed in rules health. It is not skipped.
-- **Legacy writes.** Writes to legacy rule types remain accepted with a deprecation warning in the response. The migration command picks them up on re-run.
+- **Legacy writes.** Writes to legacy rule types remain accepted with a deprecation warning in the response, but they are pending changes until approved, because the legacy types are governance types for the guard during the window ([Legacy rule types under the guard](#legacy-rule-types-under-the-guard)). The migration command picks approved state up on re-run.
 - **Structured mirror.** `serverInfo._neotoma.standing_rules` is kept alongside the new `rules` key during the window.
 - **`describe_instance_policy`.** It keeps returning the legacy shape, derived from the `policy` and predicate rules, for the duration of the window.
 - **Exit conditions.** All of the following hold: no legacy rule row lacks an approved superseding `rule`; no legacy-type write has been received for two consecutive releases; every first-party reader uses the shared resolver; the dual-name conformance test passes. Then the legacy schemas are marked deprecated and made read-only through the governance guard. They are not removed.
@@ -659,6 +692,8 @@ Who may read what:
 
 The filter covers every read path that returns entity, observation, snapshot, relationship, provenance, timeline, change-feed or search content: `retrieve_entities`, `retrieve_entity_snapshot`, `retrieve_entity_by_identifier`, `list_observations`, `list_relationships`, `get_relationship_snapshot`, `retrieve_related_entities`, `retrieve_graph_neighborhood`, `retrieve_field_provenance`, `list_timeline_events`, `list_recent_changes`, `list_potential_duplicates`, `list_interpretations`, subscription and webhook payloads, and the type-count and list totals. A record the caller may not read is indistinguishable from a record that does not exist, and is excluded from counts and totals. Export is an operator channel action.
 
+The list above is illustrative. Every read tool and route is registered with the read filter, or exempt with a written reason, in a read-path registry symmetrical with the mutation registry ([Governance guard](#governance-guard)). A new read tool that is in neither fails the read-path enumeration test.
+
 Guest redaction. Guest responses already remove the `authenticated_actor_id` provenance key at send time. The redaction extends to `member_key`, `authored_by_actor`, `approved_by_actor`, `retirement_proposed_by_actor`, and the targets of `GOVERNS` edges that resolve to a member, because each carries an attribution id or points at one. Guests never read `member` records or member or agent scoped rules.
 
 Stated limits. Anyone with database access, and the operator channel, sees every record. Reviewers see proposed text through the approval tools, so a member-scoped proposal is visible to the approvers who review it. The filter ships in slice N5 with member and agent scope. Before N5, only instance-wide rules exist ([Scopes](#scopes)), and `proposed` text is readable by every member of the graph, which is stated here so no reader assumes otherwise.
@@ -686,19 +721,20 @@ Rules are delivered to every session in scope and are stored in plain text on th
 Each slice is a separate public issue with acceptance criteria and a test requirement. Slices reference this document. The minimal governance guard ships in N1, so nothing that delivers or enforces rules can merge before approval integrity exists.
 | Slice | Issue | Title | Depends on | Safe if it ships alone |
 |---|---|---|---|---|
-| N1 | #2557 | Core `rule`, `policy` and `member` types, schemas, `GOVERNS` relationship, and the minimal governance guard (server-stamped authorship, no client in-force status, material-field freeze, one choke point for every mutation path, unattributed writes fail closed) | none | Yes. Every client write of a rule is stored `proposed`, so nothing is delivered or enforced. Only the operator channel and a single-member owner can put a rule in force. Only instance scope exists. |
-| N2 | #2558 | Server rules renderer with a budgeted index, `get_rules`, the content digest, and the shared dual-read resolver | N1 | Yes. Only guard-approved rules render. |
-| N3 | #2559 | Migration command and the transition window | N1, N2 | Yes. |
-| N4 | #2560 | Per-rule predicate enforcement, including governance-type exemption and the fail-closed rules | N1 | Yes. Only guard-approved predicate rules are evaluated, and governance types are exempt. |
-| N5 | #2535 | Member and agent scope delivery via `GOVERNS`, with the read filter and guest redaction | N1, N2, #2534 | Yes, because the read filter ships in the same slice. Member and agent `GOVERNS` edges are refused before it. |
-| N6 | #2561 | Harness hook packages as thin clients of the renderer | N2 | Yes. |
-| N7 | #2562 | Proposal and approval flow tools: approval checks, two-actor retirement, proposal listing, reviewer checklist | N1, #2534, #2537 (item 5) | Yes. |
-| N8 | #2563 | Delivery verification, receipts and per-harness conformance | N2, N6 | Yes. |
+| N1 | #2557 | Core `rule`, `policy` and `member` types, schemas, `GOVERNS` relationship; the minimal governance guard (server-stamped authorship, no client in-force status, material-field freeze, one choke point for every mutation path, unattributed writes fail closed); the operator channel (configuration path, local CLI, `operator_channel` actor); and legacy-type coverage (legacy type-name function, grandfather snapshot, approved-state reads by the write evaluator) | none | Yes. Every client write of a rule is stored `proposed`, and every client write to a legacy type is a pending change, so nothing new is delivered or enforced. Only the operator channel and a single-member owner can put anything in force. Only instance scope exists. |
+| N1-H | increment of #2557 | Hosted admin route for the operator channel | N1, decision B | Yes. Adds a verified path for the operator channel on hosted instances. |
+| N2 | #2558 | Server rules renderer with a budgeted index, `get_rules`, the content digest, receipts (table, `rendered` and `placed` issuance, `acknowledge_rules`, principal binding), and the shared dual-read resolver reading legacy rows at approved state | N1 | Yes. Only guard-approved rules and approved legacy state render, so an unapproved writer cannot add delivered text. |
+| N3 | #2559 | Migration command and the transition window | N1, N2 | Yes. It runs through the operator channel and reads approved state. On a hosted instance it runs through the local CLI until N1-H exists. |
+| N4 | #2560 | Per-rule predicate enforcement, including governance-type exemption, the fail-closed rules and the `predicates` break-glass scope | N1 | Yes. Only guard-approved predicate rules are evaluated, and governance types are exempt. |
+| N5 | #2535 | Member and agent scope delivery via `GOVERNS`, with the read filter, the read-path registry and guest redaction | N1, N2, #2534 | Yes, because the read filter ships in the same slice. Member and agent `GOVERNS` edges are refused before it. |
+| N6 | #2561 | Harness hook packages as thin clients of the renderer | N2 (receipts and `acknowledge_rules` come from N2) | Yes. |
+| N7 | #2562 | Proposal and approval flow tools: approval checks, two-actor retirement, proposal listing, reviewer checklist, person-facing refusal sentences | N1, #2534, #2537 (item 5) | Yes. |
+| N8 | #2563 | Delivery gate (`require_rules_receipt`), the `receipt_gate` break-glass scope, and per-harness conformance | N1, N2, N6, and N1-H for hosted exit | Yes. |
 | N9 | #2564 | Skill delivery alignment | N2 | Yes. |
 
 The suggested split for N2 and N3 is adjusted: the dual-read resolver ships in N2, because N2 is the first change that replaces a reader, and shipping N2 without dual-read would stop delivering legacy rows. N3 owns the writer, the window policy and the exit gate.
 
-Recommended order: N1, then N2 and N4 in parallel, then N3, N5, N7 and N6, then N8 and N9. Rules health output ships with N2. Until N7 ships, approval and retirement of a rule are available only through the operator channel, and a member's write can only propose.
+Recommended order: N1, then N2 and N4 in parallel, then N3, N5, N7 and N6, then N8 and N9, with N1-H as soon as decision B is ruled. Rules health output ships with N2. Until N7 ships, approval and retirement of a rule are available only through the operator channel, and a member's write can only propose.
 
 Interim work. #2531 renders standing rules into the instructions prose and is a valid interim. It does not need to wait for this design. N2 replaces its renderer function with the shared one and keeps its tests (rule body within the first bytes of `instructions`, failure notice, prepend order) as regression tests. #2366 (with #2054) widens injection to further type names. N2's resolver subsumes it.
 
@@ -750,6 +786,8 @@ Decisions 1 to 4 were ruled by the operator on 2026-09-30. Decisions 5, 7 and 8 
 13. **No lockout.** Governance types are exempt from predicates. The receipt gate has stated exemptions. Break-glass has its own scopes, expiry and channel, and never suspends the guard. A mandatory predicate fails closed on an unreadable rule set or schema lookup failure, and the skip for unregistered types is stated and surfaced.
 14. **Read confidentiality.** Member and agent scope cover generic graph reads through a read filter that ships in N5, and guest redaction extends to `member_key` and the server-stamped actor fields.
 15. **Instructions budget.** `mcp-instructions` keeps the interim 24,000-character budget with a self-sufficient 2,000-character head.
+16. **Legacy types under the guard.** During the transition window the legacy rule-bearing types are governance types. Their rows render and enforce at their last approved state, existing rows are grandfathered on the first start of the N1 release, and later changes are pending until approved. This closes the bypass the window would otherwise leave, so the slices can be called safe alone.
+17. **Component ownership.** The operator channel belongs to N1, with the hosted admin route a later increment (N1-H). Receipts, including `acknowledge_rules`, belong to N2. N8 owns the gate and the conformance evidence.
 
 ## Open decisions
 These need an operator ruling. Neither has been decided by this document.
@@ -766,7 +804,7 @@ These need an operator ruling. Neither has been decided by this document.
 - Options: (1) a dedicated instance admin credential, distinct from every member credential, verified by an admin route. (2) The hosting control plane sets the configuration, so the operator asks the host. (3) Break-glass exists only on instances where the operator has host access.
 - Implications: option 1 works for every instance and adds one credential to issue and protect. Option 2 makes recovery depend on the host's turnaround. Option 3 leaves hosted operators without recovery from a gate lockout.
 - Recommendation: option 1.
-- If no ruling comes: the gate stays opt-in on hosted instances, because criterion 4 of the exit criteria cannot be met there.
+- If no ruling comes: the gate stays opt-in on hosted instances, because criterion 4 of the exit criteria cannot be met there. Until then a hosted operator uses the local CLI on the instance host, as [Operator channel and break-glass](#operator-channel-and-break-glass) states, and N1-H waits.
 
 ## Testing requirements
 Each slice carries its own tests. Cross-cutting requirements:
@@ -775,11 +813,11 @@ Each slice carries its own tests. Cross-cutting requirements:
 - **Scope isolation.** Two members with distinct member rules: neither sees the other's text, title, count or digest contribution, across `initialize`, `get_rules`, fetch-by-id, error bodies and the CLI.
 - **Read isolation.** The same two members, across `retrieve_entities`, `retrieve_entity_snapshot`, `retrieve_entity_by_identifier`, `list_observations`, `list_relationships`, `retrieve_related_entities`, `retrieve_graph_neighborhood`, `list_timeline_events`, `list_recent_changes`, type counts and totals, and subscription payloads: no request returns, counts or confirms the other's rule, `GOVERNS` edge or `member` record. A guest response contains none of `member_key`, `authored_by_actor`, `approved_by_actor` or `retirement_proposed_by_actor`.
 - **Fail closed.** Unresolved principal, unreadable rule set, unsupported mandatory predicate, unresolvable `GOVERNS` target, a schema lookup failure, and a legacy row with an unrecognized type or field all produce the specified unknown or refusal outcome and never an empty success. A skipped check for an unregistered type adds an `unclassified_type` warning.
-- **Determinism and digest.** The same inputs produce byte-identical output and digest. A cosmetic correction leaves the digest unchanged. Identical content re-imported with new observation ids gives the same digest. A change to `rule_text` changes it. Every part of the excluded list is tested as excluded.
+- **Determinism and digest.** The same inputs produce byte-identical output and digest. A cosmetic correction leaves the digest unchanged. Identical content re-imported with new observation ids gives the same digest. A change to `rule_text` changes it. Every part of the excluded list is tested as excluded. Equal content hashes equally across date formats, `types` in a different order, and an empty versus an omitted `rule_text`.
 - **Budget.** A corpus larger than each profile budget never truncates mid-rule and never omits a mandatory rule.
 - **Hook packages.** A hook prints no credential, logs no rule text, and prints the UNKNOWN block when the renderer is unreachable. A call with an unlisted tool name is denied.
 - **Surface parity.** Each capability in [Surfaces and parity](#surfaces-and-parity) has a test on MCP, REST and CLI that asserts the same result.
-- **Approval.** An approval by the author is refused. An approval without attribution is refused on a multi-member instance, and two unattributed writes never count as two actors. On a single-member instance the owner's approval is admitted and recorded as `single_member_self`. An edit of a material field on an approved rule is refused and requires supersession.
+- **Approval.** An approval by the author is refused. An approval without attribution is refused on a multi-member instance, and two unattributed writes never count as two actors. On a single-member instance the owner's approval is admitted and recorded as `single_member_self`, but not when the writer is an agent identity or another human credential has been admitted. An edit of a material field on an approved rule is refused and requires supersession.
 
 Named guard and lifecycle tests. Each records its reverted-red run.
 1. **Non-store mutation paths.** Deleting, merging, splitting, restoring, and creating, deleting or restoring an edge on an in-force mandatory rule, through every non-store route and tool, is refused or routed to the two-actor path. Reverting the guard on any one path turns its test red.
@@ -792,12 +830,15 @@ Named guard and lifecycle tests. Each records its reverted-red run.
 8. **Unresolvable schema.** A mandatory predicate fails closed on a schema lookup failure for a registered type, admits governance types, and warns on an unregistered type.
 9. **Digest binding.** A `since_digest` or acknowledge digest issued to another principal yields a full render or a refusal, never a delta.
 10. **Operator channel.** Break-glass works without host access on a hosted instance, expires, is logged, and never suspends the guard.
-11. **Migration abort.** A fixture that drops one mandatory rule makes `neotoma rules migrate` abort.
+11. **Migration abort.** A fixture that drops one mandatory rule makes `neotoma rules migrate` abort. Equality is computed over all scopes. A legacy row left `proposed` by an unresolved agent scope stays in force through the adapter and appears on both sides, so a run containing one does not abort. A dropped advisory rule fails the advisory count check.
+12. **Legacy injection.** A non-operator write to each legacy type (`standing_rule`, `instance_policy` including an `enforcement` flip, and a configured legacy name) changes neither what renders nor what is enforced until it is approved. A row present at upgrade is grandfathered and still renders. Reverting the guard on any legacy type turns its test red.
+13. **Read-path enumeration.** A test lists every read tool and route and fails when one is neither registered with the read filter nor exempt with a written reason.
+14. **Single-member exception.** An instance with one admitted human credential that has no minted `member` record yet is treated as multi-member, and the exception never applies to an agent identity.
 
 ## Agent Instructions
 
 ### When to Load This Document
-Load this document when changing rule or policy schemas, the rules renderer, `initialize` instruction composition, instance policy enforcement, the governance guard, harness hook packages, or the migration from `standing_rule` and `instance_policy`.
+Load this document when changing rule or policy schemas, the operator channel, receipts, the rules renderer, `initialize` instruction composition, instance policy enforcement, the governance guard, harness hook packages, or the migration from `standing_rule` and `instance_policy`.
 
 ### Required Co-Loaded Documents
 - `docs/NEOTOMA_MANIFEST.md`
@@ -820,7 +861,7 @@ Load this document when changing rule or policy schemas, the rules renderer, `in
 9. A `proposed` rule is never enforced and neither its title nor its text is placed in another session's instructions.
 10. Every path that changes a governance record passes the governance guard. No client write sets an in-force status.
 11. An unattributed write is never an operator write and never a second actor.
-12. Governance types are never gated by a rule or by the receipt gate.
+12. No rule or predicate gates writes to governance types. The receipt gate does not exempt a member's writes to them and always exempts the operator channel.
 13. There is one digest function. Never hash anything else as the rules digest.
 14. Read back any write that matters, and assert the field written.
 
@@ -828,6 +869,8 @@ Load this document when changing rule or policy schemas, the rules renderer, `in
 - Reading a hard-coded legacy type name outside the shared resolver
 - A client-supplied member or agent identifier on any delivery route
 - A mutating route or tool that does not pass the governance guard
+- Rendering or enforcing a legacy rule-bearing row at anything other than its approved state
+- A read tool or route that is not in the read-path registry
 - Treating a missing attribution id as an operator write
 - Rule text containing personal data, credentials or client-identifying details
 - Logging rule bodies or printing credentials in hook output
@@ -841,6 +884,7 @@ Load this document when changing rule or policy schemas, the rules renderer, `in
 - [ ] Two-member isolation test passes on every delivery surface and every read path
 - [ ] Dual-name delivery test fails when the legacy adapter is removed
 - [ ] Approval by the author is refused, and an unattributed approval is refused on a multi-member instance
-- [ ] Every mutating tool and route is registered with the governance guard
+- [ ] Every mutating tool and route is registered with the governance guard, and every read tool and route with the read filter
+- [ ] A non-operator write to a legacy rule type changes nothing that renders or is enforced until approved
 - [ ] A superseder's expiry or retirement never drops a mandatory rule
 - [ ] Conformance canary passes for each supported harness with its negative controls, or its manual evidence is current
