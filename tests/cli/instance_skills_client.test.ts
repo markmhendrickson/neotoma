@@ -145,6 +145,39 @@ describe("instance_skills_client", () => {
       ]);
     });
 
+    it("carries a declared side_effect_class and drops unrecognized values", async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const [url, method] = requestUrlAndMethod(input, init);
+        if (url.includes("/entities/query") && method === "POST") {
+          return jsonResponse({
+            entities: [
+              {
+                entity_id: SKILL_ENTITY_ID,
+                snapshot: { name: "where", enabled: true, side_effect_class: "read_only" },
+              },
+              {
+                entity_id: `${SKILL_ENTITY_ID}_2`,
+                snapshot: { name: "digest", enabled: true, side_effect_class: "State_Changing " },
+              },
+              {
+                entity_id: `${SKILL_ENTITY_ID}_3`,
+                snapshot: { name: "odd", enabled: true, side_effect_class: "none" },
+              },
+            ],
+          });
+        }
+        throw new Error(`Unexpected fetch call in test: ${method} ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const rows = await fetchEnabledInstanceSkills(makeClient());
+      expect(rows.map((r) => [r.name, r.side_effect_class])).toEqual([
+        ["where", "read_only"],
+        ["digest", "state_changing"],
+        ["odd", undefined],
+      ]);
+    });
+
     it("skips a row missing name even when enabled: true", async () => {
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const [url, method] = requestUrlAndMethod(input, init);

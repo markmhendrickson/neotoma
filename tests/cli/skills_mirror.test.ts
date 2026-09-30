@@ -145,7 +145,10 @@ describe("mirrorSkillsToAllHarnesses", () => {
 
     fs.rmSync(path.join(sourceDir, "new-skill"), { recursive: true });
     mirrorSkillsToAllHarnesses({ cwd: root, scope: "project", sourceDir });
-    expect(fs.existsSync(path.join(root, ".codex", "skills", "new-skill"))).toBe(false); // pruned
+    // lstat, not existsSync: a dangling link left behind must still count as present.
+    expect(
+      fs.lstatSync(path.join(root, ".codex", "skills", "new-skill"), { throwIfNoEntry: false })
+    ).toBeUndefined(); // pruned
     expect(fs.existsSync(path.join(root, ".codex", "skills", "vendor-skill", "SKILL.md"))).toBe(
       true
     ); // foreign kept

@@ -87,6 +87,23 @@ describe("renderInstanceSkillMarkdown", () => {
   });
 });
 
+describe("renderInstanceSkillMarkdown side_effect_class projection", () => {
+  it("writes a declared side_effect_class into the SKILL.md frontmatter", () => {
+    const md = renderInstanceSkillMarkdown(makeRow({ side_effect_class: "read_only" }), {
+      instanceHost: "h",
+    });
+    const frontmatter = md.split("\n---\n")[0];
+    expect(frontmatter).toContain("side_effect_class: read_only");
+  });
+
+  it("omits side_effect_class when the row declares none (consumers fail closed)", () => {
+    const md = renderInstanceSkillMarkdown(makeRow({ side_effect_class: undefined }), {
+      instanceHost: "h",
+    });
+    expect(md).not.toContain("side_effect_class:");
+  });
+});
+
 describe("resolveSkillDirName", () => {
   it("prefers slug over name and kebab-cases it", () => {
     expect(resolveSkillDirName({ name: "Score Leads", slug: "score-leads" })).toBe("score-leads");

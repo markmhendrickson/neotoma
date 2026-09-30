@@ -94,6 +94,10 @@ entity_id: ent_f971d8f20a9d26cc15acdf10
 
 The `entity_id` field in the frontmatter lets Neotoma match the file back to its entity on the next sync. Do not edit mirrored files directly — changes are overwritten on the next mirror write. To modify a skill, use the Inspector, `neotoma edit <entity-id>`, or the MCP `correct` action.
 
+User-invocable package skills also declare `side_effect_class: read_only | state_changing`. The field is declared on the canonical `skill` entity schema (`src/services/skills/seed_schema.ts`) and projected into instance-served mirrors, so the class lives on the entity rather than only in a mirror file. The classification is fail-closed: omit it only for non-invocable legacy skills, which are treated as `state_changing` by trigger-safety checks. A read-only skill performs no writes, dispatches, external actions, or state-changing question calls in any default path. A skill whose default mode writes or dispatches remains `state_changing` even when it offers an explicitly read-only flag such as `--report-only`.
+
+Repository validation scans every published skill trigger and rejects a trigger owned by skills in different side-effect classes. This prevents a natural-language prompt from routing nondeterministically between a read-only orientation and a workflow that changes state.
+
 ## Slash-command palette
 
 Setting `user_invocable: true` on a skill entity causes the harness to surface it as an invocable slash command. In Claude Code, skills with this field set appear in the `/` palette and can be triggered by name (e.g. `/import-audio`).
@@ -121,5 +125,6 @@ For the full schema, see [`src/services/skills/seed_schema.ts`](../../src/servic
 
 ## Related
 
+- [`docs/developer/status_to_digest_migration.md`](status_to_digest_migration.md) for the breaking `/status` rename and harness-mirror migration contract.
 - [`docs/developer/mirror_guide.md`](mirror_guide.md) for the mirror profile system.
 - [`docs/developer/cli_reference.md`](cli_reference.md) for the `neotoma` CLI reference.

@@ -57,9 +57,9 @@ export function resolveSkillDirName(row: Pick<InstanceSkillRow, "name" | "slug">
 
 /**
  * Render a `skill` row into a `SKILL.md` string: YAML frontmatter matching
- * shipped skills' shape (name, description, triggers, user_invocable when
- * set) plus a do-not-edit provenance header, then the markdown `content`
- * body.
+ * shipped skills' shape (name, description, triggers, user_invocable and
+ * side_effect_class when set) plus a do-not-edit provenance header, then the
+ * markdown `content` body.
  */
 export function renderInstanceSkillMarkdown(
   row: InstanceSkillRow,
@@ -73,6 +73,9 @@ export function renderInstanceSkillMarkdown(
   }
   if (typeof row.user_invocable === "boolean") {
     frontmatterLines.push(`user_invocable: ${row.user_invocable}`);
+  }
+  if (row.side_effect_class) {
+    frontmatterLines.push(`side_effect_class: ${row.side_effect_class}`);
   }
   frontmatterLines.push("---");
 
