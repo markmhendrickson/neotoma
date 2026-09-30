@@ -366,6 +366,15 @@ docs/subsystems/ingestion/ingestion.md:
       type: explicit
       reason: Report evaluates ingestion alignment
 
+docs/subsystems/rules.md:
+  downstream:
+    - path: docs/developer/mcp/instructions.md
+      type: restates
+      reason: The STANDING RULES section restates rule delivery and is rewritten when the renderer ships
+    - path: docs/developer/rule_neotoma_sync.md
+      type: implicit
+      reason: Rule file sync targets the rule type defined in the rules design
+
 docs/subsystems/schema_registry.md:
   downstream:
     - path: docs/architecture/architecture.md
