@@ -10,6 +10,7 @@ import path from "node:path";
 import os from "node:os";
 import type { GitHubAuthMethod, IssueReportingMode, IssuesConfig } from "./types.js";
 import { DEFAULT_ISSUES_CONFIG, DEFAULT_ISSUES_TARGET_URL } from "./types.js";
+import { ALLOWED_REPOS_ENV, parseAllowedRepos } from "./repo_allowlist.js";
 
 function configFilePath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -49,6 +50,13 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
     : (stored.github_auth ?? DEFAULT_ISSUES_CONFIG.github_auth);
 
   const repo = process.env.NEOTOMA_ISSUES_REPO ?? stored.repo ?? DEFAULT_ISSUES_CONFIG.repo;
+
+  // Extra repos `sync_issues` may target besides `repo`. The env var wins over the config
+  // file when it is set at all (an empty value means "none": fail closed).
+  const envAllowedRepos = process.env[ALLOWED_REPOS_ENV];
+  const allowedRepos = parseAllowedRepos(
+    envAllowedRepos !== undefined ? envAllowedRepos : stored.allowed_repos
+  );
 
   const reportingMode: IssueReportingMode =
     (process.env.NEOTOMA_ISSUES_REPORTING_MODE as IssueReportingMode | undefined) ??
@@ -96,6 +104,7 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
     configured_at: stored.configured_at ?? null,
     target_url: targetUrl,
     author_alias: envAuthorAlias ?? storedAuthorAlias,
+    allowed_repos: allowedRepos,
   };
 }
 

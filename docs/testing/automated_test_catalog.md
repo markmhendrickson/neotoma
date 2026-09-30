@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **673**
-- Backend and repo Vitest files: **637**
+- Total automated test files: **678**
+- Backend and repo Vitest files: **642**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,11 +70,11 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 185 |
-| Vitest service tests | 51 |
-| Source-adjacent tests | 66 |
-| Vitest integration tests | 198 |
+| Vitest service tests | 52 |
+| Source-adjacent tests | 68 |
+| Vitest integration tests | 199 |
 | Vitest CLI tests | 81 |
-| Vitest contract tests | 22 |
+| Vitest contract tests | 23 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -301,7 +301,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (51):**
+**Files (52):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -351,6 +351,7 @@ flowchart TD
 - `tests/services/session_seed_schema.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
+- `tests/services/sync_issues_missing_token.test.ts`
 - `tests/services/sync_webhook_inbound.test.ts`
 - `tests/services/sync_webhook_outbound.test.ts`
 
@@ -359,7 +360,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (66):**
+**Files (68):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -400,11 +401,13 @@ flowchart TD
 - `src/services/entity_submission/submission_service.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/body_newline_decode.test.ts`
+- `src/services/issues/inspector_bulk.test.ts`
 - `src/services/issues/issue_identity.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
 - `src/services/issues/observer_import.test.ts`
 - `src/services/issues/redaction_guard.test.ts`
+- `src/services/issues/repo_allowlist.test.ts`
 - `src/services/issues/repo_discovery_resolver.test.ts`
 - `src/services/issues/seed_schema.test.ts`
 - `src/services/issues/sync_issues_push_writeback.test.ts`
@@ -432,7 +435,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (198):**
+**Files (199):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -617,6 +620,7 @@ flowchart TD
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
+- `tests/integration/sync_issues_handler_passthrough.test.ts`
 - `tests/integration/sync_webhook_inbound.test.ts`
 - `tests/integration/transcription_contract.test.ts`
 - `tests/integration/transport_parity_store_snapshot_auth.test.ts`
@@ -725,7 +729,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (22):**
+**Files (23):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -746,6 +750,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/sync_issues_contract.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
 

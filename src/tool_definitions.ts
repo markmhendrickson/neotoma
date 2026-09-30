@@ -1,4 +1,5 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
+import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
 
 export type ToolInputSchema = Record<string, unknown>;
 
@@ -1349,10 +1350,15 @@ export function buildToolDefinitions(
       name: "sync_issues",
       description: desc(
         "sync_issues",
-        "Bidirectional sync between local Neotoma and the configured GitHub repo. " +
-          "Push leg (default on): local public issues with no github_number are sanitized " +
-          "(PII stripped) and created on GitHub, then updated locally with the returned number/url. " +
-          "Pull leg: GitHub issues and their messages are pulled into local entities. " +
+        "Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their messages " +
+          "are pulled into local entities. Push leg: local public issues with no github_number are " +
+          "sanitized (PII stripped) and created on GitHub, then updated locally with the returned " +
+          "number/url. Target repo defaults to the server-configured repo (NEOTOMA_ISSUES_REPO); pass " +
+          "`repo` (`owner/name`) to mirror a different repo for one call without changing server config. " +
+          "The push leg is ON by default only for the configured default repo and OFF for any other " +
+          "`repo` unless `push: true` is passed. Pass `commit: false` for a dry run that reports what " +
+          "would be created, updated and pushed and writes nothing. Requires a GitHub token: " +
+          "NEOTOMA_ISSUES_GITHUB_TOKEN in the server environment (or `gh auth login` on the server host). " +
           "Supports filtering by state, labels, and since date."
       ),
       inputSchema: {
@@ -1372,9 +1378,21 @@ export function buildToolDefinitions(
             type: "string",
             description: "Only sync issues updated after this ISO date.",
           },
+          repo: {
+            type: "string",
+            pattern: REPO_SLUG_PATTERN,
+            description:
+              "GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Must be the configured repo or be listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or `issues.allowed_repos`). A malformed or non-permitted value is rejected before any GitHub request or write.",
+          },
           push: {
             type: "boolean",
-            description: "When false, skip the push leg (local public → GitHub). Default: true.",
+            description:
+              "Run the push leg (local public → GitHub). Default: true when `repo` is omitted or equals the configured default repo; false for any other `repo`. Pass true to opt in for another repo.",
+          },
+          commit: {
+            type: "boolean",
+            description:
+              "When false, dry run: report what would be created, updated and pushed (`plan`) and write nothing locally or on GitHub. Default: true.",
           },
         },
       },
