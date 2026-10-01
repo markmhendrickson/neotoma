@@ -5684,6 +5684,12 @@ export class NeotomaServer {
 
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
+      if (parsed.commit === false) {
+        return this.buildTextResponse({
+          commit: false,
+          overflowed: false,
+        });
+      }
       const { writeToOverflowSink } = await import("./services/overflow_sink.js");
       const result = writeToOverflowSink(args, parsed.intake.reason);
       return this.buildTextResponse(result);
@@ -5711,6 +5717,9 @@ export class NeotomaServer {
         // Propagate by-reference storage to the file leg (#1827): without this the
         // recursive store() defaults to inline and silently copies the bytes.
         source_storage: parsed.source_storage,
+        // Propagate commit so a combined entities+file call with commit:false
+        // stays a true no-write dry run on the file leg too (#2493, #2471 round 2).
+        commit: parsed.commit,
       });
       try {
         const text = unstructuredResponse.content[0]?.text ?? "{}";
@@ -5765,6 +5774,9 @@ export class NeotomaServer {
           // Propagate by-reference storage to the file leg (#1827): without this the
           // recursive store() defaults to inline and silently copies the bytes.
           source_storage: parsed.source_storage,
+          // Propagate commit so a combined entities+file call with commit:false
+          // stays a true no-write dry run on the file leg too (#2493, #2471 round 2).
+          commit: parsed.commit,
         });
         try {
           const text = unstructuredResponse.content[0]?.text ?? "{}";
@@ -5790,13 +5802,40 @@ export class NeotomaServer {
           idempotencyKey,
           parsed.original_filename,
           undefined,
-          { observationSource: parsed.observation_source }
+          {
+            commit: parsed.commit !== false,
+            observationSource: parsed.observation_source,
+          }
         );
       }
     }
 
     // --- By-reference storage path (#1775) ---
     if (parsed.source_storage === "reference" && parsed.file_path) {
+      // Plan mode (`commit: false`): no storeRawReference call, no `sources`
+      // row, no reference row. content_hash is not computed here (unlike the
+      // REST leg) because that would require reading the file; source_id:
+      // null is sufficient to signal "nothing was persisted" for this leg
+      // (#2493, #2471 round 2). Field name is `path`, matching the committed
+      // response below (this MCP leg's own established key), NOT
+      // `reference_path` (the REST/actions.ts convention) — a client toggling
+      // `commit` on the same MCP call must see the same key either way.
+      if (parsed.commit === false) {
+        // Resolve mime_type from the extension the same way storeRawReference
+        // does (raw_storage.ts) when the caller omitted it, so the preview
+        // matches what a commit:true call on the same input would report.
+        const { resolveMimeTypeFromExtension } = await import("./services/raw_storage.js");
+        const { extname } = await import("node:path");
+        const resolvedMimeType =
+          parsed.mime_type || resolveMimeTypeFromExtension(extname(parsed.file_path));
+        return this.buildTextResponse({
+          commit: false,
+          source_id: null,
+          storage_mode: "reference",
+          path: parsed.file_path,
+          mime_type: resolvedMimeType,
+        });
+      }
       const { storeRawReference } = await import("./services/raw_storage.js");
       const refResult = await storeRawReference({
         userId,
@@ -5857,6 +5896,26 @@ export class NeotomaServer {
     // --- End by-reference storage path ---
 
     const { fileBuffer, mimeType, filename } = await this.readUnstructuredInput(parsed);
+
+    // Plan mode (`commit: false`): mirror storeUnstructuredForApi's plan-mode
+    // response — no storeRawContent call, no `sources` row, no raw-storage
+    // upload. content_hash is still safe to report: readUnstructuredInput
+    // above only reads (from disk or the caller's own base64 bytes), it never
+    // writes, so computing the hash here does not violate the no-write
+    // guarantee (#2493, #2471 round 2).
+    if (parsed.commit === false) {
+      const { computeContentHash } = await import("./services/raw_storage.js");
+      return this.buildTextResponse({
+        commit: false,
+        source_id: null,
+        content_hash: computeContentHash(fileBuffer),
+        file_size: fileBuffer.length,
+        deduplicated: false,
+        entities_created: 0,
+        observations_created: 0,
+      });
+    }
+
     const storageResult = await storeRawContent({
       userId,
       fileBuffer,

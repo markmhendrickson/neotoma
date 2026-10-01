@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **678**
-- Backend and repo Vitest files: **642**
+- Total automated test files: **680**
+- Backend and repo Vitest files: **644**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,8 +72,8 @@ flowchart TD
 | Vitest unit tests | 185 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 199 |
-| Vitest CLI tests | 81 |
+| Vitest integration tests | 200 |
+| Vitest CLI tests | 82 |
 | Vitest contract tests | 23 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 7 |
@@ -435,7 +435,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (199):**
+**Files (200):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -556,6 +556,7 @@ flowchart TD
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_intra_batch_relationships.test.ts`
 - `tests/integration/mcp_store_parquet.test.ts`
+- `tests/integration/mcp_store_plan_mode_no_writes.test.ts`
 - `tests/integration/mcp_store_raw_fragments_hint.test.ts`
 - `tests/integration/mcp_store_reference_source.test.ts`
 - `tests/integration/mcp_store_unknown_fields_names.test.ts`
@@ -641,7 +642,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (81):**
+**Files (82):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -685,6 +686,7 @@ flowchart TD
 - `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
+- `tests/cli/cli_store_plan_mode_no_writes.test.ts`
 - `tests/cli/cli_timeline_commands.test.ts`
 - `tests/cli/cli_user_id_propagation.test.ts`
 - `tests/cli/config_api_discovery.test.ts`
