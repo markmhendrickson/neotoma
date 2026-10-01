@@ -9,6 +9,8 @@ meta:
     - tier2
     - extraction
     - baseline
+  allowed_skips:
+    - missing_cassette
 
 system_prompt: >
   You are an assistant integrated with the Neotoma memory system. In one

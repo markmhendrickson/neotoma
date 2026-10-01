@@ -8,6 +8,18 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const outputPath = path.join(repoRoot, "docs", "testing", "automated_test_catalog.md");
+const ciWorkflowPath = path.join(repoRoot, ".github", "workflows", "ci_test_lanes.yml");
+
+function baselineTestCommand(): string {
+  const workflow = fs.readFileSync(ciWorkflowPath, "utf8");
+  const baseline = workflow.match(/^  baseline:\n([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\n)/m)?.[1];
+  const commands = baseline?.match(/^\s+run:\s+(npm run test:[^\s]+)\s*$/gm)
+    ?.map((line) => line.replace(/^\s+run:\s+/, "")) ?? [];
+  if (commands.length !== 1) {
+    throw new Error(`expected exactly one baseline test command in ${path.relative(repoRoot, ciWorkflowPath)}, found ${commands.length}`);
+  }
+  return commands[0].trim();
+}
 
 type SuiteMeta = {
   title: string;
@@ -244,6 +256,7 @@ function renderSuiteSection(key: string, files: string[]): string {
 }
 
 function generateCatalog(): string {
+  const baselineCommand = baselineTestCommand();
   const testFiles = scanTestFiles();
   const grouped = buildSuiteInventory(testFiles);
   const suiteKeys = orderedKeys(grouped);
@@ -289,7 +302,7 @@ function generateCatalog(): string {
     "## Definitions",
     "- **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).",
     "- **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.",
-    "- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. It is the local, pre-PR advisory gate. CI does not use it: the baseline lane runs `npm run generate:test-catalog`, which renders this file rather than failing on drift, so a stale copy never blocks a pull request.",
+    "- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree and is binding in baseline CI.",
     "",
     "## Data models or schemas",
     "None.",
@@ -314,8 +327,8 @@ function generateCatalog(): string {
     "",
     "## Testing requirements",
     "- `npm run generate:test-catalog` must be run when automated test inventory changes.",
-    "- `npm run validate:test-catalog` should pass before merge, but does not block it.",
-    "- CI runs `npm run generate:test-catalog` in the baseline lane, which renders this file rather than failing on drift.",
+    "- `npm run validate:test-catalog` must pass before merge and blocks baseline CI.",
+    "- Run `npm run generate:test-catalog` locally after inventory or command changes and commit the result.",
     "",
     "## Maintenance",
     "- Canonical policy doc: `docs/testing/testing_standard.md`.",
@@ -334,7 +347,7 @@ function generateCatalog(): string {
     ...suiteSummaryLines,
     "",
     "## Primary validation commands",
-    "- `npm test`",
+    `- Baseline CI test command: \`${baselineCommand}\``,
     "- `npm run test:frontend`",
     "- `npm run test:remote:critical`",
     "- `npm run test:agent-mcp`",
@@ -343,7 +356,7 @@ function generateCatalog(): string {
     "- `npm run validate:doc-deps`",
     "",
     "## CI lanes",
-    "- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.",
+    `- Baseline CI runs \`type-check\`, \`lint\`, \`lint:site-copy\`, \`${baselineCommand}\`, \`validate:coverage\`, \`validate:test-catalog\`, and \`validate:doc-deps\`.`,
     "- Frontend CI runs `npm run test:frontend`.",
     "- Site/export CI runs route, locale, and export validation tasks.",
     "- Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.",
@@ -408,22 +421,8 @@ function main(): void {
   assertUsableCatalog(next);
   const current = readCurrentCatalog();
   const relativeOutput = path.relative(repoRoot, outputPath);
-  // `--check` is the local/pre-PR advisory gate: it reports drift and fails,
-  // without touching the file. The default (no flag) is the write path, and it
-  // is what CI runs.
-  //
-  // CI renders rather than validates because this catalog is a pure derivative
-  // of the test filenames in the tree (`git ls-files` + an extension filter) —
-  // there is no authored prose in the inventory sections, so a stale copy
-  // carries no information that regenerating it could destroy.
-  //
-  // Enforcing it in CI with `--check` turned one merge that forgot to
-  // regenerate into a red required lane on EVERY open PR, and because every PR
-  // adding a test edits the same sorted list and the same `**Files (N):**`
-  // counters, PRs also conflicted with each other in a file neither of them
-  // meaningfully authored. Approvals then aged out while the conflict was
-  // resolved by hand — a staleness ratchet that regrew the review backlog
-  // faster than it could be cleared.
+  // `--check` is the local and CI gate: it reports drift and fails,
+  // without touching the file. The default (no flag) is the local write path.
   const checkOnly = process.argv.includes("--check");
 
   if (checkOnly) {

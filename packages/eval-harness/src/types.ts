@@ -8,6 +8,8 @@ export type RunMode = "record" | "replay";
 
 export type InstructionProfile = "full" | "compact" | "auto";
 
+export type SkipKind = "quarantine" | "preflight" | "missing_cassette" | "budget_guard";
+
 export interface ScenarioMeta {
   id: string;
   description: string;
@@ -19,6 +21,8 @@ export interface ScenarioMeta {
    * fixed. The value SHOULD reference the tracking issue (e.g. "neotoma#NNNN: …").
    */
   quarantine?: string;
+  /** Skip kinds deliberately allowed for this scenario. Undeclared skips fail CI. */
+  allowed_skips?: SkipKind[];
 }
 
 export interface HostToolStubResponse {
@@ -282,7 +286,7 @@ export interface CellReport {
   /** Human-readable failure summary; empty when `pass`. */
   errorMessage?: string;
   /** Set when the cell was skipped (missing cassette, preflight, budget, or quarantine). */
-  skipped?: { reason: string };
+  skipped?: { kind: SkipKind; reason: string };
 }
 
 export interface RunSummary {
@@ -290,6 +294,8 @@ export interface RunSummary {
   passed: number;
   failed: number;
   skipped: number;
+  /** Skips not explicitly allowed by scenario metadata (quarantine is always explicit). */
+  unexpectedSkipped: number;
   cells: CellReport[];
   /** Total estimated USD spent across live cells. */
   estimatedCostUsd: number;

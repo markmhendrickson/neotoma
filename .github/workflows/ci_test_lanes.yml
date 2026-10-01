@@ -80,15 +80,8 @@ jobs:
       - name: Validate Playwright coverage map
         run: npm run validate:coverage
 
-      # Renders rather than validates. docs/testing/automated_test_catalog.md is
-      # derived entirely from the test filenames in the tree, so a stale copy is
-      # drift to re-render, not a defect to block on. Enforcing it with --check
-      # made one un-regenerated merge turn this required lane red on every open
-      # PR, and made PRs that each add a test conflict with each other in a
-      # generated file neither of them authored. This step fails only if the
-      # generator itself fails; it does not diff the result or commit it.
-      - name: Render automated test catalog
-        run: npm run generate:test-catalog
+      - name: Validate automated test catalog
+        run: npm run validate:test-catalog
 
       - name: Fetch release tags (capability manifest is derived from vX.Y.Z tags)
         run: git fetch --tags --force
@@ -360,8 +353,8 @@ jobs:
     # Neotoma server in REPLAY mode (committed cassettes — no API key required).
     # This is the CI gate for tool-behavior evals (agent calls correct / merge /
     # subscribe / …), which the hook-lifecycle agentic_evals lane cannot model.
-    # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
-    # skipped, not failed; cassette-less scenarios skip until recorded.
+    # Quarantined scenarios and skip kinds explicitly declared in scenario
+    # metadata remain optional; every undeclared skip fails the lane.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

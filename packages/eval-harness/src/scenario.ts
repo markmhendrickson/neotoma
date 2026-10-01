@@ -48,6 +48,16 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
     );
   }
 
+  const allowedSkips = meta!.allowed_skips;
+  if (allowedSkips != null) {
+    assertField(Array.isArray(allowedSkips), "meta.allowed_skips must be an array", file);
+    assertField(
+      allowedSkips.every((value) => ["quarantine", "preflight", "missing_cassette", "budget_guard"].includes(String(value))),
+      "meta.allowed_skips contains an unknown skip kind",
+      file
+    );
+  }
+
   const seedStrategy = o.seed_strategy as ScenarioFile["seed_strategy"] | undefined;
   if (seedStrategy != null) {
     assertField(
@@ -70,6 +80,9 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
       description: meta!.description as string,
       tags: Array.isArray(meta!.tags) ? (meta!.tags as string[]) : undefined,
       quarantine: typeof meta!.quarantine === "string" ? (meta!.quarantine as string) : undefined,
+      allowed_skips: Array.isArray(allowedSkips)
+        ? (allowedSkips as ScenarioFile["meta"]["allowed_skips"])
+        : undefined,
     },
     system_prompt: typeof o.system_prompt === "string" ? o.system_prompt : undefined,
     user_prompt: o.user_prompt as string,

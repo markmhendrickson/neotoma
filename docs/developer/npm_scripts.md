@@ -106,10 +106,10 @@ Some committed files are generated from source and must be kept in sync. Run the
 
 | Script | What it does | When to run | CI usage |
 |--------|-------------|-------------|----------|
-| `generate:test-catalog` | Regenerates `docs/testing/automated_test_catalog.md` from the test tree | After adding, removing, or renaming a test file | Baseline lane runs `npm run generate:test-catalog` (render; does not fail on pre-existing staleness) |
-| `validate:test-catalog` | Checks that `docs/testing/automated_test_catalog.md` matches the current test tree | Locally, before opening a PR | Advisory. Not used in CI — the baseline lane runs `generate:test-catalog` instead |
+| `generate:test-catalog` | Regenerates `docs/testing/automated_test_catalog.md` from the test tree and baseline workflow | After adding, removing, or renaming a test file or changing its CI command | Local render command; commit the generated result |
+| `validate:test-catalog` | Checks that `docs/testing/automated_test_catalog.md` matches the current test tree and baseline workflow | Locally, before opening a PR | Baseline lane runs `npm run validate:test-catalog` and fails on drift |
 | `generate:capability-manifest` | Regenerates `src/shared/capability_manifest.json` by walking git `vX.Y.Z` release tags and recording first/last appearance of each MCP tool in `src/tool_definitions.ts` | After adding or removing an MCP tool, or after cutting a new release tag | `npm run validate:capability-manifest` (fails on drift) |
-| `validate:capability-manifest` | Checks that `src/shared/capability_manifest.json` matches what the generator would produce | Before every merge | Runs in CI alongside `generate:test-catalog` |
+| `validate:capability-manifest` | Checks that `src/shared/capability_manifest.json` matches what the generator would produce | Before every merge | Runs in CI alongside `validate:test-catalog` |
 
 Sibling artifacts that look similar but are intentionally different:
 

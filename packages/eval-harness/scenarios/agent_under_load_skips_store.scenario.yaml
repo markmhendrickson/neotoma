@@ -9,6 +9,8 @@ meta:
     - tier2
     - compliance
     - small-model
+  allowed_skips:
+    - missing_cassette
 
 system_prompt: >
   You are a small model with limited capacity. Answer concisely.

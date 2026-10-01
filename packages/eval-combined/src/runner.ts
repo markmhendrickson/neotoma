@@ -61,11 +61,12 @@ export interface Tier2SummaryShape {
   passed: number;
   failed: number;
   skipped: number;
+  unexpectedSkipped: number;
   cells: Array<{
     scenario: { id: string; tags?: string[] };
     model: { provider: string; model: string };
     pass: boolean;
-    skipped?: { reason: string };
+    skipped?: { kind: string; reason: string };
     errorMessage?: string;
   }>;
 }

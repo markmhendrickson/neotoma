@@ -153,7 +153,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       startedAt,
       endedAt: new Date().toISOString(),
       pass: false,
-      skipped: { reason: `quarantined: ${plan.scenario.meta.quarantine}` },
+      skipped: { kind: "quarantine", reason: `quarantined: ${plan.scenario.meta.quarantine}` },
     };
   }
 
@@ -169,7 +169,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       startedAt,
       endedAt: new Date().toISOString(),
       pass: false,
-      skipped: { reason: preflight.reason ?? "preflight failed" },
+      skipped: { kind: "preflight", reason: preflight.reason ?? "preflight failed" },
       errorMessage: preflight.reason,
     };
   }
@@ -186,7 +186,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         startedAt,
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.` },
+        skipped: { kind: "missing_cassette", reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.` },
       };
     }
     if (staleness(cassetteResult.ageDays) === "stale") {
@@ -310,7 +310,7 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}` },
+        skipped: { kind: "budget_guard", reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}` },
       });
       log(`[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`);
       continue;
@@ -324,6 +324,9 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
     passed: cells.filter((c) => c.pass && !c.skipped).length,
     failed: cells.filter((c) => !c.pass && !c.skipped).length,
     skipped: cells.filter((c) => c.skipped).length,
+    unexpectedSkipped: cells.filter((c) =>
+      c.skipped && c.skipped.kind !== "quarantine" && !c.scenario.allowed_skips?.includes(c.skipped.kind)
+    ).length,
     cells,
     estimatedCostUsd,
     mode: opts.mode,

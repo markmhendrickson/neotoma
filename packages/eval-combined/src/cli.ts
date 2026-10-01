@@ -73,6 +73,7 @@ async function main() {
   const exitCode =
     result.writError ? 1 :
     result.tier2Summary && result.tier2Summary.failed > 0 ? 1 :
+    result.tier2Summary && result.tier2Summary.unexpectedSkipped > 0 ? 1 :
     result.writReport && result.writReport.aggregate.recall_accuracy < 0.5 ? 1 :
     0;
   process.exit(exitCode);

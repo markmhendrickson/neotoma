@@ -8,6 +8,8 @@ meta:
     - tier2
     - tool-use
     - synthesis
+  allowed_skips:
+    - missing_cassette
 
 system_prompt: >
   You research and synthesize. Use the Read tool to fetch the three docs

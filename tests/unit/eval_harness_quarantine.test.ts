@@ -36,9 +36,30 @@ describe("#1704 eval-harness quarantine", () => {
     });
     expect(summary.failed).toBe(0);
     expect(summary.skipped).toBe(1);
+    expect(summary.unexpectedSkipped).toBe(0);
     expect(summary.passed).toBe(0);
     const cell = summary.cells[0];
     expect(cell.skipped?.reason.startsWith("quarantined:")).toBe(true);
     expect(cell.skipped?.reason).toContain("test#0");
+  });
+});
+
+describe("eval-harness required skip policy", () => {
+  it("counts an undeclared missing cassette as an unexpected skip", async () => {
+    const scenario = quarantinedScenario();
+    delete scenario.meta.quarantine;
+    const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
+    expect(summary.skipped).toBe(1);
+    expect(summary.unexpectedSkipped).toBe(1);
+    expect(summary.cells[0].skipped?.kind).toBe("missing_cassette");
+  });
+
+  it("preserves a deliberately declared optional missing-cassette skip", async () => {
+    const scenario = quarantinedScenario();
+    delete scenario.meta.quarantine;
+    scenario.meta.allowed_skips = ["missing_cassette"];
+    const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
+    expect(summary.skipped).toBe(1);
+    expect(summary.unexpectedSkipped).toBe(0);
   });
 });

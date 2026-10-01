@@ -9,6 +9,8 @@ meta:
     - tier2
     - attachment
     - extraction
+  allowed_skips:
+    - missing_cassette
 
 system_prompt: >
   You handle file attachments. Always call store_structured with the

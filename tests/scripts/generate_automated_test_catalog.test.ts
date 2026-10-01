@@ -1,10 +1,8 @@
 /**
  * Effect tests for scripts/generate-automated-test-catalog.ts.
  *
- * The catalog is generated from the test filenames in the tree, and CI renders
- * it (the default write path) rather than validating it, so the behavior that
- * matters is that a stale catalog is actually rewritten back to correct
- * content — not merely that the command is callable. Each test therefore
+ * The catalog is generated from the test filenames and baseline workflow, and
+ * CI validates it. Each test therefore
  * deliberately stales the committed catalog, runs the real script through its
  * natural call shape, and asserts on the resulting file content.
  *
@@ -171,6 +169,15 @@ describe("generate-automated-test-catalog --check advisory gate", () => {
   });
 });
 
+describe("generated catalog CI contract", () => {
+  it("reports the baseline test command and binds catalog drift in CI", () => {
+    expect(freshCatalog).toContain("Baseline CI test command: `npm run test:unit`");
+    const workflow = fs.readFileSync(workflowPath, "utf8");
+    expect(workflow).toContain("run: npm run validate:test-catalog");
+    expect(workflow).not.toContain("run: npm run generate:test-catalog");
+  });
+});
+
 describe("npm script surfaces (natural call shapes)", () => {
   it("npm run generate:test-catalog regenerates a stale catalog and then validate passes", () => {
     const stale = freshCatalog.replace("# Automated test catalog", "# Automated test catalog (STALE)");
@@ -229,19 +236,17 @@ describe("generate-automated-test-catalog CLI surface", () => {
     );
   });
 
-  it("runs the render path in the required CI baseline lane", () => {
+  it("runs the validation path in the required CI baseline lane", () => {
     const workflow = fs.readFileSync(workflowPath, "utf8");
-    expect(workflow).toContain("npm run generate:test-catalog");
+    expect(workflow).toContain("npm run validate:test-catalog");
     expect(workflow).not.toContain("reconcile:test-catalog");
-    expect(workflow).not.toContain("validate:test-catalog");
-    // The lane must not fail on a rewritten catalog, nor commit one.
-    expect(workflow).not.toMatch(/git diff --exit-code[^\n]*automated_test_catalog/);
+    expect(workflow).not.toContain("npm run generate:test-catalog");
   });
 
   it("documents sibling generated-file CI policies as intentionally different", () => {
     const docs = fs.readFileSync(npmScriptsDocPath, "utf8");
     expect(docs).toContain("generate:test-catalog");
-    expect(docs).toMatch(/baseline lane runs `npm run generate:test-catalog`/i);
+    expect(docs).toMatch(/baseline lane runs `npm run validate:test-catalog`/i);
     expect(docs).toContain("openapi.yaml");
     expect(docs).toContain("openapi_types.ts");
     expect(docs).toMatch(/fail(?:s)? on [`']?git diff|fail-on-drift/i);

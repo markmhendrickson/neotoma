@@ -10,6 +10,8 @@ meta:
     - tier2
     - compliance
     - followup
+  allowed_skips:
+    - missing_cassette
 
 system_prompt: >
   You are a small assistant. When you receive a system follow-up
