@@ -3,7 +3,10 @@
  *
  * The form keeps the capability list small and explicit: each row is one
  * `{op, entity_types}` entry that mirrors the wire shape used by the
- * REST API and `enforceAgentCapability` on the server.
+ * REST API and `enforceAgentCapability` on the server. A
+ * `create_relationship` row also edits its `relationship_types` allowlist and
+ * warns while that list is empty, because such a row grants no edge writes
+ * (see `agent_grant_capabilities.ts`).
  */
 
 import { useEffect, useState } from "react";
@@ -26,6 +29,13 @@ import type {
   AgentGrantCreateRequest,
   AgentGrantUpdateRequest,
 } from "@/types/api";
+import {
+  capabilitiesForForm,
+  capabilitiesForPayload,
+  isInertRelationshipCapability,
+  parseListInput,
+  withCapabilityOp,
+} from "./agent_grant_capabilities";
 
 const CAPABILITY_OPS: ReadonlyArray<{ value: AgentCapabilityOp; label: string }> = [
   { value: "store_structured", label: "store_structured" },
@@ -84,13 +94,7 @@ function buildInitialState(
     match_thumbprint:
       initial?.match_thumbprint ?? identityHint?.thumbprint ?? "",
     notes: initial?.notes ?? "",
-    capabilities:
-      initial?.capabilities && initial.capabilities.length > 0
-        ? initial.capabilities.map((c) => ({
-            op: c.op,
-            entity_types: c.entity_types.length > 0 ? [...c.entity_types] : ["*"],
-          }))
-        : [emptyCapability()],
+    capabilities: capabilitiesForForm(initial?.capabilities) ?? [emptyCapability()],
   };
 }
 
@@ -146,12 +150,7 @@ export function AgentGrantForm({
       const t = value.trim();
       return t === "" ? null : t;
     };
-    const capabilities = state.capabilities.map((c) => ({
-      op: c.op,
-      entity_types: (Array.isArray(c.entity_types) ? c.entity_types : [])
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0),
-    }));
+    const capabilities = capabilitiesForPayload(state.capabilities);
     const payload: AgentGrantCreateRequest | AgentGrantUpdateRequest = {
       label: state.label.trim(),
       capabilities,
@@ -162,6 +161,8 @@ export function AgentGrantForm({
     };
     onSubmit(payload);
   }
+
+  const inertRelationshipRows = state.capabilities.filter(isInertRelationshipCapability).length;
 
   const matchHint =
     "match_thumbprint is required for the grant to admit signed requests: " +
@@ -235,57 +236,87 @@ export function AgentGrantForm({
         <p className="text-xs text-muted-foreground">
           Each row authorizes one op on a list of entity types. Use{" "}
           <code className="font-mono">*</code> to widen to any non-protected
-          entity type.
+          entity type. <code className="font-mono">create_relationship</code>{" "}
+          rows also need the relationship types the agent may write; entity
+          types bound both endpoints.
         </p>
         <div className="space-y-2">
-          {state.capabilities.map((cap, index) => (
-            <div
-              key={index}
-              className="grid gap-2 rounded border p-2 sm:grid-cols-[180px_1fr_auto]"
-            >
-              <Select
-                value={cap.op}
-                onValueChange={(value) =>
-                  updateCapability(index, { ...cap, op: value as AgentCapabilityOp })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CAPABILITY_OPS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                value={cap.entity_types.join(", ")}
-                onChange={(e) =>
-                  updateCapability(index, {
-                    ...cap,
-                    entity_types: e.target.value
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter((s) => s.length > 0),
-                  })
-                }
-                placeholder="entity_type, entity_type, * (any)"
-                className="font-mono"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeCapability(index)}
-                disabled={state.capabilities.length <= 1}
-                aria-label="Remove capability"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+          {state.capabilities.map((cap, index) => {
+            const isRelationship = cap.op === "create_relationship";
+            const inert = isInertRelationshipCapability(cap);
+            const warningId = `grant-cap-${index}-relationship-warning`;
+            return (
+              <div key={index} className="grid gap-2 rounded border p-2">
+                <div className="grid gap-2 sm:grid-cols-[180px_1fr_auto]">
+                  <Select
+                    value={cap.op}
+                    onValueChange={(value) =>
+                      updateCapability(index, withCapabilityOp(cap, value as AgentCapabilityOp))
+                    }
+                  >
+                    <SelectTrigger aria-label="Operation">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAPABILITY_OPS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={cap.entity_types.join(", ")}
+                    onChange={(e) =>
+                      updateCapability(index, {
+                        ...cap,
+                        entity_types: parseListInput(e.target.value),
+                      })
+                    }
+                    aria-label="Entity types"
+                    placeholder="entity_type, entity_type, * (any)"
+                    className="font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeCapability(index)}
+                    disabled={state.capabilities.length <= 1}
+                    aria-label="Remove capability"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                {isRelationship && (
+                  <div className="grid gap-1.5 sm:pl-[188px]">
+                    <Label htmlFor={`grant-cap-${index}-relationship-types`} className="text-xs">
+                      Relationship types
+                    </Label>
+                    <Input
+                      id={`grant-cap-${index}-relationship-types`}
+                      value={(cap.relationship_types ?? []).join(", ")}
+                      onChange={(e) =>
+                        updateCapability(index, {
+                          ...cap,
+                          relationship_types: parseListInput(e.target.value),
+                        })
+                      }
+                      aria-describedby={inert ? warningId : undefined}
+                      placeholder="REFERS_TO, PART_OF"
+                      className="font-mono"
+                    />
+                    {inert && (
+                      <p id={warningId} className="text-xs text-amber-700 dark:text-amber-400">
+                        This entry grants no edge writes until at least one
+                        relationship type is set.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </fieldset>
 
@@ -299,6 +330,14 @@ export function AgentGrantForm({
           rows={3}
         />
       </div>
+
+      {inertRelationshipRows > 0 && (
+        <p className="text-sm text-amber-700 dark:text-amber-400" role="status">
+          {inertRelationshipRows === 1
+            ? "1 create_relationship entry has no relationship types and will grant no edge writes."
+            : `${inertRelationshipRows} create_relationship entries have no relationship types and will grant no edge writes.`}
+        </p>
+      )}
 
       {errorMessage && (
         <p className="text-sm text-destructive" role="alert">

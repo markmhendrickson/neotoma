@@ -77,7 +77,11 @@ the source of truth):
   "match_iss": "https://agent.example.com",  // optional; descriptive
   "capabilities": [
     { "op": "store",               "entity_types": ["neotoma_feedback"] },
-    { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
+    {
+      "op": "create_relationship",
+      "entity_types": ["neotoma_feedback", "task"],
+      "relationship_types": ["REFERS_TO"]
+    },
     { "op": "correct",             "entity_types": ["neotoma_feedback"] },
     { "op": "retrieve",            "entity_types": ["neotoma_feedback"] }
   ],
@@ -198,6 +202,58 @@ today. Give an agent that needs a grant a long-lived signing key
 
 `entity_types` is a string array of permitted entity types for that op.
 Use `["*"]` to widen to every type — only do this for trusted grants.
+
+For `create_relationship`, one capability entry must cover both endpoint
+entity types and the requested type in `relationship_types`. The two bounds
+are evaluated on the same entry so partial grants cannot combine into a wider
+permission. Missing or empty `relationship_types` denies relationship writes.
+For example, this permits `REFERS_TO` only when both endpoints are a
+`checkpoint_brief` or `task`; it does not permit `PART_OF`, nor an edge with an
+`issue` endpoint:
+
+```json
+{
+  "op": "create_relationship",
+  "entity_types": ["checkpoint_brief", "task"],
+  "relationship_types": ["REFERS_TO"]
+}
+```
+
+The check is enforced at every entrance that writes an edge, from one shared
+module (`src/services/relationship_write_capability.ts`), so no surface can
+drift from another:
+
+- REST `/store` and MCP `store` authorize every requested edge up front, before
+  the first entity write; a denied edge refuses the whole call (REST answers
+  `403 capability_denied`).
+- `relationshipsService.createRelationship` enforces it per edge, which covers
+  REST and MCP `create_relationship` / `create_relationships`,
+  `/interpretations/create` and MCP `create_interpretation`, and the CLI and
+  in-process callers that reach those routes. In the batch and interpretation
+  paths a denied edge is reported in `errors` / `relationships_refused`.
+- REST and MCP `restore_relationship`: reviving an edge is an edge write.
+
+Endpoint types are resolved within the authenticated owner's scope; an
+endpoint that does not resolve fails closed. Edges the server derives from a
+registered schema (reference-field auto-linking, derived-entity extraction)
+are gated the same way: the grant must cover them too. A refused schema-derived edge is
+reported as not linked (`linked: false` / `skipped`); the store that triggered
+it still succeeds.
+
+A signature whose grant is revoked, suspended, unbound, invalid or in a pin
+conflict is refused on every edge write, as it is on `store`. Only a signer no
+grant recognises is treated as a guest and left to access policy.
+
+**Migration.** A `create_relationship` entry written before this field
+existed has no `relationship_types` and now grants no edge writes. To restore
+edge writes, update the grant's capabilities to name the relationship types the
+agent needs: in the Inspector grant form, with `PATCH /agents/grants/{grant_id}`,
+or with a `correct` on the `agent_grant` entity. The form edits the list on
+`create_relationship` rows and warns on any such row whose list is empty,
+including rows saved before this field existed; `neotoma agents grants import`
+preserves an existing list. The repo default registry (`config/agent_capabilities.default.json`)
+no longer grants `create_relationship` to the feedback forwarder, which writes
+no edges.
 
 ### Matching order
 

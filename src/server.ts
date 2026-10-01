@@ -76,6 +76,7 @@ import {
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
+import { AgentCapabilityError } from "./services/agent_capabilities.js";
 import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
 import {
   relationshipRefusalFromError,
@@ -3834,32 +3835,16 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId();
 
     try {
-      // Create a source for this relationship
-      const { data: source, error: sourceError } = await db
-        .from("sources")
-        .insert({
-          content_hash: `relationship_${Date.now()}`,
-          mime_type: "application/json",
-          storage_url: `internal://relationship/${parsed.relationship_type}`,
-          file_size: 0, // No file for direct relationship creation
-          user_id: userId,
-        })
-        .select()
-        .single();
-
-      if (sourceError || !source) {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to create source: ${sourceError?.message || "Unknown error"}`
-        );
-      }
-
       const { relationshipsService } = await import("./services/relationships.js");
       const snapshot = await relationshipsService.createRelationship({
         relationship_type: parsed.relationship_type,
         source_entity_id: parsed.source_entity_id,
         target_entity_id: parsed.target_entity_id,
-        source_id: source.id,
+        // The service owns the canonical relationship-source lifecycle: it
+        // validates the edge before any source write, derives a deterministic
+        // source identity from the relationship input, and reuses it on replay.
+        // An explicit caller-provided source remains authoritative.
+        source_id: parsed.source_id || null,
         metadata: parsed.metadata || {},
         user_id: userId,
       });
@@ -3890,6 +3875,11 @@ export class NeotomaServer {
       }
       // Check for specific error types
       if (error instanceof McpError) {
+        throw error;
+      }
+      // A relationship capability refusal propagates as itself, exactly as the
+      // MCP `store` capability gate's does — never re-labelled a server fault.
+      if (error instanceof AgentCapabilityError) {
         throw error;
       }
       throw new McpError(
@@ -3925,11 +3915,18 @@ export class NeotomaServer {
           created_at: snapshot.last_observation_at,
         });
       } catch (error) {
-        errors.push({
+        const item: Record<string, unknown> = {
           index,
           relationship,
           error: error instanceof Error ? error.message : String(error),
-        });
+        };
+        // Keep MCP batch behavior aligned with REST: partial success remains
+        // representable, while capability refusals preserve the structured
+        // grant-repair fields instead of collapsing to a message string.
+        if (error instanceof AgentCapabilityError) {
+          Object.assign(item, error.toErrorEnvelope());
+        }
+        errors.push(item);
       }
     }
 
@@ -6170,6 +6167,21 @@ export class NeotomaServer {
       }
     }
 
+    // Relationship capability (neotoma#2524), before any entity/source
+    // mutation. This MCP store core is an implementation independent of
+    // `storeStructuredForApi`, so the REST gate never reached it: an agent
+    // scoped to `REFERS_TO` could call MCP `store` with any other edge type and
+    // get the edge. Same shared check REST `/store` runs, batch-authorized up
+    // front so a denied edge refuses the whole call before the first write
+    // rather than leaving the entities written and the edge reported refused.
+    // The per-edge gate inside `relationshipsService.createRelationship`
+    // still applies in the relationship loops below.
+    if (relationships?.length) {
+      const { enforceCurrentAgentRelationshipWrites } =
+        await import("./services/relationship_write_capability.js");
+      await enforceCurrentAgentRelationshipWrites({ userId, entities, relationships });
+    }
+
     // Reject flat-packed rows early so MCP clients get a clear error instead
     // of a single corrupted entity snapshot.
     for (const entityData of entities) {
@@ -8353,6 +8365,22 @@ export class NeotomaServer {
         }
       );
     }
+
+    // Deletion changes the same live edge state as creation and restoration.
+    // Apply the shared relationship capability after the discovery guard and
+    // before the deletion observation is written.
+    const { enforceCurrentAgentRelationshipWrites } =
+      await import("./services/relationship_write_capability.js");
+    await enforceCurrentAgentRelationshipWrites({
+      userId,
+      relationships: [
+        {
+          relationship_type: parsed.relationship_type,
+          source_entity_id: parsed.source_entity_id,
+          target_entity_id: parsed.target_entity_id,
+        },
+      ],
+    });
 
     const result = await softDeleteRelationshipService(
       relationshipKey,

@@ -1,0 +1,34 @@
+{
+  "description": "Legacy create_relationship grants that did not declare relationship_types remain valid grant records but grant no relationship-write authority.",
+  "attempt": {
+    "relationship_type": "REFERS_TO",
+    "endpoint_entity_types": ["checkpoint_brief", "task"]
+  },
+  "cases": [
+    {
+      "name": "missing relationship_types",
+      "capability": {
+        "op": "create_relationship",
+        "entity_types": ["checkpoint_brief", "task"]
+      }
+    },
+    {
+      "name": "empty relationship_types",
+      "capability": {
+        "op": "create_relationship",
+        "entity_types": ["checkpoint_brief", "task"],
+        "relationship_types": []
+      }
+    }
+  ],
+  "expected_denial": {
+    "code": "capability_denied",
+    "op": "create_relationship",
+    "hint_matches": [
+      "no single create_relationship capability",
+      "relationship_type \"REFERS_TO\"",
+      "endpoint entity_types [\"checkpoint_brief\", \"task\"]",
+      "Absent or empty relationship_types denies edge writes."
+    ]
+  }
+}

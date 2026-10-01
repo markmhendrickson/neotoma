@@ -2539,6 +2539,39 @@ export interface components {
       timestamp?: string;
     };
     /**
+     * @description One failed item from `create_relationships`. Batch creation retains
+     *     successful siblings and therefore reports item failures inside the
+     *     HTTP 200 response. When `code` is `capability_denied`, `op` and `hint`
+     *     preserve the same structured grant-repair contract as the single-item
+     *     endpoint and MCP adapter.
+     */
+    RelationshipBatchErrorItem: {
+      index: number;
+      relationship: {
+        relationship_type: string;
+        source_entity_id: string;
+        target_entity_id: string;
+        source_id?: string;
+        metadata?: {
+          [key: string]: unknown;
+        };
+      };
+      /** @description Human-readable per-item failure message. */
+      error: string;
+      /** @description Machine-readable failure code; `capability_denied` for grant refusals. */
+      code?: string;
+      /** @description Canonical structured error message when a typed error is available. */
+      message?: string;
+      /** @description Capability operation that was refused. */
+      op?: string;
+      /** @description Primary endpoint entity type named by the capability denial. */
+      entity_type?: string;
+      /** @description Public-safe label for the admitted agent grant. */
+      agent_label?: string;
+      /** @description Actionable instructions for repairing the grant scope. */
+      hint?: string;
+    };
+    /**
      * @description Nested canonical error envelope returned by schema-registry tools
      *     (`update_schema_incremental`, and matching MCP tool responses) on HTTP 200
      *     when the call cannot proceed. Distinct from the flat `ErrorEnvelope` used
@@ -3334,6 +3367,15 @@ export interface components {
        *     Neotoma-native ops.
        */
       repos?: string[];
+      /**
+       * @description Relationship types this entry may write. Required for
+       *     `create_relationship` edge writes: one entry must cover the
+       *     relationship type AND both endpoint entity types
+       *     (`entity_types`). Absent or empty grants no edge writes. The
+       *     single string `*` wildcards any relationship type. Also the
+       *     scope for `register_relationship_type`.
+       */
+      relationship_types?: string[];
     };
     /**
      * @description First-class persistent grant that admits a verified AAuth
@@ -7085,6 +7127,18 @@ export interface operations {
           "application/json": components["schemas"]["RelationshipSnapshot"];
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   createRelationships: {
@@ -7125,9 +7179,7 @@ export interface operations {
             created_count?: number;
             error_count?: number;
             relationships?: components["schemas"]["RelationshipSnapshot"][];
-            errors?: {
-              [key: string]: unknown;
-            }[];
+            errors?: components["schemas"]["RelationshipBatchErrorItem"][];
           };
         };
       };
@@ -8059,6 +8111,18 @@ export interface operations {
         };
       };
       /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
        * @description No live relationship matches the supplied
        *     `relationship_type` / `source_entity_id` / `target_entity_id`
        *     triple. `details.hint` points to `/list_relationships` for
@@ -8103,6 +8167,18 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

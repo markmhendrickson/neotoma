@@ -134,7 +134,27 @@ function normalizeCapabilities(input: unknown): AgentCapabilityEntry[] {
       )
     );
     if (normalized.length === 0) continue;
-    out.push({ op: op as AgentCapabilityOp, entity_types: normalized });
+    const capability: AgentCapabilityEntry = {
+      op: op as AgentCapabilityOp,
+      entity_types: normalized,
+    };
+    // relationship_types is the second allowlist on a create_relationship
+    // entry (neotoma#2524): without it the entry grants no edge writes. Carry
+    // it through unchanged in meaning; createGrant/updateGrantFields run
+    // validateCapabilities, which rejects a malformed value.
+    if (e.relationship_types !== undefined) {
+      const relTypes = e.relationship_types;
+      capability.relationship_types = Array.isArray(relTypes)
+        ? Array.from(
+            new Set(
+              relTypes
+                .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+                .map((t) => t.trim())
+            )
+          )
+        : (relTypes as string[]);
+    }
+    out.push(capability);
   }
   return out;
 }
@@ -169,7 +189,12 @@ function findExistingGrant(
 function capabilitiesEqual(a: AgentCapabilityEntry[], b: AgentCapabilityEntry[]): boolean {
   if (a.length !== b.length) return false;
   const stringify = (cap: AgentCapabilityEntry) =>
-    JSON.stringify({ op: cap.op, entity_types: [...cap.entity_types].sort() });
+    JSON.stringify({
+      op: cap.op,
+      entity_types: [...cap.entity_types].sort(),
+      relationship_types:
+        cap.relationship_types === undefined ? null : [...cap.relationship_types].sort(),
+    });
   const aKeys = a.map(stringify).sort();
   const bKeys = b.map(stringify).sort();
   return aKeys.every((k, i) => k === bKeys[i]);

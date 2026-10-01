@@ -433,6 +433,11 @@ export type AgentCapabilityOp =
 export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;
   entity_types: string[];
+  /**
+   * Relationship types a `create_relationship` entry may write. Absent or
+   * empty grants no edge writes.
+   */
+  relationship_types?: string[];
 }
 
 export type AgentGrantStatus = "active" | "suspended" | "revoked";

@@ -1,0 +1,139 @@
+{
+  "meta": {
+    "id": "relationship_write_capability_effect",
+    "description": "An admitted agent uses the natural relationship-tool call shape. The out-of-scope PART_OF edge is denied with the structured capability contract and remains absent on readback; the exact in-scope REFERS_TO edge is then created and is live on readback. Tier 1 pins the agent-observed tool sequence and results, while tests/integration/relationship_write_capability_surfaces.test.ts executes the same effect against the real authorization seam.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2"],
+    "tags": ["authorization", "relationships", "effect-parity", "agent-facing"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Link checkpoint brief ent_checkpoint to task ent_task. First try PART_OF, verify it did not land, then use the exactly granted REFERS_TO relationship and verify that it is live."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_create_relationship",
+        "tool_input": {
+          "source_entity_id": "ent_checkpoint",
+          "target_entity_id": "ent_task",
+          "relationship_type": "PART_OF"
+        },
+        "tool_output": {
+          "success": false,
+          "code": "capability_denied",
+          "op": "create_relationship",
+          "hint": "Use one create_relationship grant entry that covers checkpoint_brief, task, and PART_OF."
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_list_relationships",
+        "tool_input": {
+          "source_entity_id": "ent_checkpoint",
+          "target_entity_id": "ent_task",
+          "relationship_type": "PART_OF",
+          "is_live": true
+        },
+        "tool_output": {
+          "relationships": [],
+          "count": 0
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_create_relationship",
+        "tool_input": {
+          "source_entity_id": "ent_checkpoint",
+          "target_entity_id": "ent_task",
+          "relationship_type": "REFERS_TO"
+        },
+        "tool_output": {
+          "success": true,
+          "relationship_id": "rel_allowed_refers_to",
+          "relationship_type": "REFERS_TO",
+          "is_live": true
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_list_relationships",
+        "tool_input": {
+          "source_entity_id": "ent_checkpoint",
+          "target_entity_id": "ent_task",
+          "relationship_type": "REFERS_TO",
+          "is_live": true
+        },
+        "tool_output": {
+          "relationships": [
+            {
+              "relationship_id": "rel_allowed_refers_to",
+              "relationship_type": "REFERS_TO",
+              "source_entity_id": "ent_checkpoint",
+              "target_entity_id": "ent_task",
+              "is_live": true
+            }
+          ],
+          "count": 1
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "The out-of-scope PART_OF edge was denied with capability_denied and readback confirmed zero live matches. The exactly scoped REFERS_TO edge succeeded and readback confirmed one live relationship."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_create_relationship" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_create_relationship" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_list_relationships" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_list_relationships" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 7
+      }
+    ]
+  }
+}

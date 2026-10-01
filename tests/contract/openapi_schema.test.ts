@@ -207,6 +207,56 @@ describe("OpenAPI tool schemas", () => {
     });
   });
 
+  describe("relationship capability-denial 403 responses are declared", () => {
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      paths?: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+    };
+
+    it.each(["/create_relationship", "/delete_relationship", "/restore_relationship"])(
+      "%s declares 403 capability_denied as ErrorEnvelope",
+      (route) => {
+        const declared = spec.paths?.[route]?.post?.responses?.["403"];
+        expect(
+          declared,
+          `${route} emits 403 capability_denied at runtime but does not declare it`
+        ).toBeTruthy();
+        expect(JSON.stringify(declared)).toContain("capability_denied");
+        expect(JSON.stringify(declared)).toContain("#/components/schemas/ErrorEnvelope");
+      }
+    );
+
+    it("declares structured per-item capability denials on create_relationships", () => {
+      const response = spec.paths?.["/create_relationships"]?.post?.responses?.["200"];
+      const encoded = JSON.stringify(response ?? {});
+      expect(encoded).toContain("#/components/schemas/RelationshipBatchErrorItem");
+    });
+  });
+
+  describe("relationship batch errors preserve the structured repair contract", () => {
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: {
+        schemas?: Record<
+          string,
+          {
+            required?: string[];
+            properties?: Record<string, unknown>;
+            additionalProperties?: boolean;
+          }
+        >;
+      };
+    };
+
+    it("declares the denial code, operation, hint, index, and relationship context", () => {
+      const item = spec.components?.schemas?.RelationshipBatchErrorItem;
+      expect(item).toBeTruthy();
+      expect(item?.additionalProperties).toBe(false);
+      expect(item?.required).toEqual(expect.arrayContaining(["index", "relationship", "error"]));
+      expect(Object.keys(item?.properties ?? {})).toEqual(
+        expect.arrayContaining(["index", "relationship", "error", "code", "op", "hint"])
+      );
+    });
+  });
+
   describe("relationships_created / relationships_refused declared on every schema that returns them", () => {
     // HTTP POST /interpretations/create and MCP create_interpretation return
     // relationships_refused (src/actions.ts, src/server.ts createInterpretation)
