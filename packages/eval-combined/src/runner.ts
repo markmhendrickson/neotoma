@@ -19,6 +19,7 @@ export interface CombinedOptions {
   writCategories?: string[];
   tier2Only?: boolean;
   writOnly?: boolean;
+  scenarioDir?: string;
   log?: (line: string) => void;
 }
 
@@ -32,6 +33,8 @@ export interface CombinedResult {
    * NOT fail open when WRIT is broken (#1738).
    */
   writError?: string;
+  /** Set when a requested Tier 2 run failed before producing a summary. */
+  tier2Error?: string;
 }
 
 export interface WritReportShape {
@@ -42,13 +45,16 @@ export interface WritReportShape {
     provenance_completeness: number;
     [key: string]: number;
   };
-  by_category: Record<string, {
-    recall_accuracy: number;
-    update_fidelity: number;
-    provenance_completeness: number;
-    scenarios_evaluated: number;
-    [key: string]: number;
-  }>;
+  by_category: Record<
+    string,
+    {
+      recall_accuracy: number;
+      update_fidelity: number;
+      provenance_completeness: number;
+      scenarios_evaluated: number;
+      [key: string]: number;
+    }
+  >;
   scenario_results: Array<{
     scenario_id: string;
     category: string;
@@ -103,9 +109,10 @@ function buildLayeredMatrix(
     for (const cell of tier2Summary.cells) {
       const cat = extractWritCategory(cell.scenario.tags);
       if (!cat) continue;
-      const seedTag = cell.scenario.tags?.find((t) =>
-        ["generated", "real_derived", "hybrid_amplified"].includes(t)
-      ) ?? "generated";
+      const seedTag =
+        cell.scenario.tags?.find((t) =>
+          ["generated", "real_derived", "hybrid_amplified"].includes(t)
+        ) ?? "generated";
 
       const key = `${cat}|${seedTag}`;
       if (!categoryMap.has(key)) categoryMap.set(key, new Map());
@@ -177,6 +184,7 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
   let writReport: WritReportShape | null = null;
   let tier2Summary: Tier2SummaryShape | null = null;
   let writError: string | undefined;
+  let tier2Error: string | undefined;
 
   const evalHarnessPath = join(opts.repoRoot, "packages", "eval-harness");
   const writPath = join(opts.repoRoot, "writ");
@@ -197,9 +205,7 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
         : [];
 
       const filteredScenarios = opts.writCategories
-        ? scenarios.filter((s: { category: string }) =>
-            opts.writCategories!.includes(s.category)
-          )
+        ? scenarios.filter((s: { category: string }) => opts.writCategories!.includes(s.category))
         : scenarios;
 
       if (filteredScenarios.length > 0) {
@@ -240,21 +246,30 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
     log("[eval-combined] running Tier 2 eval harness...");
     try {
       const harness = await import(join(evalHarnessPath, "src", "index.js"));
-      const scenarios = harness.loadScenariosFromDir();
+      const scenarios = harness.loadScenariosFromDir(opts.scenarioDir);
       const summary = await harness.runScenarios({
         scenarios,
         mode: opts.mode as "replay" | "record",
         log,
       });
       tier2Summary = summary as Tier2SummaryShape;
-      log(
-        `[eval-combined] Tier 2 complete: ${summary.passed}/${summary.total} passed`
-      );
+      log(`[eval-combined] Tier 2 complete: ${summary.passed}/${summary.total} passed`);
     } catch (err) {
-      log(`[eval-combined] Tier 2 failed: ${(err as Error).message}`);
+      tier2Error = (err as Error).message;
+      log(`[eval-combined] Tier 2 failed: ${tier2Error}`);
     }
   }
 
   const layeredMatrix = buildLayeredMatrix(writReport, tier2Summary);
-  return { writReport, tier2Summary, layeredMatrix, writError };
+  return { writReport, tier2Summary, layeredMatrix, writError, tier2Error };
+}
+
+export function combinedExitCode(result: CombinedResult): number {
+  return result.writError ||
+    result.tier2Error ||
+    (result.tier2Summary &&
+      (result.tier2Summary.failed > 0 || result.tier2Summary.unexpectedSkipped > 0)) ||
+    (result.writReport && result.writReport.aggregate.recall_accuracy < 0.5)
+    ? 1
+    : 0;
 }

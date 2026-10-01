@@ -22,10 +22,7 @@ import { evaluateExpectations } from "./assertions.js";
 import { cassetteFilename, readCassette, staleness } from "./cassette.js";
 import { getDriver } from "./drivers/index.js";
 import { createHostToolRegistry } from "./host_tools.js";
-import {
-  startIsolatedNeotomaServer,
-  type IsolatedServer,
-} from "./isolated_server.js";
+import { startIsolatedNeotomaServer, type IsolatedServer } from "./isolated_server.js";
 import type {
   AssertionFailure,
   CellReport,
@@ -70,9 +67,22 @@ interface CellPlan {
   cassettePath: string;
 }
 
-const SMALL_MODEL_HINTS = ["haiku", "mini", "nano", "fast", "small", "composer-2", "8b", "1.5b", "3b"];
+const SMALL_MODEL_HINTS = [
+  "haiku",
+  "mini",
+  "nano",
+  "fast",
+  "small",
+  "composer-2",
+  "8b",
+  "1.5b",
+  "3b",
+];
 
-function classifyEffectiveProfile(model: ModelEntry, requested: InstructionProfile): InstructionProfile {
+function classifyEffectiveProfile(
+  model: ModelEntry,
+  requested: InstructionProfile
+): InstructionProfile {
   if (requested === "compact" || requested === "full") return requested;
   // auto = compact for small models, full otherwise. Mirrors the cursor-hooks heuristic.
   const lower = model.model.toLowerCase();
@@ -128,7 +138,7 @@ async function seedEntities(
     log(`[runner] seed failed (${res.status}): ${text.slice(0, 300)}`);
     throw new Error(`seed_entities failed: HTTP ${res.status}`);
   }
-  const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+  const result = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const created = (result as { entities?: unknown[] }).entities?.length ?? 0;
   log(`[runner] seeded ${created} entities`);
 }
@@ -186,7 +196,10 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         startedAt,
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { kind: "missing_cassette", reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.` },
+        skipped: {
+          kind: "missing_cassette",
+          reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.`,
+        },
       };
     }
     if (staleness(cassetteResult.ageDays) === "stale") {
@@ -310,9 +323,14 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { kind: "budget_guard", reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}` },
+        skipped: {
+          kind: "budget_guard",
+          reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}`,
+        },
       });
-      log(`[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`);
+      log(
+        `[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`
+      );
       continue;
     }
     const report = await runCell(plan, opts);
@@ -324,9 +342,16 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
     passed: cells.filter((c) => c.pass && !c.skipped).length,
     failed: cells.filter((c) => !c.pass && !c.skipped).length,
     skipped: cells.filter((c) => c.skipped).length,
-    unexpectedSkipped: cells.filter((c) =>
-      c.skipped && c.skipped.kind !== "quarantine" && !c.scenario.allowed_skips?.includes(c.skipped.kind)
-    ).length,
+    unexpectedSkipped: cells.filter((cell) => {
+      if (!cell.skipped || cell.skipped.kind === "quarantine") return false;
+      return !cell.scenario.allowed_skips?.some(
+        (allowance) =>
+          allowance.kind === cell.skipped?.kind &&
+          (allowance.provider === undefined || allowance.provider === cell.model.provider) &&
+          (allowance.model === undefined || allowance.model === cell.model.model) &&
+          (allowance.cassette_id === undefined || allowance.cassette_id === cell.model.cassette_id)
+      );
+    }).length,
     cells,
     estimatedCostUsd,
     mode: opts.mode,

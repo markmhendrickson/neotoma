@@ -10,6 +10,13 @@ export type InstructionProfile = "full" | "compact" | "auto";
 
 export type SkipKind = "quarantine" | "preflight" | "missing_cassette" | "budget_guard";
 
+export interface AllowedSkip {
+  kind: SkipKind;
+  provider?: ProviderId;
+  model?: string;
+  cassette_id?: string;
+}
+
 export interface ScenarioMeta {
   id: string;
   description: string;
@@ -21,8 +28,8 @@ export interface ScenarioMeta {
    * fixed. The value SHOULD reference the tracking issue (e.g. "neotoma#NNNN: …").
    */
   quarantine?: string;
-  /** Skip kinds deliberately allowed for this scenario. Undeclared skips fail CI. */
-  allowed_skips?: SkipKind[];
+  /** Cell-specific skips deliberately allowed for this scenario. Undeclared skips fail CI. */
+  allowed_skips?: AllowedSkip[];
 }
 
 export interface HostToolStubResponse {

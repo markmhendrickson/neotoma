@@ -10,7 +10,9 @@ meta:
     - extraction
     - baseline
   allowed_skips:
-    - missing_cassette
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
 
 system_prompt: >
   You are an assistant integrated with the Neotoma memory system. In one

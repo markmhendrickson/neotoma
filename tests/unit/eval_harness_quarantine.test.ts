@@ -7,6 +7,10 @@
  * silently drops the quarantine check (which would let CI go red on the three
  * quarantined scenarios — neotoma#1726).
  */
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runScenarios } from "../../packages/eval-harness/src/index.js";
 import type { ScenarioFile } from "../../packages/eval-harness/src/types.js";
@@ -57,9 +61,76 @@ describe("eval-harness required skip policy", () => {
   it("preserves a deliberately declared optional missing-cassette skip", async () => {
     const scenario = quarantinedScenario();
     delete scenario.meta.quarantine;
-    scenario.meta.allowed_skips = ["missing_cassette"];
+    scenario.meta.allowed_skips = [
+      {
+        kind: "missing_cassette",
+        provider: "stub",
+        model: "replay-only",
+      },
+    ];
     const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
     expect(summary.skipped).toBe(1);
     expect(summary.unexpectedSkipped).toBe(0);
+  });
+
+  it("does not let one optional cell hide a required sibling cell", async () => {
+    const scenario = quarantinedScenario();
+    delete scenario.meta.quarantine;
+    scenario.models = [
+      { provider: "stub", model: "optional-replay" },
+      { provider: "stub", model: "required-replay" },
+    ];
+    scenario.meta.allowed_skips = [
+      {
+        kind: "missing_cassette",
+        provider: "stub",
+        model: "optional-replay",
+      },
+    ];
+    const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
+    expect(summary.skipped).toBe(2);
+    expect(summary.unexpectedSkipped).toBe(1);
+  });
+
+  it("exits nonzero through the CLI when a required sibling cassette is missing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "neotoma-eval-skip-policy-"));
+    const scenarioPath = join(dir, "mixed.scenario.yaml");
+    writeFileSync(
+      scenarioPath,
+      `meta:
+  id: mixed_cli_probe
+  description: mixed required and optional cells
+  allowed_skips:
+    - kind: missing_cassette
+      provider: stub
+      model: optional-replay
+user_prompt: noop
+host_tools: []
+models:
+  - provider: stub
+    model: optional-replay
+  - provider: stub
+    model: required-replay
+expected: []
+`
+    );
+    try {
+      const result = spawnSync(
+        resolve("node_modules/.bin/tsx"),
+        [
+          "packages/eval-harness/src/cli.ts",
+          "run",
+          "--scenario-file",
+          scenarioPath,
+          "--cassette-dir",
+          dir,
+        ],
+        { cwd: resolve("."), encoding: "utf8" }
+      );
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(1);
+      expect(result.stdout).toContain("skipped=2");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

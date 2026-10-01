@@ -9,7 +9,9 @@ meta:
     - tool-use
     - synthesis
   allowed_skips:
-    - missing_cassette
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
 
 system_prompt: >
   You research and synthesize. Use the Read tool to fetch the three docs

@@ -11,7 +11,9 @@ meta:
     - compliance
     - followup
   allowed_skips:
-    - missing_cassette
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
 
 system_prompt: >
   You are a small assistant. When you receive a system follow-up

@@ -10,7 +10,9 @@ meta:
     - compliance
     - small-model
   allowed_skips:
-    - missing_cassette
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
 
 system_prompt: >
   You are a small model with limited capacity. Answer concisely.

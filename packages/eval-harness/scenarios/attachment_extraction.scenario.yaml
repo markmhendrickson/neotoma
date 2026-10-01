@@ -10,7 +10,9 @@ meta:
     - attachment
     - extraction
   allowed_skips:
-    - missing_cassette
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
 
 system_prompt: >
   You handle file attachments. Always call store_structured with the

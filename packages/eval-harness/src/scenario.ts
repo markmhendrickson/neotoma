@@ -33,13 +33,23 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
   const o = raw as Record<string, unknown>;
   const meta = o.meta as Record<string, unknown> | undefined;
   assertField(meta?.id && typeof meta.id === "string", "meta.id is required", file);
-  assertField(meta?.description && typeof meta.description === "string", "meta.description is required", file);
+  assertField(
+    meta?.description && typeof meta.description === "string",
+    "meta.description is required",
+    file
+  );
   assertField(typeof o.user_prompt === "string", "user_prompt is required", file);
   assertField(Array.isArray(o.host_tools), "host_tools must be an array (may be empty)", file);
-  assertField(Array.isArray(o.models) && (o.models as unknown[]).length > 0, "models[] is required and non-empty", file);
+  assertField(
+    Array.isArray(o.models) && (o.models as unknown[]).length > 0,
+    "models[] is required and non-empty",
+    file
+  );
   assertField(Array.isArray(o.expected), "expected[] is required (may be empty)", file);
 
-  const instruction_profile = o.instruction_profile as ScenarioFile["instruction_profile"] | undefined;
+  const instruction_profile = o.instruction_profile as
+    | ScenarioFile["instruction_profile"]
+    | undefined;
   if (instruction_profile != null) {
     assertField(
       ["full", "compact", "auto"].includes(instruction_profile),
@@ -51,11 +61,28 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
   const allowedSkips = meta!.allowed_skips;
   if (allowedSkips != null) {
     assertField(Array.isArray(allowedSkips), "meta.allowed_skips must be an array", file);
-    assertField(
-      allowedSkips.every((value) => ["quarantine", "preflight", "missing_cassette", "budget_guard"].includes(String(value))),
-      "meta.allowed_skips contains an unknown skip kind",
-      file
-    );
+    for (const value of allowedSkips) {
+      assertField(
+        value && typeof value === "object",
+        "meta.allowed_skips entries must be objects",
+        file
+      );
+      const allowance = value as Record<string, unknown>;
+      assertField(
+        ["quarantine", "preflight", "missing_cassette", "budget_guard"].includes(
+          String(allowance.kind)
+        ),
+        "meta.allowed_skips contains an unknown skip kind",
+        file
+      );
+      assertField(
+        [allowance.provider, allowance.model, allowance.cassette_id].some(
+          (selector) => typeof selector === "string" && selector.length > 0
+        ),
+        "meta.allowed_skips entries must select provider, model, or cassette_id",
+        file
+      );
+    }
   }
 
   const seedStrategy = o.seed_strategy as ScenarioFile["seed_strategy"] | undefined;
@@ -95,15 +122,17 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
     hooks_enabled: typeof o.hooks_enabled === "boolean" ? o.hooks_enabled : true,
     driver_options: (o.driver_options as ScenarioFile["driver_options"]) ?? {},
     seed_strategy: seedStrategy,
-    source_transcript_ref: typeof o.source_transcript_ref === "string" ? o.source_transcript_ref : undefined,
+    source_transcript_ref:
+      typeof o.source_transcript_ref === "string" ? o.source_transcript_ref : undefined,
     source_pattern: typeof o.source_pattern === "string" ? o.source_pattern : undefined,
     privacy_transform: typeof o.privacy_transform === "string" ? o.privacy_transform : undefined,
     seed_entities: Array.isArray(o.seed_entities)
       ? (o.seed_entities as ScenarioFile["seed_entities"])
       : undefined,
-    server_faults: o.server_faults && typeof o.server_faults === "object"
-      ? (o.server_faults as ScenarioFile["server_faults"])
-      : undefined,
+    server_faults:
+      o.server_faults && typeof o.server_faults === "object"
+        ? (o.server_faults as ScenarioFile["server_faults"])
+        : undefined,
     expected: o.expected as ScenarioFile["expected"],
   };
   return scenario;
