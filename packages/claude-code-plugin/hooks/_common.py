@@ -177,7 +177,17 @@ def record_conversation_turn(
         entity.update(extra)
     idempotency_key = make_idempotency_key(session_id, turn_id, "turn")
     try:
-        result = client.store(entities=[entity], idempotency_key=idempotency_key)
+        # NOTE: ``store`` takes ONE positional ``StoreInput``. Passing
+        # ``entities=`` / ``idempotency_key=`` as keywords raises TypeError
+        # before any request is made — the defect that left this table empty
+        # for the entire life of the compliance framework. Keep this call
+        # positional, matching the working sibling in ``post_tool_use.py``.
+        result = client.store(
+            {
+                "entities": [entity],
+                "idempotency_key": idempotency_key,
+            }
+        )
         try:
             from neotoma_client.helpers import _extract_entities
             entities_list = _extract_entities(result)
@@ -185,8 +195,22 @@ def record_conversation_turn(
             # Fallback if helpers not available: tolerate both response shapes.
             entities_list = (result or {}).get("entities") or (result or {}).get("structured", {}).get("entities") or []
         return {"entity_id": entities_list[0].get("entity_id")} if entities_list else None
+    except TypeError as exc:
+        # A TypeError here is never transient: it means this call no longer
+        # matches the client signature, so EVERY turn is being dropped on every
+        # session. Logged at "error" — above the default "warn" threshold,
+        # unlike the "debug" line that hid this — and named as a bug so it
+        # cannot be read as a passing blip. Still non-fatal: a hook must never
+        # crash a session.
+        log(
+            "error",
+            "record_conversation_turn: BUG — store() call does not match the "
+            "client signature, so NO conversation_turn rows are being written: "
+            f"{type(exc).__name__}: {exc}",
+        )
+        return None
     except Exception as exc:
-        log("debug", f"record_conversation_turn failed: {exc}")
+        log("warn", f"record_conversation_turn failed: {type(exc).__name__}: {exc}")
         return None
 
 
