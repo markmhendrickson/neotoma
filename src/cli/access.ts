@@ -7,12 +7,16 @@
  *   reset <entity_type>       -- Reset an entity type to default (closed)
  *   enable-issues             -- Shortcut: set issue/conversation/conversation_message to submitter_scoped
  *   disable-issues            -- Shortcut: reset all three to closed
+ *
+ * By default, `access set` writes to schema_metadata (canonical, live — no restart
+ * needed). Pass `--config-file` for the deprecated config-file path.
  */
 
 import {
   loadAccessPolicyEntries,
   resolveAccessPolicyWithSource,
   setAccessPolicy,
+  setAccessPolicyInSchemaMetadata,
   resetAccessPolicy,
   ISSUE_SUBMISSION_ENTITY_TYPES,
   VALID_MODES,
@@ -23,6 +27,8 @@ import {
 
 export interface AccessSetOpts {
   json?: boolean;
+  /** Use the deprecated config-file path instead of schema_metadata. */
+  configFile?: boolean;
 }
 
 export interface AccessListOpts {
@@ -48,15 +54,13 @@ function output(data: unknown, json: boolean): void {
 }
 
 /**
- * Try to write guest_access_policy to SchemaMetadata via the registry.
- * Falls back to the config-file path with a deprecation warning when the
- * schema registry is unavailable or the schema doesn't exist.
+ * Write guest_access_policy to the canonical schema_metadata path.
+ * Falls back to the deprecated config-file path with a warning when the
+ * schema registry is unavailable or no active schema exists for the type.
  */
 async function setViaMetadata(entityType: string, mode: AccessPolicyMode): Promise<void> {
   try {
-    const { SchemaRegistryService } = await import("../services/schema_registry.js");
-    const registry = new SchemaRegistryService();
-    await registry.updateMetadata(entityType, { guest_access_policy: mode });
+    await setAccessPolicyInSchemaMetadata(entityType, mode);
   } catch {
     process.stderr.write(
       `Warning: Could not update SchemaMetadata for "${entityType}"; ` +
@@ -97,10 +101,21 @@ export async function accessSet(
     return;
   }
 
-  await setViaMetadata(entityType, mode as AccessPolicyMode);
+  let storageSource: "schema_metadata" | "config_file";
+  if (opts.configFile) {
+    process.stderr.write(
+      `Deprecation notice: --config-file writes to the deprecated config-file path. ` +
+        `Omit the flag to write to schema_metadata (canonical, live — no restart needed).\n`
+    );
+    await setAccessPolicy(entityType, mode as AccessPolicyMode);
+    storageSource = "config_file";
+  } else {
+    await setViaMetadata(entityType, mode as AccessPolicyMode);
+    storageSource = "schema_metadata";
+  }
 
   if (opts.json) {
-    output({ entity_type: entityType, mode, status: "set" }, true);
+    output({ entity_type: entityType, mode, status: "set", storage_source: storageSource }, true);
   } else {
     process.stdout.write(`Access policy for "${entityType}" set to "${mode}".\n`);
   }
