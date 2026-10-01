@@ -10450,11 +10450,19 @@ app.post("/create_relationships", async (req, res) => {
           ...snapshot,
         });
       } catch (error) {
-        errors.push({
+        const item: Record<string, unknown> = {
           index,
           relationship,
           error: error instanceof Error ? error.message : String(error),
-        });
+        };
+        // Batch semantics stay HTTP 200 so successful siblings are retained,
+        // but a capability denial must keep the same machine-actionable repair
+        // contract as the single-item endpoint. Agents rely on code/op/hint;
+        // reducing this to error.message turns a recoverable refusal opaque.
+        if (error instanceof AgentCapabilityError) {
+          Object.assign(item, error.toErrorEnvelope());
+        }
+        errors.push(item);
       }
     }
 

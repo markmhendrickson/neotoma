@@ -3915,11 +3915,18 @@ export class NeotomaServer {
           created_at: snapshot.last_observation_at,
         });
       } catch (error) {
-        errors.push({
+        const item: Record<string, unknown> = {
           index,
           relationship,
           error: error instanceof Error ? error.message : String(error),
-        });
+        };
+        // Keep MCP batch behavior aligned with REST: partial success remains
+        // representable, while capability refusals preserve the structured
+        // grant-repair fields instead of collapsing to a message string.
+        if (error instanceof AgentCapabilityError) {
+          Object.assign(item, error.toErrorEnvelope());
+        }
+        errors.push(item);
       }
     }
 

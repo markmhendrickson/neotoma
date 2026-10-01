@@ -32,6 +32,7 @@ import { vi } from "vitest";
 
 const ADMIT_HEADER = "x-test-rel-cap-admit";
 const PROBE_ADMIT_HEADER = "x-test-rel-cap-probe-admit";
+const ADMIT_BEARER = "rel-capability-surface-test-token";
 const TEST_THUMBPRINT = "tp-rel-write-capability-surfaces";
 const TEST_PROBE_THUMBPRINT = "tp-rel-write-capability-probe";
 const RUN_REST_SURFACE = process.env.NEOTOMA_TEST_SKIP_REST_SURFACE !== "1";
@@ -41,7 +42,11 @@ vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
   return {
     ...original,
     aauthVerify: () => (req: Request, _res: Response, next: NextFunction) => {
-      if (req.headers[ADMIT_HEADER] === "1" || req.headers[PROBE_ADMIT_HEADER] === "1") {
+      if (
+        req.headers[ADMIT_HEADER] === "1" ||
+        req.headers[PROBE_ADMIT_HEADER] === "1" ||
+        req.headers.authorization === `Bearer ${ADMIT_BEARER}`
+      ) {
         const probe = req.headers[PROBE_ADMIT_HEADER] === "1";
         (req as Request & { aauth?: unknown }).aauth = {
           verified: true,
@@ -80,8 +85,10 @@ vi.mock("../../src/services/aauth_admission.js", async (importOriginal) => {
 });
 
 import { app } from "../../src/actions.js";
+import { runCli } from "../../src/cli/index.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
+import { createApiClient } from "../../src/shared/api_client.js";
 import { AgentCapabilityError } from "../../src/services/agent_capabilities.js";
 import type { AgentCapabilityEntry } from "../../src/services/agent_capabilities.js";
 import type { AgentIdentity } from "../../src/crypto/agent_identity.js";
@@ -271,6 +278,37 @@ async function capture(fn: () => Promise<unknown>): Promise<unknown> {
     return error;
   }
   return undefined;
+}
+
+async function runRelationshipCli(baseUrl: string, args: string[]): Promise<unknown> {
+  const previousBearer = process.env.NEOTOMA_BEARER_TOKEN;
+  const previousExitCode = process.exitCode;
+  const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  process.env.NEOTOMA_BEARER_TOKEN = ADMIT_BEARER;
+  process.exitCode = undefined;
+  try {
+    return await capture(() =>
+      runCli([
+        "node",
+        "neotoma",
+        "--json",
+        "--api-only",
+        "--base-url",
+        baseUrl,
+        "--no-log-file",
+        "relationships",
+        "create",
+        ...args,
+      ])
+    );
+  } finally {
+    stdout.mockRestore();
+    stderr.mockRestore();
+    process.exitCode = previousExitCode;
+    if (previousBearer === undefined) delete process.env.NEOTOMA_BEARER_TOKEN;
+    else process.env.NEOTOMA_BEARER_TOKEN = previousBearer;
+  }
 }
 
 describe("relationship-write capability: every entrance, every surface", () => {
@@ -497,11 +535,16 @@ describe("relationship-write capability: every entrance, every surface", () => {
       const body = JSON.parse(result.content[0].text) as {
         created_count: number;
         error_count: number;
-        errors: Array<{ error: string }>;
+        errors: Array<{ error: string; code?: string; op?: string; hint?: string }>;
       };
       expect(body.created_count).toBe(0);
       expect(body.error_count).toBe(1);
       expect(body.errors[0].error).toMatch(/create_relationship/);
+      expect(body.errors[0]).toMatchObject({
+        code: "capability_denied",
+        op: "create_relationship",
+        hint: expect.stringContaining("LEASE"),
+      });
       expect(await edgeExists(OUT_OF_SCOPE, checkpointId, taskId)).toBe(false);
     });
 
@@ -777,7 +820,67 @@ describe("relationship-write capability: every entrance, every surface", () => {
       });
       expect(res.body.created_count).toBe(0);
       expect(res.body.error_count).toBe(1);
+      expect((res.body.errors as Array<Record<string, unknown>>)[0]).toMatchObject({
+        index: 0,
+        code: "capability_denied",
+        op: "create_relationship",
+        hint: expect.stringContaining("LEASE"),
+      });
       expect(await edgeExists(OUT_OF_SCOPE, checkpointId, taskId)).toBe(false);
+    });
+
+    it("generated SDK refuses an out-of-scope edge and admits the exact in-scope edge", async () => {
+      const sdk = createApiClient({
+        baseUrl,
+        token: ADMIT_BEARER,
+        forceHttpTransport: true,
+        signWithCliAAuth: false,
+      });
+      const denied = await sdk.POST("/create_relationship", {
+        body: {
+          relationship_type: OUT_OF_SCOPE,
+          source_entity_id: checkpointId,
+          target_entity_id: taskId,
+        },
+      });
+      expect(denied.response.status).toBe(403);
+      expect(await edgeExists(OUT_OF_SCOPE, checkpointId, taskId)).toBe(false);
+
+      const allowedTask = await seedEntity("task");
+      const allowed = await sdk.POST("/create_relationship", {
+        body: {
+          relationship_type: IN_SCOPE,
+          source_entity_id: checkpointId,
+          target_entity_id: allowedTask,
+        },
+      });
+      expect(allowed.response.status).toBe(200);
+      expect(await edgeExists(IN_SCOPE, checkpointId, allowedTask)).toBe(true);
+    });
+
+    it("CLI refuses an out-of-scope edge and admits the exact in-scope edge", async () => {
+      const denied = await runRelationshipCli(baseUrl, [
+        "--source-entity-id",
+        checkpointId,
+        "--target-entity-id",
+        taskId,
+        "--relationship-type",
+        OUT_OF_SCOPE,
+      ]);
+      expect(denied).toBeInstanceOf(Error);
+      expect(await edgeExists(OUT_OF_SCOPE, checkpointId, taskId)).toBe(false);
+
+      const allowedTask = await seedEntity("task");
+      const allowed = await runRelationshipCli(baseUrl, [
+        "--source-entity-id",
+        checkpointId,
+        "--target-entity-id",
+        allowedTask,
+        "--relationship-type",
+        IN_SCOPE,
+      ]);
+      expect(allowed).toBeUndefined();
+      expect(await edgeExists(IN_SCOPE, checkpointId, allowedTask)).toBe(true);
     });
 
     it("POST /create_relationship and /create_relationships admit the in-scope REFERS_TO edge", async () => {
