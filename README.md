@@ -159,8 +159,10 @@ Skills are guided workflows that teach an agent to import, extract, and persist 
 | **remember-contacts** | Consolidate contacts from email, calendar, chat, vCards. |
 | **remember-calendar** | Import events and commitments. |
 | **remember-codebase** | Repository integration: inventory, decisions, MCP wiring. |
-| **store-data** / **query-memory** | Generic persist and retrieve workflows. |
 | **recover-sqlite-database** | Check integrity and recover a corrupted database. |
+
+Ordinary storage and retrieval need no skill: the live MCP tool instructions delivered at
+session start cover store/query/recall directly.
 
 ## Record types
 

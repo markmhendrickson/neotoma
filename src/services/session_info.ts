@@ -106,7 +106,7 @@ export interface SessionAttributionDecision {
    * `operator_attested`. Mirrors
    * {@link AttributionDecisionDiagnostics.operator_allowlist_source}.
    */
-  operator_allowlist_source?: "issuer" | "issuer_subject";
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
 }
 
 /**

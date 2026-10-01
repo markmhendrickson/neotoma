@@ -147,7 +147,7 @@ context and never re-derive it.
 | Tier                | When                                                                                                                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `hardware`          | AAuth verified AND the JWT carries a `cnf.attestation` the verifier accepts AND (v0.12.0+) the bound key is not revoked.                   |
-| `operator_attested` | AAuth verified AND `iss` (or `iss:sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`.                     |
+| `operator_attested` | AAuth verified AND the signing key is listed in `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`, or is pinned by an active grant whose `match_iss` (or `match_iss:match_sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`. |
 | `software`          | AAuth verified, but no attestation envelope (or attestation failed and operator allowlist did not match), regardless of signing algorithm. |
 | `unverified_client` | No AAuth, but `clientInfo.name` (or `X-Client-Name`) survived normalisation.                                                              |
 | `anonymous`         | Nothing distinctive — generic or absent `clientInfo`, no AAuth, no fallback header.                                                        |

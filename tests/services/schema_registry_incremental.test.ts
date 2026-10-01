@@ -86,16 +86,21 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     return mock;
   };
 
-  // Helper to mock activate() calls (3 database calls: select, update deactivate, update activate)
-  //
-  // #2356: activate() no longer calls .single() on (entity_type, schema_version).
-  // A global row and a user-scoped row can share a version string, and .single()
-  // throws on that pair. It now awaits the query for ALL candidate rows and picks
-  // by scope precedence, so this mock resolves to an array rather than one object.
-  const mockActivateCalls = () => {
+  // Helper to mock activate() calls (3 database calls: select, update
+  // deactivate, update activate). #2356/#2389: activate() awaits ALL candidate
+  // rows for (entity_type, schema_version) as an array — not .single() — picks
+  // one by fail-closed scope precedence, then targets the deactivate/activate
+  // updates by that row's id.
+  const mockActivateCalls = (
+    row: { id?: string; scope?: string; user_id?: string | null } = {}
+  ) => {
+    const resolvedRow = {
+      id: row.id ?? "activated-row-id",
+      scope: row.scope ?? "global",
+      user_id: row.user_id ?? null,
+    };
     const mockSelect = createChainableQuery({
-      then: (resolve: any) =>
-        Promise.resolve({ data: [{ scope: "global", user_id: null }], error: null }).then(resolve),
+      then: (resolve: any) => Promise.resolve({ data: [resolvedRow], error: null }).then(resolve),
     });
 
     // For deactivate: create chainable query where update() returns the query itself
@@ -103,6 +108,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       update: vi.fn(),
       eq: vi.fn(),
       is: vi.fn(),
+      not: vi.fn(),
       then: vi.fn((resolve: any) => Promise.resolve({}).then(resolve)),
       catch: vi.fn(),
     };
@@ -110,8 +116,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateDeactivate.update.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.eq.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.is.mockReturnValue(mockUpdateDeactivate);
+    mockUpdateDeactivate.not.mockReturnValue(mockUpdateDeactivate);
 
-    // For activate: similar setup
+    // For activate: similar setup — now targets by id only (single .eq call).
     const mockUpdateActivate: any = {
       update: vi.fn(),
       eq: vi.fn(),
@@ -125,7 +132,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.is.mockReturnValue(mockUpdateActivate);
 
-    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate };
+    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate, resolvedRow };
   };
 
   beforeEach(() => {

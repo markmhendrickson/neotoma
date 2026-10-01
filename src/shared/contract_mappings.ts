@@ -84,6 +84,17 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
       "clients into the #2049 dead end.",
   },
   {
+    operationId: "mcpStreamableHttpPost",
+    method: "post",
+    path: "/mcp",
+    adapter: "infra",
+    notes:
+      "The MCP Streamable HTTP transport itself, dual-era (#2070). Carries the " +
+      "`server/discover` JSON-RPC method (2026-07-28) on the stateless path; legacy " +
+      "`initialize` + `Mcp-Session-Id` clients use the session path on the same route. " +
+      "HTTP-only by design: stdio never carried sessions and needs no discover probe here.",
+  },
+  {
     operationId: "mcpOAuthInitiate",
     method: "post",
     path: "/mcp/oauth/initiate",
@@ -885,8 +896,9 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "eventsStream",
     method: "get",
     path: "/events/stream",
-    adapter: "infra",
-    notes: "SSE stream for subscription_id; long-lived HTTP clients only.",
+    adapter: "cli",
+    cliCommand: "request --operation eventsStream",
+    notes: "Raw SSE stream for subscription_id; the CLI preserves frames until closure.",
   },
 ];
 

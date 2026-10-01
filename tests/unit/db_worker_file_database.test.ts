@@ -18,7 +18,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { Worker } from "node:worker_threads";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   WorkerFileDatabase,
   WorkerDbCrashError,
@@ -381,4 +382,67 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await db.close();
     }
   }, 120_000);
+
+  it(
+    "close() does not reject when a worker's terminate() rejects (#2483)",
+    async () => {
+      // `abandon()`'s two call sites already guard `worker.terminate()` with
+      // `.catch(() => {})` (#2324's own fix); `WorkerConnection.terminate()` —
+      // reachable only from `close()` — did not, so an unhandled rejection
+      // there could crash a clean shutdown exactly like the abort path can
+      // crash a live request. Forcing the real neon panic that made
+      // `terminate()` reject in production is what
+      // `db_abort_client_disconnect_survival.test.ts` does at a whole
+      // child-process level; this test instead proves the GUARD ITSELF is in
+      // place by making `Worker.prototype.terminate` reject directly, which
+      // is deterministic and does not depend on winning that race.
+      //
+      // A dedicated instance (not `makeDb`) with a near-zero `orphanGraceMs`:
+      // `close()`'s `awaitWorkerIdle` otherwise waits for the drain reply,
+      // which cannot arrive until the genuinely-slow in-flight statement below
+      // finishes, and defaults to a 30s grace window before falling through —
+      // this test is about the terminate() guard, not about #2324's orphan
+      // drain timing, which is covered elsewhere.
+      counter += 1;
+      const db = new WorkerFileDatabase(path.join(workDir, `w-${counter}.db`), {
+        readerWorkers: 1,
+        statementTimeoutMs: 0,
+        orphanGraceMs: 20,
+      });
+      try {
+        await seedSlowTable(db, 1500);
+        // Get a real reader worker spawned and mid-statement, so `close()`
+        // takes the "wasBusy" branch in `terminate()` — the one that awaits
+        // `awaitWorkerIdle` and then calls `worker.terminate()` — rather than
+        // the trivial "nothing to terminate" early return.
+        const inFlight = db.prepare(SLOW_SQL).get();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        const terminateSpy = vi
+          .spyOn(Worker.prototype, "terminate")
+          .mockRejectedValueOnce(new Error("simulated native panic during terminate (#2483)"));
+        try {
+          await expect(db.close()).resolves.toBeUndefined();
+        } finally {
+          terminateSpy.mockRestore();
+        }
+
+        // Deliberately NOT awaited. The mock intercepted `terminate()` without
+        // actually killing the real worker thread, so the genuinely-slow
+        // cross-join underneath `inFlight` keeps running for its full natural
+        // duration (seconds) regardless of anything this test does — the same
+        // shape as the abandoned reads `guardAbandonedRead` exists for.
+        // Awaiting it here would make this test about that unrelated timing
+        // rather than about `close()`, so it gets the identical no-op guard
+        // instead: never left unhandled, never blocked on.
+        void inFlight.catch(() => {});
+      } finally {
+        // db is already closed; a second close() must still be harmless. The
+        // real (unmocked) terminate() runs here, so this is what actually
+        // reclaims the still-running worker from the mocked call above.
+        await db.close();
+      }
+    },
+    30_000
+  );
 });

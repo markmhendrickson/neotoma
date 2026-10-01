@@ -182,10 +182,11 @@ After install and setup, skills provide guided activation workflows. Each skill 
 | `remember-contacts` | Consolidate contacts from multiple sources. |
 | `remember-calendar` | Import calendar events and commitments. |
 | `remember-codebase` | Developer repo integration and MCP wiring. |
-| `store-data` | Generic: persist any structured data. |
-| `query-memory` | Generic: retrieve from memory. |
 
 Skills ship with the npm package and are installed by `neotoma setup`. [Full catalog →](https://neotoma.io/skills)
+
+Ordinary storage and retrieval need no skill: the live MCP tool instructions delivered at
+session start cover store/query/recall directly.
 
 ### Phase 3: Activation
 

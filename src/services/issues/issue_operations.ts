@@ -40,6 +40,7 @@ import {
   structuredEntities,
   structuredEntityIdAt,
 } from "../submitted_thread/submitted_thread.js";
+import { repoSlugsEqual } from "../../shared/repo_slug.js";
 import { decodeOverEscapedBody } from "./body_newline_decode.js";
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
@@ -61,6 +62,7 @@ import {
   localIssueId,
 } from "./github_thread_keys.js";
 import * as neotomaClient from "./neotoma_client.js";
+import { resolveIssueRepo } from "./repo_allowlist.js";
 import { syncIssueIfStale } from "./sync_issues_from_github.js";
 import type {
   GitHubComment,
@@ -118,6 +120,10 @@ type ResolvedIssueRow = {
   snapshot: Record<string, unknown>;
   githubNumber: number;
   localIssueId: string | null;
+  /** Repository this row belongs to: its stored repo when valid, else the configured repo. */
+  repo: string;
+  /** Whether GitHub calls against `repo` are permitted (configured repo or allowlisted). */
+  githubAllowed: boolean;
 };
 
 function snapshotFromEntityRow(row: {
@@ -159,10 +165,15 @@ async function resolveIssueEntityIdByGithubNumber(
 /**
  * Resolve an `issue` row from Neotoma (`entity_id` preferred) or legacy GitHub issue number
  * in the configured repo.
+ *
+ * Also resolves, once per row, the repo every later GitHub call and identity key for that
+ * row must use (`repo`) and whether GitHub calls against it are permitted
+ * (`githubAllowed`). See {@link resolveIssueRepo}.
  */
 export async function resolveIssueRow(
   ops: Operations,
-  params: { entity_id?: string; issue_number?: number }
+  params: { entity_id?: string; issue_number?: number },
+  loadedConfig?: Awaited<ReturnType<typeof loadIssuesConfig>>
 ): Promise<ResolvedIssueRow> {
   const trimmedEid = typeof params.entity_id === "string" ? params.entity_id.trim() : "";
   const hasEid = trimmedEid.length > 0;
@@ -182,8 +193,9 @@ export async function resolveIssueRow(
         })) as { entity_id?: string } | null
       )?.entity_id ?? "");
 
+  const config = loadedConfig ?? (await loadIssuesConfig());
+
   if (!issue_entity_id && hasNum) {
-    const config = await loadIssuesConfig();
     issue_entity_id = await resolveIssueEntityIdByGithubNumber(ops, num, config.repo);
   }
 
@@ -219,7 +231,8 @@ export async function resolveIssueRow(
     );
   }
 
-  return { issue_entity_id, snapshot, githubNumber, localIssueId };
+  const { repo, githubAllowed } = resolveIssueRepo(snapshot, config);
+  return { issue_entity_id, snapshot, githubNumber, localIssueId, repo, githubAllowed };
 }
 
 function remoteIssueEntityIdForTarget(
@@ -673,6 +686,7 @@ export async function submitGuestIssue(
             attributionDecision: currentContext?.attributionDecision ?? null,
             aauthAdmission: currentContext?.aauthAdmission ?? null,
             externalActor: currentContext?.externalActor ?? null,
+            authenticatedPrincipal: currentContext?.authenticatedPrincipal ?? null,
             bypassGuestStoreAccessPolicy: true,
           },
           () => ops.store(input)
@@ -1110,8 +1124,15 @@ export async function addIssueMessage(
   params = { ...params, body: decodeOverEscapedBody(params.body) };
 
   const config = await loadIssuesConfig();
-  const resolved = await resolveIssueRow(ops, params);
-  const { issue_entity_id: issueEntityId, snapshot, githubNumber, localIssueId } = resolved;
+  const resolved = await resolveIssueRow(ops, params, config);
+  const {
+    issue_entity_id: issueEntityId,
+    snapshot,
+    githubNumber,
+    localIssueId,
+    repo: issueRepo,
+    githubAllowed,
+  } = resolved;
 
   const visibilitySnapshot =
     typeof snapshot.visibility === "string" ? snapshot.visibility.trim() : "";
@@ -1138,9 +1159,9 @@ export async function addIssueMessage(
 
   const threadConversationId =
     githubNumber > 0
-      ? githubIssueThreadConversationId(config.repo, githubNumber)
+      ? githubIssueThreadConversationId(issueRepo, githubNumber)
       : localIssueId
-        ? localIssueThreadConversationId(config.repo, localIssueId)
+        ? localIssueThreadConversationId(issueRepo, localIssueId)
         : undefined;
 
   if (!threadConversationId) {
@@ -1163,8 +1184,28 @@ export async function addIssueMessage(
         ? snapshot.guest_access_token.trim()
         : undefined;
 
-  // Push to remote Neotoma instance (canonical)
-  if (issuesTargetUrl) {
+  // Push to remote Neotoma instance (canonical). Two kinds of row are forwarded:
+  //  (a) a row with an explicit identity on the target: `remote_entity_id` plus either the
+  //      guest token (the post goes by entity id) or a stored `remote_conversation_id` (an
+  //      explicit thread). These were filed to the target instance (for example through
+  //      `submit_issue` with `target_repo`), so their follow-ups belong on that same record
+  //      whatever repo the row names. This leg uses no GitHub credential, so the allowlist
+  //      does not apply to it.
+  //  (b) a permitted row that belongs to the configured repo. Without an explicit identity the
+  //      client computes the thread key from the configured repo, so a row from any other repo
+  //      (permitted or not) would be filed under the configured repo's same-numbered issue.
+  // A row mirrored by sync carries no `remote_entity_id`, so it never counts as (a).
+  const hasRemoteIdentity =
+    typeof snapshot.remote_entity_id === "string" &&
+    snapshot.remote_entity_id.trim().length > 0 &&
+    (Boolean(guestForRemote) ||
+      (typeof snapshot.remote_conversation_id === "string" &&
+        snapshot.remote_conversation_id.trim().length > 0));
+  const forwardToTarget = Boolean(
+    issuesTargetUrl &&
+    (hasRemoteIdentity || (githubAllowed && repoSlugsEqual(issueRepo, config.repo)))
+  );
+  if (forwardToTarget) {
     remoteSubmissionAttempted = true;
     try {
       const remoteResult = await neotomaClient.addMessageToRemote({
@@ -1187,10 +1228,14 @@ export async function addIssueMessage(
     }
   }
 
-  // Optionally push to GitHub (for public issues with a valid issue number)
-  if (githubNumber > 0) {
+  // Optionally push to GitHub (for public issues with a valid issue number). The comment
+  // goes to the repo the issue itself belongs to, never to the configured repo by default,
+  // and only when that repo is permitted (configured repo or allowlisted).
+  if (githubNumber > 0 && githubAllowed) {
     try {
-      githubComment = await github.addIssueComment(githubNumber, params.body);
+      githubComment = await github.addIssueComment(githubNumber, params.body, {
+        repo: issueRepo,
+      });
       pushedToGithub = true;
     } catch {
       // GitHub push failed — local-only
@@ -1239,14 +1284,14 @@ export async function addIssueMessage(
   const now = new Date().toISOString();
   const author = githubComment?.user?.login ?? "local";
   const commentActor = buildExternalActorFromGithubComment(githubComment, null, {
-    repository: config.repo,
+    repository: issueRepo,
   });
   const commentKey = githubComment ? String(githubComment.id) : `local-${Date.now()}`;
   const turnKey =
     githubNumber > 0
-      ? githubIssueCommentTurnKey(config.repo, githubNumber, commentKey)
+      ? githubIssueCommentTurnKey(issueRepo, githubNumber, commentKey)
       : localIssueId
-        ? localIssueCommentTurnKey(config.repo, localIssueId, commentKey)
+        ? localIssueCommentTurnKey(issueRepo, localIssueId, commentKey)
         : `local-fallback:${issueEntityId}:${commentKey}`;
 
   const entities: StoreInput["entities"] = [
@@ -1383,14 +1428,16 @@ export async function getIssueStatus(
 ): Promise<GetIssueStatusResult> {
   const config = await loadIssuesConfig();
 
-  const resolved = await resolveIssueRow(ops, params);
+  const resolved = await resolveIssueRow(ops, params, config);
   let snapshot = resolved.snapshot as Record<string, unknown>;
 
   const lastSyncedAt = (snapshot.last_synced_at as string) ?? null;
 
   let synced = false;
-  if (!params.skip_sync && resolved.githubNumber > 0) {
-    synced = await syncIssueIfStale(ops, resolved.githubNumber, lastSyncedAt);
+  // Refresh from the repo the row belongs to; a row whose repo is not permitted is never
+  // refreshed from GitHub.
+  if (!params.skip_sync && resolved.githubNumber > 0 && resolved.githubAllowed) {
+    synced = await syncIssueIfStale(ops, resolved.githubNumber, lastSyncedAt, resolved.repo);
   }
 
   if (synced) {
@@ -1401,21 +1448,24 @@ export async function getIssueStatus(
     snapshot = (raw?.snapshot ?? snapshot) as Record<string, unknown>;
   }
 
+  // URL fallbacks below must point at the repo the row belongs to, not the configured repo.
+  const statusConfig = { ...config, repo: resolved.repo };
+
   const remoteFirst = await fetchOperatorIssueMirrorIfApplicable(
-    config,
+    statusConfig,
     resolved.issue_entity_id,
     snapshot,
     synced,
     params.guest_access_token
   );
   if (remoteFirst) {
-    const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, config);
+    const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, statusConfig);
     return {
       ...remoteFirst,
       messages: mergeIssueStatusMessages(remoteFirst.messages, local.messages),
     };
   }
 
-  const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, config);
+  const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, statusConfig);
   return { ...local, synced };
 }

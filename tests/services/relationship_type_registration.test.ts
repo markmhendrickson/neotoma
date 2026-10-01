@@ -34,7 +34,7 @@ import {
 import { softDeleteRelationship, restoreRelationship } from "../../src/services/deletion.js";
 import { generateEntityId } from "../../src/services/entity_resolution.js";
 
-/** Distinct synthetic entity ids. Relationships do not FK to entity rows. */
+/** Distinct synthetic entity ids. */
 let idCounter = 0;
 const eid = (): string => generateEntityId("g25_test_node", `g25-${process.pid}-${idCounter++}`);
 
@@ -65,7 +65,23 @@ const TEST_USER = "00000000-0000-0000-0000-0000000a2501";
 
 const service = new RelationshipsService();
 
+/**
+ * A synthetic entity id backed by an entity row owned by TEST_USER.
+ * Relationship endpoints must be entities the caller owns.
+ */
+async function ownedEid(): Promise<string> {
+  const id = eid();
+  await db.from("entities").insert({
+    id,
+    user_id: TEST_USER,
+    entity_type: "g25_test_node",
+    canonical_name: id,
+  });
+  return id;
+}
+
 async function cleanup(): Promise<void> {
+  await db.from("entities").delete().eq("entity_type", "g25_test_node").eq("user_id", TEST_USER);
   for (const type of STAGE_ONE_TYPES) {
     await db.from(RELATIONSHIP_TYPE_REGISTRY_TABLE).delete().eq("relationship_type", type);
     await db.from("relationship_snapshots").delete().eq("relationship_type", type);
@@ -106,8 +122,8 @@ describe("G25: relationship-type registration (#1972)", () => {
       ).toBe(true);
 
       // 3. The write now validates through the single enforcement point.
-      const source = eid();
-      const target = eid();
+      const source = await ownedEid();
+      const target = await ownedEid();
       const created = await service.createRelationship({
         relationship_type: relationshipType,
         source_entity_id: source,
@@ -146,8 +162,8 @@ describe("G25: relationship-type registration (#1972)", () => {
     for (const { relationship_type: relationshipType } of BUILT_IN_RELATIONSHIP_TYPES) {
       const created = await service.createRelationship({
         relationship_type: relationshipType,
-        source_entity_id: eid(),
-        target_entity_id: eid(),
+        source_entity_id: await ownedEid(),
+        target_entity_id: await ownedEid(),
         user_id: TEST_USER,
       });
       expect(created.relationship_type).toBe(relationshipType);
@@ -198,8 +214,8 @@ describe("G25: relationship-type registration (#1972)", () => {
       (
         await service.createRelationship({
           relationship_type: "knows",
-          source_entity_id: eid(),
-          target_entity_id: eid(),
+          source_entity_id: await ownedEid(),
+          target_entity_id: await ownedEid(),
           user_id: TEST_USER,
         })
       ).relationship_type
@@ -222,8 +238,8 @@ describe("G25: relationship-type registration (#1972)", () => {
               sourcePriority: 100,
             });
       for (const type of STAGE_ONE_TYPES) {
-        const source = eid(),
-          target = eid();
+        const source = await ownedEid(),
+          target = await ownedEid();
         await store(
           [{ entity_type: "task", title: `g25-${surface}-${type}` }],
           [{ relationship_type: type, source_entity_id: source, target_entity_id: target }],
@@ -326,8 +342,8 @@ describe("G25: relationship-type registration (#1972)", () => {
     // never produces an ambiguous or doubly-charged validation outcome.
     const created = await service.createRelationship({
       relationship_type: type,
-      source_entity_id: eid(),
-      target_entity_id: eid(),
+      source_entity_id: await ownedEid(),
+      target_entity_id: await ownedEid(),
       user_id: TEST_USER,
     });
     expect(created.relationship_type).toBe(type);

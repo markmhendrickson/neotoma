@@ -19,6 +19,17 @@ vi.mock("@hellocoop/httpsig", () => ({
   expressVerify: vi.fn(),
 }));
 
+// Grant lookup stub: thumbprint -> grant pinning that key.
+const pinnedGrants = vi.hoisted(() => new Map<string, Record<string, unknown>>());
+vi.mock("../../src/services/agent_grants.js", () => ({
+  lookupGrantForIdentity: vi.fn(async (input: { thumbprint?: string | null }) => ({
+    grant: (input.thumbprint && pinnedGrants.get(input.thumbprint)) || null,
+    unbound_claim_match: false,
+    inactive_grant: null,
+    pin_conflict: false,
+  })),
+}));
+
 import { expressVerify } from "@hellocoop/httpsig";
 import { aauthVerify, getAAuthContextFromRequest } from "../../src/middleware/aauth_verify.js";
 
@@ -39,6 +50,7 @@ function buildReq(overrides: Record<string, unknown> = {}): any {
 describe("aauthVerify middleware", () => {
   beforeEach(() => {
     verifyMock.mockReset();
+    pinnedGrants.clear();
   });
 
   it("short-circuits when no AAuth headers are present", async () => {
@@ -203,7 +215,7 @@ describe("aauthVerify middleware", () => {
       );
     });
 
-    it("rejects pinned-label requests signed by the wrong sub", async () => {
+    it("rejects pinned-label requests signed by a key no grant pins", async () => {
       const headerB64 = Buffer.from(
         JSON.stringify({ alg: "ES256", typ: "aa-agent+jwt" }),
       ).toString("base64url");
@@ -248,7 +260,16 @@ describe("aauthVerify middleware", () => {
       );
     });
 
-    it("accepts pinned-label requests when the signed sub matches", async () => {
+    it("accepts pinned-label requests signed by a key whose grant records the sub", async () => {
+      pinnedGrants.set("tp-match", {
+        grant_id: "ent_grant_site",
+        user_id: "user-owner",
+        label: "site forwarder",
+        capabilities: [],
+        status: "active",
+        match_thumbprint: "tp-match",
+        match_sub: "agent-site@neotoma.io",
+      });
       const headerB64 = Buffer.from(
         JSON.stringify({ alg: "ES256", typ: "aa-agent+jwt" }),
       ).toString("base64url");

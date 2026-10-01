@@ -117,6 +117,13 @@ export interface RelationshipTypeSeedSummary {
  * Register every built-in relationship type that has no effective global
  * registration. Idempotent: a second run reports every type as `preserved` and
  * issues no writes.
+ *
+ * `ensureBuiltInRelationshipTypesSeeded` is the same function under the name
+ * used by its two callers (#2482): the boot seeder in `src/actions.ts`, and
+ * the one-shot lazy repair in `registry.ts`'s `resolveAllWithRepair`, which
+ * runs this when a caller resolves an empty GLOBAL registry — the deployed-
+ * instance failure mode #1972/#2357's boot-only, best-effort seed could not
+ * recover from on its own.
  */
 export async function seedBuiltInRelationshipTypes(): Promise<RelationshipTypeSeedSummary> {
   const summary: RelationshipTypeSeedSummary = { registered: [], preserved: [], failed: [] };
@@ -172,3 +179,10 @@ export async function seedBuiltInRelationshipTypes(): Promise<RelationshipTypeSe
 
   return summary;
 }
+
+/**
+ * Named alias for `seedBuiltInRelationshipTypes` (#2482). See the doc on that
+ * function — this is the name the repair call sites use; both names are the
+ * same idempotent, strictly-additive operation.
+ */
+export const ensureBuiltInRelationshipTypesSeeded = seedBuiltInRelationshipTypes;

@@ -114,6 +114,16 @@ Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new fiel
 | Code | Meaning | HTTP | Retry? |
 |------|---------|------|--------|
 | `RESOURCE_NOT_FOUND` | Resource not found | 404 | No |
+### MCP Transport Errors (`POST /mcp`)
+These ride in a JSON-RPC error's `error.data` (`{ error_code, message, hint, details? }`), not the standard envelope, because `/mcp` answers in JSON-RPC. The JSON-RPC `error.code` is listed alongside. None of them repeats a header value or a credential.
+| Code | Meaning | HTTP | Retry? |
+|------|---------|------|--------|
+| `MCP_HEADER_VALUE_REJECTED` | `Mcp-Method` or `Mcp-Name` carried a value shaped like a credential or personal data, or not shaped like a JSON-RPC method, tool/prompt name or served resource URI (`neotoma://`, `ui://`). JSON-RPC `-32020`. Applies to both protocol eras. `details` carries `header` and `reason` (`credential_shaped`, `personal_data_shaped`, `malformed`); `hint` says to send only the method and name, or omit the header. | 400 | No |
+| `MCP_HEADER_MISMATCH` | 2026-07-28 request: `MCP-Protocol-Version`, `Mcp-Method` or `Mcp-Name` is missing or does not equal the `_meta` version, JSON-RPC method or target name. JSON-RPC `-32020`. `hint` names the headers to mirror. | 400 | No |
+| `MCP_REQUEST_META_INVALID` | 2026-07-28 request: `params._meta` lacks the protocol version or client capabilities. JSON-RPC `-32602`. `hint`: send them on every request, or send `initialize` to use 2025-11-25. | 400 | No |
+| `MCP_UNSUPPORTED_PROTOCOL_VERSION` | 2026-07-28 request names a protocol version this server does not serve statelessly. JSON-RPC `-32022`. `data` also carries `supported` and, for a plain revision date, `requested`. | 400 | No |
+| `MCP_AUTH_CONNECTION_INVALID` | 2026-07-28 request: the connection id is unknown, expired or revoked. Returned before any method runs, with `WWW-Authenticate: Bearer ... error="invalid_token"`. JSON-RPC `-32001`. `hint`: remove `X-Connection-Id` and connect again. | 401 | No |
+| `MCP_AUTH_UNRESOLVED` | 2026-07-28 request: the credential passed the `/mcp` gate but could not be resolved to a user (for example an OAuth lookup failure). JSON-RPC `-32001`. | 401 | Yes |
 ## Error Propagation
 Errors propagate **up** the layer stack:
 ```

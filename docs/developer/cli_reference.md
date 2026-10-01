@@ -41,6 +41,8 @@ The global `neotoma` runs the built files in `dist/`, not the TypeScript source.
 
 Run `npm run setup:launchd-issues-sync` once to install `com.neotoma.issues-sync`: it runs `neotoma issues sync` every 5 minutes (and once at login). Logs: `data/logs/launchd-issues-sync.log`. Optional env for launchd (not in your shell profile): copy `scripts/launchd-issues-sync.env.example` to `data/local/launchd-issues-sync.env`. Unload with `launchctl unload ~/Library/LaunchAgents/com.neotoma.issues-sync.plist`.
 
+One-off runs: `neotoma issues sync --repo <owner/name>` mirrors a different GitHub repo for that call only (server config is unchanged) and does **not** push local issues to it unless you add `--push`; `--dry-run` reports what would be created, updated and pushed and writes nothing; `--no-push` forces pull-only. The push leg stays on by default for the configured repo. A `--repo` other than the configured repo must be listed in `NEOTOMA_ISSUES_ALLOWED_REPOS` (comma-separated `owner/name`, or `issues.allowed_repos` in the config file) in the server's environment; otherwise the call is rejected. Allowlisting a repo enables more than reading it: the server's GitHub token is also used to comment on and close issues there. The GitHub token is the `NEOTOMA_ISSUES_GITHUB_TOKEN` setting in the environment of the process running the Neotoma server (or `gh auth login` as that user).
+
 ### Environment: `neotoma dev` / `neotoma prod`
 
 To target a specific API environment, pass `dev` or `prod` as the first argument or use `--env`.
@@ -257,7 +259,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 
 ### Instance Policy
 
-Inspect and configure this instance's data policy (#1974/#1975) — what the instance is *for*, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
+Inspect and configure this instance's data policy (#1974/#1975) — what the instance is _for_, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
 
 - `neotoma instance-policy show`: Show the instance data policy, or report that none is configured (`{"policy": null}` — unrestricted, not deny-all).
 - `neotoma instance-policy set --file <path> [--enforce | --advisory] [--dry-run]`: Create or update the instance policy from a JSON file (fields: `purpose`, `out_of_scope_entity_types`, `require_lawful_basis`, `require_provenance`, `max_sensitivity_class`). `--enforce` sets `enforcement: "enforced"` (reject violating writes); `--advisory` sets `enforcement: "advisory"` (declare only, do not reject — the default when unset on a new policy). `--enforce` and `--advisory` are mutually exclusive. `--dry-run` prints what would be written without persisting it.
@@ -667,9 +669,26 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--limit <n>`
   - `--offset <n>`
 
+### Relationship Types
+
+The relationship-type vocabulary is a runtime registry, not a fixed enum. Discover what an instance accepts before using an unfamiliar edge type, and register new types through this command family rather than assuming a type exists.
+
+- `neotoma relationship-types list`:
+  - `--keyword <text>`: filter names and descriptions.
+  - `--scope <scope>`: filter to `user` or `global` scope.
+  - `--include-edge-count`: include counts of written edge rows per type.
+  - An empty result does not mean no vocabulary exists — the response's `empty_reason` distinguishes `registry_unseeded` (the built-in types failed to seed for this process and self-repair on the next read; retry) from `filtered_to_empty` (your `--keyword` matched nothing; retry without it).
+- `neotoma relationship-types register --relationship-type <type>`:
+  - `--description <text>`: meaning of the edge.
+  - `--scope <scope>`: `user` (default) or `global` — `global` requires an explicit global permission in the caller's registration grant; an absent grant is refused.
+  - `--acyclic`: refuse writes that would create a cycle among edges of this type, scoped to the registering tenant and depth-bounded (see [`docs/subsystems/relationships.md`](../subsystems/relationships.md) § 8 Cycle Detection).
+  - `--inverse <type>`: advisory inverse type name (not enforced).
+  - `--symmetric`: advisory symmetry flag (not enforced).
+  - `--source-entity-types <types>` / `--target-entity-types <types>`: comma-separated advisory entity-type hints for each endpoint (not enforced).
+
 ### Relationships
 
-- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship.
+- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship. Both `--source-entity-id` and `--target-entity-id` must be entities you own; an endpoint that does not exist and one owned by another user are refused identically.
   - `--metadata <json>`: attach relationship metadata.
   - `--file <path>`: create a batch from a JSON array, or an object with `relationships: [...]`. Each entry uses `relationship_type`, `source_entity_id`, `target_entity_id`, and optional `metadata`.
 - `neotoma relationships list <entityId>`:
@@ -1113,7 +1132,10 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
   - `--body <json>`: JSON body override.
   - `--query <json>`: JSON query override.
   - `--path <json>`: JSON path override.
+  - `--guest-access-token <token>`: Use an entity-scoped guest bearer token instead of the configured owner token. It cannot be combined with `--skip-auth` or `--aauth`.
   - `--skip-auth`: Skip auth token for public endpoints.
+  - `--aauth`: Sign the request with the configured AAuth key instead of a bearer token.
+  - `eventsStream` writes raw SSE frames to stdout until the server closes the stream. Example: `neotoma request --operation eventsStream --guest-access-token <token> --query '{"subscription_id":"<id>"}'`.
 
 ## Configuration and storage paths
 

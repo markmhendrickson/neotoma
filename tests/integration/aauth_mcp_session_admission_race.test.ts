@@ -46,6 +46,14 @@
  * the within-session race: two concurrent HTTP POSTs to the SAME session. We
  * simulate this by driving two initialize handshakes through the SAME server
  * instance with interleaved promises.
+ *
+ * neotoma#2070 (dual-era transport): 2026-07-28 stateless requests have no
+ * session, so the isolation boundary moves from the session map to the
+ * request. The last describe block runs many stateless requests from two grant
+ * owners concurrently on one process, with deliberate yields so they
+ * interleave, and asserts each resolves its own owner, while legacy sessions
+ * opened alongside them keep authenticating independently (old-client
+ * regression).
  */
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
@@ -248,5 +256,96 @@ describe("MCP session admission — concurrent sessions authenticate independent
     // Critical: A must be authenticated as USER_A, not USER_B.
     expect(authenticatedUserIdOf(serverA)).toBe(USER_A);
     expect(authenticatedUserIdOf(serverB)).toBe(USER_B);
+  });
+});
+
+/**
+ * #2070: 2026-07-28 stateless requests from different grant owners, in flight
+ * together on one process. Each request gets a fresh NeotomaServer (as the
+ * `/mcp` stateless branch does) and its own request context; nothing about a
+ * request's identity may leak into a concurrent one.
+ */
+describe("#2070 stateless requests — concurrent grant owners do not cross-contaminate", () => {
+  let priorEncryptionEnabled: boolean;
+  let priorConnectionId: string | undefined;
+  const openClients: Client[] = [];
+
+  beforeEach(() => {
+    priorEncryptionEnabled = config.encryption.enabled;
+    priorConnectionId = process.env.NEOTOMA_CONNECTION_ID;
+    config.encryption.enabled = true;
+    delete process.env.NEOTOMA_CONNECTION_ID;
+  });
+
+  afterEach(async () => {
+    config.encryption.enabled = priorEncryptionEnabled;
+    if (priorConnectionId === undefined) delete process.env.NEOTOMA_CONNECTION_ID;
+    else process.env.NEOTOMA_CONNECTION_ID = priorConnectionId;
+    for (const c of openClients) {
+      await c.close().catch(() => {});
+    }
+    openClients.length = 0;
+  });
+
+  async function statelessWhoami(admission: AAuthAdmissionContext, id: number): Promise<string> {
+    return runWithRequestContext({ agentIdentity: null, aauthAdmission: admission }, async () => {
+      // Yield before the request so the chains interleave.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const server = new NeotomaServer();
+      server.primeStatelessRequest({ connectionId: null, aauthContext: null, clientInfo: null });
+      const shaped = await server.handleStatelessRequest(
+        {
+          jsonrpc: "2.0",
+          id,
+          method: "tools/call",
+          params: {
+            name: "get_authenticated_user",
+            arguments: {},
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+              "io.modelcontextprotocol/clientCapabilities": {},
+            },
+          },
+        },
+        { headers: {} }
+      );
+      const body = shaped?.body as { result?: { content?: Array<{ text?: string }> } } | undefined;
+      const text = body?.result?.content?.[0]?.text ?? "{}";
+      return (JSON.parse(text) as { user_id?: string }).user_id ?? "none";
+    });
+  }
+
+  it("interleaved stateless requests each resolve their own grant owner", async () => {
+    const admissionA = makeAdmission(USER_A, "grant-a");
+    const admissionB = makeAdmission(USER_B, "grant-b");
+    const plan = Array.from({ length: 12 }, (_, i) => (i % 2 === 0 ? admissionA : admissionB));
+    const seen = await Promise.all(plan.map((admission, i) => statelessWhoami(admission, i + 1)));
+    plan.forEach((admission, i) => {
+      expect(seen[i], `request ${i}`).toBe(admission.user_id);
+    });
+  });
+
+  it("legacy sessions opened alongside stateless traffic still authenticate independently", async () => {
+    const serverA = new NeotomaServer();
+    const serverB = new NeotomaServer();
+    const admissionA = makeAdmission(USER_A, "grant-a");
+    const admissionB = makeAdmission(USER_B, "grant-b");
+
+    const [, , statelessAsB, statelessAsA] = await Promise.all([
+      connectInMemoryWithAdmission(serverA, admissionA).then((c) => {
+        openClients.push(c);
+        return c;
+      }),
+      connectInMemoryWithAdmission(serverB, admissionB).then((c) => {
+        openClients.push(c);
+        return c;
+      }),
+      statelessWhoami(admissionB, 101),
+      statelessWhoami(admissionA, 102),
+    ]);
+    expect(authenticatedUserIdOf(serverA)).toBe(USER_A);
+    expect(authenticatedUserIdOf(serverB)).toBe(USER_B);
+    expect(statelessAsB).toBe(USER_B);
+    expect(statelessAsA).toBe(USER_A);
   });
 });

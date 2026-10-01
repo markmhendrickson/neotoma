@@ -1475,6 +1475,17 @@ function formatApiError(error: unknown): string {
   return String(error);
 }
 
+function formatRequestError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const envelope = error as { error_code?: unknown; message?: unknown };
+    if (typeof envelope.error_code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      return `${envelope.error_code}${message}`;
+    }
+  }
+  return formatApiError(error);
+}
+
 function parseOptionalJson(value?: string): unknown {
   if (!value) {
     return undefined;
@@ -1577,15 +1588,18 @@ async function startOAuthCallbackServer(): Promise<{
 
 async function exchangeToken(
   baseUrl: string,
-  code: string
+  code: string,
+  codeVerifier: string
 ): Promise<{
   access_token: string;
   token_type?: string;
   expires_in?: number;
+  connection_id?: string;
 }> {
   const body = new URLSearchParams();
   body.set("grant_type", "authorization_code");
   body.set("code", code);
+  body.set("code_verifier", codeVerifier);
 
   const response = await fetch(`${baseUrl}/mcp/oauth/token`, {
     method: "POST",
@@ -1602,6 +1616,7 @@ async function exchangeToken(
     access_token: string;
     token_type?: string;
     expires_in?: number;
+    connection_id?: string;
   };
 }
 
@@ -1631,16 +1646,25 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   if (returnedState !== state) {
     throw new Error("OAuth state mismatch");
   }
-  const token = await exchangeToken(baseUrl, code);
+  const token = await exchangeToken(baseUrl, code, verifier);
   const expiresAt = token.expires_in
     ? new Date(Date.now() + token.expires_in * 1000).toISOString()
     : undefined;
+  if (!token.connection_id) {
+    // Every server new enough to check code_verifier also returns
+    // connection_id in the token response (see getTokenResponseForConnection).
+    // `code` itself is now a single-use secret, never the connection_id — do
+    // not fall back to it for X-Connection-Id.
+    throw new Error(
+      "Token response did not include connection_id; server may be running an outdated OAuth token endpoint."
+    );
+  }
   await writeConfig({
     base_url: baseUrl,
     access_token: token.access_token,
     token_type: token.token_type,
     expires_at: expiresAt,
-    connection_id: code,
+    connection_id: token.connection_id,
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {
@@ -9752,6 +9776,19 @@ issuesCommand
   .option("--since <date>", "Only sync issues updated after this ISO date")
   .option("--state <state>", "Filter by state: open, closed, all", "all")
   .option("--labels <labels>", "Comma-separated label filter (passed to GitHub list)")
+  .option(
+    "--repo <owner/name>",
+    "GitHub repo to mirror for this run (default: the server-configured repo)"
+  )
+  .option(
+    "--push",
+    "Run the push leg (local public issues -> GitHub). Default: on for the configured repo, off for any other --repo"
+  )
+  .option("--no-push", "Skip the push leg (pull-only)")
+  .option(
+    "--dry-run",
+    "Report what would be created, updated and pushed; write nothing locally or on GitHub"
+  )
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
@@ -14275,7 +14312,26 @@ schemasCommand
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
   .option("--schema-version <version>", "New schema version (auto-increments if not provided)")
-  .option("--user-specific", "Create user-specific schema variant", false)
+  // #2374: no default. Omitted, the request carries no user_specific and the
+  // server writes to whichever scope your schema resolves to (your user
+  // override if you have one, else global). A `false` default here sent an
+  // explicit "global" on every CLI call, so the CLI never got that behavior.
+  .option(
+    "--user-specific",
+    "Write to your user-specific schema variant (omit to write to the scope your schema resolves to)"
+  )
+  .option(
+    "--no-user-specific",
+    "Write to the global schema, even if you have a user-specific variant"
+  )
+  // #2197: `force` bypasses the entity-type naming lints (test-artifact
+  // pattern, plural heuristic) only. It is declared on MCP and REST; the CLI
+  // is the surface a user is on when the guard's error says "pass force".
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -14289,6 +14345,7 @@ schemasCommand
         migrateExisting?: boolean;
         schemaVersion?: string;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -14384,6 +14441,7 @@ schemasCommand
             activate: true,
             user_id: opts.userId,
             user_specific: opts.userSpecific,
+            force: opts.force,
           },
         });
         if (error) throw new Error("Failed to update schema");
@@ -14412,6 +14470,7 @@ schemasCommand
         migrate_existing: opts.migrateExisting,
         schema_version: opts.schemaVersion,
         user_specific: opts.userSpecific,
+        force: opts.force,
       };
       if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
@@ -14453,6 +14512,11 @@ schemasCommand
   .option("--activate", "Activate schema immediately", false)
   .option("--migrate-existing", "Migrate existing data", false)
   .option("--user-specific", "Create user-specific schema", false)
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -14465,6 +14529,7 @@ schemasCommand
         activate?: boolean;
         migrateExisting?: boolean;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -14493,6 +14558,7 @@ schemasCommand
           activate: opts.activate,
           user_id: opts.userId,
           user_specific: opts.userSpecific,
+          force: opts.force,
         },
       });
       if (error) throw new Error("Failed to register schema");
@@ -16577,6 +16643,10 @@ program
   .option("--body <json>", "JSON body override")
   .option("--query <json>", "JSON query override")
   .option("--path <json>", "JSON path override")
+  .option(
+    "--guest-access-token <token>",
+    "Authenticate this request with an entity-scoped guest access token instead of the configured credential"
+  )
   .option("--skip-auth", "Skip auth token for public endpoints")
   .option(
     "--aauth",
@@ -16594,6 +16664,9 @@ program
     }
 
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    if (opts.guestAccessToken && (opts.skipAuth || opts.aauth)) {
+      throw new Error("--guest-access-token cannot be combined with --skip-auth or --aauth");
+    }
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
@@ -16607,7 +16680,8 @@ program
         );
       }
     }
-    const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
+    const token =
+      opts.skipAuth || opts.aauth ? undefined : opts.guestAccessToken || (await getCliToken());
     const api = createApiClient({
       baseUrl,
       token,
@@ -16642,6 +16716,48 @@ program
       };
     }
 
+    if (operation.path === "/events/stream") {
+      if (opts.aauth) {
+        throw new Error("eventsStream does not support --aauth; use bearer authentication");
+      }
+      const url = new URL(operation.path, baseUrl);
+      const queryParams = (requestParams.params as { query?: Record<string, unknown> } | undefined)
+        ?.query;
+      for (const [key, value] of Object.entries(queryParams ?? {})) {
+        if (Array.isArray(value)) {
+          for (const item of value) url.searchParams.append(key, String(item));
+        } else if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/event-stream",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        const error = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+        throw new Error("Request failed: " + formatRequestError(error));
+      }
+      if (!response.body) {
+        throw new Error("eventsStream response did not include a stream body");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        process.stdout.write(decoder.decode(value, { stream: true }));
+      }
+      const trailing = decoder.decode();
+      if (trailing) process.stdout.write(trailing);
+      return;
+    }
+
     const method = operation.method.toUpperCase();
     const handler = (api as unknown as Record<string, unknown>)[method] as
       | ((
@@ -16659,7 +16775,7 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      throw new Error("Request failed: " + formatApiError(error));
+      throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);
   });

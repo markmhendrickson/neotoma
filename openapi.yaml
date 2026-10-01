@@ -23,6 +23,106 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    IssuesSyncPlanIssue:
+      type: object
+      description: A GitHub issue a `/issues/sync` dry run would create or update locally.
+      additionalProperties: false
+      required: [github_number, title]
+      properties:
+        github_number:
+          type: integer
+        title:
+          type: string
+    McpRequestMeta:
+      type: object
+      description: |
+        Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+        (#2070). Operational metadata only: never persisted, never logged in full.
+      additionalProperties: true
+      properties:
+        io.modelcontextprotocol/protocolVersion:
+          type: string
+          description: Protocol version for this request. Required on the modern path.
+          example: "2026-07-28"
+        io.modelcontextprotocol/clientCapabilities:
+          type: object
+          additionalProperties: true
+          description: Client capabilities relevant to this request. Required on the modern path.
+        io.modelcontextprotocol/clientInfo:
+          type: object
+          additionalProperties: true
+          description: Self-reported client name and version (unverified; attribution fallback only).
+          properties:
+            name: { type: string }
+            version: { type: string }
+    McpJsonRpcRequest:
+      type: object
+      required: [jsonrpc, method]
+      additionalProperties: true
+      properties:
+        jsonrpc: { type: string, enum: ["2.0"] }
+        id:
+          oneOf:
+            - { type: string }
+            - { type: integer }
+        method:
+          type: string
+          description: JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy).
+        params:
+          type: object
+          additionalProperties: true
+          properties:
+            _meta: { $ref: "#/components/schemas/McpRequestMeta" }
+    McpJsonRpcResponse:
+      type: object
+      required: [jsonrpc]
+      additionalProperties: true
+      properties:
+        jsonrpc: { type: string, enum: ["2.0"] }
+        id:
+          oneOf:
+            - { type: string }
+            - { type: integer }
+            - { type: "null" }
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: integer }
+            message: { type: string }
+            data: {}
+    McpServerDiscoverResult:
+      type: object
+      description: |
+        Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+        protocol versions, this server's declared capabilities, its identity and its
+        instructions: no tenant data, no caller identity, no instance topology.
+      required: [resultType, supportedVersions, capabilities]
+      properties:
+        resultType: { type: string, enum: [complete] }
+        supportedVersions:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: object
+          additionalProperties: true
+        instructions:
+          type: string
+          description: Agent-facing MCP instructions plus this instance's declared data policy.
+        ttlMs: { type: integer }
+        cacheScope: { type: string, enum: [public, private] }
+        _meta:
+          type: object
+          additionalProperties: true
+          properties:
+            io.modelcontextprotocol/serverInfo:
+              type: object
+              properties:
+                name: { type: string }
+                version: { type: string }
     ReadinessResult:
       type: object
       description: Result of the /ready database probe.
@@ -225,6 +325,7 @@ components:
             - ERR_MERGE_REFUSED
             - ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT
             - ERR_RELATIONSHIP_ENTITY_ID_FORMAT
+            - entity_owner_conflict
         message:
           type: string
         details:
@@ -737,11 +838,14 @@ components:
     AgentAttribution:
       type: object
       description: |
-        Agent-identity provenance recorded on every durable write-path record
+        Write-attribution provenance recorded on durable write-path records
         (observations, relationships, sources, interpretations, timeline
-        events). Fields are stamped additively into the existing provenance
-        JSON blob on each record so no schema migration was required; the
-        shape below documents the keys consumers can rely on.
+        events). Most keys describe the software that wrote the record (the
+        AAuth agent and MCP client); `authenticated_actor_id` instead
+        identifies the signed-in member whose session made the write. Fields
+        are stamped additively into the existing provenance JSON blob on each
+        record so no schema migration was required; the shape below documents
+        the keys consumers can rely on.
 
         When AAuth is active the `agent_*` keys carry the cryptographically
         verified identity; `client_name`/`client_version` come from the MCP
@@ -786,6 +890,24 @@ components:
           type: string
           format: date-time
           description: ISO-8601 timestamp when the attribution block was stamped.
+        authenticated_actor_id:
+          type: string
+          description: |
+            The signed-in member whose session made this write, as their
+            write-attribution id: a random UUID minted on this instance the
+            first time the member's session is resolved. It is pseudonymous —
+            not derived from the email address or the member's `user_id`, so it
+            cannot be recomputed from a list of addresses, and the same person
+            has a different id on every instance. Only this instance's
+            `member_attribution_ids` table maps it back to a member; no API
+            exposes that mapping yet. It is not the same value as `/me`'s
+            `authenticated_user_id` and does not join to it. Provenance only —
+            it never affects which graph is read or written. Absent when no
+            verified sign-in stands behind the request (static bearer token,
+            key-derived MCP token, local no-auth, AAuth grant, or a connection
+            that predates identity recording); consumers MUST read absence as
+            "unknown", never as the graph owner. Withheld from responses to
+            guest (entity-scoped token) readers.
     AttributionPolicySnapshot:
       type: object
       description: |
@@ -883,10 +1005,14 @@ components:
           type: string
           description: |
             Set when the operator allowlist promoted the request to
-            `operator_attested`. `"issuer"` means a hit on
+            `operator_attested`. The tier is bound to the verified signing
+            key. `"thumbprint"` means the key's thumbprint is listed in
+            `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`; `"issuer"` means the
+            `match_iss` of the active grant pinning the key is listed in
             `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-            a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
-          enum: [issuer, issuer_subject]
+            that grant's `match_iss:match_sub` is listed in
+            `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+          enum: [thumbprint, issuer, issuer_subject]
     SessionInfo:
       type: object
       description: |
@@ -937,7 +1063,14 @@ components:
             that signature to one of this user's `agent_grant` entities
             and is treating the caller as authenticated. The two are
             independent: a verified-but-unmatched signature stays
-            attribution-only and `admitted` is `false`.
+            attribution-only and `admitted` is `false`. Admission is
+            key-bound: a grant admits only when its `match_thumbprint`
+            equals the signing key's thumbprint. `grant_key_unbound`
+            means a grant matched sub/iss but pins no key; capability-gated
+            writes carrying that signature are refused until the grant is
+            pinned, whatever authenticated the request. Pin
+            `match_thumbprint` to admit the agent (see
+            docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
           required:
             - verified
             - admitted
@@ -958,8 +1091,10 @@ components:
                 - admitted
                 - no_grants_for_user
                 - no_match
+                - grant_key_unbound
                 - grant_revoked
                 - grant_suspended
+                - grant_pin_conflict
                 - strict_rejected
                 - aauth_disabled
                 - not_signed
@@ -1522,6 +1657,64 @@ components:
         target_entity_type_label:
           type: string
           nullable: true
+    RelationshipCreated:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was
+        written. Shared by `StoreStructuredResponse.relationships_created`
+        and `CreateInterpretationResponse.relationships_created`. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_type
+        - source_entity_id
+        - target_entity_id
+      properties:
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+    RelationshipRefusal:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was not
+        written. The entities in the call are still stored. Shared by
+        `StoreStructuredResponse.relationships_refused` and
+        `CreateInterpretationResponse.relationships_refused`. An endpoint
+        that does not exist and one owned by another user are both reported
+        as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_index
+        - relationship_type
+        - code
+        - reason
+      properties:
+        relationship_index:
+          type: integer
+          description: Position of the relationship in the request's `relationships` array.
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+        source_index:
+          type: integer
+        target_index:
+          type: integer
+        code:
+          type: string
+          description: |
+            One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+            `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+            `RELATIONSHIP_INVALID_ENTITY_ID`,
+            `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+        reason:
+          type: string
+        hint:
+          type: string
     TimelineEvent:
       type: object
       properties:
@@ -1722,9 +1915,20 @@ components:
             data.
         relationships_created:
           type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. See
+            docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
     UsageStats:
       type: object
       description: Aggregate usage statistics computed from local data only.
@@ -1922,8 +2126,16 @@ components:
           type: string
           enum: [claim, linked_attestation, oauth_link, webhook_signature]
           default: claim
+          description: |
+            Accepted for compatibility, but a request body can only assert an
+            external actor: the stored value is always `claim`. The stronger
+            tiers are assigned by server-side verification paths (the signed
+            GitHub webhook route, AAuth token claims, grant linkage).
         delivery_id:
           type: string
+          description: |
+            Not carried over from a request body; set only by the signed
+            GitHub webhook route.
         event_type:
           type: string
         repository:
@@ -2214,6 +2426,23 @@ components:
                     type: integer
                   entity_id:
                     type: string
+        relationships_created:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. An endpoint that
+            does not exist and one owned by another user are both reported as
+            `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
         store_warnings:
           type: array
           description: |
@@ -2865,6 +3094,103 @@ paths:
                     type: string
                     description: Resolved NEOTOMA_ENV for this process (development or production).
 
+  /mcp:
+    post:
+      summary: MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+      description: |
+        Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+        protocol eras on the same route (#2070):
+
+        - **Modern (2026-07-28, stateless).** Selected when the request carries no
+          `Mcp-Session-Id`, is not an `initialize` request, and its
+          `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+          request is resolved on its own: protocol version and client capabilities
+          come from `_meta`, and the caller's identity comes only from the
+          credentials on that request. No session is minted and no server state is
+          retained, so any API instance can serve any request behind a plain
+          round-robin load balancer. `server/discover` is served on this path.
+          `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+          `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+          the body.
+        - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+          request carrying `Mcp-Session-Id`, is served by the session transport
+          exactly as before (session mint on initialize, recover-in-place for a
+          stale session id, `404` for an unknown session on GET/DELETE).
+
+        `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+        tool/resource/prompt name. A value shaped like a credential or personal
+        data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+        `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+        and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+        sessions; those are not modelled here.
+      operationId: mcpStreamableHttpPost
+      parameters:
+        - in: header
+          name: MCP-Protocol-Version
+          required: false
+          description: Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`.
+          schema: { type: string, example: "2026-07-28" }
+        - in: header
+          name: Mcp-Method
+          required: false
+          description: Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data.
+          schema: { type: string, maxLength: 256 }
+        - in: header
+          name: Mcp-Name
+          required: false
+          description: |
+            Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+            `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+            sentinel. Never a credential or personal data.
+          schema: { type: string, maxLength: 2048 }
+        - in: header
+          name: Mcp-Session-Id
+          required: false
+          description: Legacy-era session id. Its presence selects the legacy session path.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/McpJsonRpcRequest" }
+      responses:
+        "200":
+          description: |
+            JSON-RPC response. On the modern path every result carries
+            `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+            a `server/discover` result has the `McpServerDiscoverResult` shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+            text/event-stream:
+              schema: { type: string }
+        "202":
+          description: JSON-RPC notification accepted (no body).
+        "400":
+          description: |
+            `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+            `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+            `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "401":
+          description: |
+            Authentication required or credential invalid (`-32001`). On the
+            2026-07-28 path this includes a credential that passed the gate but
+            resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+            or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "404":
+          description: |
+            Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+            (`-32001`, re-initialize).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+
   /mcp/oauth/initiate:
     post:
       summary: Initiate MCP OAuth flow
@@ -2962,6 +3288,15 @@ paths:
                 grant_type:
                   type: string
                 code:
+                  type: string
+                code_verifier:
+                  type: string
+                  description: >-
+                    PKCE verifier (RFC 7636). Required with grant_type=
+                    authorization_code; the server rejects a code redemption
+                    whose SHA-256/base64url digest does not match the
+                    code_challenge presented at /mcp/oauth/authorize.
+                refresh_token:
                   type: string
       responses:
         "200":
@@ -4032,6 +4367,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: |
+            `entity_owner_conflict` — `new_entity.target_entity_id` names an
+            existing entity owned by a different, non-null user than the
+            writer. No observations are re-pointed. The source entity's own
+            ownership is already covered by the `404` above (a source owned
+            by another user reads as not-found); this refusal is for the
+            split's OTHER caller-supplied id, the merge target. The envelope
+            details carry `entity_id` and `entity_type`; never the other
+            owner's identity or fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /sources:
     get:
@@ -4486,9 +4835,11 @@ paths:
       summary: Create an agent grant
       description: |
         Creates a new `agent_grant` for the authenticated user. At least
-        one of `match_sub` or `match_thumbprint` must be supplied. The
-        grant's `capabilities` follow the same shape used by the
-        admitted-request authorization check.
+        one of `match_sub` or `match_thumbprint` must be supplied. Only
+        `match_thumbprint` admits signed requests; a grant created without
+        it is accepted but inert, and the response carries a `warnings`
+        entry saying so. The grant's `capabilities` follow the same shape
+        used by the admitted-request authorization check.
       operationId: createAgentGrant
       requestBody:
         required: true
@@ -4506,6 +4857,14 @@ paths:
                 properties:
                   grant:
                     $ref: "#/components/schemas/AgentGrant"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Advisory messages about the stored grant. Present when
+                      the grant pins no `match_thumbprint` and therefore does
+                      not admit signed requests.
         "400":
           description: Validation error (e.g. `agent_grant_invalid`)
         "409":
@@ -4543,7 +4902,10 @@ paths:
       description: |
         Patches `label`, `capabilities`, `notes`, or any of the
         `match_*` identity fields. Status transitions go through the
-        dedicated `suspend`, `revoke`, and `restore` endpoints.
+        dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+        `match_thumbprint` is how a key is pinned to an existing grant;
+        the admission cache is cleared so the pin applies to the next
+        request.
       operationId: updateAgentGrant
       parameters:
         - in: path
@@ -4567,6 +4929,14 @@ paths:
                 properties:
                   grant:
                     $ref: "#/components/schemas/AgentGrant"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Advisory messages about the stored grant. Present when
+                      the grant pins no `match_thumbprint` and therefore does
+                      not admit signed requests.
         "400":
           description: Validation error
         "404":
@@ -5261,7 +5631,11 @@ paths:
         "400":
           description: |
             Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-            `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+            `StoreResolutionErrorEnvelope` shape; one of its per-observation
+            `issues[].code` values is `entity_owner_conflict` — resolution
+            landed on an existing entity owned by a different, non-null
+            user, and the write was refused before anything was persisted
+            (see `StoreResolutionIssue.code`). `ERR_CONSTRAINT_VIOLATION` is
             returned when one or more observations fail a declarative write-time
             value constraint (constraint `policy: "reject"`); its envelope carries
             a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
@@ -6577,11 +6951,16 @@ paths:
     post:
       summary: Sync issues bidirectionally with GitHub
       description: >
-        Bidirectional sync between local Neotoma and the configured GitHub repo.
-        Push leg (default on): local public issues with no github_number are sanitized
-        (PII stripped) and created on GitHub, then updated locally with the returned number/url.
-        Pull leg: GitHub issues and their comments are pulled into local entities.
-        MCP sync_issues parity.
+        Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their
+        comments are pulled into local entities. Push leg: local public issues with no
+        github_number are sanitized (PII stripped) and created on GitHub, then updated locally
+        with the returned number/url. The target repo defaults to the server-configured repo
+        (`NEOTOMA_ISSUES_REPO` / `issues.repo`); `repo` overrides it for this call only. The
+        push leg is on by default only for the configured default repo and off for any other
+        `repo` unless `push: true` is passed. `commit: false` runs a dry run that reports what
+        would be created, updated and pushed and writes nothing. A GitHub token is required:
+        `NEOTOMA_ISSUES_GITHUB_TOKEN` in the server environment (or `gh auth login` on the
+        server host). MCP sync_issues parity.
       operationId: issuesSync
       requestBody:
         required: true
@@ -6600,26 +6979,56 @@ paths:
                   type: array
                   items:
                     type: string
+                repo:
+                  type: string
+                  description: >
+                    GitHub repository to mirror, `owner/name` (for example `acme/widgets`).
+                    Defaults to the server-configured repo. Must be the configured repo or be
+                    listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or
+                    `issues.allowed_repos`). A malformed value is rejected with a 400 and a repo
+                    that is not permitted with a 403, both before any GitHub request or write.
+                  pattern: "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\\.{1,2}$)[A-Za-z0-9._-]{1,100}$"
+                  example: acme/widgets
                 push:
                   type: boolean
-                  description: When false, skip the push leg (local public → GitHub). Default true.
+                  description: >
+                    Run the push leg (local public -> GitHub). Default true when `repo` is omitted
+                    or equals the configured default repo; default false for any other `repo`.
+                    Pass true to opt in for another repo.
+                commit:
+                  type: boolean
+                  description: >
+                    When false, dry run: report what would be created, updated and pushed in
+                    `plan` and write nothing locally or on GitHub. Default true.
                 user_id:
                   type: string
       responses:
         "200":
-          description: Sync counts and errors
+          description: Sync counts, errors and, for a dry run, the plan
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
                 required:
+                  - repo
+                  - dry_run
+                  - push_enabled
                   - issues_synced
                   - messages_synced
                   - errors
                   - issues_pushed
                   - push_errors
                 properties:
+                  repo:
+                    type: string
+                    description: Target GitHub repo (`owner/name`) this run mirrored.
+                  dry_run:
+                    type: boolean
+                    description: "True when the run was a dry run (`commit: false`); nothing was written."
+                  push_enabled:
+                    type: boolean
+                    description: Whether the push leg was enabled (resolved from `push` and `repo`).
                   issues_synced:
                     type: integer
                   messages_synced:
@@ -6634,6 +7043,55 @@ paths:
                     type: array
                     items:
                       type: string
+                  plan:
+                    type: object
+                    description: Present only on a dry run.
+                    additionalProperties: false
+                    required:
+                      - issues_to_create
+                      - issues_to_update
+                      - issues_unchanged
+                      - messages_to_sync
+                      - issues_to_push
+                      - warnings
+                    properties:
+                      issues_to_create:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IssuesSyncPlanIssue"
+                      issues_to_update:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IssuesSyncPlanIssue"
+                      issues_unchanged:
+                        type: integer
+                      messages_to_sync:
+                        type: integer
+                      issues_to_push:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [entity_id, title]
+                          properties:
+                            entity_id:
+                              type: string
+                            title:
+                              type: string
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+        "400":
+          description: Validation error (for example a malformed `repo`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /delete_entity:
     post:
@@ -7007,7 +7465,18 @@ paths:
                   type: string
                 user_specific:
                   type: boolean
-                  default: false
+                  description: >-
+                    Explicit scope override, with no default. When omitted, the
+                    write goes to whichever scope the caller's own read of the
+                    schema resolved: the caller's user-scoped override if one
+                    exists, otherwise the global row. Pass true to create or
+                    extend a user-scoped override. Pass false to extend the
+                    global row: the new global version is built from the
+                    current global schema, never from the caller's override,
+                    and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type
+                    has no global registry row and no code-defined baseline
+                    (but has the caller's user-scoped schema). The response's
+                    `scope` reports the scope actually written.
                 user_id:
                   type: string
                 activate:
@@ -7016,6 +7485,20 @@ paths:
                 migrate_existing:
                   type: boolean
                   default: false
+                  description: >-
+                    Promote existing raw_fragments for the added fields into
+                    observations (historical backfill). A request with
+                    migrate_existing true can legitimately promote nothing; see
+                    `migrated_existing` and `migration_result` in the response.
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Bypass the entity-type naming guards (forbidden test-artifact
+                    patterns and the plural-name guard) for this call only. Use
+                    when entity_type is rejected with a message naming
+                    "force: true" as the remedy. Does not affect any other
+                    validation.
       responses:
         "200":
           description: |
@@ -7069,8 +7552,52 @@ paths:
                         type: boolean
                       migrated_existing:
                         type: boolean
+                        description: >-
+                          True only when this call actually promoted at least one
+                          raw_fragment (`migration_result.migrated_count > 0`).
+                          Never an echo of the `migrate_existing` request flag.
+                      migration_result:
+                        type: object
+                        description: >-
+                          Present only when `migrate_existing` was requested. The
+                          actual migration outcome, including every fragment group
+                          that did not promote and why.
+                        required: [migrated_count, skipped]
+                        properties:
+                          migrated_count:
+                            type: integer
+                            minimum: 0
+                          skipped:
+                            type: array
+                            items:
+                              type: object
+                              required: [field_name, reason, count]
+                              properties:
+                                field_name:
+                                  type: string
+                                reason:
+                                  type: string
+                                  enum:
+                                    - no_entity_resolution
+                                    - no_active_schema
+                                    - observation_insert_failed
+                                    - already_promoted
+                                    - unexpected_error
+                                count:
+                                  type: integer
+                                  minimum: 0
                       scope:
                         type: string
+                        enum: [global, user]
+                        description: >-
+                          The scope this call actually wrote to, read from the
+                          persisted row rather than re-derived from the request.
+                      user_id:
+                        type: string
+                        nullable: true
+                        description: >-
+                          Present only when `scope` is `user`: which user's row
+                          was written.
                     additionalProperties: true
                   - $ref: "#/components/schemas/SchemaRegistryToolErrorResponse"
 
@@ -7260,6 +7787,28 @@ paths:
                           type: integer
                   total:
                     type: integer
+                  empty_reason:
+                    type: string
+                    enum: [registry_unseeded, filtered_to_empty]
+                    description: >-
+                      Present only when relationship_types is empty. Never
+                      infer "no vocabulary exists" from an empty array alone.
+                      registry_unseeded means the instance's relationship-type
+                      registry (including the built-in vocabulary) failed to
+                      seed and is a registry/seed failure that self-repairs on
+                      a subsequent read, not a permanent state; call
+                      list_relationship_types again rather than concluding no
+                      types are available. filtered_to_empty means a supplied
+                      keyword matched nothing against an otherwise-populated
+                      registry; retry without keyword to see the full
+                      vocabulary. Absent when relationship_types is non-empty.
+                  hint:
+                    type: string
+                    description: >-
+                      Present only alongside empty_reason. Human/agent-readable
+                      elaboration of empty_reason and the recommended next
+                      call; never present when relationship_types is
+                      non-empty.
 
   /register_schema:
     post:
@@ -7296,6 +7845,15 @@ paths:
                 activate:
                   type: boolean
                   default: false
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Bypass the entity-type naming guards (forbidden test-artifact
+                    patterns and the plural-name guard) for this call only. Use
+                    when entity_type is rejected with a message naming
+                    "force: true" as the remedy. Does not affect any other
+                    validation.
       responses:
         "200":
           description: Schema registered
@@ -7459,6 +8017,19 @@ paths:
             returned when an `agent_definition` entity's `override_policy`
             denies the calling agent role the corrected field; the envelope
             details carry `field_name`, `agent_role`, and `entity_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            `entity_owner_conflict` — `entity_id` resolves to an existing
+            entity owned by a different, non-null user than the writer. No
+            observation is written. `correct()` is the raw entity-store
+            surface: a caller names `entity_id` directly with no resolution
+            step in between, so this is the only refusal point for a
+            correction that would otherwise land on another user's entity.
+            The envelope details carry `entity_id` and `entity_type`; never
+            the other owner's identity or fields.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -7719,6 +8290,16 @@ paths:
   /subscribe:
     post:
       summary: Create a substrate event subscription (webhook or SSE)
+      description: |
+        Authenticated owners may subscribe to filters within their own graph.
+        Entity-scoped guests must authenticate with their guest bearer token,
+        provide a non-empty `entity_ids` filter, and keep every requested entity
+        inside that token's current grant. Empty, mixed, or out-of-grant guest
+        filters are rejected without creating a subscription. Guests may only
+        use `delivery_method: sse`, which is revalidated against the guest
+        credential on every delivery; a guest request for `webhook` delivery or
+        with a `sync_peer_id` is rejected with 403 without creating a
+        subscription.
       operationId: subscribe
       requestBody:
         required: true
@@ -7774,10 +8355,26 @@ paths:
                     type: string
                   webhook_secret:
                     type: string
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /unsubscribe:
     post:
       summary: Deactivate a subscription
+      description: |
+        Owners may deactivate their own subscriptions. Guests may deactivate only
+        subscriptions whose complete `watch_entity_ids` set remains inside the
+        guest token's current entity grant; denial leaves the subscription active.
       operationId: unsubscribe
       requestBody:
         required: true
@@ -7799,10 +8396,26 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Subscription is not wholly inside the guest entity grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /list_subscriptions:
     post:
       summary: List active subscriptions for the current user
+      description: |
+        Owners receive their active subscriptions. Guests receive only subscriptions
+        whose complete `watch_entity_ids` set is inside the token's current entity
+        grant; subscriptions outside or spanning the grant are omitted.
       operationId: listSubscriptions
       requestBody:
         required: false
@@ -7819,10 +8432,20 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /get_subscription_status:
     post:
       summary: Get subscription delivery status
+      description: |
+        Owners may inspect their subscriptions. A guest receives the status only
+        when the subscription's complete `watch_entity_ids` set is inside its
+        current grant; an inaccessible subscription is returned as `null`.
       operationId: getSubscriptionStatus
       requestBody:
         required: true
@@ -7844,10 +8467,22 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /events/stream:
     get:
       summary: Server-sent events stream for a subscription
+      description: |
+        Opens the SSE stream for an active SSE subscription. Owners retain their
+        normal authenticated access. Guests may connect only when the subscription's
+        complete entity filter is inside the token grant. Guest credentials are
+        revalidated while the connection is established: expiry, revocation, or
+        grant narrowing closes the stream before another event is delivered.
       operationId: eventsStream
       parameters:
         - in: query
@@ -7858,6 +8493,22 @@ paths:
       responses:
         "200":
           description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Subscription does not exist or is outside the guest entity grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /peers:
     get:

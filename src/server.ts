@@ -13,6 +13,7 @@ import {
 import { db } from "./db.js";
 import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
+import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -23,7 +24,20 @@ import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
+import { filterInstallableSkillNames } from "./shared/skill_deprecation.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
+import {
+  MCP_META_SERVER_INFO,
+  MCP_MODERN_SUPPORTED_VERSIONS,
+  MCP_STATELESS_CACHE_HINT,
+  SingleExchangeTransport,
+  jsonRpcIdOf,
+  shapeModernResponse,
+  statelessAuthFailureJsonRpcBody,
+  type McpStatelessAuthFailure,
+} from "./mcp_http_stateless.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import type { IncomingHttpHeaders } from "node:http";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
@@ -56,11 +70,19 @@ import {
   UpdateSchemaIncrementalRequestSchema,
   RegisterSchemaRequestSchema,
   IntakeHintSchema,
+  IssuesSyncRepoSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
+import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
+import {
+  relationshipRefusalFromError,
+  unresolvedRelationshipRefusal,
+  type StoreRelationshipCreated,
+  type StoreRelationshipRefused,
+} from "./services/store_relationships.js";
 import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
   extractTextFromBuffer,
@@ -93,11 +115,13 @@ import {
 import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
+  getCurrentMcpConnectionId,
   runWithRequestContext,
 } from "./services/request_context.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
@@ -114,7 +138,9 @@ import {
   type AAuthRequestContext,
   type AgentIdentity,
   type AttributionDecisionDiagnostics,
+  type AuthenticatedPrincipal,
 } from "./crypto/agent_identity.js";
+import { getOrCreateMemberAttributionId } from "./services/member_attribution.js";
 import {
   composeClientInstructions,
   extractFirstFencedCodeBlock,
@@ -204,15 +230,74 @@ export const MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST = [
  * must echo the same object: returning bare `tools: {}` drops `listChanged`, which
  * breaks some clients' tool discovery / UI (e.g. Cursor) even when `tools/list` works.
  */
+/**
+ * `server/discover` request (MCP 2026-07-28, SEP-2575). The request carries no
+ * parameters beyond the standard `_meta`. Not in @modelcontextprotocol/sdk 1.x,
+ * so declared here (#2070).
+ */
+const ServerDiscoverRequestSchema = z.object({
+  method: z.literal("server/discover"),
+  params: z
+    .object({ _meta: z.record(z.unknown()).optional() })
+    .passthrough()
+    .optional(),
+});
+
 const NEOTOMA_MCP_DECLARED_CAPABILITIES = {
   tools: { listChanged: true },
   resources: {},
 } as const;
 
+/** Set once the stdio entrypoint's process-level signal handlers are installed. */
+let stdioSignalHandlersInstalled = false;
+
+/**
+ * Install the stdio entrypoint's process-level signal handlers, once per
+ * process. Returns true when this call installed them.
+ *
+ * - SIGINT closes the stdio server, then exits.
+ * - SIGPIPE exits cleanly when the stdio pipe breaks (e.g. machine sleep/wake,
+ *   or the client closes the pipe), so the client shows a clean disconnect and
+ *   restarts the server.
+ *
+ * Only the stdio entrypoint calls this. HTTP servers own their own signal
+ * handling (see the entrypoint block at the end of actions.ts), and a
+ * per-instance registration would retain every instance it closed over.
+ *
+ * Skipped under NODE_ENV=test: registering process.on('SIGINT') makes vitest
+ * report "Worker exited unexpectedly" when it terminates workers after a run.
+ */
+export function installStdioSignalHandlers(close: () => Promise<void>): boolean {
+  if (stdioSignalHandlersInstalled) return false;
+  if (process.env.NODE_ENV === "test") return false;
+  stdioSignalHandlersInstalled = true;
+
+  process.on("SIGINT", async () => {
+    await close();
+    process.exit(0);
+  });
+  process.on("SIGPIPE", () => {
+    process.exit(0);
+  });
+  return true;
+}
+
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
   private autoEnhancementCleanup?: () => void;
   private authenticatedUserId: string | null = null;
+  /**
+   * #2240: the signed-in member behind this server's authenticated identity —
+   * their per-instance write-attribution id — paired with the graph user_id it
+   * was resolved alongside. Every change of identity goes through
+   * {@link setAuthenticatedIdentity}, which sets or clears the two together,
+   * so a principal cannot survive an identity change it was not resolved with.
+   * Only {@link adoptConnectionIdentity} (a verified sign-in recorded on an
+   * OAuth connection row) ever supplies one. {@link currentAuthenticatedPrincipal}
+   * additionally refuses a principal whose graph no longer matches, as a
+   * second line against a direct field write.
+   */
+  private authenticatedPrincipal: { graphUserId: string; actorId: string } | null = null;
   private sessionToken: string | null = null;
   private requestAuth: Map<string, { userId: string; token: string }> = new Map();
   /** Connection ID set from HTTP layer so handlers get auth even when SDK does not pass requestInfo */
@@ -330,8 +415,25 @@ export class NeotomaServer {
    * This is only one of two skill sources. Graph-stored `skill` entities are
    * read separately by `getInstanceSkills()` and unioned with this list in
    * {@link buildAuthenticatedInitializeResponse} (issue #2046).
+   *
+   * Excludes skills whose `SKILL.md` frontmatter declares `deprecated: true`
+   * (retired primitive wrappers kept on disk only for link compatibility —
+   * see `src/shared/skill_deprecation.ts`) so a session is never told to
+   * invoke a skill this instance no longer installs by default.
    */
   private getAvailableSkills(): string[] {
+    return this.getPackageSkills().installable;
+  }
+
+  /**
+   * Package skills split into the installable set (what
+   * {@link getAvailableSkills} returns) and the deprecated set. The deprecated
+   * set lets the `initialize` union drop a graph-stored `skill` row that reuses
+   * a retired package name: package skills win on name collision
+   * (`materializeInstanceSkills` never writes such a row locally), so
+   * advertising it would re-offer the retired skill under the same name.
+   */
+  private getPackageSkills(): { installable: string[]; deprecated: string[] } {
     const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
     const seen = new Set<string>();
     for (const root of roots) {
@@ -342,16 +444,17 @@ export class NeotomaServer {
       if (!existsSync(skillsDir)) continue;
       try {
         const entries = readdirSync(skillsDir, { withFileTypes: true });
-        const names = entries
-          .filter((d) => d.isDirectory())
-          .map((d) => d.name)
-          .sort();
-        if (names.length > 0) return names;
+        const all = entries.filter((d) => d.isDirectory()).map((d) => d.name);
+        const installable = filterInstallableSkillNames(skillsDir, all).sort();
+        if (installable.length > 0) {
+          const kept = new Set(installable);
+          return { installable, deprecated: all.filter((n) => !kept.has(n)).sort() };
+        }
       } catch {
         // Unreadable; try next root
       }
     }
-    return [];
+    return { installable: [], deprecated: [] };
   }
 
   /**
@@ -367,187 +470,370 @@ export class NeotomaServer {
       // This is NOT verified — it is whatever the MCP client put on the wire.
       const rawName = request.params?.clientInfo?.name;
       const rawVersion = request.params?.clientInfo?.version;
-      this.sessionClientInfo = {
+      this.setSessionClientInfo({
         name: typeof rawName === "string" ? rawName : undefined,
         version: typeof rawVersion === "string" ? rawVersion : undefined,
-      };
+      });
 
       // Detect transport type: HTTP has requestInfo, stdio does not
       const isHTTPTransport = !!extra?.requestInfo;
       this.isHTTPTransportSession = isHTTPTransport;
       const updateNotice = await this.getInitializeUpdateNotice(isHTTPTransport);
 
-      // Extract connection_id: prefer HTTP-layer value (set by actions.ts) so auth works when SDK does not pass requestInfo
       const allHeaders = (extra?.requestInfo as any)?.headers || {};
-      const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
-      let connectionId =
-        this.sessionConnectionId ||
-        (extra?.authInfo as any)?.connectionId ||
-        allHeaders["x-connection-id"] ||
-        allHeaders["X-Connection-Id"] ||
-        (!isHTTPTransport ? process.env.NEOTOMA_CONNECTION_ID : undefined);
-
-      // If no connection ID header, try to get it from Bearer token
-      if (
-        !connectionId &&
-        authHeader &&
-        typeof authHeader === "string" &&
-        authHeader.startsWith("Bearer ")
-      ) {
-        try {
-          const token = authHeader.substring(7);
-          const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
-          const { connectionId: resolvedConnectionId } =
-            await validateTokenAndGetConnectionId(token);
-          connectionId = resolvedConnectionId;
-          logger.info(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
-        } catch (error: any) {
-          logger.error(
-            `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
-          );
-        }
-      }
-
-      // Stdio + encryption off: no auth required, same as HTTP (actions.ts sets x-connection-id to dev-local)
-      if (!connectionId && !isHTTPTransport && !config.encryption.enabled) {
-        connectionId = "dev-local";
-      }
-
-      logger.info(
-        `[MCP Server] Initialize: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
+      const connectionId = await this.resolveRequestConnectionId(
+        allHeaders,
+        extra?.authInfo,
+        isHTTPTransport
       );
 
-      if (connectionId) {
-        // In test environment, allow test connection ID to bypass authentication
-        const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-        if (connectionId === "test-connection-bypass" && isTestEnv) {
-          this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
-          this.requestAuth.set(requestId, {
-            userId: this.authenticatedUserId,
-            token: "test-bypass-token",
-          });
-          logger.info(
-            `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
-          );
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
-        }
-
-        // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
-        if (connectionId === "dev-local-http") {
-          this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
-          this.requestAuth.set(requestId, {
-            userId: this.authenticatedUserId,
-            token: "dev-local-http",
-          });
-          logger.info(
-            `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
-          );
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
-        }
-
-        // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
-        if (connectionId === "dev-local") {
-          const devUser = await ensureLocalDevUser();
-          this.authenticatedUserId = devUser.id;
-          this.requestAuth.set(requestId, {
-            userId: this.authenticatedUserId,
-            token: "dev-local",
-          });
-          logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
-        }
-
-        // OAuth flow - check if connection ID is valid
-        try {
-          const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-          const { accessToken, userId } = await getAccessTokenForConnection(connectionId);
-
-          // Store auth per request (for HTTP) and at instance level (for stdio)
-          this.requestAuth.set(requestId, { userId, token: accessToken });
-          this.authenticatedUserId = userId;
-          this.sessionToken = accessToken;
-
-          logger.info(
-            `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
-          );
-          return await this.buildAuthenticatedInitializeResponse(updateNotice);
-        } catch (error: any) {
-          const isConnectionNotFound =
-            error.message?.includes("Connection not found") ||
-            error.message?.includes("connection_id") ||
-            error.code === "OAUTH_CONNECTION_NOT_FOUND";
-
-          if (isConnectionNotFound) {
-            logger.error(
-              `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. Clearing connection ID.`
-            );
-            this.sessionConnectionId = null;
-          } else {
-            logger.error(`[MCP Server] OAuth initialization failed: ${error.message}`);
-          }
-
-          // Stdio + encryption off: fall back to dev-local (default user)
-          if (!isHTTPTransport && !config.encryption.enabled) {
-            logger.info(
-              "[MCP Server] Stdio with encryption off: falling back to dev-local (no auth required)."
-            );
-            const devUser = await ensureLocalDevUser();
-            this.authenticatedUserId = devUser.id;
-            this.requestAuth.set(requestId, {
-              userId: this.authenticatedUserId,
-              token: "dev-local",
-            });
-            return await this.buildAuthenticatedInitializeResponse(updateNotice);
-          }
-
-          if (isConnectionNotFound) {
-            return this.getUnauthenticatedResponse(true);
-          }
-          return this.getUnauthenticatedResponse();
-        }
-      }
-
-      // Stronger AAuth Admission: a verified AAuth identity resolved to an
-      // active `agent_grant` authenticates the MCP session as the grant
-      // owner. Consulted only here — after OAuth connection-id / Bearer have
-      // had their chance above — so those credentials keep precedence and
-      // this is purely the no-OAuth fallback. Brings the MCP transport to
-      // parity with the REST direct-write endpoints, which already honour
-      // `req.aauthAdmission` (see `aauthAdmission()` middleware in actions.ts).
-      //
-      // Fail-safe by construction: `admitFromAAuthContext` only returns
-      // `admitted: true` for a verified signature matched to an `active`
-      // grant, and `user_id` is always the grant owner — never a
-      // request-supplied id — so an AAuth caller cannot pivot owners.
-      // Per-(op, entity_type) capability scope is enforced on each tool call,
-      // identical to the REST path.
-      //
-      // Read from the request-scoped AsyncLocalStorage context (threaded by
-      // actions.ts into the outer runWithRequestContext before transport
-      // handling) rather than a shared session field. The outer context is
-      // per-async-chain (per HTTP request), so concurrent admitted requests
-      // from different grant owners cannot contaminate each other's admission.
-      // The previous `this.sessionAdmission` single-field approach had a
-      // cross-request race: request B's setSessionAdmission() could overwrite
-      // the field in the window before request A read it, causing A to
-      // authenticate as B's user_id (owner pivot).
-      const admission = getCurrentAAuthAdmission();
-      if (admission?.admitted && admission.user_id) {
-        this.authenticatedUserId = admission.user_id;
-        this.requestAuth.set(requestId, {
-          userId: admission.user_id,
-          token: `aauth:${admission.grant_id ?? "admitted"}`,
-        });
-        logger.info(
-          `[MCP Server] Authenticated via AAuth admission (user: ${admission.user_id}, grant: ${admission.grant_id ?? "unknown"})`
-        );
+      const outcome = await this.resolveAuthentication({
+        connectionId,
+        isHTTPTransport,
+        requestId,
+      });
+      if (outcome === "authenticated") {
         return await this.buildAuthenticatedInitializeResponse(updateNotice);
       }
-
       // No authentication method provided - return with OAuth capabilities
       // This allows Cursor to show "Connect" button for OAuth
-      return this.getUnauthenticatedResponse();
+      return this.getUnauthenticatedResponse(outcome === "invalid_connection");
     });
+  }
+
+  /**
+   * Resolve the connection id a request authenticates with: the HTTP-layer
+   * value (set by actions.ts) first, then the SDK auth info, then (HTTP) the
+   * gate-resolved value on the request context or (stdio) the environment. When none is present but the
+   * request carries a Bearer token, resolve the connection from the token.
+   *
+   * Reads only the inputs passed in plus this instance's HTTP-layer connection
+   * id, so the legacy initialize handler and the 2026-07-28 stateless path
+   * (#2070) resolve identity the same way.
+   */
+  private async resolveRequestConnectionId(
+    allHeaders: Record<string, unknown>,
+    authInfo: unknown,
+    isHTTPTransport: boolean,
+    logLabel: "Initialize" | "Stateless request" = "Initialize"
+  ): Promise<string | undefined> {
+    // Extract connection_id. On HTTP it comes only from the /mcp gate's
+    // resolved decision (this instance's value set by the HTTP layer, else the
+    // gate-resolved value on the request context); the request's own
+    // X-Connection-Id header is never read here, so the server cannot resolve
+    // an identity the gate did not.
+    const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
+    let connectionId =
+      this.sessionConnectionId ||
+      (authInfo as any)?.connectionId ||
+      (isHTTPTransport ? getCurrentMcpConnectionId() : process.env.NEOTOMA_CONNECTION_ID) ||
+      undefined;
+
+    // If no connection ID header, try to get it from Bearer token
+    if (
+      !connectionId &&
+      authHeader &&
+      typeof authHeader === "string" &&
+      authHeader.startsWith("Bearer ")
+    ) {
+      try {
+        const token = authHeader.substring(7);
+        const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
+        const { connectionId: resolvedConnectionId } = await validateTokenAndGetConnectionId(token);
+        connectionId = resolvedConnectionId;
+        logger.info(
+          `[MCP Server] Resolved connection ID from Bearer token (${connectionIdForLog(connectionId)})`
+        );
+      } catch (error: any) {
+        logger.error(
+          `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
+        );
+      }
+    }
+
+    // Stdio + encryption off: no auth required, same as HTTP (actions.ts sets x-connection-id to dev-local)
+    if (!connectionId && !isHTTPTransport && !config.encryption.enabled) {
+      connectionId = "dev-local";
+    }
+
+    logger.info(
+      `[MCP Server] ${logLabel}: connectionId=${connectionIdForLog(connectionId)}, authHeader=${authHeader ? "present" : "missing"}`
+    );
+    return typeof connectionId === "string" ? connectionId : undefined;
+  }
+
+  /**
+   * Authenticate this server instance from one request's credentials: an
+   * OAuth / dev-local / test connection id, else a verified AAuth admission
+   * read from the request-scoped AsyncLocalStorage context. Sets
+   * `authenticatedUserId` on success.
+   *
+   * Shared by the legacy `initialize` handler (once per session) and the
+   * 2026-07-28 stateless path (once per request, on a fresh instance that is
+   * discarded afterwards, #2070). Nothing here reads a previous request's
+   * state: every input is the current request's.
+   */
+  private async resolveAuthentication(input: {
+    connectionId: string | undefined;
+    isHTTPTransport: boolean;
+    requestId: string;
+  }): Promise<"authenticated" | "unauthenticated" | "invalid_connection"> {
+    const { connectionId, isHTTPTransport, requestId } = input;
+    // #2240: a fresh resolution starts with no person. Only the OAuth
+    // connection branch below can set one.
+    this.setAuthenticatedIdentity(this.authenticatedUserId, null);
+
+    if (connectionId) {
+      // In test environment, allow test connection ID to bypass authentication
+      const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+      if (connectionId === "test-connection-bypass" && isTestEnv) {
+        this.setAuthenticatedIdentity("00000000-0000-0000-0000-000000000000", null);
+        this.requestAuth.set(requestId, {
+          userId: "00000000-0000-0000-0000-000000000000",
+          token: "test-bypass-token",
+        });
+        logger.info(
+          `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
+        );
+        return "authenticated";
+      }
+
+      // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
+      if (connectionId === "dev-local-http") {
+        this.setAuthenticatedIdentity("00000000-0000-0000-0000-000000000000", null);
+        this.requestAuth.set(requestId, {
+          userId: "00000000-0000-0000-0000-000000000000",
+          token: "dev-local-http",
+        });
+        logger.info(
+          `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
+        );
+        return "authenticated";
+      }
+
+      // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
+      if (connectionId === "dev-local") {
+        const devUser = await ensureLocalDevUser();
+        this.setAuthenticatedIdentity(devUser.id, null);
+        this.requestAuth.set(requestId, {
+          userId: devUser.id,
+          token: "dev-local",
+        });
+        logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
+        return "authenticated";
+      }
+
+      // OAuth flow - check if connection ID is valid
+      try {
+        const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+        const { accessToken, userId, authenticatedUserId } =
+          await getAccessTokenForConnection(connectionId);
+
+        // Store auth per request (for HTTP) and at instance level (for stdio)
+        this.requestAuth.set(requestId, { userId, token: accessToken });
+        await this.adoptConnectionIdentity(userId, authenticatedUserId);
+        this.sessionToken = accessToken;
+
+        logger.info(
+          `[MCP Server] Initialized with OAuth connection (${connectionIdForLog(connectionId)}, user: ${userId})`
+        );
+        return "authenticated";
+      } catch (error: any) {
+        const isConnectionNotFound =
+          error.message?.includes("Connection not found") ||
+          error.message?.includes("connection_id") ||
+          error.code === "OAUTH_CONNECTION_NOT_FOUND";
+
+        if (isConnectionNotFound) {
+          logger.error(
+            `[MCP Server] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionId)}). Clearing connection ID.`
+          );
+          this.sessionConnectionId = null;
+        } else {
+          logger.error(`[MCP Server] OAuth initialization failed: ${error.message}`);
+        }
+
+        // Stdio + encryption off: fall back to dev-local (default user)
+        if (!isHTTPTransport && !config.encryption.enabled) {
+          logger.info(
+            "[MCP Server] Stdio with encryption off: falling back to dev-local (no auth required)."
+          );
+          const devUser = await ensureLocalDevUser();
+          this.setAuthenticatedIdentity(devUser.id, null);
+          this.requestAuth.set(requestId, {
+            userId: devUser.id,
+            token: "dev-local",
+          });
+          return "authenticated";
+        }
+
+        return isConnectionNotFound ? "invalid_connection" : "unauthenticated";
+      }
+    }
+
+    // Stronger AAuth Admission: a verified AAuth identity resolved to an
+    // active `agent_grant` authenticates the MCP session as the grant
+    // owner. Consulted only here — after OAuth connection-id / Bearer have
+    // had their chance above — so those credentials keep precedence and
+    // this is purely the no-OAuth fallback. Brings the MCP transport to
+    // parity with the REST direct-write endpoints, which already honour
+    // `req.aauthAdmission` (see `aauthAdmission()` middleware in actions.ts).
+    //
+    // Fail-safe by construction: `admitFromAAuthContext` only returns
+    // `admitted: true` for a verified signature matched to an `active`
+    // grant, and `user_id` is always the grant owner — never a
+    // request-supplied id — so an AAuth caller cannot pivot owners.
+    // Per-(op, entity_type) capability scope is enforced on each tool call,
+    // identical to the REST path.
+    //
+    // Read from the request-scoped AsyncLocalStorage context (threaded by
+    // actions.ts into the outer runWithRequestContext before transport
+    // handling) rather than a shared session field. The outer context is
+    // per-async-chain (per HTTP request), so concurrent admitted requests
+    // from different grant owners cannot contaminate each other's admission.
+    // The previous `this.sessionAdmission` single-field approach had a
+    // cross-request race: request B's setSessionAdmission() could overwrite
+    // the field in the window before request A read it, causing A to
+    // authenticate as B's user_id (owner pivot).
+    const admission = getCurrentAAuthAdmission();
+    if (admission?.admitted && admission.user_id) {
+      this.setAuthenticatedIdentity(admission.user_id, null);
+      this.requestAuth.set(requestId, {
+        userId: admission.user_id,
+        token: `aauth:${admission.grant_id ?? "admitted"}`,
+      });
+      logger.info(
+        `[MCP Server] Authenticated via AAuth admission (user: ${admission.user_id}, grant: ${admission.grant_id ?? "unknown"})`
+      );
+      return "authenticated";
+    }
+
+    return "unauthenticated";
+  }
+
+  // --------------------------------------------------------------------------
+  // MCP 2026-07-28 stateless path (#2070)
+  // --------------------------------------------------------------------------
+
+  /**
+   * `server/discover` (2026-07-28, SEP-2575). Registered only on stateless-path
+   * instances (see {@link handleStatelessRequest}): stdio and legacy HTTP
+   * sessions are initialize-based, and answering a dual-era client's
+   * `server/discover` probe there would tell it to skip `initialize`, which is
+   * where those transports authenticate. Carries protocol versions, this
+   * server's declared capabilities, its identity and its instructions only:
+   * no caller identity, no tenant data (standing rules and instance skills are
+   * per-user graph data and stay off this RPC), no instance topology. The
+   * instructions are the same composition `/mcp-interaction-instructions`
+   * serves publicly: the MCP instruction block plus the instance data policy.
+   */
+  private setupDiscoverHandler(): void {
+    this.mcpServer.server.setRequestHandler(ServerDiscoverRequestSchema, async () =>
+      this.buildDiscoverResult()
+    );
+  }
+
+  async buildDiscoverResult(): Promise<Record<string, unknown>> {
+    let policySection = "";
+    try {
+      const { getInstancePolicy, renderInstancePolicyInstructions } =
+        await import("./services/instance_policy.js");
+      policySection = renderInstancePolicyInstructions(await getInstancePolicy());
+    } catch (err) {
+      logger.warn(
+        `[instance_policy] discover instructions render skipped: ${(err as Error).message}`
+      );
+    }
+    return {
+      resultType: "complete",
+      supportedVersions: [...MCP_MODERN_SUPPORTED_VERSIONS],
+      capabilities: { ...NEOTOMA_MCP_DECLARED_CAPABILITIES },
+      instructions: composeClientInstructions(this.getMcpInteractionInstructions(), policySection),
+      ttlMs: MCP_STATELESS_CACHE_HINT.ttlMs,
+      cacheScope: MCP_STATELESS_CACHE_HINT.cacheScope,
+      _meta: { [MCP_META_SERVER_INFO]: this.getServerInfo() },
+    };
+  }
+
+  /** Self-reported server identity (display and logging only). */
+  getServerInfo(): { name: string; version: string } {
+    return { name: "neotoma", version: readPackageVersion(config.projectRoot) };
+  }
+
+  /**
+   * Load one stateless request's attribution inputs onto this instance. The
+   * caller constructs a FRESH instance per request and discards it after
+   * {@link handleStatelessRequest}, so these fields never outlive the request
+   * and are never shared with a concurrent one. Synchronous, so the caller can
+   * read {@link getAgentIdentity} before entering the request context.
+   */
+  primeStatelessRequest(input: {
+    connectionId?: string | null;
+    aauthContext: AAuthRequestContext | null;
+    clientInfo: { name?: string; version?: string } | null;
+    appOrigin?: { origin?: string; source?: SessionOriginInfo["source"] };
+  }): void {
+    this.isHTTPTransportSession = true;
+    // Identity fields go through the same setters the legacy session path
+    // uses, so a change to how a field is stored stays in one place.
+    this.setSessionConnectionId(input.connectionId ?? null);
+    this.setSessionAgentIdentity(input.aauthContext);
+    this.setSessionClientInfo(input.clientInfo);
+    this.setSessionAppOrigin(input.appOrigin?.origin ?? null, input.appOrigin?.source ?? null);
+  }
+
+  /**
+   * Serve exactly one 2026-07-28 JSON-RPC request: resolve identity from this
+   * request's credentials alone, dispatch through the SDK's own request
+   * handling over a one-request transport, and return the shaped response
+   * (null for a notification). Must run inside the request's
+   * `runWithRequestContext` so an AAuth admission is visible to
+   * {@link resolveAuthentication} and the per-tool capability gate.
+   */
+  async handleStatelessRequest(
+    message: Record<string, unknown>,
+    requestInfo: { headers: IncomingHttpHeaders }
+  ): Promise<{
+    status: number;
+    body: Record<string, unknown>;
+    authFailure?: McpStatelessAuthFailure;
+  } | null> {
+    const connectionId = await this.resolveRequestConnectionId(
+      requestInfo.headers as Record<string, unknown>,
+      undefined,
+      true,
+      "Stateless request"
+    );
+    const outcome = await this.resolveAuthentication({
+      connectionId,
+      isHTTPTransport: true,
+      requestId: randomUUID(),
+    });
+    // A credential that passed the HTTP gate but resolved to no user is an
+    // authentication failure of THIS request: answer 401 now, before any
+    // method runs, instead of letting it surface later as a tool error.
+    if (outcome !== "authenticated") {
+      logger.info(`[MCP Server] Stateless request not authenticated (${outcome})`);
+      return {
+        status: 401,
+        body: statelessAuthFailureJsonRpcBody(outcome, jsonRpcIdOf(message)),
+        authFailure: outcome,
+      };
+    }
+
+    this.setupDiscoverHandler();
+    const id = jsonRpcIdOf(message);
+    const transport = new SingleExchangeTransport(id);
+    await this.mcpServer.server.connect(transport);
+    try {
+      transport.deliver(message as unknown as JSONRPCMessage, { requestInfo });
+      const response = await transport.response;
+      if (!response) return null;
+      const method = typeof message.method === "string" ? message.method : "";
+      return shapeModernResponse(method, response, this.getServerInfo());
+    } finally {
+      await this.mcpServer.server.close();
+    }
   }
 
   /**
@@ -598,11 +884,75 @@ export class NeotomaServer {
   }
 
   /**
+   * The single setter for this server's identity (#2240). Sets the graph
+   * user_id and the signed-in member together, so every path that changes
+   * who this server acts as also decides — explicitly — whether a member
+   * stands behind it. Paths with no verified sign-in pass null.
+   */
+  private setAuthenticatedIdentity(userId: string | null, actorId: string | null): void {
+    this.authenticatedUserId = userId;
+    this.authenticatedPrincipal = userId && actorId ? { graphUserId: userId, actorId } : null;
+  }
+
+  /**
+   * Adopt an identity resolved from an OAuth connection row: the graph scope
+   * every read and write uses, plus — when a verified sign-in recorded one on
+   * the row — the member who signed in, as their per-instance attribution id
+   * (#2240). A missing or unresolvable member stays missing; it is never
+   * filled in from the graph user_id, which on a shared graph names the owner
+   * rather than the author.
+   */
+  private async adoptConnectionIdentity(
+    userId: string,
+    signerLocalUserId: string | undefined
+  ): Promise<void> {
+    const actorId = signerLocalUserId
+      ? await getOrCreateMemberAttributionId(signerLocalUserId)
+      : null;
+    this.setAuthenticatedIdentity(userId, actorId);
+  }
+
+  /**
+   * The signed-in member for write attribution, or null. Fails closed: a
+   * principal resolved alongside a different graph user_id than the one now
+   * authenticated is discarded rather than stamped (#2240).
+   */
+  private currentAuthenticatedPrincipal(): AuthenticatedPrincipal | null {
+    const principal = this.authenticatedPrincipal;
+    if (!principal || !this.authenticatedUserId) return null;
+    if (principal.graphUserId !== this.authenticatedUserId) return null;
+    return { actorId: principal.actorId };
+  }
+
+  /**
+   * Listing-handler fallback matching initialize's order: when no
+   * connection id resolved a user, a request the /mcp gate admitted via AAuth
+   * authenticates as the grant owner (never a request-supplied id).
+   */
+  private userIdFromCurrentAdmission(): string | null {
+    const admission = getCurrentAAuthAdmission();
+    if (admission?.admitted && admission.user_id) {
+      this.setAuthenticatedIdentity(admission.user_id, null);
+      return admission.user_id;
+    }
+    return null;
+  }
+
+  /**
    * Set connection ID for this session from the HTTP layer.
    * Ensures listTools/listResources get auth when the SDK does not pass requestInfo to handlers.
    */
-  setSessionConnectionId(connectionId: string): void {
+  setSessionConnectionId(connectionId: string | null): void {
     this.sessionConnectionId = connectionId;
+  }
+
+  /**
+   * Record the client's self-reported `clientInfo` (fallback attribution only;
+   * unverified). Legacy sessions take it from `initialize`, 2026-07-28 requests
+   * from `params._meta`.
+   */
+  setSessionClientInfo(clientInfo: { name?: string; version?: string } | null): void {
+    this.sessionClientInfo = clientInfo;
   }
 
   /**
@@ -724,12 +1074,12 @@ export class NeotomaServer {
     try {
       if (connectionId === "dev-local") {
         const devUser = await ensureLocalDevUser();
-        this.authenticatedUserId = devUser.id;
+        this.setAuthenticatedIdentity(devUser.id, null);
         return devUser.id;
       }
       const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-      const { userId } = await getAccessTokenForConnection(connectionId);
-      this.authenticatedUserId = userId;
+      const { userId, authenticatedUserId } = await getAccessTokenForConnection(connectionId);
+      await this.adoptConnectionIdentity(userId, authenticatedUserId);
       logger.info(`[MCP Server] initialize fallback resolved userId: ${userId}`);
       return userId;
     } catch (error: unknown) {
@@ -811,9 +1161,15 @@ export class NeotomaServer {
       }
     }
 
-    const filesystemSkills = this.getAvailableSkills();
+    // A graph-stored skill row that reuses a retired package skill's name is
+    // dropped from both the instructions block and `available_skills`: package
+    // skills win on name collision, so the row never materializes locally and
+    // surfacing it would re-offer the retired skill under the same name.
+    const packageSkills = this.getPackageSkills();
+    const retiredPackageNames = new Set(packageSkills.deprecated);
+    instanceSkills = instanceSkills.filter((s) => !retiredPackageNames.has(s.name));
     const availableSkills = Array.from(
-      new Set([...filesystemSkills, ...instanceSkills.map((s) => s.name)])
+      new Set([...packageSkills.installable, ...instanceSkills.map((s) => s.name)])
     ).sort();
 
     // An instance with no skill rows is a complete no-op: the renderer returns
@@ -1660,7 +2016,9 @@ export class NeotomaServer {
       state: z.enum(["open", "closed", "all"]).optional(),
       labels: z.array(z.string()).optional(),
       since: z.string().optional(),
+      repo: IssuesSyncRepoSchema.optional(),
       push: z.boolean().optional(),
+      commit: z.boolean().optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -1672,10 +2030,28 @@ export class NeotomaServer {
         state: parsed.state,
         labels: parsed.labels,
         since: parsed.since,
+        repo: parsed.repo,
         push: parsed.push,
+        commit: parsed.commit,
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
+      // Only caller errors map to InvalidParams: a malformed repo, and a repo outside the
+      // configured allowlist. Upstream GitHub failures (401, 404, rate limits) and other
+      // transport errors are not caller errors and fall through to InternalError. The
+      // message is the service's own and does not disclose whether the repo exists.
+      const { isIssueValidationError, isIssueTransportError } =
+        await import("./services/issues/errors.js");
+      if (
+        isIssueValidationError(err) ||
+        (isIssueTransportError(err) && err.code === "ERR_ISSUE_REPO_NOT_ALLOWED")
+      ) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `sync_issues failed: ${err.message}`,
+          err.toErrorEnvelopeDetails()
+        );
+      }
       throw new McpError(ErrorCode.InternalError, `sync_issues failed: ${err?.message ?? err}`);
     }
   }
@@ -1974,23 +2350,26 @@ export class NeotomaServer {
 
       // If instance-level userId isn't set, try session connection ID (set by HTTP layer) or request context
       if (!userId) {
+        // Gate-resolved connection id only (see initialize); never the
+        // request's own X-Connection-Id header.
         const connectionId =
           this.sessionConnectionId ||
-          (extra?.requestInfo &&
-            ((extra.requestInfo as any)?.headers?.["x-connection-id"] ??
-              (extra.requestInfo as any)?.headers?.["X-Connection-Id"])) ||
+          getCurrentMcpConnectionId() ||
           (extra?.authInfo as any)?.connectionId;
 
         if (connectionId) {
           try {
+            let principalUserId: string | undefined;
             if (connectionId === "dev-local") {
               userId = (await ensureLocalDevUser()).id;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-              const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+              const { userId: resolvedUserId, authenticatedUserId } =
+                await getAccessTokenForConnection(connectionId);
               userId = resolvedUserId;
+              principalUserId = authenticatedUserId;
             }
-            this.authenticatedUserId = userId;
+            await this.adoptConnectionIdentity(userId, principalUserId);
             logger.info(`[MCP Server] listTools fallback resolved userId: ${userId}`);
           } catch (error: any) {
             // Check if error is a connection not found error (invalid/expired X-Connection-Id)
@@ -2001,7 +2380,7 @@ export class NeotomaServer {
 
             if (isInvalidConnection) {
               logger.error(
-                `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. User needs to remove header and reconnect.`
+                `[MCP Server] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionId)}). User needs to remove header and reconnect.`
               );
               // Don't throw - throwing causes "Error - Show Output" instead of triggering reconnection
               // The invalid connection was already handled in initialize by throwing an error there
@@ -2013,6 +2392,10 @@ export class NeotomaServer {
             }
           }
         }
+      }
+
+      if (!userId) {
+        userId = this.userIdFromCurrentAdmission();
       }
 
       if (!userId) {
@@ -2105,8 +2488,16 @@ export class NeotomaServer {
         // `getCurrentAAuthAdmission()`) binds for AAuth-admitted MCP sessions.
         // Without this the nested scope shadows the admission to null and the
         // gate silently no-ops.
+        // #2240: carry the signed-in person, when one stands behind this
+        // session, so writes record who made them alongside the graph they
+        // land in. Null for every non-sign-in auth path.
         const result = await runWithRequestContext(
-          { agentIdentity: identity, attributionDecision, aauthAdmission: admissionForThisRequest },
+          {
+            agentIdentity: identity,
+            attributionDecision,
+            aauthAdmission: admissionForThisRequest,
+            authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+          },
           () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
@@ -2133,6 +2524,24 @@ export class NeotomaServer {
           // clients branch on `OVERRIDE_POLICY_VIOLATION` via the MCP `data`
           // field (see src/services/override_validation.ts).
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof EntityOwnerConflictError) {
+          // Writes resolve only to entities the writer owns (tenant
+          // isolation). Same structured-envelope contract: clients branch on
+          // `entity_owner_conflict` via the MCP `data` field (see
+          // src/services/entity_resolution.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (
+          error instanceof Error &&
+          (error as { code?: unknown }).code === "agent_grant_pin_conflict"
+        ) {
+          // A refused agent_grant key pin: a client error, not a server
+          // fault. Same `code` as the REST 409 envelope.
+          throw new McpError(ErrorCode.InvalidRequest, error.message, {
+            code: "agent_grant_pin_conflict",
+            field: "match_thumbprint",
+          });
         }
         if (error instanceof StorePolicyDeniedError) {
           // Instance store-policy denials (#1975) get the same treatment. Without
@@ -2213,7 +2622,8 @@ export class NeotomaServer {
     args: unknown,
     userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    this.authenticatedUserId = userId;
+    // Local CLI dispatch carries no verified sign-in: no person (#2240).
+    this.setAuthenticatedIdentity(userId, null);
     // Mirror the CallToolRequestSchema dispatch: wrap in the request-scoped
     // context so CLI-over-MCP callers (see src/cli/core/operations.ts and
     // openclaw_entry.ts) stamp attribution just like HTTP `/mcp`. When no
@@ -2226,7 +2636,12 @@ export class NeotomaServer {
     // not grant-based AAuth). Pass null so the capability gate is a no-op
     // for CLI callers, matching prior behaviour.
     return runWithRequestContext(
-      { agentIdentity: identity, attributionDecision, aauthAdmission: null },
+      {
+        agentIdentity: identity,
+        attributionDecision,
+        aauthAdmission: null,
+        authenticatedPrincipal: null,
+      },
       () => this.executeTool(name, args)
     );
   }
@@ -2384,23 +2799,26 @@ export class NeotomaServer {
 
       // If instance-level userId isn't set, try session connection ID (set by HTTP layer) or request context
       if (!userId) {
+        // Gate-resolved connection id only (see initialize); never the
+        // request's own X-Connection-Id header.
         const connectionId =
           this.sessionConnectionId ||
-          (extra?.requestInfo &&
-            ((extra.requestInfo as any)?.headers?.["x-connection-id"] ??
-              (extra.requestInfo as any)?.headers?.["X-Connection-Id"])) ||
+          getCurrentMcpConnectionId() ||
           (extra?.authInfo as any)?.connectionId;
 
         if (connectionId) {
           try {
+            let principalUserId: string | undefined;
             if (connectionId === "dev-local") {
               userId = (await ensureLocalDevUser()).id;
             } else {
               const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-              const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+              const { userId: resolvedUserId, authenticatedUserId } =
+                await getAccessTokenForConnection(connectionId);
               userId = resolvedUserId;
+              principalUserId = authenticatedUserId;
             }
-            this.authenticatedUserId = userId;
+            await this.adoptConnectionIdentity(userId, principalUserId);
             logger.info(`[MCP Server] listResources fallback resolved userId: ${userId}`);
           } catch (error: any) {
             // Check if error is a connection not found error (invalid/expired X-Connection-Id)
@@ -2411,7 +2829,7 @@ export class NeotomaServer {
 
             if (isInvalidConnection) {
               logger.error(
-                `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. User needs to remove header and reconnect.`
+                `[MCP Server] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionId)}). User needs to remove header and reconnect.`
               );
               // Don't throw - throwing causes "Error - Show Output" instead of triggering reconnection
               // The invalid connection was already handled in initialize by throwing an error there
@@ -2423,6 +2841,10 @@ export class NeotomaServer {
             }
           }
         }
+      }
+
+      if (!userId) {
+        userId = this.userIdFromCurrentAdmission();
       }
 
       if (!userId) {
@@ -2457,15 +2879,18 @@ export class NeotomaServer {
         const { count: entityCount } = await db
           .from("entities")
           .select("*", { count: "exact", head: true })
+          .eq("user_id", userId)
           .is("merged_to_entity_id", null);
 
         const { count: relationshipCount } = await db
           .from("relationship_snapshots")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId);
 
         const { count: sourceCount } = await db
           .from("sources")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId);
 
         resources.push({
           uri: "neotoma://entities",
@@ -2506,7 +2931,7 @@ export class NeotomaServer {
         try {
           const { SchemaRegistryService } = await import("./services/schema_registry.js");
           const schemaRegistry = new SchemaRegistryService();
-          const entityTypes = await schemaRegistry.listEntityTypes();
+          const entityTypes = await schemaRegistry.listEntityTypes(undefined, userId);
           resources.push({
             uri: "neotoma://entity_types",
             name: "Entity Types",
@@ -2523,6 +2948,7 @@ export class NeotomaServer {
           const { data: relationshipTypes, error: rtError } = await db
             .from("relationship_snapshots")
             .select("relationship_type")
+            .eq("user_id", userId)
             .order("relationship_type");
 
           if (!rtError && relationshipTypes && relationshipTypes.length > 0) {
@@ -2674,26 +3100,34 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
     const { expires_in } = parsed;
+    const userId = this.getAuthenticatedUserId();
+    const { getOwnedSource, getOwnedSourceByStoragePath } =
+      await import("./services/scoped_reads.js");
 
-    // --- Reference-source lookup (#1775) ---
-    // If source_id is provided, check if it is a reference source and resolve locally.
+    // --- Source-id lookup (#1775) ---
+    // The source must belong to the authenticated user; a source owned by
+    // anyone else resolves exactly like one that does not exist.
     if (parsed.source_id) {
-      const { data: sourceRow, error: sourceErr } = await db
-        .from("sources")
-        .select("id, storage_mode, reference_path, content_hash, host_id, mime_type")
-        .eq("id", parsed.source_id)
-        .maybeSingle();
-
-      if (sourceErr) {
-        throw new Error(`Failed to look up source: ${sourceErr.message}`);
-      }
+      const sourceRow = await getOwnedSource<{
+        id: string;
+        storage_mode?: string | null;
+        storage_url?: string | null;
+        reference_path?: string | null;
+        content_hash?: string | null;
+        host_id?: string | null;
+        mime_type?: string | null;
+      }>(
+        parsed.source_id,
+        userId,
+        "id, storage_mode, storage_url, reference_path, content_hash, host_id, mime_type"
+      );
 
       if (sourceRow?.storage_mode === "reference") {
         const { resolveReferenceSource } = await import("./services/raw_storage.js");
         const resolution = resolveReferenceSource({
-          reference_path: sourceRow.reference_path,
-          content_hash: sourceRow.content_hash,
-          host_id: sourceRow.host_id,
+          reference_path: sourceRow.reference_path ?? null,
+          content_hash: sourceRow.content_hash ?? null,
+          host_id: sourceRow.host_id ?? null,
         });
 
         if (!resolution.found) {
@@ -2712,30 +3146,34 @@ export class NeotomaServer {
           mime_type: sourceRow.mime_type,
         });
       }
-    }
 
-    // --- Legacy path: storage_url / signed URL ---
-    const file_path = parsed.file_path;
-    if (!file_path) {
-      // If we have a source_id but it's not a reference source, retrieve its storage_url
-      if (parsed.source_id) {
-        const { data: sourceRow, error: sourceErr } = await db
-          .from("sources")
-          .select("storage_url")
-          .eq("id", parsed.source_id)
-          .maybeSingle();
-        if (sourceErr || !sourceRow?.storage_url) {
+      if (!parsed.file_path) {
+        // Not a reference source: sign the owned source's storage_url.
+        if (!sourceRow?.storage_url) {
           throw new Error("Could not resolve storage_url for source");
         }
-        // Fall through with the resolved storage_url as file_path
-        return await this.retrieveFileUrl({
-          file_path: sourceRow.storage_url,
-          expires_in,
-        });
+        return await this.signStoragePath(sourceRow.storage_url, expires_in);
       }
-      throw new Error("file_path or source_id is required");
     }
 
+    // --- Storage-path lookup ---
+    const file_path = parsed.file_path;
+    if (!file_path) {
+      throw new Error("file_path or source_id is required");
+    }
+    // Only sign a path that belongs to one of the caller's own sources.
+    const owned = await getOwnedSourceByStoragePath(file_path, userId);
+    if (!owned) {
+      throw new Error("Could not resolve storage_url for source");
+    }
+    // Sign the matched row's stored location, never the caller's string.
+    return await this.signStoragePath(`${SOURCES_STORAGE_BUCKET}/${owned.storage_url}`, expires_in);
+  }
+
+  private async signStoragePath(
+    file_path: string,
+    expires_in?: number
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const pathParts = file_path.split("/");
     const bucket = pathParts[0];
     const path = pathParts.slice(1).join("/");
@@ -3219,7 +3657,7 @@ export class NeotomaServer {
         // time-sensitive (fragment content doesn't change) so we reuse the current
         // value just as the previous inlined implementation did.
         const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-        const currentEntity = await getEntityWithProvenance(entity.entity_id);
+        const currentEntity = await getEntityWithProvenance(entity.entity_id, false, userId);
 
         return renderEntitySnapshotResponse({
           ...historicalResult,
@@ -3300,12 +3738,16 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(undefined);
 
-    // Get the snapshot to extract provenance
+    // Get the snapshot to extract provenance. Every read below is scoped to
+    // the authenticated user; an entity outside that scope resolves exactly
+    // like one that does not exist.
     const { data: snapshot, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .single();
 
     if (snapshotError || !snapshot) {
@@ -3330,6 +3772,7 @@ export class NeotomaServer {
       .from("observations")
       .select("*")
       .eq("id", observationId)
+      .eq("user_id", userId)
       .single();
 
     if (obsError || !observation) {
@@ -3348,6 +3791,7 @@ export class NeotomaServer {
       .from("sources")
       .select("id, mime_type, file_size, original_filename, created_at")
       .eq("id", observation.source_id)
+      .eq("user_id", userId)
       .single();
 
     if (sourceError || !sourceData) {
@@ -3433,6 +3877,15 @@ export class NeotomaServer {
           code: error.code,
           relationship_type: error.relationshipType,
           hint: error.hint,
+        });
+      }
+      if (error instanceof OwnedEntityNotFoundError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          entity_id: error.entityId,
+          hint:
+            "Both endpoints must be entities you own. Store the entity first, or in the " +
+            "same store call referenced by index, then link it.",
         });
       }
       // Check for specific error types
@@ -4638,24 +5091,27 @@ export class NeotomaServer {
     // Return a structured non-throwing response with a hint instead of propagating
     // an opaque internal error. Callers should use register_schema first.
     //
-    // The scope this guard checks (`parsed.user_specific ? userId : undefined`)
-    // is intentionally left as-is here — the write-scope resolution mechanism
-    // itself (read scope vs. write scope agreement) is #2374/#2378, fixed in
-    // PR #2446, not duplicated in this change (#2454).
+    // #2374: this existence check must resolve the SAME row
+    // `updateSchemaIncremental` itself will read inside the call below:
+    // user-scope-preferred (userId) when `user_specific` is omitted or true,
+    // global-only when the caller explicitly passed `user_specific: false`.
+    // Gating it on `user_specific` being truthy (the old rule) meant a caller
+    // who left that field unset — the common case — had this guard check the
+    // GLOBAL row while the update read the USER row.
     const { loadCodeDefinedSchemaEntry } = await import("./services/schema_registry.js");
     const registeredSchema = await schemaRegistry.loadActiveSchema(
       parsed.entity_type,
-      parsed.user_specific ? userId : undefined
+      parsed.user_specific === false ? undefined : userId
     );
     if (!registeredSchema) {
       const codeDefinedSchema = await loadCodeDefinedSchemaEntry(parsed.entity_type);
       if (!codeDefinedSchema) {
-        // #2454: this guard's lookup is scope-limited (see comment above), so
-        // it can come up empty even when a schema for this entity_type is
-        // genuinely active in a DIFFERENT scope than the one this call
-        // checked — e.g. describe_entity_type resolved it (unconditional
-        // userId, user-scope-preferred) but this guard's scope-gated lookup
-        // did not. Telling such a caller to `register_schema` is actively
+        // #2454: this guard's lookup is scope-limited when the caller passed
+        // an explicit `user_specific: false` (see comment above), so it can
+        // come up empty even when a schema for this entity_type is genuinely
+        // active in the caller's USER scope — describe_entity_type resolves
+        // it (unconditional userId, user-scope-preferred) but a global-only
+        // lookup does not. Telling such a caller to `register_schema` is actively
         // harmful: the type already has an active schema and (per #2374/
         // #2378) live entities, so registering another schema for it is how
         // the dual-active-row condition arises — the next incremental call
@@ -4670,7 +5126,10 @@ export class NeotomaServer {
         // existing register_schema guidance still applies unchanged.
         const anyScopeSchema = await schemaRegistry.loadActiveSchema(parsed.entity_type, userId);
         if (anyScopeSchema) {
-          const guardScope = parsed.user_specific ? "user" : "global";
+          // Only an explicit `user_specific: false` narrows the guard to
+          // global; omitted/true resolve user-preferring, so a miss there is a
+          // miss in every scope and never reaches this branch.
+          const guardScope = parsed.user_specific === false ? "global" : "user";
           const foundScope = anyScopeSchema.scope ?? "global";
           return this.buildTextResponse({
             error: {
@@ -4682,13 +5141,13 @@ export class NeotomaServer {
               hint:
                 `The existing SchemaDefinition for "${parsed.entity_type}" lives in ` +
                 `"${foundScope}" scope. This call did not check that scope because ` +
-                `user_specific was ${parsed.user_specific ? "true" : "not set (defaults to false)"}. ` +
+                `user_specific was ${parsed.user_specific === false ? "false" : "true"}. ` +
                 "This entity_type already has an active schema — creating a second one for it " +
                 "risks leaving two active schema_registry rows for the same entity_type (see " +
                 "#2374/#2378), after which the next incremental update can merge onto stale " +
-                `state and drop fields. Instead, retry update_schema_incremental with ` +
-                `user_specific: ${foundScope === "user"} so the call resolves the scope the ` +
-                "schema actually lives in.",
+                "state and drop fields. Instead, retry update_schema_incremental without " +
+                "user_specific (the call then writes to whichever scope your schema resolves " +
+                `to), or with user_specific: ${foundScope === "user"}.`,
               details: {
                 entity_type: parsed.entity_type,
                 guard_scope: guardScope,
@@ -4723,6 +5182,14 @@ export class NeotomaServer {
     }
 
     try {
+      // #2374: pass `user_specific` through EXACTLY as the caller sent it —
+      // `undefined` when omitted, `true`/`false` when explicit. The Zod
+      // schema no longer defaults this field (see action_schemas.ts), so
+      // `updateSchemaIncremental` can tell "no stated intent, defer to
+      // whatever scope the read resolves" apart from "explicitly global."
+      // Likewise pass `userId` unconditionally: the service decides for
+      // itself whether to use it, based on the resolved scope, not on
+      // whether this handler pre-guessed `user_specific`.
       const updatedSchema = await schemaRegistry.updateSchemaIncremental({
         entity_type: parsed.entity_type,
         fields_to_add: parsed.fields_to_add,
@@ -4730,15 +5197,31 @@ export class NeotomaServer {
         canonical_name_fields: parsed.canonical_name_fields,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
-        user_id: parsed.user_specific ? userId : undefined,
+        user_id: userId,
         activate: parsed.activate,
         migrate_existing: parsed.migrate_existing,
-        // For global schemas user_id above is undefined, but migrate_existing must
-        // still scope to the authenticated caller so raw_fragments stored by this
-        // user are promoted.  Pass the resolved userId whenever we are doing a
-        // migration, regardless of user_specific.
+        // For global schemas user_id above may still be used for migration
+        // scoping even when the write itself resolves global — pass the
+        // resolved userId whenever a migration was requested, regardless of
+        // the write scope.
         migrate_user_id: parsed.migrate_existing ? userId : undefined,
+        // #2197: this was validated by UpdateSchemaIncrementalRequestSchema
+        // (which already declares `force`) but never forwarded to the
+        // service, so the entity-type naming guards had no reachable
+        // override from MCP even before the tool's inputSchema omitted it.
+        force: parsed.force,
       });
+
+      // #2379: derive `migrated_existing` from the ACTUAL migration result,
+      // never from `parsed.migrate_existing` (the request echo). A request
+      // to migrate that promoted nothing is a real, reportable outcome —
+      // not indistinguishable success.
+      const migrationResult = updatedSchema.migration_result;
+      // #2374: report the scope this call ACTUALLY wrote to — read off the
+      // persisted row (`updatedSchema.scope`), never re-derived from the
+      // request's `user_specific`, which may have been omitted and deferred
+      // to whatever scope the read resolved.
+      const scopeWritten = updatedSchema.scope === "user" ? "user" : "global";
 
       return this.buildTextResponse({
         success: true,
@@ -4754,8 +5237,14 @@ export class NeotomaServer {
           (updatedSchema.schema_definition as { canonical_name_fields?: unknown })
             .canonical_name_fields ?? null,
         activated: parsed.activate,
-        migrated_existing: parsed.migrate_existing,
-        scope: parsed.user_specific ? "user" : "global",
+        migrated_existing: (migrationResult?.migrated_count ?? 0) > 0,
+        // Present only when migrate_existing was requested — a caller that
+        // never asked for migration should not see fabricated zero-skip data.
+        ...(migrationResult ? { migration_result: migrationResult } : {}),
+        scope: scopeWritten,
+        // #2374: name which user's row this was, when scoped, so a caller
+        // relying on this response never has to guess or re-derive it.
+        ...(scopeWritten === "user" ? { user_id: updatedSchema.user_id ?? null } : {}),
       });
     } catch (error: any) {
       // Detect R2 identity-configuration error from the base schema.
@@ -4841,6 +5330,20 @@ export class NeotomaServer {
       }
     }
 
+    // #2482: a bare `{ relationship_types: [], total: 0 }` is indistinguishable
+    // from "this instance genuinely has no permitted types", which is never
+    // true once the built-in seed has run. Explain WHY the list is empty
+    // rather than letting a caller read unknown as a conclusion.
+    const emptyReason =
+      registrations.length === 0
+        ? await relationshipTypeRegistry.describeEmpty({
+            user_id: userId,
+            keyword: parsed.keyword,
+            scope: parsed.scope,
+            include_deactivated: parsed.include_deactivated,
+          })
+        : null;
+
     return this.buildTextResponse({
       relationship_types: registrations.map((r) => ({
         ...r,
@@ -4849,6 +5352,7 @@ export class NeotomaServer {
           : {}),
       })),
       total: registrations.length,
+      ...(emptyReason ? { empty_reason: emptyReason.empty_reason, hint: emptyReason.hint } : {}),
     });
   }
 
@@ -4881,11 +5385,11 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId();
 
     {
-      const { enforceRelationshipTypeCapability, contextFromAgentIdentity } =
+      const { enforceRelationshipTypeCapabilityWithHint, contextFromAgentIdentity } =
         await import("./services/agent_capabilities.js");
       const { getCurrentAgentIdentity } = await import("./services/request_context.js");
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
-      enforceRelationshipTypeCapability(parsed.relationship_type, parsed.scope, ctx);
+      await enforceRelationshipTypeCapabilityWithHint(parsed.relationship_type, parsed.scope, ctx);
     }
 
     const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =
@@ -4954,6 +5458,11 @@ export class NeotomaServer {
         user_id: parsed.user_specific ? userId : undefined, // Only set user_id if user_specific
         user_specific: parsed.user_specific,
         activate: parsed.activate,
+        // #2197: this was validated by RegisterSchemaRequestSchema (which
+        // already declares `force`) but never forwarded to the service, so
+        // the entity-type naming guards had no reachable override from MCP
+        // even after the tool's inputSchema is fixed to accept the param.
+        force: parsed.force,
       });
 
       return this.buildTextResponse({
@@ -5040,14 +5549,11 @@ export class NeotomaServer {
       },
     });
 
-    const relationshipsCreated: Array<{
-      relationship_type: string;
-      source_entity_id: string;
-      target_entity_id: string;
-    }> = [];
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (parsed.relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
-      for (const rel of parsed.relationships as StoreRelationshipRef[]) {
+      for (const [relIndex, rel] of (parsed.relationships as StoreRelationshipRef[]).entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -5060,20 +5566,31 @@ export class NeotomaServer {
             : typeof rel.target_index === "number"
               ? result.entities[rel.target_index]?.entityId
               : undefined;
-        if (!sourceEntityId || !targetEntityId) continue;
-        await relationshipsService.createRelationship({
-          relationship_type: rel.relationship_type as RelationshipType,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          source_id: parsed.source_id,
-          metadata: rel.metadata ?? {},
-          user_id: userId,
-        });
-        relationshipsCreated.push({
-          relationship_type: rel.relationship_type,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-        });
+        if (!sourceEntityId || !targetEntityId) {
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
+          continue;
+        }
+        try {
+          await relationshipsService.createRelationship({
+            relationship_type: rel.relationship_type as RelationshipType,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+            source_id: parsed.source_id,
+            metadata: rel.metadata ?? {},
+            user_id: userId,
+          });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
+        } catch (relError) {
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
+          );
+        }
       }
     }
 
@@ -5091,6 +5608,7 @@ export class NeotomaServer {
       unknown_fields: result.unknownFieldNames,
       ...(result.hint ? { hint: result.hint } : {}),
       relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: result.noSchemaEntityTypes }
         : {}),
@@ -5358,7 +5876,7 @@ export class NeotomaServer {
       refResponse.asset_entity_id = refAssetInfo.entityId;
       refResponse.asset_entity_type = refAssetInfo.entityType;
 
-      const refEntityIds = await this.getEntityIdsFromSource(refResult.sourceId);
+      const refEntityIds = await this.getEntityIdsFromSource(refResult.sourceId, userId);
       // Dangling-reference invariant: warn if no observations were materialized
       if (refEntityIds.length === 0 && !refResult.deduplicated) {
         refResponse.store_warnings = [
@@ -5431,7 +5949,7 @@ export class NeotomaServer {
     result.asset_entity_id = assetInfo.entityId;
     result.asset_entity_type = assetInfo.entityType;
 
-    const entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
+    const entityIds = await this.getEntityIdsFromSource(storageResult.sourceId, userId);
     let entities: Array<Record<string, unknown>> = [];
     if (entityIds.length > 0) {
       const validEntityIds = entityIds.filter(Boolean);
@@ -5439,14 +5957,16 @@ export class NeotomaServer {
         const { data: entityData, error: entityError } = await db
           .from("entities")
           .select("*")
-          .in("id", validEntityIds);
+          .in("id", validEntityIds)
+          .eq("user_id", userId);
 
         if (!entityError && entityData) {
           entities = entityData as Array<Record<string, unknown>>;
           const { data: snapshots, error: snapError } = await db
             .from("entity_snapshots")
             .select("*")
-            .in("entity_id", validEntityIds);
+            .in("entity_id", validEntityIds)
+            .eq("user_id", userId);
 
           if (!snapError && snapshots) {
             const snapshotMap = new Map(
@@ -5461,7 +5981,7 @@ export class NeotomaServer {
       }
     }
 
-    const relatedData = await this.getRelatedEntitiesAndRelationships(entityIds);
+    const relatedData = await this.getRelatedEntitiesAndRelationships(entityIds, userId);
     result.related_entities = entities;
     result.related_relationships = relatedData.relationships;
 
@@ -5553,11 +6073,12 @@ export class NeotomaServer {
   }
 
   // Helper method to get entity IDs from a source_id
-  private async getEntityIdsFromSource(sourceId: string): Promise<string[]> {
+  private async getEntityIdsFromSource(sourceId: string, userId: string): Promise<string[]> {
     const { data: observations, error } = await db
       .from("observations")
       .select("id, entity_id")
-      .eq("source_id", sourceId);
+      .eq("source_id", sourceId)
+      .eq("user_id", userId);
 
     if (error) {
       console.error("Error fetching observations:", error);
@@ -5595,7 +6116,8 @@ export class NeotomaServer {
 
   // Helper method to retrieve related entities and relationships for entity IDs
   private async getRelatedEntitiesAndRelationships(
-    entityIds: string[]
+    entityIds: string[],
+    userId: string
   ): Promise<{ entities: any[]; relationships: any[] }> {
     if (entityIds.length === 0) {
       return { entities: [], relationships: [] };
@@ -5608,7 +6130,8 @@ export class NeotomaServer {
     const { data: outboundRels, error: outError } = await db
       .from("relationship_snapshots")
       .select("*")
-      .in("source_entity_id", entityIds);
+      .in("source_entity_id", entityIds)
+      .eq("user_id", userId);
 
     if (!outError && outboundRels) {
       allRelationships.push(...outboundRels);
@@ -5620,7 +6143,8 @@ export class NeotomaServer {
     const { data: inboundRels, error: inError } = await db
       .from("relationship_snapshots")
       .select("*")
-      .in("target_entity_id", entityIds);
+      .in("target_entity_id", entityIds)
+      .eq("user_id", userId);
 
     if (!inError && inboundRels) {
       allRelationships.push(...inboundRels);
@@ -5635,7 +6159,8 @@ export class NeotomaServer {
       const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
-        .in("id", Array.from(relatedEntityIds));
+        .in("id", Array.from(relatedEntityIds))
+        .eq("user_id", userId);
 
       if (!entityError && entityData) {
         entities = entityData;
@@ -5644,7 +6169,8 @@ export class NeotomaServer {
         const { data: snapshots, error: snapError } = await db
           .from("entity_snapshots")
           .select("*")
-          .in("entity_id", Array.from(relatedEntityIds));
+          .in("entity_id", Array.from(relatedEntityIds))
+          .eq("user_id", userId);
 
         if (!snapError && snapshots) {
           const snapshotMap = new Map(
@@ -5772,6 +6298,26 @@ export class NeotomaServer {
       enforceAttributionPolicy("observations", getCurrentAgentIdentity());
     }
 
+    // A key thumbprint may be pinned by agent_grants under one owner only.
+    // This core inserts observations directly (not via `createObservation`),
+    // so the check is explicit here, before anything is persisted.
+    {
+      const grantEntities = entities.filter((entityData) => {
+        const raw = (entityData ?? {}) as Record<string, unknown>;
+        return (raw.entity_type ?? raw.type) === "agent_grant";
+      });
+      if (grantEntities.length > 0) {
+        const { assertGrantWriteKeepsPinUnique } = await import("./services/agent_grants.js");
+        for (const entityData of grantEntities) {
+          await assertGrantWriteKeepsPinUnique({
+            userId,
+            entityType: "agent_grant",
+            fields: entityData as Record<string, unknown>,
+          });
+        }
+      }
+    }
+
     // Plan mode: resolve deterministically, report planned actions per entity,
     // and skip every write (source row, observations, snapshots, relationships).
     if (!commit) {
@@ -5816,7 +6362,11 @@ export class NeotomaServer {
             action: result.trace.action,
           });
         } catch (err) {
-          if (err instanceof CanonicalNameUnresolvedError || err instanceof MergeRefusedError) {
+          if (
+            err instanceof CanonicalNameUnresolvedError ||
+            err instanceof MergeRefusedError ||
+            err instanceof EntityOwnerConflictError
+          ) {
             issues.push({
               observation_index: i,
               entity_type: entityType,
@@ -5964,7 +6514,10 @@ export class NeotomaServer {
           existingObservations.map(
             (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
           ) ?? [];
-        const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+        const relatedData = await this.getRelatedEntitiesAndRelationships(
+          existingEntityIds,
+          userId
+        );
         const { data: fragmentRows } = await db
           .from("raw_fragments")
           .select("fragment_key")
@@ -6082,9 +6635,13 @@ export class NeotomaServer {
         },
       });
 
+      // The entities above are already written, so a relationship that
+      // cannot be created is reported rather than failing the whole call.
+      const interpretationRelationshipsCreated: StoreRelationshipCreated[] = [];
+      const interpretationRelationshipsRefused: StoreRelationshipRefused[] = [];
       if (relationships?.length) {
         const { relationshipsService } = await import("./services/relationships.js");
-        for (const rel of relationships) {
+        for (const [relIndex, rel] of relationships.entries()) {
           const sourceEntityId =
             typeof rel.source_entity_id === "string"
               ? rel.source_entity_id
@@ -6097,15 +6654,35 @@ export class NeotomaServer {
               : typeof rel.target_index === "number"
                 ? result.entities[rel.target_index]?.entityId
                 : undefined;
-          if (!sourceEntityId || !targetEntityId) continue;
-          await relationshipsService.createRelationship({
-            relationship_type: rel.relationship_type as RelationshipType,
-            source_entity_id: sourceEntityId,
-            target_entity_id: targetEntityId,
-            source_id: resolvedInterpretationSourceId,
-            metadata: rel.metadata ?? {},
-            user_id: userId,
-          });
+          if (!sourceEntityId || !targetEntityId) {
+            interpretationRelationshipsRefused.push(
+              unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+            );
+            continue;
+          }
+          try {
+            await relationshipsService.createRelationship({
+              relationship_type: rel.relationship_type as RelationshipType,
+              source_entity_id: sourceEntityId,
+              target_entity_id: targetEntityId,
+              source_id: resolvedInterpretationSourceId,
+              metadata: rel.metadata ?? {},
+              user_id: userId,
+            });
+            interpretationRelationshipsCreated.push({
+              relationship_type: rel.relationship_type,
+              source_entity_id: sourceEntityId,
+              target_entity_id: targetEntityId,
+            });
+          } catch (relError) {
+            logger.warn(
+              `store (interpretation): failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
+              relError instanceof Error ? relError.message : String(relError)
+            );
+            interpretationRelationshipsRefused.push(
+              relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
+            );
+          }
         }
       }
 
@@ -6125,6 +6702,10 @@ export class NeotomaServer {
           ? { no_schema_entity_types: result.noSchemaEntityTypes }
           : {}),
         ...(result.hint ? { hint: result.hint } : {}),
+        relationships_created: interpretationRelationshipsCreated,
+        ...(interpretationRelationshipsRefused.length > 0
+          ? { relationships_refused: interpretationRelationshipsRefused }
+          : {}),
       });
     }
 
@@ -6159,7 +6740,11 @@ export class NeotomaServer {
           targetId: preTargetId,
         });
       } catch (err) {
-        if (err instanceof CanonicalNameUnresolvedError || err instanceof MergeRefusedError) {
+        if (
+          err instanceof CanonicalNameUnresolvedError ||
+          err instanceof MergeRefusedError ||
+          err instanceof EntityOwnerConflictError
+        ) {
           preResolutionIssues.push({
             index: preIdx,
             entityType: preEntityType,
@@ -6353,9 +6938,11 @@ export class NeotomaServer {
       // (op, entity_type) pairs declared on its grant. Mirrors the HTTP
       // `/store` gate in actions.ts (`enforceAgentCapability("store", …)`)
       // so an AAuth-authenticated MCP session gets exactly the REST scope —
-      // never broader. No-op for non-admitted callers (`enforceAgentCapability`
-      // only enforces when `ctx.admitted`), so plain OAuth/Bearer users and
-      // anonymous callers are unaffected.
+      // never broader. The limits follow the request's capability ceiling,
+      // not how it authenticated: a signature that names a grant pinning no
+      // key fails closed even under OAuth/Bearer. Callers with no AAuth
+      // signature (plain OAuth/Bearer users, anonymous callers) are
+      // unaffected.
       {
         const { enforceAgentCapability, contextFromAgentIdentity } =
           await import("./services/agent_capabilities.js");
@@ -6514,6 +7101,11 @@ export class NeotomaServer {
             `Observation ${createdEntities.length} (${entityType}): ${err.message}`
           );
         }
+        // EntityOwnerConflictError (and anything else) falls through here
+        // un-wrapped. Should already have been caught by the pre-resolution
+        // pass above (same fields, same userId, commit:false) — this is
+        // defense in depth. Re-thrown as-is so the outer MCP dispatcher's
+        // EntityOwnerConflictError branch runs `error.toErrorEnvelope()`.
         throw err;
       }
 
@@ -6887,11 +7479,15 @@ export class NeotomaServer {
       }
     }
 
-    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation)
+    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation).
+    // Each relationship is created independently: one that cannot be created
+    // is reported in relationships_refused and the rest proceed.
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
       const entityIds = createdEntities.map((e) => e.entityId);
-      for (const rel of relationships) {
+      for (const [relIndex, rel] of relationships.entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -6911,6 +7507,9 @@ export class NeotomaServer {
               `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
               `entities.length=${entityIds.length}); skipping`
           );
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
           continue;
         }
         try {
@@ -6922,10 +7521,18 @@ export class NeotomaServer {
             metadata: rel.metadata ?? {},
             user_id: userId,
           });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
         } catch (relError) {
           logger.warn(
             `store_structured: failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
             relError instanceof Error ? relError.message : String(relError)
+          );
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relError)
           );
         }
       }
@@ -6933,7 +7540,8 @@ export class NeotomaServer {
 
     // Get related entities and relationships for all created entities
     const relatedData = await this.getRelatedEntitiesAndRelationships(
-      createdEntities.map((e) => e.entityId)
+      createdEntities.map((e) => e.entityId),
+      userId
     );
 
     // Schema-driven store_warnings: non-blocking warnings declared in the schema
@@ -7315,6 +7923,8 @@ export class NeotomaServer {
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
+      relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });
   }
@@ -7489,6 +8099,15 @@ export class NeotomaServer {
         })
       );
     } catch (corrErr) {
+      if (corrErr instanceof EntityOwnerConflictError) {
+        // Re-throw as-is (not wrapped in McpError) so the outer MCP
+        // dispatcher's EntityOwnerConflictError branch runs
+        // `error.toErrorEnvelope()` and reports `entity_owner_conflict`
+        // rather than a generic InternalError. In practice this entity was
+        // already proven same-owner above before createCorrection ran; this
+        // is defense in depth against a future call site skipping that check.
+        throw corrErr;
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
@@ -7660,6 +8279,9 @@ export class NeotomaServer {
       ) {
         throw new McpError(ErrorCode.InvalidParams, err.message);
       }
+      if (err instanceof EntityOwnerConflictError) {
+        throw new McpError(ErrorCode.InvalidRequest, err.message, err.toErrorEnvelope());
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to split entity: ${err instanceof Error ? err.message : String(err)}`
@@ -7827,6 +8449,12 @@ export class NeotomaServer {
     );
 
     if (!result.success) {
+      if (result.not_found) {
+        // Same response for a missing entity and another user's entity.
+        throw new McpError(ErrorCode.InvalidParams, result.error ?? "Entity not found", {
+          code: "RESOURCE_NOT_FOUND",
+        });
+      }
       throw new McpError(ErrorCode.InternalError, result.error ?? "Restore entity failed");
     }
 
@@ -7846,16 +8474,35 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
 
-    const result = await restoreRelationshipService(
-      relationshipKey,
-      parsed.relationship_type,
-      parsed.source_entity_id,
-      parsed.target_entity_id,
-      userId,
-      parsed.reason
-    );
+    let result: Awaited<ReturnType<typeof restoreRelationshipService>>;
+    try {
+      result = await restoreRelationshipService(
+        relationshipKey,
+        parsed.relationship_type,
+        parsed.source_entity_id,
+        parsed.target_entity_id,
+        userId,
+        parsed.reason
+      );
+    } catch (error) {
+      if (error instanceof UnregisteredRelationshipTypeError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          relationship_type: error.relationshipType,
+          hint: error.hint,
+        });
+      }
+      throw error;
+    }
 
     if (!result.success) {
+      if (result.not_found) {
+        // Restore only revives a relationship the caller already holds. A
+        // missing relationship and another user's get the same response.
+        throw new McpError(ErrorCode.InvalidParams, result.error ?? "Relationship not found", {
+          code: "RESOURCE_NOT_FOUND",
+        });
+      }
       throw new McpError(ErrorCode.InternalError, result.error ?? "Restore relationship failed");
     }
 
@@ -8085,6 +8732,8 @@ export class NeotomaServer {
     entity_type?: string;
     user_id?: string;
   }): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const { queryEntities } = await import("./services/entity_queries.js");
 
@@ -8092,7 +8741,6 @@ export class NeotomaServer {
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const entityTypeFilter = queryParams?.entity_type;
-      const userId = queryParams?.user_id;
 
       // Get entities with filters
       const entities = await queryEntities({
@@ -8181,13 +8829,14 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const { queryEntities } = await import("./services/entity_queries.js");
 
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
-      const userId = queryParams?.user_id;
 
       const entities = await queryEntities({
         userId,
@@ -8400,6 +9049,8 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const startDate = `${year}-01-01T00:00:00Z`;
       const endDate = `${parseInt(year) + 1}-01-01T00:00:00Z`;
@@ -8411,6 +9062,7 @@ export class NeotomaServer {
       let query = db
         .from("timeline_events")
         .select("*")
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate)
         .order("event_timestamp", { ascending: false });
@@ -8431,6 +9083,7 @@ export class NeotomaServer {
       const { count, error: countError } = await db
         .from("timeline_events")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate);
 
@@ -8478,6 +9131,8 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       const startDate = `${year}-${month}-01T00:00:00Z`;
       const nextMonth =
@@ -8488,41 +9143,13 @@ export class NeotomaServer {
       // Apply query parameters
       const limit = queryParams?.limit || 1000;
       const offset = queryParams?.offset || 0;
-      const userId = queryParams?.user_id;
-
-      // If user_id is provided, get source IDs for that user first
-      let userSourceIds: string[] | undefined;
-      if (userId) {
-        const { data: userSources } = await db.from("sources").select("id").eq("user_id", userId);
-
-        if (userSources && userSources.length > 0) {
-          userSourceIds = userSources.map((s: any) => s.id);
-        } else {
-          // No sources for this user, return empty result
-          return {
-            type: "timeline",
-            category: "timeline",
-            year,
-            month,
-            events: [],
-            total: 0,
-            returned: 0,
-            has_more: false,
-            uri: `neotoma://timeline/${year}-${month}`,
-          };
-        }
-      }
 
       let query = db
         .from("timeline_events")
         .select("*")
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate);
-
-      // Filter by user_id through sources
-      if (userSourceIds && userSourceIds.length > 0) {
-        query = query.in("source_id", userSourceIds);
-      }
 
       query = query.order("event_timestamp", { ascending: false });
 
@@ -8539,17 +9166,12 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = db
+      const { count, error: countError } = await db
         .from("timeline_events")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .gte("event_timestamp", startDate)
         .lt("event_timestamp", endDate);
-
-      if (userSourceIds && userSourceIds.length > 0) {
-        countQuery = countQuery.in("source_id", userSourceIds);
-      }
-
-      const { count, error: countError } = await countQuery;
 
       if (countError) {
         logger.warn("Failed to count timeline events:", countError);
@@ -8592,13 +9214,17 @@ export class NeotomaServer {
    * Resource handler: Get source
    */
   private async handleSource(sourceId: string): Promise<any> {
-    const { data: source, error } = await db
-      .from("sources")
-      .select("*")
-      .eq("id", sourceId)
-      .single();
+    const userId = this.getAuthenticatedUserId();
+    const { getOwnedSource } = await import("./services/scoped_reads.js");
 
-    if (error || !source) {
+    let source: Record<string, any> | null = null;
+    try {
+      source = await getOwnedSource(sourceId, userId);
+    } catch {
+      source = null;
+    }
+
+    if (!source) {
       throw new McpError(ErrorCode.InvalidRequest, `Source not found: ${sourceId}`);
     }
 
@@ -8607,6 +9233,7 @@ export class NeotomaServer {
       .from("observations")
       .select("id, entity_id, entity_type")
       .eq("source_id", sourceId)
+      .eq("user_id", userId)
       .limit(100);
 
     if (obsError) {
@@ -8639,22 +9266,20 @@ export class NeotomaServer {
     order?: "asc" | "desc";
     user_id?: string;
   }): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const sortField = queryParams?.sort || "created_at";
       const sortOrder = queryParams?.order === "asc";
-      const userId = queryParams?.user_id;
 
       let query = db
         .from("sources")
         .select("id, mime_type, file_size, content_hash, created_at, user_id")
+        .eq("user_id", userId)
         .order(sortField, { ascending: sortOrder });
-
-      if (userId) {
-        query = query.eq("user_id", userId);
-      }
 
       if (offset > 0) {
         query = query.range(offset, offset + limit - 1);
@@ -8669,13 +9294,10 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = db.from("sources").select("*", { count: "exact", head: true });
-
-      if (userId) {
-        countQuery = countQuery.eq("user_id", userId);
-      }
-
-      const { count, error: countError } = await countQuery;
+      const { count, error: countError } = await db
+        .from("sources")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId);
 
       if (countError) {
         logger.warn("Failed to count sources:", countError);
@@ -8718,6 +9340,8 @@ export class NeotomaServer {
     relationship_type?: string;
     user_id?: string;
   }): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
@@ -8725,48 +9349,16 @@ export class NeotomaServer {
       const sortField = queryParams?.sort || "last_observation_at";
       const sortOrder = queryParams?.order === "asc";
       const relationshipTypeFilter = queryParams?.relationship_type;
-      const userId = queryParams?.user_id;
-
-      // If user_id is provided, get entity IDs for that user first
-      let userEntityIds: string[] | undefined;
-      if (userId) {
-        const { data: userEntities } = await db
-          .from("entities")
-          .select("id")
-          .eq("user_id", userId)
-          .is("merged_to_entity_id", null);
-
-        if (userEntities && userEntities.length > 0) {
-          userEntityIds = userEntities.map((e: any) => e.id);
-        } else {
-          // No entities for this user, return empty result
-          return {
-            type: "relationship_collection_all",
-            category: "relationships",
-            relationships: [],
-            total: 0,
-            returned: 0,
-            has_more: false,
-            uri: "neotoma://relationships",
-          };
-        }
-      }
 
       let query = db
         .from("relationship_snapshots")
         .select(
           "relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at"
-        );
+        )
+        .eq("user_id", userId);
 
       if (relationshipTypeFilter) {
         query = query.eq("relationship_type", relationshipTypeFilter);
-      }
-
-      // Filter by user_id through entities
-      if (userEntityIds && userEntityIds.length > 0) {
-        query = query.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
       }
 
       query = query.order(sortField, { ascending: sortOrder });
@@ -8786,16 +9378,11 @@ export class NeotomaServer {
       // Get total count
       let countQuery = db
         .from("relationship_snapshots")
-        .select("*", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId);
 
       if (relationshipTypeFilter) {
         countQuery = countQuery.eq("relationship_type", relationshipTypeFilter);
-      }
-
-      if (userEntityIds && userEntityIds.length > 0) {
-        countQuery = countQuery.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
       }
 
       const { count, error: countError } = await countQuery;
@@ -8845,53 +9432,22 @@ export class NeotomaServer {
       user_id?: string;
     }
   ): Promise<any> {
+    // Always the authenticated user; a user_id query param must match it.
+    const userId = this.getAuthenticatedUserId(queryParams?.user_id);
     try {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
       const sortField = queryParams?.sort || "last_observation_at";
       const sortOrder = queryParams?.order === "asc";
-      const userId = queryParams?.user_id;
-
-      // If user_id is provided, get entity IDs for that user first
-      let userEntityIds: string[] | undefined;
-      if (userId) {
-        const { data: userEntities } = await db
-          .from("entities")
-          .select("id")
-          .eq("user_id", userId)
-          .is("merged_to_entity_id", null);
-
-        if (userEntities && userEntities.length > 0) {
-          userEntityIds = userEntities.map((e: any) => e.id);
-        } else {
-          // No entities for this user, return empty result
-          return {
-            type: "relationship_collection",
-            category: "relationships",
-            relationship_type: relationshipType,
-            relationships: [],
-            total: 0,
-            returned: 0,
-            has_more: false,
-            uri: `neotoma://relationships/${relationshipType}`,
-          };
-        }
-      }
 
       let query = db
         .from("relationship_snapshots")
         .select(
           "relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at"
         )
+        .eq("user_id", userId)
         .eq("relationship_type", relationshipType);
-
-      // Filter by user_id through entities
-      if (userEntityIds && userEntityIds.length > 0) {
-        query = query.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
-      }
 
       query = query.order(sortField, { ascending: sortOrder });
 
@@ -8908,16 +9464,11 @@ export class NeotomaServer {
       }
 
       // Get total count for this type
-      let countQuery = db
+      const countQuery = db
         .from("relationship_snapshots")
         .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
         .eq("relationship_type", relationshipType);
-
-      if (userEntityIds && userEntityIds.length > 0) {
-        countQuery = countQuery.or(
-          `source_entity_id.in.(${userEntityIds.join(",")}),target_entity_id.in.(${userEntityIds.join(",")})`
-        );
-      }
 
       const { count, error: countError } = await countQuery;
 
@@ -8962,10 +9513,11 @@ export class NeotomaServer {
    * Resource handler: Get all entity types (schema-level discovery resource)
    */
   private async handleEntityTypes(): Promise<any> {
+    const userId = this.getAuthenticatedUserId();
     try {
       const { SchemaRegistryService } = await import("./services/schema_registry.js");
       const schemaRegistry = new SchemaRegistryService();
-      const entityTypes = await schemaRegistry.listEntityTypes();
+      const entityTypes = await schemaRegistry.listEntityTypes(undefined, userId);
 
       // Return simplified entity type information for discovery
       return {
@@ -8992,33 +9544,24 @@ export class NeotomaServer {
     }
   }
 
+  /**
+   * Per-instance error wiring only. Process-level signal handlers are NOT
+   * registered here: `NeotomaServer` is constructed per request on the
+   * 2026-07-28 stateless path and per call on several HTTP routes, and a
+   * `process.on` closure over `this` would keep every such instance (and the
+   * credentials it resolved) reachable for the life of the process. The stdio
+   * entrypoint installs its handlers once per process in {@link run}.
+   */
   private setupErrorHandler(): void {
     this.mcpServer.server.onerror = (error) => {
       logger.error("[MCP Error]", error);
     };
-
-    // Skip signal handlers in test environments: registering process.on('SIGINT')
-    // causes vitest to report "Worker exited unexpectedly" when it terminates workers
-    // after a test run, even when all tests pass.
-    if (process.env.NODE_ENV === "test") {
-      return;
-    }
-
-    process.on("SIGINT", async () => {
-      await this.mcpServer.server.close();
-      process.exit(0);
-    });
-
-    // Exit cleanly when stdio pipe breaks (e.g. machine sleep/wake; Cursor closes the pipe).
-    // Allows Cursor to show a clean disconnect and restart the server.
-    process.on("SIGPIPE", () => {
-      process.exit(0);
-    });
   }
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.mcpServer.server.connect(transport);
+    installStdioSignalHandlers(() => this.mcpServer.server.close());
     logger.info("[Neotoma MCP] Server running on stdio");
 
     await this.startAutoEnhancement();

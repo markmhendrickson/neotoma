@@ -37,6 +37,7 @@ Instance skills / scripts (CLI-only, no MCP tool — materialization writes to t
 - **When MCP is available (installed and running):** Prefer **MCP** for Neotoma operations (**`store`**, `create_relationship`, retrieval tools, etc.) per the MCP instruction block. Deprecated aliases `store_structured` / `store_unstructured` still work but map to the same **`store`** handler.
 - **When both neotoma-dev and neotoma MCP servers are configured:** Default to **neotoma** (production) for retrieval/store/instruction precedence. Use **neotoma-dev** only when the user explicitly requests development behavior or the task is clearly dev-only.
 - **When MCP is not available:** Use the **Neotoma CLI** as backup. Data commands are offline-first with in-process local transport by default. Use `--api-only` to require remote API; `--offline` forces local transport. For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
+- **MCP 2026-07-28 clients over HTTP** (#2070): `POST /mcp` is dual-era. A request with no `Mcp-Session-Id` whose `params._meta` carries `io.modelcontextprotocol/protocolVersion` (plus `clientCapabilities`, and `clientInfo` for attribution) is served statelessly: no `initialize`, no session, identity from that request's own credentials. Call `server/discover` for instructions, capabilities and supported versions; it carries no per-user data (standing rules, instance skills), so read those with `retrieve_entities` (`entity_type: "standing_rule"` / `"skill"`). `Mcp-Method` / `Mcp-Name` carry only the method and the tool/resource/prompt name; a 400 naming either header means the value looked like a credential or personal data, so resend without it (credentials go only in `Authorization`). Legacy `initialize` + session clients are unchanged. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md` → `[INITIALIZATION]`); this is a transport-layer pointer only.
 
 ## CLI startup protocol (use-existing)
 
@@ -78,6 +79,8 @@ neotoma relationships create --source-entity-id <container_id> --target-entity-i
 
 Entity IDs are returned in the `store` response (`entities[].entity_id`). If `relationships create` fails or is unavailable, check `neotoma relationships --help` for current syntax.
 
+Both `--source-entity-id` and `--target-entity-id` must be existing entities owned by the authenticated user; an endpoint that does not exist and one owned by another user are refused identically. Store the entity first, then link it. After a `store` call that named relationships, check the response's `relationships_refused` array rather than assuming every requested edge exists — see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION] and `docs/subsystems/relationships.md` § 6.1.
+
 ## Relationship creation guidance (canonical)
 
 For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
@@ -104,7 +107,9 @@ neotoma schemas audit-fragments contact         # one entity type
 
 It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
 
-**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** when `neotoma schemas update` reports this error and `found_scope` is `user`, retry with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
+**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** `neotoma schemas update` without `--user-specific` / `--no-user-specific` writes to whichever scope your schema resolves to. The error means `--no-user-specific` checked global only while the schema is user-scoped: retry without the flag, or with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
+
+**Naming guard (`force`):** when `neotoma schemas update` or `neotoma schemas register` rejects an entity type name as plural or test-artifact-like, `--force` bypasses only those two naming checks; it does not skip the existence, scope, or identity guards. Rename the type instead unless the name is deliberate.
 
 ## Retrieval command quick reference (CLI backup)
 
@@ -200,6 +205,11 @@ Load when configuring or documenting agent behavior, or when choosing between MC
 
 ## Relationship type discovery and registration
 
+This section is not part of the MCP instruction block (the fenced block that
+`neotoma instructions print` emits and MCP clients receive), so it is carried here
+in full for CLI-installed agents. It is kept verbatim with the section of the same
+name in `docs/developer/mcp/instructions.md`; edit both together.
+
 The vocabulary is instance data. Call `list_relationship_types` (CLI:
 `neotoma relationship-types list`) before using an unfamiliar edge type. If the
 meaning is absent, an authorized principal calls `register_relationship_type`
@@ -213,6 +223,28 @@ Refresh cached tool definitions after registration, verify the census includes t
 type, create the edge, and read it back with its type filter. Endpoint type hints,
 inverse and symmetry are advisory. Acyclic declarations are enforced on every edge
 creation surface and cannot be removed by re-registering metadata.
+
+An empty `list_relationship_types` result never means no vocabulary exists — the
+built-in types (`PART_OF`, `REFERS_TO`, and 26 others) are always expected to be
+present. When `relationship_types` is empty, the response carries `empty_reason`
+and `hint`: `registry_unseeded` means the instance's registry (including the
+built-ins) failed to seed and self-repairs on the very next read — call
+`list_relationship_types` again rather than concluding the vocabulary is
+unavailable; `filtered_to_empty` means a supplied `keyword` matched nothing —
+retry without `keyword`. Do not call `register_relationship_type` to work around
+either case: it registers a new custom type and cannot restore a missing built-in.
+
+If a write refuses a **built-in** type name (`PART_OF`, `REFERS_TO`, etc.) as
+unregistered, the error's `hint` says so explicitly and the remedy is the same as
+above — call `list_relationship_types` and retry, not `register_relationship_type`.
+If `register_relationship_type` itself refuses a built-in name for capability
+reasons (no grant covering it), the denial may ALSO mention a possible seed/registry
+cause — but only when the registry is genuinely unhealthy for that type; an ordinary
+grant-scope refusal (the far more common case: your grant simply does not cover this
+type) reads as a plain capability denial. Either way, request the grant through the
+operator's normal grant-administration process; do not retry with wider scope, and
+do not read a capability denial as evidence of a registry problem unless the denial
+says so.
 
 To re-type the historical `related_to` + `metadata.relation="knows"` convention,
 register `knows`, list the old edges, and select only those with that exact metadata

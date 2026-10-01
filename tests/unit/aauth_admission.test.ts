@@ -7,6 +7,7 @@
  *   - admission disabled via env → `aauth_disabled`
  *   - lookup error → `no_match`
  *   - no grant matched → `no_match`
+ *   - only a grant without a key pin matched the claims → `grant_key_unbound`
  *   - matched grant in `suspended` / `revoked` state → corresponding
  *     `grant_suspended` / `grant_revoked` reason
  *   - active grant → `admitted` with user_id / grant_id / capabilities
@@ -15,18 +16,11 @@
  * touches SQLite.
  */
 
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AAuthRequestContext } from "../../src/crypto/agent_identity.js";
 
 vi.mock("../../src/services/agent_grants.js", () => ({
-  findActiveGrantByIdentity: vi.fn(),
+  lookupGrantForIdentity: vi.fn(),
   recordMatch: vi.fn(),
 }));
 
@@ -34,13 +28,16 @@ vi.mock("../../src/utils/logger.js", () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import {
-  findActiveGrantByIdentity,
-  recordMatch,
-} from "../../src/services/agent_grants.js";
+import { lookupGrantForIdentity, recordMatch } from "../../src/services/agent_grants.js";
 import { admitFromAAuthContext } from "../../src/services/aauth_admission.js";
 
-const findMock = vi.mocked(findActiveGrantByIdentity);
+const findMock = vi.mocked(lookupGrantForIdentity);
+
+/** Lookup result for a grant bound to the presented key. */
+const bound = (grant: Awaited<ReturnType<typeof lookupGrantForIdentity>>["grant"]) => ({
+  grant,
+  unbound_claim_match: false,
+});
 const recordMock = vi.mocked(recordMatch);
 
 const VERIFIED_CTX: AAuthRequestContext = {
@@ -100,7 +97,7 @@ describe("admitFromAAuthContext", () => {
   });
 
   it("returns `no_match` when no grant matches the identity", async () => {
-    findMock.mockResolvedValueOnce(null);
+    findMock.mockResolvedValueOnce(bound(null));
     const result = await admitFromAAuthContext(VERIFIED_CTX);
     expect(result).toEqual({ admitted: false, reason: "no_match" });
     expect(findMock).toHaveBeenCalledWith({
@@ -110,17 +107,26 @@ describe("admitFromAAuthContext", () => {
     });
   });
 
+  it("returns `grant_key_unbound` when only a grant without a key pin matched", async () => {
+    findMock.mockResolvedValueOnce({ grant: null, unbound_claim_match: true });
+    const result = await admitFromAAuthContext(VERIFIED_CTX);
+    expect(result).toEqual({ admitted: false, reason: "grant_key_unbound" });
+    expect(recordMock).not.toHaveBeenCalled();
+  });
+
   it("returns `grant_suspended` for a suspended grant", async () => {
-    findMock.mockResolvedValueOnce({
-      grant_id: "ent_grant_susp",
-      user_id: "usr_owner",
-      label: "Suspended grant",
-      capabilities: [],
-      status: "suspended",
-      match_sub: "agent-cli@example.com",
-      match_iss: null,
-      match_thumbprint: null,
-    });
+    findMock.mockResolvedValueOnce(
+      bound({
+        grant_id: "ent_grant_susp",
+        user_id: "usr_owner",
+        label: "Suspended grant",
+        capabilities: [],
+        status: "suspended",
+        match_sub: "agent-cli@example.com",
+        match_iss: null,
+        match_thumbprint: "tp-cli",
+      })
+    );
     const result = await admitFromAAuthContext(VERIFIED_CTX);
     expect(result.admitted).toBe(false);
     expect(result.reason).toBe("grant_suspended");
@@ -130,16 +136,18 @@ describe("admitFromAAuthContext", () => {
   });
 
   it("returns `grant_revoked` for a revoked grant", async () => {
-    findMock.mockResolvedValueOnce({
-      grant_id: "ent_grant_rev",
-      user_id: "usr_owner",
-      label: "Revoked grant",
-      capabilities: [],
-      status: "revoked",
-      match_sub: "agent-cli@example.com",
-      match_iss: null,
-      match_thumbprint: null,
-    });
+    findMock.mockResolvedValueOnce(
+      bound({
+        grant_id: "ent_grant_rev",
+        user_id: "usr_owner",
+        label: "Revoked grant",
+        capabilities: [],
+        status: "revoked",
+        match_sub: "agent-cli@example.com",
+        match_iss: null,
+        match_thumbprint: "tp-cli",
+      })
+    );
     const result = await admitFromAAuthContext(VERIFIED_CTX);
     expect(result.admitted).toBe(false);
     expect(result.reason).toBe("grant_revoked");
@@ -151,15 +159,13 @@ describe("admitFromAAuthContext", () => {
       grant_id: "ent_grant_active",
       user_id: "usr_owner",
       label: "Cursor on macbook-pro",
-      capabilities: [
-        { op: "store_structured" as const, entity_types: ["task"] },
-      ],
+      capabilities: [{ op: "store_structured" as const, entity_types: ["task"] }],
       status: "active" as const,
       match_sub: "agent-cli@example.com",
       match_iss: "https://agent.example.com",
       match_thumbprint: "tp-cli",
     };
-    findMock.mockResolvedValueOnce(grant);
+    findMock.mockResolvedValueOnce(bound(grant));
     const result = await admitFromAAuthContext(VERIFIED_CTX);
     expect(result.admitted).toBe(true);
     expect(result.reason).toBe("admitted");
@@ -173,16 +179,18 @@ describe("admitFromAAuthContext", () => {
   });
 
   it("does not throw when recordMatch rejects (best-effort)", async () => {
-    findMock.mockResolvedValueOnce({
-      grant_id: "ent_grant_active",
-      user_id: "usr_owner",
-      label: "test",
-      capabilities: [],
-      status: "active",
-      match_sub: "agent-cli@example.com",
-      match_iss: null,
-      match_thumbprint: null,
-    });
+    findMock.mockResolvedValueOnce(
+      bound({
+        grant_id: "ent_grant_active",
+        user_id: "usr_owner",
+        label: "test",
+        capabilities: [],
+        status: "active",
+        match_sub: "agent-cli@example.com",
+        match_iss: null,
+        match_thumbprint: "tp-cli",
+      })
+    );
     recordMock.mockRejectedValueOnce(new Error("transient"));
     const result = await admitFromAAuthContext(VERIFIED_CTX);
     expect(result.admitted).toBe(true);

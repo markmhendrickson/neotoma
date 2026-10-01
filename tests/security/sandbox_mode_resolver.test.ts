@@ -33,6 +33,8 @@ import {
   resolveForceMode,
   getOrCreateInstallFingerprint,
   sandboxPrincipalIdFromFingerprint,
+  extractBoundHost,
+  decidePostureReconciliation,
   type ResolveSandboxModeInputs,
 } from "../../src/services/sandbox_mode.js";
 
@@ -102,9 +104,7 @@ describe("resolveSandboxMode — mode selection", () => {
     // Loopback alone is not enough in production — a reverse proxy could be
     // forwarding public traffic. The canonical `isLocalRequest` helper already
     // enforces this; the resolver mirrors it.
-    const result = resolveSandboxMode(
-      makeInputs({ loopbackBindOnly: true, productionEnv: true })
-    );
+    const result = resolveSandboxMode(makeInputs({ loopbackBindOnly: true, productionEnv: true }));
     expect(result.mode).toBe("refuse");
   });
 });
@@ -145,9 +145,7 @@ describe("resolveSandboxMode — refuse policy gating", () => {
           .shouldRefuseBoot
       ).toBe(false);
       // local_sandbox (default makeInputs)
-      expect(resolveSandboxMode(makeInputs({ refusePolicy: policy })).shouldRefuseBoot).toBe(
-        false
-      );
+      expect(resolveSandboxMode(makeInputs({ refusePolicy: policy })).shouldRefuseBoot).toBe(false);
     }
   });
 });
@@ -171,9 +169,7 @@ describe("resolveSandboxMode — forceMode dev override", () => {
   });
 
   it("forceMode can route into refuse mode for testing the advisory banner", () => {
-    const result = resolveSandboxMode(
-      makeInputs({ forceMode: "refuse", productionEnv: false })
-    );
+    const result = resolveSandboxMode(makeInputs({ forceMode: "refuse", productionEnv: false }));
     expect(result.mode).toBe("refuse");
     // The forced refuse verdict carries the override reason, not the advisory text.
     // shouldRefuseBoot stays false because the override returns the verdict
@@ -298,5 +294,160 @@ describe("sandboxPrincipalIdFromFingerprint — deterministic principal", () => 
     const a = sandboxPrincipalIdFromFingerprint("abcdef0123456789");
     const b = sandboxPrincipalIdFromFingerprint("0123456789abcdef");
     expect(a).not.toBe(b);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Falco finding 2 (fail_open_enforcement) — post-bind reconciliation.
+//
+// The pre-fix `src/actions.ts` computed `resolveSandboxMode(...).shouldRefuseBoot`
+// in the post-bind reconciliation block and then discarded it, using only
+// `.mode`. `shouldRefuseBoot` was honored pre-bind (can abort boot before the
+// socket opens) but silently ignored post-bind (socket already open), so an
+// identical `refuse`+`enforce` verdict was fatal before bind and merely
+// informational after. These tests cover the two pure helpers extracted so
+// `src/actions.ts` can act on the verdict instead of dropping it, and so a
+// null/non-object `server.address()` is treated as UNKNOWN rather than
+// silently inheriting the intended (pre-bind) posture.
+// ---------------------------------------------------------------------------
+
+describe("extractBoundHost — classifying a server.address() readback", () => {
+  it("extracts the address string from a well-formed AddressInfo", () => {
+    expect(extractBoundHost({ address: "127.0.0.1", family: "IPv4", port: 3080 })).toBe(
+      "127.0.0.1"
+    );
+  });
+
+  it("returns null (unknown) for a null address — RED before the fix: this used", () => {
+    // to fall through to the caller's `bindHost` (the INTENDED host), i.e. an
+    // address the socket could not even confirm was silently treated as
+    // matching operator intent. That is the bug: absence of evidence read as
+    // evidence of safety.
+    expect(extractBoundHost(null)).toBeNull();
+  });
+
+  it("returns null (unknown) for a non-object address (e.g. a pipe path string)", () => {
+    // Unix-socket listeners report address() as a plain string, not an
+    // {address,port} object. Before the fix, `typeof boundAddr === "object"`
+    // was false here too, so the ternary fell through to `bindHost` — same
+    // bug as the null case, via a different Node return shape.
+    expect(extractBoundHost("/tmp/some.sock")).toBeNull();
+  });
+
+  it("returns null (unknown) when address is present but has no string `address` field", () => {
+    expect(extractBoundHost({ port: 3080 })).toBeNull();
+  });
+});
+
+describe("decidePostureReconciliation — acting on shouldRefuseBoot instead of discarding it", () => {
+  const isLoopbackHost = (host: string): boolean => {
+    const normalized = host.trim().toLowerCase();
+    return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+  };
+
+  it("RED before the fix: a refuse+enforce verdict on a real mismatch must close and exit, not just log", () => {
+    // Intended loopback, but the actual bound address is non-loopback (the
+    // exact drift this reconciliation exists to catch), under enforce policy.
+    // Pre-fix, `src/actions.ts` computed this same verdict and used only
+    // `.mode` — `shouldRefuseAndClose` did not exist and nothing stopped the
+    // server from continuing to serve on the already-open socket.
+    const decision = decidePostureReconciliation({
+      boundHost: "0.0.0.0",
+      intendedHost: "127.0.0.1",
+      refusePolicy: "enforce",
+      isLoopbackHost,
+      resolve: (loopbackBindOnly) =>
+        resolveSandboxMode({
+          authConfigured: false,
+          loopbackBindOnly,
+          productionEnv: false,
+          hostedSandboxEnabled: false,
+          refusePolicy: "enforce",
+        }),
+    });
+    expect(decision.shouldRefuseAndClose).toBe(true);
+    expect(decision.verdict?.mode).toBe("refuse");
+  });
+
+  it("under warn policy, the same mismatch stays non-fatal", () => {
+    const decision = decidePostureReconciliation({
+      boundHost: "0.0.0.0",
+      intendedHost: "127.0.0.1",
+      refusePolicy: "warn",
+      isLoopbackHost,
+      resolve: (loopbackBindOnly) =>
+        resolveSandboxMode({
+          authConfigured: false,
+          loopbackBindOnly,
+          productionEnv: false,
+          hostedSandboxEnabled: false,
+          refusePolicy: "warn",
+        }),
+    });
+    expect(decision.shouldRefuseAndClose).toBe(false);
+    expect(decision.verdict?.mode).toBe("refuse");
+  });
+
+  it("RED before the fix: an unresolvable (null) bound address must fail closed under enforce, not default to safe", () => {
+    // This is the "null/non-object server.address() falls back to the
+    // intended host" defect. Before the fix there was no such thing as an
+    // unresolved boundHost distinct from "matches intent" — a null address
+    // fell back to `bindHost` and was therefore always treated as matching
+    // whatever the operator asked for, regardless of refusePolicy.
+    const decision = decidePostureReconciliation({
+      boundHost: null,
+      intendedHost: "127.0.0.1",
+      refusePolicy: "enforce",
+      isLoopbackHost,
+      resolve: () => {
+        throw new Error("resolve() must not be called when boundHost is unknown");
+      },
+    });
+    expect(decision.shouldRefuseAndClose).toBe(true);
+    expect(decision.verdict).toBeNull();
+  });
+
+  it("an unresolvable (null) bound address stays non-fatal under warn", () => {
+    const decision = decidePostureReconciliation({
+      boundHost: null,
+      intendedHost: "127.0.0.1",
+      refusePolicy: "warn",
+      isLoopbackHost,
+      resolve: () => {
+        throw new Error("resolve() must not be called when boundHost is unknown");
+      },
+    });
+    expect(decision.shouldRefuseAndClose).toBe(false);
+    expect(decision.verdict).toBeNull();
+  });
+
+  it("does nothing when the bound host matches the intended posture (the common case)", () => {
+    const decision = decidePostureReconciliation({
+      boundHost: "127.0.0.1",
+      intendedHost: "127.0.0.1",
+      refusePolicy: "enforce",
+      isLoopbackHost,
+      resolve: () => {
+        throw new Error("resolve() must not be called when posture already matches");
+      },
+    });
+    expect(decision.shouldRefuseAndClose).toBe(false);
+    expect(decision.verdict).toBeNull();
+  });
+
+  it("a loopback intent that actually bound loopback via a DIFFERENT loopback spelling still matches (no false mismatch)", () => {
+    // e.g. intent "localhost" (loopback) actually binds as "::1" (also
+    // loopback) — both classify true, so this must NOT be treated as a
+    // mismatch requiring reconciliation.
+    const decision = decidePostureReconciliation({
+      boundHost: "::1",
+      intendedHost: "localhost",
+      refusePolicy: "enforce",
+      isLoopbackHost,
+      resolve: () => {
+        throw new Error("resolve() must not be called when posture already matches");
+      },
+    });
+    expect(decision.shouldRefuseAndClose).toBe(false);
   });
 });

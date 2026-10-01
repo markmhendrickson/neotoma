@@ -124,6 +124,17 @@ export function getDb(): Promise<DbDatabase> {
 }
 
 /**
+ * Synchronous, non-opening peek at whatever connection is already cached, or
+ * `null` if none has opened yet. For diagnostics only (#2483): a process-level
+ * handler reacting to an already-thrown error must never itself await an open
+ * or trigger one — it needs "whatever is here right now", not "the database,
+ * opening it if necessary". `getDb()` deliberately does not offer that shape.
+ */
+export function peekCachedDb(): DbDatabase | null {
+  return cachedDb;
+}
+
+/**
  * Clear the cached connection. The next getDb() opens a new one (creating the
  * DB file if missing). Call after I/O errors (disk I/O error, DB file deleted
  * while the server was running).

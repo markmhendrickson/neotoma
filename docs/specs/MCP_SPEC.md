@@ -449,7 +449,7 @@ See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 | `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+).                           | Strong      | Partial       | Available |
 | `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
 | `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
-| `sync_issues`      | Bulk pull issues (and messages) from configured GitHub into local Neotoma                                                                                                           | Strong      | Partial       | Available |
+| `sync_issues`      | Bulk pull issues (and messages) from the configured or `repo`-selected GitHub repo into local Neotoma; push opt-in for non-default repos; `commit: false` dry run                   | Strong      | Partial       | Available |
 | `bulk_close_issues`| Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                          | Strong      | Yes           | Available |
 | `bulk_remove_issues`| Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.   | Strong      | Yes           | Available |
 
@@ -1779,14 +1779,17 @@ This enables full explainability: for any fact in the system, you can trace it b
   }>;
   fields_to_remove?: string[]; // Optional: Field names to remove (triggers major version bump)
   schema_version?: string; // Optional: New schema version (auto-increments if not provided)
-  user_specific?: boolean; // Optional: Create user-specific schema variant (default: false)
+  user_specific?: boolean; // Optional, no default. Omitted: write to the scope the schema resolves to (your user-scoped override if you have one, else global), matching describe_entity_type. true: write to your user-specific variant. false: extend the global schema, even if you hold an override.
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: true)
   migrate_existing?: boolean; // Optional: Migrate existing raw_fragments (default: false)
+  force?: boolean; // Optional: Bypass the entity-type naming guards (test-artifact pattern, plural heuristic) for this call only (default: false)
 }
 ```
 
 At least one of `fields_to_add` or `fields_to_remove` must be provided and non-empty.
+
+**Scope resolution:** the write follows the same resolution as the read (user scope first, global fallback; `schema_registry.md` §4.4). An explicit `user_specific` is an override. An explicit `user_specific: false` reads and extends the global schema only; it never copies the caller's user-scoped override into a new global version. If the type has no global registry row and no code-defined baseline (but does have a user-scoped schema), that call returns `ERR_SCHEMA_SCOPE_MISMATCH` instead of promoting the override. With a code-defined baseline, the update extends that baseline as the first global row.
 
 **Response Schema:**
 
@@ -1798,8 +1801,17 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   fields_added: string[]; // List of field names added
   fields_removed: string[]; // List of field names removed
   activated: boolean; // Whether schema was activated
-  migrated_existing: boolean; // Whether historical data was migrated
-  scope: 'global' | 'user';
+  migrated_existing: boolean; // True only when this call actually promoted at least one raw_fragment (migration_result.migrated_count > 0); never an echo of the migrate_existing request flag
+  migration_result?: { // Present only when migrate_existing was requested
+    migrated_count: number;
+    skipped: Array<{
+      field_name: string;
+      reason: 'no_entity_resolution' | 'no_active_schema' | 'observation_insert_failed' | 'already_promoted' | 'unexpected_error';
+      count: number;
+    }>;
+  };
+  scope: 'global' | 'user'; // The scope actually written, read from the persisted row
+  user_id?: string; // Present only when scope is 'user': the user whose row was written
 }
 ```
 
@@ -1809,6 +1821,8 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid field definition or empty add/remove | No |
 | `SCHEMA_NOT_FOUND` | 404 | No active schema found for entity type | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
+| `ERR_SCHEMA_SCOPE_MISMATCH` | 200 (error envelope) | Explicit `user_specific: false`, but the type has no global registry row and no code-defined baseline, and an active schema exists in the caller's user scope (`details.guard_scope` vs `details.found_scope`) | Yes: retry without `user_specific`, or with `user_specific: true`. Do not call `register_schema` for this code. See `docs/reference/error_codes.md`. |
+| `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema updates are atomic)
 **Determinism:** Yes (same fields + same schema version → same snapshot)
@@ -1852,6 +1866,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   user_specific?: boolean; // Optional (default: false)
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: false)
+  force?: boolean; // Optional: Bypass the entity-type naming guards (test-artifact pattern, plural heuristic) for this call only (default: false)
 }
 ```
 
@@ -1874,6 +1889,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid schema definition or reducer config | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
 | `SCHEMA_EXISTS` | 409 | Schema version already exists | No |
+| `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema registration is atomic)
 **Determinism:** Yes (same schema → same result)
@@ -2142,7 +2158,7 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`. |
 | `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
 | `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
-| `sync_issues` | Yes | Optional `state`, `labels`, `since`. |
+| `sync_issues` | Yes | Optional `state`, `labels`, `since`, `repo` (`owner/name`, defaults to the configured repo), `push` (default true only for the configured repo, false for any other `repo`), `commit` (`false` = dry run, writes nothing). `repo` must be the configured repo or listed in `NEOTOMA_ISSUES_ALLOWED_REPOS`; otherwise `InvalidParams`. |
 | `bulk_close_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `bulk_remove_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |
@@ -2155,6 +2171,8 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `get_peer_status` | No | `peer_id`. |
 | `sync_peer` | Yes | Bounded fan-out; requires peer + public base URL configuration. |
 | `resolve_sync_conflict` | Yes | Strategy enum + entity/observation selectors per OpenAPI. |
+| `register_relationship_type` | Yes | Runtime relationship-type registry. `relationship_type`, optional `description`, `scope` (`user` default, `global` requires an explicit grant), `acyclic`, `inverse`, `symmetric`, `source_entity_types`, `target_entity_types`. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md). |
+| `list_relationship_types` | No | Optional `keyword`, `scope`, `include_edge_counts`. Empty result carries `empty_reason` (`registry_unseeded` or `filtered_to_empty`) rather than being ambiguous with "no vocabulary exists." |
 
 When adding or renaming an MCP tool, update **this catalog**, **`NEOTOMA_TOOL_NAMES`**, and the change-guardrails checklist in [`docs/architecture/change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc).
 

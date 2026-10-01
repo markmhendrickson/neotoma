@@ -14,6 +14,7 @@ import { getCurrentAgentIdentity } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 import { getActiveRelationshipTypeNames } from "./relationship_types/registry.js";
+import { assertEntitiesOwned } from "./scoped_reads.js";
 
 /** Minimal shape of a `relationship_observations` row needed for liveness. */
 interface RelationshipObservationRow {
@@ -100,6 +101,16 @@ function stableStringify(value: unknown): string {
  * Replaces a bare `throw new Error("Invalid relationship type: X")`, which
  * named no remedy — a caller learned the type was rejected but not that a
  * registry exists, nor how to read it, nor how to add to it.
+ *
+ * #2482: the hint is built-in-aware. `getActiveRelationshipTypeNames` (via
+ * `resolveAllWithRepair`) already attempts a lazy reseed before this error can
+ * fire, so reaching here with a BUILT-IN name (`PART_OF`, `REFERS_TO`, ...)
+ * means the repair itself failed — most likely the registry table is
+ * unavailable — and the correct remedy is an operator seed/repair, never
+ * `register_relationship_type`: that tool registers a NEW type and refuses a
+ * built-in name from an ungranted caller (`enforceRelationshipTypeCapability`),
+ * which would otherwise read as a dead end. A genuinely unregistered CUSTOM
+ * name keeps the original discovery/registration hint.
  */
 export class UnregisteredRelationshipTypeError extends Error {
   readonly code = "unregistered_relationship_type";
@@ -107,10 +118,15 @@ export class UnregisteredRelationshipTypeError extends Error {
   readonly relationshipType: string;
   readonly hint: string;
 
-  constructor(relationshipType: string) {
-    const hint =
-      `Call list_relationship_types to see the vocabulary this instance accepts, ` +
-      `or register_relationship_type to add "${relationshipType}" to it.`;
+  constructor(relationshipType: string, isBuiltIn = false) {
+    const hint = isBuiltIn
+      ? `"${relationshipType}" is a built-in relationship type that should always be registered; its ` +
+        `absence means the instance's relationship-type registry is unseeded or unavailable, not that ` +
+        `the type does not exist. Call list_relationship_types to see the current vocabulary and any ` +
+        `reported empty_reason/hint; do not call register_relationship_type for this name — an operator ` +
+        `seed/repair is the remedy, not registration.`
+      : `Call list_relationship_types to see the vocabulary this instance accepts, ` +
+        `or register_relationship_type to add "${relationshipType}" to it.`;
     super(`Invalid relationship type: ${relationshipType}. ${hint}`);
     this.name = "UnregisteredRelationshipTypeError";
     this.relationshipType = relationshipType;
@@ -135,7 +151,11 @@ export class RelationshipsService {
   async assertRegisteredType(relationshipType: string, userId?: string): Promise<void> {
     const names = await getActiveRelationshipTypeNames(userId);
     if (!names.has(relationshipType)) {
-      throw new UnregisteredRelationshipTypeError(relationshipType);
+      const { BUILT_IN_RELATIONSHIP_TYPES } = await import("./relationship_types/seed_registry.js");
+      const isBuiltIn = BUILT_IN_RELATIONSHIP_TYPES.some(
+        (t) => t.relationship_type === relationshipType
+      );
+      throw new UnregisteredRelationshipTypeError(relationshipType, isBuiltIn);
     }
   }
 
@@ -191,6 +211,9 @@ export class RelationshipsService {
   }): Promise<RelationshipSnapshot> {
     enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
     await this.assertRegisteredType(params.relationship_type, params.user_id);
+    // Both endpoints must be entities the caller owns. A missing entity and
+    // one owned by another user are refused with the same error.
+    await assertEntitiesOwned([params.source_entity_id, params.target_entity_id], params.user_id);
     await this.assertAcyclicWrite(params);
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;

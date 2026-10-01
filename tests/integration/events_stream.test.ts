@@ -11,9 +11,26 @@ import {
   hashGuestAccessToken,
 } from "../../src/services/guest_access_token.js";
 import { handleSubstrateEventForSubscriptions } from "../../src/services/subscriptions/subscription_bridge.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 const tracker = new TestIdTracker();
+
+/** A guest token must name the entity_ids it covers (subscription routes now
+ * enforce this scope) — seed a real owned entity for the token to name. */
+async function seedOwnedEntity(userId: string, idSuffix: string): Promise<string> {
+  const entityId = `ent_events_${idSuffix}_${Date.now().toString(16)}`;
+  const now = new Date().toISOString();
+  await db.from("entities").insert({
+    id: entityId,
+    entity_type: "note",
+    canonical_name: `events-stream-test-${idSuffix}-${Date.now()}`,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+  });
+  return entityId;
+}
 
 interface SubscribeResponse {
   subscription_id: string;
@@ -48,8 +65,8 @@ async function withHttpServer<T>(callback: (baseUrl: string) => Promise<T>): Pro
   }
 }
 
-async function guestTokenFor(userId: string): Promise<string> {
-  const token = await generateGuestAccessToken({ entityIds: [], userId });
+async function guestTokenFor(userId: string, entityIds: string[]): Promise<string> {
+  const token = await generateGuestAccessToken({ entityIds, userId });
   tracker.trackEntity(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
   return token;
 }
@@ -57,10 +74,7 @@ async function guestTokenFor(userId: string): Promise<string> {
 async function subscribe(
   baseUrl: string,
   token: string,
-  subscriptionBody: Record<string, unknown> = {
-    entity_types: ["note"],
-    delivery_method: "sse",
-  },
+  subscriptionBody: Record<string, unknown>
 ): Promise<SubscribeResponse> {
   const response = await fetch(`${baseUrl}/subscribe`, {
     method: "POST",
@@ -83,7 +97,7 @@ function streamUrl(baseUrl: string, subscriptionId: string): string {
 async function readSseEvent(
   response: Response,
   predicate: (event: SubstrateEvent) => boolean,
-  timeoutMs = 5_000,
+  timeoutMs = 5_000
 ): Promise<SubstrateEvent> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("SSE response did not expose a readable body");
@@ -96,7 +110,10 @@ async function readSseEvent(
     const read = await Promise.race([
       reader.read(),
       new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) =>
-        setTimeout(() => reject(new Error("SSE read timeout")), Math.min(250, deadline - Date.now())),
+        setTimeout(
+          () => reject(new Error("SSE read timeout")),
+          Math.min(250, deadline - Date.now())
+        )
       ),
     ]).catch(() => null);
     if (!read) continue;
@@ -116,6 +133,31 @@ async function readSseEvent(
   throw new Error("Timed out waiting for matching SSE event");
 }
 
+async function expectSseClosedWithoutEvent(
+  response: Response,
+  eventId: string,
+  timeoutMs = 1_000
+): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("SSE response did not expose a readable body");
+  const decoder = new TextDecoder();
+  let body = "";
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const read = await Promise.race([
+      reader.read(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 25)),
+    ]);
+    if (read === null) continue;
+    if (read.done) {
+      expect(body).not.toContain(eventId);
+      return;
+    }
+    body += decoder.decode(read.value, { stream: true });
+  }
+  throw new Error("SSE stream stayed open after its guest credential became invalid");
+}
+
 describe("GET /events/stream", () => {
   afterEach(async () => {
     await tracker.cleanup();
@@ -133,7 +175,9 @@ describe("GET /events/stream", () => {
 
   it("rejects an invalid subscription_id", async () => {
     await withHttpServer(async (baseUrl) => {
-      const token = await guestTokenFor("sp009-events-owner");
+      const entityId = await seedOwnedEntity("sp009-events-owner", "invalid-sub");
+      tracker.trackEntity(entityId);
+      const token = await guestTokenFor("sp009-events-owner", [entityId]);
       const response = await fetch(streamUrl(baseUrl, "sp009-missing"), {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -145,9 +189,16 @@ describe("GET /events/stream", () => {
 
   it("denies cross-user subscription_id access", async () => {
     await withHttpServer(async (baseUrl) => {
-      const ownerToken = await guestTokenFor("sp009-events-owner");
-      const otherToken = await guestTokenFor("sp009-events-other");
-      const created = await subscribe(baseUrl, ownerToken);
+      const ownerEntityId = await seedOwnedEntity("sp009-events-owner", "cross-user-owner");
+      const otherEntityId = await seedOwnedEntity("sp009-events-other", "cross-user-other");
+      tracker.trackEntity(ownerEntityId);
+      tracker.trackEntity(otherEntityId);
+      const ownerToken = await guestTokenFor("sp009-events-owner", [ownerEntityId]);
+      const otherToken = await guestTokenFor("sp009-events-other", [otherEntityId]);
+      const created = await subscribe(baseUrl, ownerToken, {
+        entity_ids: [ownerEntityId],
+        delivery_method: "sse",
+      });
 
       const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
         headers: { Authorization: `Bearer ${otherToken}` },
@@ -160,8 +211,13 @@ describe("GET /events/stream", () => {
 
   it("closes an open SSE stream cleanly when the client aborts", async () => {
     await withHttpServer(async (baseUrl) => {
-      const token = await guestTokenFor("sp009-events-close");
-      const created = await subscribe(baseUrl, token);
+      const entityId = await seedOwnedEntity("sp009-events-close", "close");
+      tracker.trackEntity(entityId);
+      const token = await guestTokenFor("sp009-events-close", [entityId]);
+      const created = await subscribe(baseUrl, token, {
+        entity_ids: [entityId],
+        delivery_method: "sse",
+      });
       const controller = new AbortController();
 
       const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
@@ -228,7 +284,7 @@ describe("GET /events/stream", () => {
               (event) =>
                 event.entity_id === issueEntityId &&
                 event.entity_type === "issue" &&
-                event.event_type === "entity.updated",
+                event.event_type === "entity.updated"
             )
           ) {
             await new Promise((resolve) => setTimeout(resolve, 25));
@@ -238,7 +294,7 @@ describe("GET /events/stream", () => {
             (event) =>
               event.entity_id === issueEntityId &&
               event.entity_type === "issue" &&
-              event.event_type === "entity.updated",
+              event.event_type === "entity.updated"
           );
 
           expect(received).toMatchObject({
@@ -263,9 +319,12 @@ describe("GET /events/stream", () => {
 
   it("streams matching issue substrate events to an authorized SSE subscriber", async () => {
     await withHttpServer(async (baseUrl) => {
-      const token = await guestTokenFor("sp009-events-issue-owner");
+      const issueEntityId = `ent_issue_sse_${randomUUID().replaceAll("-", "")}`;
+      const userId = "sp009-events-issue-owner";
+      tracker.trackEntity(issueEntityId);
+      const token = await guestTokenFor(userId, [issueEntityId]);
       const created = await subscribe(baseUrl, token, {
-        entity_types: ["issue"],
+        entity_ids: [issueEntityId],
         event_types: ["entity.updated"],
         delivery_method: "sse",
       });
@@ -280,8 +339,8 @@ describe("GET /events/stream", () => {
         event_id: `evt_${randomUUID()}`,
         event_type: "entity.updated",
         timestamp: new Date().toISOString(),
-        user_id: "sp009-events-issue-owner",
-        entity_id: `ent_issue_sse_${randomUUID().replaceAll("-", "")}`,
+        user_id: userId,
+        entity_id: issueEntityId,
         entity_type: "issue",
         action: "updated",
         fields_changed: ["status"],
@@ -290,7 +349,7 @@ describe("GET /events/stream", () => {
       await handleSubstrateEventForSubscriptions(issueEvent);
       const received = await readSseEvent(
         response,
-        (event) => event.event_id === issueEvent.event_id,
+        (event) => event.event_id === issueEvent.event_id
       );
 
       expect(received).toMatchObject({
@@ -302,6 +361,139 @@ describe("GET /events/stream", () => {
       });
       controller.abort();
       await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+  });
+
+  it("closes an established guest stream before delivery after token expiry", async () => {
+    const previousTtl = process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS;
+    process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS = "1";
+    try {
+      await withHttpServer(async (baseUrl) => {
+        const entityId = await seedOwnedEntity("sp009-events-expiry", "expiry");
+        tracker.trackEntity(entityId);
+        const token = await guestTokenFor("sp009-events-expiry", [entityId]);
+        const created = await subscribe(baseUrl, token, {
+          entity_ids: [entityId],
+          delivery_method: "sse",
+        });
+        const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        expect(response.status).toBe(200);
+
+        await new Promise((resolve) => setTimeout(resolve, 1_050));
+        const event: SubstrateEvent = {
+          event_id: `evt_expired_${randomUUID()}`,
+          event_type: "entity.updated",
+          timestamp: new Date().toISOString(),
+          user_id: "sp009-events-expiry",
+          entity_id: entityId,
+          entity_type: "note",
+          action: "updated",
+        };
+        await handleSubstrateEventForSubscriptions(event);
+        await expectSseClosedWithoutEvent(response, event.event_id);
+      });
+    } finally {
+      if (previousTtl === undefined) delete process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS;
+      else process.env.NEOTOMA_GUEST_TOKEN_TTL_SECONDS = previousTtl;
+    }
+  });
+
+  it("closes an established guest stream before delivery after token revocation", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const userId = "sp009-events-revoked";
+      const entityId = await seedOwnedEntity(userId, "revoked");
+      tracker.trackEntity(entityId);
+      const token = await guestTokenFor(userId, [entityId]);
+      const tokenEntityId = `guest_token_${hashGuestAccessToken(token).slice(0, 16)}`;
+      const created = await subscribe(baseUrl, token, {
+        entity_ids: [entityId],
+        delivery_method: "sse",
+      });
+      const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(response.status).toBe(200);
+
+      const revokedAt = new Date(Date.now() + 1_000).toISOString();
+      await db.from("observations").insert({
+        id: randomUUID(),
+        entity_id: tokenEntityId,
+        entity_type: "guest_access_token",
+        user_id: userId,
+        fields: {
+          token_hash: hashGuestAccessToken(token),
+          entity_ids: [entityId],
+          created_at: revokedAt,
+          ttl_seconds: 30 * 24 * 60 * 60,
+          revoked_at: revokedAt,
+        },
+        observed_at: revokedAt,
+        source_priority: 100,
+      });
+
+      const event: SubstrateEvent = {
+        event_id: `evt_revoked_${randomUUID()}`,
+        event_type: "entity.updated",
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        entity_id: entityId,
+        entity_type: "note",
+        action: "updated",
+      };
+      await handleSubstrateEventForSubscriptions(event);
+      await expectSseClosedWithoutEvent(response, event.event_id);
+    });
+  });
+
+  it("closes an established guest stream before delivery after its grant narrows", async () => {
+    await withHttpServer(async (baseUrl) => {
+      const userId = "sp009-events-narrowed";
+      const entityId = await seedOwnedEntity(userId, "narrowed");
+      const otherEntityId = await seedOwnedEntity(userId, "narrowed-other");
+      tracker.trackEntity(entityId);
+      tracker.trackEntity(otherEntityId);
+      const token = await guestTokenFor(userId, [entityId]);
+      const tokenEntityId = `guest_token_${hashGuestAccessToken(token).slice(0, 16)}`;
+      const created = await subscribe(baseUrl, token, {
+        entity_ids: [entityId],
+        delivery_method: "sse",
+      });
+      const response = await fetch(streamUrl(baseUrl, created.subscription_id), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(response.status).toBe(200);
+
+      // A later token observation re-scopes the grant away from the
+      // subscribed entity without revoking or expiring the token.
+      const narrowedAt = new Date(Date.now() + 1_000).toISOString();
+      await db.from("observations").insert({
+        id: randomUUID(),
+        entity_id: tokenEntityId,
+        entity_type: "guest_access_token",
+        user_id: userId,
+        fields: {
+          token_hash: hashGuestAccessToken(token),
+          entity_ids: [otherEntityId],
+          created_at: narrowedAt,
+          ttl_seconds: 30 * 24 * 60 * 60,
+        },
+        observed_at: narrowedAt,
+        source_priority: 100,
+      });
+
+      const event: SubstrateEvent = {
+        event_id: `evt_narrowed_${randomUUID()}`,
+        event_type: "entity.updated",
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        entity_id: entityId,
+        entity_type: "note",
+        action: "updated",
+      };
+      await handleSubstrateEventForSubscriptions(event);
+      await expectSseClosedWithoutEvent(response, event.event_id);
     });
   });
 });

@@ -26,8 +26,7 @@ Contracts evolve through negotiations, amendments, and renewals, yet most CLM sy
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured contract, clause, and obligation entities |
-| `query-memory` | Reconstructs contractual state at any historical point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

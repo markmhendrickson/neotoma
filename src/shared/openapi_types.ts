@@ -98,6 +98,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+     * @description Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+     *     protocol eras on the same route (#2070):
+     *
+     *     - **Modern (2026-07-28, stateless).** Selected when the request carries no
+     *       `Mcp-Session-Id`, is not an `initialize` request, and its
+     *       `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+     *       request is resolved on its own: protocol version and client capabilities
+     *       come from `_meta`, and the caller's identity comes only from the
+     *       credentials on that request. No session is minted and no server state is
+     *       retained, so any API instance can serve any request behind a plain
+     *       round-robin load balancer. `server/discover` is served on this path.
+     *       `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+     *       `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+     *       the body.
+     *     - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+     *       request carrying `Mcp-Session-Id`, is served by the session transport
+     *       exactly as before (session mint on initialize, recover-in-place for a
+     *       stale session id, `404` for an unknown session on GET/DELETE).
+     *
+     *     `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+     *     tool/resource/prompt name. A value shaped like a credential or personal
+     *     data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+     *     `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+     *     and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+     *     sessions; those are not modelled here.
+     */
+    post: operations["mcpStreamableHttpPost"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/mcp/oauth/initiate": {
     parameters: {
       query?: never;
@@ -786,9 +830,11 @@ export interface paths {
     /**
      * Create an agent grant
      * @description Creates a new `agent_grant` for the authenticated user. At least
-     *     one of `match_sub` or `match_thumbprint` must be supplied. The
-     *     grant's `capabilities` follow the same shape used by the
-     *     admitted-request authorization check.
+     *     one of `match_sub` or `match_thumbprint` must be supplied. Only
+     *     `match_thumbprint` admits signed requests; a grant created without
+     *     it is accepted but inert, and the response carries a `warnings`
+     *     entry saying so. The grant's `capabilities` follow the same shape
+     *     used by the admitted-request authorization check.
      */
     post: operations["createAgentGrant"];
     delete?: never;
@@ -815,7 +861,10 @@ export interface paths {
      * Update editable fields on an agent grant
      * @description Patches `label`, `capabilities`, `notes`, or any of the
      *     `match_*` identity fields. Status transitions go through the
-     *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+     *     dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+     *     `match_thumbprint` is how a key is pinned to an existing grant;
+     *     the admission cache is cleared so the pin applies to the next
+     *     request.
      */
     patch: operations["updateAgentGrant"];
     trace?: never;
@@ -1740,7 +1789,7 @@ export interface paths {
     put?: never;
     /**
      * Sync issues bidirectionally with GitHub
-     * @description Bidirectional sync between local Neotoma and the configured GitHub repo. Push leg (default on): local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. Pull leg: GitHub issues and their comments are pulled into local entities. MCP sync_issues parity.
+     * @description Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their comments are pulled into local entities. Push leg: local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. The target repo defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`); `repo` overrides it for this call only. The push leg is on by default only for the configured default repo and off for any other `repo` unless `push: true` is passed. `commit: false` runs a dry run that reports what would be created, updated and pushed and writes nothing. A GitHub token is required: `NEOTOMA_ISSUES_GITHUB_TOKEN` in the server environment (or `gh auth login` on the server host). MCP sync_issues parity.
      */
     post: operations["issuesSync"];
     delete?: never;
@@ -2158,7 +2207,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create a substrate event subscription (webhook or SSE) */
+    /**
+     * Create a substrate event subscription (webhook or SSE)
+     * @description Authenticated owners may subscribe to filters within their own graph.
+     *     Entity-scoped guests must authenticate with their guest bearer token,
+     *     provide a non-empty `entity_ids` filter, and keep every requested entity
+     *     inside that token's current grant. Empty, mixed, or out-of-grant guest
+     *     filters are rejected without creating a subscription. Guests may only
+     *     use `delivery_method: sse`, which is revalidated against the guest
+     *     credential on every delivery; a guest request for `webhook` delivery or
+     *     with a `sync_peer_id` is rejected with 403 without creating a
+     *     subscription.
+     */
     post: operations["subscribe"];
     delete?: never;
     options?: never;
@@ -2175,7 +2235,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Deactivate a subscription */
+    /**
+     * Deactivate a subscription
+     * @description Owners may deactivate their own subscriptions. Guests may deactivate only
+     *     subscriptions whose complete `watch_entity_ids` set remains inside the
+     *     guest token's current entity grant; denial leaves the subscription active.
+     */
     post: operations["unsubscribe"];
     delete?: never;
     options?: never;
@@ -2192,7 +2257,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** List active subscriptions for the current user */
+    /**
+     * List active subscriptions for the current user
+     * @description Owners receive their active subscriptions. Guests receive only subscriptions
+     *     whose complete `watch_entity_ids` set is inside the token's current entity
+     *     grant; subscriptions outside or spanning the grant are omitted.
+     */
     post: operations["listSubscriptions"];
     delete?: never;
     options?: never;
@@ -2209,7 +2279,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Get subscription delivery status */
+    /**
+     * Get subscription delivery status
+     * @description Owners may inspect their subscriptions. A guest receives the status only
+     *     when the subscription's complete `watch_entity_ids` set is inside its
+     *     current grant; an inaccessible subscription is returned as `null`.
+     */
     post: operations["getSubscriptionStatus"];
     delete?: never;
     options?: never;
@@ -2224,7 +2299,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Server-sent events stream for a subscription */
+    /**
+     * Server-sent events stream for a subscription
+     * @description Opens the SSE stream for an active SSE subscription. Owners retain their
+     *     normal authenticated access. Guests may connect only when the subscription's
+     *     complete entity filter is inside the token grant. Guest credentials are
+     *     revalidated while the connection is established: expiry, revocation, or
+     *     grant narrowing closes the stream before another event is delivered.
+     */
     get: operations["eventsStream"];
     put?: never;
     post?: never;
@@ -2342,6 +2424,90 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description A GitHub issue a `/issues/sync` dry run would create or update locally. */
+    IssuesSyncPlanIssue: {
+      github_number: number;
+      title: string;
+    };
+    /**
+     * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+     *     (#2070). Operational metadata only: never persisted, never logged in full.
+     */
+    McpRequestMeta: {
+      /**
+       * @description Protocol version for this request. Required on the modern path.
+       * @example 2026-07-28
+       */
+      "io.modelcontextprotocol/protocolVersion"?: string;
+      /** @description Client capabilities relevant to this request. Required on the modern path. */
+      "io.modelcontextprotocol/clientCapabilities"?: {
+        [key: string]: unknown;
+      };
+      /** @description Self-reported client name and version (unverified; attribution fallback only). */
+      "io.modelcontextprotocol/clientInfo"?: {
+        name?: string;
+        version?: string;
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcRequest: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number;
+      /** @description JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy). */
+      method: string;
+      params?: {
+        _meta?: components["schemas"]["McpRequestMeta"];
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcResponse: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number | null;
+      result?: {
+        [key: string]: unknown;
+      };
+      error?: {
+        code: number;
+        message: string;
+        data?: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+     *     protocol versions, this server's declared capabilities, its identity and its
+     *     instructions: no tenant data, no caller identity, no instance topology.
+     */
+    McpServerDiscoverResult: {
+      /** @enum {string} */
+      resultType: "complete";
+      supportedVersions: string[];
+      capabilities: {
+        [key: string]: unknown;
+      };
+      /** @description Agent-facing MCP instructions plus this instance's declared data policy. */
+      instructions?: string;
+      ttlMs?: number;
+      /** @enum {string} */
+      cacheScope?: "public" | "private";
+      _meta?: {
+        "io.modelcontextprotocol/serverInfo"?: {
+          name?: string;
+          version?: string;
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    };
     /** @description Result of the /ready database probe. */
     ReadinessResult: {
       /** @description True only when the database completed the probe read. */
@@ -2466,7 +2632,8 @@ export interface components {
         | "ERR_CANONICAL_NAME_UNRESOLVED"
         | "ERR_MERGE_REFUSED"
         | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
-        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT"
+        | "entity_owner_conflict";
       message?: string;
       /**
        * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
@@ -2864,11 +3031,14 @@ export interface components {
       replayed: boolean;
     };
     /**
-     * @description Agent-identity provenance recorded on every durable write-path record
+     * @description Write-attribution provenance recorded on durable write-path records
      *     (observations, relationships, sources, interpretations, timeline
-     *     events). Fields are stamped additively into the existing provenance
-     *     JSON blob on each record so no schema migration was required; the
-     *     shape below documents the keys consumers can rely on.
+     *     events). Most keys describe the software that wrote the record (the
+     *     AAuth agent and MCP client); `authenticated_actor_id` instead
+     *     identifies the signed-in member whose session made the write. Fields
+     *     are stamped additively into the existing provenance JSON blob on each
+     *     record so no schema migration was required; the shape below documents
+     *     the keys consumers can rely on.
      *
      *     When AAuth is active the `agent_*` keys carry the cryptographically
      *     verified identity; `client_name`/`client_version` come from the MCP
@@ -2908,6 +3078,24 @@ export interface components {
        * @description ISO-8601 timestamp when the attribution block was stamped.
        */
       attributed_at?: string;
+      /**
+       * @description The signed-in member whose session made this write, as their
+       *     write-attribution id: a random UUID minted on this instance the
+       *     first time the member's session is resolved. It is pseudonymous —
+       *     not derived from the email address or the member's `user_id`, so it
+       *     cannot be recomputed from a list of addresses, and the same person
+       *     has a different id on every instance. Only this instance's
+       *     `member_attribution_ids` table maps it back to a member; no API
+       *     exposes that mapping yet. It is not the same value as `/me`'s
+       *     `authenticated_user_id` and does not join to it. Provenance only —
+       *     it never affects which graph is read or written. Absent when no
+       *     verified sign-in stands behind the request (static bearer token,
+       *     key-derived MCP token, local no-auth, AAuth grant, or a connection
+       *     that predates identity recording); consumers MUST read absence as
+       *     "unknown", never as the graph owner. Withheld from responses to
+       *     guest (entity-scoped token) readers.
+       */
+      authenticated_actor_id?: string;
     };
     /**
      * @description Active attribution policy for the Neotoma instance. Governs how
@@ -2985,12 +3173,16 @@ export interface components {
       } | null;
       /**
        * @description Set when the operator allowlist promoted the request to
-       *     `operator_attested`. `"issuer"` means a hit on
+       *     `operator_attested`. The tier is bound to the verified signing
+       *     key. `"thumbprint"` means the key's thumbprint is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`; `"issuer"` means the
+       *     `match_iss` of the active grant pinning the key is listed in
        *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-       *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+       *     that grant's `match_iss:match_sub` is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
        * @enum {string}
        */
-      operator_allowlist_source?: "issuer" | "issuer_subject";
+      operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
     };
     /**
      * @description Resolved attribution and policy for the current session. Returned
@@ -3017,7 +3209,14 @@ export interface components {
        *     that signature to one of this user's `agent_grant` entities
        *     and is treating the caller as authenticated. The two are
        *     independent: a verified-but-unmatched signature stays
-       *     attribution-only and `admitted` is `false`.
+       *     attribution-only and `admitted` is `false`. Admission is
+       *     key-bound: a grant admits only when its `match_thumbprint`
+       *     equals the signing key's thumbprint. `grant_key_unbound`
+       *     means a grant matched sub/iss but pins no key; capability-gated
+       *     writes carrying that signature are refused until the grant is
+       *     pinned, whatever authenticated the request. Pin
+       *     `match_thumbprint` to admit the agent (see
+       *     docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
        */
       aauth: {
         verified: boolean;
@@ -3028,8 +3227,10 @@ export interface components {
           | "admitted"
           | "no_grants_for_user"
           | "no_match"
+          | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
+          | "grant_pin_conflict"
           | "strict_rejected"
           | "aauth_disabled"
           | "not_signed"
@@ -3398,6 +3599,44 @@ export interface components {
       target_entity_type?: string | null;
       target_entity_type_label?: string | null;
     };
+    /**
+     * @description A relationship from a request's `relationships` array that was
+     *     written. Shared by `StoreStructuredResponse.relationships_created`
+     *     and `CreateInterpretationResponse.relationships_created`. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipCreated: {
+      relationship_type: string;
+      source_entity_id: string;
+      target_entity_id: string;
+    };
+    /**
+     * @description A relationship from a request's `relationships` array that was not
+     *     written. The entities in the call are still stored. Shared by
+     *     `StoreStructuredResponse.relationships_refused` and
+     *     `CreateInterpretationResponse.relationships_refused`. An endpoint
+     *     that does not exist and one owned by another user are both reported
+     *     as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipRefusal: {
+      /** @description Position of the relationship in the request's `relationships` array. */
+      relationship_index: number;
+      relationship_type: string;
+      source_entity_id?: string;
+      target_entity_id?: string;
+      source_index?: number;
+      target_index?: number;
+      /**
+       * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+       *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+       *     `RELATIONSHIP_INVALID_ENTITY_ID`,
+       *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+       */
+      code: string;
+      reason: string;
+      hint?: string;
+    };
     TimelineEvent: {
       id?: string;
       event_type?: string;
@@ -3537,9 +3776,18 @@ export interface components {
        *     data.
        */
       hint?: string;
-      relationships_created?: {
-        [key: string]: unknown;
-      }[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. See
+       *     docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
     };
     /** @description Aggregate usage statistics computed from local data only. */
     UsageStats: {
@@ -3662,10 +3910,18 @@ export interface components {
        */
       type?: "User" | "Bot" | "Organization";
       /**
+       * @description Accepted for compatibility, but a request body can only assert an
+       *     external actor: the stored value is always `claim`. The stronger
+       *     tiers are assigned by server-side verification paths (the signed
+       *     GitHub webhook route, AAuth token claims, grant linkage).
        * @default claim
        * @enum {string}
        */
       verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+      /**
+       * @description Not carried over from a request body; set only by the signed
+       *     GitHub webhook route.
+       */
       delivery_id?: string;
       event_type?: string;
       repository?: string;
@@ -3891,6 +4147,19 @@ export interface components {
         observation_index?: number;
         entity_id?: string;
       })[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. An endpoint that
+       *     does not exist and one owned by another user are both reported as
+       *     `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
       /**
        * @description Schema-driven non-fatal warnings emitted when a stored observation
        *     omits all fields listed by a schema's `store_warnings` rule. Used
@@ -4444,6 +4713,94 @@ export interface operations {
       };
     };
   };
+  mcpStreamableHttpPost: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`. */
+        "MCP-Protocol-Version"?: string;
+        /** @description Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data. */
+        "Mcp-Method"?: string;
+        /**
+         * @description Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+         *     `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+         *     sentinel. Never a credential or personal data.
+         */
+        "Mcp-Name"?: string;
+        /** @description Legacy-era session id. Its presence selects the legacy session path. */
+        "Mcp-Session-Id"?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["McpJsonRpcRequest"];
+      };
+    };
+    responses: {
+      /**
+       * @description JSON-RPC response. On the modern path every result carries
+       *     `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+       *     a `server/discover` result has the `McpServerDiscoverResult` shape.
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+          "text/event-stream": string;
+        };
+      };
+      /** @description JSON-RPC notification accepted (no body). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+       *     `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+       *     `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Authentication required or credential invalid (`-32001`). On the
+       *     2026-07-28 path this includes a credential that passed the gate but
+       *     resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+       *     or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+       *     (`-32001`, re-initialize).
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+    };
+  };
   mcpOAuthInitiate: {
     parameters: {
       query?: never;
@@ -4554,6 +4911,9 @@ export interface operations {
         "application/x-www-form-urlencoded": {
           grant_type?: string;
           code?: string;
+          /** @description PKCE verifier (RFC 7636). Required with grant_type= authorization_code; the server rejects a code redemption whose SHA-256/base64url digest does not match the code_challenge presented at /mcp/oauth/authorize. */
+          code_verifier?: string;
+          refresh_token?: string;
         };
       };
     };
@@ -5545,6 +5905,24 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
+      /**
+       * @description `entity_owner_conflict` — `new_entity.target_entity_id` names an
+       *     existing entity owned by a different, non-null user than the
+       *     writer. No observations are re-pointed. The source entity's own
+       *     ownership is already covered by the `404` above (a source owned
+       *     by another user reads as not-found); this refusal is for the
+       *     split's OTHER caller-supplied id, the merge target. The envelope
+       *     details carry `entity_id` and `entity_type`; never the other
+       *     owner's identity or fields.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSources: {
@@ -5862,6 +6240,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -5937,6 +6321,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -6514,7 +6904,11 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+       *     `StoreResolutionErrorEnvelope` shape; one of its per-observation
+       *     `issues[].code` values is `entity_owner_conflict` — resolution
+       *     landed on an existing entity owned by a different, non-null
+       *     user, and the write was refused before anything was persisted
+       *     (see `StoreResolutionIssue.code`). `ERR_CONSTRAINT_VIOLATION` is
        *     returned when one or more observations fail a declarative write-time
        *     value constraint (constraint `policy: "reject"`); its envelope carries
        *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
@@ -7551,26 +7945,69 @@ export interface operations {
           /** @enum {string} */
           state?: "open" | "closed" | "all";
           labels?: string[];
-          /** @description When false, skip the push leg (local public → GitHub). Default true. */
+          /**
+           * @description GitHub repository to mirror, `owner/name` (for example `acme/widgets`). Defaults to the server-configured repo. Must be the configured repo or be listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or `issues.allowed_repos`). A malformed value is rejected with a 400 and a repo that is not permitted with a 403, both before any GitHub request or write.
+           * @example acme/widgets
+           */
+          repo?: string;
+          /** @description Run the push leg (local public -> GitHub). Default true when `repo` is omitted or equals the configured default repo; default false for any other `repo`. Pass true to opt in for another repo. */
           push?: boolean;
+          /** @description When false, dry run: report what would be created, updated and pushed in `plan` and write nothing locally or on GitHub. Default true. */
+          commit?: boolean;
           user_id?: string;
         };
       };
     };
     responses: {
-      /** @description Sync counts and errors */
+      /** @description Sync counts, errors and, for a dry run, the plan */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": {
+            /** @description Target GitHub repo (`owner/name`) this run mirrored. */
+            repo: string;
+            /** @description True when the run was a dry run (`commit: false`); nothing was written. */
+            dry_run: boolean;
+            /** @description Whether the push leg was enabled (resolved from `push` and `repo`). */
+            push_enabled: boolean;
             issues_synced: number;
             messages_synced: number;
             errors: string[];
             issues_pushed: number;
             push_errors: string[];
+            /** @description Present only on a dry run. */
+            plan?: {
+              issues_to_create: components["schemas"]["IssuesSyncPlanIssue"][];
+              issues_to_update: components["schemas"]["IssuesSyncPlanIssue"][];
+              issues_unchanged: number;
+              messages_to_sync: number;
+              issues_to_push: {
+                entity_id: string;
+                title: string;
+              }[];
+              warnings: string[];
+            };
           };
+        };
+      };
+      /** @description Validation error (for example a malformed `repo`) */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist) */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -7854,13 +8291,21 @@ export interface operations {
               }
           )[];
           schema_version?: string;
-          /** @default false */
+          /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global registry row and no code-defined baseline (but has the caller's user-scoped schema). The response's `scope` reports the scope actually written. */
           user_specific?: boolean;
           user_id?: string;
           /** @default true */
           activate?: boolean;
-          /** @default false */
+          /**
+           * @description Promote existing raw_fragments for the added fields into observations (historical backfill). A request with migrate_existing true can legitimately promote nothing; see `migrated_existing` and `migration_result` in the response.
+           * @default false
+           */
           migrate_existing?: boolean;
+          /**
+           * @description Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Use when entity_type is rejected with a message naming "force: true" as the remedy. Does not affect any other validation.
+           * @default false
+           */
+          force?: boolean;
         };
       };
     };
@@ -7895,8 +8340,30 @@ export interface operations {
                     )[]
                   | null;
                 activated?: boolean;
+                /** @description True only when this call actually promoted at least one raw_fragment (`migration_result.migrated_count > 0`). Never an echo of the `migrate_existing` request flag. */
                 migrated_existing?: boolean;
-                scope?: string;
+                /** @description Present only when `migrate_existing` was requested. The actual migration outcome, including every fragment group that did not promote and why. */
+                migration_result?: {
+                  migrated_count: number;
+                  skipped: {
+                    field_name: string;
+                    /** @enum {string} */
+                    reason:
+                      | "no_entity_resolution"
+                      | "no_active_schema"
+                      | "observation_insert_failed"
+                      | "already_promoted"
+                      | "unexpected_error";
+                    count: number;
+                  }[];
+                };
+                /**
+                 * @description The scope this call actually wrote to, read from the persisted row rather than re-derived from the request.
+                 * @enum {string}
+                 */
+                scope?: "global" | "user";
+                /** @description Present only when `scope` is `user`: which user's row was written. */
+                user_id?: string | null;
               } & {
                 [key: string]: unknown;
               })
@@ -8003,6 +8470,13 @@ export interface operations {
               edge_count?: number;
             }[];
             total: number;
+            /**
+             * @description Present only when relationship_types is empty. Never infer "no vocabulary exists" from an empty array alone. registry_unseeded means the instance's relationship-type registry (including the built-in vocabulary) failed to seed and is a registry/seed failure that self-repairs on a subsequent read, not a permanent state; call list_relationship_types again rather than concluding no types are available. filtered_to_empty means a supplied keyword matched nothing against an otherwise-populated registry; retry without keyword to see the full vocabulary. Absent when relationship_types is non-empty.
+             * @enum {string}
+             */
+            empty_reason?: "registry_unseeded" | "filtered_to_empty";
+            /** @description Present only alongside empty_reason. Human/agent-readable elaboration of empty_reason and the recommended next call; never present when relationship_types is non-empty. */
+            hint?: string;
           };
         };
       };
@@ -8032,6 +8506,11 @@ export interface operations {
           user_id?: string;
           /** @default false */
           activate?: boolean;
+          /**
+           * @description Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Use when entity_type is rejected with a message naming "force: true" as the remedy. Does not affect any other validation.
+           * @default false
+           */
+          force?: boolean;
         };
       };
     };
@@ -8156,6 +8635,24 @@ export interface operations {
        *     details carry `field_name`, `agent_role`, and `entity_id`.
        */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `entity_owner_conflict` — `entity_id` resolves to an existing
+       *     entity owned by a different, non-null user than the writer. No
+       *     observation is written. `correct()` is the raw entity-store
+       *     surface: a caller names `entity_id` directly with no resolution
+       *     step in between, so this is the only refusal point for a
+       *     correction that would otherwise land on another user's entity.
+       *     The envelope details carry `entity_id` and `entity_type`; never
+       *     the other owner's identity or fields.
+       */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -8431,6 +8928,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   unsubscribe: {
@@ -8459,6 +8974,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription is not wholly inside the guest entity grant */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSubscriptions: {
@@ -8483,6 +9016,15 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8513,6 +9055,15 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   eventsStream: {
@@ -8531,7 +9082,27 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription does not exist or is outside the guest entity grant */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
       };
     };
   };

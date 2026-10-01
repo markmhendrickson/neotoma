@@ -26,8 +26,7 @@ Customer support escalations and routing decisions are often opaque — when a t
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured routing decisions, escalation chains, and interactions |
-| `query-memory` | Reconstructs routing rationale and escalation context at any point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 
