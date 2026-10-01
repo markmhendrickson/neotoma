@@ -130,6 +130,7 @@ describe("eval-harness required skip policy", () => {
     const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
     expect(summary.skipped).toBe(2);
     expect(summary.unexpectedSkipped).toBe(1);
+    expect(summary.unexpectedSkipDiagnostics[0].cell).toContain("cassette_id=required-replay");
   });
 
   it.each([
@@ -229,6 +230,35 @@ expected: []
       );
       expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(1);
       expect(result.stdout).toContain("skipped=2");
+      expect(result.stdout).toContain("unexpected_skipped=1");
+      expect(result.stdout).toContain(
+        "scenario=mixed_cli_probe provider=stub model=required-replay cassette_id=(default) kind=missing_cassette"
+      );
+      expect(result.stdout).toContain("record the required cassette");
+      expect(result.stdout).toContain("exact meta.allowed_skips entry");
+
+      const junit = spawnSync(
+        resolve("node_modules/.bin/tsx"),
+        [
+          "packages/eval-harness/src/cli.ts",
+          "run",
+          "--scenario-file",
+          scenarioPath,
+          "--cassette-dir",
+          dir,
+          "--reporter",
+          "junit",
+        ],
+        { cwd: resolve("."), encoding: "utf8" }
+      );
+      expect(junit.status, `${junit.stdout}\n${junit.stderr}`).toBe(1);
+      expect(junit.stdout).toContain('failures="1"');
+      expect(junit.stdout).toContain('skipped="1"');
+      expect(junit.stdout).toContain(
+        "scenario=mixed_cli_probe provider=stub model=required-replay cassette_id=(default) kind=missing_cassette"
+      );
+      expect(junit.stdout).toContain("record the required cassette");
+      expect(junit.stdout).toContain("exact meta.allowed_skips entry");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

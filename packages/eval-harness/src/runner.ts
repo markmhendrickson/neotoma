@@ -23,6 +23,7 @@ import { cassetteFilename, readCassette, staleness } from "./cassette.js";
 import { getDriver } from "./drivers/index.js";
 import { createHostToolRegistry } from "./host_tools.js";
 import { startIsolatedNeotomaServer, type IsolatedServer } from "./isolated_server.js";
+import { buildUnexpectedSkipDiagnostics, UNEXPECTED_SKIP_REPAIR_ACTION } from "./skip_policy.js";
 import type {
   AssertionFailure,
   CellReport,
@@ -337,21 +338,16 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
     if (report.driverResult) estimatedCostUsd += report.driverResult.estimatedCostUsd;
     cells.push(report);
   }
+  const unexpectedSkipDiagnostics = buildUnexpectedSkipDiagnostics(cells);
   const summary: RunSummary = {
     total: cells.length,
     passed: cells.filter((c) => c.pass && !c.skipped).length,
     failed: cells.filter((c) => !c.pass && !c.skipped).length,
     skipped: cells.filter((c) => c.skipped).length,
-    unexpectedSkipped: cells.filter((cell) => {
-      if (!cell.skipped || cell.skipped.kind === "quarantine") return false;
-      return !cell.scenario.allowed_skips?.some(
-        (allowance) =>
-          allowance.kind === cell.skipped?.kind &&
-          allowance.provider === cell.model.provider &&
-          allowance.model === cell.model.model &&
-          allowance.cassette_id === cell.model.cassette_id
-      );
-    }).length,
+    unexpectedSkipped: unexpectedSkipDiagnostics.length,
+    unexpectedSkipDiagnostics,
+    unexpectedSkipRepair:
+      unexpectedSkipDiagnostics.length > 0 ? UNEXPECTED_SKIP_REPAIR_ACTION : null,
     cells,
     estimatedCostUsd,
     mode: opts.mode,

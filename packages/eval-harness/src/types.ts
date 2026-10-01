@@ -296,6 +296,17 @@ export interface CellReport {
   skipped?: { kind: SkipKind; reason: string };
 }
 
+export interface UnexpectedSkipDiagnostic {
+  /** Stable, human-readable identity for the exact matrix cell. */
+  cell: string;
+  scenarioId: string;
+  provider: ProviderId;
+  model: string;
+  cassetteId: string | null;
+  kind: SkipKind;
+  reason: string;
+}
+
 export interface RunSummary {
   total: number;
   passed: number;
@@ -303,6 +314,10 @@ export interface RunSummary {
   skipped: number;
   /** Skips not explicitly allowed by scenario metadata (quarantine is always explicit). */
   unexpectedSkipped: number;
+  /** Exact required cells that were skipped and therefore make the run fail. */
+  unexpectedSkipDiagnostics: UnexpectedSkipDiagnostic[];
+  /** Actionable repair guidance when unexpectedSkipDiagnostics is non-empty. */
+  unexpectedSkipRepair: string | null;
   cells: CellReport[];
   /** Total estimated USD spent across live cells. */
   estimatedCostUsd: number;

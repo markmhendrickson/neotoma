@@ -157,7 +157,7 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
       ? (o.attachments as ScenarioFile["attachments"])
       : undefined,
     host_tools: o.host_tools as ScenarioFile["host_tools"],
-    models: models as ScenarioFile["models"],
+    models: models as unknown as ScenarioFile["models"],
     instruction_profile: instruction_profile ?? "auto",
     hooks_enabled: typeof o.hooks_enabled === "boolean" ? o.hooks_enabled : true,
     driver_options: (o.driver_options as ScenarioFile["driver_options"]) ?? {},

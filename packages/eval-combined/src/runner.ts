@@ -68,6 +68,11 @@ export interface Tier2SummaryShape {
   failed: number;
   skipped: number;
   unexpectedSkipped: number;
+  unexpectedSkipDiagnostics: Array<{
+    cell: string;
+    reason: string;
+  }>;
+  unexpectedSkipRepair: string | null;
   cells: Array<{
     scenario: { id: string; tags?: string[] };
     model: { provider: string; model: string };
@@ -247,11 +252,21 @@ export async function runCombined(opts: CombinedOptions): Promise<CombinedResult
     try {
       const harness = await import(join(evalHarnessPath, "src", "index.js"));
       const scenarios = harness.loadScenariosFromDir(opts.scenarioDir);
+      if (scenarios.length === 0) {
+        throw new Error(
+          "No Tier 2 scenarios found in requested directory. Repair: add at least one *.scenario.yaml file or correct --scenarios-dir."
+        );
+      }
       const summary = await harness.runScenarios({
         scenarios,
         mode: opts.mode as "replay" | "record",
         log,
       });
+      if (summary.total === 0 || summary.cells.length === 0) {
+        throw new Error(
+          "Tier 2 produced zero cells. Repair: add a runnable model cell or correct --scenarios-dir."
+        );
+      }
       tier2Summary = summary as Tier2SummaryShape;
       log(`[eval-combined] Tier 2 complete: ${summary.passed}/${summary.total} passed`);
     } catch (err) {

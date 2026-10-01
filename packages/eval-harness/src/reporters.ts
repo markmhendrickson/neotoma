@@ -7,6 +7,11 @@
  */
 
 import type { RunSummary, CellReport } from "./types.js";
+import {
+  formatUnexpectedSkipCell,
+  isUnexpectedSkip,
+  UNEXPECTED_SKIP_REPAIR_ACTION,
+} from "./skip_policy.js";
 
 function symbol(cell: CellReport): string {
   if (cell.skipped) return "·";
@@ -31,15 +36,26 @@ export function renderTty(summary: RunSummary): string {
     } else if (cell.driverResult) {
       lines.push(
         `    ${cell.driverResult.toolCalls.length} tool calls in ${cell.driverResult.elapsedMs}ms${
-          cell.driverResult.estimatedCostUsd > 0 ? ` (~$${cell.driverResult.estimatedCostUsd.toFixed(4)})` : ""
+          cell.driverResult.estimatedCostUsd > 0
+            ? ` (~$${cell.driverResult.estimatedCostUsd.toFixed(4)})`
+            : ""
         }`
       );
     }
   }
   lines.push("");
   lines.push(
-    `total=${summary.total}  passed=${summary.passed}  failed=${summary.failed}  skipped=${summary.skipped}  spend≈$${summary.estimatedCostUsd.toFixed(4)}`
+    `total=${summary.total}  passed=${summary.passed}  failed=${summary.failed}  skipped=${summary.skipped}  unexpected_skipped=${summary.unexpectedSkipped}  spend≈$${summary.estimatedCostUsd.toFixed(4)}`
   );
+  if (summary.unexpectedSkipped > 0) {
+    lines.push("");
+    lines.push(`Unexpected required skips: ${summary.unexpectedSkipped}`);
+    for (const diagnostic of summary.unexpectedSkipDiagnostics) {
+      lines.push(`  - ${diagnostic.cell}`);
+      lines.push(`    reason: ${diagnostic.reason}`);
+    }
+    lines.push(summary.unexpectedSkipRepair ?? UNEXPECTED_SKIP_REPAIR_ACTION);
+  }
   return lines.join("\n");
 }
 
@@ -58,18 +74,28 @@ function escapeXml(s: string): string {
 
 export function renderJunit(summary: RunSummary): string {
   const lines: string[] = [];
+  const failures = summary.failed + summary.unexpectedSkipped;
+  const skipped = summary.skipped - summary.unexpectedSkipped;
   lines.push(`<?xml version="1.0" encoding="UTF-8"?>`);
   lines.push(
-    `<testsuites name="neotoma-eval" tests="${summary.total}" failures="${summary.failed}" skipped="${summary.skipped}">`
+    `<testsuites name="neotoma-eval" tests="${summary.total}" failures="${failures}" skipped="${skipped}">`
   );
   lines.push(
-    `  <testsuite name="tier2" tests="${summary.total}" failures="${summary.failed}" skipped="${summary.skipped}">`
+    `  <testsuite name="tier2" tests="${summary.total}" failures="${failures}" skipped="${skipped}">`
   );
   for (const cell of summary.cells) {
     const name = `${cell.scenario.id} (${cell.model.provider}/${cell.model.model}, profile=${cell.effectiveProfile})`;
     const time = cell.driverResult ? (cell.driverResult.elapsedMs / 1000).toFixed(3) : "0";
-    lines.push(`    <testcase name="${escapeXml(name)}" classname="${escapeXml(cell.scenario.id)}" time="${time}">`);
-    if (cell.skipped) {
+    lines.push(
+      `    <testcase name="${escapeXml(name)}" classname="${escapeXml(cell.scenario.id)}" time="${time}">`
+    );
+    if (isUnexpectedSkip(cell)) {
+      const identity = formatUnexpectedSkipCell(cell);
+      const detail = `${identity}\nreason: ${cell.skipped!.reason}\n${UNEXPECTED_SKIP_REPAIR_ACTION}`;
+      lines.push(
+        `      <failure message="${escapeXml(`Unexpected required skip: ${identity}`)}"><![CDATA[\n${detail}\n]]></failure>`
+      );
+    } else if (cell.skipped) {
       lines.push(`      <skipped message="${escapeXml(cell.skipped.reason)}"/>`);
     } else if (!cell.pass) {
       lines.push(
