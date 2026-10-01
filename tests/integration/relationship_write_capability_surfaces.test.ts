@@ -31,7 +31,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 
 const ADMIT_HEADER = "x-test-rel-cap-admit";
+const PROBE_ADMIT_HEADER = "x-test-rel-cap-probe-admit";
 const TEST_THUMBPRINT = "tp-rel-write-capability-surfaces";
+const TEST_PROBE_THUMBPRINT = "tp-rel-write-capability-probe";
 const RUN_REST_SURFACE = process.env.NEOTOMA_TEST_SKIP_REST_SURFACE !== "1";
 
 vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
@@ -39,11 +41,12 @@ vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
   return {
     ...original,
     aauthVerify: () => (req: Request, _res: Response, next: NextFunction) => {
-      if (req.headers[ADMIT_HEADER] === "1") {
+      if (req.headers[ADMIT_HEADER] === "1" || req.headers[PROBE_ADMIT_HEADER] === "1") {
+        const probe = req.headers[PROBE_ADMIT_HEADER] === "1";
         (req as Request & { aauth?: unknown }).aauth = {
           verified: true,
           publicKey: '{"kty":"EC"}',
-          thumbprint: TEST_THUMBPRINT,
+          thumbprint: probe ? TEST_PROBE_THUMBPRINT : TEST_THUMBPRINT,
           algorithm: "ES256",
           sub: "dispatcher@swarm.test",
           iss: "https://swarm.test",
@@ -59,7 +62,7 @@ vi.mock("../../src/services/aauth_admission.js", async (importOriginal) => {
   const { LOCAL_DEV_USER_ID: owner } = await import("../../src/services/local_auth.js");
   return {
     ...original,
-    admitFromAAuthContext: async (ctx: { verified?: boolean } | null) =>
+    admitFromAAuthContext: async (ctx: { verified?: boolean; thumbprint?: string } | null) =>
       ctx?.verified
         ? {
             admitted: true,
@@ -67,7 +70,10 @@ vi.mock("../../src/services/aauth_admission.js", async (importOriginal) => {
             user_id: owner,
             grant_id: "ent_test_rel_cap_grant",
             agent_label: "relationship capability surfaces grant",
-            capabilities: CHECKPOINT_CAPABILITIES,
+            capabilities:
+              ctx.thumbprint === TEST_PROBE_THUMBPRINT
+                ? PROBE_CAPABILITIES
+                : CHECKPOINT_CAPABILITIES,
           }
         : { admitted: false, reason: "not_signed" },
   };
@@ -97,6 +103,17 @@ const CHECKPOINT_CAPABILITIES: AgentCapabilityEntry[] = [
   {
     op: "create_relationship",
     entity_types: ["checkpoint_brief", "task"],
+    relationship_types: ["REFERS_TO"],
+  },
+];
+
+const PROBE_TYPE = "rel_cap_autolink_probe";
+const PROBE_CAPABILITIES: AgentCapabilityEntry[] = [
+  { op: "store", entity_types: [PROBE_TYPE, "task"] },
+  { op: "retrieve", entity_types: ["*"] },
+  {
+    op: "create_relationship",
+    entity_types: [PROBE_TYPE, "task"],
     relationship_types: ["REFERS_TO"],
   },
 ];
@@ -235,6 +252,22 @@ describe("relationship-write capability: every entrance, every surface", () => {
     const res = await fetch(`${baseUrl}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", [ADMIT_HEADER]: "1" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      json = { raw: text };
+    }
+    return { status: res.status, body: json };
+  }
+
+  async function postAsProbe(path: string, body: Record<string, unknown>) {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [PROBE_ADMIT_HEADER]: "1" },
       body: JSON.stringify(body),
     });
     const text = await res.text();
@@ -800,17 +833,6 @@ describe("relationship-write capability: every entrance, every surface", () => {
 
   // ------------------------------------- schema-chosen edge types are gated
   describe("edges whose type a registered schema chooses", () => {
-    const PROBE_TYPE = "rel_cap_autolink_probe";
-    const PROBE_CAPABILITIES: AgentCapabilityEntry[] = [
-      { op: "store", entity_types: [PROBE_TYPE, "task"] },
-      { op: "retrieve", entity_types: ["*"] },
-      {
-        op: "create_relationship",
-        entity_types: [PROBE_TYPE, "task"],
-        relationship_types: [IN_SCOPE],
-      },
-    ];
-
     beforeAll(async () => {
       if (!(await schemaRegistry.loadActiveSchema(PROBE_TYPE, USER_ID))) {
         await schemaRegistry.register({
@@ -836,26 +858,163 @@ describe("relationship-write capability: every entrance, every surface", () => {
       }
     });
 
+    const probeAdmission: AAuthAdmissionContext = {
+      admitted: true,
+      reason: "admitted",
+      user_id: USER_ID,
+      grant_id: "ent_test_rel_cap_probe_grant",
+      agent_label: "relationship capability probe grant",
+      capabilities: PROBE_CAPABILITIES,
+    };
+
+    const entityIdOf = (result: ToolResult): string => {
+      const body = JSON.parse(result.content[0].text) as {
+        entities?: Array<{ entity_id?: string }>;
+      };
+      const id = body.entities?.[0]?.entity_id;
+      if (!id) throw new Error(`store returned no entity id: ${result.content[0].text}`);
+      createdEntityIds.push(id);
+      return id;
+    };
+
+    async function canonicalNameOf(id: string): Promise<string> {
+      const { data } = await db
+        .from("entity_snapshots")
+        .select("canonical_name")
+        .eq("entity_id", id)
+        .single();
+      const canonicalName = (data as { canonical_name?: string } | null)?.canonical_name;
+      if (!canonicalName) throw new Error(`entity ${id} has no canonical_name`);
+      return canonicalName;
+    }
+
+    async function seedOwnerAutoLink(field: "lease_task" | "ref_task"): Promise<{
+      probeId: string;
+      probeTitle: string;
+      targetId: string;
+    }> {
+      const targetId = entityIdOf(
+        await tool(
+          mcp,
+          "store"
+        )({
+          user_id: USER_ID,
+          idempotency_key: `rel-cap-autolink-retract-target-${randomUUID()}`,
+          entities: [{ entity_type: "task", title: `retraction target ${randomUUID()}` }],
+        })
+      );
+      const targetName = await canonicalNameOf(targetId);
+      const probeTitle = `retraction probe ${randomUUID()}`;
+      const probeId = entityIdOf(
+        await tool(
+          mcp,
+          "store"
+        )({
+          user_id: USER_ID,
+          idempotency_key: `rel-cap-autolink-retract-probe-${randomUUID()}`,
+          entities: [{ entity_type: PROBE_TYPE, title: probeTitle, [field]: targetName }],
+        })
+      );
+      const relationshipType = field === "lease_task" ? OUT_OF_SCOPE : IN_SCOPE;
+      expect(await edgeIsLive(relationshipType, probeId, targetId)).toBe(true);
+      return { probeId, probeTitle, targetId };
+    }
+
+    function warningCodes(body: Record<string, unknown>): string[] {
+      return ((body.store_warnings ?? []) as Array<{ code?: string }>)
+        .map((warning) => warning.code)
+        .filter((code): code is string => typeof code === "string");
+    }
+
+    it("MCP store refuses an out-of-grant schema auto-link retraction and leaves the edge live", async () => {
+      const seeded = await seedOwnerAutoLink("lease_task");
+      const result = await runWithAdmission(probeAdmission, () =>
+        tool(
+          mcp,
+          "store"
+        )({
+          user_id: USER_ID,
+          idempotency_key: `rel-cap-autolink-retract-mcp-denied-${randomUUID()}`,
+          entities: [
+            {
+              entity_type: PROBE_TYPE,
+              title: seeded.probeTitle,
+              lease_task: `unresolved-${randomUUID()}`,
+            },
+          ],
+        })
+      );
+      const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+
+      expect(warningCodes(body)).toContain("AUTO_LINK_RETRACTION_FAILED");
+      expect(await edgeIsLive(OUT_OF_SCOPE, seeded.probeId, seeded.targetId)).toBe(true);
+    });
+
+    it("MCP store permits an in-grant schema auto-link retraction", async () => {
+      const seeded = await seedOwnerAutoLink("ref_task");
+      const result = await runWithAdmission(probeAdmission, () =>
+        tool(
+          mcp,
+          "store"
+        )({
+          user_id: USER_ID,
+          idempotency_key: `rel-cap-autolink-retract-mcp-allowed-${randomUUID()}`,
+          entities: [
+            {
+              entity_type: PROBE_TYPE,
+              title: seeded.probeTitle,
+              ref_task: `unresolved-${randomUUID()}`,
+            },
+          ],
+        })
+      );
+      const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+
+      expect(warningCodes(body)).toContain("AUTO_LINK_EDGE_RETRACTED");
+      expect(await edgeIsLive(IN_SCOPE, seeded.probeId, seeded.targetId)).toBe(false);
+    });
+
+    describe.skipIf(!RUN_REST_SURFACE)("REST store schema auto-link retraction", () => {
+      it("refuses an out-of-grant retraction and leaves the edge live", async () => {
+        const seeded = await seedOwnerAutoLink("lease_task");
+        const res = await postAsProbe("/store", {
+          idempotency_key: `rel-cap-autolink-retract-rest-denied-${randomUUID()}`,
+          entities: [
+            {
+              entity_type: PROBE_TYPE,
+              title: seeded.probeTitle,
+              lease_task: `unresolved-${randomUUID()}`,
+            },
+          ],
+        });
+
+        expect(res.status).toBe(200);
+        expect(warningCodes(res.body)).toContain("AUTO_LINK_RETRACTION_FAILED");
+        expect(await edgeIsLive(OUT_OF_SCOPE, seeded.probeId, seeded.targetId)).toBe(true);
+      });
+
+      it("permits an in-grant retraction", async () => {
+        const seeded = await seedOwnerAutoLink("ref_task");
+        const res = await postAsProbe("/store", {
+          idempotency_key: `rel-cap-autolink-retract-rest-allowed-${randomUUID()}`,
+          entities: [
+            {
+              entity_type: PROBE_TYPE,
+              title: seeded.probeTitle,
+              ref_task: `unresolved-${randomUUID()}`,
+            },
+          ],
+        });
+
+        expect(res.status).toBe(200);
+        expect(warningCodes(res.body)).toContain("AUTO_LINK_EDGE_RETRACTED");
+        expect(await edgeIsLive(IN_SCOPE, seeded.probeId, seeded.targetId)).toBe(false);
+      });
+    });
+
     it("refuses the out-of-grant auto-link, keeps the in-grant one, and the store succeeds", async () => {
-      const admission: AAuthAdmissionContext = {
-        admitted: true,
-        reason: "admitted",
-        user_id: USER_ID,
-        grant_id: "ent_test_rel_cap_probe_grant",
-        agent_label: "relationship capability probe grant",
-        capabilities: PROBE_CAPABILITIES,
-      };
       const storeAs = (args: Record<string, unknown>) =>
-        runWithAdmission(admission, () => tool(mcp, "store")(args));
-      const entityIdOf = (result: ToolResult): string => {
-        const body = JSON.parse(result.content[0].text) as {
-          entities?: Array<{ entity_id?: string }>;
-        };
-        const id = body.entities?.[0]?.entity_id;
-        if (!id) throw new Error(`store returned no entity id: ${result.content[0].text}`);
-        createdEntityIds.push(id);
-        return id;
-      };
+        runWithAdmission(probeAdmission, () => tool(mcp, "store")(args));
 
       const targetTaskId = entityIdOf(
         await storeAs({
