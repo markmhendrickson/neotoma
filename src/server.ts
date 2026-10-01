@@ -8393,6 +8393,22 @@ export class NeotomaServer {
       );
     }
 
+    // Deletion changes the same live edge state as creation and restoration.
+    // Apply the shared relationship capability after the discovery guard and
+    // before the deletion observation is written.
+    const { enforceCurrentAgentRelationshipWrites } =
+      await import("./services/relationship_write_capability.js");
+    await enforceCurrentAgentRelationshipWrites({
+      userId,
+      relationships: [
+        {
+          relationship_type: parsed.relationship_type,
+          source_entity_id: parsed.source_entity_id,
+          target_entity_id: parsed.target_entity_id,
+        },
+      ],
+    });
+
     const result = await softDeleteRelationshipService(
       relationshipKey,
       parsed.relationship_type,

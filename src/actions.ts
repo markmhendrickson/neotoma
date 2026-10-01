@@ -11468,6 +11468,17 @@ app.post("/delete_relationship", async (req, res) => {
       );
     }
 
+    // Tombstoning a live edge changes the same relationship state that the
+    // create/restore capability governs. Enforce the admitted grant after the
+    // discovery guard (so a missing edge stays not-found) and before writing
+    // the deletion observation.
+    const { enforceCurrentAgentRelationshipWrites } =
+      await import("./services/relationship_write_capability.js");
+    await enforceCurrentAgentRelationshipWrites({
+      userId,
+      relationships: [{ relationship_type, source_entity_id, target_entity_id }],
+    });
+
     const { softDeleteRelationship } = await import("./services/deletion.js");
 
     // Construct relationship key

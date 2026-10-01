@@ -20,6 +20,8 @@
  *     REST/MCP handlers) — per edge, inside the service.
  *   - `restoreRelationship` (REST/MCP `restore_relationship`) — reviving an
  *     edge is an edge write.
+ *   - REST/MCP `delete_relationship` — tombstoning a live edge is authorized
+ *     by the same relationship-type and endpoint-type grant.
  *
  * The check is the same one everywhere, so a sibling path cannot drift from
  * the one that was fixed: that drift is the defect this module exists to

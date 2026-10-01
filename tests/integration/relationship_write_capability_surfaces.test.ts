@@ -8,7 +8,8 @@
  *   - MCP `store` (`storeStructuredInternal`) — a second, independent store
  *     implementation whose relationship loop ran unconditionally.
  *   - REST and MCP `create_relationship` / `create_relationships`.
- *   - REST and MCP `restore_relationship` (reviving an edge is an edge write).
+ *   - REST and MCP `delete_relationship` / `restore_relationship` (changing
+ *     whether an edge is live is an edge write).
  *
  * Each case below drives the real surface — the Express app over HTTP, the
  * NeotomaServer tool methods for MCP — as an AAuth-admitted agent whose grant
@@ -31,6 +32,7 @@ import { vi } from "vitest";
 
 const ADMIT_HEADER = "x-test-rel-cap-admit";
 const TEST_THUMBPRINT = "tp-rel-write-capability-surfaces";
+const RUN_REST_SURFACE = process.env.NEOTOMA_TEST_SKIP_REST_SURFACE !== "1";
 
 vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/middleware/aauth_verify.js")>();
@@ -154,6 +156,17 @@ async function edgeExists(type: string, source: string, target: string): Promise
   return (observations?.length ?? 0) > 0 || (snapshots?.length ?? 0) > 0;
 }
 
+async function edgeIsLive(type: string, source: string, target: string): Promise<boolean> {
+  const key = `${type}:${source}:${target}`;
+  const { data } = await db
+    .from("relationship_snapshots")
+    .select("is_live")
+    .eq("relationship_key", key)
+    .eq("user_id", USER_ID)
+    .maybeSingle();
+  return data?.is_live === 1;
+}
+
 async function edgesOfTypeTo(type: string, target: string): Promise<number> {
   const { data } = await db
     .from("relationship_observations")
@@ -211,7 +224,7 @@ async function capture(fn: () => Promise<unknown>): Promise<unknown> {
 }
 
 describe("relationship-write capability: every entrance, every surface", () => {
-  let httpServer: Server;
+  let httpServer: Server | undefined;
   let baseUrl: string;
   let mcp: NeotomaServer;
   let checkpointId: string;
@@ -244,18 +257,22 @@ describe("relationship-write capability: every entrance, every surface", () => {
       });
     }
 
-    httpServer = createServer(app);
-    await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", () => resolve()));
-    const address = httpServer.address();
-    if (!address || typeof address === "string") throw new Error("expected TCP address");
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    if (RUN_REST_SURFACE) {
+      httpServer = createServer(app);
+      await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", () => resolve()));
+      const address = httpServer.address();
+      if (!address || typeof address === "string") throw new Error("expected TCP address");
+      baseUrl = `http://127.0.0.1:${address.port}`;
+    }
 
     mcp = new NeotomaServer();
     (mcp as unknown as Record<string, unknown>).authenticatedUserId = USER_ID;
   });
 
   afterAll(async () => {
-    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    if (httpServer) {
+      await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+    }
     if (createdEntityIds.length > 0) {
       await db.from("relationship_observations").delete().in("source_entity_id", createdEntityIds);
       await db.from("relationship_observations").delete().in("target_entity_id", createdEntityIds);
@@ -357,7 +374,7 @@ describe("relationship-write capability: every entrance, every surface", () => {
   });
 
   // ----------------------------------------------- MCP standalone relationship tools
-  describe("MCP create_relationship / create_relationships / restore_relationship (blocker 2)", () => {
+  describe("MCP relationship lifecycle tools (blocker 2)", () => {
     it("create_relationship refuses LEASE and the edge does not exist", async () => {
       const error = await capture(() =>
         runAdmitted(() =>
@@ -455,6 +472,55 @@ describe("relationship-write capability: every entrance, every surface", () => {
       expect(await edgeExists(IN_SCOPE, checkpointId, secondTask)).toBe(true);
     });
 
+    it("delete_relationship refuses tombstoning an out-of-scope LEASE edge", async () => {
+      const service = new RelationshipsService();
+      await service.createRelationship({
+        relationship_type: OUT_OF_SCOPE as never,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+        user_id: USER_ID,
+      });
+
+      const error = await capture(() =>
+        runAdmitted(() =>
+          tool(
+            mcp,
+            "deleteRelationship"
+          )({
+            relationship_type: OUT_OF_SCOPE,
+            source_entity_id: checkpointId,
+            target_entity_id: taskId,
+          })
+        )
+      );
+      expect(error, String((error as Error | undefined)?.message)).toBeInstanceOf(
+        AgentCapabilityError
+      );
+      expect(await edgeIsLive(OUT_OF_SCOPE, checkpointId, taskId)).toBe(true);
+    });
+
+    it("delete_relationship still tombstones an in-scope REFERS_TO edge", async () => {
+      const service = new RelationshipsService();
+      await service.createRelationship({
+        relationship_type: IN_SCOPE as never,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+        user_id: USER_ID,
+      });
+
+      await runAdmitted(() =>
+        tool(
+          mcp,
+          "deleteRelationship"
+        )({
+          relationship_type: IN_SCOPE,
+          source_entity_id: checkpointId,
+          target_entity_id: taskId,
+        })
+      );
+      expect(await edgeIsLive(IN_SCOPE, checkpointId, taskId)).toBe(false);
+    });
+
     it("restore_relationship refuses reviving an out-of-scope LEASE edge", async () => {
       // Owner (no agent context) writes and soft-deletes the LEASE edge.
       const service = new RelationshipsService();
@@ -527,7 +593,7 @@ describe("relationship-write capability: every entrance, every surface", () => {
   });
 
   // ------------------------------------------------------------------- REST
-  describe("REST (blockers 2 and 3 on the HTTP surface)", () => {
+  describe.skipIf(!RUN_REST_SURFACE)("REST (blockers 2 and 3 on the HTTP surface)", () => {
     it("POST /store refuses a LEASE edge with 403 and writes no edge", async () => {
       const res = await post("/store", {
         idempotency_key: `rel-cap-rest-store-lease-${randomUUID()}`,
@@ -601,6 +667,43 @@ describe("relationship-write capability: every entrance, every surface", () => {
       expect(batch.status).toBe(200);
       expect(batch.body.created_count).toBe(1);
       expect(await edgeExists(IN_SCOPE, checkpointId, secondTask)).toBe(true);
+    });
+
+    it("POST /delete_relationship refuses tombstoning a LEASE edge with 403", async () => {
+      const service = new RelationshipsService();
+      await service.createRelationship({
+        relationship_type: OUT_OF_SCOPE as never,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+        user_id: USER_ID,
+      });
+
+      const res = await post("/delete_relationship", {
+        relationship_type: OUT_OF_SCOPE,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+      });
+      expect(res.status).toBe(403);
+      expect(res.body.error_code).toBe("capability_denied");
+      expect(await edgeIsLive(OUT_OF_SCOPE, checkpointId, taskId)).toBe(true);
+    });
+
+    it("POST /delete_relationship still tombstones an in-scope REFERS_TO edge", async () => {
+      const service = new RelationshipsService();
+      await service.createRelationship({
+        relationship_type: IN_SCOPE as never,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+        user_id: USER_ID,
+      });
+
+      const res = await post("/delete_relationship", {
+        relationship_type: IN_SCOPE,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+      });
+      expect(res.status).toBe(200);
+      expect(await edgeIsLive(IN_SCOPE, checkpointId, taskId)).toBe(false);
     });
 
     it("POST /restore_relationship refuses reviving a LEASE edge with 403", async () => {
