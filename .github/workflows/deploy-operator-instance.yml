@@ -311,10 +311,24 @@ jobs:
 
           # (e) AUTHENTICATED READ PROBE — exercises the database, not just the
           #     HTTP listener. This is the check /health cannot make.
-          #     Budget 90s: a cold read against the operator's ~20GB graph
-          #     legitimately takes 14-18s after a restart, so a short timeout
-          #     would report a false failure on every deploy. Anything beyond
-          #     90s is the wedged-DB signature, not slowness.
+          #     Budget 90s total, spent as retries with backoff (below), not a
+          #     single curl call. A cold read against the operator's ~20GB
+          #     graph legitimately takes 14-18s after a restart: (a)-(d) above
+          #     only prove the HTTP listener is up, not that the DB layer has
+          #     finished its own boot-time seeding and warmed its page cache.
+          #     One request landing in that window can get a 502 — server- or
+          #     proxy-side — even though the instance recovers a few seconds
+          #     later. Confirmed on 2026-09-06 (run 34039966130): the probe's
+          #     own curl measured exactly 14.3s from request start to the 502,
+          #     matching this comment's own 14-18s cold-read figure. A single
+          #     attempt cannot tell a transient cold-boot 502 from a wedged
+          #     DB; retrying inside the SAME 90s budget can, without weakening
+          #     what still counts as failure — reads still have to come back
+          #     inside 90s, and every attempt is logged so a real outage is
+          #     just as visible as before, not quieter.
+          #
+          #     Anything that fails for the full 90s is the wedged-DB
+          #     signature, not slowness.
           if [ -z "${READ_PROBE_TOKEN:-}" ]; then
             echo "FAIL: OPERATOR_INSTANCE_TOKEN is not set — cannot verify the"
             echo "instance actually serves reads. /health alone has passed"
@@ -322,14 +336,51 @@ jobs:
             echo "deploy verified."
             exit 1
           fi
-          CODE=$(curl -s -o /tmp/entities.json -w '%{http_code}' --max-time 90 \
-                   -H "Authorization: Bearer $READ_PROBE_TOKEN" \
-                   "https://$HOST/entities?limit=1" || echo "000")
-          if [ "$CODE" != "200" ]; then
-            echo "FAIL: authenticated read returned HTTP $CODE (000 = timeout/no response)."
-            echo "The instance is not serving reads even if /health is green."
-            exit 1
-          fi
+
+          READ_PROBE_DEADLINE=$(( $(date +%s) + 90 ))
+          ATTEMPT=0
+          CODE=""
+          while :; do
+            ATTEMPT=$((ATTEMPT + 1))
+            REMAINING=$(( READ_PROBE_DEADLINE - $(date +%s) ))
+            if [ "$REMAINING" -le 0 ]; then
+              echo "FAIL: authenticated read did not return 200 within the 90s budget"
+              echo "(last HTTP code: ${CODE:-none}, $((ATTEMPT - 1)) attempt(s))."
+              echo "The instance is not serving reads even if /health is green."
+              exit 1
+            fi
+
+            # --max-time caps THIS attempt only, never below 10s so a single
+            # try has a fair shot even late in the budget; the outer deadline
+            # above is what actually enforces the 90s ceiling. Timing comes
+            # from curl's own %{time_total}, not shell `date` arithmetic —
+            # GNU date's sub-second %N is not portable (BSD/macOS date lacks
+            # it), and curl already measures this precisely.
+            ATTEMPT_TIMEOUT=$(( REMAINING < 10 ? 10 : REMAINING ))
+            RESULT=$(curl -s -o /tmp/entities.json -w '%{http_code} %{time_total}' --max-time "$ATTEMPT_TIMEOUT" \
+                     -H "Authorization: Bearer $READ_PROBE_TOKEN" \
+                     "https://$HOST/entities?limit=1" || echo "000 0")
+            CODE="${RESULT%% *}"
+            ELAPSED_S="${RESULT#* }"
+
+            if [ "$CODE" = "200" ]; then
+              echo "OK authenticated read: HTTP 200 on attempt $ATTEMPT after ${ELAPSED_S}s"
+              break
+            fi
+
+            # Distinguish "the proxy answered" from "nothing answered" so a
+            # future failure is diagnosable from this log alone, without
+            # needing flyctl logs from a window that may have already rolled
+            # off the buffer (see run 34039966130, where the buffer had
+            # rolled past the incident by the time it was investigated).
+            case "$CODE" in
+              000) SOURCE="no response (client-side timeout or connection error)" ;;
+              502|503|504) SOURCE="proxy/app 502-class — Fly proxy returned this even though (a)-(d) passed; app may not have finished booting its DB layer" ;;
+              *) SOURCE="unexpected HTTP $CODE from the app itself" ;;
+            esac
+            echo "Attempt $ATTEMPT: HTTP ${CODE:-000} after ${ELAPSED_S}s — $SOURCE. Retrying (${REMAINING}s left in budget)…"
+            sleep 3
+          done
           node -e '
             const j = require("/tmp/entities.json");
             const rows = Array.isArray(j) ? j : (j.entities ?? j.data ?? j.results);
