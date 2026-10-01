@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runScenarios } from "../../packages/eval-harness/src/index.js";
+import { loadScenarioFile } from "../../packages/eval-harness/src/scenario.js";
 import type { ScenarioFile } from "../../packages/eval-harness/src/types.js";
 
 function quarantinedScenario(): ScenarioFile {
@@ -90,6 +91,105 @@ describe("eval-harness required skip policy", () => {
     const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
     expect(summary.skipped).toBe(2);
     expect(summary.unexpectedSkipped).toBe(1);
+  });
+
+  it("matches an allowance to the exact provider as well as the model", async () => {
+    const scenario = quarantinedScenario();
+    delete scenario.meta.quarantine;
+    scenario.models = [
+      { provider: "stub", model: "shared-model-name" },
+      { provider: "openai", model: "shared-model-name" },
+    ];
+    scenario.meta.allowed_skips = [
+      {
+        kind: "missing_cassette",
+        provider: "stub",
+        model: "shared-model-name",
+      },
+    ];
+    const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
+    expect(summary.skipped).toBe(2);
+    expect(summary.unexpectedSkipped).toBe(1);
+  });
+
+  it("matches an allowance to the exact cassette identity", async () => {
+    const scenario = quarantinedScenario();
+    delete scenario.meta.quarantine;
+    scenario.models = [
+      { provider: "stub", model: "shared-model", cassette_id: "optional-replay" },
+      { provider: "stub", model: "shared-model", cassette_id: "required-replay" },
+    ];
+    scenario.meta.allowed_skips = [
+      {
+        kind: "missing_cassette",
+        provider: "stub",
+        model: "shared-model",
+        cassette_id: "optional-replay",
+      },
+    ];
+    const summary = await runScenarios({ scenarios: [scenario], mode: "replay" });
+    expect(summary.skipped).toBe(2);
+    expect(summary.unexpectedSkipped).toBe(1);
+  });
+
+  it.each([
+    ["provider-only", "      provider: stub\n"],
+    ["model-only", "      model: replay-only\n"],
+  ])("rejects a %s skip allowance", (_name, selector) => {
+    const dir = mkdtempSync(join(tmpdir(), "neotoma-eval-skip-parser-"));
+    const scenarioPath = join(dir, "invalid.scenario.yaml");
+    writeFileSync(
+      scenarioPath,
+      `meta:
+  id: invalid_skip_selector
+  description: invalid skip selector
+  allowed_skips:
+    - kind: missing_cassette
+${selector}user_prompt: noop
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected: []
+`
+    );
+    try {
+      expect(() => loadScenarioFile(scenarioPath)).toThrow(
+        "meta.allowed_skips entries must specify provider and model"
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires cassette_id when it is part of the target cell identity", () => {
+    const dir = mkdtempSync(join(tmpdir(), "neotoma-eval-skip-parser-"));
+    const scenarioPath = join(dir, "invalid.scenario.yaml");
+    writeFileSync(
+      scenarioPath,
+      `meta:
+  id: missing_cassette_identity
+  description: missing cassette identity
+  allowed_skips:
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
+user_prompt: noop
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+    cassette_id: custom-replay
+expected: []
+`
+    );
+    try {
+      expect(() => loadScenarioFile(scenarioPath)).toThrow(
+        "meta.allowed_skips entries must identify exactly one models[] cell"
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("exits nonzero through the CLI when a required sibling cassette is missing", () => {

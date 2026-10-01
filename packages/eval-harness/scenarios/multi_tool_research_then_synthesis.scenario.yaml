@@ -12,6 +12,12 @@ meta:
     - kind: missing_cassette
       provider: stub
       model: replay-only
+    - kind: missing_cassette
+      provider: claude
+      model: claude-sonnet-4-5-20250929
+    - kind: missing_cassette
+      provider: openai
+      model: gpt-5-mini
 
 system_prompt: >
   You research and synthesize. Use the Read tool to fetch the three docs

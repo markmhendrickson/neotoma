@@ -14,6 +14,9 @@ meta:
     - kind: missing_cassette
       provider: stub
       model: replay-only
+    - kind: missing_cassette
+      provider: claude
+      model: claude-haiku-4-20250929
 
 system_prompt: >
   You are a small assistant. When you receive a system follow-up

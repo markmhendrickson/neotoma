@@ -13,6 +13,12 @@ meta:
     - kind: missing_cassette
       provider: stub
       model: replay-only
+    - kind: missing_cassette
+      provider: claude
+      model: claude-haiku-4-20250929
+    - kind: missing_cassette
+      provider: claude
+      model: claude-sonnet-4-5-20250929
 
 system_prompt: >
   You are an assistant integrated with the Neotoma memory system. In one

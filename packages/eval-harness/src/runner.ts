@@ -347,9 +347,9 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
       return !cell.scenario.allowed_skips?.some(
         (allowance) =>
           allowance.kind === cell.skipped?.kind &&
-          (allowance.provider === undefined || allowance.provider === cell.model.provider) &&
-          (allowance.model === undefined || allowance.model === cell.model.model) &&
-          (allowance.cassette_id === undefined || allowance.cassette_id === cell.model.cassette_id)
+          allowance.provider === cell.model.provider &&
+          allowance.model === cell.model.model &&
+          allowance.cassette_id === cell.model.cassette_id
       );
     }).length,
     cells,

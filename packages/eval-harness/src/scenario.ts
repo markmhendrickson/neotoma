@@ -47,6 +47,28 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
   );
   assertField(Array.isArray(o.expected), "expected[] is required (may be empty)", file);
 
+  const models = o.models as Array<Record<string, unknown>>;
+  for (const model of models) {
+    assertField(model && typeof model === "object", "models[] entries must be objects", file);
+    assertField(
+      ["claude", "openai", "ollama", "stub"].includes(String(model.provider)),
+      "models[] contains an unknown provider",
+      file
+    );
+    assertField(
+      typeof model.model === "string" && model.model.length > 0,
+      "models[] entries require a model",
+      file
+    );
+    if (model.cassette_id != null) {
+      assertField(
+        typeof model.cassette_id === "string" && model.cassette_id.length > 0,
+        "models[].cassette_id must be a non-empty string",
+        file
+      );
+    }
+  }
+
   const instruction_profile = o.instruction_profile as
     | ScenarioFile["instruction_profile"]
     | undefined;
@@ -76,10 +98,28 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
         file
       );
       assertField(
-        [allowance.provider, allowance.model, allowance.cassette_id].some(
-          (selector) => typeof selector === "string" && selector.length > 0
-        ),
-        "meta.allowed_skips entries must select provider, model, or cassette_id",
+        ["claude", "openai", "ollama", "stub"].includes(String(allowance.provider)) &&
+          typeof allowance.model === "string" &&
+          allowance.model.length > 0,
+        "meta.allowed_skips entries must specify provider and model",
+        file
+      );
+      if (allowance.cassette_id != null) {
+        assertField(
+          typeof allowance.cassette_id === "string" && allowance.cassette_id.length > 0,
+          "meta.allowed_skips cassette_id must be a non-empty string",
+          file
+        );
+      }
+      const matchingCells = models.filter(
+        (model) =>
+          model.provider === allowance.provider &&
+          model.model === allowance.model &&
+          model.cassette_id === allowance.cassette_id
+      );
+      assertField(
+        matchingCells.length === 1,
+        "meta.allowed_skips entries must identify exactly one models[] cell (including cassette_id when set)",
         file
       );
     }
@@ -117,7 +157,7 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
       ? (o.attachments as ScenarioFile["attachments"])
       : undefined,
     host_tools: o.host_tools as ScenarioFile["host_tools"],
-    models: o.models as ScenarioFile["models"],
+    models: models as ScenarioFile["models"],
     instruction_profile: instruction_profile ?? "auto",
     hooks_enabled: typeof o.hooks_enabled === "boolean" ? o.hooks_enabled : true,
     driver_options: (o.driver_options as ScenarioFile["driver_options"]) ?? {},

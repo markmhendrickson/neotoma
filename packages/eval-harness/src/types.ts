@@ -12,8 +12,8 @@ export type SkipKind = "quarantine" | "preflight" | "missing_cassette" | "budget
 
 export interface AllowedSkip {
   kind: SkipKind;
-  provider?: ProviderId;
-  model?: string;
+  provider: ProviderId;
+  model: string;
   cassette_id?: string;
 }
 
