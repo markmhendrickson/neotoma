@@ -22,10 +22,8 @@ import { evaluateExpectations } from "./assertions.js";
 import { cassetteFilename, readCassette, staleness } from "./cassette.js";
 import { getDriver } from "./drivers/index.js";
 import { createHostToolRegistry } from "./host_tools.js";
-import {
-  startIsolatedNeotomaServer,
-  type IsolatedServer,
-} from "./isolated_server.js";
+import { startIsolatedNeotomaServer, type IsolatedServer } from "./isolated_server.js";
+import { buildUnexpectedSkipDiagnostics, UNEXPECTED_SKIP_REPAIR_ACTION } from "./skip_policy.js";
 import type {
   AssertionFailure,
   CellReport,
@@ -70,9 +68,22 @@ interface CellPlan {
   cassettePath: string;
 }
 
-const SMALL_MODEL_HINTS = ["haiku", "mini", "nano", "fast", "small", "composer-2", "8b", "1.5b", "3b"];
+const SMALL_MODEL_HINTS = [
+  "haiku",
+  "mini",
+  "nano",
+  "fast",
+  "small",
+  "composer-2",
+  "8b",
+  "1.5b",
+  "3b",
+];
 
-function classifyEffectiveProfile(model: ModelEntry, requested: InstructionProfile): InstructionProfile {
+function classifyEffectiveProfile(
+  model: ModelEntry,
+  requested: InstructionProfile
+): InstructionProfile {
   if (requested === "compact" || requested === "full") return requested;
   // auto = compact for small models, full otherwise. Mirrors the cursor-hooks heuristic.
   const lower = model.model.toLowerCase();
@@ -128,7 +139,7 @@ async function seedEntities(
     log(`[runner] seed failed (${res.status}): ${text.slice(0, 300)}`);
     throw new Error(`seed_entities failed: HTTP ${res.status}`);
   }
-  const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+  const result = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const created = (result as { entities?: unknown[] }).entities?.length ?? 0;
   log(`[runner] seeded ${created} entities`);
 }
@@ -153,7 +164,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       startedAt,
       endedAt: new Date().toISOString(),
       pass: false,
-      skipped: { reason: `quarantined: ${plan.scenario.meta.quarantine}` },
+      skipped: { kind: "quarantine", reason: `quarantined: ${plan.scenario.meta.quarantine}` },
     };
   }
 
@@ -169,7 +180,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       startedAt,
       endedAt: new Date().toISOString(),
       pass: false,
-      skipped: { reason: preflight.reason ?? "preflight failed" },
+      skipped: { kind: "preflight", reason: preflight.reason ?? "preflight failed" },
       errorMessage: preflight.reason,
     };
   }
@@ -186,7 +197,10 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         startedAt,
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.` },
+        skipped: {
+          kind: "missing_cassette",
+          reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.`,
+        },
       };
     }
     if (staleness(cassetteResult.ageDays) === "stale") {
@@ -310,20 +324,30 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}` },
+        skipped: {
+          kind: "budget_guard",
+          reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}`,
+        },
       });
-      log(`[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`);
+      log(
+        `[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`
+      );
       continue;
     }
     const report = await runCell(plan, opts);
     if (report.driverResult) estimatedCostUsd += report.driverResult.estimatedCostUsd;
     cells.push(report);
   }
+  const unexpectedSkipDiagnostics = buildUnexpectedSkipDiagnostics(cells);
   const summary: RunSummary = {
     total: cells.length,
     passed: cells.filter((c) => c.pass && !c.skipped).length,
     failed: cells.filter((c) => !c.pass && !c.skipped).length,
     skipped: cells.filter((c) => c.skipped).length,
+    unexpectedSkipped: unexpectedSkipDiagnostics.length,
+    unexpectedSkipDiagnostics,
+    unexpectedSkipRepair:
+      unexpectedSkipDiagnostics.length > 0 ? UNEXPECTED_SKIP_REPAIR_ACTION : null,
     cells,
     estimatedCostUsd,
     mode: opts.mode,

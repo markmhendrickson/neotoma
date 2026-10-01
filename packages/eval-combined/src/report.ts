@@ -5,6 +5,20 @@
 
 import type { CombinedResult, LayeredMatrixRow } from "./runner.js";
 
+const FALLBACK_UNEXPECTED_SKIP_REPAIR =
+  "Repair: record the required cassette, or if the skip is intentional add an exact meta.allowed_skips entry for kind/provider/model/cassette_id.";
+
+function appendUnexpectedSkipDiagnostics(lines: string[], result: CombinedResult): void {
+  const summary = result.tier2Summary;
+  if (!summary || summary.unexpectedSkipped === 0) return;
+  lines.push(`Tier 2 unexpected skips: ${summary.unexpectedSkipped}`);
+  for (const diagnostic of summary.unexpectedSkipDiagnostics) {
+    lines.push(`- ${diagnostic.cell}`);
+    lines.push(`  reason: ${diagnostic.reason}`);
+  }
+  lines.push(summary.unexpectedSkipRepair ?? FALLBACK_UNEXPECTED_SKIP_REPAIR);
+}
+
 function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
@@ -50,8 +64,11 @@ function renderTty(result: CombinedResult): string {
 
   if (result.tier2Summary) {
     lines.push(
-      `Tier 2: ${result.tier2Summary.passed}/${result.tier2Summary.total} passed, ${result.tier2Summary.failed} failed, ${result.tier2Summary.skipped} skipped`
+      `Tier 2: ${result.tier2Summary.passed}/${result.tier2Summary.total} passed, ${result.tier2Summary.failed} failed, ${result.tier2Summary.skipped} skipped, unexpected skips: ${result.tier2Summary.unexpectedSkipped}`
     );
+    appendUnexpectedSkipDiagnostics(lines, result);
+  } else if (result.tier2Error) {
+    lines.push(`Tier 2 ERROR: ${result.tier2Error}`);
   }
   if (result.writReport) {
     lines.push(
@@ -88,13 +105,14 @@ function renderMarkdown(result: CombinedResult): string {
   lines.push("");
   if (result.tier2Summary) {
     lines.push(
-      `**Tier 2:** ${result.tier2Summary.passed}/${result.tier2Summary.total} passed`
+      `**Tier 2:** ${result.tier2Summary.passed}/${result.tier2Summary.total} passed; ${result.tier2Summary.failed} failed; ${result.tier2Summary.skipped} skipped; unexpected skips: ${result.tier2Summary.unexpectedSkipped}`
     );
+    appendUnexpectedSkipDiagnostics(lines, result);
+  } else if (result.tier2Error) {
+    lines.push(`**Tier 2 ERROR:** ${result.tier2Error}`);
   }
   if (result.writReport) {
-    lines.push(
-      `**WRIT:** ${result.writReport.scenarios_run} scenarios evaluated`
-    );
+    lines.push(`**WRIT:** ${result.writReport.scenarios_run} scenarios evaluated`);
   }
 
   return lines.join("\n");

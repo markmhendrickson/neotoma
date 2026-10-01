@@ -9,6 +9,16 @@ meta:
     - tier2
     - compliance
     - small-model
+  allowed_skips:
+    - kind: missing_cassette
+      provider: stub
+      model: replay-only
+    - kind: missing_cassette
+      provider: claude
+      model: claude-haiku-4-20250929
+    - kind: missing_cassette
+      provider: openai
+      model: gpt-5-nano
 
 system_prompt: >
   You are a small model with limited capacity. Answer concisely.

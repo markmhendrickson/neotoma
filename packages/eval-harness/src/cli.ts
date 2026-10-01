@@ -172,7 +172,7 @@ async function main(): Promise<void> {
   if (args.output) {
     writeFileSync(args.output, rendered + "\n", "utf-8");
   }
-  process.exit(summary.failed > 0 ? 1 : 0);
+  process.exit(summary.failed > 0 || summary.unexpectedSkipped > 0 ? 1 : 0);
 }
 
 main().catch((err) => {

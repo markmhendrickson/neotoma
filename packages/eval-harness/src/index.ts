@@ -5,6 +5,7 @@ export * from "./cassette.js";
 export * from "./assertions.js";
 export * from "./isolated_server.js";
 export * from "./reporters.js";
+export * from "./skip_policy.js";
 export { runScenarios, DEFAULT_CASSETTE_DIR } from "./runner.js";
 export { getDriver, registerDriver, listProviders } from "./drivers/index.js";
 export { stubDriver } from "./drivers/stub.js";

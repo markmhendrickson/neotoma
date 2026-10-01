@@ -27,7 +27,7 @@ This document does not cover:
 ## Definitions
 - **Automated test file**: A repo test source matched by this catalog's scanner (`tests/**`, `src/**`, `frontend/src/**`, `playwright/tests/**`).
 - **Catalog generator**: `scripts/generate-automated-test-catalog.ts`, the only source allowed to rewrite this file.
-- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree. It is the local, pre-PR advisory gate. CI does not use it: the baseline lane runs `npm run generate:test-catalog`, which renders this file rather than failing on drift, so a stale copy never blocks a pull request.
+- **Catalog validator**: `npm run validate:test-catalog`, which fails when this file drifts from the repo tree and is binding in baseline CI.
 
 ## Data models or schemas
 None.
@@ -52,8 +52,8 @@ flowchart TD
 
 ## Testing requirements
 - `npm run generate:test-catalog` must be run when automated test inventory changes.
-- `npm run validate:test-catalog` should pass before merge, but does not block it.
-- CI runs `npm run generate:test-catalog` in the baseline lane, which renders this file rather than failing on drift.
+- `npm run validate:test-catalog` must pass before merge and blocks baseline CI.
+- Run `npm run generate:test-catalog` locally after inventory or command changes and commit the result.
 
 ## Maintenance
 - Canonical policy doc: `docs/testing/testing_standard.md`.
@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **678**
-- Backend and repo Vitest files: **642**
+- Total automated test files: **679**
+- Backend and repo Vitest files: **643**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 185 |
+| Vitest unit tests | 186 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
 | Vitest integration tests | 199 |
@@ -88,7 +88,7 @@ flowchart TD
 | Tests Scripts | 4 |
 
 ## Primary validation commands
-- `npm test`
+- Baseline CI test command: `npm run test:unit`
 - `npm run test:frontend`
 - `npm run test:remote:critical`
 - `npm run test:agent-mcp`
@@ -97,7 +97,7 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.
+- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm run test:unit`, `validate:coverage`, `validate:test-catalog`, and `validate:doc-deps`.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
 - Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (185):**
+**Files (186):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -179,6 +179,7 @@ flowchart TD
 - `tests/unit/entity_id_tenant_scope.test.ts`
 - `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/env_contamination_audit.test.ts`
+- `tests/unit/eval_combined_fail_closed.test.ts`
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
 - `tests/unit/eval_harness_quarantine.test.ts`
 - `tests/unit/ext_apps_widget_host.test.ts`

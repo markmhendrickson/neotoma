@@ -8,6 +8,15 @@ export type RunMode = "record" | "replay";
 
 export type InstructionProfile = "full" | "compact" | "auto";
 
+export type SkipKind = "quarantine" | "preflight" | "missing_cassette" | "budget_guard";
+
+export interface AllowedSkip {
+  kind: SkipKind;
+  provider: ProviderId;
+  model: string;
+  cassette_id?: string;
+}
+
 export interface ScenarioMeta {
   id: string;
   description: string;
@@ -19,6 +28,8 @@ export interface ScenarioMeta {
    * fixed. The value SHOULD reference the tracking issue (e.g. "neotoma#NNNN: …").
    */
   quarantine?: string;
+  /** Cell-specific skips deliberately allowed for this scenario. Undeclared skips fail CI. */
+  allowed_skips?: AllowedSkip[];
 }
 
 export interface HostToolStubResponse {
@@ -282,7 +293,18 @@ export interface CellReport {
   /** Human-readable failure summary; empty when `pass`. */
   errorMessage?: string;
   /** Set when the cell was skipped (missing cassette, preflight, budget, or quarantine). */
-  skipped?: { reason: string };
+  skipped?: { kind: SkipKind; reason: string };
+}
+
+export interface UnexpectedSkipDiagnostic {
+  /** Stable, human-readable identity for the exact matrix cell. */
+  cell: string;
+  scenarioId: string;
+  provider: ProviderId;
+  model: string;
+  cassetteId: string | null;
+  kind: SkipKind;
+  reason: string;
 }
 
 export interface RunSummary {
@@ -290,6 +312,12 @@ export interface RunSummary {
   passed: number;
   failed: number;
   skipped: number;
+  /** Skips not explicitly allowed by scenario metadata (quarantine is always explicit). */
+  unexpectedSkipped: number;
+  /** Exact required cells that were skipped and therefore make the run fail. */
+  unexpectedSkipDiagnostics: UnexpectedSkipDiagnostic[];
+  /** Actionable repair guidance when unexpectedSkipDiagnostics is non-empty. */
+  unexpectedSkipRepair: string | null;
   cells: CellReport[];
   /** Total estimated USD spent across live cells. */
   estimatedCostUsd: number;
