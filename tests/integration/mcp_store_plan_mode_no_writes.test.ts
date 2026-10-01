@@ -25,13 +25,15 @@
 
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { randomUUID } from "crypto";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, rm } from "fs/promises";
+import { existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { createMinimalTestParquet } from "../helpers/create_test_parquet.js";
 
 const TEST_USER_ID = LOCAL_DEV_USER_ID;
 
@@ -41,10 +43,7 @@ function makeMcpServer(): NeotomaServer {
   return server;
 }
 
-async function callStore(
-  server: NeotomaServer,
-  args: unknown
-): Promise<Record<string, unknown>> {
+async function callStore(server: NeotomaServer, args: unknown): Promise<Record<string, unknown>> {
   const result = (await (
     server as unknown as {
       store: (a: unknown) => Promise<{ content: Array<{ type: string; text: string }> }>;
@@ -172,6 +171,90 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
 
       const after = await countSourcesForUser(TEST_USER_ID);
       expect(after - before).toBe(1);
+    });
+  });
+
+  describe("parquet ingest leg", () => {
+    it("commit:false plans parquet entities without creating observations", async () => {
+      const server = makeMcpServer();
+      const parquetPath = join(testDir, `mcp_plan_${randomUUID()}.parquet`);
+      await createMinimalTestParquet(parquetPath);
+      const observationsBefore = await db
+        .from("observations")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", TEST_USER_ID);
+      if (observationsBefore.error) throw observationsBefore.error;
+      const entitiesBefore = await db
+        .from("entities")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", TEST_USER_ID);
+      if (entitiesBefore.error) throw entitiesBefore.error;
+
+      const result = await callStore(server, {
+        idempotency_key: `mcp-plan-mode-parquet-${randomUUID()}`,
+        file_path: parquetPath,
+        commit: false,
+      });
+
+      expect(result.commit).toBe(false);
+      expect(Array.isArray(result.entities)).toBe(true);
+      const observationsAfter = await db
+        .from("observations")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", TEST_USER_ID);
+      if (observationsAfter.error) throw observationsAfter.error;
+      const entitiesAfter = await db
+        .from("entities")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", TEST_USER_ID);
+      if (entitiesAfter.error) throw entitiesAfter.error;
+      expect((observationsAfter.count ?? 0) - (observationsBefore.count ?? 0)).toBe(0);
+      expect((entitiesAfter.count ?? 0) - (entitiesBefore.count ?? 0)).toBe(0);
+    });
+  });
+
+  describe("overflow intake leg", () => {
+    it("commit:false returns a plan receipt without creating the overflow sink", async () => {
+      const server = makeMcpServer();
+      const sinkPath = join(testDir, `overflow-${randomUUID()}.jsonl`);
+      const previousSink = process.env.NEOTOMA_OVERFLOW_SINK;
+      process.env.NEOTOMA_OVERFLOW_SINK = sinkPath;
+
+      try {
+        const result = await callStore(server, {
+          intake: { mode: "overflow", reason: "plan-mode regression" },
+          entities: [{ entity_type: "note", title: "must not be written" }],
+          commit: false,
+        });
+
+        expect(result).toMatchObject({ commit: false, overflowed: false });
+        expect(existsSync(sinkPath)).toBe(false);
+      } finally {
+        if (previousSink === undefined) delete process.env.NEOTOMA_OVERFLOW_SINK;
+        else process.env.NEOTOMA_OVERFLOW_SINK = previousSink;
+        await rm(sinkPath, { force: true });
+      }
+    });
+
+    it("commit:true (default) still appends to the overflow sink", async () => {
+      const server = makeMcpServer();
+      const sinkPath = join(testDir, `overflow-${randomUUID()}.jsonl`);
+      const previousSink = process.env.NEOTOMA_OVERFLOW_SINK;
+      process.env.NEOTOMA_OVERFLOW_SINK = sinkPath;
+
+      try {
+        const result = await callStore(server, {
+          intake: { mode: "overflow", reason: "committed control" },
+          entities: [{ entity_type: "note", title: "control write" }],
+        });
+
+        expect(result.overflowed).toBe(true);
+        expect(existsSync(sinkPath)).toBe(true);
+      } finally {
+        if (previousSink === undefined) delete process.env.NEOTOMA_OVERFLOW_SINK;
+        else process.env.NEOTOMA_OVERFLOW_SINK = previousSink;
+        await rm(sinkPath, { force: true });
+      }
     });
   });
 });

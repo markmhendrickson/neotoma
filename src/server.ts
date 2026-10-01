@@ -5166,6 +5166,12 @@ export class NeotomaServer {
 
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
+      if (parsed.commit === false) {
+        return this.buildTextResponse({
+          commit: false,
+          overflowed: false,
+        });
+      }
       const { writeToOverflowSink } = await import("./services/overflow_sink.js");
       const result = writeToOverflowSink(args, parsed.intake.reason);
       return this.buildTextResponse(result);
@@ -5278,7 +5284,10 @@ export class NeotomaServer {
           idempotencyKey,
           parsed.original_filename,
           undefined,
-          { observationSource: parsed.observation_source }
+          {
+            commit: parsed.commit !== false,
+            observationSource: parsed.observation_source,
+          }
         );
       }
     }
