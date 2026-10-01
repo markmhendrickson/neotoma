@@ -4,6 +4,10 @@ One entry per payload whose declared `outcome` changed in a release. The release
 
 Format: one bullet per flip, keyed by the Neotoma version that introduced the new outcome. Name the fixture path and the before/after state.
 
+## v0.25.0
+
+- `tests/contract/fixtures/legacy_relationship_grant_without_scope.json` records an authorization-seam tightening for pre-`relationship_types` `create_relationship` grants. The grant record remains accepted, but its edge-write outcome changes from admitted by `op` + `entity_types` to `capability_denied` unless one entry also covers the relationship type and both endpoint entity types. Missing or empty `relationship_types` denies the write, and the structured hint names the complete replacement entry. This is an authorization outcome change rather than an HTTP payload-validation flip, so the fixture is exercised by `tests/contract/relationship_write_grant_contract.test.ts` instead of the unauthenticated legacy-payload replay runner.
+
 ## v0.24.0
 
 - `v0.23.x/create_relationship_unowned_target` seeded as `rejected`. The fixture lives under `v0.23.x/` because it replays a payload v0.23.x accepted; v0.24.0 is the release that introduced the rejection. `POST /create_relationship` (and MCP `create_relationship`, and the relationship leg of `store` / `create_interpretation`, all via `relationshipsService.createRelationship`) requires both `source_entity_id` and `target_entity_id` to be entities the caller owns; an unowned or nonexistent endpoint is refused with `404 RESOURCE_NOT_FOUND`. `store` and `create_interpretation` report a refused relationship in `relationships_refused` rather than failing the call — see docs/subsystems/relationships.md § 6.1.
