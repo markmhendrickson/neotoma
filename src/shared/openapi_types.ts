@@ -7094,6 +7094,18 @@ export interface operations {
           "application/json": components["schemas"]["RelationshipSnapshot"];
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   createRelationships: {
@@ -8068,6 +8080,18 @@ export interface operations {
         };
       };
       /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
        * @description No live relationship matches the supplied
        *     `relationship_type` / `source_entity_id` / `target_entity_id`
        *     triple. `details.hint` points to `/list_relationships` for
@@ -8112,6 +8136,18 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

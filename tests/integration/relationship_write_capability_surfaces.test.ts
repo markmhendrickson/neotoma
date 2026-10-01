@@ -194,6 +194,39 @@ async function edgesOfTypeTo(type: string, target: string): Promise<number> {
   return data?.length ?? 0;
 }
 
+async function relationshipSourceIds(
+  type: string,
+  source: string,
+  target: string
+): Promise<string[]> {
+  const relationshipKey = `${type}:${source}:${target}`;
+  const { data, error } = await db
+    .from("relationship_observations")
+    .select("source_id")
+    .eq("relationship_key", relationshipKey)
+    .eq("user_id", USER_ID);
+  if (error) throw new Error(`list relationship sources: ${error.message}`);
+  return Array.from(
+    new Set(
+      (data ?? [])
+        .map((row) => row.source_id)
+        .filter((sourceId): sourceId is string => typeof sourceId === "string")
+    )
+  );
+}
+
+async function sourceIdsForStorageUrl(storageUrl: string): Promise<string[]> {
+  const { data, error } = await db
+    .from("sources")
+    .select("id")
+    .eq("storage_url", storageUrl)
+    .eq("user_id", USER_ID);
+  if (error) throw new Error(`list sources for ${storageUrl}: ${error.message}`);
+  return (data ?? [])
+    .map((row) => row.id)
+    .filter((sourceId): sourceId is string => typeof sourceId === "string");
+}
+
 function runAdmitted<T>(fn: () => Promise<T>): Promise<T> {
   return runWithAdmission(
     {
@@ -503,6 +536,75 @@ describe("relationship-write capability: every entrance, every surface", () => {
       const body = JSON.parse(result.content[0].text) as { created_count: number };
       expect(body.created_count).toBe(1);
       expect(await edgeExists(IN_SCOPE, checkpointId, secondTask)).toBe(true);
+    });
+
+    it("create_relationship reuses the deterministic provenance source for an identical edge", async () => {
+      const create = () =>
+        runAdmitted(() =>
+          tool(
+            mcp,
+            "createRelationship"
+          )({
+            relationship_type: IN_SCOPE,
+            source_entity_id: checkpointId,
+            target_entity_id: taskId,
+            metadata: { reason: "same canonical relationship input" },
+          })
+        );
+
+      await create();
+      await create();
+
+      const sourceIds = await relationshipSourceIds(IN_SCOPE, checkpointId, taskId);
+      createdSourceIds.push(...sourceIds);
+      expect(sourceIds).toHaveLength(1);
+    });
+
+    it("create_relationship leaves no provenance source when the edge fails the acyclic guard", async () => {
+      const service = new RelationshipsService();
+      await service.createRelationship({
+        relationship_type: "PART_OF" as never,
+        source_entity_id: checkpointId,
+        target_entity_id: taskId,
+        user_id: USER_ID,
+      });
+      createdSourceIds.push(...(await relationshipSourceIds("PART_OF", checkpointId, taskId)));
+
+      const storageUrl = "internal://relationship/PART_OF";
+      const before = await sourceIdsForStorageUrl(storageUrl);
+      const error = await capture(() =>
+        runWithAdmission(
+          {
+            admitted: true,
+            reason: "admitted",
+            user_id: USER_ID,
+            grant_id: "ent_test_rel_cap_part_of_grant",
+            agent_label: "relationship capability PART_OF grant",
+            capabilities: [
+              {
+                op: "create_relationship",
+                entity_types: ["checkpoint_brief", "task"],
+                relationship_types: ["PART_OF"],
+              },
+            ],
+          },
+          () =>
+            tool(
+              mcp,
+              "createRelationship"
+            )({
+              relationship_type: "PART_OF",
+              source_entity_id: taskId,
+              target_entity_id: checkpointId,
+            })
+        )
+      );
+      const after = await sourceIdsForStorageUrl(storageUrl);
+      createdSourceIds.push(...after.filter((sourceId) => !before.includes(sourceId)));
+
+      expect(String((error as Error | undefined)?.message)).toMatch(/create a cycle/i);
+      expect(after).toEqual(expect.arrayContaining(before));
+      expect(after).toHaveLength(before.length);
     });
 
     it("delete_relationship refuses tombstoning an out-of-scope LEASE edge", async () => {

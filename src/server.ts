@@ -3834,51 +3834,17 @@ export class NeotomaServer {
     // Use authenticated user_id
     const userId = this.getAuthenticatedUserId();
 
-    // Relationship capability (neotoma#2524) before the source row below is
-    // written, so a refused edge leaves nothing behind. The service re-checks
-    // at the edge write; this only moves the refusal ahead of the source.
-    const { enforceCurrentAgentRelationshipWrites } =
-      await import("./services/relationship_write_capability.js");
-    await enforceCurrentAgentRelationshipWrites({
-      userId,
-      relationships: [
-        {
-          relationship_type: parsed.relationship_type,
-          source_entity_id: parsed.source_entity_id,
-          target_entity_id: parsed.target_entity_id,
-        },
-      ],
-    });
-
     try {
-      // Create a source for this relationship. The hash carries a UUID as well
-      // as the timestamp: two calls in the same millisecond otherwise collide on
-      // UNIQUE(content_hash, user_id) and the second fails as a server error.
-      const { data: source, error: sourceError } = await db
-        .from("sources")
-        .insert({
-          content_hash: `relationship_${Date.now()}_${randomUUID()}`,
-          mime_type: "application/json",
-          storage_url: `internal://relationship/${parsed.relationship_type}`,
-          file_size: 0, // No file for direct relationship creation
-          user_id: userId,
-        })
-        .select()
-        .single();
-
-      if (sourceError || !source) {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to create source: ${sourceError?.message || "Unknown error"}`
-        );
-      }
-
       const { relationshipsService } = await import("./services/relationships.js");
       const snapshot = await relationshipsService.createRelationship({
         relationship_type: parsed.relationship_type,
         source_entity_id: parsed.source_entity_id,
         target_entity_id: parsed.target_entity_id,
-        source_id: source.id,
+        // The service owns the canonical relationship-source lifecycle: it
+        // validates the edge before any source write, derives a deterministic
+        // source identity from the relationship input, and reuses it on replay.
+        // An explicit caller-provided source remains authoritative.
+        source_id: parsed.source_id || null,
         metadata: parsed.metadata || {},
         user_id: userId,
       });

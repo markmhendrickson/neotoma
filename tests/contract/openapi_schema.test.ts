@@ -207,6 +207,25 @@ describe("OpenAPI tool schemas", () => {
     });
   });
 
+  describe("relationship capability-denial 403 responses are declared", () => {
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      paths?: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+    };
+
+    it.each(["/create_relationship", "/delete_relationship", "/restore_relationship"])(
+      "%s declares 403 capability_denied as ErrorEnvelope",
+      (route) => {
+        const declared = spec.paths?.[route]?.post?.responses?.["403"];
+        expect(
+          declared,
+          `${route} emits 403 capability_denied at runtime but does not declare it`
+        ).toBeTruthy();
+        expect(JSON.stringify(declared)).toContain("capability_denied");
+        expect(JSON.stringify(declared)).toContain("#/components/schemas/ErrorEnvelope");
+      }
+    );
+  });
+
   describe("relationships_created / relationships_refused declared on every schema that returns them", () => {
     // HTTP POST /interpretations/create and MCP create_interpretation return
     // relationships_refused (src/actions.ts, src/server.ts createInterpretation)
