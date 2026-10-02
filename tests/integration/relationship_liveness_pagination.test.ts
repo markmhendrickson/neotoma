@@ -377,6 +377,15 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
       OWNER_USER_ID
     );
     expect(visible === null).toBe(winningDeleted);
+    const { json: active } = await post("/list_relationships", {
+      entity_id: hub,
+      direction: "outgoing",
+      user_id: OWNER_USER_ID,
+    });
+    const listed = (active.relationships as Array<{ relationship_key: string }>).some(
+      (relationship) => relationship.relationship_key === key
+    );
+    expect(listed).toBe(!winningDeleted);
   });
 });
 

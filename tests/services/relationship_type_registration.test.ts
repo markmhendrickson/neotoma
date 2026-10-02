@@ -21,12 +21,12 @@
  * may write BEFORE writing it.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { NeotomaServer } from "../../src/server.js";
 import { storeStructuredForApi } from "../../src/actions.js";
 import { BUILT_IN_RELATIONSHIP_TYPES } from "../../src/services/relationship_types/seed_registry.js";
 import { db } from "../../src/db.js";
-import { RelationshipsService } from "../../src/services/relationships.js";
+import { RelationshipsService, relationshipsService } from "../../src/services/relationships.js";
 import {
   relationshipTypeRegistry,
   RELATIONSHIP_TYPE_REGISTRY_TABLE,
@@ -178,6 +178,114 @@ describe("G25: relationship-type registration (#1972)", () => {
         ),
         `${relationshipType} edge survived its second deletion`
       ).toBe(false);
+    }
+  });
+
+  it("serializes concurrent same-edge lifecycle actions", async () => {
+    const relationshipType = "REFERS_TO";
+    const source = await ownedEid();
+    const target = await ownedEid();
+    const created = await service.createRelationship({
+      relationship_type: relationshipType,
+      source_entity_id: source,
+      target_entity_id: target,
+      user_id: TEST_USER,
+    });
+    const key = created.relationship_key;
+    const timestamp = "2026-06-09T00:00:00.000Z";
+
+    try {
+      const deletions = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          softDeleteRelationship(
+            key,
+            relationshipType,
+            source,
+            target,
+            TEST_USER,
+            undefined,
+            timestamp
+          )
+        )
+      );
+      expect(deletions.every((result) => result.success)).toBe(true);
+      expect(new Set(deletions.map((result) => result.observation_id)).size).toBe(8);
+
+      const [restore, deleteAgain] = await Promise.all([
+        restoreRelationship(key, relationshipType, source, target, TEST_USER, undefined, timestamp),
+        softDeleteRelationship(
+          key,
+          relationshipType,
+          source,
+          target,
+          TEST_USER,
+          undefined,
+          timestamp
+        ),
+      ]);
+      expect(restore.success && deleteAgain.success).toBe(true);
+
+      const { data: observations } = await db
+        .from("relationship_observations")
+        .select("source_priority, metadata")
+        .eq("relationship_key", key)
+        .eq("user_id", TEST_USER)
+        .order("source_priority", { ascending: false });
+      expect(observations).toHaveLength(11);
+      expect(new Set(observations?.map((observation) => observation.source_priority)).size).toBe(
+        11
+      );
+      const winningDeleted = observations?.[0].metadata?._deleted === true;
+      const { data: snapshot } = await db
+        .from("relationship_snapshots")
+        .select("is_live")
+        .eq("relationship_key", key)
+        .single();
+      expect(snapshot?.is_live).toBe(winningDeleted ? 0 : 1);
+    } finally {
+      await db.from("relationship_snapshots").delete().eq("relationship_key", key);
+      await db.from("relationship_observations").delete().eq("relationship_key", key);
+    }
+  });
+
+  it("rolls back a lifecycle observation when snapshot recomputation fails", async () => {
+    const relationshipType = "REFERS_TO";
+    const source = await ownedEid();
+    const target = await ownedEid();
+    const created = await service.createRelationship({
+      relationship_type: relationshipType,
+      source_entity_id: source,
+      target_entity_id: target,
+      user_id: TEST_USER,
+    });
+    const key = created.relationship_key;
+    const recompute = vi
+      .spyOn(relationshipsService, "computeRelationshipSnapshot")
+      .mockRejectedValueOnce(new Error("snapshot write failed"));
+    try {
+      const deletion = await softDeleteRelationship(
+        key,
+        relationshipType,
+        source,
+        target,
+        TEST_USER
+      );
+      expect(deletion.success).toBe(false);
+      const { data: observations } = await db
+        .from("relationship_observations")
+        .select("id")
+        .eq("relationship_key", key);
+      expect(observations).toHaveLength(1);
+      const { data: snapshot } = await db
+        .from("relationship_snapshots")
+        .select("is_live")
+        .eq("relationship_key", key)
+        .single();
+      expect(snapshot?.is_live).toBe(1);
+    } finally {
+      recompute.mockRestore();
+      await db.from("relationship_snapshots").delete().eq("relationship_key", key);
+      await db.from("relationship_observations").delete().eq("relationship_key", key);
     }
   });
 

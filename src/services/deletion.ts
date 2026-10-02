@@ -8,6 +8,7 @@
 
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
+import { getDb } from "../repositories/db/connection.js";
 
 import { emitEntityLifecycle, emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 
@@ -225,55 +226,52 @@ export async function softDeleteRelationship(
   const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
   try {
-    const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
-    // Include the lifecycle sequence: two deletes in one millisecond must not
-    // collide after an intervening restore.
-    const observationId = createHash("sha256")
-      .update(`${relationshipKey}:deletion:${deletedAt}:${sourcePriority}`)
-      .digest("hex");
-    const deletionObservation = {
-      id: observationId,
-      relationship_key: relationshipKey,
-      source_entity_id: sourceEntityId,
-      target_entity_id: targetEntityId,
-      relationship_type: relationshipType,
-      observed_at: deletedAt,
-      source_priority: sourcePriority,
-      metadata: {
-        _deleted: true,
-        deleted_at: deletedAt,
-        deleted_by: userId,
-        ...(reason && { deletion_reason: reason }),
-      },
-      canonical_hash: canonicalHash,
-      user_id: userId,
-    };
-    const { data, error } = await db
-      .from("relationship_observations")
-      .insert(deletionObservation)
-      .select()
-      .single();
-
-    if (error) {
-      return {
-        success: false,
-        entity_id: relationshipKey,
-        error: `Failed to create relationship deletion observation: ${error.message}`,
-      };
-    }
-
-    // Materialize liveness on the snapshot (#1570). The deletion observation we
-    // just wrote outranks every prior observation for this key, so the edge is dead. Flip the
-    // snapshot's `is_live` to 0 so the default list_relationships read (which
-    // filters `is_live = 1` at the DB) stops surfacing it without re-deriving
-    // liveness from the observation log on every read. The observation log
-    // remains the source of truth; this is a derived cache that
-    // computeRelationshipSnapshot also re-stamps on any later recompute.
-    await db
-      .from("relationship_snapshots")
-      .update({ is_live: 0 })
-      .eq("relationship_key", relationshipKey)
-      .eq("user_id", userId);
+    const { relationshipsService } = await import("./relationships.js");
+    const database = await getDb();
+    // BEGIN IMMEDIATE serializes the read, append and derived-snapshot write
+    // across requests and processes. A later action cannot reuse this priority
+    // or overwrite a newer action's materialized liveness (#2570).
+    const observationId = await database.transaction(async () => {
+      const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
+      // Include the lifecycle sequence: two deletes in one millisecond must
+      // still have distinct deterministic observation IDs.
+      const id = createHash("sha256")
+        .update(`${relationshipKey}:deletion:${deletedAt}:${sourcePriority}`)
+        .digest("hex");
+      const { data, error } = await db
+        .from("relationship_observations")
+        .insert({
+          id,
+          relationship_key: relationshipKey,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
+          relationship_type: relationshipType,
+          observed_at: deletedAt,
+          source_priority: sourcePriority,
+          metadata: {
+            _deleted: true,
+            deleted_at: deletedAt,
+            deleted_by: userId,
+            ...(reason && { deletion_reason: reason }),
+          },
+          canonical_hash: canonicalHash,
+          user_id: userId,
+        })
+        .select()
+        .single();
+      if (error || !data) {
+        throw new Error(
+          `Failed to create relationship deletion observation: ${error?.message ?? "no row returned"}`
+        );
+      }
+      await relationshipsService.computeRelationshipSnapshot(
+        relationshipType,
+        sourceEntityId,
+        targetEntityId,
+        userId
+      );
+      return data.id as string;
+    });
 
     emitRelationshipLifecycle({
       user_id: userId,
@@ -283,11 +281,11 @@ export async function softDeleteRelationship(
       target_entity_id: targetEntityId,
       event_type: "relationship.deleted",
       timestamp: deletedAt,
-      observation_id: data.id as string,
+      observation_id: observationId,
     });
     return {
       success: true,
-      observation_id: data.id,
+      observation_id: observationId,
       entity_id: relationshipKey,
     };
   } catch (err) {
@@ -547,49 +545,48 @@ export async function restoreRelationship(
   const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
   try {
-    const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
-    const observationId = createHash("sha256")
-      .update(`${relationshipKey}:restoration:${restoredAt}:${sourcePriority}`)
-      .digest("hex");
-    const restorationObservation = {
-      id: observationId,
-      relationship_key: relationshipKey,
-      source_entity_id: sourceEntityId,
-      target_entity_id: targetEntityId,
-      relationship_type: relationshipType,
-      observed_at: restoredAt,
-      source_priority: sourcePriority,
-      metadata: {
-        _deleted: false,
-        restored_at: restoredAt,
-        restored_by: userId,
-        ...(reason && { restoration_reason: reason }),
-      },
-      canonical_hash: canonicalHash,
-      user_id: userId,
-    };
-    const { data, error } = await db
-      .from("relationship_observations")
-      .insert(restorationObservation)
-      .select()
-      .single();
-
-    if (error) {
-      return {
-        success: false,
-        entity_id: relationshipKey,
-        error: `Failed to create relationship restoration observation: ${error.message}`,
-      };
-    }
-
-    // Restore the materialized list predicate from the immutable observation
-    // log. A previously deleted snapshot still has is_live = 0 (#1570).
-    await relationshipsService.computeRelationshipSnapshot(
-      relationshipType,
-      sourceEntityId,
-      targetEntityId,
-      userId
-    );
+    const database = await getDb();
+    const observationId = await database.transaction(async () => {
+      const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
+      const id = createHash("sha256")
+        .update(`${relationshipKey}:restoration:${restoredAt}:${sourcePriority}`)
+        .digest("hex");
+      const { data, error } = await db
+        .from("relationship_observations")
+        .insert({
+          id,
+          relationship_key: relationshipKey,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
+          relationship_type: relationshipType,
+          observed_at: restoredAt,
+          source_priority: sourcePriority,
+          metadata: {
+            _deleted: false,
+            restored_at: restoredAt,
+            restored_by: userId,
+            ...(reason && { restoration_reason: reason }),
+          },
+          canonical_hash: canonicalHash,
+          user_id: userId,
+        })
+        .select()
+        .single();
+      if (error || !data) {
+        throw new Error(
+          `Failed to create relationship restoration observation: ${error?.message ?? "no row returned"}`
+        );
+      }
+      // Recompute from the winning observation while this writer still owns
+      // the transaction; no later delete can be overwritten by a stale cache.
+      await relationshipsService.computeRelationshipSnapshot(
+        relationshipType,
+        sourceEntityId,
+        targetEntityId,
+        userId
+      );
+      return data.id as string;
+    });
 
     emitRelationshipLifecycle({
       user_id: userId,
@@ -599,11 +596,11 @@ export async function restoreRelationship(
       target_entity_id: targetEntityId,
       event_type: "relationship.restored",
       timestamp: restoredAt,
-      observation_id: data.id as string,
+      observation_id: observationId,
     });
     return {
       success: true,
-      observation_id: data.id,
+      observation_id: observationId,
       entity_id: relationshipKey,
     };
   } catch (err) {
