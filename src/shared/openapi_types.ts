@@ -9111,6 +9111,10 @@ export interface operations {
             /** @description Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races. */
             item_version?: string;
             array_length?: number;
+            /** @description Entity snapshot computed from the committed patch. */
+            snapshot?: {
+              [key: string]: unknown;
+            };
             /** @description True when this response replays the exact prior committed result for the idempotency key. */
             replayed?: boolean;
           };

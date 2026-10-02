@@ -241,7 +241,7 @@ describe("ObservationReducer - merge_array_by_key", () => {
     expect(ids).toEqual(["row-a", "row-b"]);
   });
 
-  it("falls back to Set-union (mergeArray) behavior when key_field is missing from the policy", async () => {
+  it("rejects merge_array_by_key when key_field is missing from the policy", async () => {
     (schemaRegistry.loadActiveSchema as any).mockResolvedValue({
       id: "schema-missing-key-field",
       entity_type: testEntityType,
@@ -271,10 +271,9 @@ describe("ObservationReducer - merge_array_by_key", () => {
       fields: { tasks_claimed: ["b", "c"] },
     });
 
-    const snapshot = await reducer.computeSnapshot(testEntityId, [obs1, obs2]);
-    const items = snapshot!.snapshot.tasks_claimed as unknown[];
-
-    expect(new Set(items)).toEqual(new Set(["a", "b", "c"]));
+    await expect(reducer.computeSnapshot(testEntityId, [obs1, obs2])).rejects.toThrow(
+      'merge_array_by_key policy for field "tasks_claimed" is missing required key_field'
+    );
   });
 
   it("carries through an item missing the key field unkeyed, rather than dropping it", async () => {

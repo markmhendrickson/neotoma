@@ -1,0 +1,88 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "atomic_keyed_array_disjoint_writers",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-02T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Register a synthetic claim entity with tasks_claimed keyed by claim_id.\nSeed it with an empty tasks_claimed array. Writer A adds an in-review row,\nthen writer B adds a different in-progress row. Read the final snapshot.\n",
+  "system_prompt": "You are an assistant integrated with Neotoma. For an array governed by merge_array_by_key, use patch_array_item to update one keyed row without replacing rows written by another agent.\n",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_atomic_claim",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "title": { "type": "string", "required": true },
+            "tasks_claimed": { "type": "array", "required": false }
+          },
+          "canonical_name_fields": ["title"]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "title": { "strategy": "last_write" },
+            "tasks_claimed": {
+              "strategy": "merge_array_by_key",
+              "key_field": "claim_id"
+            }
+          }
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "atomic-keyed-array-disjoint-writers-seed",
+        "entities": [
+          {
+            "entity_type": "eval_atomic_claim",
+            "title": "Patch array item atomic conflict target",
+            "tasks_claimed": []
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": { "claim_id": "writer-a", "status": "in_review" },
+        "idempotency_key": "atomic-keyed-array-writer-a"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-b",
+        "item": { "claim_id": "writer-b", "status": "in_progress" },
+        "idempotency_key": "atomic-keyed-array-writer-b"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8"
+      },
+      "sequence": 4
+    }
+  ],
+  "assistant_text": "Both independent claim rows are present in the final snapshot; writer B preserved writer A."
+}

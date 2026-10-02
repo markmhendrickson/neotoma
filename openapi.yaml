@@ -8461,6 +8461,10 @@ paths:
                     description: Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races.
                   array_length:
                     type: integer
+                  snapshot:
+                    type: object
+                    additionalProperties: true
+                    description: Entity snapshot computed from the committed patch.
                   replayed:
                     type: boolean
                     description: True when this response replays the exact prior committed result for the idempotency key.

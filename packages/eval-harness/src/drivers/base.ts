@@ -33,6 +33,7 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   create_relationship: "/create_relationship",
   correct: "/correct",
   correct_transaction: "/corrections/transaction",
+  patch_array_item: "/patch_array_item",
   get_session_identity: "/session",
   // Entity soft-delete lifecycle (#1705 eval-coverage backfill).
   delete_entity: "/delete_entity",

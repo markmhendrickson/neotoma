@@ -12580,6 +12580,7 @@ app.post("/patch_array_item", writeRateLimit, async (req, res) => {
       item: result.item,
       item_version: result.item_version,
       array_length: result.array_length,
+      snapshot: result.snapshot,
       replayed: result.replayed ?? false,
     });
   } catch (error) {
