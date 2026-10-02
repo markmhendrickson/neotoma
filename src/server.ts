@@ -8435,7 +8435,7 @@ export class NeotomaServer {
     });
   }
 
-  /** MCP restore_relationship: restore a deleted relationship via restoration observation (priority 1001, overrides deletion) */
+  /** MCP restore_relationship: restore a deleted relationship via an observation above prior edge priority */
   private async restoreRelationship(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
