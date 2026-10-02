@@ -312,6 +312,72 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
       1
     );
   });
+
+  it("serializes overlapping lifecycle writes and materializes the winning state", async () => {
+    const victim = spokes[2];
+    const key = keyFor(victim);
+    const timestamp = "2026-06-09T00:00:00.000Z";
+
+    const deletions = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        softDeleteRelationship(
+          key,
+          relationshipType,
+          hub,
+          victim,
+          OWNER_USER_ID,
+          undefined,
+          timestamp
+        )
+      )
+    );
+    expect(deletions.every((result) => result.success)).toBe(true);
+    expect(new Set(deletions.map((result) => result.observation_id)).size).toBe(8);
+
+    const [restore, deleteAgain] = await Promise.all([
+      restoreRelationship(key, relationshipType, hub, victim, OWNER_USER_ID, undefined, timestamp),
+      softDeleteRelationship(
+        key,
+        relationshipType,
+        hub,
+        victim,
+        OWNER_USER_ID,
+        undefined,
+        timestamp
+      ),
+    ]);
+    expect(restore.success).toBe(true);
+    expect(deleteAgain.success).toBe(true);
+
+    const { data: observations } = await db
+      .from("relationship_observations")
+      .select("source_priority, metadata")
+      .eq("relationship_key", key)
+      .eq("user_id", OWNER_USER_ID)
+      .order("source_priority", { ascending: false });
+    expect(observations).toHaveLength(11);
+    const priorities = observations?.map((observation) => observation.source_priority) ?? [];
+    expect(new Set(priorities).size).toBe(11);
+    expect(priorities.slice(0, 10)).toEqual([
+      1009, 1008, 1007, 1006, 1005, 1004, 1003, 1002, 1001, 1000,
+    ]);
+
+    const winningDeleted = observations?.[0].metadata?._deleted === true;
+    const { data: snapshot } = await db
+      .from("relationship_snapshots")
+      .select("is_live")
+      .eq("relationship_key", key)
+      .single();
+    expect(snapshot?.is_live).toBe(winningDeleted ? 0 : 1);
+    expect(await isRelationshipDeleted(key, OWNER_USER_ID)).toBe(winningDeleted);
+    const visible = await relationshipsService.getRelationshipSnapshot(
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID
+    );
+    expect(visible === null).toBe(winningDeleted);
+  });
 });
 
 describe("isRelationshipLive helper (#1570)", () => {
