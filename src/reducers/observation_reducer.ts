@@ -320,7 +320,7 @@ export class ObservationReducer {
         break;
 
       case "merge_array_by_key":
-        mergedResult = this.mergeArrayByKey(field, relevantObservations, keyField, fieldDef);
+        mergedResult = this.mergeArrayByKey(field, relevantObservations, keyField);
         break;
 
       default:
@@ -543,18 +543,20 @@ export class ObservationReducer {
    * row (the `session_digest.tasks_claimed` lost-update reproduction this
    * strategy exists to fix).
    *
-   * Falls back to `mergeArray`'s Set-union behavior when `keyField` is not
-   * supplied (schema misconfiguration) or an item is not an object carrying
-   * that key, so a malformed row cannot silently vanish from the snapshot.
+   * A malformed `merge_array_by_key` policy without `key_field` is rejected;
+   * silently degrading to Set-union would change the configured conflict
+   * semantics. Items that lack a usable declared key remain preserved as
+   * unkeyed rows so malformed historical data cannot silently vanish.
    */
   private mergeArrayByKey(
     field: string,
     observations: Observation[],
-    keyField: string | undefined,
-    fieldDef?: FieldDefinition
+    keyField: string | undefined
   ): { value: unknown; source_observation_id: string } {
     if (!keyField) {
-      return this.mergeArray(field, observations, fieldDef);
+      throw new Error(
+        `merge_array_by_key policy for field "${field}" is missing required key_field`
+      );
     }
 
     const maxPriority = observations.reduce(

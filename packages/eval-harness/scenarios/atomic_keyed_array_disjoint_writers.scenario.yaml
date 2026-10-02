@@ -1,0 +1,68 @@
+meta:
+  id: atomic_keyed_array_disjoint_writers
+  description: >
+    Registers a synthetic keyed-array entity, seeds an empty workboard, and
+    replays two independent patch_array_item writers. Proves the agent-facing
+    effect: the second writer preserves the first writer's complete row.
+  tags:
+    - tier2
+    - patch-array-item
+    - atomicity
+    - lost-update
+
+seed_strategy: generated
+source_pattern: "Concurrent whole-array writes could each report success while the later writer erased a disjoint row; this replay proves both keyed patches survive."
+privacy_transform: "Fully synthetic entity type and claim rows; no PII."
+
+system_prompt: >
+  You are an assistant integrated with Neotoma. For an array governed by
+  merge_array_by_key, use patch_array_item to update one keyed row without
+  replacing rows written by another agent.
+
+user_prompt: |
+  Register a synthetic claim entity with tasks_claimed keyed by claim_id.
+  Seed it with an empty tasks_claimed array. Writer A adds an in-review row,
+  then writer B adds a different in-progress row. Read the final snapshot.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: mcp_tool.invocations
+    tool_name: patch_array_item
+    op: eq
+    value: 2
+  - type: mcp_tool.invocations
+    tool_name: patch_array_item
+    arg_subset:
+      key_value: writer-a
+    op: eq
+    value: 1
+  - type: mcp_tool.invocations
+    tool_name: patch_array_item
+    arg_subset:
+      key_value: writer-b
+    op: eq
+    value: 1
+  - type: tool_result.matches
+    tool_name: patch_array_item
+    which: 0
+    result_subset:
+      array_length: 1
+  - type: tool_result.matches
+    tool_name: patch_array_item
+    which: 1
+    result_subset:
+      array_length: 2
+      snapshot:
+        tasks_claimed:
+          - claim_id: writer-a
+            status: in_review
+          - claim_id: writer-b
+            status: in_progress
+  - type: snapshot.field_present
+    entity_id: ent_30d410d89b465f879c2949f8
+    field: tasks_claimed

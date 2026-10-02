@@ -29,6 +29,7 @@ import { cleanupEntityType, cleanupTestSchema } from "../helpers/cleanup_helpers
 
 const USER_ID = LOCAL_DEV_USER_ID;
 const TYPE = "test_array_item_patch_session_digest";
+const DECOY_TYPE = "unprotected_decoy_type";
 const API_PORT = 18243;
 const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
@@ -120,6 +121,18 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
         activate: true,
       });
     }
+    if (!(await schemaRegistry.loadActiveSchema(DECOY_TYPE))) {
+      await schemaRegistry.register({
+        entity_type: DECOY_TYPE,
+        schema_version: "1.0",
+        schema_definition: {
+          fields: { title: { type: "string", required: false } },
+          canonical_name_fields: ["title"],
+        },
+        reducer_config: { merge_policies: {} },
+        activate: true,
+      });
+    }
 
     const stored = await callStore(server, {
       user_id: USER_ID,
@@ -135,6 +148,7 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     await cleanupEntityType(TYPE, USER_ID);
     await cleanupTestSchema(TYPE, null);
+    await cleanupTestSchema(DECOY_TYPE, null);
   });
 
   it("agent-facing eval: two sessions refresh one workboard without losing either task", async () => {
@@ -165,6 +179,8 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     expect(resB.status).toBe(200);
     expect(resA.body.item_version).toMatch(/^[a-f0-9]{64}$/);
     expect(resB.body.item_version).toMatch(/^[a-f0-9]{64}$/);
+    expect(resA.body.snapshot).toBeTruthy();
+    expect(resB.body.snapshot).toBeTruthy();
 
     const snapshot = await fetchSnapshot(entityId);
     const rows = snapshot.tasks_claimed as Array<Record<string, unknown>>;
@@ -350,6 +366,11 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
     const body = JSON.parse(result.content[0].text) as PatchBody;
     expect(body.item).toMatchObject({ claim_id: key, status: "queued" });
     expect(typeof body.item_version).toBe("string");
+    expect(body.snapshot).toMatchObject({
+      tasks_claimed: expect.arrayContaining([
+        expect.objectContaining({ claim_id: key, status: "queued" }),
+      ]),
+    });
 
     const snapshot = await fetchSnapshot(entityId);
     const rows = snapshot.tasks_claimed as Array<Record<string, unknown>>;
@@ -602,7 +623,7 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
   it("rejects a caller-supplied entity_type that differs from the stored type", async () => {
     const res = await httpPatch({
       entity_id: entityId,
-      entity_type: "unprotected_decoy_type",
+      entity_type: DECOY_TYPE,
       field: "tasks_claimed",
       key_field: "claim_id",
       key_value: "type-mismatch",
@@ -651,7 +672,7 @@ describe("patch_array_item — lost-update prevention (Waxwing ADR)", () => {
 
     const response = await httpCorrect({
       entity_id: entityId,
-      entity_type: "unprotected_decoy_type",
+      entity_type: DECOY_TYPE,
       field: "title",
       value: "must-not-land",
       idempotency_key: "correct-type-mismatch",
