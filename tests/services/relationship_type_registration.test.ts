@@ -104,7 +104,7 @@ describe("G25: relationship-type registration (#1972)", () => {
     ).rejects.toThrow(/register_relationship_type/);
   });
 
-  it("registers each of the thirteen and writes, reads, deletes, restores an edge of each", async () => {
+  it("registers each of the thirteen and writes, reads, deletes, restores, and deletes each edge again", async () => {
     for (const relationshipType of STAGE_ONE_TYPES) {
       // 1. Registration.
       await relationshipTypeRegistry.register({
@@ -155,6 +155,29 @@ describe("G25: relationship-type registration (#1972)", () => {
         afterRestore.some((r) => r.source_entity_id === source && r.target_entity_id === target),
         `${relationshipType} did not restore`
       ).toBe(true);
+
+      const secondDelete = await softDeleteRelationship(
+        key,
+        relationshipType,
+        source,
+        target,
+        TEST_USER
+      );
+      expect(secondDelete.success).toBe(true);
+      expect(
+        await service.getRelationshipSnapshot(relationshipType, source, target, TEST_USER)
+      ).toBeNull();
+      const afterSecondDelete = await service.getRelationshipsByType(
+        relationshipType,
+        false,
+        TEST_USER
+      );
+      expect(
+        afterSecondDelete.some(
+          (r) => r.source_entity_id === source && r.target_entity_id === target
+        ),
+        `${relationshipType} edge survived its second deletion`
+      ).toBe(false);
     }
   });
 

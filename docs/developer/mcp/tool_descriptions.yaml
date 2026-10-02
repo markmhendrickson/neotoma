@@ -30,7 +30,7 @@ tools:
   delete_entity: "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use."
   delete_relationship: "Delete a relationship. Requires the exact relationship_type between the two entities; if unknown, call list_relationships with source_entity_id and target_entity_id first to discover it. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit. Returns 404 with a discovery hint when no live relationship matches the supplied triple."
   restore_entity: "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."
-  restore_relationship: "Restore a deleted relationship. Creates a restoration observation (priority 1001) that overrides the deletion. Relationship becomes visible in snapshots and queries again. Immutable restoration for audit."
+  restore_relationship: "Restore a deleted relationship. Creates an immutable restoration observation that outranks earlier observations. Relationship becomes visible in snapshots and queries again; later explicit deletion remains possible."
   get_entity_type_counts: |
     Return canonical entity counts by entity_type for the authenticated user. Uses the same dashboard stats aggregation behind GET /stats and sorts results by count descending, then entity_type ascending. Use this when the user asks for counts by type, histograms, or sorted totals. This returns row counts, unlike list_entity_types where field_count is schema field width.
   list_entity_types: |

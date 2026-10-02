@@ -105,7 +105,10 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
   afterAll(async () => {
     await db.from("relationship_snapshots").delete().in("relationship_key", allKeys);
     await db.from("relationship_observations").delete().in("relationship_key", allKeys);
-    await db.from("entities").delete().in("id", [hub, ...spokes]);
+    await db
+      .from("entities")
+      .delete()
+      .in("id", [hub, ...spokes]);
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   });
 
@@ -206,9 +209,9 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
       user_id: OWNER_USER_ID,
       include_deleted: true,
     });
-    const allReturned = (
-      withDeleted.relationships as Array<{ relationship_key: string }>
-    ).map((r) => r.relationship_key);
+    const allReturned = (withDeleted.relationships as Array<{ relationship_key: string }>).map(
+      (r) => r.relationship_key
+    );
     expect(allReturned).toContain(key);
     expect(withDeleted.total_count).toBe(5);
   });
@@ -237,8 +240,24 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
       "2026-06-07T00:00:00.000Z"
     );
     expect(restore.success).toBe(true);
-    expect(await relationshipsService.getRelationshipSnapshot(relationshipType, hub, victim, OWNER_USER_ID))
-      .not.toBeNull();
+    expect(
+      await relationshipsService.getRelationshipSnapshot(
+        relationshipType,
+        hub,
+        victim,
+        OWNER_USER_ID
+      )
+    ).not.toBeNull();
+    const { json: restoredList } = await post("/list_relationships", {
+      entity_id: hub,
+      direction: "outgoing",
+      user_id: OWNER_USER_ID,
+    });
+    expect(
+      (restoredList.relationships as Array<{ relationship_key: string }>).map(
+        (relationship) => relationship.relationship_key
+      )
+    ).toContain(key);
 
     const secondDelete = await softDeleteRelationship(
       key,
@@ -251,8 +270,14 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
     );
     expect(secondDelete.success).toBe(true);
     expect(await isRelationshipDeleted(key, OWNER_USER_ID)).toBe(true);
-    expect(await relationshipsService.getRelationshipSnapshot(relationshipType, hub, victim, OWNER_USER_ID))
-      .toBeNull();
+    expect(
+      await relationshipsService.getRelationshipSnapshot(
+        relationshipType,
+        hub,
+        victim,
+        OWNER_USER_ID
+      )
+    ).toBeNull();
 
     const { data: snapshot } = await db
       .from("relationship_snapshots")
@@ -266,17 +291,26 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
       direction: "outgoing",
       user_id: OWNER_USER_ID,
     });
-    expect((active.relationships as Array<{ relationship_key: string }>).map((r) => r.relationship_key))
-      .not.toContain(key);
+    expect(
+      (active.relationships as Array<{ relationship_key: string }>).map((r) => r.relationship_key)
+    ).not.toContain(key);
 
     const { data: history } = await db
       .from("relationship_observations")
-      .select("metadata")
+      .select("metadata, source_priority")
       .eq("relationship_key", key)
-      .eq("user_id", OWNER_USER_ID);
+      .eq("user_id", OWNER_USER_ID)
+      .order("source_priority", { ascending: true });
     expect(history).toHaveLength(4);
-    expect(history?.filter((observation) => observation.metadata?._deleted === true)).toHaveLength(2);
-    expect(history?.filter((observation) => observation.metadata?._deleted === false)).toHaveLength(1);
+    expect(history?.map((observation) => observation.source_priority)).toEqual([
+      1, 1000, 1001, 1002,
+    ]);
+    expect(history?.filter((observation) => observation.metadata?._deleted === true)).toHaveLength(
+      2
+    );
+    expect(history?.filter((observation) => observation.metadata?._deleted === false)).toHaveLength(
+      1
+    );
   });
 });
 

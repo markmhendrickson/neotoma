@@ -63,6 +63,35 @@ export const ENTITY_NOT_FOUND_MESSAGE = "Entity not found";
 export const RELATIONSHIP_NOT_FOUND_MESSAGE = "Relationship not found";
 
 /**
+ * Explicit lifecycle actions must outrank every earlier observation for this
+ * edge, including a previous restoration. A fixed delete priority of 1000
+ * cannot supersede a restoration at 1001 on a later delete (#2570).
+ */
+async function nextRelationshipLifecyclePriority(
+  relationshipKey: string,
+  userId: string
+): Promise<number> {
+  const { data, error } = await db
+    .from("relationship_observations")
+    .select("source_priority")
+    .eq("relationship_key", relationshipKey)
+    .eq("user_id", userId)
+    .order("source_priority", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to read relationship lifecycle priority: ${error.message}`);
+  }
+
+  const nextPriority = Math.max(1000, (data?.source_priority ?? 999) + 1);
+  if (!Number.isSafeInteger(nextPriority)) {
+    throw new Error("Relationship lifecycle priority exceeds the safe integer range");
+  }
+  return nextPriority;
+}
+
+/**
  * Soft delete an entity by creating a deletion observation
  *
  * @param entityId - Entity ID to delete
@@ -186,11 +215,6 @@ export async function softDeleteRelationship(
 ): Promise<DeletionResult> {
   const deletedAt = timestamp || new Date().toISOString();
 
-  // Create deterministic observation ID
-  const observationId = createHash("sha256")
-    .update(`${relationshipKey}:deletion:${deletedAt}`)
-    .digest("hex");
-
   // Create canonical hash for deletion metadata
   const metadataString = JSON.stringify({
     _deleted: true,
@@ -200,25 +224,30 @@ export async function softDeleteRelationship(
   });
   const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
-  const deletionObservation = {
-    id: observationId,
-    relationship_key: relationshipKey,
-    source_entity_id: sourceEntityId,
-    target_entity_id: targetEntityId,
-    relationship_type: relationshipType,
-    observed_at: deletedAt,
-    source_priority: 1000, // Highest priority
-    metadata: {
-      _deleted: true,
-      deleted_at: deletedAt,
-      deleted_by: userId,
-      ...(reason && { deletion_reason: reason }),
-    },
-    canonical_hash: canonicalHash,
-    user_id: userId,
-  };
-
   try {
+    const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
+    // Include the lifecycle sequence: two deletes in one millisecond must not
+    // collide after an intervening restore.
+    const observationId = createHash("sha256")
+      .update(`${relationshipKey}:deletion:${deletedAt}:${sourcePriority}`)
+      .digest("hex");
+    const deletionObservation = {
+      id: observationId,
+      relationship_key: relationshipKey,
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      relationship_type: relationshipType,
+      observed_at: deletedAt,
+      source_priority: sourcePriority,
+      metadata: {
+        _deleted: true,
+        deleted_at: deletedAt,
+        deleted_by: userId,
+        ...(reason && { deletion_reason: reason }),
+      },
+      canonical_hash: canonicalHash,
+      user_id: userId,
+    };
     const { data, error } = await db
       .from("relationship_observations")
       .insert(deletionObservation)
@@ -234,8 +263,7 @@ export async function softDeleteRelationship(
     }
 
     // Materialize liveness on the snapshot (#1570). The deletion observation we
-    // just wrote is at source_priority 1000 — by definition now the
-    // highest-priority observation for this key — so the edge is dead. Flip the
+    // just wrote outranks every prior observation for this key, so the edge is dead. Flip the
     // snapshot's `is_live` to 0 so the default list_relationships read (which
     // filters `is_live = 1` at the DB) stops surfacing it without re-deriving
     // liveness from the observation log on every read. The observation log
@@ -509,11 +537,6 @@ export async function restoreRelationship(
 
   const restoredAt = timestamp || new Date().toISOString();
 
-  // Create deterministic observation ID
-  const observationId = createHash("sha256")
-    .update(`${relationshipKey}:restoration:${restoredAt}`)
-    .digest("hex");
-
   // Create canonical hash for restoration metadata
   const metadataString = JSON.stringify({
     _deleted: false,
@@ -523,25 +546,28 @@ export async function restoreRelationship(
   });
   const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
-  const restorationObservation = {
-    id: observationId,
-    relationship_key: relationshipKey,
-    source_entity_id: sourceEntityId,
-    target_entity_id: targetEntityId,
-    relationship_type: relationshipType,
-    observed_at: restoredAt,
-    source_priority: 1001, // Higher than deletion (1000)
-    metadata: {
-      _deleted: false,
-      restored_at: restoredAt,
-      restored_by: userId,
-      ...(reason && { restoration_reason: reason }),
-    },
-    canonical_hash: canonicalHash,
-    user_id: userId,
-  };
-
   try {
+    const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
+    const observationId = createHash("sha256")
+      .update(`${relationshipKey}:restoration:${restoredAt}:${sourcePriority}`)
+      .digest("hex");
+    const restorationObservation = {
+      id: observationId,
+      relationship_key: relationshipKey,
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      relationship_type: relationshipType,
+      observed_at: restoredAt,
+      source_priority: sourcePriority,
+      metadata: {
+        _deleted: false,
+        restored_at: restoredAt,
+        restored_by: userId,
+        ...(reason && { restoration_reason: reason }),
+      },
+      canonical_hash: canonicalHash,
+      user_id: userId,
+    };
     const { data, error } = await db
       .from("relationship_observations")
       .insert(restorationObservation)
@@ -555,6 +581,15 @@ export async function restoreRelationship(
         error: `Failed to create relationship restoration observation: ${error.message}`,
       };
     }
+
+    // Restore the materialized list predicate from the immutable observation
+    // log. A previously deleted snapshot still has is_live = 0 (#1570).
+    await relationshipsService.computeRelationshipSnapshot(
+      relationshipType,
+      sourceEntityId,
+      targetEntityId,
+      userId
+    );
 
     emitRelationshipLifecycle({
       user_id: userId,
