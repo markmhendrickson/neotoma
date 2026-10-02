@@ -21,8 +21,12 @@ import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
-import { softDeleteRelationship } from "../../src/services/deletion.js";
-import { isRelationshipLive } from "../../src/services/relationships.js";
+import {
+  isRelationshipDeleted,
+  restoreRelationship,
+  softDeleteRelationship,
+} from "../../src/services/deletion.js";
+import { isRelationshipLive, relationshipsService } from "../../src/services/relationships.js";
 
 const OWNER_USER_ID = "00000000-0000-0000-0000-0000000004a0";
 const API_PORT = 18176;
@@ -207,6 +211,72 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
     ).map((r) => r.relationship_key);
     expect(allReturned).toContain(key);
     expect(withDeleted.total_count).toBe(5);
+  });
+
+  it("can delete a restored edge again without losing lifecycle history", async () => {
+    const victim = spokes[1];
+    const key = keyFor(victim);
+    const firstDelete = await softDeleteRelationship(
+      key,
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID,
+      "first delete",
+      "2026-06-06T00:00:00.000Z"
+    );
+    expect(firstDelete.success).toBe(true);
+
+    const restore = await restoreRelationship(
+      key,
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID,
+      "restore",
+      "2026-06-07T00:00:00.000Z"
+    );
+    expect(restore.success).toBe(true);
+    expect(await relationshipsService.getRelationshipSnapshot(relationshipType, hub, victim, OWNER_USER_ID))
+      .not.toBeNull();
+
+    const secondDelete = await softDeleteRelationship(
+      key,
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID,
+      "second delete",
+      "2026-06-08T00:00:00.000Z"
+    );
+    expect(secondDelete.success).toBe(true);
+    expect(await isRelationshipDeleted(key, OWNER_USER_ID)).toBe(true);
+    expect(await relationshipsService.getRelationshipSnapshot(relationshipType, hub, victim, OWNER_USER_ID))
+      .toBeNull();
+
+    const { data: snapshot } = await db
+      .from("relationship_snapshots")
+      .select("is_live")
+      .eq("relationship_key", key)
+      .single();
+    expect(snapshot?.is_live).toBe(0);
+
+    const { json: active } = await post("/list_relationships", {
+      entity_id: hub,
+      direction: "outgoing",
+      user_id: OWNER_USER_ID,
+    });
+    expect((active.relationships as Array<{ relationship_key: string }>).map((r) => r.relationship_key))
+      .not.toContain(key);
+
+    const { data: history } = await db
+      .from("relationship_observations")
+      .select("metadata")
+      .eq("relationship_key", key)
+      .eq("user_id", OWNER_USER_ID);
+    expect(history).toHaveLength(4);
+    expect(history?.filter((observation) => observation.metadata?._deleted === true)).toHaveLength(2);
+    expect(history?.filter((observation) => observation.metadata?._deleted === false)).toHaveLength(1);
   });
 });
 
