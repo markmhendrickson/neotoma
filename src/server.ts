@@ -12,6 +12,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "./db.js";
 import { isValidSnapshotFieldName } from "./services/entity_queries.js";
+import {
+  projectSensitiveResponse,
+  type SensitiveResponseProjectionOptions,
+} from "./services/sensitive_response_projection.js";
 import { logger } from "./utils/logger.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
@@ -1764,10 +1768,13 @@ export class NeotomaServer {
           : {}),
       });
 
-      return this.buildTextResponse({
-        ...result,
-        ...(usedAdvisoryAlias ? { _deprecation: ADVISORY_VISIBILITY_DEPRECATION } : {}),
-      });
+      return this.buildTextResponse(
+        {
+          ...result,
+          ...(usedAdvisoryAlias ? { _deprecation: ADVISORY_VISIBILITY_DEPRECATION } : {}),
+        },
+        { allowTopLevelFields: ["guest_access_token"] }
+      );
     } catch (err: any) {
       const { isIssueValidationError } = await import("./services/issues/errors.js");
       if (isIssueValidationError(err)) {
@@ -1801,7 +1808,9 @@ export class NeotomaServer {
         fields: parsed.fields as Record<string, unknown>,
         initial_message: parsed.initial_message,
       });
-      return this.buildTextResponse(result);
+      return this.buildTextResponse(result, {
+        allowTopLevelFields: ["guest_access_token"],
+      });
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -3200,7 +3209,10 @@ export class NeotomaServer {
     };
   }
 
-  private buildTextResponse(data: unknown): {
+  private buildTextResponse(
+    data: unknown,
+    projectionOptions: SensitiveResponseProjectionOptions = {}
+  ): {
     content: Array<{ type: string; text: string }>;
   } {
     // Use replacer to handle BigInt values (convert to number)
@@ -3212,7 +3224,12 @@ export class NeotomaServer {
     };
     // Use compact JSON (no indentation) to reduce response size and avoid Cursor file-writing threshold
     return {
-      content: [{ type: "text", text: JSON.stringify(data, replacer) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(projectSensitiveResponse(data, projectionOptions), replacer),
+        },
+      ],
     };
   }
 
@@ -8122,7 +8139,9 @@ export class NeotomaServer {
         }
       );
 
-      return this.buildTextResponse(result);
+      return this.buildTextResponse(result, {
+        allowTopLevelFields: ["access_token"],
+      });
     } catch (err) {
       if (err instanceof PublishRenderedPageError) {
         // Structured envelope: stable code + optional hint/details, not prose in message.
