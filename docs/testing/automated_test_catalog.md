@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **685**
-- Backend and repo Vitest files: **649**
+- Total automated test files: **686**
+- Backend and repo Vitest files: **650**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 188 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 202 |
+| Vitest integration tests | 203 |
 | Vitest CLI tests | 81 |
 | Vitest contract tests | 24 |
 | Vitest security tests | 17 |
@@ -438,7 +438,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (202):**
+**Files (203):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -569,6 +569,7 @@ flowchart TD
 - `tests/integration/nonjson_csv_store_behavior.test.ts`
 - `tests/integration/nonjson_fixtures_mcp_replay.test.ts`
 - `tests/integration/observation_ingestion.test.ts`
+- `tests/integration/observation_insert_sites_attribution.test.ts`
 - `tests/integration/observation_insert_sites_characterization.test.ts`
 - `tests/integration/observation_insert_sites_routing.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`

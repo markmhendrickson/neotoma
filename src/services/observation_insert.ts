@@ -1,7 +1,8 @@
 /**
  * Shared observation-insert primitive (Domain Layer)
  *
- * Three code paths write rows into `observations`:
+ * Several code paths write rows into `observations`. Three of them are the
+ * subject of this module:
  *
  *   1. `createObservation` (observation_storage.ts), used by the HTTP store
  *      path and other services;
@@ -9,8 +10,14 @@
  *      in server.ts);
  *   3. `createCorrection` (correction.ts).
  *
- * They built the same row shape and probed for an existing content-addressed
- * row independently, which let the three drift. This module holds the three
+ * They are NOT the only inserters: other services (access-token handling,
+ * deletion, schema-lag repair, interpretation, schema registry) still insert
+ * into `observations` directly and are deliberately left untouched here. The
+ * conditional-write change that follows is responsible for inventorying them.
+ *
+ * The three built the same row shape and probed for an existing
+ * content-addressed row independently, which let them drift. This module holds
+ * the three
  * mechanical steps they share, so there is one place that knows how an
  * observation row is assembled, how an already-persisted row is found, and how
  * the insert is issued:
@@ -135,8 +142,9 @@ export function buildObservationRow(input: ObservationRowInput): ObservationInse
  * content, so a hit means the same content was stored before.
  *
  * The probe is scoped to `(id, user_id)` so a same-content observation owned by
- * another user never masks this user's write. Returns the raw `{ data, error }`
- * result; the caller owns the wording of any error it raises, and chooses the
+ * another user never masks this user's write. Returns the database query builder
+ * un-awaited (it is thenable): `await` it to get the raw `{ data, error }`
+ * result. The caller owns the wording of any error it raises, and chooses the
  * columns it needs (`"*"` for a full row, `"id"` for a bare existence check).
  */
 export function findExistingObservation(
@@ -157,6 +165,12 @@ export function findExistingObservation(
  * un-awaited so a caller can chain `.select().single()` to read the row back,
  * or await it directly and inspect `{ error }` (including a unique-violation
  * code, which the correction site uses as its replay signal).
+ *
+ * SECURITY: this carries NO guards. It performs a raw insert and checks nothing
+ * about who is writing or what. Every caller must already have cleared instance
+ * store policy, attribution policy, protected-type and agent-grant checks, and
+ * the cross-owner guard before calling it; a call placed ahead of those gates
+ * bypasses them. Structural tests pin that ordering at the three current sites.
  */
 export function insertObservationRow(row: ObservationInsertRow): ObservationsQuery {
   return db.from("observations").insert(row);

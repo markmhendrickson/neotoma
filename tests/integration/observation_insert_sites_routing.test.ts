@@ -85,6 +85,11 @@ describe("observation insertion sites route through the shared primitive", () =>
     expect(spies.find.mock.calls[0].slice(0, 2)).toEqual([created.id, USER]);
     expect(spies.insert).toHaveBeenCalledTimes(1);
     expect(spies.insert.mock.calls[0][0]).toMatchObject({ id: created.id, entity_id: entityId });
+    // This site stamps created_at client-side (the other two leave it to the
+    // database default); the stamp must reach the builder.
+    expect(typeof (spies.build.mock.calls[0][0] as { created_at?: unknown }).created_at).toBe(
+      "string"
+    );
 
     // A replay probes, finds the row, and inserts nothing further.
     spies.insert.mockClear();
@@ -113,6 +118,14 @@ describe("observation insertion sites route through the shared primitive", () =>
       source_priority: 100,
       user_id: MCP_USER_ID,
     });
+    // The probe is owner-scoped, keyed on the id that is then inserted, and
+    // asks only for the id column (a bare existence check).
+    const insertedId = (spies.insert.mock.calls[0][0] as { id: string }).id;
+    expect(spies.find.mock.calls.map((c) => c.slice(0, 3))).toContainEqual([
+      insertedId,
+      MCP_USER_ID,
+      "id",
+    ]);
 
     spies.build.mockClear();
     spies.find.mockClear();
@@ -135,5 +148,7 @@ describe("observation insertion sites route through the shared primitive", () =>
     // The correction site has never probed first: it relies on the unique
     // constraint for replay, and must keep doing so.
     expect(spies.find).not.toHaveBeenCalled();
+    // And it leaves created_at to the database default.
+    expect(spies.build.mock.calls[0][0]).not.toHaveProperty("created_at");
   });
 });

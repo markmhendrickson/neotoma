@@ -96,6 +96,14 @@ function compareObservationRecencyThenId(a: Observation, b: Observation): number
  *
  * Exported so there is one definition of the order; the reducer's own sort
  * calls it.
+ *
+ * Inherited behaviour, unchanged by the extraction (the body is the reducer's
+ * previous private comparator verbatim): the id tie-break uses `localeCompare`,
+ * which is locale-dependent rather than byte order, and an unparseable
+ * `observed_at` makes the time subtraction NaN, which is not a consistent
+ * comparator result. Callers that need either guarantee must validate
+ * `observed_at` and choose an ordinal id comparison deliberately rather than
+ * rely on this function for it.
  */
 export function compareObservationsByReducerOrder(
   a: Pick<Observation, "observed_at" | "id">,

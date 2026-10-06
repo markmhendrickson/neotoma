@@ -342,6 +342,7 @@ function sortObservations(observations: Observation[]): Observation[] {
   });
 }
 ```
+
 This order is exported from `src/reducers/observation_reducer.ts` as `compareObservationsByReducerOrder` (and `sortObservationsInReducerOrder`), and the reducer's own sort calls it. Code that needs to agree with the reducer about which observation is first (the current winner of an entity) must use the exported comparator rather than copying the ordering. It is distinct from the module-private recency comparator used for deletion handling, which also consults `created_at`.
 ## 6. Type Conversion During Snapshot Computation
 
