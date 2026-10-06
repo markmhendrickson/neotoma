@@ -4121,6 +4121,18 @@ export interface components {
     StoreStructuredResponse: {
       success?: boolean;
       /**
+       * @description Echoes the request's `commit` flag. `false` means this response
+       *     describes a plan/dry-run preview: no source, observation or entity
+       *     was persisted and `source_id` is `null`.
+       */
+      commit?: boolean;
+      /**
+       * @description Id of the raw `sources` row written for this store. `null` in
+       *     plan/dry-run mode (`commit: false`), where no source row is
+       *     written.
+       */
+      source_id?: string | null;
+      /**
        * @description True when the response is an idempotency replay (no new observations
        *     or entities were written for this request). The key was already used
        *     with identical content so the original result is returned. Consumers
@@ -4133,7 +4145,12 @@ export interface components {
       entities?: {
         entity_id?: string;
         entity_type?: string;
-        observation_id?: string;
+        /**
+         * @description Id of the observation written for this entity. `null` in
+         *     plan/dry-run mode (`commit: false`), where no observation is
+         *     written.
+         */
+        observation_id?: string | null;
         canonical_name?: string;
         resolver_path?: string[];
         /**
@@ -4399,7 +4416,12 @@ export interface components {
       commit?: boolean;
     };
     StoreUnstructuredResponse: {
-      source_id?: string;
+      /**
+       * @description Id of the persisted source row. `null` when the request ran in
+       *     plan/dry-run mode (`commit: false`): nothing was persisted, so
+       *     there is no source to point at.
+       */
+      source_id?: string | null;
       content_hash?: string;
       file_size?: number;
       deduplicated?: boolean;

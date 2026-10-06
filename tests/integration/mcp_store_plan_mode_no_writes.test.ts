@@ -23,17 +23,19 @@
  * and cross_surface_contract_parity_tested_all_surfaces (ent_2ad0677fe23c0c1878ae43e8).
  */
 
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
 import { randomUUID } from "crypto";
 import { writeFile, mkdir, rm } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
+import { config } from "../../src/config.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
-import { createMinimalTestParquet } from "../helpers/create_test_parquet.js";
+import { cleanupAllTestData } from "../helpers/cleanup_helpers.js";
+import { createMinimalTestParquet, createTestParquetFile } from "../helpers/create_test_parquet.js";
 
 const TEST_USER_ID = LOCAL_DEV_USER_ID;
 
@@ -255,6 +257,270 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
         else process.env.NEOTOMA_OVERFLOW_SINK = previousSink;
         await rm(sinkPath, { force: true });
       }
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Effect-level coverage for the legs the tests above do not reach (#2493,
+// #2471 review round 3): combined entities + file, entities-only, parquet
+// commit:true control, and malformed `commit` values.
+//
+// Every test below runs as its OWN unique user, so row counts and the per-user
+// raw-storage directory are hermetic: no other suite writing to the shared
+// vitest DB under the default local user can move them, and a leftover from an
+// earlier (or pre-fix) run cannot turn them red. NEOTOMA_TEST_REAL_STORAGE=1
+// is set for the duration so the raw-storage upload path actually runs (it is
+// skipped under NODE_ENV=test otherwise) and the FILE-count assertion can fail
+// on the thing it watches; the MCP server runs in this process, so the flag is
+// read live by storeRawContent / storeRawReference.
+// ---------------------------------------------------------------------------
+
+type EffectCounts = { sources: number; observations: number; entities: number; files: number };
+
+async function countRows(table: string, userId: string): Promise<number> {
+  const { count, error } = await db
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+  if (error) throw new Error(`Failed to count ${table}: ${JSON.stringify(error)}`);
+  return count ?? 0;
+}
+
+function perUserStorageDir(userId: string): string {
+  return join(config.rawStorageDir, userId);
+}
+
+function countStoredFiles(userId: string): number {
+  const dir = perUserStorageDir(userId);
+  return existsSync(dir) ? readdirSync(dir).length : 0;
+}
+
+async function effectCounts(userId: string): Promise<EffectCounts> {
+  return {
+    sources: await countRows("sources", userId),
+    observations: await countRows("observations", userId),
+    entities: await countRows("entities", userId),
+    files: countStoredFiles(userId),
+  };
+}
+
+function delta(before: EffectCounts, after: EffectCounts): EffectCounts {
+  return {
+    sources: after.sources - before.sources,
+    observations: after.observations - before.observations,
+    entities: after.entities - before.entities,
+    files: after.files - before.files,
+  };
+}
+
+const NO_WRITES: EffectCounts = { sources: 0, observations: 0, entities: 0, files: 0 };
+
+async function cleanupUser(userId: string): Promise<void> {
+  const { data: entityRows } = await db.from("entities").select("id").eq("user_id", userId);
+  const { data: sourceRows } = await db.from("sources").select("id").eq("user_id", userId);
+  await cleanupAllTestData({
+    entityIds: (entityRows ?? []).map((r: { id: string }) => r.id),
+    sourceIds: (sourceRows ?? []).map((r: { id: string }) => r.id),
+  });
+  await rm(perUserStorageDir(userId), { recursive: true, force: true });
+}
+
+describe("MCP store tool: effect-level plan mode for combined, entities-only, parquet and malformed commit", () => {
+  const originalRealStorage = process.env.NEOTOMA_TEST_REAL_STORAGE;
+  let testDir: string;
+  let userId: string;
+  let server: NeotomaServer;
+
+  beforeAll(async () => {
+    process.env.NEOTOMA_TEST_REAL_STORAGE = "1";
+    testDir = join(tmpdir(), `neotoma-mcp-plan-mode-effects-${randomUUID()}`);
+    await mkdir(testDir, { recursive: true });
+  });
+
+  beforeEach(() => {
+    userId = randomUUID();
+    server = makeMcpServer();
+    (server as unknown as { authenticatedUserId: string }).authenticatedUserId = userId;
+  });
+
+  afterEach(async () => {
+    await cleanupUser(userId);
+  });
+
+  afterAll(async () => {
+    if (originalRealStorage === undefined) delete process.env.NEOTOMA_TEST_REAL_STORAGE;
+    else process.env.NEOTOMA_TEST_REAL_STORAGE = originalRealStorage;
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  function entity(label: string): Record<string, unknown> {
+    return { entity_type: "plan_mode_test_note", title: `${label} ${randomUUID()}` };
+  }
+
+  // The two `commit: parsed.commit` hunks in NeotomaServer.store (src/server.ts)
+  // that forward `commit` to the recursive file-leg call each serve one of
+  // these interpretation modes: `source_ref: "unstructured"` stores the file
+  // FIRST (before the structured leg); with no interpretation the file leg
+  // runs AFTER the structured leg. Reference mode exercises the same two
+  // hunks with the by-reference storage branch on the file leg.
+  const COMBINED_VARIANTS: Array<{
+    name: string;
+    fileArgs: () => Promise<Record<string, unknown>>;
+    interpretation?: Record<string, unknown>;
+    byReference?: boolean;
+  }> = [
+    {
+      name: "inline file, interpretation.source_ref='unstructured' (file leg runs first)",
+      interpretation: { source_ref: "unstructured" },
+      fileArgs: async () => ({
+        file_content: Buffer.from(`combined inline first ${randomUUID()}`).toString("base64"),
+        mime_type: "text/plain",
+        original_filename: "combined-first.txt",
+      }),
+    },
+    {
+      name: "inline file, no interpretation (file leg runs after the structured leg)",
+      fileArgs: async () => ({
+        file_content: Buffer.from(`combined inline after ${randomUUID()}`).toString("base64"),
+        mime_type: "text/plain",
+        original_filename: "combined-after.txt",
+      }),
+    },
+    {
+      name: "by-reference file, no interpretation",
+      byReference: true,
+      fileArgs: async () => {
+        const file = join(testDir, `combined-reference-${randomUUID()}.txt`);
+        await writeFile(file, `combined reference ${randomUUID()}`);
+        return { file_path: file, source_storage: "reference" };
+      },
+    },
+  ];
+
+  describe.each(COMBINED_VARIANTS)("combined entities + file: $name", (variant) => {
+    it("commit:false writes nothing: zero sources/observations/entities/files, both legs report source_id null", async () => {
+      const before = await effectCounts(userId);
+
+      const result = await callStore(server, {
+        idempotency_key: `mcp-plan-combined-${randomUUID()}`,
+        entities: [entity("combined plan")],
+        ...(variant.interpretation ? { interpretation: variant.interpretation } : {}),
+        ...(await variant.fileArgs()),
+        commit: false,
+      });
+
+      const structured = result.structured as Record<string, unknown>;
+      const unstructured = result.unstructured as Record<string, unknown>;
+      expect(structured?.commit).toBe(false);
+      expect(unstructured?.commit).toBe(false);
+      expect(unstructured?.source_id).toBeNull();
+
+      expect(delta(before, await effectCounts(userId))).toEqual(NO_WRITES);
+    });
+
+    it("commit:true control writes a source, an observation, an entity and (inline) a stored file", async () => {
+      const before = await effectCounts(userId);
+
+      const result = await callStore(server, {
+        idempotency_key: `mcp-commit-combined-${randomUUID()}`,
+        entities: [entity("combined commit")],
+        ...(variant.interpretation ? { interpretation: variant.interpretation } : {}),
+        ...(await variant.fileArgs()),
+      });
+
+      const unstructured = result.unstructured as Record<string, unknown>;
+      expect(typeof unstructured?.source_id).toBe("string");
+
+      const d = delta(before, await effectCounts(userId));
+      expect(d.sources).toBeGreaterThanOrEqual(1);
+      expect(d.observations).toBeGreaterThanOrEqual(1);
+      expect(d.entities).toBeGreaterThanOrEqual(1);
+      // By-reference stores a pointer, not a copy of the bytes.
+      if (!variant.byReference) {
+        expect(d.files).toBeGreaterThanOrEqual(1);
+      }
+    });
+  });
+
+  describe("entities-only (the MCP structured leg's own `commit` option)", () => {
+    it("commit:false writes nothing", async () => {
+      const before = await effectCounts(userId);
+
+      const result = await callStore(server, {
+        idempotency_key: `mcp-plan-entities-${randomUUID()}`,
+        entities: [entity("entities-only plan")],
+        commit: false,
+      });
+
+      expect(result.commit).toBe(false);
+      expect(delta(before, await effectCounts(userId))).toEqual(NO_WRITES);
+    });
+
+    it("commit:true control writes a source, an observation, an entity and a stored file", async () => {
+      const before = await effectCounts(userId);
+
+      await callStore(server, {
+        idempotency_key: `mcp-commit-entities-${randomUUID()}`,
+        entities: [entity("entities-only commit")],
+      });
+
+      const d = delta(before, await effectCounts(userId));
+      expect(d.sources).toBeGreaterThanOrEqual(1);
+      expect(d.observations).toBeGreaterThanOrEqual(1);
+      expect(d.entities).toBeGreaterThanOrEqual(1);
+      expect(d.files).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("parquet ingest leg: commit:true control", () => {
+    it("commit:true writes observations and entities (unique content, so it is not deduplicated away)", async () => {
+      const parquetPath = join(testDir, `mcp_commit_${randomUUID()}.parquet`);
+      await createTestParquetFile({
+        outputPath: parquetPath,
+        rows: [
+          {
+            id: BigInt(Date.now()),
+            name: `Parquet commit control ${randomUUID()}`,
+            amount: 1.5,
+            count: BigInt(7),
+            timestamp: BigInt(1000000),
+          },
+        ],
+      });
+      const before = await effectCounts(userId);
+
+      const result = await callStore(server, {
+        idempotency_key: `mcp-commit-parquet-${randomUUID()}`,
+        file_path: parquetPath,
+      });
+
+      expect(result.commit).not.toBe(false);
+      const d = delta(before, await effectCounts(userId));
+      expect(d.observations).toBeGreaterThanOrEqual(1);
+      expect(d.entities).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("malformed `commit` values are rejected, never coerced into a write", () => {
+    it.each([
+      ["string 'false'", "false"],
+      ["number 0", 0],
+      ["null", null],
+    ])("commit = %s is rejected and writes nothing", async (_label, badCommit) => {
+      const before = await effectCounts(userId);
+
+      await expect(
+        callStore(server, {
+          idempotency_key: `mcp-bad-commit-${randomUUID()}`,
+          entities: [entity("malformed commit")],
+          file_content: Buffer.from(`malformed commit ${randomUUID()}`).toString("base64"),
+          mime_type: "text/plain",
+          commit: badCommit,
+        })
+      ).rejects.toThrow();
+
+      expect(delta(before, await effectCounts(userId))).toEqual(NO_WRITES);
     });
   });
 });

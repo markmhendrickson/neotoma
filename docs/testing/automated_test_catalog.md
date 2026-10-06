@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **683**
-- Backend and repo Vitest files: **647**
+- Total automated test files: **685**
+- Backend and repo Vitest files: **649**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,9 +72,9 @@ flowchart TD
 | Vitest unit tests | 186 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 201 |
+| Vitest integration tests | 202 |
 | Vitest CLI tests | 82 |
-| Vitest contract tests | 24 |
+| Vitest contract tests | 25 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -436,7 +436,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (201):**
+**Files (202):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -618,6 +618,7 @@ flowchart TD
 - `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/store_source_priority_ignored_warning.test.ts`
+- `tests/integration/store_structured_commit_invariant.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/store_warning_condition_rule.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
@@ -733,7 +734,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (24):**
+**Files (25):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -755,6 +756,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/store_plan_mode_response_schema.test.ts`
 - `tests/contract/sync_issues_contract.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`

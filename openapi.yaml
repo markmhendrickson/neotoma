@@ -2398,6 +2398,19 @@ components:
       properties:
         success:
           type: boolean
+        commit:
+          type: boolean
+          description: |
+            Echoes the request's `commit` flag. `false` means this response
+            describes a plan/dry-run preview: no source, observation or entity
+            was persisted and `source_id` is `null`.
+        source_id:
+          type: string
+          nullable: true
+          description: |
+            Id of the raw `sources` row written for this store. `null` in
+            plan/dry-run mode (`commit: false`), where no source row is
+            written.
         replayed:
           type: boolean
           description: |
@@ -2419,6 +2432,11 @@ components:
                 type: string
               observation_id:
                 type: string
+                nullable: true
+                description: |
+                  Id of the observation written for this entity. `null` in
+                  plan/dry-run mode (`commit: false`), where no observation is
+                  written.
               canonical_name:
                 type: string
               resolver_path:
@@ -2759,6 +2777,11 @@ components:
       properties:
         source_id:
           type: string
+          nullable: true
+          description: |
+            Id of the persisted source row. `null` when the request ran in
+            plan/dry-run mode (`commit: false`): nothing was persisted, so
+            there is no source to point at.
         content_hash:
           type: string
         file_size:
