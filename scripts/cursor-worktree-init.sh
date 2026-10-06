@@ -10,15 +10,16 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR/..")
 
 echo "Setting up Cursor worktree..."
 
-# Copy env file
-if [ -f "$SCRIPT_DIR/copy-env-to-worktree.js" ]; then
-  echo "Copying environment file..."
-  node "$SCRIPT_DIR/copy-env-to-worktree.js" || {
-    echo "Warning: Failed to copy env file. You may need to run 'npm run copy:env' manually."
+# Write a minimal, non-secret .env.development (credentials are never copied)
+if [ -f "$SCRIPT_DIR/write-worktree-dev-env.js" ]; then
+  echo "Writing non-secret dev environment file..."
+  node "$SCRIPT_DIR/write-worktree-dev-env.js" || {
+    echo "Warning: Failed to write dev env file. You may need to run 'npm run setup:worktree-env' manually."
   }
 fi
 
 echo "✓ Worktree setup complete"
 echo ""
-echo "If the dev server fails to start, ensure you have a .env file:"
-echo "  npm run copy:env"
+echo "If the dev server fails to start, regenerate the non-secret dev env file:"
+echo "  npm run setup:worktree-env"
+echo "Credentials are never copied into a worktree; set any you need yourself."

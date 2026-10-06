@@ -163,8 +163,8 @@ Before creating a Feature Unit, verify:
    # Verify branch is based on main
    git branch --show-current  # Should show feature/FU-XXX-short-description
    git log --oneline -1       # Should show latest main commit
-   # Setup worktree environment (copies .env files)
-   npm run copy:env || node scripts/copy-env-to-worktree.js
+   # Setup worktree environment (writes a minimal non-secret .env.development; copies no credentials)
+   npm run setup:worktree-env
    # Install dependencies in worktree
    npm install
    # Push branch to remote

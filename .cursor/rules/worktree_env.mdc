@@ -1,1 +1,21 @@
-../../../foundation/.cursor/rules/worktree_env.mdc
+---
+description: "Rules for the dev environment file in git worktrees, especially Cursor worktrees"
+alwaysApply: true
+---
+# Worktree Environment Rules
+
+When working in a git worktree (especially Cursor worktrees):
+
+1. Worktree setup writes a minimal, **non-secret** `.env.development` from an explicit allowlist (environment, data directory, ports, API base URL). It does **not** copy any env file.
+2. To (re)generate it in the current worktree, run:
+   - `npm run setup:worktree-env`
+   - or `node scripts/write-worktree-dev-env.js` (`--force` overwrites an existing file; `--help` explains)
+3. The `post-checkout` hook and `.cursor/worktrees.json` call the same generator automatically.
+4. The generator reads nothing outside the repository: not the home directory, not `~/.config/neotoma`, not another checkout.
+5. Credentials are never copied into a worktree. If a task needs credentials, the developer sets them deliberately (shell environment, or their own gitignored `.env` in the worktree).
+6. Env files are gitignored and MUST NOT be committed.
+
+Agents should:
+- Suggest `npm run setup:worktree-env` when a worktree is missing its dev env file
+- Never copy, print, or commit `.env*` files or any private config file
+- Never copy credentials from the main checkout or the home directory into a worktree
