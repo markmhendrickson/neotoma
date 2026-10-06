@@ -761,7 +761,7 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
   - `--entities <path>` (required): JSON file containing the entity array extracted by the caller.
   - `--source-file <path>` (required): Raw source artifact (PDF, transcript, CSV, etc.) attached as provenance.
   - `--user-id <id>` / `--idempotency-key <key>` / `--file-idempotency-key <key>`: same semantics as `neotoma store`.
-  - `--plan` / `--dry-run`: Preview planned actions without committing.
+  - `--plan` / `--dry-run`: Preview planned actions without committing. Nothing is persisted: no source row, no stored file, no observations and no entities are written, and `source_id` is `null` in the response.
   - `--strict`: Refuse silent merges (schema `canonical_name_fields` must match, or `--target-id` must be supplied).
   - `--source-upload` (v0.5.1+): Force base64 upload of the source file via `file_content`. Use this when the CLI and API run on different machines so the server can't read the CLI's local filesystem.
   - `--source-content` (v0.5.1+): Alias for `--source-upload`.

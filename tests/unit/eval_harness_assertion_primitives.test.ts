@@ -6,6 +6,9 @@
  * snapshot.field_absent. The first two run purely against captured toolCalls
  * (no network); the snapshot ones stub fetch.
  */
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evaluatePredicate,
@@ -252,5 +255,71 @@ describe("#1703 snapshot.field_present / field_absent", () => {
       field: "chosen",
     };
     expect(await evaluatePredicate(p, ctx())).toBeNull();
+  });
+});
+
+describe("#2493 stats.counter", () => {
+  const stats = { sources_count: 0, total_observations: 3, nested: { rows: 2 } };
+
+  it("passes when the counter satisfies op/value", async () => {
+    const p: ExpectedAssertion = { type: "stats.counter", field: "sources_count", op: "eq", value: 0 };
+    expect(await evaluatePredicate(p, ctx({ stats }))).toBeNull();
+    const q: ExpectedAssertion = { type: "stats.counter", field: "total_observations", op: "gte", value: 1 };
+    expect(await evaluatePredicate(q, ctx({ stats }))).toBeNull();
+  });
+
+  it("reads dotted paths", async () => {
+    const p: ExpectedAssertion = { type: "stats.counter", field: "nested.rows", op: "eq", value: 2 };
+    expect(await evaluatePredicate(p, ctx({ stats }))).toBeNull();
+  });
+
+  it("fails when the counter violates op/value", async () => {
+    const p: ExpectedAssertion = { type: "stats.counter", field: "total_observations", op: "eq", value: 0 };
+    const fail = await evaluatePredicate(p, ctx({ stats }));
+    expect(fail).not.toBeNull();
+    expect(fail!.message).toContain("total_observations");
+  });
+
+  it("fails closed on a missing field, a non-numeric field, and absent stats (never reads as zero)", async () => {
+    const zero: Omit<ExpectedAssertion, "field"> = { type: "stats.counter", op: "eq", value: 0 };
+    expect(await evaluatePredicate({ ...zero, field: "no_such_counter" }, ctx({ stats }))).not.toBeNull();
+    expect(await evaluatePredicate({ ...zero, field: "nested" }, ctx({ stats }))).not.toBeNull();
+    expect(await evaluatePredicate({ ...zero, field: "sources_count" }, ctx({ stats: null }))).not.toBeNull();
+  });
+});
+
+describe("#2493 raw_storage.file_count", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  const makeDataDir = () => {
+    const d = mkdtempSync(join(tmpdir(), "raw-storage-count-"));
+    dirs.push(d);
+    return d;
+  };
+
+  it("counts zero when the raw-storage directory was never created", async () => {
+    const p: ExpectedAssertion = { type: "raw_storage.file_count", op: "eq", value: 0 };
+    expect(await evaluatePredicate(p, ctx({ dataDir: makeDataDir() }))).toBeNull();
+  });
+
+  it("counts files recursively and ignores files outside the raw-storage directory", async () => {
+    const d = makeDataDir();
+    mkdirSync(join(d, "sources", "user_1"), { recursive: true });
+    writeFileSync(join(d, "sources", "user_1", "hash_a"), "a");
+    writeFileSync(join(d, "sources", "user_1", "hash_b"), "b");
+    writeFileSync(join(d, "neotoma.db"), "not raw storage");
+    const eq2: ExpectedAssertion = { type: "raw_storage.file_count", op: "eq", value: 2 };
+    expect(await evaluatePredicate(eq2, ctx({ dataDir: d }))).toBeNull();
+    const eq0: ExpectedAssertion = { type: "raw_storage.file_count", op: "eq", value: 0 };
+    const fail = await evaluatePredicate(eq0, ctx({ dataDir: d }));
+    expect(fail).not.toBeNull();
+    expect(fail!.message).toContain("got 2");
+  });
+
+  it("fails closed when no data dir was provided", async () => {
+    const p: ExpectedAssertion = { type: "raw_storage.file_count", op: "eq", value: 0 };
+    expect(await evaluatePredicate(p, ctx())).not.toBeNull();
   });
 });
