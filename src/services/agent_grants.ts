@@ -1151,10 +1151,15 @@ async function writeGrantEntity(params: InternalGrantWrite): Promise<AgentGrant>
  * Scoped strictly to `entity_type === "agent_grant"` and the `capabilities`
  * field — every other entity_type and every other agent_grant field is a
  * no-op here, mirroring the `usage_digest` redaction guard's shape in
- * `actions.ts`. Throws {@link AgentGrantValidationError} (mapped to a 400
- * by the same envelope `createGrant`/`updateGrantFields` already produce)
- * before any row is written, so an invalid capability can never be stored
- * by ANY write surface — not only the two ergonomic helpers.
+ * `actions.ts`. Throws {@link AgentGrantValidationError} before any row is
+ * written (a 400 on the grants routes and `POST /correct`; `POST /store`
+ * surfaces it as a 500 `DB_QUERY_FAILED`; MCP `correct` as JSON-RPC -32603),
+ * so an invalid capability is not stored by the
+ * surfaces that call this guard (and the two ergonomic helpers). It is NOT
+ * called on every insert: the MCP structured `store` path and the
+ * interpretation paths (MCP `create_interpretation`, `POST
+ * /interpretations/create`) insert observations without it, so reads
+ * re-validate (`snapshotToGrant`) and fail closed on a stored invalid shape.
  */
 export function assertAgentGrantFieldValid(
   entityType: string,

@@ -374,23 +374,37 @@ key perform a fixed purpose and nothing else. It is **declared, not accepted**:
 no build admits it yet, and it never covers anything through the legacy
 capability checks above.
 
-- **Refused at write** (`agent_grant_invalid`, field `capabilities[i].op`):
-  `POST /agents/grants`, `PATCH /agents/grants/{id}`, `POST /store`,
-  `POST /correct`, MCP `correct`.
-- **Not refused at write:** MCP `store` (structured path). It inserts the
-  observation without running the grant validator, so a v1-shaped `agent_grant`
-  entity can be persisted through it. The entity is inert: every read
-  re-validates it, rejects it, and resolves it to no grant, so admission fails
-  closed. Adding the validator call to that insert is a separate, small change
-  that belongs with the owner-only write guard.
+- **Refused at write** (the validator rejects the v1 entry; message and field
+  `capabilities[0].op`), with the error each surface returns today:
+  `POST /agents/grants` and `PATCH /agents/grants/{id}` answer HTTP 400
+  `error_code` `AGENT_GRANT_INVALID` (`details.code` `agent_grant_invalid`);
+  `POST /correct` answers HTTP 400 `error_code` `agent_grant_invalid`;
+  `POST /store` answers HTTP 500 `DB_QUERY_FAILED` carrying the validator
+  message; MCP `correct` answers JSON-RPC `-32603` carrying the validator
+  message and no code. Only the first three return an `agent_grant_invalid`
+  code. See [`errors.md`](errors.md#agent-capability-v1-errors-reserved).
+- **Not refused at write:** MCP `store` (structured path), MCP
+  `create_interpretation` and `POST /interpretations/create`. They insert the
+  observation directly, without the grant validator or the protected-type
+  check, so a v1-shaped `agent_grant` entity can be persisted through any of
+  them. The entity is inert: every read re-validates it, rejects it, and
+  resolves it to no grant, so admission fails closed. Closing these paths
+  (the validator call on each insert, plus the owner-session guard) belongs
+  with the owner-only write guard, at every insertion entrance.
 - **Enable gate.** Before any change makes the validator accept the v1 shape,
   it must reject (or ignore) every v1-shaped grant observation that already
-  exists. Without that, an entity planted through the MCP `store` path by a
-  principal holding the legacy `agent_grant` store capability would become a
-  live candidate the moment the validator starts accepting v1, without ever
-  passing an owner-session check. The enabling change carries a test that
-  seeds such an observation directly and asserts it confers no authority after
-  enabling.
+  exists, from whichever path wrote it. Without that, an entity planted
+  through any non-refusing path by any principal able to reach it would become
+  a live candidate the moment the validator starts accepting v1, without ever
+  passing an owner-session check. After enabling, the field-shape guard no
+  longer protects (v1 becomes a valid shape), so the owner-session guard must
+  sit at every insertion entrance, including MCP `store` and
+  `create_interpretation`. The test `ENABLE GATE: a v1-shaped grant
+  observation seeded past every write guard confers no authority` in
+  `tests/integration/agent_capability_v1_inert.test.ts` is live now and goes
+  red when the validator starts accepting v1, so the enabling change cannot
+  skip the gate silently; it must change that test deliberately, with the
+  gate satisfied.
 - `agent_grant` schema 1.1.0 declares `valid_from` / `valid_until` as plain
   strings. Nothing reads them. On an instance whose active schema is 1.1.0 (a
   fresh instance, or one where an owner registered 1.1.0) a raw `store` or

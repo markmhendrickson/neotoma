@@ -263,30 +263,98 @@ describe("contract integrity", () => {
 
 describe("statements about which surfaces refuse a v1-shaped grant are honest", () => {
   const collapse = (t: string) => t.replace(/\s+/g, " ");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
   const entryDescription: string = collapse(schemas.AgentCapabilityEntry.description);
-  const errorsIntro = errorsMd.slice(
-    errorsMd.indexOf("### Agent Capability v1 Errors (reserved)"),
-    errorsMd.indexOf("All of these ride in")
+  const errorsIntro = collapse(
+    errorsMd.slice(
+      errorsMd.indexOf("### Agent Capability v1 Errors (reserved)"),
+      errorsMd.indexOf("All of these ride in")
+    )
+  );
+  const capabilitiesMdFull = readFileSync(
+    join(root, "docs/subsystems/agent_capabilities.md"),
+    "utf-8"
+  );
+  const capabilitiesMd = collapse(
+    capabilitiesMdFull.slice(capabilitiesMdFull.indexOf("## Reserved: agent_capability_v1"))
+  );
+  const grantsSource = readFileSync(join(root, "src/services/agent_grants.ts"), "utf-8");
+  const guardComment = collapse(
+    grantsSource
+      .slice(
+        grantsSource.lastIndexOf(
+          "/**",
+          grantsSource.indexOf("export function assertAgentGrantFieldValid")
+        ),
+        grantsSource.indexOf("export function assertAgentGrantFieldValid")
+      )
+      .replace(/\n\s*\*\s?/g, " ")
   );
 
+  // The per-surface partition, as the docs state it and the integration suite pins it.
+  const partition = [
+    "POST /agents/grants",
+    "PATCH /agents/grants/{id}",
+    "POST /correct",
+    "POST /store",
+    "MCP `correct`",
+    "MCP `store`",
+    "create_interpretation",
+    "POST /interpretations/create",
+  ];
+
+  it("the OpenAPI description states the contract only, not an inventory of internal write paths", () => {
+    expect(entryDescription).toMatch(/RESERVED/);
+    expect(entryDescription).toMatch(/AGENT_GRANT_INVALID/);
+    expect(entryDescription).toMatch(/fails? closed|no authority/i);
+    for (const internal of [
+      "POST /store",
+      "POST /correct",
+      "MCP `store`",
+      "create_interpretation",
+    ]) {
+      expect(entryDescription, internal).not.toContain(internal);
+    }
+  });
+
   for (const [label, text] of [
-    ["the AgentCapabilityEntry description", entryDescription],
     ["the errors.md section intro", errorsIntro],
+    ["the agent_capabilities.md reserved section", capabilitiesMd],
   ] as const) {
-    it(`${label} names the surfaces that refuse and the MCP store exception`, () => {
-      for (const surface of [
-        "POST /agents/grants",
-        "PATCH /agents/grants",
-        "POST /store",
-        "POST /correct",
-      ]) {
-        expect(text, surface).toContain(surface);
-      }
-      expect(text).toMatch(/MCP `store`/);
-      expect(text).toMatch(/fails? closed|no authority/i);
-      expect(text).not.toMatch(/every write surface/i);
+    it(`${label} names every surface, the non-refusing ones, and the fail-closed read`, () => {
+      for (const surface of partition) expect(text, surface).toContain(surface);
+      expect(text).toMatch(/not refused|\*\*Not refused/i);
+      expect(text).toMatch(/fails? closed|no authority|no grant/i);
+    });
+
+    it(`${label} states the real error each refusing surface returns`, () => {
+      expect(text).toContain("AGENT_GRANT_INVALID");
+      expect(text).toContain("DB_QUERY_FAILED");
+      expect(text).toContain("-32603");
+      // Only the grants routes and /correct return an agent_grant_invalid code.
+      expect(text).toMatch(/`agent_grant_invalid`/);
     });
   }
+
+  it("the enable gate is widened beyond one principal and one path, and names the live test", () => {
+    expect(capabilitiesMd).toMatch(/any principal able to reach it/);
+    expect(capabilitiesMd).toMatch(/every insertion entrance/);
+    expect(capabilitiesMd).toContain("ENABLE GATE");
+    expect(capabilitiesMd).not.toMatch(/legacy `agent_grant` store capability/);
+  });
+
+  it("no document or code comment claims a guard on every or any write surface", () => {
+    for (const [name, text] of [
+      ["openapi.yaml", entryDescription],
+      ["errors.md", errorsMd],
+      ["agent_capabilities.md", capabilitiesMdFull],
+      ["agent_grants.ts guard comment", guardComment],
+    ] as const) {
+      expect(text, name).not.toMatch(/every write surface|any write surface|can never be stored/i);
+    }
+    expect(guardComment).toMatch(/NOT called on every insert/);
+    expect(guardComment).toContain("create_interpretation");
+  });
 
   it("the reserved attribution keys state their guest visibility and that they are not proof", () => {
     for (const key of ["grant_id", "grant_revision", "capability_id", "capability_digest"]) {

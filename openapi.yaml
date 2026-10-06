@@ -1348,18 +1348,17 @@ components:
         distinct wire shape and never a legacy entry plus extra keys.
 
         RESERVED, not accepted by this build. The grant validator accepts only
-        the legacy branch and refuses a v1 entry with `agent_grant_invalid`
-        (reported at `capabilities[i].op`) on these write surfaces: `POST
-        /agents/grants`, `PATCH /agents/grants/{id}`, `POST /store`, `POST
-        /correct` and the MCP `correct` tool. It is NOT refused on the MCP
-        `store` tool: that structured path inserts the observation without
-        running the validator, so a v1-shaped `agent_grant` entity can be
-        persisted there. Such an entity confers no authority: every read
-        re-validates it, rejects it, and resolves it to no grant (admission
-        fails closed). Enabling the v1 shape is gated on first rejecting any
-        v1-shaped grant observation that already exists. The branch is
-        declared first so the contract, generated types and error vocabulary
-        land before the enforcement they describe.
+        the legacy branch, so `POST /agents/grants` and `PATCH
+        /agents/grants/{id}` refuse a v1 entry (HTTP 400, `error_code`
+        `AGENT_GRANT_INVALID`). A v1-shaped grant that reaches storage by any
+        other path confers no authority: every read re-validates it, rejects
+        it, and resolves it to no grant (admission fails closed). Which
+        internal write paths refuse and which do not is documented in
+        `docs/subsystems/agent_capabilities.md`, not in this contract.
+        Enabling the v1 shape is gated on first rejecting any v1-shaped grant
+        observation that already exists. The branch is declared first so the
+        contract, generated types and error vocabulary land before the
+        enforcement they describe.
       oneOf:
         - $ref: "#/components/schemas/AgentCapabilityEntryLegacy"
         - $ref: "#/components/schemas/AgentCapabilityEntryV1"
