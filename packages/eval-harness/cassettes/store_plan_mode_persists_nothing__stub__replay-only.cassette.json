@@ -1,0 +1,88 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_plan_mode_persists_nothing",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-06T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Preview what storing a contact and a note file would do, without saving anything.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user asks for a preview, call store with commit false for every shape (entities, file, entities plus file, file by reference) and never persist. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "commit": false,
+        "idempotency_key": "plan-structured",
+        "entities": [
+          {
+            "entity_type": "contact",
+            "name": "plan structured",
+            "email": "plan@example.invalid"
+          }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"success\":true,\"replayed\":false,\"commit\":false,\"source_id\":null,\"entities_created\":0,\"observations_created\":0,\"entities\":[{\"entity_id\":\"ent_plan_struct\",\"entity_type\":\"contact\",\"observation_id\":null,\"observation_index\":0,\"action\":\"would_create\",\"canonical_name\":\"plan structured\",\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\",\"entity_snapshot_after\":null}],\"relationships_created\":[]}"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "commit": false,
+        "idempotency_key": "plan-file",
+        "file_content": "cGxhbi1tb2RlIHByb2JlOiB0aGVzZSBieXRlcyBtdXN0IG5ldmVyIHJlYWNoIHJhdyBzdG9yYWdlCg==",
+        "mime_type": "text/plain",
+        "original_filename": "plan-file.txt"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"commit\":false,\"source_id\":null,\"content_hash\":\"8ba57c2758d96e977ab5e7d77d538f5a77981cb66b4f20b03861d06ce00915cd\",\"file_size\":58,\"deduplicated\":false,\"entities_created\":0,\"observations_created\":0}"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "commit": false,
+        "idempotency_key": "plan-combined",
+        "file_idempotency_key": "plan-combined-file",
+        "entities": [
+          {
+            "entity_type": "contact",
+            "name": "plan combined",
+            "email": "plan@example.invalid"
+          }
+        ],
+        "file_content": "cGxhbi1tb2RlIHByb2JlOiB0aGVzZSBieXRlcyBtdXN0IG5ldmVyIHJlYWNoIHJhdyBzdG9yYWdlCg==",
+        "mime_type": "text/plain",
+        "original_filename": "plan-combined.txt"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"structured\":{\"success\":true,\"replayed\":false,\"commit\":false,\"source_id\":null,\"entities_created\":0,\"observations_created\":0,\"entities\":[{\"entity_id\":\"ent_plan_combined\",\"entity_type\":\"contact\",\"observation_id\":null,\"observation_index\":0,\"action\":\"would_create\",\"canonical_name\":\"plan combined\",\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\",\"entity_snapshot_after\":null}],\"relationships_created\":[]},\"unstructured\":{\"commit\":false,\"source_id\":null,\"content_hash\":\"8ba57c2758d96e977ab5e7d77d538f5a77981cb66b4f20b03861d06ce00915cd\",\"file_size\":58,\"deduplicated\":false,\"entities_created\":0,\"observations_created\":0}}"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "commit": false,
+        "idempotency_key": "plan-reference",
+        "file_path": "package.json",
+        "mime_type": "application/json",
+        "source_storage": "reference"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"commit\":false,\"source_id\":null,\"storage_mode\":\"reference\",\"reference_path\":\"package.json\",\"mime_type\":\"application/json\"}"
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "Previewed all four store shapes in plan mode; nothing was saved."
+}

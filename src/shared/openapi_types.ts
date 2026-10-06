@@ -4438,10 +4438,13 @@ export interface components {
       /**
        * @description Present when the request used reference storage
        *     (`source_storage: "reference"`), for both a committed store and a
-       *     plan-mode (`commit: false`) preview. Indicates the response
-       *     describes a reference-mode result rather than the inline-mode
-       *     shape (`content_hash` / `file_size` / `entities_created` /
-       *     `observations_created`).
+       *     plan-mode (`commit: false`) preview. A reference-mode response
+       *     carries `storage_mode`, `reference_path` and `mime_type`; a
+       *     committed one also carries `content_hash` and `file_size`, while a
+       *     plan-mode preview carries neither. Inline-mode responses omit
+       *     `storage_mode` and carry `content_hash`, `file_size`,
+       *     `deduplicated`, `entities_created` and `observations_created`
+       *     (plan mode: `source_id` is `null`).
        * @enum {string}
        */
       storage_mode?: "reference";

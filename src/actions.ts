@@ -8060,8 +8060,7 @@ export async function storeStructuredForApi(params: {
   // inside `if (commit)` blocks further down (observation creation, event
   // emission, auto-linking), so a null placeholder here is never written to
   // a row; pass 1 entity resolution (resolveEntityWithTrace, below) takes no
-  // source id at all. See docs note at the top of this function and
-  // "--plan/--dry-run performs no source writes".
+  // source id at all.
   const storageResult = commit
     ? await storeRawContent({
         userId,

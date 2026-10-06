@@ -46,7 +46,7 @@
  *     restructuring the shared test server.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { randomUUID } from "crypto";
@@ -117,6 +117,10 @@ describe("store --plan / --dry-run perform no source writes (structured + unstru
   beforeAll(async () => {
     testDir = join(tmpdir(), `neotoma-cli-plan-mode-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
   });
 
   afterEach(async () => {

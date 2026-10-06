@@ -33,15 +33,17 @@ import { tmpdir } from "os";
 import { config } from "../../src/config.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
-import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { cleanupAllTestData } from "../helpers/cleanup_helpers.js";
 import { createMinimalTestParquet, createTestParquetFile } from "../helpers/create_test_parquet.js";
 
-const TEST_USER_ID = LOCAL_DEV_USER_ID;
-
-function makeMcpServer(): NeotomaServer {
+/**
+ * A server authenticated as `userId`. Every test mints its own random user so
+ * row counts are hermetic (nothing else writing to the shared vitest DB can
+ * move them) and cleanup touches only rows this test owns.
+ */
+function makeMcpServer(userId: string): NeotomaServer {
   const server = new NeotomaServer();
-  (server as unknown as { authenticatedUserId: string }).authenticatedUserId = TEST_USER_ID;
+  (server as unknown as { authenticatedUserId: string }).authenticatedUserId = userId;
   return server;
 }
 
@@ -63,31 +65,33 @@ async function countSourcesForUser(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-async function cleanupSourcesForUser(userId: string): Promise<void> {
-  const { data: leftoverSources } = await db.from("sources").select("id").eq("user_id", userId);
-  const leftoverIds = (leftoverSources ?? []).map((s: { id: string }) => s.id);
-  if (leftoverIds.length > 0) {
-    await db.from("observations").delete().in("source_id", leftoverIds);
-    await db.from("sources").delete().in("id", leftoverIds);
-  }
-}
-
 describe("MCP store tool: commit:false performs no source writes (by-reference + inline unstructured)", () => {
   let testDir: string;
+  let userId: string;
+  let server: NeotomaServer;
 
   beforeAll(async () => {
-    testDir = join(tmpdir(), `neotoma-mcp-plan-mode-test-${Date.now()}`);
+    testDir = join(tmpdir(), `neotoma-mcp-plan-mode-test-${randomUUID()}`);
     await mkdir(testDir, { recursive: true });
   });
 
+  beforeEach(() => {
+    userId = randomUUID();
+    server = makeMcpServer(userId);
+  });
+
   afterEach(async () => {
-    await cleanupSourcesForUser(TEST_USER_ID);
+    // Only rows owned by this test's unique user are removed.
+    await cleanupUser(userId);
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
   });
 
   describe("by-reference leg (source_storage: 'reference')", () => {
     it("commit:false leaves the sources table untouched and nulls source_id", async () => {
-      const server = makeMcpServer();
-      const before = await countSourcesForUser(TEST_USER_ID);
+      const before = await countSourcesForUser(userId);
 
       const testFile = join(testDir, `mcp-plan-mode-reference-${randomUUID()}.txt`);
       await writeFile(testFile, `MCP plan mode by-reference probe ${randomUUID()}`);
@@ -110,12 +114,11 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
       // same way storeRawReference does under commit:true, not echo undefined.
       expect(result.mime_type).toBe("text/plain");
 
-      const after = await countSourcesForUser(TEST_USER_ID);
+      const after = await countSourcesForUser(userId);
       expect(after - before).toBe(0);
     });
 
     it("commit:true (default) uses the same 'path' key — control case proving parity across commit values", async () => {
-      const server = makeMcpServer();
 
       const testFile = join(testDir, `mcp-commit-true-reference-${randomUUID()}.txt`);
       await writeFile(testFile, `MCP commit:true by-reference control probe ${randomUUID()}`);
@@ -134,8 +137,7 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
 
   describe("inline unstructured leg (file_content, no entities)", () => {
     it("commit:false leaves the sources table untouched and nulls source_id", async () => {
-      const server = makeMcpServer();
-      const before = await countSourcesForUser(TEST_USER_ID);
+      const before = await countSourcesForUser(userId);
 
       const content = `MCP plan mode inline probe ${randomUUID()}`;
 
@@ -152,13 +154,12 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
       expect(result.entities_created).toBe(0);
       expect(result.observations_created).toBe(0);
 
-      const after = await countSourcesForUser(TEST_USER_ID);
+      const after = await countSourcesForUser(userId);
       expect(after - before).toBe(0);
     });
 
     it("commit:true (default) still writes — control case proving the assertion above is not vacuous", async () => {
-      const server = makeMcpServer();
-      const before = await countSourcesForUser(TEST_USER_ID);
+      const before = await countSourcesForUser(userId);
 
       const content = `MCP commit:true control probe ${randomUUID()}`;
 
@@ -171,25 +172,24 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
 
       expect(result.source_id).toBeTruthy();
 
-      const after = await countSourcesForUser(TEST_USER_ID);
+      const after = await countSourcesForUser(userId);
       expect(after - before).toBe(1);
     });
   });
 
   describe("parquet ingest leg", () => {
     it("commit:false plans parquet entities without creating observations", async () => {
-      const server = makeMcpServer();
       const parquetPath = join(testDir, `mcp_plan_${randomUUID()}.parquet`);
       await createMinimalTestParquet(parquetPath);
       const observationsBefore = await db
         .from("observations")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", TEST_USER_ID);
+        .eq("user_id", userId);
       if (observationsBefore.error) throw observationsBefore.error;
       const entitiesBefore = await db
         .from("entities")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", TEST_USER_ID);
+        .eq("user_id", userId);
       if (entitiesBefore.error) throw entitiesBefore.error;
 
       const result = await callStore(server, {
@@ -203,12 +203,12 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
       const observationsAfter = await db
         .from("observations")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", TEST_USER_ID);
+        .eq("user_id", userId);
       if (observationsAfter.error) throw observationsAfter.error;
       const entitiesAfter = await db
         .from("entities")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", TEST_USER_ID);
+        .eq("user_id", userId);
       if (entitiesAfter.error) throw entitiesAfter.error;
       expect((observationsAfter.count ?? 0) - (observationsBefore.count ?? 0)).toBe(0);
       expect((entitiesAfter.count ?? 0) - (entitiesBefore.count ?? 0)).toBe(0);
@@ -217,7 +217,6 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
 
   describe("overflow intake leg", () => {
     it("commit:false returns a plan receipt without creating the overflow sink", async () => {
-      const server = makeMcpServer();
       const sinkPath = join(testDir, `overflow-${randomUUID()}.jsonl`);
       const previousSink = process.env.NEOTOMA_OVERFLOW_SINK;
       process.env.NEOTOMA_OVERFLOW_SINK = sinkPath;
@@ -239,7 +238,6 @@ describe("MCP store tool: commit:false performs no source writes (by-reference +
     });
 
     it("commit:true (default) still appends to the overflow sink", async () => {
-      const server = makeMcpServer();
       const sinkPath = join(testDir, `overflow-${randomUUID()}.jsonl`);
       const previousSink = process.env.NEOTOMA_OVERFLOW_SINK;
       process.env.NEOTOMA_OVERFLOW_SINK = sinkPath;
@@ -340,8 +338,7 @@ describe("MCP store tool: effect-level plan mode for combined, entities-only, pa
 
   beforeEach(() => {
     userId = randomUUID();
-    server = makeMcpServer();
-    (server as unknown as { authenticatedUserId: string }).authenticatedUserId = userId;
+    server = makeMcpServer(userId);
   });
 
   afterEach(async () => {
