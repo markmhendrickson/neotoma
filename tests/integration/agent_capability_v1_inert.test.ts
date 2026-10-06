@@ -28,7 +28,17 @@
  *   - ENABLE GATE: a v1-shaped grant observation that already exists (however
  *     it got there) must still confer no authority. That test is live now and
  *     must be changed deliberately by the change that makes the validator
- *     accept v1.
+ *     accept v1. Its seed is a complete, contract-conformant v1 grant (pins and
+ *     validity window set), so a spec-conformant enabler cannot reject it for
+ *     an unrelated reason.
+ *
+ * The "persisted or refused" tests for the non-refusing surfaces accept either
+ * outcome, so they do NOT by themselves detect a future change that makes one of
+ * those surfaces refuse. That change must update this file and
+ * docs/subsystems/agent_capabilities.md together.
+ *
+ * The effect of the 1.1.0 schema on valid_from / valid_until (storage, timeline,
+ * read-back) is covered by agent_grant_validity_fields_effect.test.ts.
  *
  * A legacy-shaped grant must keep behaving exactly as before, including
  * ignoring the reserved validity fields on the grants routes.
@@ -49,8 +59,13 @@ import {
 import { db } from "../../src/db.js";
 import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
 import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
-import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { cleanupTestEntities } from "../helpers/cleanup_helpers.js";
+import {
+  V1_FIXTURE_ISS,
+  V1_FIXTURE_SUB,
+  conformantV1GrantFields,
+  v1CapabilityFor,
+} from "../helpers/agent_capability_v1_fixture.js";
 
 const OWNER = LOCAL_DEV_USER_ID;
 const LEGACY_CAPS = [{ op: "retrieve", entity_types: ["task"] }];
@@ -69,27 +84,7 @@ function lowercaseThumbprint(): string {
   return randomBytes(32).toString("hex");
 }
 
-function v1Capability(): Record<string, unknown> {
-  return {
-    op: "agent_capability_v1",
-    capability_id: "cap-1",
-    purpose: { name: "example_purpose", version: "1" },
-    delegation_chain: [],
-    param_constraints: {
-      contract_version: 1,
-      operation_ids: ["store"],
-      owner: { user_id: OWNER },
-      source_bytes: [{ sha256: "a".repeat(64), byte_length: 12, mime_type: "text/plain" }],
-      sources: [],
-      entities: {
-        entity_type: "configuration",
-        composite: { system: "example", key: "example" },
-        bound_fields: { schema_version: 1 },
-        max_observations: 10,
-      },
-    },
-  };
-}
+const v1Capability = () => v1CapabilityFor(OWNER);
 
 async function send(path: string, body: unknown, method = "POST") {
   const res = await fetch(`${apiBase}${path}`, {
@@ -119,8 +114,8 @@ function codeOf(body: Record<string, any>): string | undefined {
   return body.error_code;
 }
 
-const AGENT_SUB = "agent@example.com";
-const AGENT_ISS = "https://agent.example.com";
+const AGENT_SUB = V1_FIXTURE_SUB;
+const AGENT_ISS = V1_FIXTURE_ISS;
 
 /**
  * The invariant every non-refusing surface must keep: the key resolves to no
@@ -132,8 +127,13 @@ async function expectNoAuthority(tp: string, storedEntityId: string | null) {
   expect(lookup.grant).toBeNull();
   expect(lookup.inactive_grant).toBeNull();
   if (storedEntityId) {
+    // Persisted: the read side must reject it, by name.
     expect(lookup.invalid_grant_id).toBe(storedEntityId);
     await expect(getGrant(OWNER, storedEntityId)).rejects.toThrow(/capabilities\[0\]\.op/);
+  } else {
+    // Refused at write: nothing was stored, so nothing is flagged or pinned either.
+    expect(lookup.invalid_grant_id).toBeNull();
+    expect(await pinnedBy(tp)).toHaveLength(0);
   }
 }
 
@@ -438,19 +438,22 @@ describe("agent_capability_v1 is declared but confers no authority", () => {
       observed_at: now,
       specificity_score: 1,
       source_priority: 1000,
-      fields: {
-        label: "v1-gate",
-        status: "active",
-        capabilities: [v1Capability()],
-        match_thumbprint: tp,
-        match_sub: AGENT_SUB,
-        match_iss: AGENT_ISS,
-      },
+      fields: conformantV1GrantFields(OWNER, tp),
       user_id: OWNER,
       created_at: now,
     });
     if (error) throw new Error(`seed observation: ${error.message}`);
     await recomputeSnapshot(entityId, OWNER);
+
+    // The seed must be a COMPLETE v1 grant as the contract defines it, and it must
+    // reach the snapshot that way, so a future validator that accepts v1 and
+    // enforces the pins and the validity window cannot reject it for a wrong
+    // reason and leave this test green. (Under the active schema 1.1.0 the
+    // validity fields are declared, so they are in the snapshot.)
+    const seeded = (await getEntityWithProvenance(entityId))?.snapshot ?? {};
+    for (const key of ["match_thumbprint", "match_sub", "match_iss", "valid_from", "valid_until"]) {
+      expect(seeded[key], `seeded snapshot carries ${key}`).toBeTruthy();
+    }
 
     await expectNoAuthority(tp, entityId);
   });
@@ -475,40 +478,5 @@ describe("agent_capability_v1 is declared but confers no authority", () => {
     const stored = await getGrant(OWNER, body.grant.grant_id as string);
     expect(stored).not.toHaveProperty("valid_from");
     expect(stored).not.toHaveProperty("valid_until");
-  });
-
-  it("raw /store of valid_from follows the ACTIVE schema: stored verbatim on 1.1.0, dropped before", async () => {
-    const tp = thumbprint();
-    const garbage = "not-a-date";
-    const { status, body } = await send("/store", {
-      idempotency_key: `v1-inert-validity-${randomUUID()}`,
-      entities: [
-        {
-          entity_type: "agent_grant",
-          label: "legacy-with-validity",
-          status: "active",
-          capabilities: LEGACY_CAPS,
-          match_thumbprint: tp,
-          valid_from: garbage,
-        },
-      ],
-    });
-    expect(status).toBeLessThan(300);
-    const entityId = body.structured?.entities?.[0]?.entity_id ?? body.entities?.[0]?.entity_id;
-    expect(typeof entityId).toBe("string");
-    created.push(entityId);
-
-    const active = await schemaRegistry.loadActiveSchema("agent_grant");
-    const declared = Boolean(active?.schema_definition.fields.valid_from);
-    const snapshot = (await getEntityWithProvenance(entityId))?.snapshot ?? {};
-    if (declared) {
-      // The field is declared as a plain string, so the value is kept exactly as
-      // sent and is NOT validated here (validation belongs to the v1 validator).
-      expect(snapshot.valid_from).toBe(garbage);
-    } else {
-      expect(snapshot).not.toHaveProperty("valid_from");
-    }
-    // Either way nothing reads the field: the grant is still an ordinary legacy grant.
-    expect((await getGrant(OWNER, entityId))?.capabilities).toEqual(LEGACY_CAPS);
   });
 });

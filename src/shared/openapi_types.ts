@@ -3633,14 +3633,18 @@ export interface components {
       /**
        * @description RESERVED for `agent_capability_v1`. Start of the grant's validity
        *     window, RFC 3339 normalised to UTC with a `Z` suffix. Null on a
-       *     grant with no v1 capability. This build neither stores nor
-       *     enforces it.
+       *     grant with no v1 capability. The grant-management routes do not
+       *     return, store, validate or enforce it in this build; a raw write
+       *     can retain it as an unvalidated plain string only where
+       *     `agent_grant` schema 1.1.0 is active, and nothing reads it.
        */
       valid_from?: string | null;
       /**
        * @description RESERVED for `agent_capability_v1`. End (exclusive) of the grant's
        *     validity window, normalised like `valid_from`. Null on a grant
-       *     with no v1 capability. This build neither stores nor enforces it.
+       *     with no v1 capability. Same status as `valid_from`: not returned,
+       *     stored, validated or enforced by the grant-management routes in
+       *     this build.
        */
       valid_until?: string | null;
       notes?: string | null;
@@ -3663,7 +3667,10 @@ export interface components {
      *     canonical form (no surrounding whitespace), and the validity window is
      *     supplied by the issuing owner with no default. This build refuses the
      *     v1 capability shape outright, so those requirements are not yet
-     *     enforced, and `valid_from` / `valid_until` are ignored.
+     *     enforced. The grant-management routes do not store, validate or
+     *     enforce `valid_from` / `valid_until` in this build (a raw write can
+     *     retain them as unvalidated strings only where `agent_grant` schema
+     *     1.1.0 is active; nothing reads them).
      */
     AgentGrantCreate: {
       label: string;
@@ -3677,16 +3684,16 @@ export interface components {
       match_iss?: string | null;
       match_thumbprint?: string | null;
       /**
-       * @description RESERVED for `agent_capability_v1`; ignored by this build.
-       *     RFC 3339 with uppercase `T` and `Z` or a mandatory `+hh:mm` /
+       * @description RESERVED for `agent_capability_v1`. Not stored, validated or
+       *     enforced by this route in this build. RFC 3339 with uppercase `T` and `Z` or a mandatory `+hh:mm` /
        *     `-hh:mm` offset; any other form (date-only, no offset, lowercase,
        *     locale text) will be refused. Normalised to UTC `Z` before storage
        *     and compared by instant.
        */
       valid_from?: string | null;
       /**
-       * @description RESERVED for `agent_capability_v1`; ignored by this build. Same
-       *     format as `valid_from`. Must be later than `valid_from`.
+       * @description RESERVED for `agent_capability_v1`. Not stored, validated or
+       *     enforced by this route in this build. Same format as `valid_from`. Must be later than `valid_from`.
        */
       valid_until?: string | null;
       notes?: string | null;
@@ -3705,8 +3712,8 @@ export interface components {
      *     set of safety-bearing keys (`status`, `match_thumbprint`, `match_sub`,
      *     `match_iss`, `capabilities`, `valid_from`, `valid_until`) and is
      *     written as one observation. This build refuses the v1 capability
-     *     shape, so that rule is not yet enforced, and `valid_from` /
-     *     `valid_until` are ignored.
+     *     shape, so that rule is not yet enforced. This route does not store,
+     *     validate or enforce `valid_from` / `valid_until` in this build.
      */
     AgentGrantUpdate: {
       label?: string;
@@ -3715,9 +3722,9 @@ export interface components {
       match_sub?: string | null;
       match_iss?: string | null;
       match_thumbprint?: string | null;
-      /** @description RESERVED for `agent_capability_v1`; ignored by this build. See `AgentGrantCreate.valid_from`. */
+      /** @description RESERVED for `agent_capability_v1`. Not stored, validated or enforced by this route in this build. See `AgentGrantCreate.valid_from`. */
       valid_from?: string | null;
-      /** @description RESERVED for `agent_capability_v1`; ignored by this build. See `AgentGrantCreate.valid_until`. */
+      /** @description RESERVED for `agent_capability_v1`. Not stored, validated or enforced by this route in this build. See `AgentGrantCreate.valid_until`. */
       valid_until?: string | null;
     };
     Entity: {

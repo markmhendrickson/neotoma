@@ -3038,9 +3038,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     // `AgentCapabilityEntryV1`). Nothing in this build reads them. They are
     // plain strings, not `date`: a later digest needs the exact normalised
     // text, and `date` would not validate it anyway. Where 1.1.0 is the active
-    // schema, a raw store/correct keeps the value verbatim and unvalidated,
-    // and a value that looks like a date derives a timeline event by the
-    // generic heuristic, as `last_used_at` already does. Existing instances
+    // schema, a raw store/correct (HTTP or MCP) keeps the value verbatim and
+    // unvalidated, and a value that looks like a date derives a timeline event
+    // by the generic heuristic, as `last_used_at` already does (the MCP store
+    // path derives such events from submitted fields even where the active
+    // schema does not declare them). The grant-management routes
+    // (`/agents/grants`) never store these fields. Existing instances
     // keep their registered schema until an owner registers this version (the
     // boot seeder never replaces an active schema), so a grant with a v1
     // capability stays unusable there.

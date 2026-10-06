@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import yaml from "js-yaml";
 import { resolveOpenApiPath } from "../../src/shared/openapi_file.js";
+import { conformantV1GrantFields } from "../helpers/agent_capability_v1_fixture.js";
 
 type Json = Record<string, any>;
 
@@ -175,6 +176,41 @@ describe("the declared schema accepts exactly the shapes the contract describes"
       expect(validate(entry, bad).length).toBeGreaterThan(0);
     });
   }
+});
+
+describe("the shared v1 grant fixture is a COMPLETE, contract-conformant grant", () => {
+  const OWNER_ID = "00000000-0000-0000-0000-000000000001";
+  const fields = conformantV1GrantFields(OWNER_ID, "dGh1bWJwcmludA") as Record<string, any>;
+
+  it("carries every grant-level key the contract requires, non-null and canonical", () => {
+    for (const key of ["match_thumbprint", "match_sub", "match_iss"]) {
+      expect(typeof fields[key], key).toBe("string");
+      expect(fields[key].length, key).toBeGreaterThan(0);
+      expect(fields[key], key).toBe(fields[key].trim());
+    }
+    for (const key of ["valid_from", "valid_until"]) {
+      const pattern = schemas.AgentGrantCreate.properties[key].pattern as string;
+      expect(new RegExp(pattern).test(fields[key]), key).toBe(true);
+    }
+    expect(Date.parse(fields.valid_until)).toBeGreaterThan(Date.parse(fields.valid_from));
+    expect(fields.status).toBe("active");
+  });
+
+  it("its capability validates against the declared v1 branch, owned by the grant's owner", () => {
+    expect(fields.capabilities).toHaveLength(1);
+    expect(validate(schemas.AgentCapabilityEntry, fields.capabilities[0])).toEqual([]);
+    expect(fields.capabilities[0].param_constraints.owner.user_id).toBe(OWNER_ID);
+  });
+
+  it("the check can fail: dropping any required grant-level key is detected", () => {
+    for (const key of ["match_sub", "match_iss", "valid_from", "valid_until"]) {
+      const broken = { ...fields, [key]: null };
+      const complete = ["match_sub", "match_iss", "valid_from", "valid_until"].every(
+        (k) => typeof broken[k] === "string" && broken[k].length > 0
+      );
+      expect(complete, key).toBe(false);
+    }
+  });
 });
 
 describe("contract integrity", () => {
@@ -340,6 +376,8 @@ describe("statements about which surfaces refuse a v1-shaped grant are honest", 
     expect(capabilitiesMd).toMatch(/any principal able to reach it/);
     expect(capabilitiesMd).toMatch(/every insertion entrance/);
     expect(capabilitiesMd).toContain("ENABLE GATE");
+    expect(capabilitiesMd).toContain("agent_capability_v1_fixture");
+    expect(capabilitiesMd).toMatch(/do not by themselves detect/);
     expect(capabilitiesMd).not.toMatch(/legacy `agent_grant` store capability/);
   });
 
@@ -367,6 +405,31 @@ describe("statements about which surfaces refuse a v1-shaped grant are honest", 
   it("errors.md does not claim that no code carries a revision id while the conflict row does", () => {
     expect(errorsMd).toContain("current_last_observation_id");
     expect(errorsMd).not.toMatch(/None echoes a key, token, digest or revision id/);
+  });
+});
+
+describe("validity-field wording says what the grant routes and raw writes actually do", () => {
+  it("no grant schema description says the fields are merely ignored or that nothing changes", () => {
+    for (const name of ["AgentGrant", "AgentGrantCreate", "AgentGrantUpdate"]) {
+      for (const field of ["valid_from", "valid_until"]) {
+        const d: string = schemas[name].properties[field].description.replace(/\s+/g, " ");
+        expect(d, `${name}.${field}`).not.toMatch(/ignored by this build|no runtime/i);
+        expect(d, `${name}.${field}`).toMatch(/not (return|stored|store)/i);
+      }
+    }
+    const create: string = schemas.AgentGrantCreate.description.replace(/\s+/g, " ");
+    expect(create).toMatch(/schema 1\.1\.0 is active/);
+    expect(create).toMatch(/unvalidated strings/);
+  });
+
+  it("agent_capabilities.md states the schema effect precisely and never claims no runtime effects", () => {
+    const md = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../docs/subsystems/agent_capabilities.md"),
+      "utf-8"
+    );
+    expect(md).not.toMatch(/no runtime effect/i);
+    expect(md).toMatch(/under 1\.0\.0 the snapshot omits them/);
+    expect(md).toMatch(/derives a timeline event/);
   });
 });
 

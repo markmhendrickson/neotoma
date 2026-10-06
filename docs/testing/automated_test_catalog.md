@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **685**
-- Backend and repo Vitest files: **649**
+- Total automated test files: **686**
+- Backend and repo Vitest files: **650**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 186 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 201 |
+| Vitest integration tests | 202 |
 | Vitest CLI tests | 81 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -436,7 +436,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (201):**
+**Files (202):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -451,6 +451,7 @@ flowchart TD
 - `tests/integration/agent_capabilities_store.test.ts`
 - `tests/integration/agent_capability_v1_inert.test.ts`
 - `tests/integration/agent_grant_thumbprint_pin_uniqueness.test.ts`
+- `tests/integration/agent_grant_validity_fields_effect.test.ts`
 - `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`

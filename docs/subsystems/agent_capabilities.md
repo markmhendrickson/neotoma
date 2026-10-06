@@ -404,14 +404,30 @@ capability checks above.
   `tests/integration/agent_capability_v1_inert.test.ts` is live now and goes
   red when the validator starts accepting v1, so the enabling change cannot
   skip the gate silently; it must change that test deliberately, with the
-  gate satisfied.
+  gate satisfied. Its seed is a COMPLETE, contract-conformant v1 grant (all
+  three pins and the validity window set, shared fixture
+  `tests/helpers/agent_capability_v1_fixture.ts`, checked against the declared
+  schema), so an enabler that enforces the pins and the validity window cannot
+  reject it for an unrelated reason and leave the test green.
+- **Tolerance tests.** The tests for the non-refusing surfaces accept either
+  outcome (persisted or refused) and assert only that no authority results, so
+  they do not by themselves detect a future change that makes one of those
+  surfaces refuse. That change must update those tests and this section
+  together.
 - `agent_grant` schema 1.1.0 declares `valid_from` / `valid_until` as plain
-  strings. Nothing reads them. On an instance whose active schema is 1.1.0 (a
-  fresh instance, or one where an owner registered 1.1.0) a raw `store` or
-  `correct` of those fields is kept verbatim and unvalidated, and a value that
-  looks like a date can derive a timeline event, exactly as `last_used_at`
-  already does. Existing instances keep their registered schema until an owner
-  registers 1.1.0.
+  optional strings. Nothing reads them, and the grant-management routes
+  (`POST /agents/grants`, `PATCH /agents/grants/{id}`) neither return, store,
+  validate nor enforce them under any schema version. What changes is raw
+  writes (`/store`, `/correct`, MCP `store`, MCP `correct`): where 1.1.0 is the
+  active schema (a fresh instance, or one where an owner registered 1.1.0) they
+  keep both fields verbatim and unvalidated in the snapshot, and a date-shaped
+  value derives a timeline event, exactly as `last_used_at` already does;
+  under 1.0.0 the snapshot omits them. The MCP `store` path derives those
+  timeline events from the submitted fields even where the active schema does
+  not declare them, which predates 1.1.0. Existing instances keep their
+  registered schema until an owner registers 1.1.0. Covered, per version and
+  surface, by `tests/integration/agent_grant_validity_fields_effect.test.ts`
+  and the `agent_grant_validity_fields_effect` agentic-eval fixture.
 
 Error vocabulary: [`errors.md`](errors.md#agent-capability-v1-errors-reserved).
 
