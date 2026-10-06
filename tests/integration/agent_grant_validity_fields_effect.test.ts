@@ -14,7 +14,8 @@
  *     timeline event, exactly as `last_used_at` already does.
  *
  * Each case drives the surfaces in their natural call shapes (HTTP `/store`
- * and `/correct`, MCP `store` and `correct`) and reads back through both HTTP
+ * and `/correct`, MCP `store` and `correct`, and the real CLI `store` and
+ * `corrections create` run as a child process) and reads back through both HTTP
  * `GET /entities/:id` and MCP `retrieve_entity_snapshot`. In every case the
  * grant stays an ordinary legacy grant: a v1 capability is still refused and
  * confers no authority. The grants routes (`POST/PATCH /agents/grants`) do not
@@ -27,6 +28,12 @@
 
 import { createServer } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -73,6 +80,48 @@ function definitionAt(version: Version) {
 }
 
 let apiBase = "";
+let cliHome = "";
+
+const execFileAsync = promisify(execFile);
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const TSX_BIN = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
+const CLI_ENTRY = path.join(REPO_ROOT, "src", "cli", "index.ts");
+
+/**
+ * Run the real CLI from the reviewed source as a child process against the
+ * suite's loopback server. Asynchronous, because this process hosts that
+ * server. HOME points at an empty directory and transport/auth overrides from
+ * the operator's environment are dropped, so only `--base-url` decides where
+ * the command goes.
+ */
+async function cli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, HOME: cliHome, USERPROFILE: cliHome };
+  for (const name of [
+    "NEOTOMA_BASE_URL",
+    "NEOTOMA_BEARER_TOKEN",
+    "NEOTOMA_USER_ID",
+    "NEOTOMA_OFFLINE",
+    "NEOTOMA_API_ONLY",
+    "NEOTOMA_FORCE_LOCAL_TRANSPORT",
+  ]) {
+    delete childEnv[name];
+  }
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      TSX_BIN,
+      [CLI_ENTRY, "--json", "--api-only", "--base-url", apiBase, ...args],
+      { cwd: REPO_ROOT, env: childEnv, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }
+    );
+    return { code: 0, stdout, stderr };
+  } catch (err) {
+    const e = err as { code?: unknown; stdout?: string; stderr?: string };
+    return {
+      code: typeof e.code === "number" ? e.code : 1,
+      stdout: e.stdout ?? "",
+      stderr: e.stderr ?? "",
+    };
+  }
+}
 
 async function http(path: string, body?: unknown, method = body === undefined ? "GET" : "POST") {
   const res = await fetch(`${apiBase}${path}`, {
@@ -182,6 +231,7 @@ describe("agent_grant validity fields: storage follows the active schema version
     const address = httpServer.address();
     if (!address || typeof address === "string") throw new Error("no listen address");
     apiBase = `http://127.0.0.1:${address.port}`;
+    cliHome = await mkdtemp(path.join(tmpdir(), "neotoma-validity-cli-"));
   });
 
   afterEach(() => {
@@ -192,6 +242,7 @@ describe("agent_grant validity fields: storage follows the active schema version
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     await cleanupTestEntities(created);
     await clearUserSchemas();
+    if (cliHome) await rm(cliHome, { recursive: true, force: true });
   });
 
   /** Read the snapshot back through HTTP and through MCP; both must agree. */
@@ -325,6 +376,76 @@ describe("agent_grant validity fields: storage follows the active schema version
         expect(err.message).toMatch(/capabilities\[0\]\.op/);
       },
     },
+    {
+      name: "CLI store and corrections create",
+      // The CLI forwards both commands to HTTP /store and /correct.
+      derivesTimelineWithoutDeclaration: false,
+      async store(tp: string, extra: Record<string, unknown>) {
+        const entities = [
+          {
+            entity_type: "agent_grant",
+            label: "validity-cli",
+            status: "active",
+            capabilities: LEGACY_CAPS,
+            match_thumbprint: tp,
+            match_sub: AGENT_SUB,
+            match_iss: AGENT_ISS,
+            ...extra,
+          },
+        ];
+        const { code, stdout } = await cli([
+          "store",
+          "--entities",
+          JSON.stringify(entities),
+          "--idempotency-key",
+          `validity-cli-${randomUUID()}`,
+        ]);
+        expect(code, stdout).toBe(0);
+        const out = JSON.parse(stdout) as {
+          structured?: { entities?: Array<{ entity_id?: string }> };
+          entities?: Array<{ entity_id?: string }>;
+        };
+        return (out.structured?.entities?.[0]?.entity_id ?? out.entities?.[0]?.entity_id) as string;
+      },
+      async correct(entityId: string, field: string, value: unknown) {
+        const { code, stdout } = await cli([
+          "corrections",
+          "create",
+          "--entity-id",
+          entityId,
+          "--entity-type",
+          "agent_grant",
+          "--field-name",
+          field,
+          "--corrected-value",
+          typeof value === "string" ? value : JSON.stringify(value),
+          "--idempotency-key",
+          `validity-cli-correct-${randomUUID()}`,
+        ]);
+        expect(code, stdout).toBe(0);
+      },
+      async refuseV1(entityId: string) {
+        const { code, stdout, stderr } = await cli([
+          "corrections",
+          "create",
+          "--entity-id",
+          entityId,
+          "--entity-type",
+          "agent_grant",
+          "--field-name",
+          "capabilities",
+          "--corrected-value",
+          JSON.stringify([v1Capability()]),
+          "--idempotency-key",
+          `validity-cli-v1-${randomUUID()}`,
+        ]);
+        // The CLI reports HTTP's refusal as a generic failure; the exit code
+        // is the contract here, and legacyCheck() proves nothing changed. The
+        // message pins the failure to the /correct call, not argument parsing.
+        expect(code).not.toBe(0);
+        expect(`${stdout}\n${stderr}`).toMatch(/Failed to create correction/);
+      },
+    },
   ];
 
   for (const version of ["1.0.0", "1.1.0"] as const) {
@@ -391,7 +512,7 @@ describe("agent_grant validity fields: storage follows the active schema version
           await surface.refuseV1(entityId);
           await legacyCheck();
           ran.add(`${version}:${surface.name}`);
-        });
+        }, 300_000);
       }
 
       it("the grants routes do not store or enforce the validity fields", async () => {
