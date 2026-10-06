@@ -111,11 +111,11 @@ describe("jcs canonicalise: RFC 8785 reference examples (literal expectations)",
     const input = {
       "€": "Euro Sign",
       "\r": "Carriage Return",
-      "דּ": "Hebrew Letter Dalet With Dagesh",
+      דּ: "Hebrew Letter Dalet With Dagesh",
       "1": "One",
       "\u{1f600}": "Emoji: Grinning Face",
       "\u0080": "Control",
-      "ö": "Latin Small Letter O With Diaeresis",
+      ö: "Latin Small Letter O With Diaeresis",
     };
     expect(canonicalise(input)).toBe(
       '{"\\r":"Carriage Return","1":"One","\u0080":"Control",' +
@@ -126,7 +126,7 @@ describe("jcs canonicalise: RFC 8785 reference examples (literal expectations)",
 
   it("section 3.2.2: string and literal serialisation", () => {
     const input = {
-      string: "€$\u000f\u000aA'B\"\\\\\"/",
+      string: '€$\u000f\u000aA\'B"\\\\"/',
       literals: [null, true, false],
     };
     expect(canonicalise(input)).toBe(
@@ -295,9 +295,15 @@ describe("jcs canonicalise: rejection (typed error, never coercion)", () => {
 describe("jcs sha256Hex", () => {
   it("returns lowercase hex sha256 over UTF-8 bytes", () => {
     expect(sha256Hex("")).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    expect(sha256Hex("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    expect(sha256Hex("abc")).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
     // Non-ASCII input is hashed as UTF-8, not UTF-16 or Latin-1.
-    expect(sha256Hex("é")).toBe(createHash("sha256").update(Buffer.from([0xc3, 0xa9])).digest("hex"));
+    expect(sha256Hex("é")).toBe(
+      createHash("sha256")
+        .update(Buffer.from([0xc3, 0xa9]))
+        .digest("hex")
+    );
   });
 
   it("refuses text containing a lone surrogate instead of hashing U+FFFD", () => {
