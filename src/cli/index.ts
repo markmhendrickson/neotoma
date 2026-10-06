@@ -1356,20 +1356,29 @@ export function getSqliteRecoveryHint(
   );
 }
 
-export function writeCliError(err: unknown): void {
+/** What `writeCliError` writes to stderr, as text; pure so each output mode is testable. */
+export function renderCliError(err: unknown, outputMode: OutputMode, isTty = false): string {
   const msg = formatCliError(err);
   const recoveryHint = getSqliteRecoveryHint(err);
-  const outputMode = resolveOutputMode();
   if (outputMode === "json") {
     const envelope: Record<string, unknown> = { error: msg };
     if (err instanceof CliHintError) envelope.hint = err.hint;
     else if (recoveryHint) envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
-    process.stderr.write(JSON.stringify(envelope) + "\n");
-    return;
+    return JSON.stringify(envelope) + "\n";
   }
-  if (process.stdout.isTTY) process.stderr.write("\n");
-  process.stderr.write(`neotoma: ${msg}\n`);
-  if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
+  let out = isTty ? "\n" : "";
+  out += `neotoma: ${msg}\n`;
+  // The server's recovery path travels on the error (see `cliApiError`); show
+  // it in text mode too, not only in `--json`.
+  if (err instanceof CliHintError && typeof err.hint.hint === "string") {
+    out += `hint: ${err.hint.hint}\n`;
+  }
+  if (recoveryHint) out += `tip: ${recoveryHint}\n`;
+  return out;
+}
+
+export function writeCliError(err: unknown): void {
+  process.stderr.write(renderCliError(err, resolveOutputMode(), Boolean(process.stdout.isTTY)));
 }
 
 /**
@@ -13727,7 +13736,7 @@ relationshipsCommand
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
         } as any,
       });
-      if (error) throw new Error("Failed to create relationships");
+      if (error) throw cliApiError(error);
       writeOutput(data, outputMode);
       return;
     }
@@ -13745,7 +13754,7 @@ relationshipsCommand
         ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
-    if (error) throw new Error("Failed to create relationship");
+    if (error) throw cliApiError(error);
     const rel = data as any;
     writeOutput(
       {
