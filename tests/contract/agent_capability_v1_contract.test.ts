@@ -214,7 +214,7 @@ describe("agent_grant SchemaDefinition", () => {
 
   it("declares valid_from and valid_until with last_write merge policies", () => {
     for (const field of ["valid_from", "valid_until"]) {
-      expect(def.schema_definition.fields[field]).toEqual({ type: "date", required: false });
+      expect(def.schema_definition.fields[field]).toEqual({ type: "string", required: false });
       expect(def.reducer_config.merge_policies[field]).toEqual({ strategy: "last_write" });
     }
   });

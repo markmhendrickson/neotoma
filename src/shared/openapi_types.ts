@@ -3168,20 +3168,27 @@ export interface components {
        * @description RESERVED for the `agent_capability_v1` capability type (see
        *     `AgentCapabilityEntryV1`). The grant that authorised the write.
        *     No build stamps this key yet; it is declared so the contract lands
-       *     before the enforcement that populates it. Treat absence as "not
-       *     written under a v1 capability".
+       *     before the enforcement that populates it. Not proof on its own:
+       *     provenance travels with replicated observations, so a consumer
+       *     must verify against the grant itself. Guest (entity-scoped token)
+       *     readers must not receive it; the change that starts stamping it
+       *     extends guest redaction, which today strips only
+       *     `authenticated_actor_id`.
        */
       grant_id?: string;
       /**
        * @description RESERVED for `agent_capability_v1`. Id of the grant observation
        *     the write was authorised against (the computed revision of the
        *     grant's safety-bearing keys), read inside the same unit as the
-       *     write. Not stamped by this build.
+       *     write. Not stamped by this build. Not proof on its own, and
+       *     withheld from guest readers once stamped (see `grant_id`).
        */
       grant_revision?: string;
       /**
        * @description RESERVED for `agent_capability_v1`. `capability_id` of the single
-       *     capability that covered the write. Not stamped by this build.
+       *     capability that covered the write. Not stamped by this build. Not
+       *     proof on its own, and withheld from guest readers once stamped
+       *     (see `grant_id`).
        */
       capability_id?: string;
       /**
@@ -3189,7 +3196,8 @@ export interface components {
        *     canonical form of the grant's identity pins, validity window and
        *     capability, as read inside the write unit. A computed value, never
        *     stored on the grant and never accepted in a request. Not stamped
-       *     by this build.
+       *     by this build. Not proof on its own, and withheld from guest
+       *     readers once stamped (see `grant_id`).
        */
       capability_digest?: string;
     };
@@ -3412,12 +3420,19 @@ export interface components {
      *     `agent_capability_v1` shape (`AgentCapabilityEntryV1`), which is a
      *     distinct wire shape and never a legacy entry plus extra keys.
      *
-     *     RESERVED: this build still refuses the v1 branch. `agent_grant`
-     *     validation accepts only the legacy branch, so a grant carrying an
-     *     `agent_capability_v1` entry is rejected with `agent_grant_invalid`
-     *     until the change that enables it ships. The branch is declared first
-     *     so the contract, generated types and error vocabulary land before the
-     *     enforcement they describe.
+     *     RESERVED, not accepted by this build. The grant validator accepts only
+     *     the legacy branch and refuses a v1 entry with `agent_grant_invalid`
+     *     (reported at `capabilities[i].op`) on these write surfaces: `POST
+     *     /agents/grants`, `PATCH /agents/grants/{id}`, `POST /store`, `POST
+     *     /correct` and the MCP `correct` tool. It is NOT refused on the MCP
+     *     `store` tool: that structured path inserts the observation without
+     *     running the validator, so a v1-shaped `agent_grant` entity can be
+     *     persisted there. Such an entity confers no authority: every read
+     *     re-validates it, rejects it, and resolves it to no grant (admission
+     *     fails closed). Enabling the v1 shape is gated on first rejecting any
+     *     v1-shaped grant observation that already exists. The branch is
+     *     declared first so the contract, generated types and error vocabulary
+     *     land before the enforcement they describe.
      */
     AgentCapabilityEntry:
       | components["schemas"]["AgentCapabilityEntryLegacy"]
@@ -3510,12 +3525,23 @@ export interface components {
        *     verification. It is not a store input: no request names an
        *     existing Source by id.
        */
-      sources: (components["schemas"]["AgentCapabilitySourceBytesV1"] & {
-        source_id: string;
-      })[];
+      sources: components["schemas"]["AgentCapabilitySourceV1"][];
       entities: components["schemas"]["AgentCapabilityEntitiesConstraintV1"];
     };
     AgentCapabilitySourceBytesV1: {
+      /** @description Lowercase hex SHA-256 of the exact bytes. */
+      sha256: string;
+      /** @description Exact byte length. */
+      byte_length: number;
+      /** @description Canonical, non-blank MIME type. */
+      mime_type: string;
+    };
+    /**
+     * @description An owned Source a v1 key may read: its id plus the exact digest,
+     *     length and MIME type. Closed, like every other v1 object.
+     */
+    AgentCapabilitySourceV1: {
+      source_id: string;
       /** @description Lowercase hex SHA-256 of the exact bytes. */
       sha256: string;
       /** @description Exact byte length. */
@@ -7256,10 +7282,19 @@ export interface operations {
        *
        *     RESERVED, not emitted by this build: a conditional write under an
        *     `agent_capability_v1` capability that loses a revision race
-       *     answers 409 with the resolution envelope, an `issues[]` entry
-       *     whose `code` is `ERR_REVISION_CONFLICT` (body shape
-       *     `StoreResolutionErrorEnvelope`). Re-read and re-preview; never
-       *     overwrite or force.
+       *     answers 409 with the resolution envelope (body shape
+       *     `StoreResolutionErrorEnvelope`, `error.code`
+       *     `ERR_STORE_RESOLUTION_FAILED`), carrying an `issues[]` entry whose
+       *     `code` is `ERR_REVISION_CONFLICT`. Status rule: 409 only when
+       *     every issue in the envelope is `ERR_REVISION_CONFLICT`; any other
+       *     mix keeps the resolution envelope's existing 400. The 409 has two
+       *     meanings on this route; tell them apart by the body: the
+       *     idempotency collision above is a standard envelope with
+       *     `error_code` `ERR_IDEMPOTENCY_COLLISION`, a revision conflict has
+       *     `error.code` `ERR_STORE_RESOLUTION_FAILED`. Re-read and
+       *     re-preview; never overwrite or force. The response `content`
+       *     schema stays the standard envelope in this contract revision; the
+       *     enabling change types it as a `oneOf`.
        */
       409: {
         headers: {

@@ -366,6 +366,41 @@ A denial produces HTTP 403 with:
 }
 ```
 
+## Reserved: agent_capability_v1
+
+`openapi.yaml` declares a second capability shape, `agent_capability_v1`
+(`AgentCapabilityEntryV1`), a narrowly scoped capability that lets one pinned
+key perform a fixed purpose and nothing else. It is **declared, not accepted**:
+no build admits it yet, and it never covers anything through the legacy
+capability checks above.
+
+- **Refused at write** (`agent_grant_invalid`, field `capabilities[i].op`):
+  `POST /agents/grants`, `PATCH /agents/grants/{id}`, `POST /store`,
+  `POST /correct`, MCP `correct`.
+- **Not refused at write:** MCP `store` (structured path). It inserts the
+  observation without running the grant validator, so a v1-shaped `agent_grant`
+  entity can be persisted through it. The entity is inert: every read
+  re-validates it, rejects it, and resolves it to no grant, so admission fails
+  closed. Adding the validator call to that insert is a separate, small change
+  that belongs with the owner-only write guard.
+- **Enable gate.** Before any change makes the validator accept the v1 shape,
+  it must reject (or ignore) every v1-shaped grant observation that already
+  exists. Without that, an entity planted through the MCP `store` path by a
+  principal holding the legacy `agent_grant` store capability would become a
+  live candidate the moment the validator starts accepting v1, without ever
+  passing an owner-session check. The enabling change carries a test that
+  seeds such an observation directly and asserts it confers no authority after
+  enabling.
+- `agent_grant` schema 1.1.0 declares `valid_from` / `valid_until` as plain
+  strings. Nothing reads them. On an instance whose active schema is 1.1.0 (a
+  fresh instance, or one where an owner registered 1.1.0) a raw `store` or
+  `correct` of those fields is kept verbatim and unvalidated, and a value that
+  looks like a date can derive a timeline event, exactly as `last_used_at`
+  already does. Existing instances keep their registered schema until an owner
+  registers 1.1.0.
+
+Error vocabulary: [`errors.md`](errors.md#agent-capability-v1-errors-reserved).
+
 ## Operator runbook
 
 ### Upgrading from the env-config era
