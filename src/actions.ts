@@ -275,6 +275,7 @@ import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
 import { isProductionEnvironment } from "./shared/environment.js";
+import { isLoopbackHost, resolveBindHostFromEnv } from "./shared/bind_host.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -13345,15 +13346,13 @@ function assertRouteTableIsReachable(): void {
  * loopback while the socket was actually open on all interfaces).
  */
 export function resolveHttpBindHost(env: NodeJS.ProcessEnv = process.env): string {
-  const raw = (env.NEOTOMA_HTTP_HOST || "").trim();
-  return raw.length > 0 ? raw : "127.0.0.1";
+  return resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env);
 }
 
-/** True when the given bind host resolves to a loopback-only address. */
-export function isLoopbackHost(host: string): boolean {
-  const normalized = host.trim().toLowerCase();
-  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
-}
+// Re-exported so existing importers of `isLoopbackHost` from this module keep
+// working; the implementation lives in `./shared/bind_host.ts`, which the
+// standalone MCP WebSocket bridge also uses.
+export { isLoopbackHost };
 
 /**
  * Try to bind on a port/host; resolves with server and port, or rejects on

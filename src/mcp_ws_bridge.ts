@@ -1,10 +1,18 @@
 import { spawn } from "node:child_process";
+import type { AddressInfo } from "node:net";
 import { WebSocketServer, WebSocket } from "ws";
+
+import { resolveBindHostFromEnv } from "./shared/bind_host.js";
 
 const MCP_CMD = process.env.NEOTOMA_MCP_CMD || process.env.MCP_CMD || "node";
 const mcpArgsEnv = process.env.NEOTOMA_MCP_ARGS || process.env.MCP_ARGS;
 const MCP_ARGS = (mcpArgsEnv ? JSON.parse(mcpArgsEnv) : ["dist/index.js"]) as string[];
 const PORT = parseInt(process.env.NEOTOMA_WS_PORT || process.env.WS_PORT || "8280", 10);
+// Loopback by default (same convention as NEOTOMA_HTTP_HOST for the HTTP API).
+// The bridge spawns an MCP child process per connection with no authentication
+// before the spawn, so reachability of the socket is its only access control.
+// Set NEOTOMA_WS_HOST (e.g. 0.0.0.0) to opt in to a wider bind.
+const HOST = resolveBindHostFromEnv("NEOTOMA_WS_HOST");
 
 interface BridgeMessage {
   type:
@@ -19,7 +27,16 @@ interface BridgeMessage {
   connectionId?: string; // OAuth connection ID
 }
 
-const wss = new WebSocketServer({ port: PORT, path: "/mcp" });
+const wss = new WebSocketServer({ port: PORT, host: HOST, path: "/mcp" });
+
+// An unusable host (or a taken port) must stop the bridge, never fall back to a
+// wider bind. Without a listener the 'error' event would surface as an
+// uncaught exception; exit explicitly with a clear message instead.
+wss.on("error", (err: Error) => {
+  // eslint-disable-next-line no-console
+  console.error(`MCP WebSocket bridge failed to listen on ${HOST}:${PORT}: ${err.message}`);
+  process.exit(1);
+});
 
 wss.on("connection", (ws: WebSocket) => {
   let connectionId: string | undefined;
@@ -228,5 +245,14 @@ wss.on("connection", (ws: WebSocket) => {
   });
 });
 
-// eslint-disable-next-line no-console
-console.log(`MCP WebSocket bridge on ws://localhost:${PORT}/mcp`);
+// Report the address the socket is actually bound to (read back from the
+// listener), not the configured host or a hardcoded "localhost".
+wss.on("listening", () => {
+  const addr = wss.address() as AddressInfo | string | null;
+  const where =
+    addr && typeof addr === "object"
+      ? `${addr.family === "IPv6" ? `[${addr.address}]` : addr.address}:${addr.port}`
+      : `${HOST}:${PORT}`;
+  // eslint-disable-next-line no-console
+  console.log(`MCP WebSocket bridge on ws://${where}/mcp`);
+});
