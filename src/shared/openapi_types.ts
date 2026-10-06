@@ -4454,6 +4454,18 @@ export interface components {
     StoreStructuredResponse: {
       success?: boolean;
       /**
+       * @description Echoes the request's `commit` flag. `false` means this response
+       *     describes a plan/dry-run preview: no source, observation or entity
+       *     was persisted and `source_id` is `null`.
+       */
+      commit?: boolean;
+      /**
+       * @description Id of the raw `sources` row written for this store. `null` in
+       *     plan/dry-run mode (`commit: false`), where no source row is
+       *     written.
+       */
+      source_id?: string | null;
+      /**
        * @description True when the response is an idempotency replay (no new observations
        *     or entities were written for this request). The key was already used
        *     with identical content so the original result is returned. Consumers
@@ -4466,7 +4478,12 @@ export interface components {
       entities?: {
         entity_id?: string;
         entity_type?: string;
-        observation_id?: string;
+        /**
+         * @description Id of the observation written for this entity. `null` in
+         *     plan/dry-run mode (`commit: false`), where no observation is
+         *     written.
+         */
+        observation_id?: string | null;
         canonical_name?: string;
         resolver_path?: string[];
         /**
@@ -4723,9 +4740,21 @@ export interface components {
       original_filename?: string;
       /** Format: uuid */
       user_id?: string;
+      /**
+       * @description When false, runs in plan/dry-run mode: computes the content hash
+       *     without persisting a source row or uploading raw content. Useful
+       *     for previewing an unstructured store before committing.
+       * @default true
+       */
+      commit?: boolean;
     };
     StoreUnstructuredResponse: {
-      source_id?: string;
+      /**
+       * @description Id of the persisted source row. `null` when the request ran in
+       *     plan/dry-run mode (`commit: false`): nothing was persisted, so
+       *     there is no source to point at.
+       */
+      source_id?: string | null;
       content_hash?: string;
       file_size?: number;
       deduplicated?: boolean;
@@ -4733,6 +4762,49 @@ export interface components {
         [key: string]: unknown;
       };
       entity_ids?: string[];
+      /**
+       * @description Echoes the request's `commit` flag. `false` means this response
+       *     describes a plan/dry-run preview: no source row was persisted and
+       *     no raw content was uploaded. `source_id` is `null` in that case.
+       */
+      commit?: boolean;
+      /**
+       * @description Present when the request used reference storage
+       *     (`source_storage: "reference"`), for both a committed store and a
+       *     plan-mode (`commit: false`) preview. A reference-mode response
+       *     carries `storage_mode`, `reference_path` and `mime_type`; a
+       *     committed one also carries `content_hash` and `file_size`, while a
+       *     plan-mode preview carries neither. Inline-mode responses omit
+       *     `storage_mode` and carry `content_hash`, `file_size`,
+       *     `deduplicated`, `entities_created` and `observations_created`
+       *     (plan mode: `source_id` is `null`).
+       * @enum {string}
+       */
+      storage_mode?: "reference";
+      /**
+       * @description Reference-storage only: the file path this store referenced
+       *     (committed) or would reference if committed (plan mode).
+       */
+      reference_path?: string;
+      /**
+       * @description Reference-storage only: the MIME type resolved for the file
+       *     (echoes the request's `mime_type`, or the value inferred from
+       *     the file extension when omitted). Present for both a committed
+       *     store and a plan-mode preview.
+       */
+      mime_type?: string;
+      /**
+       * @description Inline-storage only. Always `0` today: unstructured store never
+       *     creates entities directly, in either commit or plan mode. Not a
+       *     placeholder for a future non-zero value under commit — if that
+       *     changes, this description will change with it.
+       */
+      entities_created?: number;
+      /**
+       * @description Inline-storage only: always `0`, for the same reason as
+       *     `entities_created`.
+       */
+      observations_created?: number;
     };
     /**
      * @description FU-2026-05-002. Identifies the conversation and the assistant message

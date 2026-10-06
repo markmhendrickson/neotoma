@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_commit_persists_control",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-06T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Save a contact and a note file.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Persist the requested data with the store tool for every shape (entities, file, entities plus file, file by reference). Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "commit-structured",
+        "entities": [
+          {
+            "entity_type": "contact",
+            "name": "commit structured",
+            "email": "commit@example.invalid"
+          }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"success\":true,\"replayed\":false,\"commit\":true,\"source_id\":\"src_commit_001\",\"entities_created\":1,\"observations_created\":1,\"entities\":[{\"entity_id\":\"ent_commit_struct\",\"entity_type\":\"contact\",\"observation_id\":\"obs_struct\",\"observation_index\":0,\"action\":\"created\",\"canonical_name\":\"commit structured\",\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\",\"entity_snapshot_after\":{\"name\":\"commit structured\",\"email\":\"x@example.invalid\"}}],\"relationships_created\":[]}"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "commit-file",
+        "file_content": "cGxhbi1tb2RlIHByb2JlOiB0aGVzZSBieXRlcyBtdXN0IG5ldmVyIHJlYWNoIHJhdyBzdG9yYWdlCg==",
+        "mime_type": "text/plain",
+        "original_filename": "commit-file.txt"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"src_commit_002\",\"content_hash\":\"8ba57c2758d96e977ab5e7d77d538f5a77981cb66b4f20b03861d06ce00915cd\",\"file_size\":58,\"deduplicated\":false,\"entities_created\":0,\"observations_created\":0}"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "commit-combined",
+        "file_idempotency_key": "commit-combined-file",
+        "entities": [
+          {
+            "entity_type": "contact",
+            "name": "commit combined",
+            "email": "commit@example.invalid"
+          }
+        ],
+        "file_content": "cGxhbi1tb2RlIHByb2JlOiB0aGVzZSBieXRlcyBtdXN0IG5ldmVyIHJlYWNoIHJhdyBzdG9yYWdlCg==",
+        "mime_type": "text/plain",
+        "original_filename": "commit-combined.txt"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"structured\":{\"success\":true,\"replayed\":false,\"commit\":true,\"source_id\":\"src_commit_003\",\"entities_created\":1,\"observations_created\":1,\"entities\":[{\"entity_id\":\"ent_commit_combined\",\"entity_type\":\"contact\",\"observation_id\":\"obs_mbined\",\"observation_index\":0,\"action\":\"created\",\"canonical_name\":\"commit combined\",\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\",\"entity_snapshot_after\":{\"name\":\"commit combined\",\"email\":\"x@example.invalid\"}}],\"relationships_created\":[]},\"unstructured\":{\"source_id\":\"src_commit_002\",\"content_hash\":\"8ba57c2758d96e977ab5e7d77d538f5a77981cb66b4f20b03861d06ce00915cd\",\"file_size\":58,\"deduplicated\":false,\"entities_created\":0,\"observations_created\":0}}"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "commit-reference",
+        "file_path": "package.json",
+        "mime_type": "application/json",
+        "source_storage": "reference"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"src_commit_004\",\"content_hash\":\"0cf6d344c4555a950af25b9ad3a3ed62796cd41c121be62177d7e46e5ba94e3c\",\"storage_mode\":\"reference\",\"reference_path\":\"package.json\",\"file_size\":24445,\"mime_type\":\"application/json\"}"
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "Saved the contact and the note file."
+}

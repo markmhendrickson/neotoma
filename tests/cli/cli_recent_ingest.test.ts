@@ -80,16 +80,22 @@ describe("CLI recent and ingest commands", () => {
       ).toBe("");
       const result = JSON.parse(stdout) as {
         ingest_report?: { mode: string; entities_total: number };
-        structured?: { entities?: unknown[] };
-        unstructured?: { source_id?: string };
+        structured?: { entities?: unknown[]; commit?: boolean; source_id?: string | null };
+        unstructured?: { commit?: boolean; source_id?: string | null };
       };
       expect(result.ingest_report?.mode).toBe("plan");
       expect(Array.isArray(result.structured?.entities)).toBe(true);
       const entities = result.structured?.entities ?? [];
       expect(entities.length).toBeGreaterThan(0);
-      if (result.unstructured?.source_id) {
-        tracker.trackSource(result.unstructured.source_id);
-      }
+      // Plan mode persists nothing, so neither leg may point at a source row.
+      // (This used to tolerate a non-null `unstructured.source_id`, which is
+      // exactly what the pre-fix behaviour returned, so it could not fail on
+      // the defect. #2493; the row-count effect check lives in
+      // cli_store_plan_mode_no_writes.test.ts.)
+      expect(result.structured?.commit).toBe(false);
+      expect(result.structured?.source_id).toBeNull();
+      expect(result.unstructured?.commit).toBe(false);
+      expect(result.unstructured?.source_id).toBeNull();
     });
   });
 });

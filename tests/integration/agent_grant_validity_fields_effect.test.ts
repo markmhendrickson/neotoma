@@ -29,6 +29,7 @@
 import { createServer } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -94,18 +95,54 @@ const CLI_ENTRY = path.join(REPO_ROOT, "src", "cli", "index.ts");
  * the operator's environment are dropped, so only `--base-url` decides where
  * the command goes.
  */
-async function cli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  const childEnv: NodeJS.ProcessEnv = { ...process.env, HOME: cliHome, USERPROFILE: cliHome };
-  for (const name of [
-    "NEOTOMA_BASE_URL",
-    "NEOTOMA_BEARER_TOKEN",
-    "NEOTOMA_USER_ID",
-    "NEOTOMA_OFFLINE",
-    "NEOTOMA_API_ONLY",
-    "NEOTOMA_FORCE_LOCAL_TRANSPORT",
-  ]) {
-    delete childEnv[name];
+/**
+ * Names the CLI child must not inherit: transport and credential overrides, and
+ * every AAuth / signing / key input the CLI reads, so a developer shell that
+ * exports them cannot make the child sign loopback requests or pick another
+ * server. The pattern covers future `NEOTOMA_AAUTH_*` / `NEOTOMA_CLI_AAUTH_*`
+ * names; the list names the rest explicitly (found by grepping `src/cli`,
+ * `src/shared` and `src/crypto` for `process.env.NEOTOMA_*`).
+ */
+const CLI_SCRUBBED_ENV_NAMES = [
+  "NEOTOMA_BASE_URL",
+  "NEOTOMA_BEARER_TOKEN",
+  "NEOTOMA_USER_ID",
+  "NEOTOMA_OFFLINE",
+  "NEOTOMA_API_ONLY",
+  "NEOTOMA_FORCE_LOCAL_TRANSPORT",
+  "NEOTOMA_KEY_FILE_PATH",
+  "NEOTOMA_MNEMONIC",
+  "NEOTOMA_MNEMONIC_PASSPHRASE",
+  "NEOTOMA_AAUTH_PRIVATE_JWK_PATH",
+  "NEOTOMA_AAUTH_SUB",
+  "NEOTOMA_AAUTH_ISS",
+  "NEOTOMA_AAUTH_KID",
+  "NEOTOMA_AAUTH_TOKEN_TTL_SEC",
+  "NEOTOMA_CLI_AAUTH_ENABLE",
+  "NEOTOMA_CLI_AAUTH_DISABLE",
+  "NEOTOMA_CLI_AAUTH_SUB",
+  "NEOTOMA_CLI_AAUTH_ISS",
+  "NEOTOMA_CLI_AAUTH_KID",
+  "NEOTOMA_CLI_AAUTH_TOKEN_TTL_SEC",
+] as const;
+const CLI_SCRUBBED_ENV_PATTERN = /^NEOTOMA_(CLI_)?AAUTH_/;
+
+/** The environment the CLI child runs with: the parent's, minus the scrubbed names. */
+function buildCliEnv(source: NodeJS.ProcessEnv, home: string): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = { ...source, HOME: home, USERPROFILE: home };
+  for (const name of Object.keys(childEnv)) {
+    if (
+      (CLI_SCRUBBED_ENV_NAMES as readonly string[]).includes(name) ||
+      CLI_SCRUBBED_ENV_PATTERN.test(name)
+    ) {
+      delete childEnv[name];
+    }
   }
+  return childEnv;
+}
+
+async function cli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  const childEnv = buildCliEnv(process.env, cliHome);
   try {
     const { stdout, stderr } = await execFileAsync(
       TSX_BIN,
@@ -160,6 +197,48 @@ function v1Capability(): Record<string, unknown> {
     },
   };
 }
+
+describe("the CLI child environment cannot sign or redirect loopback requests", () => {
+  const dummy = "/nonexistent/value";
+
+  it("drops every AAuth, signing-key, credential and transport input, even when exported", () => {
+    const source: NodeJS.ProcessEnv = { PATH: process.env.PATH, KEEP_ME: "yes" };
+    for (const name of CLI_SCRUBBED_ENV_NAMES) source[name] = dummy;
+    // A name the explicit list does not know, matched by the pattern.
+    source.NEOTOMA_AAUTH_SOMETHING_NEW = dummy;
+    source.NEOTOMA_CLI_AAUTH_SOMETHING_NEW = dummy;
+
+    const child = buildCliEnv(source, "/tmp/empty-home");
+    for (const name of CLI_SCRUBBED_ENV_NAMES) expect(child, name).not.toHaveProperty(name);
+    expect(child).not.toHaveProperty("NEOTOMA_AAUTH_SOMETHING_NEW");
+    expect(child).not.toHaveProperty("NEOTOMA_CLI_AAUTH_SOMETHING_NEW");
+    // Unrelated variables and the isolated HOME survive.
+    expect(child.KEEP_ME).toBe("yes");
+    expect(child.HOME).toBe("/tmp/empty-home");
+    expect(child.USERPROFILE).toBe("/tmp/empty-home");
+    // The input was not mutated.
+    expect(source.NEOTOMA_AAUTH_PRIVATE_JWK_PATH).toBe(dummy);
+  });
+
+  it("names the signing inputs the CLI actually reads", () => {
+    const cliDir = path.join(REPO_ROOT, "src", "cli");
+    const cliSources = readdirSync(cliDir)
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => readFileSync(path.join(cliDir, f), "utf-8"))
+      .join("\n");
+    const read = new Set(
+      [...cliSources.matchAll(/process\.env\.(NEOTOMA_(?:CLI_)?AAUTH_[A-Z_]+)/g)].map((m) => m[1])
+    );
+    expect(read.size, "the CLI reads at least one AAuth variable").toBeGreaterThan(0);
+    for (const name of read) {
+      expect(
+        (CLI_SCRUBBED_ENV_NAMES as readonly string[]).includes(name) ||
+          CLI_SCRUBBED_ENV_PATTERN.test(name),
+        `${name} is scrubbed from the CLI child`
+      ).toBe(true);
+    }
+  });
+});
 
 describe("agent_grant schema versions: the code-defined schema is 1.1.0", () => {
   it("1.1.0 declares both validity fields as plain optional strings; 1.0.0 declared neither", () => {
@@ -328,6 +407,7 @@ describe("agent_grant validity fields: storage follows the active schema version
     {
       name: "MCP store and correct",
       derivesTimelineWithoutDeclaration: true,
+      slow: false,
       async store(tp: string, extra: Record<string, unknown>) {
         const result = await mcp("store", {
           user_id: OWNER,
@@ -378,6 +458,8 @@ describe("agent_grant validity fields: storage follows the active schema version
     },
     {
       name: "CLI store and corrections create",
+      // Each CLI call starts a child process (tsx compile); give those cells room.
+      slow: true,
       // The CLI forwards both commands to HTTP /store and /correct.
       derivesTimelineWithoutDeclaration: false,
       async store(tp: string, extra: Record<string, unknown>) {
@@ -455,64 +537,68 @@ describe("agent_grant validity fields: storage follows the active schema version
       });
 
       for (const surface of surfaces) {
-        it(`${surface.name}: both fields ${version === "1.1.0" ? "are kept verbatim" : "are not stored"}, on store and on correction, as read back through HTTP and MCP`, async () => {
-          const tp = thumbprint();
-          const entityId = await surface.store(tp, { valid_from: FROM, valid_until: UNTIL });
-          expect(entityId).toBeTruthy();
-          created.push(entityId);
+        it(
+          `${surface.name}: both fields ${version === "1.1.0" ? "are kept verbatim" : "are not stored"}, on store and on correction, as read back through HTTP and MCP`,
+          async () => {
+            const tp = thumbprint();
+            const entityId = await surface.store(tp, { valid_from: FROM, valid_until: UNTIL });
+            expect(entityId).toBeTruthy();
+            created.push(entityId);
 
-          // The grant is an ordinary legacy grant in every case.
-          const legacyCheck = async () => {
-            expect((await getGrant(OWNER, entityId))?.capabilities).toEqual(LEGACY_CAPS);
-            clearGrantCacheForTests();
-            const lookup = await lookupGrantForIdentity({
-              sub: AGENT_SUB,
-              iss: AGENT_ISS,
-              thumbprint: tp,
-            });
-            expect(lookup.grant?.grant_id).toBe(entityId);
-            expect(lookup.grant?.capabilities).toEqual(LEGACY_CAPS);
-          };
+            // The grant is an ordinary legacy grant in every case.
+            const legacyCheck = async () => {
+              expect((await getGrant(OWNER, entityId))?.capabilities).toEqual(LEGACY_CAPS);
+              clearGrantCacheForTests();
+              const lookup = await lookupGrantForIdentity({
+                sub: AGENT_SUB,
+                iss: AGENT_ISS,
+                thumbprint: tp,
+              });
+              expect(lookup.grant?.grant_id).toBe(entityId);
+              expect(lookup.grant?.capabilities).toEqual(LEGACY_CAPS);
+            };
 
-          let snapshot = await readBack(entityId);
-          const events = await timelineTypes(entityId);
-          if (version === "1.1.0") {
-            expect(snapshot.valid_from).toBe(FROM);
-            expect(snapshot.valid_until).toBe(UNTIL);
-            // Documented effect: a date-shaped value derives a timeline event
-            // (generic heuristic, as last_used_at already does).
-            expect(events).toEqual(["ValidFrom", "ValidUntil"]);
-          } else {
-            expect(snapshot).not.toHaveProperty("valid_from");
-            expect(snapshot).not.toHaveProperty("valid_until");
-            // Pre-existing and independent of 1.1.0: the MCP store path derives
-            // timeline events from the submitted fields even when the active
-            // schema does not declare them; the HTTP /store path does not.
-            expect(events).toEqual(
-              surface.derivesTimelineWithoutDeclaration ? ["ValidFrom", "ValidUntil"] : []
-            );
-          }
-          await legacyCheck();
+            let snapshot = await readBack(entityId);
+            const events = await timelineTypes(entityId);
+            if (version === "1.1.0") {
+              expect(snapshot.valid_from).toBe(FROM);
+              expect(snapshot.valid_until).toBe(UNTIL);
+              // Documented effect: a date-shaped value derives a timeline event
+              // (generic heuristic, as last_used_at already does).
+              expect(events).toEqual(["ValidFrom", "ValidUntil"]);
+            } else {
+              expect(snapshot).not.toHaveProperty("valid_from");
+              expect(snapshot).not.toHaveProperty("valid_until");
+              // Pre-existing and independent of 1.1.0: the MCP store path derives
+              // timeline events from the submitted fields even when the active
+              // schema does not declare them; the HTTP /store path does not.
+              expect(events).toEqual(
+                surface.derivesTimelineWithoutDeclaration ? ["ValidFrom", "ValidUntil"] : []
+              );
+            }
+            await legacyCheck();
 
-          // Correction, one field at a time, in this surface's natural shape.
-          await surface.correct(entityId, "valid_from", FROM_2);
-          await surface.correct(entityId, "valid_until", UNTIL_2);
-          snapshot = await readBack(entityId);
-          if (version === "1.1.0") {
-            expect(snapshot.valid_from).toBe(FROM_2);
-            expect(snapshot.valid_until).toBe(UNTIL_2);
-          } else {
-            expect(snapshot).not.toHaveProperty("valid_from");
-            expect(snapshot).not.toHaveProperty("valid_until");
-          }
-          await legacyCheck();
+            // Correction, one field at a time, in this surface's natural shape.
+            await surface.correct(entityId, "valid_from", FROM_2);
+            await surface.correct(entityId, "valid_until", UNTIL_2);
+            snapshot = await readBack(entityId);
+            if (version === "1.1.0") {
+              expect(snapshot.valid_from).toBe(FROM_2);
+              expect(snapshot.valid_until).toBe(UNTIL_2);
+            } else {
+              expect(snapshot).not.toHaveProperty("valid_from");
+              expect(snapshot).not.toHaveProperty("valid_until");
+            }
+            await legacyCheck();
 
-          // The stored fields never turn into v1 authority: a v1 capability is
-          // still refused on this surface and the grant is unchanged.
-          await surface.refuseV1(entityId);
-          await legacyCheck();
-          ran.add(`${version}:${surface.name}`);
-        }, 300_000);
+            // The stored fields never turn into v1 authority: a v1 capability is
+            // still refused on this surface and the grant is unchanged.
+            await surface.refuseV1(entityId);
+            await legacyCheck();
+            ran.add(`${version}:${surface.name}`);
+          },
+          surface.slow ? 300_000 : undefined
+        );
       }
 
       it("the grants routes do not store or enforce the validity fields", async () => {

@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **686**
-- Backend and repo Vitest files: **650**
+- Total automated test files: **690**
+- Backend and repo Vitest files: **654**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,9 +72,9 @@ flowchart TD
 | Vitest unit tests | 186 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 202 |
-| Vitest CLI tests | 81 |
-| Vitest contract tests | 26 |
+| Vitest integration tests | 204 |
+| Vitest CLI tests | 82 |
+| Vitest contract tests | 27 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -436,7 +436,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (202):**
+**Files (204):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -559,6 +559,7 @@ flowchart TD
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_intra_batch_relationships.test.ts`
 - `tests/integration/mcp_store_parquet.test.ts`
+- `tests/integration/mcp_store_plan_mode_no_writes.test.ts`
 - `tests/integration/mcp_store_raw_fragments_hint.test.ts`
 - `tests/integration/mcp_store_reference_source.test.ts`
 - `tests/integration/mcp_store_unknown_fields_names.test.ts`
@@ -619,6 +620,7 @@ flowchart TD
 - `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/store_source_priority_ignored_warning.test.ts`
+- `tests/integration/store_structured_commit_invariant.test.ts`
 - `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/store_warning_condition_rule.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
@@ -645,7 +647,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (81):**
+**Files (82):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -689,6 +691,7 @@ flowchart TD
 - `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
+- `tests/cli/cli_store_plan_mode_no_writes.test.ts`
 - `tests/cli/cli_timeline_commands.test.ts`
 - `tests/cli/cli_user_id_propagation.test.ts`
 - `tests/cli/config_api_discovery.test.ts`
@@ -733,7 +736,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (26):**
+**Files (27):**
 - `tests/contract/agent_capability_v1_contract_shapes.test.ts`
 - `tests/contract/agent_capability_v1_contract.test.ts`
 - `tests/contract/cli_handler_dist_smoke.test.ts`
@@ -757,6 +760,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/store_plan_mode_response_schema.test.ts`
 - `tests/contract/sync_issues_contract.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`
 - `tests/contract/vite_config.test.ts`
