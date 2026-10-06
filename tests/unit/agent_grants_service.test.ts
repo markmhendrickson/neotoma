@@ -104,6 +104,45 @@ describe("validateCapabilities", () => {
     ]);
   });
 
+  it("preserves relationship_types on create_relationship capabilities", () => {
+    const out = validateCapabilities([
+      {
+        op: "create_relationship",
+        entity_types: ["checkpoint_brief", "task"],
+        relationship_types: ["  REFERS_TO  ", "REFERS_TO"],
+      },
+    ]);
+
+    expect(out).toEqual([
+      {
+        op: "create_relationship",
+        entity_types: ["checkpoint_brief", "task"],
+        relationship_types: ["REFERS_TO"],
+      },
+    ]);
+  });
+
+  it("rejects malformed relationship_types on create_relationship capabilities", () => {
+    expect(() =>
+      validateCapabilities([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: "REFERS_TO",
+        },
+      ])
+    ).toThrow(AgentGrantValidationError);
+    expect(() =>
+      validateCapabilities([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: ["  "],
+        },
+      ])
+    ).toThrow(AgentGrantValidationError);
+  });
+
   it("preserves wildcard entity_types", () => {
     const out = validateCapabilities([{ op: "retrieve", entity_types: ["*"] }]);
     expect(out).toEqual([{ op: "retrieve", entity_types: ["*"] }]);

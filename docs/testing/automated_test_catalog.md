@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **680**
-- Backend and repo Vitest files: **644**
+- Total automated test files: **683**
+- Backend and repo Vitest files: **647**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 185 |
+| Vitest unit tests | 186 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 200 |
+| Vitest integration tests | 201 |
 | Vitest CLI tests | 82 |
-| Vitest contract tests | 23 |
+| Vitest contract tests | 24 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (185):**
+**Files (186):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -200,6 +200,7 @@ flowchart TD
 - `tests/unit/html_to_markdown.test.ts`
 - `tests/unit/i18n_routing.test.ts`
 - `tests/unit/inspector_admin_unlock_url.test.ts`
+- `tests/unit/inspector_agent_grant_capabilities.test.ts`
 - `tests/unit/inspector_skin.test.ts`
 - `tests/unit/instance_policy_write_path_coverage.test.ts`
 - `tests/unit/instance_policy.test.ts`
@@ -435,7 +436,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (200):**
+**Files (201):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -583,6 +584,7 @@ flowchart TD
 - `tests/integration/relationship_pagination_determinism.test.ts`
 - `tests/integration/relationship_query_determinism.test.ts`
 - `tests/integration/relationship_snapshots.test.ts`
+- `tests/integration/relationship_write_capability_surfaces.test.ts`
 - `tests/integration/retrieval_transport_reliability.test.ts`
 - `tests/integration/retrieve_graph_neighborhood_tenant_isolation.test.ts`
 - `tests/integration/root_landing.test.ts`
@@ -731,7 +733,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (23):**
+**Files (24):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -749,6 +751,7 @@ flowchart TD
 - `tests/contract/package_scripts.test.ts`
 - `tests/contract/relationship_type_enum_parity.test.ts`
 - `tests/contract/relationship_type_single_source.test.ts`
+- `tests/contract/relationship_write_grant_contract.test.ts`
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`

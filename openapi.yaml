@@ -170,6 +170,57 @@ components:
         timestamp:
           type: string
           format: date-time
+    RelationshipBatchErrorItem:
+      type: object
+      additionalProperties: false
+      required: [index, relationship, error]
+      description: |
+        One failed item from `create_relationships`. Batch creation retains
+        successful siblings and therefore reports item failures inside the
+        HTTP 200 response. When `code` is `capability_denied`, `op` and `hint`
+        preserve the same structured grant-repair contract as the single-item
+        endpoint and MCP adapter.
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        relationship:
+          type: object
+          additionalProperties: false
+          required: [relationship_type, source_entity_id, target_entity_id]
+          properties:
+            relationship_type:
+              type: string
+            source_entity_id:
+              type: string
+            target_entity_id:
+              type: string
+            source_id:
+              type: string
+            metadata:
+              type: object
+              additionalProperties: true
+        error:
+          type: string
+          description: Human-readable per-item failure message.
+        code:
+          type: string
+          description: Machine-readable failure code; `capability_denied` for grant refusals.
+        message:
+          type: string
+          description: Canonical structured error message when a typed error is available.
+        op:
+          type: string
+          description: Capability operation that was refused.
+        entity_type:
+          type: string
+          description: Primary endpoint entity type named by the capability denial.
+        agent_label:
+          type: string
+          description: Public-safe label for the admitted agent grant.
+        hint:
+          type: string
+          description: Actionable instructions for repairing the grant scope.
     SchemaRegistryToolErrorResponse:
       type: object
       description: |
@@ -1242,6 +1293,17 @@ components:
             strings. The single string `*` wildcards any repo. Only
             meaningful for `github_harness:*` ops; ignored for
             Neotoma-native ops.
+        relationship_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Relationship types this entry may write. Required for
+            `create_relationship` edge writes: one entry must cover the
+            relationship type AND both endpoint entity types
+            (`entity_types`). Absent or empty grants no edge writes. The
+            single string `*` wildcards any relationship type. Also the
+            scope for `register_relationship_type`.
     AgentGrant:
       type: object
       description: |
@@ -5851,6 +5913,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RelationshipSnapshot" }
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover
+            the relationship type and both endpoint entity types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /create_relationships:
     post:
@@ -5916,8 +5985,7 @@ paths:
                   errors:
                     type: array
                     items:
-                      type: object
-                      additionalProperties: true
+                      $ref: "#/components/schemas/RelationshipBatchErrorItem"
 
   /list_relationships:
     post:
@@ -7214,6 +7282,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover
+            the relationship type and both endpoint entity types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /restore_relationship:
     post:
@@ -7254,6 +7329,13 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover
+            the relationship type and both endpoint entity types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /analyze_schema_candidates:
     post:

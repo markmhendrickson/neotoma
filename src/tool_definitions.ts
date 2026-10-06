@@ -711,7 +711,7 @@ export function buildToolDefinitions(
       name: "restore_relationship",
       description: desc(
         "restore_relationship",
-        "Restore a deleted relationship. Creates a restoration observation (priority 1001) that overrides the deletion. Relationship becomes visible in snapshots and queries again. Immutable restoration for audit."
+        "Restore a deleted relationship. Creates an immutable restoration observation that outranks earlier observations. Relationship becomes visible in snapshots and queries again; later explicit deletion remains possible."
       ),
       inputSchema: {
         type: "object",

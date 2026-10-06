@@ -223,6 +223,66 @@ describe("runAgentsGrantsImport", () => {
     expect(grants[0].grant_id).toBe(grantId);
   });
 
+  it("carries create_relationship relationship_types into the created grant (neotoma#2524)", async () => {
+    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
+      agents: {
+        "agent-site@neotoma.io": {
+          match: { sub: "agent-site@neotoma.io" },
+          capabilities: [
+            {
+              op: "create_relationship",
+              entity_types: ["checkpoint_brief", "task"],
+              relationship_types: [" REFERS_TO ", "REFERS_TO"],
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await runAgentsGrantsImport({ ownerUserId: "user-test" });
+
+    expect(result.created).toBe(1);
+    expect(grants[0].capabilities).toEqual([
+      {
+        op: "create_relationship",
+        entity_types: ["checkpoint_brief", "task"],
+        relationship_types: ["REFERS_TO"],
+      },
+    ]);
+  });
+
+  it("updates a grant when only relationship_types diverges, instead of skipping it", async () => {
+    const registry = (relationshipTypes?: string[]) =>
+      JSON.stringify({
+        agents: {
+          "agent-site@neotoma.io": {
+            match: { sub: "agent-site@neotoma.io" },
+            capabilities: [
+              {
+                op: "create_relationship",
+                entity_types: ["checkpoint_brief", "task"],
+                ...(relationshipTypes ? { relationship_types: relationshipTypes } : {}),
+              },
+            ],
+          },
+        },
+      });
+
+    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = registry();
+    expect((await runAgentsGrantsImport({ ownerUserId: "user-test" })).created).toBe(1);
+
+    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = registry(["REFERS_TO"]);
+    const second = await runAgentsGrantsImport({ ownerUserId: "user-test" });
+
+    expect(second.updated).toBe(1);
+    expect(second.skipped).toBe(0);
+    expect(grants[0].capabilities[0].relationship_types).toEqual(["REFERS_TO"]);
+
+    // And a rerun with the same scope is idempotent again.
+    const third = await runAgentsGrantsImport({ ownerUserId: "user-test" });
+    expect(third.skipped).toBe(1);
+  });
+
   it("skips entries whose match has neither sub nor thumbprint", async () => {
     process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
       agents: {

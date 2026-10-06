@@ -56,6 +56,7 @@ import {
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
+import { enforceRelationshipWriteCapabilities } from "./services/relationship_write_capability.js";
 import {
   assertGuestWriteAllowed,
   AccessPolicyError,
@@ -7834,9 +7835,15 @@ export async function storeStructuredForApi(params: {
       .map((entity) => entity?.entity_type)
       .filter((t): t is string => typeof t === "string" && t.length > 0);
     enforceAgentCapability("store", entityTypes, capabilityCtx);
-    const relationshipOp = Array.isArray(relationships) && relationships.length > 0;
-    if (relationshipOp) {
-      enforceAgentCapability("create_relationship", entityTypes, capabilityCtx);
+    if (Array.isArray(relationships) && relationships.length > 0) {
+      // Same shared check the MCP store and every standalone relationship
+      // entrance run (services/relationship_write_capability.ts).
+      await enforceRelationshipWriteCapabilities({
+        userId,
+        entities,
+        relationships,
+        capabilityCtx,
+      });
     }
   }
 
@@ -9709,6 +9716,16 @@ async function handleStorePost(
         hint: error.hint,
       });
     }
+    // A capability refusal is the caller's authorization, not a server fault:
+    // 403 with the same envelope `handleApiError` gives every other route.
+    // Falling through made a denied edge (or entity type) read as a retryable
+    // 500 DB_QUERY_FAILED.
+    if (error instanceof AgentCapabilityError) {
+      logWarn("AgentCapabilityRejection:store", req, error.toErrorEnvelope());
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
     logError("APIError:store", req, error);
     const message = error instanceof Error ? error.message : "Failed to store payload";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -10448,6 +10465,14 @@ app.post("/create_relationship", async (req, res) => {
           "same store call referenced by index, then link it.",
       });
     }
+    // Relationship-type + endpoint-type capability refusal, raised inside
+    // relationshipsService.createRelationship (the shared edge-write gate).
+    if (error instanceof AgentCapabilityError) {
+      logWarn("AgentCapabilityRejection:create_relationship", req, error.toErrorEnvelope());
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
     logError("RelationshipCreationError:create_relationship", req, error);
     return sendError(
       res,
@@ -10490,11 +10515,19 @@ app.post("/create_relationships", async (req, res) => {
           ...snapshot,
         });
       } catch (error) {
-        errors.push({
+        const item: Record<string, unknown> = {
           index,
           relationship,
           error: error instanceof Error ? error.message : String(error),
-        });
+        };
+        // Batch semantics stay HTTP 200 so successful siblings are retained,
+        // but a capability denial must keep the same machine-actionable repair
+        // contract as the single-item endpoint. Agents rely on code/op/hint;
+        // reducing this to error.message turns a recoverable refusal opaque.
+        if (error instanceof AgentCapabilityError) {
+          Object.assign(item, error.toErrorEnvelope());
+        }
+        errors.push(item);
       }
     }
 
@@ -11507,6 +11540,17 @@ app.post("/delete_relationship", async (req, res) => {
         }
       );
     }
+
+    // Tombstoning a live edge changes the same relationship state that the
+    // create/restore capability governs. Enforce the admitted grant after the
+    // discovery guard (so a missing edge stays not-found) and before writing
+    // the deletion observation.
+    const { enforceCurrentAgentRelationshipWrites } =
+      await import("./services/relationship_write_capability.js");
+    await enforceCurrentAgentRelationshipWrites({
+      userId,
+      relationships: [{ relationship_type, source_entity_id, target_entity_id }],
+    });
 
     const { softDeleteRelationship } = await import("./services/deletion.js");
 

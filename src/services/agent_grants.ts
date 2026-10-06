@@ -362,6 +362,32 @@ export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
         normalisedTypes.push(t.trim());
       }
       normalisedTypes = Array.from(new Set(normalisedTypes));
+
+      // Relationship writes carry two independent allowlists on the same
+      // capability entry: endpoint entity types and relationship types.
+      // Preserve an absent/empty relationship_types list as an explicit
+      // deny-at-enforcement state, but reject malformed values so a broken
+      // safety field can never be interpreted permissively.
+      if (op === "create_relationship" && entry.relationship_types !== undefined) {
+        const relTypes = entry.relationship_types;
+        if (!Array.isArray(relTypes)) {
+          throw new AgentGrantValidationError(
+            `capabilities[${i}].relationship_types must be an array of strings when present`,
+            `capabilities[${i}].relationship_types`
+          );
+        }
+        const relList: string[] = [];
+        for (const [j, t] of relTypes.entries()) {
+          if (typeof t !== "string" || t.trim().length === 0) {
+            throw new AgentGrantValidationError(
+              `capabilities[${i}].relationship_types[${j}] must be a non-empty string`,
+              `capabilities[${i}].relationship_types[${j}]`
+            );
+          }
+          relList.push(t.trim());
+        }
+        normalisedRelationshipTypes = Array.from(new Set(relList));
+      }
     }
 
     const validated: AgentCapabilityEntry = {
