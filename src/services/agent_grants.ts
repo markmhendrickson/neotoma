@@ -1127,12 +1127,15 @@ async function writeGrantEntity(params: InternalGrantWrite): Promise<AgentGrant>
 
 /**
  * Pre-persist guard for a raw write to `agent_grant` fields, called from
- * the two choke points every transport converges on before an
- * `agent_grant` observation or correction is ever inserted:
- * {@link ../services/observation_storage.ts#createObservation} (the
- * `store` / `store_structured` path, both HTTP and MCP) and
+ * the two choke points that cover most write surfaces:
+ * {@link ../services/observation_storage.ts#createObservation} (the HTTP
+ * `store` / `store_structured` path) and
  * {@link ../services/correction.ts#createCorrection} (the `correct` path,
- * both HTTP and MCP).
+ * both HTTP and MCP). NOT every transport converges there: the MCP
+ * structured `store` path inserts its observations directly in `server.ts`
+ * and does not call this guard, so a raw MCP `store` of an `agent_grant` can
+ * persist a shape this validator would refuse. Reads re-validate, so such an
+ * entity fails closed, but the write itself is unguarded.
  *
  * `createGrant` / `updateGrantFields` in this module already call
  * {@link validateCapabilities} directly before they persist, so grants
@@ -1148,10 +1151,15 @@ async function writeGrantEntity(params: InternalGrantWrite): Promise<AgentGrant>
  * Scoped strictly to `entity_type === "agent_grant"` and the `capabilities`
  * field — every other entity_type and every other agent_grant field is a
  * no-op here, mirroring the `usage_digest` redaction guard's shape in
- * `actions.ts`. Throws {@link AgentGrantValidationError} (mapped to a 400
- * by the same envelope `createGrant`/`updateGrantFields` already produce)
- * before any row is written, so an invalid capability can never be stored
- * by ANY write surface — not only the two ergonomic helpers.
+ * `actions.ts`. Throws {@link AgentGrantValidationError} before any row is
+ * written (a 400 on the grants routes and `POST /correct`; `POST /store`
+ * surfaces it as a 500 `DB_QUERY_FAILED`; MCP `correct` as JSON-RPC -32603),
+ * so an invalid capability is not stored by the
+ * surfaces that call this guard (and the two ergonomic helpers). It is NOT
+ * called on every insert: the MCP structured `store` path and the
+ * interpretation paths (MCP `create_interpretation`, `POST
+ * /interpretations/create`) insert observations without it, so reads
+ * re-validate (`snapshotToGrant`) and fail closed on a stored invalid shape.
  */
 export function assertAgentGrantFieldValid(
   entityType: string,

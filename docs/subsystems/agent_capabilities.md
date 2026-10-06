@@ -366,6 +366,71 @@ A denial produces HTTP 403 with:
 }
 ```
 
+## Reserved: agent_capability_v1
+
+`openapi.yaml` declares a second capability shape, `agent_capability_v1`
+(`AgentCapabilityEntryV1`), a narrowly scoped capability that lets one pinned
+key perform a fixed purpose and nothing else. It is **declared, not accepted**:
+no build admits it yet, and it never covers anything through the legacy
+capability checks above.
+
+- **Refused at write** (the validator rejects the v1 entry; message and field
+  `capabilities[0].op`), with the error each surface returns today:
+  `POST /agents/grants` and `PATCH /agents/grants/{id}` answer HTTP 400
+  `error_code` `AGENT_GRANT_INVALID` (`details.code` `agent_grant_invalid`);
+  `POST /correct` answers HTTP 400 `error_code` `agent_grant_invalid`;
+  `POST /store` answers HTTP 500 `DB_QUERY_FAILED` carrying the validator
+  message; MCP `correct` answers JSON-RPC `-32603` carrying the validator
+  message and no code. Only the first three return an `agent_grant_invalid`
+  code. See [`errors.md`](errors.md#agent-capability-v1-errors-reserved).
+- **Not refused at write:** MCP `store` (structured path), MCP
+  `create_interpretation` and `POST /interpretations/create`. They insert the
+  observation directly, without the grant validator or the protected-type
+  check, so a v1-shaped `agent_grant` entity can be persisted through any of
+  them. The entity is inert: every read re-validates it, rejects it, and
+  resolves it to no grant, so admission fails closed. Closing these paths
+  (the validator call on each insert, plus the owner-session guard) belongs
+  with the owner-only write guard, at every insertion entrance.
+- **Enable gate.** Before any change makes the validator accept the v1 shape,
+  it must reject (or ignore) every v1-shaped grant observation that already
+  exists, from whichever path wrote it. Without that, an entity planted
+  through any non-refusing path by any principal able to reach it would become
+  a live candidate the moment the validator starts accepting v1, without ever
+  passing an owner-session check. After enabling, the field-shape guard no
+  longer protects (v1 becomes a valid shape), so the owner-session guard must
+  sit at every insertion entrance, including MCP `store` and
+  `create_interpretation`. The test `ENABLE GATE: a v1-shaped grant
+  observation seeded past every write guard confers no authority` in
+  `tests/integration/agent_capability_v1_inert.test.ts` is live now and goes
+  red when the validator starts accepting v1, so the enabling change cannot
+  skip the gate silently; it must change that test deliberately, with the
+  gate satisfied. Its seed is a COMPLETE, contract-conformant v1 grant (all
+  three pins and the validity window set, shared fixture
+  `tests/helpers/agent_capability_v1_fixture.ts`, checked against the declared
+  schema), so an enabler that enforces the pins and the validity window cannot
+  reject it for an unrelated reason and leave the test green.
+- **Tolerance tests.** The tests for the non-refusing surfaces accept either
+  outcome (persisted or refused) and assert only that no authority results, so
+  they do not by themselves detect a future change that makes one of those
+  surfaces refuse. That change must update those tests and this section
+  together.
+- `agent_grant` schema 1.1.0 declares `valid_from` / `valid_until` as plain
+  optional strings. Nothing reads them, and the grant-management routes
+  (`POST /agents/grants`, `PATCH /agents/grants/{id}`) neither return, store,
+  validate nor enforce them under any schema version. What changes is raw
+  writes (`/store`, `/correct`, MCP `store`, MCP `correct`): where 1.1.0 is the
+  active schema (a fresh instance, or one where an owner registered 1.1.0) they
+  keep both fields verbatim and unvalidated in the snapshot, and a date-shaped
+  value derives a timeline event, exactly as `last_used_at` already does;
+  under 1.0.0 the snapshot omits them. The MCP `store` path derives those
+  timeline events from the submitted fields even where the active schema does
+  not declare them, which predates 1.1.0. Existing instances keep their
+  registered schema until an owner registers 1.1.0. Covered, per version and
+  surface, by `tests/integration/agent_grant_validity_fields_effect.test.ts`
+  and the `agent_grant_validity_fields_effect` agentic-eval fixture.
+
+Error vocabulary: [`errors.md`](errors.md#agent-capability-v1-errors-reserved).
+
 ## Operator runbook
 
 ### Upgrading from the env-config era

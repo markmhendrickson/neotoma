@@ -1,0 +1,169 @@
+{
+  "meta": {
+    "id": "agent_grant_validity_fields_effect",
+    "description": "An agent stores a legacy-shaped agent_grant carrying a validity window (valid_from and valid_until), reads the snapshot back and sees both fields persisted, then tries to give the grant a reserved agent_capability_v1 capability through correct. The write is refused with the validator message, a second readback shows the grant unchanged (still the legacy capability, validity fields intact), and the agent does not report the v1 capability as granted. Tier 1 pins the agent-observed tool sequence and results, while tests/integration/agent_grant_validity_fields_effect.test.ts and tests/integration/agent_capability_v1_inert.test.ts execute the same effects against the real store under explicit schema versions 1.0.0 and 1.1.0.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2"],
+    "tags": ["authorization", "agent_grant", "schema", "effect-parity", "agent-facing"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Create an agent grant for the reporting agent that expires at the end of next year, confirm the validity window was saved, then try to switch it to the new narrowly scoped capability and check what actually happened."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            {
+              "entity_type": "agent_grant",
+              "label": "reporting agent",
+              "status": "active",
+              "capabilities": [{ "op": "retrieve", "entity_types": ["task"] }],
+              "match_thumbprint": "thumb_reporting_agent",
+              "valid_from": "2030-01-01T00:00:00Z",
+              "valid_until": "2031-01-01T00:00:00Z"
+            }
+          ],
+          "idempotency_key": "grant-reporting-agent-1"
+        },
+        "tool_output": {
+          "success": true,
+          "entities": [
+            {
+              "entity_id": "ent_grant_reporting",
+              "entity_type": "agent_grant",
+              "action": "created"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+        "tool_input": { "entity_id": "ent_grant_reporting", "format": "json" },
+        "tool_output": {
+          "entity_id": "ent_grant_reporting",
+          "entity_type": "agent_grant",
+          "schema_version": "1.1.0",
+          "snapshot": {
+            "label": "reporting agent",
+            "status": "active",
+            "capabilities": [{ "op": "retrieve", "entity_types": ["task"] }],
+            "match_thumbprint": "thumb_reporting_agent",
+            "valid_from": "2030-01-01T00:00:00Z",
+            "valid_until": "2031-01-01T00:00:00Z"
+          }
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_correct",
+        "tool_input": {
+          "entity_id": "ent_grant_reporting",
+          "entity_type": "agent_grant",
+          "field": "capabilities",
+          "value": [
+            {
+              "op": "agent_capability_v1",
+              "capability_id": "cap-1",
+              "delegation_chain": []
+            }
+          ],
+          "idempotency_key": "grant-reporting-agent-v1"
+        },
+        "tool_output": {
+          "success": false,
+          "error": "MCP error -32603: Failed to create correction: capabilities[0].op must be one of: store, store_structured, create_relationship, correct, retrieve, register_relationship_type, github_harness:read, github_harness:write, github_harness:*"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+        "tool_input": { "entity_id": "ent_grant_reporting", "format": "json" },
+        "tool_output": {
+          "entity_id": "ent_grant_reporting",
+          "entity_type": "agent_grant",
+          "schema_version": "1.1.0",
+          "snapshot": {
+            "label": "reporting agent",
+            "status": "active",
+            "capabilities": [{ "op": "retrieve", "entity_types": ["task"] }],
+            "match_thumbprint": "thumb_reporting_agent",
+            "valid_from": "2030-01-01T00:00:00Z",
+            "valid_until": "2031-01-01T00:00:00Z"
+          }
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "The grant was created and readback shows valid_from 2030-01-01 and valid_until 2031-01-01 saved. The switch to the new capability was refused by the validator and a second readback confirms the grant is unchanged: it still holds only the retrieve capability, with the validity window intact. The new capability type is not granted."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_correct" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_correct" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_retrieve_entity_snapshot" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_retrieve_entity_snapshot" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 7
+      }
+    ]
+  }
+}

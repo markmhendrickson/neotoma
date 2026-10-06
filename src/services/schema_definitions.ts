@@ -3033,7 +3033,21 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   agent_grant: {
     entity_type: "agent_grant",
-    schema_version: "1.0.0",
+    // 1.1.0: declares `valid_from` / `valid_until` (the grant validity window
+    // used by the reserved `agent_capability_v1` capability, see openapi.yaml
+    // `AgentCapabilityEntryV1`). Nothing in this build reads them. They are
+    // plain strings, not `date`: a later digest needs the exact normalised
+    // text, and `date` would not validate it anyway. Where 1.1.0 is the active
+    // schema, a raw store/correct (HTTP or MCP) keeps the value verbatim and
+    // unvalidated, and a value that looks like a date derives a timeline event
+    // by the generic heuristic, as `last_used_at` already does (the MCP store
+    // path derives such events from submitted fields even where the active
+    // schema does not declare them). The grant-management routes
+    // (`/agents/grants`) never store these fields. Existing instances
+    // keep their registered schema until an owner registers this version (the
+    // boot seeder never replaces an active schema), so a grant with a v1
+    // capability stays unusable there.
+    schema_version: "1.1.0",
     metadata: {
       label: "Agent grant",
       description:
@@ -3048,6 +3062,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         match_sub: { type: "string", required: false },
         match_iss: { type: "string", required: false },
         match_thumbprint: { type: "string", required: false },
+        valid_from: { type: "string", required: false },
+        valid_until: { type: "string", required: false },
         capabilities: { type: "array", required: true },
         status: { type: "string", required: true },
         notes: { type: "string", required: false },
@@ -3078,6 +3094,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         match_sub: { strategy: "last_write" },
         match_iss: { strategy: "last_write" },
         match_thumbprint: { strategy: "last_write" },
+        valid_from: { strategy: "last_write" },
+        valid_until: { strategy: "last_write" },
         import_source: { strategy: "last_write" },
         linked_github_login: { strategy: "last_write" },
         linked_github_user_id: { strategy: "last_write" },

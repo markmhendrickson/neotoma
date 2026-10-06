@@ -114,6 +114,45 @@ Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new fiel
 | Code | Meaning | HTTP | Retry? |
 |------|---------|------|--------|
 | `RESOURCE_NOT_FOUND` | Resource not found | 404 | No |
+### Agent Capability v1 Errors (reserved)
+Declared ahead of the `agent_capability_v1` capability type (see `AgentCapabilityEntryV1` in `openapi.yaml`), a narrowly scoped capability that lets one pinned key perform a fixed, owner-chosen purpose and nothing else. **No code path emits any of these yet.** The names and hints are declared first so the contract, generated types and agent instructions exist before the enforcement they describe; each row is a contract for the change that enables the capability. Until then the existing grant validator refuses a grant carrying the v1 shape (message and field `capabilities[i].op`), but how the refusal reaches the caller differs by surface, and not every write path calls the validator:
+
+| Surface | Result today |
+|---------|--------------|
+| `POST /agents/grants`, `PATCH /agents/grants/{id}` | HTTP 400, `error_code` `AGENT_GRANT_INVALID`, `details.code` `agent_grant_invalid` |
+| `POST /correct` | HTTP 400, `error_code` `agent_grant_invalid`, `details.field` `capabilities[0].op` |
+| `POST /store` | HTTP 500, `error_code` `DB_QUERY_FAILED`, with the validator message (the refusal holds; it falls into the generic error path) |
+| MCP `correct` | JSON-RPC `-32603` carrying the validator message, no error code |
+| MCP `store` (structured path), MCP `create_interpretation`, `POST /interpretations/create` | **Not refused.** They insert the observation without running the validator, so a v1-shaped `agent_grant` entity can be persisted |
+
+A persisted v1-shaped entity confers no authority: every read re-validates it, rejects it, and resolves it to no grant (admission fails closed). The enabling change must first reject any v1-shaped grant observation that already exists, from any of those paths (see `docs/subsystems/agent_capabilities.md`, "Reserved: agent_capability_v1").
+
+All of these ride in the standard envelope (`details.hint` carries the structured hint), except that `ERR_REVISION_CONFLICT` rides as an issue of the resolution envelope (above). None echoes a key, token or grant digest. The only value any of them returns is `details.current_last_observation_id` on `ERR_REVISION_CONFLICT`, by design and only after the write passed the capability check. How they render over MCP (JSON-RPC) is specified with the enabling change, not here.
+
+| Code | Meaning | HTTP | Retry? | Hint (`details.hint`) |
+|------|---------|------|--------|------|
+| `ERR_ACQUISITION_NOT_AUTHORIZED` | A request tried to make the server read a file path, follow a reference, fetch a URL or provider object, or parse a server-local file. A v1 key may only send inline bytes. Refused from request shape alone, before any filesystem or provider call. | 403 | No | Send the exact bytes inline as `file_content` (base64) with `mime_type`; server-side acquisition is not available to this key. |
+| `ERR_AUTHORITY_CHANGED` | The grant stopped covering the write between admission and a durable step (revoked, suspended, expired, or its capability changed). `details` carries classified `persisted`, `refused` and `replayed` counts of what the request had already done. Nothing further is written. | 403 | No | Stop. Do not retry with a wider scope. The owner must reissue the grant. |
+| `ERR_REVISION_CONFLICT` | A conditional write named an `expected_last_observation_id` that is no longer the entity's first observation, or a create-only write found existing observations. Reported as an `issues[]` entry of an `ERR_STORE_RESOLUTION_FAILED` envelope (resolution envelope above) with `details.current_last_observation_id`, only after the write passed the capability check. The HTTP status is 409 only when every issue in the envelope is `ERR_REVISION_CONFLICT`; any other mix keeps the resolution envelope's 400. On `/store`, 409 also means an idempotency collision (`ERR_IDEMPOTENCY_COLLISION`, standard envelope); tell them apart by the body. | 409 | No (re-read first) | Re-read the entity and re-preview the change. Never overwrite or force. |
+| `ERR_V1_OWNER_SESSION_REQUIRED` | An operation reserved to the owner (creating, changing or reactivating a v1 grant, or a merge, split, delete or restore of one) came from a request that is not an owner session. | 403 | No | Ask the owner to perform this in an owner session (Inspector or CLI). |
+| `ERR_V1_ROUTE_NOT_PERMITTED` | A v1-scoped key called a route or MCP method outside its capability's `operation_ids`, or one not yet wired for v1. Denial is the default; a route added later is denied until wired. | 403 | No | This key may only call the operations listed in its capability. |
+| `ERR_V1_WRITE_BUDGET_EXHAUSTED` | The bound entity already holds the owner-set maximum number of observations, counted across all authors for its lifetime. The body carries no count, revision id or entity id. | 403 | No | Stop. The owner must reissue the grant with a higher `max_observations`; do not retry. |
+
+`agent_grant_invalid` reasons added for the v1 shape. They will ride in `details.reason` of the envelope the refusing surfaces above already return.
+
+| Reason | Meaning | Field |
+|--------|---------|-------|
+| `delegation_unsupported_v1` | `delegation_chain` is not the empty array. | `capabilities[i].delegation_chain` |
+| `validity_required` | A grant with a v1 capability has no `valid_from` / `valid_until`, or the active `agent_grant` schema does not declare them. | `valid_from`, `valid_until` |
+| `validity_malformed` | A validity value is not RFC 3339 with uppercase `T` and `Z` or an explicit offset. | `valid_from`, `valid_until` |
+| `validity_window_invalid` | `valid_until` is not later than `valid_from`. | `valid_until` |
+| `pins_required` | A grant with a v1 capability lacks a non-null canonical `match_thumbprint`, `match_sub` or `match_iss`. | `match_thumbprint`, `match_sub`, `match_iss` |
+| `operation_id_not_permitted` | `operation_ids` names an operation outside the closed vocabulary, or one this build does not enforce. | `capabilities[i].param_constraints.operation_ids` |
+| `legacy_capability_mixed` | A grant carrying a v1 capability also carries a legacy capability. | `capabilities` |
+| `key_already_pinned` | The write would leave a second active or suspended grant pinning a key a v1 grant pins, or give a v1 grant a key already pinned elsewhere. | `match_thumbprint` |
+| `unknown_constraint` | `param_constraints` carries an unknown version, unknown key, malformed value or unsupported predicate. | `capabilities[i].param_constraints` |
+| `write_budget_required` | `entities.max_observations` is missing, not an integer, not positive, or a float. | `capabilities[i].param_constraints.entities.max_observations` |
+
 ### MCP Transport Errors (`POST /mcp`)
 These ride in a JSON-RPC error's `error.data` (`{ error_code, message, hint, details? }`), not the standard envelope, because `/mcp` answers in JSON-RPC. The JSON-RPC `error.code` is listed alongside. None of them repeats a header value or a credential.
 | Code | Meaning | HTTP | Retry? |

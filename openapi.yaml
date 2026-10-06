@@ -363,6 +363,12 @@ components:
       description: |
         A single per-observation failure inside an
         `ERR_STORE_RESOLUTION_FAILED` response.
+
+        `ERR_REVISION_CONFLICT` is RESERVED for the conditional write used
+        under an `agent_capability_v1` capability and is not emitted by this
+        build. It carries `details.current_last_observation_id` and is only
+        reported after the write has been checked against the capability, so
+        an out-of-scope target never learns an observation id.
       properties:
         observation_index:
           type: integer
@@ -377,6 +383,7 @@ components:
             - ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT
             - ERR_RELATIONSHIP_ENTITY_ID_FORMAT
             - entity_owner_conflict
+            - ERR_REVISION_CONFLICT
         message:
           type: string
         details:
@@ -468,6 +475,44 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/StoreResolutionIssue"
+    AgentCapabilityV1ErrorEnvelope:
+      description: |
+        RESERVED for `agent_capability_v1`; not emitted by this build. The
+        standard envelope for the refusals a v1-scoped key can meet:
+        `ERR_V1_ROUTE_NOT_PERMITTED`, `ERR_V1_OWNER_SESSION_REQUIRED`,
+        `ERR_V1_WRITE_BUDGET_EXHAUSTED`, `ERR_ACQUISITION_NOT_AUTHORIZED`
+        (all 403) and `ERR_AUTHORITY_CHANGED` (403). The budget refusal body
+        carries no count, no revision id and no entity id.
+        `ERR_AUTHORITY_CHANGED` additionally carries classified counts of the
+        effects of the request so far in `details`: `persisted`, `refused` and
+        `replayed`. Every refusal carries a structured `hint` in `details`.
+      allOf:
+        - $ref: "#/components/schemas/ErrorEnvelope"
+        - type: object
+          properties:
+            error_code:
+              type: string
+              enum:
+                - ERR_ACQUISITION_NOT_AUTHORIZED
+                - ERR_AUTHORITY_CHANGED
+                - ERR_V1_OWNER_SESSION_REQUIRED
+                - ERR_V1_ROUTE_NOT_PERMITTED
+                - ERR_V1_WRITE_BUDGET_EXHAUSTED
+            details:
+              type: object
+              additionalProperties: true
+              properties:
+                hint:
+                  type: string
+                persisted:
+                  type: integer
+                  minimum: 0
+                refused:
+                  type: integer
+                  minimum: 0
+                replayed:
+                  type: integer
+                  minimum: 0
     OAuthProtectedResourceMetadata:
       type: object
       description: |
@@ -959,6 +1004,42 @@ components:
             that predates identity recording); consumers MUST read absence as
             "unknown", never as the graph owner. Withheld from responses to
             guest (entity-scoped token) readers.
+        grant_id:
+          type: string
+          description: |
+            RESERVED for the `agent_capability_v1` capability type (see
+            `AgentCapabilityEntryV1`). The grant that authorised the write.
+            No build stamps this key yet; it is declared so the contract lands
+            before the enforcement that populates it. Not proof on its own:
+            provenance travels with replicated observations, so a consumer
+            must verify against the grant itself. Guest (entity-scoped token)
+            readers must not receive it; the change that starts stamping it
+            extends guest redaction, which today strips only
+            `authenticated_actor_id`.
+        grant_revision:
+          type: string
+          description: |
+            RESERVED for `agent_capability_v1`. Id of the grant observation
+            the write was authorised against (the computed revision of the
+            grant's safety-bearing keys), read inside the same unit as the
+            write. Not stamped by this build. Not proof on its own, and
+            withheld from guest readers once stamped (see `grant_id`).
+        capability_id:
+          type: string
+          description: |
+            RESERVED for `agent_capability_v1`. `capability_id` of the single
+            capability that covered the write. Not stamped by this build. Not
+            proof on its own, and withheld from guest readers once stamped
+            (see `grant_id`).
+        capability_digest:
+          type: string
+          description: |
+            RESERVED for `agent_capability_v1`. Lowercase hex SHA-256 of the
+            canonical form of the grant's identity pins, validity window and
+            capability, as read inside the write unit. A computed value, never
+            stored on the grant and never accepted in a request. Not stamped
+            by this build. Not proof on its own, and withheld from guest
+            readers once stamped (see `grant_id`).
     AttributionPolicySnapshot:
       type: object
       description: |
@@ -1259,6 +1340,246 @@ components:
             `issue` sync traffic, etc. Omitted when no typed observations
             exist for that agent.
     AgentCapabilityEntry:
+      description: |
+        One capability on an `agent_grant`. Discriminated by `op`: the
+        legacy shape (`AgentCapabilityEntryLegacy`, an `op` from the legacy
+        vocabulary plus `entity_types`) and the narrowly scoped
+        `agent_capability_v1` shape (`AgentCapabilityEntryV1`), which is a
+        distinct wire shape and never a legacy entry plus extra keys.
+
+        RESERVED, not accepted by this build. The grant validator accepts only
+        the legacy branch, so `POST /agents/grants` and `PATCH
+        /agents/grants/{id}` refuse a v1 entry (HTTP 400, `error_code`
+        `AGENT_GRANT_INVALID`). A v1-shaped grant that reaches storage by any
+        other path confers no authority: every read re-validates it, rejects
+        it, and resolves it to no grant (admission fails closed). Which
+        internal write paths refuse and which do not is documented in
+        `docs/subsystems/agent_capabilities.md`, not in this contract.
+        Enabling the v1 shape is gated on first rejecting any v1-shaped grant
+        observation that already exists. The branch is declared first so the
+        contract, generated types and error vocabulary land before the
+        enforcement they describe.
+      oneOf:
+        - $ref: "#/components/schemas/AgentCapabilityEntryLegacy"
+        - $ref: "#/components/schemas/AgentCapabilityEntryV1"
+    AgentCapabilityEntryV1:
+      type: object
+      additionalProperties: false
+      description: |
+        RESERVED, refused by this build. A narrowly scoped capability that
+        authorises one fixed purpose for one pinned key and nothing else. It
+        carries no `entity_types`, no `repos`, no `relationship_types` and no
+        legacy `op`; a legacy reader that meets it denies the whole grant
+        (`agent_grant_invalid`), and no legacy coverage check ever treats it
+        as covering anything. All of its authority comes from a dedicated
+        evaluator, never from the legacy capability checks.
+
+        A grant that carries a v1 entry carries ONLY v1 entries (a legacy
+        entry beside one is refused with reason `legacy_capability_mixed`).
+        The grant must also carry non-null `match_thumbprint`, `match_sub`,
+        `match_iss`, `valid_from` and `valid_until` (see `AgentGrantCreate`).
+      required:
+        - op
+        - capability_id
+        - purpose
+        - delegation_chain
+        - param_constraints
+      properties:
+        op:
+          type: string
+          enum:
+            - agent_capability_v1
+          description: Discriminator. A value outside the legacy `op` vocabulary.
+        capability_id:
+          type: string
+          minLength: 1
+          description: Stable identifier, unique within the grant.
+        purpose:
+          type: object
+          additionalProperties: false
+          required: [name, version]
+          description: |
+            Describes the admitted action inside the capability. Never a
+            reference to an external issuer, and never supplied or
+            authenticated by a request.
+          properties:
+            name:
+              type: string
+              minLength: 1
+            version:
+              type: string
+              minLength: 1
+        delegation_chain:
+          type: array
+          maxItems: 0
+          items: {}
+          description: |
+            REQUIRED and always `[]`: direct owner-to-producer issuance is a
+            root grant with an explicit empty chain. A non-empty chain is
+            refused (reason `delegation_unsupported_v1`, field
+            `capabilities[i].delegation_chain`). Delegation is a later
+            contract version.
+        param_constraints:
+          $ref: "#/components/schemas/AgentCapabilityParamConstraintsV1"
+    AgentCapabilityParamConstraintsV1:
+      type: object
+      additionalProperties: false
+      description: |
+        The single constraint object of an `agent_capability_v1` entry. All
+        six keys are REQUIRED. An unknown version, unknown key, malformed
+        value or unsupported predicate is refused (reason `unknown_constraint`
+        or a more specific reason); it is never dropped into a type-only
+        grant. Floats are rejected anywhere in a v1 capability: every number
+        is an integer within +/-(2^53 - 1).
+
+        RESERVED, refused by this build.
+      required:
+        - contract_version
+        - operation_ids
+        - owner
+        - source_bytes
+        - sources
+        - entities
+      properties:
+        contract_version:
+          type: integer
+          enum: [1]
+        operation_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - store
+              - listSources
+              - getSourceById
+              - listObservations
+              - queryObservations
+              - getEntitySnapshot
+              - getFieldProvenance
+          description: |
+            Closed vocabulary of operations the key may call. Any other value
+            is refused, including `correct`, `createInterpretation`,
+            `createObservation`, batch correction, grant management and schema
+            registration. A grant naming an operation that the build does not
+            enforce is refused (reason `operation_id_not_permitted`). A Source
+            content operation joins this list only after it is declared with
+            its own `operationId`.
+        owner:
+          type: object
+          additionalProperties: false
+          required: [user_id]
+          description: The issuing owner. Must equal the user the grant belongs to.
+          properties:
+            user_id:
+              type: string
+              minLength: 1
+        source_bytes:
+          type: array
+          minItems: 1
+          description: |
+            Finite allowlist of exact byte sequences the key may store inline.
+            Each entry names the SHA-256, exact length and canonical MIME type
+            of the bytes.
+          items:
+            $ref: "#/components/schemas/AgentCapabilitySourceBytesV1"
+        sources:
+          type: array
+          description: |
+            Finite list of owned Source ids, each with its exact digest, MIME
+            type and length. It bounds READS of those Sources and a consumer's
+            verification. It is not a store input: no request names an
+            existing Source by id.
+          items:
+            $ref: "#/components/schemas/AgentCapabilitySourceV1"
+        entities:
+          $ref: "#/components/schemas/AgentCapabilityEntitiesConstraintV1"
+    AgentCapabilitySourceBytesV1:
+      type: object
+      additionalProperties: false
+      required: [sha256, byte_length, mime_type]
+      properties:
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: Lowercase hex SHA-256 of the exact bytes.
+        byte_length:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Exact byte length.
+        mime_type:
+          type: string
+          minLength: 1
+          description: Canonical, non-blank MIME type.
+    AgentCapabilitySourceV1:
+      type: object
+      additionalProperties: false
+      description: |
+        An owned Source a v1 key may read: its id plus the exact digest,
+        length and MIME type. Closed, like every other v1 object.
+      required: [source_id, sha256, byte_length, mime_type]
+      properties:
+        source_id:
+          type: string
+          minLength: 1
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: Lowercase hex SHA-256 of the exact bytes.
+        byte_length:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Exact byte length.
+        mime_type:
+          type: string
+          minLength: 1
+          description: Canonical, non-blank MIME type.
+    AgentCapabilityEntitiesConstraintV1:
+      type: object
+      additionalProperties: false
+      required: [entity_type, composite, bound_fields, max_observations]
+      description: |
+        Binds the capability to exactly one entity. The entity type is named
+        here, never on the capability entry. RESERVED, refused by this build.
+      properties:
+        entity_type:
+          type: string
+          enum: [configuration]
+        composite:
+          type: object
+          additionalProperties: false
+          required: [system, key]
+          description: The composite identity of the one admitted entity.
+          properties:
+            system:
+              type: string
+              minLength: 1
+            key:
+              type: string
+              minLength: 1
+        bound_fields:
+          type: object
+          additionalProperties: true
+          description: |
+            The complete set of binding-bearing fields of the admitted entity
+            with the exact values (and versioned bundle shape) the key may
+            write. Values use the integer-only JSON domain: strings, booleans,
+            null, arrays, objects and integers within +/-(2^53 - 1).
+        max_observations:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+          description: |
+            REQUIRED, supplied by the issuing owner, no default. Lifetime
+            bound on the number of observations the admitted entity may hold,
+            counted across all authors. A write that would exceed it is
+            refused (`ERR_V1_WRITE_BUDGET_EXHAUSTED`). Raising it is a new
+            whole grant revision. A missing, non-integer or non-positive value
+            is refused with reason `write_budget_required`.
+    AgentCapabilityEntryLegacy:
       type: object
       required:
         - op
@@ -1340,6 +1661,25 @@ components:
         match_thumbprint:
           type: string
           nullable: true
+        valid_from:
+          type: string
+          nullable: true
+          description: |
+            RESERVED for `agent_capability_v1`. Start of the grant's validity
+            window, RFC 3339 normalised to UTC with a `Z` suffix. Null on a
+            grant with no v1 capability. The grant-management routes do not
+            return, store, validate or enforce it in this build; a raw write
+            can retain it as an unvalidated plain string only where
+            `agent_grant` schema 1.1.0 is active, and nothing reads it.
+        valid_until:
+          type: string
+          nullable: true
+          description: |
+            RESERVED for `agent_capability_v1`. End (exclusive) of the grant's
+            validity window, normalised like `valid_from`. Null on a grant
+            with no v1 capability. Same status as `valid_from`: not returned,
+            stored, validated or enforced by the grant-management routes in
+            this build.
         notes:
           type: string
           nullable: true
@@ -1361,6 +1701,19 @@ components:
           nullable: true
     AgentGrantCreate:
       type: object
+      description: |
+        Create payload for an `agent_grant`.
+
+        RESERVED (`agent_capability_v1`): when any capability is the v1 shape,
+        `match_thumbprint`, `match_sub`, `match_iss`, `valid_from` and
+        `valid_until` are ALL required and non-null, the thumbprint must be in
+        canonical form (no surrounding whitespace), and the validity window is
+        supplied by the issuing owner with no default. This build refuses the
+        v1 capability shape outright, so those requirements are not yet
+        enforced. The grant-management routes do not store, validate or
+        enforce `valid_from` / `valid_until` in this build (a raw write can
+        retain them as unvalidated strings only where `agent_grant` schema
+        1.1.0 is active; nothing reads them).
       required:
         - label
         - capabilities
@@ -1384,6 +1737,23 @@ components:
         match_thumbprint:
           type: string
           nullable: true
+        valid_from:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+          description: |
+            RESERVED for `agent_capability_v1`. Not stored, validated or
+            enforced by this route in this build. RFC 3339 with uppercase `T` and `Z` or a mandatory `+hh:mm` /
+            `-hh:mm` offset; any other form (date-only, no offset, lowercase,
+            locale text) will be refused. Normalised to UTC `Z` before storage
+            and compared by instant.
+        valid_until:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+          description: |
+            RESERVED for `agent_capability_v1`. Not stored, validated or
+            enforced by this route in this build. Same format as `valid_from`. Must be later than `valid_from`.
         notes:
           type: string
           nullable: true
@@ -1396,6 +1766,16 @@ components:
             active). Admitted AAuth requests cannot pivot owners.
     AgentGrantUpdate:
       type: object
+      description: |
+        Partial update of an `agent_grant`.
+
+        RESERVED (`agent_capability_v1`): a grant that carries a v1 capability
+        is never changed by partial update; a change must supply the complete
+        set of safety-bearing keys (`status`, `match_thumbprint`, `match_sub`,
+        `match_iss`, `capabilities`, `valid_from`, `valid_until`) and is
+        written as one observation. This build refuses the v1 capability
+        shape, so that rule is not yet enforced. This route does not store,
+        validate or enforce `valid_from` / `valid_until` in this build.
       properties:
         label:
           type: string
@@ -1415,6 +1795,16 @@ components:
         match_thumbprint:
           type: string
           nullable: true
+        valid_from:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+          description: RESERVED for `agent_capability_v1`. Not stored, validated or enforced by this route in this build. See `AgentGrantCreate.valid_from`.
+        valid_until:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+          description: RESERVED for `agent_capability_v1`. Not stored, validated or enforced by this route in this build. See `AgentGrantCreate.valid_until`.
     Entity:
       type: object
       properties:
@@ -2310,6 +2700,43 @@ components:
           description: |
             Optional Neotoma peer id to stamp on observations for cross-instance
             sync loop prevention (Phase 5). Requires `observation_source: sync` in practice.
+    StoreEntityEntryConditionalV1:
+      type: object
+      additionalProperties: true
+      description: |
+        RESERVED, not referenced by any request schema and not honoured by
+        this build. Declares the entity-entry keys of the conditional write
+        used under an `agent_capability_v1` capability (see
+        `AgentCapabilityEntryV1`), so the contract exists before the
+        enforcement. It is deliberately NOT added to `StoreRequest.entities`
+        items: that schema also feeds the advertised `store` tool schema, and
+        a documented precondition that no build enforces would read as a
+        protection that does not exist. Until the enforcing change ships, an
+        entity entry carrying `expected_last_observation_id` is treated like
+        any other field the entity's schema does not declare.
+
+        Other keys of a conditional entry are the fields the entity's schema
+        declares. Under a v1 capability the entry's key set is closed:
+        `entity_type` equal to the literal `configuration`, `target_id`,
+        `expected_last_observation_id` and schema-declared fields; every
+        other key is refused.
+      properties:
+        target_id:
+          type: string
+          description: |
+            Existing entity id. Required together with a non-null
+            `expected_last_observation_id`.
+        expected_last_observation_id:
+          type: string
+          nullable: true
+          description: |
+            Entity-level precondition. A string is the id of the entity's
+            first observation in the reducer's own order (`observed_at`
+            descending, then the reducer's id comparison); the write is
+            refused with `ERR_REVISION_CONFLICT` when another observation has
+            since become first. An explicit `null` means create-only: the
+            write is refused unless the entity has no observations yet.
+            Omitting the key is refused on a conditional write.
     StoreResponse:
       type: object
       properties:
@@ -5749,6 +6176,12 @@ paths:
             when an `agent_definition` entity's `override_policy` denies the
             calling agent role a field being written; the envelope details
             carry `field_name`, `agent_role`, and `entity_id`.
+
+            RESERVED, not emitted by this build: a key admitted under an
+            `agent_capability_v1` capability can also meet
+            `ERR_ACQUISITION_NOT_AUTHORIZED`, `ERR_AUTHORITY_CHANGED` and
+            `ERR_V1_WRITE_BUDGET_EXHAUSTED` here; the body is the standard
+            envelope, with the shape described by `AgentCapabilityV1ErrorEnvelope`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -5757,6 +6190,22 @@ paths:
             Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
             idempotency_key was already used for a store call with different
             content. Use a new idempotency_key to write the updated payload.
+
+            RESERVED, not emitted by this build: a conditional write under an
+            `agent_capability_v1` capability that loses a revision race
+            answers 409 with the resolution envelope (body shape
+            `StoreResolutionErrorEnvelope`, `error.code`
+            `ERR_STORE_RESOLUTION_FAILED`), carrying an `issues[]` entry whose
+            `code` is `ERR_REVISION_CONFLICT`. Status rule: 409 only when
+            every issue in the envelope is `ERR_REVISION_CONFLICT`; any other
+            mix keeps the resolution envelope's existing 400. The 409 has two
+            meanings on this route; tell them apart by the body: the
+            idempotency collision above is a standard envelope with
+            `error_code` `ERR_IDEMPOTENCY_COLLISION`, a revision conflict has
+            `error.code` `ERR_STORE_RESOLUTION_FAILED`. Re-read and
+            re-preview; never overwrite or force. The response `content`
+            schema stays the standard envelope in this contract revision; the
+            enabling change types it as a `oneOf`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }

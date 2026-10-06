@@ -5008,12 +5008,16 @@ function handleApiError(
       .status(error.status)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelopeDetails()));
   }
-  // A raw store/store_structured/correct targeting entity_type: "agent_grant"
-  // that fails assertAgentGrantFieldValid's pre-persist shape check (invalid
+  // A raw correct targeting entity_type: "agent_grant" that fails
+  // assertAgentGrantFieldValid's pre-persist shape check (invalid
   // capabilities, status, or label) is a client input error, not a server
   // fault — surface it as 400 rather than masking it as a 500
   // DB_QUERY_FAILED, matching the ergonomic /agents/grants routes'
-  // errorEnvelopeFromGrantError. Matched by name (not `instanceof`) to avoid
+  // errorEnvelopeFromGrantError. NOTE: this only applies to handlers whose
+  // catch reaches this function (POST /correct does). POST /store does NOT
+  // reach it and still answers 500 DB_QUERY_FAILED with the validator
+  // message; MCP correct answers JSON-RPC -32603. See docs/subsystems/errors.md.
+  // Matched by name (not `instanceof`) to avoid
   // a static import cycle: agent_grants.ts lazy-imports actions.js for the
   // same reason (writeGrantEntity's comment).
   if (error instanceof Error && error.name === "AgentGrantValidationError") {
