@@ -162,7 +162,7 @@ describe("src/mcp_ws_bridge.ts real listener", () => {
   }, 30000);
 
   it("refuses to start on a malformed host instead of widening the bind", async () => {
-    const proc = spawnBridge("not a host; $(touch /tmp/x)");
+    const proc = spawnBridge("not a valid host!!");
     let out = "";
     proc.stdout.on("data", (c: Buffer) => (out += c.toString("utf8")));
     proc.stderr.on("data", (c: Buffer) => (out += c.toString("utf8")));
@@ -176,5 +176,8 @@ describe("src/mcp_ws_bridge.ts real listener", () => {
     expect(code).not.toBe(0);
     expect(out).not.toContain("MCP WebSocket bridge on ws://");
     expect(out).toContain("failed to listen");
+    // The failure must tell the operator which variables to change.
+    expect(out).toContain("NEOTOMA_WS_HOST");
+    expect(out).toContain("NEOTOMA_WS_PORT");
   }, 30000);
 });

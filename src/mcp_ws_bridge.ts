@@ -34,7 +34,10 @@ const wss = new WebSocketServer({ port: PORT, host: HOST, path: "/mcp" });
 // uncaught exception; exit explicitly with a clear message instead.
 wss.on("error", (err: Error) => {
   // eslint-disable-next-line no-console
-  console.error(`MCP WebSocket bridge failed to listen on ${HOST}:${PORT}: ${err.message}`);
+  console.error(
+    `MCP WebSocket bridge failed to listen on ${HOST}:${PORT}: ${err.message}. ` +
+      "Check NEOTOMA_WS_HOST (bind address) and NEOTOMA_WS_PORT (port)."
+  );
   process.exit(1);
 });
 
