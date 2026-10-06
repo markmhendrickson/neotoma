@@ -90,8 +90,9 @@ Before flipping the variable on an existing database, run `npx tsx scripts/valid
 | `NEOTOMA_HTTP_PORT` (or `HTTP_PORT`) | HTTP API and HTTP MCP port                 | `3080` dev, `3180` prod |
 | `NEOTOMA_HTTP_HOST`                  | HTTP listener bind address (explicit opt-in for non-loopback) | `127.0.0.1` |
 | `WS_PORT`                            | WebSocket MCP bridge port                  | `8280`                  |
+| `NEOTOMA_WS_HOST`                    | WebSocket MCP bridge bind address (explicit opt-in for non-loopback). Prefer `127.0.0.1` for loopback; write an IPv6 loopback bare (`::1`, not `[::1]`, which fails to start with exit 1). `localhost` resolves to a single address family on some hosts (for example IPv6 `::1` only), so IPv4 clients may not reach it. | `127.0.0.1` |
 
-The server binds loopback-only by default so a self-hosted install is never reachable from the LAN unless you opt in. Set `NEOTOMA_HTTP_HOST=0.0.0.0` for a Fly/Docker deployment fronted by its own network boundary or auth, or for a tunnel client — see [Deployment Modes](deployment.md).
+The server binds loopback-only by default so a self-hosted install is never reachable from the LAN unless you opt in. Set `NEOTOMA_HTTP_HOST=0.0.0.0` for a Fly/Docker deployment fronted by its own network boundary or auth, or for a tunnel client — see [Deployment Modes](deployment.md). The WebSocket MCP bridge follows the same convention with `NEOTOMA_WS_HOST`: it listens on loopback by default, so a client on another host can reach it only after you set that variable (for example `NEOTOMA_WS_HOST=0.0.0.0` behind a network boundary or auth of your own).
 
 See [Running the Server](running_the_server.md) for transports and processes.
 
