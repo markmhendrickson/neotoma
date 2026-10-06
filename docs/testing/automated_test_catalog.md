@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **686**
-- Backend and repo Vitest files: **650**
+- Total automated test files: **691**
+- Backend and repo Vitest files: **655**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 186 |
+| Vitest unit tests | 188 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 202 |
+| Vitest integration tests | 205 |
 | Vitest CLI tests | 82 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (186):**
+**Files (188):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -231,6 +231,8 @@ flowchart TD
 - `tests/unit/mirror_writeback.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
 - `tests/unit/null_cleared_field_warning.test.ts`
+- `tests/unit/observation_insert_primitive.test.ts`
+- `tests/unit/observation_reducer_comparator.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_highest_priority_tiebreak.test.ts`
 - `tests/unit/observation_reducer_merge_array_correction.test.ts`
@@ -436,7 +438,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (202):**
+**Files (205):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -568,6 +570,9 @@ flowchart TD
 - `tests/integration/nonjson_csv_store_behavior.test.ts`
 - `tests/integration/nonjson_fixtures_mcp_replay.test.ts`
 - `tests/integration/observation_ingestion.test.ts`
+- `tests/integration/observation_insert_sites_attribution.test.ts`
+- `tests/integration/observation_insert_sites_characterization.test.ts`
+- `tests/integration/observation_insert_sites_routing.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`
 - `tests/integration/override_policy_enforcement.test.ts`
 - `tests/integration/payload_compiler.test.ts`
