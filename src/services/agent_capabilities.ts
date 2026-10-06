@@ -572,6 +572,24 @@ export function enforceAgentCapability(
  * grants from composing into authority neither grant declared. An absent or
  * empty `relationship_types` list grants no edge writes.
  */
+function relationshipGrantHint(
+  agentLabel: string,
+  relationshipType: string,
+  endpointEntityTypes: string[]
+): string {
+  const types = endpointEntityTypes.map((type) => `"${type}"`).join(", ");
+  return (
+    `Admitted agent "${agentLabel}" has no single create_relationship capability ` +
+    `covering relationship_type "${relationshipType || "unknown"}" and endpoint ` +
+    `entity_types [${types}]. ` +
+    `Update the grant's capabilities (PATCH /agents/grants/{grant_id}, or correct ` +
+    `on the agent_grant entity) to include ` +
+    `{ op: "create_relationship", entity_types: [${types}], ` +
+    `relationship_types: ["${relationshipType || "<relationship_type>"}"] }.` +
+    ` Absent or empty relationship_types denies edge writes.`
+  );
+}
+
 export function enforceAgentRelationshipCapability(
   relationshipType: string,
   endpointEntityTypes: string[],
@@ -584,7 +602,22 @@ export function enforceAgentRelationshipCapability(
   // Reuse the ordinary capability path for ceiling handling, default-deny,
   // and endpoint type admission. This also preserves the rollout behaviour
   // for an unadmitted identity when default-deny is disabled.
-  enforceAgentCapability("create_relationship", distinctEndpointTypes, ctx);
+  try {
+    enforceAgentCapability("create_relationship", distinctEndpointTypes, ctx);
+  } catch (error) {
+    // The generic hint says to add `{ op, entity_types }`, which would still be
+    // denied: an edge write also needs `relationship_types`. A caller who
+    // follows the generic hint edits the grant, retries, and is refused again.
+    if (error instanceof AgentCapabilityError && ceilingOf(ctx).kind === "grant") {
+      throw new AgentCapabilityError({
+        op: "create_relationship",
+        entityType: error.entityType,
+        agentLabel: ctx.agentLabel,
+        hint: relationshipGrantHint(ctx.agentLabel, relationshipType, distinctEndpointTypes),
+      });
+    }
+    throw error;
+  }
 
   const ceiling = ceilingOf(ctx);
   if (ceiling.kind !== "grant") return;
@@ -613,16 +646,7 @@ export function enforceAgentRelationshipCapability(
     op: "create_relationship",
     entityType,
     agentLabel: ctx.agentLabel,
-    hint:
-      `Admitted agent "${ctx.agentLabel}" has no single create_relationship capability ` +
-      `covering relationship_type "${relationshipType || "unknown"}" and endpoint ` +
-      `entity_types [${distinctEndpointTypes.map((type) => `"${type}"`).join(", ")}]. ` +
-      `Update the grant's capabilities (PATCH /agents/grants/{grant_id}, or correct ` +
-      `on the agent_grant entity) to include ` +
-      `{ op: "create_relationship", entity_types: [` +
-      `${distinctEndpointTypes.map((type) => `"${type}"`).join(", ")}], ` +
-      `relationship_types: ["${relationshipType || "<relationship_type>"}"] }.` +
-      ` Absent or empty relationship_types denies edge writes.`,
+    hint: relationshipGrantHint(ctx.agentLabel, relationshipType, distinctEndpointTypes),
   });
   logger.warn(
     JSON.stringify({

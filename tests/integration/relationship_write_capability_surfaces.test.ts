@@ -25,6 +25,9 @@
  */
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import type { NextFunction, Request, Response } from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -35,6 +38,9 @@ const PROBE_ADMIT_HEADER = "x-test-rel-cap-probe-admit";
 const ADMIT_BEARER = "rel-capability-surface-test-token";
 const TEST_THUMBPRINT = "tp-rel-write-capability-surfaces";
 const TEST_PROBE_THUMBPRINT = "tp-rel-write-capability-probe";
+const NOEDGE_HEADER = "x-test-rel-cap-noedge";
+const NOEDGE_BEARER = "rel-capability-noedge-test-token";
+const TEST_NOEDGE_THUMBPRINT = "tp-rel-write-capability-noedge";
 const RUN_REST_SURFACE = process.env.NEOTOMA_TEST_SKIP_REST_SURFACE !== "1";
 
 vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
@@ -45,13 +51,22 @@ vi.mock("../../src/middleware/aauth_verify.js", async (importOriginal) => {
       if (
         req.headers[ADMIT_HEADER] === "1" ||
         req.headers[PROBE_ADMIT_HEADER] === "1" ||
+        req.headers[NOEDGE_HEADER] === "1" ||
+        req.headers.authorization === `Bearer ${NOEDGE_BEARER}` ||
         req.headers.authorization === `Bearer ${ADMIT_BEARER}`
       ) {
         const probe = req.headers[PROBE_ADMIT_HEADER] === "1";
+        const noEdge =
+          req.headers[NOEDGE_HEADER] === "1" ||
+          req.headers.authorization === `Bearer ${NOEDGE_BEARER}`;
         (req as Request & { aauth?: unknown }).aauth = {
           verified: true,
           publicKey: '{"kty":"EC"}',
-          thumbprint: probe ? TEST_PROBE_THUMBPRINT : TEST_THUMBPRINT,
+          thumbprint: noEdge
+            ? TEST_NOEDGE_THUMBPRINT
+            : probe
+              ? TEST_PROBE_THUMBPRINT
+              : TEST_THUMBPRINT,
           algorithm: "ES256",
           sub: "dispatcher@swarm.test",
           iss: "https://swarm.test",
@@ -74,11 +89,16 @@ vi.mock("../../src/services/aauth_admission.js", async (importOriginal) => {
             reason: "admitted",
             user_id: owner,
             grant_id: "ent_test_rel_cap_grant",
-            agent_label: "relationship capability surfaces grant",
+            agent_label:
+              ctx.thumbprint === TEST_NOEDGE_THUMBPRINT
+                ? NOEDGE_AGENT_LABEL
+                : "relationship capability surfaces grant",
             capabilities:
-              ctx.thumbprint === TEST_PROBE_THUMBPRINT
-                ? PROBE_CAPABILITIES
-                : CHECKPOINT_CAPABILITIES,
+              ctx.thumbprint === TEST_NOEDGE_THUMBPRINT
+                ? noEdgeCapabilities
+                : ctx.thumbprint === TEST_PROBE_THUMBPRINT
+                  ? PROBE_CAPABILITIES
+                  : CHECKPOINT_CAPABILITIES,
           }
         : { admitted: false, reason: "not_signed" },
   };
@@ -113,6 +133,20 @@ const CHECKPOINT_CAPABILITIES: AgentCapabilityEntry[] = [
     relationship_types: ["REFERS_TO"],
   },
 ];
+
+/**
+ * An admitted agent whose grant covers the entity types but has NO
+ * `create_relationship` entry at all (the shape that left a dispatcher's signed
+ * checkpoint stores refused). Mutable: the recovery tests apply the grant edit
+ * the denial hint describes and retry.
+ */
+const NOEDGE_AGENT_LABEL = "eval agent";
+const NOEDGE_BASE_CAPABILITIES: AgentCapabilityEntry[] = [
+  { op: "store", entity_types: ["checkpoint_brief", "task"] },
+  { op: "retrieve", entity_types: ["*"] },
+  { op: "correct", entity_types: ["task"] },
+];
+let noEdgeCapabilities: AgentCapabilityEntry[] = [...NOEDGE_BASE_CAPABILITIES];
 
 const PROBE_TYPE = "rel_cap_autolink_probe";
 const PROBE_CAPABILITIES: AgentCapabilityEntry[] = [
@@ -280,12 +314,16 @@ async function capture(fn: () => Promise<unknown>): Promise<unknown> {
   return undefined;
 }
 
-async function runRelationshipCli(baseUrl: string, args: string[]): Promise<unknown> {
+async function runRelationshipCli(
+  baseUrl: string,
+  args: string[],
+  bearer: string = ADMIT_BEARER
+): Promise<unknown> {
   const previousBearer = process.env.NEOTOMA_BEARER_TOKEN;
   const previousExitCode = process.exitCode;
   const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-  process.env.NEOTOMA_BEARER_TOKEN = ADMIT_BEARER;
+  process.env.NEOTOMA_BEARER_TOKEN = bearer;
   process.exitCode = undefined;
   try {
     return await capture(() =>
@@ -1254,5 +1292,347 @@ describe("relationship-write capability: every entrance, every surface", () => {
       expect(await edgeExists(OUT_OF_SCOPE, probeId, targetTaskId)).toBe(false);
       expect(await edgeExists(IN_SCOPE, probeId, targetTaskId)).toBe(true);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A grant with no create_relationship entry: caller-visible hint, recovery, and
+// parity across every surface (neotoma PR #2584 review).
+//
+// The hint is only worth anything if it REACHES the caller and FOLLOWING it
+// admits the edge. Each surface below starts from the no-edge grant, asserts the
+// denial it sees names both endpoint types and the relationship type, applies
+// the grant entry the hint describes (parsed from the hint itself, not
+// hard-coded), retries the original call, and reads the edge back.
+// ---------------------------------------------------------------------------
+describe("grant with no create_relationship entry: hint reaches the caller and recovers", () => {
+  let httpServer: Server | undefined;
+  let baseUrl: string;
+  let mcp: NeotomaServer;
+  let checkpointId: string;
+  let taskId: string;
+
+  const hintedGrantEntry = (hint: string): AgentCapabilityEntry => {
+    const match =
+      /\{ op: "create_relationship", entity_types: \[([^\]]*)\], relationship_types: \[([^\]]*)\] \}/.exec(
+        hint
+      );
+    expect(match, `hint must describe a complete grant entry: ${hint}`).not.toBeNull();
+    const list = (raw: string) =>
+      raw
+        .split(",")
+        .map((item) => item.trim().replace(/^"|"$/g, ""))
+        .filter(Boolean);
+    return {
+      op: "create_relationship",
+      entity_types: list(match![1]),
+      relationship_types: list(match![2]),
+    };
+  };
+
+  /** The caller-visible denial must say what to add: both endpoint types and the type. */
+  const expectCompleteHint = (hint: unknown) => {
+    expect(typeof hint).toBe("string");
+    const text = hint as string;
+    expect(text).toContain('"checkpoint_brief"');
+    expect(text).toContain('"task"');
+    expect(text).toContain('relationship_types: ["REFERS_TO"]');
+    expect(text).toContain("Absent or empty relationship_types denies edge writes");
+    return text;
+  };
+
+  /** Apply the edit the hint describes; unrelated capabilities must survive it. */
+  const applyHintedGrant = (hint: string) => {
+    noEdgeCapabilities = [...noEdgeCapabilities, hintedGrantEntry(hint)];
+    for (const base of NOEDGE_BASE_CAPABILITIES) expect(noEdgeCapabilities).toContainEqual(base);
+  };
+
+  async function postNoEdge(path: string, body: Record<string, unknown>) {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [NOEDGE_HEADER]: "1" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      json = { raw: text };
+    }
+    return { status: res.status, body: json };
+  }
+
+  const hintOfBody = (body: Record<string, unknown>): unknown =>
+    (body.details as { hint?: unknown } | undefined)?.hint;
+
+  const storeBody = (key: string) => ({
+    idempotency_key: key,
+    entities: [{ entity_type: "checkpoint_brief", title: key }],
+    relationships: [{ relationship_type: IN_SCOPE, source_index: 0, target_entity_id: taskId }],
+  });
+
+  const runNoEdge = <T>(fn: () => Promise<T>): Promise<T> =>
+    runWithAdmission(
+      {
+        admitted: true,
+        reason: "admitted",
+        user_id: USER_ID,
+        grant_id: "ent_test_rel_cap_grant",
+        agent_label: NOEDGE_AGENT_LABEL,
+        capabilities: noEdgeCapabilities,
+      },
+      fn
+    );
+
+  beforeAll(async () => {
+    if (RUN_REST_SURFACE) {
+      httpServer = createServer(app);
+      await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", () => resolve()));
+      const address = httpServer.address();
+      if (!address || typeof address === "string") throw new Error("expected TCP address");
+      baseUrl = `http://127.0.0.1:${address.port}`;
+    }
+    mcp = new NeotomaServer();
+    (mcp as unknown as Record<string, unknown>).authenticatedUserId = USER_ID;
+  });
+
+  afterAll(async () => {
+    if (httpServer) {
+      await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+    }
+    if (createdEntityIds.length > 0) {
+      await db.from("relationship_observations").delete().in("source_entity_id", createdEntityIds);
+      await db.from("relationship_observations").delete().in("target_entity_id", createdEntityIds);
+      await db.from("relationship_snapshots").delete().in("source_entity_id", createdEntityIds);
+      await db.from("relationship_snapshots").delete().in("target_entity_id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
+    }
+  });
+
+  beforeEach(async () => {
+    noEdgeCapabilities = [...NOEDGE_BASE_CAPABILITIES];
+    checkpointId = await seedEntity("checkpoint_brief");
+    taskId = await seedEntity("task");
+  });
+
+  it("REST /create_relationship: denial names the entry to add; following it admits the edge", async () => {
+    const body = {
+      relationship_type: IN_SCOPE,
+      source_entity_id: checkpointId,
+      target_entity_id: taskId,
+    };
+    const denied = await postNoEdge("/create_relationship", body);
+    expect(denied.status).toBe(403);
+    expect(denied.body.error_code).toBe("capability_denied");
+    const hint = expectCompleteHint(hintOfBody(denied.body));
+    expect(await edgeExists(IN_SCOPE, checkpointId, taskId)).toBe(false);
+
+    // Bound to the recorded agent-facing eval: the fixture's denial hint is the
+    // live hint, byte for byte, so reverting the hint change fails this test.
+    const fixture = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "tests",
+          "fixtures",
+          "agentic_eval",
+          "relationship_write_missing_grant_recovery.json"
+        ),
+        "utf8"
+      )
+    ) as { events: Array<{ payload?: { tool_output?: { code?: string; hint?: string } } }> };
+    const recorded = fixture.events
+      .map((event) => event.payload?.tool_output)
+      .find((output) => output?.code === "capability_denied");
+    expect(recorded?.hint).toBe(hint);
+
+    applyHintedGrant(hint);
+    const retried = await postNoEdge("/create_relationship", body);
+    expect(retried.status).toBe(200);
+    expect(await edgeIsLive(IN_SCOPE, checkpointId, taskId)).toBe(true);
+
+    // The edit added edge permission only: it did not widen anything else.
+    const stillDenied = await postNoEdge("/store", {
+      idempotency_key: `noedge-unrelated-${randomUUID()}`,
+      entities: [{ entity_type: "issue", title: "outside the grant" }],
+    });
+    expect(stillDenied.status).toBe(403);
+    const unrelatedOk = await postNoEdge("/store", {
+      idempotency_key: `noedge-task-${randomUUID()}`,
+      entities: [{ entity_type: "task", title: `unrelated capability ${randomUUID()}` }],
+    });
+    expect(unrelatedOk.status).toBe(200);
+  });
+
+  it("REST /store with a relationship: denial names the entry to add; the retry persists the edge", async () => {
+    const key = `noedge-store-${randomUUID()}`;
+    const denied = await postNoEdge("/store", storeBody(key));
+    expect(denied.status).toBe(403);
+    const hint = expectCompleteHint(hintOfBody(denied.body));
+    expect(await edgesOfTypeTo(IN_SCOPE, taskId)).toBe(0);
+
+    applyHintedGrant(hint);
+    const retried = await postNoEdge("/store", storeBody(key));
+    expect(retried.status).toBe(200);
+    expect(await edgesOfTypeTo(IN_SCOPE, taskId)).toBe(1);
+  });
+
+  it("MCP create_relationship and store: the thrown denial carries the complete hint, and recovery works", async () => {
+    const createArgs = {
+      user_id: USER_ID,
+      relationship_type: IN_SCOPE,
+      source_entity_id: checkpointId,
+      target_entity_id: taskId,
+    };
+    const createDenied = await capture(() =>
+      runNoEdge(() => tool(mcp, "createRelationship")(createArgs))
+    );
+    expect(createDenied).toBeInstanceOf(AgentCapabilityError);
+    const hint = expectCompleteHint((createDenied as AgentCapabilityError).hint);
+    expect(await edgeExists(IN_SCOPE, checkpointId, taskId)).toBe(false);
+
+    const key = `noedge-mcp-store-${randomUUID()}`;
+    const storeDenied = await capture(() =>
+      runNoEdge(() => tool(mcp, "store")({ user_id: USER_ID, ...storeBody(key) }))
+    );
+    expect(storeDenied).toBeInstanceOf(AgentCapabilityError);
+    expectCompleteHint((storeDenied as AgentCapabilityError).hint);
+    expect(await edgesOfTypeTo(IN_SCOPE, taskId)).toBe(0);
+
+    applyHintedGrant(hint);
+    await runNoEdge(() => tool(mcp, "createRelationship")(createArgs));
+    expect(await edgeIsLive(IN_SCOPE, checkpointId, taskId)).toBe(true);
+    const secondTask = await seedEntity("task");
+    await runNoEdge(() =>
+      tool(
+        mcp,
+        "store"
+      )({
+        user_id: USER_ID,
+        idempotency_key: `${key}-retry`,
+        entities: [{ entity_type: "checkpoint_brief", title: `${key}-retry` }],
+        relationships: [
+          { relationship_type: IN_SCOPE, source_index: 0, target_entity_id: secondTask },
+        ],
+      })
+    );
+    expect(await edgesOfTypeTo(IN_SCOPE, secondTask)).toBe(1);
+  });
+
+  it("generated SDK: the error body carries the complete hint, and recovery works", async () => {
+    const sdk = createApiClient({
+      baseUrl,
+      token: NOEDGE_BEARER,
+      forceHttpTransport: true,
+      signWithCliAAuth: false,
+    });
+    const body = {
+      relationship_type: IN_SCOPE,
+      source_entity_id: checkpointId,
+      target_entity_id: taskId,
+    };
+    const denied = await sdk.POST("/create_relationship", { body });
+    expect(denied.response.status).toBe(403);
+    const hint = expectCompleteHint(
+      (denied.error as { details?: { hint?: unknown } } | undefined)?.details?.hint
+    );
+    const storeDenied = await sdk.POST("/store", {
+      body: storeBody(`noedge-sdk-${randomUUID()}`) as any,
+    });
+    expect(storeDenied.response.status).toBe(403);
+    expectCompleteHint(
+      (storeDenied.error as { details?: { hint?: unknown } } | undefined)?.details?.hint
+    );
+
+    applyHintedGrant(hint);
+    const retried = await sdk.POST("/create_relationship", { body });
+    expect(retried.response.status).toBe(200);
+    expect(await edgeIsLive(IN_SCOPE, checkpointId, taskId)).toBe(true);
+  });
+
+  it("CLI relationships create: the denial keeps the structured hint, in JSON and text; recovery works", async () => {
+    const args = [
+      "--source-entity-id",
+      checkpointId,
+      "--target-entity-id",
+      taskId,
+      "--relationship-type",
+      IN_SCOPE,
+    ];
+    const denied = await runRelationshipCli(baseUrl, args, NOEDGE_BEARER);
+    expect(denied).toBeInstanceOf(Error);
+    // Not the generic "Failed to create relationship" the CLI used to throw.
+    expect((denied as Error).message).not.toBe("Failed to create relationship");
+    const cliHint = (denied as { hint?: { code?: string; hint?: unknown } }).hint;
+    expect(cliHint?.code).toBe("capability_denied");
+    const hint = expectCompleteHint(cliHint?.hint);
+    expect(await edgeExists(IN_SCOPE, checkpointId, taskId)).toBe(false);
+
+    // Both output modes show it: the JSON envelope carries it as `hint.hint`,
+    // and the text mode prints a `hint:` line.
+    const { renderCliError } = await import("../../src/cli/index.js");
+    const jsonOut = JSON.parse(renderCliError(denied, "json").trim()) as {
+      hint?: { code?: string; hint?: string };
+    };
+    expect(jsonOut.hint?.code).toBe("capability_denied");
+    expectCompleteHint(jsonOut.hint?.hint);
+    const textOut = renderCliError(denied, "pretty");
+    expect(textOut).toContain("hint: ");
+    expectCompleteHint(textOut);
+
+    applyHintedGrant(hint);
+    const retried = await runRelationshipCli(baseUrl, args, NOEDGE_BEARER);
+    expect(retried).toBeUndefined();
+    expect(await edgeIsLive(IN_SCOPE, checkpointId, taskId)).toBe(true);
+  });
+
+  it("CLI store --file with a relationship: the denial reaches the caller; recovery persists the edge", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "noedge-cli-store-"));
+    const file = join(dir, "envelope.json");
+    const key = `noedge-cli-store-${randomUUID()}`;
+    writeFileSync(file, JSON.stringify(storeBody(key)));
+
+    const runStore = async (): Promise<unknown> => {
+      const previousBearer = process.env.NEOTOMA_BEARER_TOKEN;
+      const previousExitCode = process.exitCode;
+      const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      process.env.NEOTOMA_BEARER_TOKEN = NOEDGE_BEARER;
+      process.exitCode = undefined;
+      try {
+        return await capture(() =>
+          runCli([
+            "node",
+            "neotoma",
+            "--json",
+            "--api-only",
+            "--base-url",
+            baseUrl,
+            "--no-log-file",
+            "store",
+            "--file",
+            file,
+          ])
+        );
+      } finally {
+        stdout.mockRestore();
+        stderr.mockRestore();
+        process.exitCode = previousExitCode;
+        if (previousBearer === undefined) delete process.env.NEOTOMA_BEARER_TOKEN;
+        else process.env.NEOTOMA_BEARER_TOKEN = previousBearer;
+      }
+    };
+
+    const denied = await runStore();
+    expect(denied).toBeInstanceOf(Error);
+    const message = (denied as Error).message;
+    expect(message).toContain("capability_denied");
+    expect(message).toContain("relationship_types");
+    expect(await edgesOfTypeTo(IN_SCOPE, taskId)).toBe(0);
+
+    applyHintedGrant(message.replace(/\\"/g, '"'));
+    expect(await runStore()).toBeUndefined();
+    expect(await edgesOfTypeTo(IN_SCOPE, taskId)).toBe(1);
   });
 });

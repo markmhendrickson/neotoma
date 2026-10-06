@@ -1,0 +1,491 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_12",
+        "target_entity_id": "ent_mock_9"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_19",
+        "target_entity_id": "ent_mock_16"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_26",
+        "target_entity_id": "ent_mock_23"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_33",
+        "target_entity_id": "ent_mock_30"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_3",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_37",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "PART_OF",
+        "source_entity_id": "ent_mock_42",
+        "target_entity_id": "ent_mock_1"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "client_name": "Cursor",
+            "conversation_id": "<id:1>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor-hook",
+            "hook_event": "beforeSubmitPrompt",
+            "repository_name": "<env>",
+            "repository_remote": "<env>",
+            "repository_root": "<env>",
+            "scope_summary": "<env>",
+            "thread_kind": "human_agent",
+            "title": "<env>",
+            "workspace_kind": "<env>"
+          },
+          {
+            "content": "Link checkpoint brief ent_checkpoint to task ent_task with REFERS_TO. If the write is denied, report exactly which grant entry is missing, verify the edge did not land, and after the grant is updated retry and verify that the edge is live.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:2>",
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": [
+              "before_submit_prompt"
+            ],
+            "model": "composer-2",
+            "session_id": "<id:1>",
+            "started_at": "<ts>",
+            "stored_entity_ids": [
+              "ent_mock_3"
+            ],
+            "turn_id": "<id:4>",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"source_entity_id\":\"ent_checkpoint\",\"target_entity_id\":\"ent_task\",\"relationship_type\":\"REFERS_TO\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"success\":false,\"code\":\"capability_denied\",\"op\":\"create_relationship\",\"hint\":\"Admitted agent \\\"eval agent\\\" has no single create_relationship capability covering relationship_type \\\"REFERS_TO\\\" and endpoint entity_types [\\\"checkpoint_brief\\\", \\\"task\\\"]. Update the grant's capabilities (PATCH /agents/grants/{grant_id}, or correct on the agent_grant entity) to include { op: \\\"create_relationship...",
+            "status": null,
+            "tool_name": "mcp_neotoma_create_relationship",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_9"
+            ],
+            "tool_invocation_count": 1,
+            "turn_id": "<id:4>",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"source_entity_id\":\"ent_checkpoint\",\"target_entity_id\":\"ent_task\",\"relationship_type\":\"REFERS_TO\",\"is_live\":true}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"relationships\":[],\"count\":0}",
+            "status": null,
+            "tool_name": "mcp_neotoma_list_relationships",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_16"
+            ],
+            "tool_invocation_count": 2,
+            "turn_id": "<id:4>",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"source_entity_id\":\"ent_checkpoint\",\"target_entity_id\":\"ent_task\",\"relationship_type\":\"REFERS_TO\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"success\":true,\"relationship_id\":\"rel_after_grant_update\",\"relationship_type\":\"REFERS_TO\",\"is_live\":true}",
+            "status": null,
+            "tool_name": "mcp_neotoma_create_relationship",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:8>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_23"
+            ],
+            "tool_invocation_count": 3,
+            "turn_id": "<id:4>",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"source_entity_id\":\"ent_checkpoint\",\"target_entity_id\":\"ent_task\",\"relationship_type\":\"REFERS_TO\",\"is_live\":true}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"relationships\":[{\"relationship_id\":\"rel_after_grant_update\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_checkpoint\",\"target_entity_id\":\"ent_task\",\"is_live\":true}],\"count\":1}",
+            "status": null,
+            "tool_name": "mcp_neotoma_list_relationships",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:9>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_30"
+            ],
+            "tool_invocation_count": 4,
+            "turn_id": "<id:4>",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "The write was denied with capability_denied: the grant needs a create_relationship entry covering checkpoint_brief and task for REFERS_TO. Readback confirmed zero live edges. After the grant was updated the same call succeeded and readback confirmed one live REFERS_TO relationship.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:10>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "diagnosis_confidence": "high",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": [
+              "stop"
+            ],
+            "instruction_diagnostics": {
+              "classification": "agent_ignored_available_instructions",
+              "local_build": true,
+              "proactive_remediation_required": true,
+              "reason": "Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call **`store`**.",
+              "signals": {
+                "had_final_text": true,
+                "model": "composer-2",
+                "neotoma_connection_failure": false,
+                "neotoma_tool_failures": 0,
+                "reminder_hooks": [
+                  "post_tool_use"
+                ],
+                "reminder_injected": true,
+                "tool_invocation_count": 4,
+                "user_message_stored": true
+              }
+            },
+            "missed_steps": [
+              "user_phase_store"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "recommended_repairs": [
+              "Add or extend a Tier 1 fixture in `tests/fixtures/agentic_eval/` that asserts the `agent_ignored_available_instructions` classification for this model.",
+              "Check the postToolUse reminder gate so wrapped host tool calls still receive the compact Neotoma reminder.",
+              "Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly."
+            ],
+            "reminder_injected": true,
+            "retrieve_calls": 0,
+            "safety_net_used": true,
+            "session_id": "<id:1>",
+            "status": "backfilled_by_hook",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 4,
+            "turn_id": "<id:4>",
+            "turn_key": "relationship_write_missing_grant_recovery__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {
+        "followup_message": "Neotoma compliance pass: the previous turn skipped the required Neotoma writes. Please re-run this turn now using one batched **`store`** MCP call: (1) bounded retrieval if the user message implied known entities, (2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links, (3) closing assistant store with the exact reply text. Reply with a one-line summary noting the entity_ids stored. Likely cause: agent ignored available instructions — Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call **`store`**. Because this is a Neotoma source checkout, do not stop after backfilling the turn; proactively resolve the repo-owned root cause now when safe. Recommended repairs: Add or extend a Tier 1 fixture in `tests/fixtures/agentic_eval/` that asserts the `agent_ignored_available_instructions` classification for this model. Check the postToolUse reminder gate so wrapped host tool calls still receive the compact Neotoma reminder. Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly.\n\nNeotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    }
+  ]
+}
