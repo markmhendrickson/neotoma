@@ -77,6 +77,12 @@ import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { AgentCapabilityError } from "./services/agent_capabilities.js";
+import {
+  DEFAULT_OBSERVATION_SOURCE,
+  buildObservationRow,
+  findExistingObservation,
+  insertObservationRow,
+} from "./services/observation_insert.js";
 import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
 import {
   relationshipRefusalFromError,
@@ -7115,12 +7121,8 @@ export class NeotomaServer {
       // different user (same observationId due to content-addressed hashing)
       // would cause this insert to be skipped, leaving the current user with
       // no observation despite store returning success (write/read gap).
-      const { data: existingObservation, error: existingObservationError } = await db
-        .from("observations")
-        .select("id")
-        .eq("id", observationId)
-        .eq("user_id", userId)
-        .maybeSingle();
+      const { data: existingObservation, error: existingObservationError } =
+        await findExistingObservation(observationId, userId, "id");
 
       if (existingObservationError) {
         throw new Error(
@@ -7135,27 +7137,27 @@ export class NeotomaServer {
           await import("./services/request_context.js");
         const structuredAttribution = _structuredAttrib();
         const observedAt = new Date().toISOString();
-        const { error: obsError } = await db.from("observations").insert({
-          id: observationId,
-          entity_id: entityId,
-          entity_type: entityType,
-          schema_version: schema?.schema_version || "1.0",
-          source_id: storageResult.sourceId,
-          interpretation_id: null, // No interpretation run for structured data
-          observed_at: observedAt,
-          specificity_score: 1.0, // Structured data has high specificity
-          source_priority: sourcePriority, // Use provided priority (default 100)
-          observation_source: observationSource ?? "llm_summary",
-          ...(sourcePeerId ? { source_peer_id: sourcePeerId } : {}),
-          fields: fieldsForObservation,
-          user_id: userId,
-          identity_basis: resolverTrace.identityBasis,
-          identity_rule: resolverTrace.identityRule,
-          ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-          ...(Object.keys(structuredAttribution).length > 0
-            ? { provenance: structuredAttribution }
-            : {}),
-        });
+        const { error: obsError } = await insertObservationRow(
+          buildObservationRow({
+            id: observationId,
+            entity_id: entityId,
+            entity_type: entityType,
+            schema_version: schema?.schema_version || "1.0",
+            source_id: storageResult.sourceId,
+            interpretation_id: null, // No interpretation run for structured data
+            observed_at: observedAt,
+            specificity_score: 1.0, // Structured data has high specificity
+            source_priority: sourcePriority, // Use provided priority (default 100)
+            observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
+            source_peer_id: sourcePeerId || undefined,
+            fields: fieldsForObservation,
+            user_id: userId,
+            identity_basis: resolverTrace.identityBasis,
+            identity_rule: resolverTrace.identityRule,
+            idempotency_key: idempotencyKey || undefined,
+            provenance: structuredAttribution,
+          })
+        );
 
         if (obsError) {
           throw new Error(`Failed to create observation: ${obsError.message}`);

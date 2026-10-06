@@ -19,16 +19,16 @@ import { enforceOverridePolicy } from "./override_validation.js";
 import { assertAgentGrantFieldValid } from "./agent_grants.js";
 import { assertNoOwnerConflict } from "./entity_resolution.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
+import {
+  DEFAULT_OBSERVATION_SOURCE,
+  buildObservationRow,
+  findExistingObservation,
+  insertObservationRow,
+} from "./observation_insert.js";
 
-/**
- * Default `observation_source` applied by the write path when a caller
- * omits the field. MCP / CLI callers are LLM-driven by construction, so
- * unclassified writes land in the LLM-summary bucket. Sensors, workflow
- * state machines, humans, and ETL pipelines MUST set the field
- * explicitly — the default is deliberately non-sensor so the reducer
- * does not over-weight unclassified writes.
- */
-export const DEFAULT_OBSERVATION_SOURCE: ObservationSource = "llm_summary";
+// Re-exported so existing importers of the default keep resolving it here;
+// the definition (and its rationale) now lives with the shared insert primitive.
+export { DEFAULT_OBSERVATION_SOURCE };
 
 export interface CreateObservationParams {
   entity_id: string;
@@ -150,7 +150,13 @@ export async function createObservation(
     params.idempotency_key
   );
 
-  const row = {
+  // Agent attribution (Phase 1). The provenance blob is empty when no
+  // request context is active (stdio + no env identity), which keeps
+  // existing behaviour intact. See src/crypto/agent_identity.ts for the
+  // AttributionProvenance shape.
+  const attribution = getCurrentAttribution();
+
+  const row = buildObservationRow({
     id: observationId,
     entity_id: params.entity_id,
     entity_type: params.entity_type,
@@ -164,29 +170,14 @@ export async function createObservation(
     fields: params.fields,
     user_id: params.user_id,
     created_at: new Date().toISOString(),
-  };
-
-  if (params.idempotency_key) {
-    (row as Record<string, unknown>).idempotency_key = params.idempotency_key;
-  }
-  if (params.identity_basis) {
-    (row as Record<string, unknown>).identity_basis = params.identity_basis;
-  }
-  if (params.identity_rule) {
-    (row as Record<string, unknown>).identity_rule = params.identity_rule;
-  }
-  if (params.source_peer_id) {
-    (row as Record<string, unknown>).source_peer_id = params.source_peer_id;
-  }
-
-  // Agent attribution (Phase 1). The provenance blob is empty when no
-  // request context is active (stdio + no env identity), which keeps
-  // existing behaviour intact. See src/crypto/agent_identity.ts for the
-  // AttributionProvenance shape.
-  const attribution = getCurrentAttribution();
-  if (Object.keys(attribution).length > 0) {
-    (row as Record<string, unknown>).provenance = attribution;
-  }
+    // Optional columns are written only when truthy, so an empty string is
+    // treated as absent rather than persisted.
+    idempotency_key: params.idempotency_key || undefined,
+    identity_basis: params.identity_basis || undefined,
+    identity_rule: params.identity_rule || undefined,
+    source_peer_id: params.source_peer_id || undefined,
+    provenance: attribution,
+  });
 
   // Content-addressed idempotency: the observation id is a deterministic hash
   // of (source_id, interpretation_id, entity_id, fields, idempotency_key), so a
@@ -196,12 +187,10 @@ export async function createObservation(
   // repeated content — e.g. a "file + its entities" combined call). Scope the
   // check to (id, user_id) so a same-content observation owned by another user
   // never masks this user's write. Mirrors the MCP store path in server.ts.
-  const { data: existing, error: existingError } = await db
-    .from("observations")
-    .select("*")
-    .eq("id", observationId)
-    .eq("user_id", params.user_id)
-    .maybeSingle();
+  const { data: existing, error: existingError } = await findExistingObservation(
+    observationId,
+    params.user_id
+  );
 
   if (existingError) {
     throw new Error(`Failed to check existing observation: ${existingError.message}`);
@@ -210,7 +199,7 @@ export async function createObservation(
     return existing as ObservationRecord;
   }
 
-  const { data, error } = await db.from("observations").insert(row).select().single();
+  const { data, error } = await insertObservationRow(row).select().single();
 
   if (error) {
     throw new Error(`Failed to create observation: ${error.message}`);

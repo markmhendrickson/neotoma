@@ -81,6 +81,43 @@ function compareObservationRecencyThenId(a: Observation, b: Observation): number
   return a.id.localeCompare(b.id);
 }
 
+/**
+ * The reducer's own observation ordering, as a comparator.
+ *
+ * Observations are ordered by `observed_at` descending (most recent first),
+ * then by `id` ascending as a stable tie-breaker. This is the order every
+ * snapshot computation sorts into, so "the first observation" of an entity
+ * means the first in THIS order. It is intentionally different from
+ * `compareObservationRecencyThenId` above, which also consults `created_at`:
+ * code that must agree with the reducer about which observation is current
+ * (for example a conditional write comparing against the entity's current
+ * winner) must use this function rather than copying the ordering or using the
+ * recency comparator.
+ *
+ * Exported so there is one definition of the order; the reducer's own sort
+ * calls it.
+ */
+export function compareObservationsByReducerOrder(
+  a: Pick<Observation, "observed_at" | "id">,
+  b: Pick<Observation, "observed_at" | "id">
+): number {
+  // Primary: observed_at DESC (most recent first)
+  const timeA = new Date(a.observed_at).getTime();
+  const timeB = new Date(b.observed_at).getTime();
+  if (timeB !== timeA) {
+    return timeB - timeA;
+  }
+  // Secondary: id ASC (stable tie-breaker)
+  return a.id.localeCompare(b.id);
+}
+
+/** Sort a copy of `observations` into {@link compareObservationsByReducerOrder} order. */
+export function sortObservationsInReducerOrder<T extends Pick<Observation, "observed_at" | "id">>(
+  observations: readonly T[]
+): T[] {
+  return [...observations].sort(compareObservationsByReducerOrder);
+}
+
 export interface EntitySnapshot {
   entity_id: string;
   entity_type: string;
@@ -227,19 +264,11 @@ export class ObservationReducer {
   }
 
   /**
-   * Sort observations deterministically
+   * Sort observations deterministically, in the reducer's own order
+   * (see {@link compareObservationsByReducerOrder}).
    */
   private sortObservations(observations: Observation[]): Observation[] {
-    return [...observations].sort((a, b) => {
-      // Primary: observed_at DESC (most recent first)
-      const timeA = new Date(a.observed_at).getTime();
-      const timeB = new Date(b.observed_at).getTime();
-      if (timeB !== timeA) {
-        return timeB - timeA;
-      }
-      // Secondary: id ASC (stable tie-breaker)
-      return a.id.localeCompare(b.id);
-    });
+    return sortObservationsInReducerOrder(observations);
   }
 
   /**

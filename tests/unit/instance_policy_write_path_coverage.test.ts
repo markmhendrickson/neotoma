@@ -213,7 +213,9 @@ describe("instance store-policy is enforced on every write path", () => {
       sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternal")
     );
     const mcpGate = mcpCore.indexOf(ENFORCE_CALL);
-    const mcpObservationInsert = mcpCore.indexOf('db.from("observations").insert');
+    // The structured-store core issues its observation insert through the
+    // shared primitive (src/services/observation_insert.ts).
+    const mcpObservationInsert = mcpCore.indexOf("insertObservationRow(");
     expect(mcpGate, "gate not found inside storeStructuredInternal").toBeGreaterThan(-1);
     expect(
       mcpObservationInsert,

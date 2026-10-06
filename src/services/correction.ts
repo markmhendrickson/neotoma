@@ -8,6 +8,7 @@
 
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
+import { buildObservationRow, insertObservationRow } from "./observation_insert.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
 import {
   getCurrentAAuthAdmission,
@@ -148,7 +149,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     idempotency_key
   );
 
-  const row: Record<string, unknown> = {
+  const row = buildObservationRow({
     id: observationId,
     entity_id,
     entity_type,
@@ -160,18 +161,11 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     source_priority: 1000,
     fields: { [field]: value },
     user_id,
-  };
+    idempotency_key: idempotency_key || undefined,
+    provenance: getCurrentAttribution(),
+  });
 
-  if (idempotency_key) {
-    row.idempotency_key = idempotency_key;
-  }
-
-  const correctionAttribution = getCurrentAttribution();
-  if (Object.keys(correctionAttribution).length > 0) {
-    row.provenance = correctionAttribution;
-  }
-
-  const { error: obsError } = await db.from("observations").insert(row);
+  const { error: obsError } = await insertObservationRow(row);
 
   if (obsError) {
     if (obsError.code === "23505") {
@@ -188,7 +182,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
 
   const snapshot = await recomputeSnapshot(entity_id, user_id);
   const snap = (snapshot?.snapshot as Record<string, unknown> | null | undefined) ?? null;
-  const emitTs = row.observed_at as string;
+  const emitTs = row.observed_at;
   emitObservationCreated({
     user_id,
     entity_id,
