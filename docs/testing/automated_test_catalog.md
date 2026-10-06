@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **681**
-- Backend and repo Vitest files: **645**
+- Total automated test files: **683**
+- Backend and repo Vitest files: **647**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,9 +72,9 @@ flowchart TD
 | Vitest unit tests | 186 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 200 |
+| Vitest integration tests | 201 |
 | Vitest CLI tests | 81 |
-| Vitest contract tests | 24 |
+| Vitest contract tests | 25 |
 | Vitest security tests | 17 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -436,7 +436,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (200):**
+**Files (201):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -449,6 +449,7 @@ flowchart TD
 - `tests/integration/aauth_tpm2_e2e.test.ts`
 - `tests/integration/aauth_webauthn_packed_e2e.test.ts`
 - `tests/integration/agent_capabilities_store.test.ts`
+- `tests/integration/agent_capability_v1_inert.test.ts`
 - `tests/integration/agent_grant_thumbprint_pin_uniqueness.test.ts`
 - `tests/integration/agent_memory_turn_lifecycle.test.ts`
 - `tests/integration/agentic_eval_matrix.test.ts`
@@ -731,7 +732,8 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (24):**
+**Files (25):**
+- `tests/contract/agent_capability_v1_contract.test.ts`
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
