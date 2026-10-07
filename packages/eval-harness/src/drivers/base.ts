@@ -91,6 +91,82 @@ const TOOL_ENDPOINTS: Record<string, string> = {
 export const NEOTOMA_TOOL_NAMES = new Set<string>(Object.keys(TOOL_ENDPOINTS));
 
 /**
+ * Neotoma MCP tools with NO REST route, replayed by calling the tool itself
+ * over the isolated server's `/mcp` endpoint (one stateless 2026-07-28
+ * `tools/call` per invocation, Bearer-authenticated like the REST calls).
+ * `manage_bundles` mutates bundle state, which deliberately has no REST
+ * mutation route; replaying it over MCP exercises the real tool handler.
+ * A scenario can route other tools the same way with `replay_over_mcp`.
+ */
+export const NEOTOMA_MCP_ONLY_TOOL_NAMES = new Set<string>(["manage_bundles"]);
+
+const MCP_PROTOCOL_VERSION = "2026-07-28";
+
+async function callNeotomaMcpTool(
+  baseUrl: string,
+  toolName: string,
+  input: unknown,
+  token: string,
+  id: number,
+): Promise<{ output?: unknown; error?: string }> {
+  const body = {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: {
+      name: toolName,
+      arguments: input ?? {},
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": { name: "neotoma-eval-harness", version: "0.1.0" },
+      },
+    },
+  };
+  try {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": toolName,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      return { error: `${toolName} (mcp) returned status ${res.status}: ${text.slice(0, 400)}` };
+    }
+    let reply: {
+      error?: { message?: string };
+      result?: { isError?: boolean; content?: Array<{ type?: string; text?: string }> };
+    };
+    try {
+      reply = JSON.parse(text);
+    } catch {
+      return { error: `${toolName} (mcp) returned non-JSON: ${text.slice(0, 400)}` };
+    }
+    if (reply.error) return { error: `${toolName} (mcp) error: ${reply.error.message ?? ""}` };
+    const first = (reply.result?.content ?? []).find((c) => c.type === "text");
+    let output: unknown = first?.text;
+    try {
+      output = first?.text ? JSON.parse(first.text) : undefined;
+    } catch {
+      // leave as text
+    }
+    if (reply.result?.isError) {
+      return { error: `${toolName} (mcp) tool error: ${String(first?.text ?? "").slice(0, 400)}` };
+    }
+    return { output };
+  } catch (err) {
+    return { error: `${toolName} (mcp) failed: ${(err as Error).message}` };
+  }
+}
+
+/**
  * Tools whose HTTP route is a GET (no request body). Everything else POSTs the
  * tool input as JSON. Keep this in sync with the route methods in
  * src/shared/contract_mappings.ts.
@@ -164,7 +240,18 @@ export async function replayCassetteAgainstServer(
   const replayedCalls: ToolCall[] = [];
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };
-    if (NEOTOMA_TOOL_NAMES.has(call.name)) {
+    const overMcp =
+      NEOTOMA_MCP_ONLY_TOOL_NAMES.has(call.name) ||
+      (invocation.scenario.replay_over_mcp ?? []).includes(call.name);
+    if (overMcp) {
+      result = await callNeotomaMcpTool(
+        invocation.neotomaBaseUrl,
+        call.name,
+        call.input,
+        invocation.neotomaToken,
+        replayedCalls.length + 1,
+      );
+    } else if (NEOTOMA_TOOL_NAMES.has(call.name)) {
       result = await postNeotomaTool(
         invocation.neotomaBaseUrl,
         call.name,

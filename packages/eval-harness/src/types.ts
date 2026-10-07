@@ -131,6 +131,12 @@ export interface ExpectedAssertion {
   /** For `tool_result.matches` with `result_key`: expect present (default true) or absent. */
   present?: boolean;
   /**
+   * For `tool_result.matches`: a substring the JSON-serialized result must
+   * contain. Use for error messages, where a structural subset cannot match a
+   * leaf by substring. ANDed with `result_key` / `result_subset`.
+   */
+  result_contains?: string;
+  /**
    * For `snapshot.field_present` / `snapshot.field_absent`: the entity to
    * project. Either an explicit id, or resolved from `entity_type` + `where`
    * (first match). The `field` (above) is the snapshot key checked.
@@ -200,6 +206,29 @@ export interface ScenarioFile {
    * from `raw_storage.file_count`. Sets NEOTOMA_TEST_REAL_STORAGE=1.
    */
   real_storage?: boolean;
+  /**
+   * Schema-evolution mode for the isolated server (`NEOTOMA_SCHEMA_MODE`).
+   * Omit for the server default (`evolving`). Set `guided` to exercise
+   * bundle-gated auto-create.
+   */
+  schema_mode?: "evolving" | "guided" | "locked";
+  /**
+   * Per-scenario bundle install state. The runner writes a fresh bundle state
+   * file inside the scenario's own tmp dir and points the server at it
+   * (`NEOTOMA_BUNDLE_STATE_PATH`), so a scenario never reads or writes the
+   * host's real bundle state. `enabled` lists opt-in bundles enabled at boot;
+   * omit (or leave empty) to start with only the default-install bundles.
+   */
+  bundle_state?: {
+    enabled?: string[];
+  };
+  /**
+   * Neotoma tools whose cassette calls replay through the MCP tool itself on
+   * the isolated server's `/mcp` endpoint instead of the matching REST route.
+   * Use when the behaviour under test lives in the MCP handler (the surface an
+   * agent actually calls), e.g. `[store]` for guided-mode store gating.
+   */
+  replay_over_mcp?: string[];
   server_faults?: {
     /** Target MCP tool or HTTP endpoint to inject faults on. */
     target: string;

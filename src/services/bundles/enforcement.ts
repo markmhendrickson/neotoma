@@ -22,6 +22,7 @@
  */
 
 import { getSchemaMode, type SchemaMode } from "../schema_mode.js";
+import { bundleDeclaringAlias } from "./bundle_schemas.js";
 import { bundleDeclaring, bundleProviding } from "./loader.js";
 
 /** Why an auto-create was blocked. */
@@ -87,6 +88,23 @@ export function checkAutoCreateAllowed(
         `Schema mode is "guided": entity type "${entityType}" is provided by bundle ` +
         `"${declaringBundle}", which is not enabled. Enable it with the manage_bundles tool ` +
         `(action "install", bundle "${declaringBundle}"), then retry the write.`,
+    };
+  }
+  // An alias of a bundle type resolves to that type only once the bundle has
+  // registered its schema, so before that it arrives here under its own name.
+  const alias = bundleDeclaringAlias(entityType);
+  if (alias) {
+    return {
+      allowed: false,
+      reason: "guided_unprovided",
+      mode,
+      entityType,
+      providingBundle: alias.bundle,
+      message:
+        `Schema mode is "guided": "${entityType}" is an alias of entity type ` +
+        `"${alias.canonical_entity_type}", provided by bundle "${alias.bundle}", which is not ` +
+        `enabled. Enable it with the manage_bundles tool (action "install", bundle ` +
+        `"${alias.bundle}"), then retry the write.`,
     };
   }
   return {

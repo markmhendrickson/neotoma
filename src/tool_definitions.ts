@@ -1582,7 +1582,7 @@ export function buildToolDefinitions(
       name: "manage_bundles",
       description: desc(
         "manage_bundles",
-        "Inspect and manage Neotoma bundles (the deliverable unit shipping schemas, record-type docs, and skills). action=list returns all bundles with type/version/enabled/always_active/provides count; action=info (with bundle) returns full manifest detail; action=install/enable/disable (with bundle) toggle persisted enable state. Default-install bundles (core, infrastructure, core_workflows) are always active and cannot be disabled. Disabling a schema bundle stops its types from auto-creating under guided/locked while preserving existing data. Returns structured JSON."
+        "Inspect and manage Neotoma bundles (the deliverable unit shipping schemas, record-type docs, and skills). action=list returns all bundles with type/version/enabled/always_active/provides count; action=info (with bundle) returns full manifest detail; action=install/enable/disable (with bundle) toggle persisted enable state. Default-install bundles (core, infrastructure, core_workflows) are always active and cannot be disabled. install/enable also registers the bundle's schemas immediately and returns the outcome as schema_seed ({ok, registered, preserved, failed}); if any schema fails to register, ok stays true (the bundle is enabled), schema_seed.ok is false, and a top-level warning explains it. Disabling a schema bundle stops its types that have no registered schema from auto-creating under guided/locked; types whose schemas it already registered stay writable, and existing data is preserved. Returns structured JSON."
       ),
       inputSchema: {
         type: "object",

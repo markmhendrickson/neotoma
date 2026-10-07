@@ -13,12 +13,14 @@
  *     registered (the documented "Disable, not uninstall" behaviour).
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import {
   getBundleSchemas,
@@ -26,6 +28,7 @@ import {
   resetBundleStateCacheForTesting,
 } from "../../src/services/bundles/index.js";
 import { getSchemaDefinition } from "../../src/services/schema_definitions.js";
+import { runInterpretation } from "../../src/services/interpretation.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { resetSchemaModeCacheForTesting } from "../../src/services/schema_mode.js";
 import { cleanupEntityType } from "../helpers/cleanup_helpers.js";
@@ -125,6 +128,14 @@ describe("manage_bundles enable -> guided store (real store path)", () => {
     expect(await schemaRegistry.loadGlobalSchema("lead_update")).toBeNull();
   });
 
+  it("rejects a bundle alias before enable, naming the canonical type and bundle", async () => {
+    const body = await store({ entity_type: "contact_list", title: "Cohort" });
+    expect(body.entities ?? []).toHaveLength(0);
+    expect(String(body.error)).toMatch(/ERR_SCHEMA_MODE_GUIDED_UNPROVIDED/);
+    expect(String(body.error)).toMatch(/alias of entity type "contact_group"/);
+    expect(String(body.error)).toMatch(/bundle "crm"/);
+  });
+
   it("install via manage_bundles seeds schemas and the next write uses the bundle field set", async () => {
     const out = await manageBundles({ action: "install", bundle: "crm" });
     expect(out.ok).toBe(true);
@@ -167,6 +178,38 @@ describe("manage_bundles enable -> guided store (real store path)", () => {
       );
       // No near-duplicate schema was created for the alias name.
       expect(await schemaRegistry.loadActiveSchema(alias, TEST_USER_ID)).toBeNull();
+    }
+  });
+
+  it("after enabling, extraction-time interpretation maps an alias to the curated type", async () => {
+    const { data: source, error } = await db
+      .from("sources")
+      .insert({
+        user_id: TEST_USER_ID,
+        original_filename: "bundle_alias_extraction.json",
+        mime_type: "application/json",
+        file_size: 1,
+        content_hash: `bundle_alias_${randomUUID()}`,
+      })
+      .select("id")
+      .single();
+    if (error || !source) throw new Error(`source insert failed: ${error?.message}`);
+    try {
+      const result = await runInterpretation({
+        userId: TEST_USER_ID,
+        sourceId: source.id,
+        extractedData: [{ entity_type: "decision_record", title: "Adopt bundles" }],
+        config: {
+          provider: "test",
+          model_id: "test-model",
+          temperature: 0,
+          prompt_hash: "bundle_alias_extraction",
+          code_version: "1.0.0",
+        },
+      });
+      expect(result.entities.map((e) => e.entityType)).toEqual(["architectural_decision"]);
+    } finally {
+      await db.from("sources").delete().eq("id", source.id);
     }
   });
 
