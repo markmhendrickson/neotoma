@@ -15,6 +15,7 @@ export { ManifestError, normalizeManifest, parseManifest } from "./manifest.js";
 export {
   ALWAYS_ACTIVE_BUNDLES,
   BundleStateError,
+  bundleDeclaring,
   bundleProviding,
   bundleStatePath,
   bundlesRootDir,

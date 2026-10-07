@@ -29,7 +29,11 @@ export interface BundleSchemaSpec {
   label: string;
   description: string;
   category?: EntitySchemaMetadata["category"];
-  /** Alternate names that resolve to this type. */
+  /**
+   * Alternate names that resolve to this type once the schema is registered.
+   * Written to `schema_definition.aliases` (read by the store path) and
+   * mirrored to `metadata.aliases` for display.
+   */
   aliases?: string[];
   fields: Record<string, FieldDefinition>;
   /** Ordered identity rules. Exactly one of this or `identity_opt_out` is required (R2). */
@@ -51,6 +55,13 @@ export function defineBundleSchema(spec: BundleSchemaSpec): EntitySchema {
   };
 
   const schema_definition: SchemaDefinition = { fields };
+  // Aliases go on the schema definition, which is the field the store path's
+  // equivalence check (`entity_type_equivalence.ts`) and extraction-time alias
+  // resolution read from registered schemas. `metadata.aliases` (below) is only
+  // read for built-in `ENTITY_SCHEMAS`, so on its own it would be inert here.
+  if (spec.aliases && spec.aliases.length > 0) {
+    schema_definition.aliases = [...spec.aliases];
+  }
   if (spec.canonical_name_fields) {
     schema_definition.canonical_name_fields = spec.canonical_name_fields;
   }

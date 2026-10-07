@@ -28,4 +28,4 @@ Heuristic (`identity_opt_out: heuristic_canonical_name`): resolved from name-lik
 
 ## Usage notes
 
-One touchpoint. Relate it `REFERS_TO` the `contact` it was with. Provenance (`data_source`) belongs in observation metadata, not a field. `outreach_activity` is an alias.
+One touchpoint. Relate it `REFERS_TO` the `contact` it was with. Provenance (`data_source`) belongs in observation metadata, not a field. Once the bundle has registered this schema, writes under the alias `outreach_activity` land here.

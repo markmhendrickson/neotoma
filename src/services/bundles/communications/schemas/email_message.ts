@@ -19,7 +19,7 @@ export const emailMessageSchema = defineBundleSchema({
     from_email: str("Sender address."),
     from_name: text("Sender display name."),
     to_addresses: list("Recipient addresses."),
-    cc: str("Cc recipients."),
+    cc: list("Cc recipient addresses."),
     sent_at: date(),
     received_at: date(),
     message_id: str("RFC 5322 Message-ID."),

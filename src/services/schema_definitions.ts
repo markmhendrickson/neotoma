@@ -3945,6 +3945,34 @@ export function resolveEntityTypeFromAlias(extractedType: string): string | null
 }
 
 /**
+ * Resolve a type name against the `schema_definition.aliases` of REGISTERED
+ * schemas (e.g. those a bundle seeded). Complements
+ * {@link resolveEntityTypeFromAlias}, which only knows built-in aliases.
+ * Same normalization (case- and accent-insensitive). Pure: the caller passes
+ * the registry rows it already loaded.
+ *
+ * @returns the registered canonical entity_type, or null when none matches
+ */
+export function resolveEntityTypeFromRegisteredAliases(
+  extractedType: string,
+  registered: ReadonlyArray<{
+    entity_type: string;
+    schema_definition?: { aliases?: unknown } | null;
+  }>
+): string | null {
+  const normalized = normalizeForAliasMatch(extractedType);
+  if (!normalized) return null;
+  for (const row of registered) {
+    const aliases = row.schema_definition?.aliases;
+    if (!Array.isArray(aliases)) continue;
+    if (aliases.some((a) => typeof a === "string" && normalizeForAliasMatch(a) === normalized)) {
+      return row.entity_type;
+    }
+  }
+  return null;
+}
+
+/**
  * Return all canonical entity types that have a registered schema.
  * Used e.g. for LLM-based entity type inference when no alias matches.
  */

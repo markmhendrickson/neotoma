@@ -31,4 +31,4 @@ Heuristic (`identity_opt_out: heuristic_canonical_name`): resolved from name-lik
 
 ## Usage notes
 
-`decision_record` is an alias. Relate it `REFERS_TO` the `pull_request` or `issue` that carries it.
+Once the bundle has registered this schema, writes under the alias `decision_record` land here. Relate it `REFERS_TO` the `pull_request` or `issue` that carries it.
