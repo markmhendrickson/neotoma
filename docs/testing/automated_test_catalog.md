@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **691**
-- Backend and repo Vitest files: **655**
+- Total automated test files: **693**
+- Backend and repo Vitest files: **657**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 188 |
+| Vitest unit tests | 189 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 205 |
+| Vitest integration tests | 206 |
 | Vitest CLI tests | 82 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (188):**
+**Files (189):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -298,6 +298,7 @@ flowchart TD
 - `tests/unit/usage_stats.test.ts`
 - `tests/unit/webhook_url_allowed.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
+- `tests/unit/write_events_context.test.ts`
 
 ### Vitest service tests
 **Directory:** `tests/services/`
@@ -438,7 +439,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (205):**
+**Files (206):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -644,6 +645,7 @@ flowchart TD
 - `tests/integration/update_schema_incremental_scope_mismatch.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`
+- `tests/integration/write_events_record.test.ts`
 
 ### Vitest CLI tests
 **Directory:** `tests/cli/`

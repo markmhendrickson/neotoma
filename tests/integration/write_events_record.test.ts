@@ -14,6 +14,7 @@
  */
 
 import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -42,7 +43,6 @@ const CONVERSATION = `conv-${RUN}`;
 const TURN_MCP = `${RUN}:t1`;
 const TURN_CORRECT = `${RUN}:t2`;
 const TURN_HTTP = `${RUN}:t3`;
-const API_PORT = 18000 + Math.floor(Math.random() * 900);
 
 type Handler = (req: unknown, extra: unknown) => Promise<unknown>;
 
@@ -92,6 +92,7 @@ async function waitForWrites(
 describe("write events: server-side record of every write", () => {
   let server: NeotomaServer;
   let httpServer: Server;
+  let apiPort = 0;
   const entityIds: string[] = [];
   const persist = (ev: SubstrateEvent): void => {
     void handleSubstrateEventForSubscriptions(ev);
@@ -114,9 +115,11 @@ describe("write events: server-side record of every write", () => {
     const { app } = await import("../../src/actions.js");
     httpServer = createServer(app);
     await new Promise<void>((resolve, reject) => {
-      httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+      // Ephemeral port: fixed ports collide with other suites in a parallel run.
+      httpServer.listen(0, "127.0.0.1", () => resolve());
       httpServer.once("error", reject);
     });
+    apiPort = (httpServer.address() as AddressInfo).port;
   });
 
   afterAll(async () => {
@@ -220,7 +223,7 @@ describe("write events: server-side record of every write", () => {
   });
 
   it("HTTP /store: turn identity from X-Neotoma-* headers lands on the record", async () => {
-    const res = await fetch(`http://127.0.0.1:${API_PORT}/store`, {
+    const res = await fetch(`http://127.0.0.1:${apiPort}/store`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

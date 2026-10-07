@@ -22,15 +22,15 @@ It does NOT cover:
 
 ## Inventory: what already existed
 
-| Mechanism | What it records | Why it was not enough on its own |
-|---|---|---|
-| Observations and relationship observations | Every assertion, append-only, kept forever, with an attribution block in `provenance` (tier, agent sub and thumbprint, client name and version, connection id, signed-in member id) | No operation vocabulary (a correction, a deletion and a store all look like observations), no turn identity, and no cheap "what did this turn write" query. |
-| `substrate_events` (durable log behind SSE resume) | One row per emitted substrate event: created, updated, deleted, restored, merged, split, relationship created/deleted/restored, observation created | Carried only the agent thumbprint as actor, no client, no member id, no turn. Pruned to `NEOTOMA_EVENT_RETENTION_DAYS` (default 7). |
-| `list_recent_changes` | A union over current table rows (entities, sources, observations, interpretations, relationship snapshots, timeline events) | Derived from current state, not an event log: no deletes or restores as events, relationships at snapshot level, turn key only for rows whose own fields carry one. |
-| `list_timeline_events` | Domain events derived from entity date fields | About the world, not about writes. |
-| `neotoma_turn_summary` | Stored and retrieved entities for a turn | Computed from `REFERS_TO` edges the agent itself writes from its turn messages, so it is only as complete as the agent's reporting. |
-| `tool_invocation`, `conversation_turn`, `turn_activity` | Hook-written, client-side self-reports | Written only by harnesses that run Neotoma hooks, and only when those hooks work. See "Reads" below. |
-| `harness_event` | A client-defined audit row type | Client-written; not a server record. |
+| Mechanism                                               | What it records                                                                                                                                                                     | Why it was not enough on its own                                                                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Observations and relationship observations              | Every assertion, append-only, kept forever, with an attribution block in `provenance` (tier, agent sub and thumbprint, client name and version, connection id, signed-in member id) | No operation vocabulary (a correction, a deletion and a store all look like observations), no turn identity, and no cheap "what did this turn write" query.         |
+| `substrate_events` (durable log behind SSE resume)      | One row per emitted substrate event: created, updated, deleted, restored, merged, split, relationship created/deleted/restored, observation created                                 | Carried only the agent thumbprint as actor, no client, no member id, no turn. Pruned to `NEOTOMA_EVENT_RETENTION_DAYS` (default 7).                                 |
+| `list_recent_changes`                                   | A union over current table rows (entities, sources, observations, interpretations, relationship snapshots, timeline events)                                                         | Derived from current state, not an event log: no deletes or restores as events, relationships at snapshot level, turn key only for rows whose own fields carry one. |
+| `list_timeline_events`                                  | Domain events derived from entity date fields                                                                                                                                       | About the world, not about writes.                                                                                                                                  |
+| `neotoma_turn_summary`                                  | Stored and retrieved entities for a turn                                                                                                                                            | Computed from `REFERS_TO` edges the agent itself writes from its turn messages, so it is only as complete as the agent's reporting.                                 |
+| `tool_invocation`, `conversation_turn`, `turn_activity` | Hook-written, client-side self-reports                                                                                                                                              | Written only by harnesses that run Neotoma hooks, and only when those hooks work. See "Reads" below.                                                                |
+| `harness_event`                                         | A client-defined audit row type                                                                                                                                                     | Client-written; not a server record.                                                                                                                                |
 
 The durable substrate-event log already sat on exactly the right seam: every write path emits through `src/events/substrate_store_emit.ts`, and every emitted event is persisted. It lacked the actor, the turn, and the operation vocabulary. This design extends it rather than adding a parallel table.
 
@@ -40,7 +40,7 @@ A write event is a substrate event persisted in `substrate_events`, now carrying
 
 ```ts
 interface WriteEventContext {
-  operation: WriteOperation;   // see table below
+  operation: WriteOperation; // see table below
   actor: {
     attribution_tier?: string;
     agent_sub?: string;
@@ -48,23 +48,23 @@ interface WriteEventContext {
     client_name?: string;
     client_version?: string;
     connection_id?: string;
-    authenticated_actor_id?: string;  // the signed-in member's attribution id, when present
+    authenticated_actor_id?: string; // the signed-in member's attribution id, when present
   };
-  conversation_id?: string;    // client-reported
-  turn_key?: string;           // client-reported
+  conversation_id?: string; // client-reported
+  turn_key?: string; // client-reported
   turn_source?: "header" | "mcp_meta";
 }
 ```
 
 Together with the event's existing fields (entity id and type, timestamp, observation id, relationship type and endpoints, changed field names, source peer) this is the full record the lane asked for.
 
-| Event type | Operation |
-|---|---|
-| `entity.created` | `created` |
-| `entity.updated` | `updated`, or `corrected` when written by the correction path |
-| `observation.created` | `stored` (or `corrected`) |
-| `entity.deleted` / `entity.restored` | `deleted` / `restored` |
-| `entity.merged` / `entity.split` | `merged` / `split` |
+| Event type                                        | Operation                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `entity.created`                                  | `created`                                                                 |
+| `entity.updated`                                  | `updated`, or `corrected` when written by the correction path             |
+| `observation.created`                             | `stored` (or `corrected`)                                                 |
+| `entity.deleted` / `entity.restored`              | `deleted` / `restored`                                                    |
+| `entity.merged` / `entity.split`                  | `merged` / `split`                                                        |
 | `relationship.created` / `.deleted` / `.restored` | `relationship_created` / `relationship_deleted` / `relationship_restored` |
 
 `corrected` is set explicitly by `src/services/correction.ts`; every other operation is derived from the event type, so no other write path changed.
@@ -83,9 +83,9 @@ If turn-scoped queries over long windows become necessary, the follow-up is a sc
 
 Two carriers, one shape. Both are optional, self-reported, and unverified, the same trust level as MCP `clientInfo`.
 
-| Carrier | Keys | Applies to |
-|---|---|---|
-| HTTP headers | `X-Neotoma-Conversation-Id`, `X-Neotoma-Turn-Key` | Every REST route (read by the attribution middleware) and `/mcp` on both protocol eras |
+| Carrier                    | Keys                                                | Applies to                                                                                |
+| -------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| HTTP headers               | `X-Neotoma-Conversation-Id`, `X-Neotoma-Turn-Key`   | Every REST route (read by the attribution middleware) and `/mcp` on both protocol eras    |
 | MCP request `params._meta` | `io.neotoma/conversation_id`, `io.neotoma/turn_key` | Every `tools/call`, on stdio, legacy-session HTTP, and the 2026-07-28 stateless transport |
 
 On an MCP tool call, `_meta` wins over a header: `_meta` is scoped to the one call, while a header may be a static per-connection setting.

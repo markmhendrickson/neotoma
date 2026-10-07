@@ -101,7 +101,8 @@ export function toWriteEventRecord(seq: number, event: SubstrateEvent): WriteEve
     occurred_at: event.timestamp,
     entity_id: event.entity_id,
     entity_type: event.entity_type,
-    actor: ctx?.actor ?? (event.agent_thumbprint ? { agent_thumbprint: event.agent_thumbprint } : {}),
+    actor:
+      ctx?.actor ?? (event.agent_thumbprint ? { agent_thumbprint: event.agent_thumbprint } : {}),
   };
   if (event.observation_id) record.observation_id = event.observation_id;
   if (event.relationship_type) record.relationship_type = event.relationship_type;
@@ -118,7 +119,9 @@ export function toWriteEventRecord(seq: number, event: SubstrateEvent): WriteEve
 /**
  * List write events for one user, newest first.
  */
-export async function listWriteEvents(filter: ListWriteEventsFilter): Promise<ListWriteEventsResult> {
+export async function listWriteEvents(
+  filter: ListWriteEventsFilter
+): Promise<ListWriteEventsResult> {
   const limit = clamp(filter.limit, DEFAULT_LIMIT, MAX_LIMIT);
   const scanLimit = clamp(filter.scanLimit, DEFAULT_SCAN_LIMIT, MAX_SCAN_LIMIT);
   const entityLevelOnly = filter.entityLevelOnly !== false;
