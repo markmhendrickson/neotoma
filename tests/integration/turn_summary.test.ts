@@ -352,6 +352,78 @@ describe("POST /turn_summary", () => {
     expect(mcp.content[1]).toEqual({ type: "text", text: mcp.structuredContent?.fallback_text });
   });
 
+  it("lists a heuristic merge under a warn-policy schema as Ambiguous, not Updated", async () => {
+    const stamp = Date.now();
+    const entityType = `tsummary_gadget_${stamp}`;
+    const reg = await fetch(`${apiBase}/register_schema`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        user_id: TEST_USER_ID,
+        entity_type: entityType,
+        schema_definition: {
+          fields: {
+            name: { type: "string" },
+            sku: { type: "string" },
+            color: { type: "string" },
+          },
+          // "warn" requires declared identity, but the writes below omit
+          // `sku`, so resolution falls through to the heuristic name match;
+          // landing on the existing row then raises HEURISTIC_MERGE instead
+          // of merging silently.
+          canonical_name_fields: ["sku"],
+          name_collision_policy: "warn",
+        },
+        reducer_config: { merge_policies: {} },
+        activate: true,
+      }),
+    });
+    expect(reg.status).toBe(200);
+
+    const convId = `conv-tsummary-ambiguous-${stamp}`;
+    const gadgetName = `Gadget ${stamp}`;
+    const conv = await userTurn(convId, 1, "tsummary ambiguous");
+    await storeJson({
+      idempotency_key: `${convId}-asst-1`,
+      entities: [
+        assistantMessage(convId, 1),
+        { entity_type: entityType, name: gadgetName, color: "red" },
+      ],
+      relationships: [
+        { relationship_type: "PART_OF", source_index: 0, target_entity_id: conv },
+        { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
+      ],
+    });
+
+    await tick();
+
+    await userTurn(convId, 2, "tsummary ambiguous");
+    const turn2 = (await storeJson({
+      idempotency_key: `${convId}-asst-2`,
+      entities: [
+        assistantMessage(convId, 2),
+        { entity_type: entityType, name: gadgetName, color: "blue" },
+      ],
+      relationships: [
+        { relationship_type: "PART_OF", source_index: 0, target_entity_id: conv },
+        { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
+      ],
+    })) as StoreResponse & { warnings?: Array<{ code?: string }> };
+    // Precondition: the store itself reported the heuristic merge.
+    expect(JSON.stringify(turn2)).toContain("HEURISTIC_MERGE");
+    const gadgetId = turn2.entities?.find((e) => e.entity_type === entityType)?.entity_id;
+    expect(gadgetId).toBeTruthy();
+
+    const summary = await summarize(convId, `${convId}:2:assistant`);
+    expect(summary.groups.updated).toEqual([]);
+    expect(summary.groups.ambiguous.map((e) => e.entity_id)).toEqual([gadgetId]);
+    expect(summary.card.groups.map((g) => g.key)).toEqual(["ambiguous"]);
+    const lines = summary.fallback_text.split("\n");
+    expect(lines[1]).toBe("**Ambiguous (1)**");
+    expect(lines[2]).toContain(gadgetName);
+    expect(lines[2]).toMatch(/ — heuristic match via identity_rule "name_key:name"$/);
+  });
+
   it("returns empty fallback_text for a turn that touched only chat bookkeeping", async () => {
     const convId = `conv-tsummary-empty-${Date.now()}`;
     const conv = await userTurn(convId, 1, "tsummary empty");

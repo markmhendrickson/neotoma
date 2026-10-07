@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "turn_summary_fallback_relay",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-07T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Remind me to send Ada Example the draft by Friday.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Follow the served MCP instructions: store the user message, do the work, run the closing assistant store, then call neotoma_turn_summary and end the reply with its fallback_text verbatim under a horizontal rule.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-fallback-user-1",
+        "commit": true,
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "eval-fallback-conv",
+            "title": "Draft reminder for Ada",
+            "thread_kind": "human_agent"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Remind me to send Ada Example the draft by Friday.",
+            "turn_key": "eval-fallback-conv:1",
+            "turn_number": 1
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entity_by_identifier",
+      "input": {
+        "identifier": "Ada Example",
+        "entity_type": "contact"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-fallback-asst-1",
+        "commit": true,
+        "entities": [
+          {
+            "entity_type": "conversation_message",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "content": "Done: I added a task to send Ada Example the draft by Friday.",
+            "turn_key": "eval-fallback-conv:1:assistant",
+            "turn_number": 2
+          },
+          {
+            "entity_type": "task",
+            "title": "Send Ada Example the draft",
+            "due_date": "2026-10-09",
+            "status": "pending"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 0,
+            "target_entity_id": "ent_74dd44e6080c6efcba4c57fc"
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 0,
+            "target_index": 1
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 0,
+            "target_entity_id": "ent_1adb7ebf9400ceda3e2f7991"
+          }
+        ]
+      },
+      "sequence": 2
+    },
+    {
+      "name": "neotoma_turn_summary",
+      "input": {
+        "conversation_id": "eval-fallback-conv",
+        "turn_key": "eval-fallback-conv:1:assistant"
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "Done: I added a task to send Ada Example the draft by Friday.\n\n---\n\n🧠 Neotoma · neotoma.example.test — [Draft reminder for Ada](https://neotoma.example.test/conversations/ent_74dd44e6080c6efcba4c57fc)\n**Created (1)**\n- ✅ Send Ada Example the draft ([task](https://neotoma.example.test/entities/ent_84d8f72791b71b0571c69e99))\n**Retrieved (1)**\n- 👤 Ada Example ([contact](https://neotoma.example.test/entities/ent_1adb7ebf9400ceda3e2f7991))"
+}

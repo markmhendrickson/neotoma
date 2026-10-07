@@ -89,6 +89,10 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
       ? (o.seed_entities as ScenarioFile["seed_entities"])
       : undefined,
     real_storage: o.real_storage === true ? true : undefined,
+    public_base_url:
+      typeof o.public_base_url === "string" && o.public_base_url.length > 0
+        ? o.public_base_url
+        : undefined,
     server_faults: o.server_faults && typeof o.server_faults === "object"
       ? (o.server_faults as ScenarioFile["server_faults"])
       : undefined,

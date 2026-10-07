@@ -207,6 +207,9 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       env: {
         NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
         ...(plan.scenario.real_storage ? { NEOTOMA_TEST_REAL_STORAGE: "1" } : {}),
+        ...(plan.scenario.public_base_url
+          ? { NEOTOMA_PUBLIC_BASE_URL: plan.scenario.public_base_url }
+          : {}),
       },
       faults: plan.scenario.server_faults,
     });

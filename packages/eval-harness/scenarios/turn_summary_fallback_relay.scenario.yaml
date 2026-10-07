@@ -1,0 +1,78 @@
+meta:
+  id: turn_summary_fallback_relay
+  description: >
+    The MCP display rule tells the agent to end the reply with the
+    server-rendered `fallback_text` from neotoma_turn_summary, verbatim,
+    instead of writing its own "🧠 Neotoma" section. This turn stores a new
+    task and cites a contact that already existed, so the summary has a real
+    Created group and a real Retrieved group (not only chat bookkeeping). The
+    scenario checks (1) the served instructions still carry the relay rule,
+    (2) the tool still returns a non-empty fallback_text with those groups,
+    and (3) the reply contains that text byte for byte. Removing the rule
+    from the instructions fails (1); removing the field from the tool result
+    fails (2) and (3).
+  tags:
+    - tier2
+    - turn-summary
+    - display-rule
+
+seed_strategy: generated
+source_pattern: "Agents hand-wrote the per-turn Neotoma summary and each worded, grouped and linked it differently; the summary is now rendered server-side and must be relayed verbatim."
+privacy_transform: "Fully synthetic contact, task and conversation; no PII."
+
+# Pins the origin the server uses for links, so the relayed text is
+# byte-stable across runs instead of carrying a random port.
+public_base_url: https://neotoma.example.test
+
+seed_entities:
+  - entity_type: contact
+    name: Ada Example
+    email: ada@example.test
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Follow the
+  served MCP instructions: store the user message, do the work, run the
+  closing assistant store, then call neotoma_turn_summary and end the reply
+  with its fallback_text verbatim under a horizontal rule.
+
+user_prompt: |
+  Remind me to send Ada Example the draft by Friday.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # (1) The rule the agent follows is still served.
+  - type: served_instructions.contains
+    substring: "end the reply with its `fallback_text` verbatim"
+  # The turn wrote real (non-bookkeeping) state.
+  - type: entity.exists
+    entity_type: task
+  - type: mcp_tool.invocations
+    tool_name: neotoma_turn_summary
+    op: gte
+    value: 1
+  # (2) The tool returns the server-rendered text, with real groups.
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: last
+    result_key: fallback_text
+    present: true
+  - type: tool_result.matches
+    tool_name: neotoma_turn_summary
+    which: last
+    result_subset:
+      card:
+        total_count: 2
+  # (3) The reply relays it verbatim, and it carries both groups.
+  - type: reply_text.relays_tool_result
+    tool_name: neotoma_turn_summary
+    which: last
+    result_key: fallback_text
+  - type: reply_text.contains
+    substring: "**Created (1)**"
+  - type: reply_text.contains
+    substring: "**Retrieved (1)**"
