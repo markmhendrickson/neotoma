@@ -76,7 +76,14 @@ export interface ExpectedAssertion {
     /** Compare a numeric key of the post-turn `/stats` payload (`field`, `op`, `value`). */
     | "stats.counter"
     /** Count files written under the isolated server's raw-storage dir (`op`, `value`). */
-    | "raw_storage.file_count";
+    | "raw_storage.file_count"
+    /**
+     * Count server-side write events in the isolated server's durable log
+     * whose fields match `where` (keys: event_type, operation, entity_type,
+     * turn_key, conversation_id, turn_source, client_name), compared with
+     * `op` / `value`. See docs/subsystems/write_events.md.
+     */
+    | "write_event.recorded";
   /** Numeric comparison op for count-shaped predicates. */
   op?: "eq" | "gte" | "lte";
   value?: number | string | boolean;
@@ -234,6 +241,17 @@ export interface ToolCall {
   error?: string;
   /** Monotonic order across the run. */
   sequence: number;
+  /**
+   * Replay only: how to send this call to the isolated server. `rest`
+   * (default) posts to the tool's REST route; `mcp` sends a 2026-07-28
+   * stateless `tools/call` to `/mcp`. Lets a cassette exercise per-request
+   * MCP state such as `_meta`.
+   */
+  transport?: "rest" | "mcp";
+  /** Replay only: extra HTTP request headers sent with this call. */
+  headers?: Record<string, string>;
+  /** Replay only (`transport: "mcp"`): extra `params._meta` keys for this call. */
+  mcp_meta?: Record<string, unknown>;
 }
 
 export interface DriverResult {

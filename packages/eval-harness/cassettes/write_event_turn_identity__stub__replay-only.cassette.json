@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "write_event_turn_identity",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-07T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Store three short notes for this turn.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Store each note the user asks for with the store tool.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "transport": "mcp",
+      "mcp_meta": {
+        "io.neotoma/turn_key": "eval-session-we:t1",
+        "io.neotoma/conversation_id": "eval-conv-we"
+      },
+      "input": {
+        "idempotency_key": "we-eval-meta",
+        "entities": [{ "entity_type": "note", "title": "Write event eval note via meta" }]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "headers": {
+        "X-Neotoma-Turn-Key": "eval-session-we:t2",
+        "X-Neotoma-Conversation-Id": "eval-conv-we"
+      },
+      "input": {
+        "idempotency_key": "we-eval-header",
+        "entities": [{ "entity_type": "note", "title": "Write event eval note via header" }]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "transport": "mcp",
+      "headers": { "X-Neotoma-Turn-Key": "eval-session-we:t3-header-loses" },
+      "mcp_meta": { "io.neotoma/turn_key": "eval-session-we:t3-meta" },
+      "input": {
+        "idempotency_key": "we-eval-both",
+        "entities": [{ "entity_type": "note", "title": "Write event eval note via both" }]
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Stored three notes for this turn."
+}
