@@ -40,6 +40,17 @@ Per-turn telemetry entity that captures hook lifecycle events, tool invocations,
 
 Stable session context belongs on the parent `conversation` (`client_name`, `harness`, `workspace_kind`, `repository_name`, `repository_root`, `repository_remote`, `scope_summary`) or a linked `repository` / `project` entity. `conversation_turn` stores volatile turn-local context only. Repository and workspace context fields are not identity fields.
 
+## Sending the turn key to the server
+
+A client can tell the server which turn caused a request, so the server records it on the write event of every write that request makes ([`write_events.md`](write_events.md)). The server then knows a turn's writes without the hooks or the model reporting them.
+
+| Carrier | Keys |
+|---------|------|
+| HTTP headers (REST and `/mcp`) | `X-Neotoma-Turn-Key: {session_id}:{turn_id}`, `X-Neotoma-Conversation-Id: {conversation id}` |
+| MCP `tools/call` `params._meta` | `io.neotoma/turn_key`, `io.neotoma/conversation_id` |
+
+Send the same `turn_key` this subsystem uses, so server write events join with `conversation_turn` and `conversation_message` rows. If no real per-turn id is available, send nothing; a per-call timestamp is worse than nothing (#2440). On an MCP call, a usable `_meta` identity replaces the header identity as a whole; a value that is not a short identifier (ASCII letters, digits and `. _ : @ # / -`, at most 200 characters) or a repeated header is ignored and logged at debug level. The full precedence table is in [`write_events.md`](write_events.md).
+
 ## Lifecycle: which hook contributes which fields
 
 ```mermaid

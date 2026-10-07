@@ -2431,7 +2431,9 @@ export interface components {
     };
     /**
      * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
-     *     (#2070). Operational metadata only: never persisted, never logged in full.
+     *     (#2070). Operational metadata only: never persisted, never logged in full,
+     *     except the optional `io.neotoma/*` turn identifiers, which are stamped on the
+     *     request's write events (docs/subsystems/write_events.md).
      */
     McpRequestMeta: {
       /**
@@ -2450,6 +2452,13 @@ export interface components {
       } & {
         [key: string]: unknown;
       };
+      /**
+       * @description Optional client conversation id for this call's write events. Any usable
+       *     `io.neotoma/*` key here replaces the `X-Neotoma-*` header identity as a whole.
+       */
+      "io.neotoma/conversation_id"?: string;
+      /** @description Optional `{session_id}:{turn_id}` for this call's write events (#2440). */
+      "io.neotoma/turn_key"?: string;
     } & {
       [key: string]: unknown;
     };
@@ -4636,7 +4645,25 @@ export interface components {
     };
   };
   responses: never;
-  parameters: never;
+  parameters: {
+    /**
+     * @description Optional. The client's conversation identifier, stamped on the write events of
+     *     every write this request makes (docs/subsystems/write_events.md). Self-reported
+     *     and unverified. At most 200 characters of ASCII letters, digits and
+     *     `. _ : @ # / -`; any other value, or a repeated header, is ignored (logged at
+     *     debug with the reason). On an MCP `tools/call`, an `io.neotoma/*` identity in
+     *     `params._meta` replaces the header identity as a whole.
+     */
+    XNeotomaConversationId: string;
+    /**
+     * @description Optional. The conversation turn that caused this request, as
+     *     `{session_id}:{turn_id}` (docs/subsystems/conversation_turn.md), stamped on the
+     *     write events of every write this request makes. Same validation and precedence
+     *     as `X-Neotoma-Conversation-Id`. A caller can send any turn key, including
+     *     another caller's, so displays should show the recorded writer alongside it.
+     */
+    XNeotomaTurnKey: string;
+  };
   requestBodies: never;
   headers: never;
   pathItems: never;

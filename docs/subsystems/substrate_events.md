@@ -87,7 +87,9 @@ interface SubstrateEvent {
 - `emitRelationshipLifecycle({ user_id, relationship_key, relationship_type, source_entity_id, target_entity_id, event_type, timestamp, observation_id?, source_id?, idempotency_key?, source_peer_id? })`.
 - `emitEntityLifecycle({ user_id, entity_id, entity_type, event_type, timestamp, observation_id?, source_id?, idempotency_key?, source_peer_id? })` for `entity.deleted | restored | merged | split`.
 
-Storage callers MUST pass through `observation_source` and `source_peer_id` from the originating observation so downstream loop prevention works.
+- `emitObservationWrite({ user_id, entity_id, entity_type, observation_id?, timestamp, is_new_entity, fields_changed?, … })` emits the observation-plus-entity pair for write paths outside the store core (REST observation create, file-store asset records, schema field promotion, schema-lag repair).
+
+Storage callers MUST pass through `observation_source` and `source_peer_id` from the originating observation so downstream loop prevention works. A write path that inserts an observation without calling one of these emitters leaves no substrate event and no write event; see [`write_events.md`](write_events.md), "Coverage".
 
 ## Listeners
 
@@ -96,7 +98,7 @@ Current consumers:
 - `handleSubstrateEventForSubscriptions` (`src/services/subscriptions/subscription_bridge.ts`) — pushes the event into the SSE ring buffer, broadcasts to matching SSE clients, and queues webhook or peer-sync deliveries. See [`subscriptions.md`](subscriptions.md).
 - Peer-sync outbound queue (`src/services/sync/sync_webhook_outbound.ts`) is invoked transitively from the subscription bridge when `sync_peer_id` is set on a subscription.
 
-`install_subscription_bridge.ts` registers the subscription bridge listener once at server startup; tests register their own listeners on the same singleton bus.
+`install_subscription_bridge.ts` registers the subscription bridge listener once per process: at HTTP server startup (`actions.ts`) and in the MCP stdio entrypoint (`src/index.ts`). Tests register their own listeners on the same singleton bus.
 
 ## Debugging
 
