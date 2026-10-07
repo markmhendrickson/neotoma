@@ -38,6 +38,9 @@
  *    evaluate string, from README.md, or from what_is_neotoma.md fails — which is the
  *    exact EN↔ES asymmetry the review found, where EN said only "is intended".
  *  - NEGATIVE CONTROL (posture): no surface calls the product zero-install.
+ *  - POSITIVE: every surface that states the posture names npm/CLI as today's path
+ *    AND names guided install as unavailable; and both locales of `/evaluate` carry
+ *    the Candidate-B signal that the docs carry.
  *
  * A third invariant was added with the SD-001 amendment of 2026-10-07:
  *
@@ -47,9 +50,15 @@
  *      intended, not shipped)" under the narrowed D4, not disqualified. A sentence
  *      that presents the hosted Neotoma without saying it is unshipped reads as
  *      available, exactly as invariant 2's guided-install sentences would.
- *  - POSITIVE: every surface that states the posture names npm/CLI as today's path
- *    AND names guided install as unavailable; and both locales of `/evaluate` carry
- *    the Candidate-B signal that the docs carry.
+ *
+ *  - NEGATIVE CONTROL (hosted): no sentence presents the hosted Neotoma without
+ *    saying it is unshipped, or calls it available; no surface, in either language,
+ *    requires an account or sign-in to use or self-host Neotoma; and the
+ *    pre-amendment D4 exclusion does not come back.
+ *  - POSITIVE (hosted): the D4 row, and every ICP doc that states D4, carries the
+ *    future marker. Quoted superseded wording ("D4 previously read *"…"*") is
+ *    stripped span by span, never line by line, so the revision note that quotes it
+ *    is still checked.
  *
  * Surfaces are asserted in their natural form: markdown files are read from disk as
  * prose, and `/evaluate` is read from the i18n string tables it renders from, for
@@ -290,10 +299,13 @@ describe("ICP ↔ /evaluate cross-surface parity (#2415)", () => {
      * a quotation is not a live claim.
      */
     function liveText(text: string): string {
-      return text
-        .split("\n")
-        .filter((l) => !/previously read|D4 previously/i.test(l))
-        .join("\n");
+      // Strip only the quoted span that follows "previously read", in straight or
+      // curly quotes and with or without markdown emphasis. Dropping the whole line
+      // would also drop the rest of the revision note, which carries live claims.
+      return text.replace(
+        /(previously read)\s*[*_]*\s*(?:"[^"\n]*"|“[^”\n]*”)\s*[*_]*/gi,
+        "$1 [quoted]",
+      );
     }
 
     /** Sentences naming the hosted offering ("the hosted Neotoma") or the route to it. */
@@ -315,8 +327,23 @@ describe("ICP ↔ /evaluate cross-surface parity (#2415)", () => {
     const SAYS_HOSTED_AVAILABLE =
       /\b(available (now|today)|is (now )?(available|live|launched)|has (shipped|launched)|now shipped)\b/i;
     /** States that an account or sign-in is required to use, run, or self-host Neotoma. */
-    const REQUIRES_SIGN_IN =
-      /(?<!\bno )\b(signing in|sign-in|signing up|sign-up|an account|account creation|account)\s+(is|will be)\s+(required|needed|necessary|mandatory)\s+to\s+(use|run|install|self-host|try)\b|\bmust (sign in|sign up|create an account|have an account)\b|(?<!never )(?<!not )\brequires? (an account|sign-in|signing in)\b/i;
+    const REQUIRES_SIGN_IN = new RegExp(
+      [
+        // "an account is required to use Neotoma", "signing in will be needed to self-host"
+        String.raw`(?<!\bno )\b(signing in|sign-in|signing up|sign-up|an account|account creation|account)\s+(is|will be)\s+(required|needed|necessary|mandatory)\s+to\s+(use|run|install|self-host|try)\b`,
+        // "you must sign in", "users must create an account"
+        String.raw`\bmust (sign in|sign up|create an account|have an account)\b`,
+        // "Neotoma requires an account" (not "never requires" / "does not require")
+        String.raw`(?<!never )(?<!not )\brequires? (an account|sign-in|signing in)\b`,
+        // "You need an account to use Neotoma" (not "you don't need an account")
+        String.raw`(?<!\b(?:no|never|not|don't|do not|doesn't|does not|won't|will not)\s+)\bneeds? (?:an account|to sign in|to sign up|to create an account)\b(?!\s+only\b)`,
+        // ES: "se requiere una cuenta", "necesita iniciar sesión" (not "no se requiere")
+        String.raw`(?<!\bno\s+(?:se\s+)?)\b(?:requiere|requieren|necesita|necesitan|necesitas|hace falta|es necesario|es obligatorio)\s+(?:una cuenta|iniciar sesi[óo]n|registrarse|crear una cuenta)\b`,
+        // ES: "iniciar sesión es obligatorio para usar", "una cuenta es necesaria"
+        String.raw`(?<!\bno\s+)\b(?:iniciar sesi[óo]n|una cuenta|el registro)\s+(?:es|ser[áa])\s+(?:obligatori[oa]|necesari[oa]|requerid[oa])\b`,
+      ].join("|"),
+      "i",
+    );
     /** The marker the narrowed D4 puts on hosted-only buyers until the hosted Neotoma ships. */
     const FUTURE_MARKER = /future \(hosted path intended, not shipped\)/i;
     /** The pre-amendment D4 and its mirrors, as live exclusions. */
