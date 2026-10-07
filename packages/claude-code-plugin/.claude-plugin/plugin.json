@@ -17,6 +17,12 @@
       "default": "https://sandbox.neotoma.io/mcp"
     }
   },
+  "mcpServers": {
+    "neotoma": {
+      "type": "http",
+      "url": "${user_config.neotoma_mcp_url}"
+    }
+  },
   "hooks": {
     "SessionStart": [
       {

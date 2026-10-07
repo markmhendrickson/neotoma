@@ -15,10 +15,16 @@ pip install neotoma-client
 claude plugin marketplace add /ABS/PATH/TO/neotoma/packages/claude-code-plugin
 claude plugin install neotoma@neotoma-marketplace
 
-#    Or from the Neotoma marketplace (once published):
+#    Or from GitHub: the repo root ships .claude-plugin/marketplace.json, so the
+#    owner/repo form resolves (also from Customize › Plugins › Add marketplace in
+#    the Claude apps):
 #    /plugin marketplace add markmhendrickson/neotoma
-#    /plugin install neotoma
+#    /plugin install neotoma@neotoma-marketplace
 ```
+
+The plugin also bundles a Neotoma MCP connector, onboarding skills (`setup`,
+`check`, `recover`), and starter commands. See
+[`packages/claude-code-plugin/README.md`](../../../packages/claude-code-plugin/README.md).
 
 ## Hooks wired
 
