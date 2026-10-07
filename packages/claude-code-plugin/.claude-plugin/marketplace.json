@@ -4,7 +4,7 @@
     "name": "Neotoma",
     "url": "https://neotoma.io"
   },
-  "description": "Local-checkout catalog for the Neotoma Claude plugin. The repo-root .claude-plugin/marketplace.json is the one `owner/repo` resolves to.",
+  "description": "Local-checkout catalog for the Neotoma Claude plugin, registered by `neotoma hooks install --tool claude-code`. Shares the name neotoma-marketplace with the repo-root catalog (markmhendrickson/neotoma) on purpose: same plugin, same install id.",
   "plugins": [
     {
       "name": "neotoma",

@@ -92,6 +92,17 @@ export interface FixtureMeta {
   harnesses: HarnessId[];
   models: string[];
   tags?: string[];
+  /**
+   * Run the claude-code-plugin hooks as the INSTALLED plugin (CLAUDE_PLUGIN_ROOT
+   * set, HOME isolated). Without this block the adapter pins the out-of-plugin
+   * path. `{cell_base_url}` / `{cell_mcp_url}` expand to this cell's mock server.
+   */
+  claude_plugin?: {
+    /** CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL; "" or omitted = option unset. */
+    mcp_url?: string;
+    /** NEOTOMA_BASE_URL; null = unset. Omitted = the cell's mock server. */
+    neotoma_base_url?: string | null;
+  };
 }
 
 export type ExpectedOutputsByHook = Partial<Record<CanonicalHook, ExpectedOutputPredicate[]>>;

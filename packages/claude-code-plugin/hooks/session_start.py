@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
     NEOTOMA_BASE_URL,
     get_client,
+    is_public_sandbox,
     harness_provenance,
     log,
     make_idempotency_key,
@@ -42,6 +43,9 @@ from _common import (  # noqa: E402
 def _prefetch_mcp_instructions() -> None:
     """Fetch MCP instructions once at session start and cache them."""
     if _urllib_request is None:
+        return
+    if is_public_sandbox(NEOTOMA_BASE_URL):
+        # Capture is off on the public sandbox; the hooks make no requests.
         return
     url = NEOTOMA_BASE_URL.rstrip("/") + "/mcp-interaction-instructions"
     try:

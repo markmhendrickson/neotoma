@@ -1,7 +1,7 @@
 {
   "name": "neotoma",
   "version": "0.2.0",
-  "description": "Neotoma for Claude: a bundled MCP connector (defaults to the public sandbox; point it at your own Neotoma in the plugin settings), onboarding skills (setup, check, recover), starter commands, and Claude Code lifecycle hooks (Python, under ${CLAUDE_PLUGIN_ROOT}/hooks). The same package also ships a Cursor hook map (.cursor/hooks.json -> cursor-hooks).",
+  "description": "Neotoma for Claude: a bundled MCP connector (Claude Code: your Neotoma MCP URL setting, default the shared public sandbox; Cowork: the public sandbox; Chat ignores it, add a custom connector), onboarding skills (setup, check, recover), starter commands, and Claude Code lifecycle hooks that follow the same Neotoma. The same package also ships a Cursor hook map (.cursor/hooks.json -> cursor-hooks).",
   "author": {
     "name": "Mark Hendrickson",
     "url": "https://neotoma.io"
@@ -13,7 +13,7 @@
     "neotoma_mcp_url": {
       "type": "string",
       "title": "Neotoma MCP URL",
-      "description": "The MCP endpoint of the Neotoma you want Claude to use, e.g. https://your-neotoma.example/mcp or http://127.0.0.1:3080/mcp. Leave empty to use the public sandbox (shared and ephemeral: do not store personal data there).",
+      "description": "The /mcp URL of the Neotoma the connector and hooks use, e.g. http://127.0.0.1:3080/mcp or https://your-neotoma.example/mcp. Default: the shared public sandbox (visible to others and wiped; hooks never capture there). `neotoma hooks install --tool claude-code` sets this for you.",
       "default": "https://sandbox.neotoma.io/mcp"
     }
   },

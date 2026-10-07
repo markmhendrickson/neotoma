@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "starter_prompt_remember_this",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-07T12:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Remember this in Neotoma:\n\nMy dentist appointment moved to Thursday 12 November at 10:00.\n\nThen read it back and show me exactly what was saved.\n\nBefore storing, check which Neotoma I am connected to (`get_session_identity`). If it is the shared public sandbox, tell me that anything stored there is visible to other people and gets wiped, and store only after I confirm.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Follow the user's request using the Neotoma MCP tools, then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "get_session_identity",
+      "input": {},
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{}"
+        }
+      ],
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "starter-remember-this-1",
+        "entities": [
+          {
+            "entity_type": "event",
+            "schema_version": "1.0",
+            "title": "Dentist appointment",
+            "start_time": "2026-11-12T10:00:00Z",
+            "notes": "Moved to Thursday 12 November at 10:00."
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{}"
+        }
+      ],
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entity_by_identifier",
+      "input": {
+        "identifier": "Dentist appointment"
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{}"
+        }
+      ],
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Saved and read back: Dentist appointment, Thursday 12 November 2026 at 10:00 (event)."
+}

@@ -215,6 +215,11 @@ NEOTOMA_BASE_URL, NEOTOMA_URL_SOURCE = resolve_neotoma_url()
 NEOTOMA_TOKEN = resolve_token(NEOTOMA_BASE_URL)
 
 
+def capture_enabled() -> bool:
+    """False on the public sandbox: the hooks then make no requests at all."""
+    return not is_public_sandbox(NEOTOMA_BASE_URL)
+
+
 def log(level: str, message: str) -> None:
     """Write a single-line log to stderr when level is enabled."""
     order = {"debug": 0, "info": 1, "warn": 2, "error": 3, "silent": 4}
@@ -249,7 +254,7 @@ def get_client() -> Any | None:
     We do not raise here because that would fail the hook and the user's
     agent turn. Instead we log a one-line warning the first time.
     """
-    if is_public_sandbox(NEOTOMA_BASE_URL):
+    if not capture_enabled():
         # The public sandbox is shared and readable by other visitors. Hooks
         # capture every prompt and reply, so they never write there; the
         # connector (agent-driven, deliberate writes) still works. The

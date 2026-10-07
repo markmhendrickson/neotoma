@@ -1,0 +1,80 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "endpoint": "/mcp-interaction-instructions",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "endpoint": "/mcp-interaction-instructions",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "conversation",
+            "harness": "claude-code",
+            "hook_event": "SessionStart",
+            "session_id": "<id:1>",
+            "session_uuid": "claude_plugin_option_routes_capture__claude-code-plugin__claude-sonnet-4.5",
+            "started_at": "<ts>",
+            "title": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:2>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Sara Lee said the proposal looks great.",
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "conversation_message",
+            "harness": "claude-code",
+            "hook_event": "UserPromptSubmit",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "claude_plugin_option_routes_capture__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:3>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/timeline",
+      "body": {
+        "limit": 5
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {
+        "additionalContext": "## Recent timeline\n{'entities': [], 'total': 0, 'excluded_merged': True}"
+      }
+    },
+    {
+      "hook": "sessionStart",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}

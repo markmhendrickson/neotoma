@@ -1,0 +1,59 @@
+meta:
+  id: starter_prompt_remember_this
+  description: >
+    The user turn is the exact rendering of the `remember-this` MCP starter
+    prompt (src/mcp_prompts.ts, content argument supplied). The agent must do
+    what the prompt asks: check which Neotoma it is connected to, store the
+    item, and read it back. tests/unit/mcp_prompts.test.ts pins this
+    user_prompt to the live prompt rendering, so prompt text drift breaks it.
+  tags:
+    - tier2
+    - starter_prompts
+    - store_then_read_back
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Follow the user's request using the Neotoma MCP tools, then reply briefly.
+
+user_prompt: |
+  Remember this in Neotoma:
+
+  My dentist appointment moved to Thursday 12 November at 10:00.
+
+  Then read it back and show me exactly what was saved.
+
+  Before storing, check which Neotoma I am connected to (`get_session_identity`). If it is the shared public sandbox, tell me that anything stored there is visible to other people and gets wiped, and store only after I confirm.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: mcp_tool.invocations
+    tool_name: get_session_identity
+    op: gte
+    value: 1
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: event
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_by_identifier
+    op: gte
+    value: 1
+  - type: reply_text.contains
+    value: Dentist appointment
+  - type: tool_result.matches
+    tool_name: retrieve_entity_by_identifier
+    which: last
+    result_subset:
+      total: 1

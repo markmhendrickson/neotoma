@@ -40,12 +40,12 @@ Every hook above also accretes onto a single `conversation_turn` keyed by `(sess
 
 ## Configuration
 
-Installed as the Claude plugin, the hooks follow the plugin's **Neotoma MCP URL** option, the same URL as the bundled connector, and ignore `NEOTOMA_BASE_URL`. They never capture into the public sandbox. See [`packages/claude-code-plugin/README.md`](../../../packages/claude-code-plugin/README.md#configuration-hooks).
+Installed as the Claude plugin, the hooks use the plugin's **Neotoma MCP URL** option (the bundled connector's URL) when set, then `NEOTOMA_BASE_URL`, then a local Neotoma CLI config, then the public sandbox. They never capture into the sandbox, and a session-start status line says when capture is off or split from the connector. `neotoma hooks install --tool claude-code` sets the option for you. See [`packages/claude-code-plugin/README.md`](../../../packages/claude-code-plugin/README.md#configuration-hooks).
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `NEOTOMA_BASE_URL` | unset | API root, used only when the hooks run outside the installed plugin. |
-| `NEOTOMA_TOKEN` | `dev-local` | Auth token. |
+| `NEOTOMA_BASE_URL` | unset | API root (after the plugin option); also scopes `NEOTOMA_TOKEN`. |
+| `NEOTOMA_TOKEN` | unset | Auth token, sent only to the origin of `NEOTOMA_BASE_URL` (or a loopback server when that is unset). |
 | `NEOTOMA_LOG_LEVEL` | `warn` | `debug` through `silent`. |
 | `NEOTOMA_HOOK_STATE_DIR` | `~/.neotoma/hook-state` | Where the hook layer keeps per-session failure-counter state. |
 | `NEOTOMA_HOOK_FEEDBACK_HINT` | `on` | Set to `off` to disable the one-shot failure hint. |

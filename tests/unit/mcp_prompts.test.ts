@@ -13,8 +13,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   NEOTOMA_MCP_PROMPTS,
+  SANDBOX_CAUTION,
   getNeotomaPrompt,
   listNeotomaPrompts,
+  renderPluginCommandMarkdown,
 } from "../../src/mcp_prompts.js";
 import { buildSmitheryServerCard } from "../../src/mcp_server_card.js";
 
@@ -110,6 +112,50 @@ describe("MCP prompts", () => {
     expect(text).toContain("Do not write anything");
   });
 
+  it("prompts that store warn about the shared public sandbox", () => {
+    const remember = getNeotomaPrompt("remember-this", { content: "x" })!.messages[0].content.text;
+    expect(remember).toContain(SANDBOX_CAUTION);
+    expect(getNeotomaPrompt("remember-this", {})!.messages[0].content.text).toContain(
+      SANDBOX_CAUTION
+    );
+    const setup = getNeotomaPrompt("set-up-neotoma", {})!.messages[0].content.text;
+    expect(setup).toMatch(/shared public sandbox/);
+    expect(setup).toMatch(/made-up test data/);
+  });
+
+  it("check-neotoma treats a duplicate Neotoma connector as a failure", () => {
+    const text = getNeotomaPrompt("check-neotoma", {})!.messages[0].content.text;
+    expect(text).toMatch(/exactly one Neotoma connector/);
+    expect(text).toMatch(/duplicate connector/);
+  });
+
+  it("the starter-prompt eval scenario uses the live remember-this rendering", () => {
+    const scenarioDir = join(REPO_ROOT, "packages", "eval-harness");
+    const yaml = readFileSync(
+      join(scenarioDir, "scenarios", "starter_prompt_remember_this.scenario.yaml"),
+      "utf-8"
+    );
+    const cassette = JSON.parse(
+      readFileSync(
+        join(
+          scenarioDir,
+          "cassettes",
+          "starter_prompt_remember_this__stub__replay-only.cassette.json"
+        ),
+        "utf-8"
+      )
+    ) as { user_prompt: string };
+    const rendered = getNeotomaPrompt("remember-this", {
+      content: "My dentist appointment moved to Thursday 12 November at 10:00.",
+    })!.messages[0].content.text;
+    expect(cassette.user_prompt.trimEnd()).toBe(rendered);
+    const block = rendered
+      .split("\n")
+      .map((line) => (line ? `  ${line}` : ""))
+      .join("\n");
+    expect(yaml).toContain(`user_prompt: |\n${block}\n`);
+  });
+
   it("advertises the same prompts on the static server card", () => {
     const card = buildSmitheryServerCard();
     expect((card.prompts as Array<{ name: string }>).map((p) => p.name)).toEqual(EXPECTED_NAMES);
@@ -117,6 +163,17 @@ describe("MCP prompts", () => {
 });
 
 describe("Claude plugin shell", () => {
+  it("plugin command files are the generated rendering of their prompt, word for word", () => {
+    for (const prompt of NEOTOMA_MCP_PROMPTS) {
+      const file = readFileSync(join(PLUGIN_DIR, "commands", `${prompt.name}.md`), "utf-8");
+      expect(file).toBe(renderPluginCommandMarkdown(prompt));
+      for (const a of prompt.arguments) {
+        expect(file).toContain(prompt.render({ [a.name]: "$ARGUMENTS" }));
+      }
+      expect(file).toContain(prompt.render({}));
+    }
+  });
+
   it("mirrors every MCP prompt as a plugin command, and nothing else", () => {
     const commands = readdirSync(join(PLUGIN_DIR, "commands"))
       .filter((f) => f.endsWith(".md"))

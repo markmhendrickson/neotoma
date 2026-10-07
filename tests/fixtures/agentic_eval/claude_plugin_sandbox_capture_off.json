@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "id": "claude_plugin_sandbox_capture_off",
+    "description": "Installed Claude plugin on its default connector (the shared public sandbox), with no local Neotoma configured. The hooks must make no requests at all, and SessionStart must tell the user that lifecycle capture is off.",
+    "harnesses": ["claude-code-plugin"],
+    "models": ["claude-sonnet-4.5"],
+    "tags": ["claude-plugin", "in-plugin", "sandbox", "privacy"],
+    "claude_plugin": {
+      "mcp_url": "https://sandbox.neotoma.io/mcp",
+      "neotoma_base_url": null
+    }
+  },
+  "events": [
+    { "hook": "sessionStart", "payload": {} },
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "My dentist appointment moved to Thursday at 10." }
+    },
+    { "hook": "stop", "payload": { "text": "Noted: dentist on Thursday at 10." } }
+  ],
+  "assertions": {
+    "default": [
+      { "type": "no_writes" },
+      { "type": "request_count", "endpoint": "/store", "op": "eq", "value": 0 }
+    ]
+  },
+  "expected_outputs": {
+    "sessionStart": [
+      { "field": "systemMessage", "presence": "present", "matches": "public sandbox.*capture is off" }
+    ]
+  }
+}

@@ -4,12 +4,12 @@
     "name": "Neotoma",
     "url": "https://neotoma.io"
   },
-  "description": "Neotoma plugins for Claude: a bundled Neotoma MCP connector, onboarding skills, starter commands, and Claude Code lifecycle hooks.",
+  "description": "Neotoma plugins for Claude. Shares the marketplace name neotoma-marketplace with the package-local catalog on purpose: both list the same plugin, so the install id is neotoma@neotoma-marketplace from either source.",
   "plugins": [
     {
       "name": "neotoma",
       "source": "./packages/claude-code-plugin",
-      "description": "Connect Claude to Neotoma (public sandbox by default, or your own instance), with setup, check, and recover skills and starter commands.",
+      "description": "Connect Claude to Neotoma (Claude Code: your own Neotoma or the public sandbox; Chat and Cowork: see the setup skill), with setup, check, and recover skills and starter commands.",
       "category": "memory",
       "tags": ["memory", "state", "provenance", "mcp", "cross-tool"]
     }
