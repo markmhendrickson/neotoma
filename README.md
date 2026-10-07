@@ -205,7 +205,7 @@ Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md) — t
 
 ## Status
 
-**Version:** v0.17.0 · **License:** MIT · **Storage:** local-only (SQLite + local files).
+**Version:** see the [latest release](https://github.com/markmhendrickson/neotoma/releases/latest) or [npm](https://www.npmjs.com/package/neotoma) · **License:** MIT · **Storage:** local-only (SQLite + local files).
 
 Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, append-only log, full provenance, same contract across CLI and MCP) are stable — phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
 
