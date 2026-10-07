@@ -70,8 +70,11 @@ interface SubstrateEvent {
   agent_thumbprint?: string;    // resolved via getCurrentAgentIdentity()
   observation_source?: string;  // sensor | llm_summary | workflow_state | human | import | sync
   source_peer_id?: string;      // set when the observation was replayed from a peer
+  write_context?: WriteEventContext; // durable log only; never delivered (see below)
 }
 ```
+
+`write_context` carries the write operation, the actor as identifiers, and the client-reported conversation turn. It is stamped by the emit helpers from the request context, persisted in the durable log, and stripped by `toDeliverableSubstrateEvent` before any delivery (ring, SSE, webhook, peer sync, durable resume). It is not part of the `event_id` hash. See [`write_events.md`](write_events.md).
 
 `fields_changed` is computed by `shallowFieldsChanged(before, after)` in `src/events/substrate_store_emit.ts` so all entity-update events carry a sorted, JSON-stable diff.
 
@@ -110,3 +113,4 @@ Set `NEOTOMA_DEBUG_SUBSTRATE_EVENTS=1` to log each event at `debug` level (`even
 - [`peer_sync.md`](peer_sync.md) — replication semantics that consume `source_peer_id`.
 - [`observation_architecture.md`](observation_architecture.md) — the upstream commit boundary that triggers emit calls.
 - [`reducer.md`](reducer.md) — how `fields_changed` relates to snapshot diffs.
+- [`write_events.md`](write_events.md) — the server-side write record and turn identity carried in `write_context`.
