@@ -1,6 +1,6 @@
 /**
  * Effect test: every write leaves a server-side record carrying its operation,
- * actor and conversation turn (#2508 lane 6).
+ * actor and conversation turn (write events; turn keys #2440).
  *
  * Drives real write paths — the MCP `tools/call` handler (with turn identity
  * in `_meta`), `createCorrection`, and the HTTP `/store` route (with turn

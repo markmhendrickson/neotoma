@@ -1,5 +1,5 @@
 /**
- * Unit tests for write-event turn identity and write context (#2508 lane 6).
+ * Unit tests for write-event turn identity and write context (write events; turn keys #2440).
  *
  * Pins: which carriers are read, that only identifier-shaped values survive
  * (no prose, no oversized values), `_meta` precedence over headers, the
@@ -7,7 +7,7 @@
  * deliverable form of an event never carries the write context.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createAgentIdentity } from "../../src/crypto/agent_identity.js";
 import type { SubstrateEvent } from "../../src/events/types.js";
@@ -18,6 +18,7 @@ import {
   TURN_HEADER_CONVERSATION_ID,
   TURN_HEADER_TURN_KEY,
   TURN_IDENTIFIER_MAX_LENGTH,
+  checkTurnIdentifier,
   resolveToolCallTurnIdentity,
   sanitizeTurnIdentifier,
   turnIdentityFromHeaders,
@@ -29,6 +30,7 @@ import {
   writeOperationForEventType,
 } from "../../src/services/write_events/write_context.js";
 import { getCurrentTurnIdentity } from "../../src/services/request_context.js";
+import { logger } from "../../src/utils/logger.js";
 
 describe("sanitizeTurnIdentifier", () => {
   it("keeps session:turn keys, UUIDs and the ungrouped sentinel", () => {
@@ -54,13 +56,26 @@ describe("sanitizeTurnIdentifier", () => {
 });
 
 describe("turn identity carriers", () => {
-  it("reads both headers, taking the first value of a repeated header", () => {
+  it("reads both headers", () => {
     expect(
       turnIdentityFromHeaders({
         [TURN_HEADER_CONVERSATION_ID]: "conv-1",
-        [TURN_HEADER_TURN_KEY]: ["sess-1:t1", "sess-1:t2"],
+        [TURN_HEADER_TURN_KEY]: "sess-1:t1",
       })
     ).toEqual({ conversation_id: "conv-1", turn_key: "sess-1:t1", source: "header" });
+  });
+
+  it("drops a repeated header instead of picking one of its values", () => {
+    // Node joins a repeated request header into "a, b"; an array is the other shape.
+    expect(
+      turnIdentityFromHeaders({
+        [TURN_HEADER_CONVERSATION_ID]: "conv-1",
+        [TURN_HEADER_TURN_KEY]: "sess-1:t1, sess-1:t2",
+      })
+    ).toEqual({ conversation_id: "conv-1", source: "header" });
+    expect(
+      turnIdentityFromHeaders({ [TURN_HEADER_TURN_KEY]: ["sess-1:t1", "sess-1:t2"] })
+    ).toBeNull();
   });
 
   it("returns null when no header carries a usable identifier", () => {
@@ -93,12 +108,73 @@ describe("turn identity carriers", () => {
     expect(resolveToolCallTurnIdentity(undefined, null)).toBeNull();
   });
 
+  it("a _meta carrying only a conversation id replaces the header identity as a whole", () => {
+    const inherited = {
+      conversation_id: "hdr-conv",
+      turn_key: "hdr:t1",
+      source: "header" as const,
+    };
+    // No field-by-field merge: the header's turn key does not survive.
+    expect(
+      resolveToolCallTurnIdentity({ [MCP_META_CONVERSATION_ID]: "meta-conv" }, inherited)
+    ).toEqual({ conversation_id: "meta-conv", source: "mcp_meta" });
+  });
+
+  it("a _meta whose identifiers are all unusable falls back to the header identity", () => {
+    const inherited = { turn_key: "hdr:t1", source: "header" as const };
+    expect(resolveToolCallTurnIdentity({ [MCP_META_TURN_KEY]: "not an id" }, inherited)).toBe(
+      inherited
+    );
+  });
+
   it("survives runWithExternalActor's context clone", async () => {
     const turn = { turn_key: "keep:t1", source: "header" as const };
     const seen = await runWithRequestContext({ agentIdentity: null, turn }, () =>
       runWithExternalActor(null, () => getCurrentTurnIdentity())
     );
     expect(seen).toEqual(turn);
+  });
+});
+
+describe("checkTurnIdentifier drop reasons", () => {
+  it("names why an identifier was not used", () => {
+    expect(checkTurnIdentifier(7)).toEqual({ ok: false, reason: "not_a_string" });
+    expect(checkTurnIdentifier("  ")).toEqual({ ok: false, reason: "empty" });
+    expect(checkTurnIdentifier("a".repeat(TURN_IDENTIFIER_MAX_LENGTH + 1))).toEqual({
+      ok: false,
+      reason: "too_long",
+    });
+    expect(checkTurnIdentifier("two words")).toEqual({ ok: false, reason: "invalid_characters" });
+    expect(checkTurnIdentifier("caf\u00e9:t1")).toEqual({
+      ok: false,
+      reason: "invalid_characters",
+    });
+    expect(checkTurnIdentifier("a:t1, a:t2")).toEqual({ ok: false, reason: "repeated_header" });
+    expect(checkTurnIdentifier(["a", "b"])).toEqual({ ok: false, reason: "repeated_header" });
+    expect(checkTurnIdentifier(" s:t1 ")).toEqual({ ok: true, value: "s:t1" });
+  });
+
+  it("logs a dropped identifier at debug with its reason and length, never its value", () => {
+    const spy = vi.spyOn(logger, "debug").mockImplementation(() => {});
+    try {
+      turnIdentityFromHeaders({ [TURN_HEADER_TURN_KEY]: "secret prose here" });
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [message, details] = spy.mock.calls[0] as [string, Record<string, unknown>];
+      expect(message).toContain("ignored client turn identifier");
+      expect(details).toEqual({
+        source: "header",
+        field: "turn_key",
+        reason: "invalid_characters",
+        length: "secret prose here".length,
+      });
+      expect(JSON.stringify(spy.mock.calls)).not.toContain("secret prose");
+      // Absent headers are not drops and log nothing.
+      spy.mockClear();
+      turnIdentityFromHeaders({});
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
