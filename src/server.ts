@@ -7,6 +7,8 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
   InitializeRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -26,6 +28,7 @@ import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
 import { filterInstallableSkillNames } from "./shared/skill_deprecation.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
+import { getNeotomaPrompt, listNeotomaPrompts } from "./mcp_prompts.js";
 import {
   MCP_META_SERVER_INFO,
   MCP_MODERN_SUPPORTED_VERSIONS,
@@ -253,6 +256,9 @@ const ServerDiscoverRequestSchema = z.object({
 const NEOTOMA_MCP_DECLARED_CAPABILITIES = {
   tools: { listChanged: true },
   resources: {},
+  // Static starter prompts (src/mcp_prompts.ts). The set never changes at
+  // runtime, so no list_changed notifications.
+  prompts: {},
 } as const;
 
 /** Set once the stdio entrypoint's process-level signal handlers are installed. */
@@ -343,6 +349,7 @@ export class NeotomaServer {
     this.setupInitializeHandler();
     this.setupToolHandlers();
     this.setupResourceHandlers();
+    this.setupPromptHandlers();
     this.setupErrorHandler();
   }
 
@@ -2793,6 +2800,26 @@ export class NeotomaServer {
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
+  }
+
+  /**
+   * MCP prompts capability. Prompts are static text with no tenant data (see
+   * src/mcp_prompts.ts), served like `tools/list` serves static definitions:
+   * no identity resolution, no DB access. Tool calls a rendered prompt leads
+   * to stay auth-gated.
+   */
+  private setupPromptHandlers(): void {
+    this.mcpServer.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: listNeotomaPrompts(),
+    }));
+    this.mcpServer.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+      const result = getNeotomaPrompt(name, args);
+      if (!result) {
+        throw new McpError(ErrorCode.InvalidParams, `Unknown prompt: ${name}`);
+      }
+      return result;
+    });
   }
 
   /**

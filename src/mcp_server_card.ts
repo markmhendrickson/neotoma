@@ -3,6 +3,7 @@ import { join } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
+import { listNeotomaPrompts } from "./mcp_prompts.js";
 import { readPackageVersion } from "./shared/package_version.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
@@ -91,6 +92,6 @@ export function buildSmitheryServerCard(): Record<string, unknown> {
         mimeType: "application/json",
       },
     ],
-    prompts: [],
+    prompts: listNeotomaPrompts(),
   };
 }

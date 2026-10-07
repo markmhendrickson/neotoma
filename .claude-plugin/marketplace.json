@@ -1,0 +1,17 @@
+{
+  "name": "neotoma-marketplace",
+  "owner": {
+    "name": "Neotoma",
+    "url": "https://neotoma.io"
+  },
+  "description": "Neotoma plugins for Claude: a bundled Neotoma MCP connector, onboarding skills, starter commands, and Claude Code lifecycle hooks.",
+  "plugins": [
+    {
+      "name": "neotoma",
+      "source": "./packages/claude-code-plugin",
+      "description": "Connect Claude to Neotoma (public sandbox by default, or your own instance), with setup, check, and recover skills and starter commands.",
+      "category": "memory",
+      "tags": ["memory", "state", "provenance", "mcp", "cross-tool"]
+    }
+  ]
+}
