@@ -35,26 +35,33 @@ NEOTOMA_LOG_LEVEL = os.environ.get("NEOTOMA_LOG_LEVEL", "warn").lower()
 #
 # The plugin bundles an MCP connector whose URL is the plugin option
 # `neotoma_mcp_url` (plugin.json `userConfig`, default: the public sandbox).
-# The hooks MUST resolve to the same Neotoma as that connector: hooks and
-# connector never split across two instances, and the hooks never default to
-# localhost when the connector points elsewhere.
+# Claude Code resolves the connector to `connector_mcp_url()` below.
 #
-# Precedence:
-#   1. The plugin option, which Claude Code exports to hook processes as
-#      CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL. This is exactly what the
-#      connector's `${user_config.neotoma_mcp_url}` resolves to.
-#   2. NEOTOMA_BASE_URL, only when explicitly set AND the hooks are not running
-#      as the installed plugin (no CLAUDE_PLUGIN_ROOT). Inside the plugin the
-#      connector cannot see this variable, so honouring it would split hooks
-#      and connector; it is ignored there with a warning.
-#   3. The option's default from plugin.json (the same value the connector
-#      falls back to).
+# Precedence for the hooks:
+#   1. The plugin option (CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL), when the user
+#      set it to something other than the default. Hooks == connector.
+#   2. NEOTOMA_BASE_URL, when explicitly set (an existing local configuration).
+#   3. An existing Neotoma CLI configuration (~/.config/neotoma/config.json):
+#      its `base_url`, else http://127.0.0.1:3080, which is what plugin 0.1.x
+#      hooks used. This keeps upgraded installs capturing where they did.
+#   4. The plugin default (the public sandbox). Hooks == connector.
+#
+# 2 and 3 honour an existing local setup instead of falling back to the
+# sandbox. If that differs from where the bundled connector points, the
+# SessionStart hook says so visibly (see `status_message()`), with the one
+# command that makes them agree. `neotoma hooks install --tool claude-code`
+# sets the option, so after it runs 1 applies and they never differ.
 
 PLUGIN_URL_OPTION_ENV = "CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL"
 _PLUGIN_MANIFEST = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
 # Used only if plugin.json cannot be read; tests pin it to the manifest default.
 _FALLBACK_DEFAULT_MCP_URL = "https://sandbox.neotoma.io/mcp"
-PUBLIC_SANDBOX_HOST = "sandbox.neotoma.io"
+# The 0.1.x hooks default, honoured when a local Neotoma CLI config exists.
+LEGACY_LOCAL_BASE_URL = "http://127.0.0.1:3080"
+# Hostnames that serve the shared public sandbox (custom domain and the
+# hosting platform's alias for the same app).
+PUBLIC_SANDBOX_HOSTS = frozenset({"sandbox.neotoma.io", "neotoma-sandbox.fly.dev"})
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def plugin_default_mcp_url() -> str:
@@ -69,39 +76,143 @@ def plugin_default_mcp_url() -> str:
     return _FALLBACK_DEFAULT_MCP_URL
 
 
+def _with_scheme(url: str) -> str:
+    url = url.strip()
+    if url and "://" not in url:
+        return "https://" + url
+    return url
+
+
 def mcp_url_to_base_url(url: str) -> str:
     """API root for an MCP endpoint URL (drops a trailing `/mcp`)."""
-    base = url.strip().rstrip("/")
-    if base.endswith("/mcp"):
+    base = _with_scheme(url).rstrip("/")
+    if base.lower().endswith("/mcp"):
         base = base[: -len("/mcp")]
     return base
 
 
-def resolve_neotoma_url(env: Any = None) -> tuple[str, str]:
-    """Return (api_base_url, source) for the hooks. See precedence above."""
-    env = os.environ if env is None else env
-    option = (env.get(PLUGIN_URL_OPTION_ENV) or "").strip()
-    if option:
-        return mcp_url_to_base_url(option), "plugin_option"
-    explicit = (env.get("NEOTOMA_BASE_URL") or "").strip()
-    in_plugin = bool((env.get("CLAUDE_PLUGIN_ROOT") or "").strip())
-    if explicit and not in_plugin:
-        return mcp_url_to_base_url(explicit), "env"
-    return mcp_url_to_base_url(plugin_default_mcp_url()), "plugin_default"
-
-
-def is_public_sandbox(base_url: str) -> bool:
-    """True when base_url is the shared public sandbox."""
+def url_host(url: str) -> str:
+    """Normalised hostname: lowercase, no trailing dot, scheme optional."""
     try:
         from urllib.parse import urlparse
 
-        return (urlparse(base_url).hostname or "").lower() == PUBLIC_SANDBOX_HOST
+        return (urlparse(_with_scheme(url)).hostname or "").lower().rstrip(".")
     except Exception:
-        return False
+        return ""
+
+
+def url_origin(url: str) -> str:
+    """scheme://host:port, normalised, for pairing a token with a URL."""
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(_with_scheme(url))
+        scheme = (parsed.scheme or "").lower()
+        port = parsed.port or (443 if scheme == "https" else 80)
+        return f"{scheme}://{url_host(url)}:{port}"
+    except Exception:
+        return ""
+
+
+def is_public_sandbox(url: str) -> bool:
+    """True when url points at the shared public sandbox."""
+    return url_host(url) in PUBLIC_SANDBOX_HOSTS
+
+
+def is_loopback(url: str) -> bool:
+    return url_host(url) in _LOOPBACK_HOSTS
+
+
+def connector_mcp_url(environ: Any = None) -> str:
+    """Where the bundled connector points: `${user_config.neotoma_mcp_url}`, defaulted."""
+    environ = os.environ if environ is None else environ
+    option = (environ.get(PLUGIN_URL_OPTION_ENV) or "").strip()
+    return option or plugin_default_mcp_url()
+
+
+def _local_cli_config_base_url(environ: Any) -> str | None:
+    """Base URL from an existing Neotoma CLI config, or None if there is none."""
+    home = (environ.get("HOME") or "").strip() or str(Path.home())
+    config_path = Path(home) / ".config" / "neotoma" / "config.json"
+    if not config_path.is_file():
+        return None
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        value = data.get("base_url") if isinstance(data, dict) else None
+        if isinstance(value, str) and value.strip():
+            return mcp_url_to_base_url(value)
+    except Exception:
+        pass
+    return LEGACY_LOCAL_BASE_URL
+
+
+def resolve_neotoma_url(environ: Any = None) -> tuple[str, str]:
+    """Return (api_base_url, source) for the hooks. See precedence above."""
+    environ = os.environ if environ is None else environ
+    default = plugin_default_mcp_url()
+    option = (environ.get(PLUGIN_URL_OPTION_ENV) or "").strip()
+    if option and mcp_url_to_base_url(option) != mcp_url_to_base_url(default):
+        return mcp_url_to_base_url(option), "plugin_option"
+    explicit = (environ.get("NEOTOMA_BASE_URL") or "").strip()
+    if explicit:
+        return mcp_url_to_base_url(explicit), "env"
+    local = _local_cli_config_base_url(environ)
+    if local:
+        return local, "local_config"
+    return mcp_url_to_base_url(default), "plugin_default"
+
+
+def resolve_token(base_url: str, environ: Any = None) -> str | None:
+    """NEOTOMA_TOKEN, only for the Neotoma it was configured for.
+
+    The token is paired with NEOTOMA_BASE_URL: it is sent only when the hooks'
+    URL has the same origin, or, when NEOTOMA_BASE_URL is unset, only to a
+    loopback (local) server. Never over plain http to a non-local host.
+    """
+    environ = os.environ if environ is None else environ
+    token = (environ.get("NEOTOMA_TOKEN") or "").strip()
+    if not token:
+        return None
+    if base_url.strip().lower().startswith("http://") and not is_loopback(base_url):
+        return None
+    paired = (environ.get("NEOTOMA_BASE_URL") or "").strip()
+    if paired:
+        return token if url_origin(paired) == url_origin(base_url) else None
+    return token if is_loopback(base_url) else None
+
+
+def in_plugin(environ: Any = None) -> bool:
+    environ = os.environ if environ is None else environ
+    return bool((environ.get("CLAUDE_PLUGIN_ROOT") or "").strip())
+
+
+def status_message(environ: Any = None) -> str | None:
+    """One user-visible line about capture, or None when all is well."""
+    environ = os.environ if environ is None else environ
+    base, source = resolve_neotoma_url(environ)
+    if is_public_sandbox(base):
+        return (
+            "Neotoma: connected to the shared public sandbox, so lifecycle capture is off. "
+            "Do not store personal data there. To use your own Neotoma, run "
+            "`neotoma hooks install --tool claude-code`, or set /plugin > neotoma > "
+            "Configure options > Neotoma MCP URL."
+        )
+    if not in_plugin(environ):
+        return None
+    connector = connector_mcp_url(environ)
+    if mcp_url_to_base_url(connector) != base:
+        where = "NEOTOMA_BASE_URL" if source == "env" else "your Neotoma CLI config"
+        return (
+            f"Neotoma: lifecycle capture uses {base} (from {where}), but the plugin's "
+            f"bundled connector points at {connector}. Run "
+            "`neotoma hooks install --tool claude-code` to point the plugin at your "
+            "Neotoma and turn off the duplicate connector."
+        )
+    return None
 
 
 NEOTOMA_BASE_URL, NEOTOMA_URL_SOURCE = resolve_neotoma_url()
-NEOTOMA_TOKEN = os.environ.get("NEOTOMA_TOKEN") or None
+NEOTOMA_TOKEN = resolve_token(NEOTOMA_BASE_URL)
 
 
 def log(level: str, message: str) -> None:
@@ -138,27 +249,12 @@ def get_client() -> Any | None:
     We do not raise here because that would fail the hook and the user's
     agent turn. Instead we log a one-line warning the first time.
     """
-    explicit_env = (os.environ.get("NEOTOMA_BASE_URL") or "").strip()
-    if (
-        NEOTOMA_URL_SOURCE == "plugin_default"
-        and explicit_env
-        and mcp_url_to_base_url(explicit_env) != NEOTOMA_BASE_URL
-    ):
-        log(
-            "warn",
-            "NEOTOMA_BASE_URL is ignored inside the Claude plugin so hooks and the "
-            "bundled connector use the same Neotoma. Set the plugin's "
-            "'Neotoma MCP URL' option to that server's /mcp URL instead.",
-        )
     if is_public_sandbox(NEOTOMA_BASE_URL):
         # The public sandbox is shared and readable by other visitors. Hooks
         # capture every prompt and reply, so they never write there; the
-        # connector (agent-driven, deliberate writes) still works.
-        log(
-            "info",
-            "Neotoma is the public sandbox; lifecycle capture is off. Point the "
-            "plugin's 'Neotoma MCP URL' at your own Neotoma to enable it.",
-        )
+        # connector (agent-driven, deliberate writes) still works. The
+        # SessionStart hook tells the user (status_message()).
+        log("warn", "Neotoma is the public sandbox; lifecycle capture is off.")
         return None
     if NeotomaClient is None:
         log(
