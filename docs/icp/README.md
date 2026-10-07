@@ -143,6 +143,8 @@ The two documents disagree on the defining trait, and it is not a wording gap.
 
 Both are defensible (self-hosted multi-user is not managed SaaS), but read side by side they look contradictory in the two most public documents.
 
+*Update, 2026-10-07:* the SD-001 amendment of this date (`../foundation/scope_decisions.md`) puts one shared hosted instance in scope as an optional path, never a precondition, and keeps the rule that nothing is described as zero-install. That settles the scope side of O4. The ICP side stays open: whether D4 in `primary_icp.md` should still disqualify a prospect who wants only the hosted path. The public README and the functional exclusions remain accurate as statements of what ships today, since the hosted instance is not shipped.
+
 ### Unimplemented follow-ups inherited from `icp_reconciliation.md`
 
 Recorded here so they are not lost a second time:

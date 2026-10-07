@@ -93,6 +93,8 @@ Functionally enabled but not the design center:
 
 **A note on installation.** This list deliberately no longer excludes people who want a guided installation. Neotoma is for people who want to own their agents' state, not for people who enjoy assembling an install from a terminal — and an earlier version of this list conflated the two. **As of 2026-09-15, setup is npm plus the CLI**; a guided installation is the intended path and is not shipped. Guided is not zero-install: the software runs on your machine either way.
 
+**A note on the hosted path (2026-10-07).** The two hosted exclusions above describe the functionality as it ships today. The 2026-10-07 amendment to SD-001 ([`../foundation/scope_decisions.md`](../foundation/scope_decisions.md)) puts one shared hosted instance in scope as an optional path beside self-hosting, never in place of it. It is intended and not shipped. Whether a prospect who wants only the hosted path is in the ICP is an open question recorded against D4 in [`primary_icp.md`](./primary_icp.md); this list does not settle it.
+
 ## Qualification signals
 
 Someone is in the primary ICP if most of these are true:
