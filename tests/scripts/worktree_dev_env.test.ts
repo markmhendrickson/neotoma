@@ -1,11 +1,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
+  linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -214,13 +218,13 @@ for (const name of ['readFileSync','openSync','existsSync','statSync','lstatSync
 });
 
 describe("worktree setup behavior", () => {
-  it("leaves an existing .env.development untouched and warns about credential-named keys by count only", () => {
+  it("leaves an existing .env.development untouched and never prints its content", () => {
     resetWorktreeEnv();
     writeFileSync(devEnvPath(), "MY_SERVICE_TOKEN=dev-own-value\nPORT=4000\n");
     const result = runScript();
     expect(result.status).toBe(0);
     expect(readFileSync(devEnvPath(), "utf-8")).toBe("MY_SERVICE_TOKEN=dev-own-value\nPORT=4000\n");
-    expect(`${result.stdout}${result.stderr}`).toMatch(/1 credential-named key/);
+    expect(`${result.stdout}${result.stderr}`).toMatch(/already exists/);
     expect(`${result.stdout}${result.stderr}`).not.toContain("dev-own-value");
     resetWorktreeEnv();
   });
@@ -245,6 +249,138 @@ describe("worktree setup behavior", () => {
     const help = runScript(["--help"]).stdout;
     expect(help).toMatch(/never writes credentials/i);
     expect(help).toMatch(/set them\s+yourself/i);
+  });
+});
+
+describe("worktree setup stays inside the worktree for the destination entry", () => {
+  const OUTSIDE_CONTENT = "OUTSIDE_SECRET_NAME=outside-planted-value\n";
+  const outside = () => join(fixture.root, "outside-target");
+
+  function resetOutside() {
+    rmSync(outside(), { recursive: true, force: true });
+    mkdirSync(outside(), { recursive: true });
+    writeFileSync(join(outside(), "file"), OUTSIDE_CONTENT);
+  }
+
+  function outsideUnchanged() {
+    return readFileSync(join(outside(), "file"), "utf-8") === OUTSIDE_CONTENT;
+  }
+
+  it("never opens or reads an existing .env.development (the planted content stays unread)", () => {
+    resetWorktreeEnv();
+    resetOutside();
+    writeFileSync(devEnvPath(), "MY_SERVICE_TOKEN=dev-own-value\n");
+    const log = join(fixture.root, "read-trace.log");
+    rmSync(log, { force: true });
+    const preload = join(fixture.root, "trace-reads.cjs");
+    writeFileSync(
+      preload,
+      `
+const fs = require('fs');
+const path = require('path');
+const log = process.env.FS_TRACE_LOG;
+for (const name of ['readFileSync','openSync','createReadStream','readFile','open']) {
+  const orig = fs[name];
+  if (typeof orig !== 'function') continue;
+  fs[name] = function (...args) {
+    try {
+      const p = args[0];
+      if (typeof p === 'string') fs.appendFileSync(log, name + ' ' + path.resolve(process.cwd(), p) + '\\n');
+    } catch {}
+    return orig.apply(this, args);
+  };
+}
+`
+    );
+    const spawned = spawnSync(process.execPath, ["--require", preload, SCRIPT], {
+      cwd: fixture.worktree,
+      encoding: "utf-8",
+      env: {
+        PATH: process.env.PATH ?? "",
+        HOME: fixture.home,
+        USERPROFILE: fixture.home,
+        FS_TRACE_LOG: log,
+      },
+    });
+    expect(spawned.status).toBe(0);
+    const touched = existsSync(log) ? readFileSync(log, "utf-8").split("\n").filter(Boolean) : [];
+    const readsOfDestination = touched.filter((l) => l.endsWith(` ${devEnvPath()}`));
+    expect(readsOfDestination, "existing destination must not be opened").toEqual([]);
+    expect(readFileSync(devEnvPath(), "utf-8")).toBe("MY_SERVICE_TOKEN=dev-own-value\n");
+    resetWorktreeEnv();
+  });
+
+  it("does not follow a symlinked destination by default (no read, no write)", () => {
+    resetWorktreeEnv();
+    resetOutside();
+    symlinkSync(join(outside(), "file"), devEnvPath());
+    const result = runScript();
+    expect(result.status).toBe(0);
+    expect(outsideUnchanged()).toBe(true);
+    expect(lstatSync(devEnvPath()).isSymbolicLink()).toBe(true);
+    expect(`${result.stdout}${result.stderr}`).not.toContain("outside-planted-value");
+    resetWorktreeEnv();
+  });
+
+  it("does not create the target of a dangling symlinked destination", () => {
+    resetWorktreeEnv();
+    resetOutside();
+    symlinkSync(join(outside(), "not-yet-there"), devEnvPath());
+    runScript();
+    expect(existsSync(join(outside(), "not-yet-there"))).toBe(false);
+    runScript(["--force"]);
+    expect(existsSync(join(outside(), "not-yet-there"))).toBe(false);
+    resetWorktreeEnv();
+  });
+
+  it("--force replaces a symlinked destination itself and leaves the referent byte-identical", () => {
+    resetWorktreeEnv();
+    resetOutside();
+    symlinkSync(join(outside(), "file"), devEnvPath());
+    const result = runScript(["--force"]);
+    expect(result.status).toBe(0);
+    expect(outsideUnchanged()).toBe(true);
+    expect(lstatSync(devEnvPath()).isSymbolicLink()).toBe(false);
+    expect(keysOf(readFileSync(devEnvPath(), "utf-8"))).toEqual(
+      WORKTREE_DEV_ENV_ALLOWLIST.map((e) => e.key)
+    );
+    resetWorktreeEnv();
+  });
+
+  it("--force does not truncate a file the destination is hard-linked to", () => {
+    resetWorktreeEnv();
+    resetOutside();
+    linkSync(join(outside(), "file"), devEnvPath());
+    const result = runScript(["--force"]);
+    expect(result.status).toBe(0);
+    expect(outsideUnchanged()).toBe(true);
+    expect(readFileSync(devEnvPath(), "utf-8")).toContain("NEOTOMA_ENV=development");
+    resetWorktreeEnv();
+  });
+
+  it.each([[[]], [["--force"]]] as Array<[string[]]>)(
+    "rejects a directory at the destination (args: %j) without changing it",
+    (args) => {
+      resetWorktreeEnv();
+      mkdirSync(devEnvPath());
+      writeFileSync(join(devEnvPath(), "keep"), "x");
+      const result = runScript(args);
+      expect(result.status).not.toBe(0);
+      expect(lstatSync(devEnvPath()).isDirectory()).toBe(true);
+      expect(readFileSync(join(devEnvPath(), "keep"), "utf-8")).toBe("x");
+      rmSync(devEnvPath(), { recursive: true, force: true });
+    }
+  );
+
+  it("leaves no temporary file behind after a forced regeneration", () => {
+    resetWorktreeEnv();
+    writeFileSync(devEnvPath(), "PORT=1\n");
+    expect(runScript(["--force"]).status).toBe(0);
+    const leftovers = readdirSync(fixture.worktree).filter(
+      (n) => n.startsWith(".env.development") && n !== ".env.development"
+    );
+    expect(leftovers).toEqual([]);
+    resetWorktreeEnv();
   });
 });
 
