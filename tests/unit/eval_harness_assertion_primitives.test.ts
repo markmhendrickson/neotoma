@@ -323,3 +323,71 @@ describe("#2493 raw_storage.file_count", () => {
     expect(await evaluatePredicate(p, ctx())).not.toBeNull();
   });
 });
+
+describe("reply_text.relays_tool_result", () => {
+  const summary = "🧠 Neotoma — Chat\n**Created (1)**\n- ✅ Buy bread (task)";
+  const p: ExpectedAssertion = {
+    type: "reply_text.relays_tool_result",
+    tool_name: "neotoma_turn_summary",
+    result_key: "fallback_text",
+  };
+
+  it("passes when the reply contains the tool's text verbatim", async () => {
+    const c = ctx({
+      toolCalls: [call("neotoma_turn_summary", {}, { fallback_text: summary })],
+      assistantText: `Done.\n\n---\n${summary}`,
+    });
+    expect(await evaluatePredicate(p, c)).toBeNull();
+  });
+
+  it("fails when the reply paraphrases it", async () => {
+    const c = ctx({
+      toolCalls: [call("neotoma_turn_summary", {}, { fallback_text: summary })],
+      assistantText: "Done.\n\n🧠 Neotoma — Chat\nCreated: Buy bread (task)",
+    });
+    expect(await evaluatePredicate(p, c)).not.toBeNull();
+  });
+
+  it("fails when the field is missing or empty", async () => {
+    for (const output of [{}, { fallback_text: "" }]) {
+      const c = ctx({
+        toolCalls: [call("neotoma_turn_summary", {}, output)],
+        assistantText: summary,
+      });
+      const fail = await evaluatePredicate(p, c);
+      expect(fail).not.toBeNull();
+      expect(fail!.message).toContain("nothing for the reply to relay");
+    }
+  });
+});
+
+describe("served_instructions.contains", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubInstructions(body: string | null) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: body !== null, text: async () => body ?? "" })) as never
+    );
+  }
+
+  it("passes when the served instructions carry the substring", async () => {
+    stubInstructions("... end the reply with its `fallback_text` verbatim ...");
+    const p: ExpectedAssertion = {
+      type: "served_instructions.contains",
+      substring: "end the reply with its `fallback_text` verbatim",
+    };
+    expect(await evaluatePredicate(p, ctx())).toBeNull();
+  });
+
+  it("fails when the rule is gone, or nothing is served", async () => {
+    const p: ExpectedAssertion = {
+      type: "served_instructions.contains",
+      substring: "end the reply with its `fallback_text` verbatim",
+    };
+    stubInstructions("render a 🧠 Neotoma section by hand");
+    expect(await evaluatePredicate(p, ctx())).not.toBeNull();
+    stubInstructions(null);
+    expect(await evaluatePredicate(p, ctx())).not.toBeNull();
+  });
+});
