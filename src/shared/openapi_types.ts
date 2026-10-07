@@ -4547,6 +4547,38 @@ export interface components {
        *     externally. Empty unless the auto-file flow flagged something.
        */
       issues: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Every entity either message of the turn REFERS_TO, partitioned by
+       *     its observations: `created` (first observation landed this turn),
+       *     `updated` (existed before, observed this turn), `ambiguous` (an
+       *     update resolved by heuristic name match under a schema whose
+       *     `name_collision_policy` is `warn`), `retrieved` (referenced, no
+       *     observation this turn). Chat bookkeeping is excluded.
+       */
+      groups?: {
+        created?: components["schemas"]["TurnSummaryEntityRef"][];
+        updated?: components["schemas"]["TurnSummaryEntityRef"][];
+        retrieved?: components["schemas"]["TurnSummaryEntityRef"][];
+        ambiguous?: components["schemas"]["TurnSummaryEntityRef"][];
+      };
+      /**
+       * @description Display data for the in-chat MCP Apps card
+       *     (`ui://neotoma/turn-summary`): `header` (icon, title, instance,
+       *     conversation label and link), non-empty `groups` in order
+       *     Created, Updated, Retrieved, Ambiguous (each with full `count` and
+       *     the shown `items`), `more` when rows were truncated, and `issues`
+       *     when issue entities need review. `fallback_text` is rendered from
+       *     this same object.
+       */
+      card?: {
+        [key: string]: unknown;
+      };
+      /**
+       * @description `card` rendered as markdown for clients that cannot show MCP Apps.
+       *     Agents relay it verbatim. Empty string when the turn touched only
+       *     chat bookkeeping.
+       */
+      fallback_text?: string;
     };
     /**
      * @description FU-2026-05-003. Index of turns within a conversation, ordered by
@@ -4599,6 +4631,10 @@ export interface components {
       entity_id: string;
       entity_type: string;
       canonical_name?: string | null;
+      /** @description Human-readable label (title or name) from the snapshot. */
+      label?: string | null;
+      /** @description identity_rule of the heuristic match, on `ambiguous` entries only. */
+      identity_rule?: string | null;
     };
     GetRelationshipSnapshotRequest: {
       /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */

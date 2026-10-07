@@ -2924,6 +2924,49 @@ components:
             externally. Empty unless the auto-file flow flagged something.
           items:
             $ref: "#/components/schemas/TurnSummaryEntityRef"
+        groups:
+          type: object
+          description: |
+            Every entity either message of the turn REFERS_TO, partitioned by
+            its observations: `created` (first observation landed this turn),
+            `updated` (existed before, observed this turn), `ambiguous` (an
+            update resolved by heuristic name match under a schema whose
+            `name_collision_policy` is `warn`), `retrieved` (referenced, no
+            observation this turn). Chat bookkeeping is excluded.
+          properties:
+            created:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+            updated:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+            retrieved:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+            ambiguous:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+        card:
+          type: object
+          additionalProperties: true
+          description: |
+            Display data for the in-chat MCP Apps card
+            (`ui://neotoma/turn-summary`): `header` (icon, title, instance,
+            conversation label and link), non-empty `groups` in order
+            Created, Updated, Retrieved, Ambiguous (each with full `count` and
+            the shown `items`), `more` when rows were truncated, and `issues`
+            when issue entities need review. `fallback_text` is rendered from
+            this same object.
+        fallback_text:
+          type: string
+          description: |
+            `card` rendered as markdown for clients that cannot show MCP Apps.
+            Agents relay it verbatim. Empty string when the turn touched only
+            chat bookkeeping.
     ConversationTurnIndex:
       type: object
       description: |
@@ -3009,6 +3052,14 @@ components:
         canonical_name:
           type: string
           nullable: true
+        label:
+          type: string
+          nullable: true
+          description: Human-readable label (title or name) from the snapshot.
+        identity_rule:
+          type: string
+          nullable: true
+          description: identity_rule of the heuristic match, on `ambiguous` entries only.
     GetRelationshipSnapshotRequest:
       type: object
       additionalProperties: false

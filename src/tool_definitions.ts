@@ -1481,7 +1481,7 @@ export function buildToolDefinitions(
       name: "neotoma_turn_summary",
       description: desc(
         "neotoma_turn_summary",
-        "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
+        "Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Returns fallback_text: the turn's Created/Updated/Retrieved/Ambiguous summary rendered server-side as markdown from the same data as the in-chat card (empty when only chat bookkeeping was touched). Agents relay fallback_text verbatim at the end of the reply instead of composing their own summary; MCP Apps clients render the card from structuredContent."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("neotoma_turn_summary"),
       ...(turnSummaryWidgetResourceUri

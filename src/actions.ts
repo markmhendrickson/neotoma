@@ -12450,7 +12450,12 @@ app.post("/turn_summary", async (req, res) => {
     }
     const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
     try {
-      const result = await computeTurnSummary({ userId, conversationId, turnKey });
+      const result = await computeTurnSummary({
+        userId,
+        conversationId,
+        turnKey,
+        origin: resolvePublicAppOriginFromRequest(req).origin ?? null,
+      });
       return res.json(result);
     } catch (err) {
       if (err instanceof TurnSummaryError) {
