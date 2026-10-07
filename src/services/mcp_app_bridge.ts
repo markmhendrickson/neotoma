@@ -21,7 +21,13 @@
  *   5. Host requests the View does not implement get a JSON-RPC error rather
  *      than silence; `ping` and `ui/resource-teardown` get an empty result.
  *
- * The widget script defines `window.neotomaAppRender(payload)` and calls
+ *   6. A failed (`isError`, or an `{ error }` payload) or cancelled tool call
+ *      calls `window.neotomaAppFailure(message)` so the widget leaves its
+ *      waiting state instead of spinning forever.
+ *
+ * The widget script defines `window.neotomaAppRender(payload)` and
+ * `window.neotomaAppFailure(message)`, sets `href` only when
+ * `window.neotomaApp.isSafeLink(url)`, and calls
  * `window.neotomaApp.openLink(url)` for links.
  */
 
@@ -95,9 +101,21 @@ export function buildMcpAppBridgeScript(appName: string): string {
         reportSize();
       }
 
+      function fail(message) {
+        if (typeof window.neotomaAppFailure === "function") {
+          window.neotomaAppFailure(message);
+        }
+        reportSize();
+      }
+
+      function isSafeLink(url) {
+        return typeof url === "string" && /^https?:\\/\\//i.test(url);
+      }
+
       window.neotomaApp = {
+        isSafeLink: isSafeLink,
         openLink: function (url) {
-          if (typeof url !== "string" || !/^https?:\\/\\//i.test(url)) return Promise.resolve(null);
+          if (!isSafeLink(url)) return Promise.resolve(null);
           return request("ui/open-link", { url: url }).catch(function () { return null; });
         },
         reportSize: reportSize,
@@ -119,12 +137,29 @@ export function buildMcpAppBridgeScript(appName: string): string {
 
         var hasId = message.id !== undefined && message.id !== null;
         switch (message.method) {
-          case "ui/notifications/tool-result":
-            render(payloadFromToolResult(message.params));
+          case "ui/notifications/tool-result": {
+            var result = message.params;
+            if (result && result.isError === true) {
+              fail("The Neotoma tool call failed.");
+              return;
+            }
+            var payload = payloadFromToolResult(result);
+            if (!payload) {
+              fail("The Neotoma tool returned no readable result.");
+              return;
+            }
+            if (payload.error && typeof payload.error === "object") {
+              fail("The Neotoma tool call failed.");
+              return;
+            }
+            render(payload);
+            return;
+          }
+          case "ui/notifications/tool-cancelled":
+            fail("The Neotoma tool call was cancelled.");
             return;
           case "ui/notifications/tool-input":
           case "ui/notifications/tool-input-partial":
-          case "ui/notifications/tool-cancelled":
           case "ui/notifications/host-context-changed":
             return;
           case "ping":

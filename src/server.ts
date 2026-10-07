@@ -193,7 +193,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   '2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE **`store`** call (deprecated alias: store_structured). entities = [ { entity_type: "conversation", conversation_id, target_id? when bounded retrieval found the existing conversation, title?, thread_kind?, client_name?/harness?, repository_name?/repository_root?/repository_remote?, scope_summary? }, { entity_type: "conversation_message", role: "user", sender_kind: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. Context fields are optional and never identity-bearing; do not store raw git status, terminal output, file contents, secrets, or large open-file lists by default. MUST NOT skip for greetings or minimal messages.',
   "3. Other actions: host IDE tools and other MCP tools may run only after steps 1 and 2.",
   "4. Compose reply: synthesize the answer using retrieval results and tool output.",
-  '5a. Closing store: call **`store`** with entities = [ { entity_type: "conversation_message", role: "assistant", sender_kind: "assistant", content: "<exact reply text>", turn_key: "{conversation_id}:{turn_id}:assistant" } ] and idempotency_key "conversation-{conversation_id}-{turn_id}-assistant-{suffix}".',
+  '5a. Closing store: call **`store`** with entities = [ { entity_type: "conversation_message", role: "assistant", sender_kind: "assistant", content: "<exact reply text minus the turn-summary block>", turn_key: "{conversation_id}:{turn_id}:assistant" } ] and idempotency_key "conversation-{conversation_id}-{turn_id}-assistant-{suffix}".',
   "5b. Closing relationship: create_relationship(PART_OF, source=assistant message entity_id, target=conversation entity_id). Include REFERS_TO from assistant message to every entity the reply materially cites or produces.",
   "5c. FORBIDDEN: persisting the user message without storing the assistant reply when you did reply; ending the turn without the closing assistant store when you produced a user-visible reply.",
   "",
@@ -202,7 +202,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves non-chat entities, call neotoma_turn_summary after the closing store and end the reply with its `fallback_text` verbatim (nothing if empty). If that tool fails, render `🧠 Neotoma — <conversation name>` with Created/Updated/Retrieved bullets (emoji + label + entity_type), linking only via `get_session_identity.origins.inspector_origin`, never a guessed host.",
+  "Display rule: when a turn creates, updates, or retrieves non-chat entities, after the closing store call neotoma_turn_summary and end the reply with its `fallback_text` verbatim (no section if empty). If it fails, render `🧠 Neotoma — <conversation name>` with Created/Updated/Retrieved bullets (emoji + label + entity_type), linking only via `origins.inspector_origin`, never a guessed host.",
   "",
   "Schema/fidelity: for known entity_types (seen this session), check declared fields via get_schema_recommendations or an existing snapshot before storing; use declared fields, invent snake_case only for unfit data. unknown_fields_count > 0 = mandatory repair before closing store. FORBIDDEN: inventing all fields for a known type without checking; ignoring unknown_fields_count > 0.",
   "",
@@ -3395,6 +3395,11 @@ export class NeotomaServer {
     const summaryEl = document.getElementById("summary");
     const payloadEl = document.getElementById("payload");
 
+    window.neotomaAppFailure = function (message) {
+      summaryEl.textContent = "Timeline unavailable: " + message;
+      payloadEl.textContent = "";
+    };
+
     window.neotomaAppRender = function (payload) {
       const safePayload = payload && typeof payload === "object" ? payload : {};
       const events = Array.isArray(safePayload.events) ? safePayload.events : [];
@@ -3497,7 +3502,7 @@ export class NeotomaServer {
     }
 
     function linkOrText(text, url) {
-      if (typeof url !== "string" || !url) return document.createTextNode(String(text));
+      if (!window.neotomaApp.isSafeLink(url)) return document.createTextNode(String(text));
       const a = el("a", "", text);
       a.href = url;
       a.rel = "noopener";
@@ -3508,6 +3513,11 @@ export class NeotomaServer {
       return a;
     }
 
+    window.neotomaAppFailure = function (message) {
+      cardEl.textContent = "";
+      cardEl.appendChild(el("span", "empty", "Neotoma summary unavailable: " + message));
+    };
+
     window.neotomaAppRender = function (payload) {
       const card = payload && typeof payload === "object" ? payload.card : null;
       cardEl.textContent = "";
@@ -3515,7 +3525,7 @@ export class NeotomaServer {
         cardEl.appendChild(el("span", "empty", "Waiting for turn summary..."));
         return;
       }
-      if (card.groups.length === 0) {
+      if (!(card.total_count > 0)) {
         cardEl.appendChild(el("span", "empty", "No Neotoma activity this turn."));
         return;
       }

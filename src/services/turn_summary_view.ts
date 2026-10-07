@@ -207,14 +207,17 @@ function toItem(
   origin: string | null
 ): TurnSummaryCardItem {
   const rawLabel = typeof entity.label === "string" ? sanitizeTurnSummaryLabel(entity.label) : "";
+  // entity_type is schema-registered and user-definable, so it is cleaned
+  // like any other free text before it reaches a terminal or the card.
+  const entityType = sanitizeTurnSummaryLabel(String(entity.entity_type ?? ""), 60) || "entity";
   const rule =
     groupKey === "ambiguous" && typeof entity.identity_rule === "string"
       ? sanitizeTurnSummaryLabel(entity.identity_rule, 60)
       : "";
   return {
     entity_id: entity.entity_id,
-    entity_type: entity.entity_type,
-    label: rawLabel || entity.entity_type,
+    entity_type: entityType,
+    label: rawLabel || entityType,
     icon: iconForEntityType(entity.entity_type),
     url: entityUrl(origin, entity.entity_id),
     note:
@@ -230,7 +233,9 @@ function toItem(
  * Build the card data. Bookkeeping types are dropped defensively, an entity
  * listed under `ambiguous` is removed from `created`/`updated` (never
  * double-listed), and at most `max_items` rows are kept across all groups in
- * group order; each group keeps its full count.
+ * group order; a group that is shown keeps its full count, and a group with
+ * no rows left in the budget is not shown at all (its rows count toward
+ * "N more").
  */
 export function buildTurnSummaryCard(input: BuildTurnSummaryCardInput): TurnSummaryCard {
   const origin = normalizeOrigin(input.origin);
@@ -262,6 +267,7 @@ export function buildTurnSummaryCard(input: BuildTurnSummaryCardInput): TurnSumm
     budget -= take;
     total += entries.length;
     shown += take;
+    if (take === 0) continue;
     groups.push({
       key,
       label,
@@ -334,7 +340,7 @@ function renderLink(text: string, url: string | null): string {
  *   🐛 [N issues flagged this turn — review in Inspector](<url>)
  */
 export function renderTurnSummaryFallbackText(card: TurnSummaryCard): string {
-  if (card.groups.length === 0) return "";
+  if (card.total_count === 0) return "";
   const lines: string[] = [];
 
   let header = `${card.header.icon} ${card.header.title}`;

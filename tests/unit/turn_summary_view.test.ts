@@ -135,17 +135,30 @@ describe("turn summary fallback text", () => {
     );
   });
 
-  it("keeps a group header and its count when truncation leaves it no rows", () => {
+  it("omits a later group whose rows the budget used up, counting them under 'more'", () => {
     const many = (prefix: string, n: number) =>
       Array.from({ length: n }, (_, i) => entity(`${prefix}${i}`, "task", `${prefix} ${i}`));
     const { card, text } = render({ created: many("c", 5), retrieved: many("r", 2) });
-    // Retrieved still counts toward "more", and its header still shows the count.
-    expect(card.groups.map((g) => [g.label, g.items.length])).toEqual([
-      ["Created", 5],
-      ["Retrieved", 0],
-    ]);
-    expect(text).toContain("**Retrieved (2)**");
-    expect(text).toMatch(/… 2 more — /);
+    expect(card.groups.map((g) => [g.label, g.items.length])).toEqual([["Created", 5]]);
+    expect(card.total_count).toBe(7);
+    expect(text).not.toContain("Retrieved");
+    expect(text.split("\n").pop()).toMatch(/^… 2 more — /);
+  });
+
+  it("still renders the header and 'more' line when the budget is zero", () => {
+    const { card, text } = render({ created: [entity("c", "task", "C")], max_items: 0 });
+    expect(card.groups).toEqual([]);
+    expect(text.split("\n")).toHaveLength(2);
+    expect(text).toMatch(/… 1 more — /);
+  });
+
+  it("strips control characters and newlines from entity types", () => {
+    const { text, card } = render({
+      created: [entity("ent_1", "bad\u001b[2Jtype\nnext", "Label")],
+    });
+    expect(card.groups[0].items[0].entity_type).toBe("bad [2Jtype next");
+    expect(text).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f]/);
+    expect(text.split("\n")).toHaveLength(3);
   });
 
   it("returns an empty string when nothing besides chat bookkeeping was touched", () => {

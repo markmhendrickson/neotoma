@@ -279,3 +279,64 @@ describe("timeline widget rendering", () => {
     expect(widget.window.document.getElementById("summary")!.textContent).toBe("2 events");
   });
 });
+
+describe("widget failure states and link safety", () => {
+  const turnHtml = (new NeotomaServer() as any).buildTurnSummaryWidgetHtml() as string;
+  const timelineHtml = (new NeotomaServer() as any).buildTimelineWidgetHtml() as string;
+
+  it.each([
+    ["an isError tool result", { content: [{ type: "text", text: "boom" }], isError: true }],
+    [
+      "a tool result carrying an error envelope",
+      {
+        content: [{ type: "text", text: "{}" }],
+        structuredContent: { error: { code: "ERR_TURN_SUMMARY_MESSAGE_NOT_FOUND", message: "x" } },
+      },
+    ],
+    ["an unreadable tool result", { content: [{ type: "text", text: "not json" }] }],
+  ])("turn summary leaves the waiting state on %s", async (_label, params) => {
+    const widget = mountWidget(turnHtml);
+    await initialize(widget);
+    widget.hostSend({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params });
+    const text = widget.window.document.getElementById("card")!.textContent ?? "";
+    expect(text).not.toContain("Waiting");
+    expect(text).toMatch(/unavailable/i);
+  });
+
+  it("turn summary shows a cancelled state on ui/notifications/tool-cancelled", async () => {
+    const widget = mountWidget(turnHtml);
+    await initialize(widget);
+    widget.hostSend({ jsonrpc: "2.0", method: "ui/notifications/tool-cancelled", params: {} });
+    expect(widget.window.document.getElementById("card")!.textContent).toMatch(/cancelled/i);
+  });
+
+  it("timeline shows a failure state on an isError result", async () => {
+    const widget = mountWidget(timelineHtml);
+    await initialize(widget);
+    widget.hostSend({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: { content: [{ type: "text", text: "boom" }], isError: true },
+    });
+    expect(widget.window.document.getElementById("summary")!.textContent).toMatch(/unavailable/i);
+  });
+
+  it("never sets a non-http(s) href, even if the card carries one", async () => {
+    const widget = mountWidget(turnHtml);
+    await initialize(widget);
+    const { callToolResult } = sampleTurnSummaryResult();
+    const structured = JSON.parse(JSON.stringify(callToolResult.structuredContent));
+    structured.card.groups[0].items[0].url = "javascript:alert(1)";
+    structured.card.header.conversation_url = "data:text/html,hi";
+    widget.hostSend({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: { content: callToolResult.content, structuredContent: structured },
+    });
+    const doc = widget.window.document;
+    for (const a of Array.from(doc.querySelectorAll("a"))) {
+      expect(a.getAttribute("href")).toMatch(/^https:\/\//);
+    }
+    expect(doc.getElementById("card")!.textContent).toContain("Buy bread");
+  });
+});
