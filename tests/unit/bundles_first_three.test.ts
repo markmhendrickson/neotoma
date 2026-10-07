@@ -33,6 +33,7 @@ import {
   ENTITY_SCHEMAS,
   getSchemaDefinition,
   resolveEntityTypeFromAlias,
+  resolveEntityTypeFromRegisteredAliases,
 } from "../../src/services/schema_definitions.js";
 import {
   SchemaRegistryService,
@@ -245,6 +246,76 @@ describe("store-path interaction with built-in aliases", () => {
       email_thread: "email",
       bug_report: "product_feedback",
     });
+  });
+});
+
+describe("bundle aliases live in the registry's alias field", () => {
+  const cases: Array<[bundle: string, alias: string, canonical: string]> = [
+    ["crm", "contact_list", "contact_group"],
+    ["crm", "outreach_activity", "outreach_interaction"],
+    ["engineering", "decision_record", "architectural_decision"],
+  ];
+
+  it.each(cases)("%s: %s is on %s's schema_definition.aliases", (bundle, alias, canonical) => {
+    const schema = getBundleSchemas(bundle).find((s) => s.entity_type === canonical)!;
+    expect(schema.schema_definition.aliases).toContain(alias);
+  });
+
+  it.each(cases)(
+    "%s: extraction-time resolution maps %s to %s once registered",
+    (bundle, alias, canonical) => {
+      const registered = getBundleSchemas(bundle);
+      expect(resolveEntityTypeFromRegisteredAliases(alias, registered)).toBe(canonical);
+      // And not before: built-in alias resolution does not know the name.
+      expect(resolveEntityTypeFromAlias(alias)).toBeNull();
+    }
+  );
+
+  it("registered-alias resolution is case-insensitive and returns null on no match", () => {
+    const registered = getBundleSchemas("crm");
+    expect(resolveEntityTypeFromRegisteredAliases("Contact_List", registered)).toBe(
+      "contact_group"
+    );
+    expect(resolveEntityTypeFromRegisteredAliases("no_such_alias", registered)).toBeNull();
+  });
+});
+
+describe("guided rejection names the bundle to enable", () => {
+  it("names the declaring bundle when it is not enabled", () => {
+    const d = checkAutoCreateAllowed("lead_update", "guided");
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) {
+      expect(d.providingBundle).toBe("crm");
+      expect(d.message).toMatch(/bundle "crm", which is not enabled/);
+      expect(d.message).toMatch(/manage_bundles/);
+    }
+  });
+
+  it("keeps the generic message for a type no bundle declares", () => {
+    const d = checkAutoCreateAllowed("totally_new_type", "guided");
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) {
+      expect(d.providingBundle).toBeUndefined();
+      expect(d.message).toMatch(/no bundle provides this type/i);
+    }
+  });
+});
+
+describe("schema notes the review asked for", () => {
+  it("email_message.cc is an array like to_addresses", () => {
+    const schema = getBundleSchemas("communications").find(
+      (s) => s.entity_type === "email_message"
+    )!;
+    expect(schema.schema_definition.fields.cc.type).toBe("array");
+    expect(schema.schema_definition.fields.to_addresses.type).toBe("array");
+  });
+
+  it("deployment_configuration warns about deploy_command provenance and secrets in build_args", () => {
+    const fields = getBundleSchemas("engineering").find(
+      (s) => s.entity_type === "deployment_configuration"
+    )!.schema_definition.fields;
+    expect(fields.deploy_command.description).toMatch(/not trusted input/i);
+    expect(fields.build_args.description).toMatch(/never store secret values/i);
   });
 });
 

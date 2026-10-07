@@ -154,11 +154,27 @@ Enabling a bundle registers its schemas through the same additive seeder as the 
 - at server boot, for every enabled bundle (right after the built-in seeder);
 - immediately on `manage_bundles install|enable`, reported as `schema_seed` in the response.
 
-`neotoma bundles install` from the CLI records state only; the server seeds the bundle at its next boot.
+`manage_bundles` runs inside the server, so its changes apply at once. If seeding fails, the response keeps `ok: true` (the bundle is enabled), sets `schema_seed.ok: false`, and adds a top-level `warning`.
 
-Two store-path interactions to know: `email_message` and `email_thread` are aliases of the built-in `email`, and `bug_report` is an alias of the built-in `product_feedback`. Until the owning bundle has registered its schema, writes under those names resolve to the built-in. Once registered, the registered schema takes priority over the alias.
+`neotoma bundles install|enable|disable` from the CLI only writes the local bundle state file. A running server reads that file once at startup, so a CLI change reaches it at its next restart (when enabled bundles are also seeded), and never reaches a server on another machine. The CLI says so in its output. Use `manage_bundles` for immediate effect.
 
 `npm run bundles:check` enforces that a bundle's schemas and its `provides_entity_types` match exactly, and that every schema declares an identity rule.
+
+### Aliases
+
+A bundle schema's aliases are written to `schema_definition.aliases`, the field read for registered schemas: by the store path's type-equivalence check and by extraction-time alias resolution. After the bundle registers its schemas, a write under `contact_list`, `outreach_activity`, or `decision_record` lands on `contact_group`, `outreach_interaction`, or `architectural_decision`. Before that, these names are unknown types.
+
+Built-in aliases work differently, and the split matters for three bundle types. `email_message` and `email_thread` are aliases of the built-in `email`, and `bug_report` is an alias of the built-in `product_feedback`. Until the owning bundle has registered its schema, writes under those names resolve to the built-in. Once registered, the registered schema takes priority over the built-in alias.
+
+### Existing schemas keep priority
+
+Seeding registers GLOBAL schemas and never touches an existing one. Schema lookup prefers a schema scoped to the writing user over a global one. So on an instance where a type was already in use, the existing schema keeps governing that user's writes, whether it is a global row or a per-user schema inferred on first write. The bundle's curated field set applies to users and instances that had none.
+
+### Disable
+
+Disabling a bundle removes its types from the `guided` provided set. That gate only applies to types with no registered schema, so schemas the bundle already registered stay registered, and writes of those types still succeed. Disable does not block writes; it stops new auto-creation of the bundle's unregistered types. The `disable` message says this.
+
+In `guided` mode, the rejection for a type whose bundle is not enabled names that bundle and how to enable it.
 
 ## Use cases and bundles
 

@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **693**
-- Backend and repo Vitest files: **657**
+- Total automated test files: **695**
+- Backend and repo Vitest files: **659**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,8 +72,8 @@ flowchart TD
 | Vitest unit tests | 189 |
 | Vitest service tests | 53 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 205 |
-| Vitest CLI tests | 82 |
+| Vitest integration tests | 206 |
+| Vitest CLI tests | 83 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -440,7 +440,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (205):**
+**Files (206):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -461,6 +461,7 @@ flowchart TD
 - `tests/integration/attachment_resolution_equivalence.test.ts`
 - `tests/integration/attribution_parity.test.ts`
 - `tests/integration/auto_link_retraction_organization_change.test.ts`
+- `tests/integration/bundle_enable_store_path.test.ts`
 - `tests/integration/cli_init_bootstrap.test.ts`
 - `tests/integration/cli_to_mcp_entities.test.ts`
 - `tests/integration/cli_to_mcp_relationships.test.ts`
@@ -652,9 +653,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (82):**
+**Files (83):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
+- `tests/cli/bundles_cli_takes_effect.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
 - `tests/cli/cli_admin_commands.test.ts`
 - `tests/cli/cli_api_commands.test.ts`

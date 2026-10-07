@@ -1,0 +1,132 @@
+{
+  "meta": {
+    "id": "bundle_enable_guided_store",
+    "description": "In guided schema mode an agent's store of a crm type (lead_update) is rejected with an error that names the bundle to enable. The agent enables the bundle with manage_bundles, reads schema_seed in the response (the bundle's schemas registered, nothing failed), retries the same store, and it succeeds. SCOPE NOTE: Tier 1 is the hook-lifecycle layer and runs against a MOCK Neotoma server, so this fixture pins the agent-observed tool sequence and results and what the hooks record about them, not the enforcement itself. The effect — rejection before enable, schema_seed from the real manage_bundles handler, the bundle's field set governing the retried write, and bundle aliases landing on the curated types — is asserted on the real store path in tests/integration/bundle_enable_store_path.test.ts.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "claude-sonnet-4.5"],
+    "tags": ["bundles", "schema-mode", "guided", "tool-loop", "agent-facing"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Log a lead update for today's intro call: we agreed I send a proposal by Friday. This instance runs in guided schema mode."
+      }
+    },
+    {
+      "hook": "postToolUseFailure",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            {
+              "entity_type": "lead_update",
+              "name": "Intro call",
+              "what_happened": "Intro call held.",
+              "commitments_made": "Send a proposal by Friday."
+            }
+          ],
+          "idempotency_key": "bundle-enable-eval-store-1"
+        },
+        "tool_error": "ERR_SCHEMA_MODE_GUIDED_UNPROVIDED: Schema mode is \"guided\": entity type \"lead_update\" is provided by bundle \"crm\", which is not enabled. Enable it with the manage_bundles tool (action \"install\", bundle \"crm\"), then retry the write."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_manage_bundles",
+        "tool_input": { "action": "install", "bundle": "crm" },
+        "tool_output": {
+          "ok": true,
+          "action": "install",
+          "bundle": "crm",
+          "enabled": true,
+          "always_active": false,
+          "message": "Bundle \"crm\" installed and enabled.",
+          "schema_seed": {
+            "ok": true,
+            "bundle": "crm",
+            "registered": [
+              "lead_update",
+              "lead_evaluation",
+              "opportunity",
+              "contact_group",
+              "icp",
+              "category_membership",
+              "outreach_interaction"
+            ],
+            "preserved": ["company", "person"],
+            "failed": []
+          }
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            {
+              "entity_type": "lead_update",
+              "name": "Intro call",
+              "what_happened": "Intro call held.",
+              "commitments_made": "Send a proposal by Friday."
+            }
+          ],
+          "idempotency_key": "bundle-enable-eval-store-2"
+        },
+        "tool_output": {
+          "entities": [{ "entity_id": "ent_lead_update_001", "entity_type": "lead_update" }],
+          "unknown_fields": []
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "The first save was refused because this instance runs in guided mode and lead updates come from the crm bundle, which was not enabled. I enabled crm; its schemas registered with no failures. The retried save succeeded, and the lead update is stored with the commitment to send a proposal by Friday."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_manage_bundles" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_manage_bundles" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      }
+    ]
+  }
+}

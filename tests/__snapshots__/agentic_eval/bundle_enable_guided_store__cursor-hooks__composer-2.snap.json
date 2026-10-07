@@ -1,0 +1,358 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_12",
+        "target_entity_id": "ent_mock_9"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_19",
+        "target_entity_id": "ent_mock_16"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_26",
+        "target_entity_id": "ent_mock_23"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "client_name": "Cursor",
+            "conversation_id": "<id:1>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor-hook",
+            "hook_event": "beforeSubmitPrompt",
+            "repository_name": "<env>",
+            "repository_remote": "<env>",
+            "repository_root": "<env>",
+            "scope_summary": "<env>",
+            "thread_kind": "human_agent",
+            "title": "<env>",
+            "workspace_kind": "<env>"
+          },
+          {
+            "content": "Log a lead update for today's intro call: we agreed I send a proposal by Friday. This instance runs in guided schema mode.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:2>",
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": [
+              "before_submit_prompt"
+            ],
+            "model": "composer-2",
+            "session_id": "<id:1>",
+            "started_at": "<ts>",
+            "stored_entity_ids": [
+              "ent_mock_3"
+            ],
+            "turn_id": "<id:4>",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation_failure",
+            "error_class": "ERR_SCHEMA_MODE_GUIDED_UNPROVIDED",
+            "error_message_redacted": "ERR_SCHEMA_MODE_GUIDED_UNPROVIDED: Schema mode is \"guided\": entity type \"lead_update\" is provided by bundle \"crm\", which is not enabled. Enable it with the manage_bundles tool (action \"install\", bundle \"crm\"), then retry the write.",
+            "harness": "cursor",
+            "hit_count_session": 1,
+            "hook_event": "postToolUseFailure",
+            "invocation_shape": [
+              "entities",
+              "idempotency_key"
+            ],
+            "observed_at": "<ts>",
+            "tool_name": "mcp_neotoma_store",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use_failure",
+            "hook_events": [
+              "post_tool_use_failure"
+            ],
+            "neotoma_tool_failures": 1,
+            "session_id": "<id:1>",
+            "stored_entity_ids": [
+              "ent_mock_9"
+            ],
+            "turn_id": "<id:4>",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"action\":\"install\",\"bundle\":\"crm\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"ok\":true,\"action\":\"install\",\"bundle\":\"crm\",\"enabled\":true,\"always_active\":false,\"message\":\"Bundle \\\"crm\\\" installed and enabled.\",\"schema_seed\":{\"ok\":true,\"bundle\":\"crm\",\"registered\":[\"lead_update\",\"lead_evaluation\",\"opportunity\",\"contact_group\",\"icp\",\"category_membership\",\"outreach_interaction\"],\"preserved\":[\"company\",\"person\"],\"failed\":[]}}",
+            "status": null,
+            "tool_name": "mcp_neotoma_manage_bundles",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 1,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 0,
+            "stored_entity_ids": [
+              "ent_mock_16"
+            ],
+            "tool_invocation_count": 1,
+            "turn_id": "<id:4>",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"entities\":[{\"entity_type\":\"lead_update\",\"name\":\"Intro call\",\"what_happened\":\"Intro call held.\",\"commitments_made\":\"Send a proposal by Friday.\"}],\"idempotency_key\":\"bundle-enable-eval-store-2\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"entities\":[{\"entity_id\":\"ent_lead_update_001\",\"entity_type\":\"lead_update\"}],\"unknown_fields\":[]}",
+            "status": null,
+            "tool_name": "mcp_neotoma_store",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:8>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 1,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": [
+              "ent_mock_23"
+            ],
+            "tool_invocation_count": 2,
+            "turn_id": "<id:4>",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "The first save was refused because this instance runs in guided mode and lead updates come from the crm bundle, which was not enabled. I enabled crm; its schemas registered with no failures. The retried save succeeded, and the lead update is stored with the commitment to send a proposal by Friday.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:9>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": [
+              "stop"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 1,
+            "reminder_injected": true,
+            "retrieve_calls": 0,
+            "safety_net_used": false,
+            "session_id": "<id:1>",
+            "status": "completed",
+            "store_structured_calls": 1,
+            "tool_invocation_count": 2,
+            "turn_id": "<id:4>",
+            "turn_key": "bundle_enable_guided_store__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUseFailure",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}

@@ -23,4 +23,4 @@ Canonical name rules, in order: (`title` + `source_contact_id`), then (`title` +
 
 ## Usage notes
 
-One row per (group, member). Relate it `REFERS_TO` the member `contact`. `contact_list` is an alias.
+One row per (group, member). Relate it `REFERS_TO` the member `contact`. Once the bundle has registered this schema, writes under the alias `contact_list` land here.

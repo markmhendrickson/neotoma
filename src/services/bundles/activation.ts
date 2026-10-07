@@ -142,9 +142,14 @@ export function disableBundle(name: string): BundleActionResult {
     bundle: name,
     enabled,
     always_active: isAlwaysActiveBundle(name),
+    // Disable stops the bundle's types counting as "provided" under guided, which
+    // only governs types with no registered schema. Schemas the bundle already
+    // registered stay registered, so writes of those types keep succeeding.
     message:
-      `Bundle "${name}" disabled. Its schemas remain registered but its types ` +
-      `no longer auto-create under guided/locked; existing data is preserved.`,
+      `Bundle "${name}" disabled. Its types no longer count as provided under ` +
+      `guided/locked, so a type with no registered schema can no longer auto-create. ` +
+      `Schemas this bundle already registered stay registered, so writes of those ` +
+      `types still succeed. Existing data is preserved.`,
   };
 }
 

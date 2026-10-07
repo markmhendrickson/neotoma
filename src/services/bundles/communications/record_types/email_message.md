@@ -18,7 +18,7 @@ Canonical name rules, in order: `message_id`, then (`from_email` + `subject` + `
 | `from_email`           | string | no       | Sender address.                                             |
 | `from_name`            | string | no       | Sender display name.                                        |
 | `to_addresses`         | array  | no       | Recipient addresses.                                        |
-| `cc`                   | string | no       | Cc recipients.                                              |
+| `cc`                   | array  | no       | Cc recipient addresses.                                     |
 | `sent_at`              | date   | no       |                                                             |
 | `received_at`          | date   | no       |                                                             |
 | `message_id`           | string | no       | RFC 5322 Message-ID.                                        |
