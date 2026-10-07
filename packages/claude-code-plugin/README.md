@@ -96,17 +96,23 @@ claude plugin install neotoma@neotoma-marketplace
 
 The connector, skills, and commands need nothing extra. The hooks need:
 
-1. A running Neotoma server (default: `http://127.0.0.1:3080`). See [install.md](https://github.com/markmhendrickson/neotoma/blob/main/install.md).
+1. Your own running Neotoma server, set as the plugin's **Neotoma MCP URL** (hooks stay off on the public sandbox). See [install.md](https://github.com/markmhendrickson/neotoma/blob/main/install.md).
 2. The `neotoma-client` Python package: `pip install neotoma-client`.
 
 ## Configuration (hooks)
 
-The hooks read environment variables, not the plugin's **Neotoma MCP URL** option:
+The hooks always talk to the **same Neotoma as the bundled connector**, so the two never split across instances:
+
+1. the plugin option **Neotoma MCP URL** (Claude Code exports it to hooks as `CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL`; a trailing `/mcp` is dropped to get the API root);
+2. `NEOTOMA_BASE_URL`, only when it is explicitly set **and** the hooks run outside the installed plugin. Inside the plugin it is ignored with a warning, because the connector cannot see it;
+3. the option's default from `plugin.json` (the public sandbox). There is no localhost default.
+
+**The hooks never capture into the public sandbox.** It is shared and readable by other visitors, and the hooks record every prompt and reply, so on the sandbox the hooks stay off and only the connector works. Point the option at your own Neotoma to turn capture on.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `NEOTOMA_BASE_URL` | `http://127.0.0.1:3080` | Neotoma API root. |
-| `NEOTOMA_TOKEN` | `dev-local` | Auth token for the Neotoma API. |
+| `NEOTOMA_BASE_URL` | unset | API root, used only outside the installed plugin (see above). |
+| `NEOTOMA_TOKEN` | unset | Auth token for the Neotoma API. |
 | `NEOTOMA_LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error`, `silent`. |
 
 All hooks are best-effort: a failure in the plugin never blocks your turn. Errors are logged to stderr and the agent continues.

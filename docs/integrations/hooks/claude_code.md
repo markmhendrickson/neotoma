@@ -40,9 +40,11 @@ Every hook above also accretes onto a single `conversation_turn` keyed by `(sess
 
 ## Configuration
 
+Installed as the Claude plugin, the hooks follow the plugin's **Neotoma MCP URL** option, the same URL as the bundled connector, and ignore `NEOTOMA_BASE_URL`. They never capture into the public sandbox. See [`packages/claude-code-plugin/README.md`](../../../packages/claude-code-plugin/README.md#configuration-hooks).
+
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `NEOTOMA_BASE_URL` | `http://127.0.0.1:3080` | API root. |
+| `NEOTOMA_BASE_URL` | unset | API root, used only when the hooks run outside the installed plugin. |
 | `NEOTOMA_TOKEN` | `dev-local` | Auth token. |
 | `NEOTOMA_LOG_LEVEL` | `warn` | `debug` through `silent`. |
 | `NEOTOMA_HOOK_STATE_DIR` | `~/.neotoma/hook-state` | Where the hook layer keeps per-session failure-counter state. |

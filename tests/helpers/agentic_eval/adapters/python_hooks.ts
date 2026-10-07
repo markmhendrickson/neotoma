@@ -43,6 +43,11 @@ async function runPython(
     NEOTOMA_HOOK_STATE_DIR: ctx.hookStateDir,
     NEOTOMA_BASE_URL: ctx.baseUrl,
     NEOTOMA_TOKEN: ctx.token,
+    // Pin the eval to ctx.baseUrl even when run from inside a Claude plugin
+    // session: the plugin option and plugin context outrank NEOTOMA_BASE_URL
+    // in claude-code-plugin/hooks/_common.py.
+    CLAUDE_PLUGIN_ROOT: "",
+    CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: "",
     NEOTOMA_LOG_LEVEL: "silent",
     NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP:
       process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP ?? "auto",
