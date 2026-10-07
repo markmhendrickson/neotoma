@@ -86,7 +86,8 @@ export interface ExpectedAssertion {
     | "tools_list.tool"
     /**
      * Every tool in the live `tools/list` has a non-empty `title` equal to
-     * `annotations.title`. Optional `value` is the minimum tool count.
+     * `annotations.title`, and the tool count compares as `op`/`value`
+     * (default `gte 1`; use `eq` to pin the exact inventory).
      */
     | "tools_list.all_titled";
   /** Numeric comparison op for count-shaped predicates. */

@@ -758,7 +758,8 @@ export async function evaluatePredicate(
       if (typeof tools === "string") {
         return { predicate, message: tools, expected: predicate, actual: null };
       }
-      const minimum = typeof predicate.value === "number" ? predicate.value : 1;
+      const expectedCount = typeof predicate.value === "number" ? predicate.value : 1;
+      const countOp = predicate.op ?? "gte";
       const untitled = tools
         .filter((tool) => {
           const title = typeof tool.title === "string" ? tool.title.trim() : "";
@@ -766,14 +767,14 @@ export async function evaluatePredicate(
           return !title || annotations.title !== tool.title;
         })
         .map((tool) => tool.name);
-      if (tools.length >= minimum && untitled.length === 0) return null;
+      const countOk = compareNumber(tools.length, countOp, expectedCount);
+      if (countOk && untitled.length === 0) return null;
       return {
         predicate,
-        message:
-          tools.length < minimum
-            ? `Expected at least ${minimum} tools in tools/list, got ${tools.length}.`
-            : `Tools without a title mirrored into annotations.title: ${untitled.join(", ")}.`,
-        expected: { minimum, title_equals_annotations_title: true },
+        message: !countOk
+          ? `Expected tools/list tool count ${countOp} ${expectedCount}, got ${tools.length}.`
+          : `Tools without a title mirrored into annotations.title: ${untitled.join(", ")}.`,
+        expected: { op: countOp, value: expectedCount, title_equals_annotations_title: true },
         actual: { count: tools.length, untitled },
       };
     }

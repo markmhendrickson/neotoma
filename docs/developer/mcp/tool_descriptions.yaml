@@ -152,6 +152,12 @@ titles:
 # changes Neotoma state; `external` can contact or publish beyond this instance.
 # The server derives protocol annotations from this catalog. New tool registrations
 # must add a class here or tools/list and the server card fail closed at startup.
+#
+# Each tool in tools/list and the server card also carries the class verbatim as
+# `_meta["neotoma/effect_class"]` (one of read | write | external). That key is a
+# stable, namespaced vendor field for policy engines, audit tooling and hosts
+# that want Neotoma's own three-way vocabulary. It is informational, like the
+# MCP annotations: a hint about effect, never an authorization control.
 effect_classes:
   retrieve_file_url: read
   retrieve_entity_snapshot: read

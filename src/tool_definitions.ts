@@ -1608,9 +1608,17 @@ export function buildToolDefinitions(
 
   return tools.map((tool) => {
     const effectClass = toolEffectCatalog.effectClasses.get(tool.name);
-    if (!effectClass) throw new Error(`No effect class declared for MCP tool ${tool.name}`);
+    if (!effectClass) {
+      throw new Error(
+        `No effect class declared for MCP tool ${tool.name} in ${toolEffectCatalog.sourcePath}`
+      );
+    }
     const title = toolEffectCatalog.titles.get(tool.name);
-    if (!title) throw new Error(`No title declared for MCP tool ${tool.name}`);
+    if (!title) {
+      throw new Error(
+        `No title declared for MCP tool ${tool.name} in ${toolEffectCatalog.sourcePath}`
+      );
+    }
     return {
       ...tool,
       title,

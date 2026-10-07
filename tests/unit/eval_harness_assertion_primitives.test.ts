@@ -410,6 +410,11 @@ describe("tools_list.tool / tools_list.all_titled", () => {
     expect(fail!.message).toContain("store");
     stubToolsList(listed);
     expect(await evaluatePredicate({ type: "tools_list.all_titled", value: 60 }, ctx())).not.toBeNull();
+    stubToolsList(listed);
+    expect(await evaluatePredicate({ type: "tools_list.all_titled", op: "eq", value: 2 }, ctx())).toBeNull();
+    stubToolsList(listed);
+    const exact = await evaluatePredicate({ type: "tools_list.all_titled", op: "eq", value: 3 }, ctx());
+    expect(exact!.message).toContain("eq 3, got 2");
   });
 
   it("fails closed when tools/list cannot be read (never treats an error as an empty list)", async () => {

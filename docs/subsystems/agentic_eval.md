@@ -347,7 +347,7 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 | `stats.counter` | A numeric key (dotted path allowed, e.g. `sources_count`, `total_observations`) of the post-turn `/stats` payload compares as `op`/`value`. Fails closed: a missing or non-numeric key is a failure, never read as zero (#2493) |
 | `raw_storage.file_count` | Number of files the isolated server wrote under its raw-storage directory compares as `op`/`value`. Pair with the scenario flag `real_storage: true`, because an isolated server (NODE_ENV=test) otherwise skips the byte upload and writes only the `sources` row (#2493) |
 | `tools_list.tool` | Reads the isolated server's live MCP `tools/list` (stateless request, bearer token) and checks one `tool_name`: `tool_subset` is a deep subset match on the listed tool (`title`, `annotations`, `_meta`), and `absent_paths` lists dotted paths that must be missing (for example `annotations.destructiveHint` on a read-only tool). Fails closed when `tools/list` cannot be read |
-| `tools_list.all_titled` | Every tool in the live `tools/list` has a non-empty `title` equal to `annotations.title`, and at least `value` tools are listed |
+| `tools_list.all_titled` | Every tool in the live `tools/list` has a non-empty `title` equal to `annotations.title`, and the tool count compares as `op`/`value` (default `gte 1`; use `eq` to pin the exact inventory) |
 
 These four `#1703` primitives close the audit gap where wrong-tool / silent-no-op
 behavior was invisible: the older predicates could only observe store-side entity

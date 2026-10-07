@@ -13,7 +13,15 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -106,22 +114,34 @@ describe("MCP tool catalog ships with every artifact", () => {
       process.stdout.write(JSON.stringify({ count: tools.length, storeTitle: store && store.title }));
       process.exit(0);
     `;
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
-      cwd: outside,
-      encoding: "utf8",
-      timeout: 60_000,
-      env: {
-        PATH: process.env.PATH ?? "",
-        HOME: outside,
-        NODE_ENV: "test",
-        NEOTOMA_DATA_DIR: join(outside, "data"),
-      },
-    });
-    expect(result.stderr).not.toMatch(/ENOENT|tool catalog .* is missing/);
-    expect(result.status, result.stderr).toBe(0);
-    const lastLine = result.stdout.trim().split("\n").at(-1) ?? "{}";
-    const parsed = JSON.parse(lastLine) as { count: number; storeTitle?: string };
-    expect(parsed.count).toBe(NEOTOMA_TOOL_NAMES.length);
-    expect(parsed.storeTitle).toBe("Store entities and files");
+    const runProbe = (extraEnv: Record<string, string> = {}) => {
+      const result = spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
+        cwd: outside,
+        encoding: "utf8",
+        timeout: 60_000,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: outside,
+          NODE_ENV: "test",
+          NEOTOMA_DATA_DIR: join(outside, "data"),
+          ...extraEnv,
+        },
+      });
+      expect(result.stderr).not.toMatch(/ENOENT|tool catalog .* is (missing|not valid)/);
+      expect(result.status, result.stderr).toBe(0);
+      const lastLine = result.stdout.trim().split("\n").at(-1) ?? "{}";
+      const parsed = JSON.parse(lastLine) as { count: number; storeTitle?: string };
+      expect(parsed.count).toBe(NEOTOMA_TOOL_NAMES.length);
+      expect(parsed.storeTitle).toBe("Store entities and files");
+    };
+    runProbe();
+
+    // Installed package launched with a stale checkout as the project root:
+    // the package's own catalog must win, so the server still starts.
+    const stale = makeScratch("neotoma-installed-stale-root-");
+    writeFileSync(join(stale, "package.json"), JSON.stringify({ name: "neotoma" }));
+    mkdirSync(join(stale, "docs", "developer", "mcp"), { recursive: true });
+    writeFileSync(join(stale, TOOL_CATALOG_RELATIVE_PATH), 'tools:\n  store: "Store."\n');
+    runProbe({ NEOTOMA_PROJECT_ROOT: stale });
   }, 240_000);
 });

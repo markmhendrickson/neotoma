@@ -164,6 +164,14 @@ write. A host can present
 or apply a graduated policy, but those annotations are hints rather than an
 authorization control.
 
+Each tool also carries Neotoma's own effect class as
+`_meta["neotoma/effect_class"]`: `read` (no persistence, no egress), `write`
+(changes Neotoma state) or `external` (can contact or publish beyond this
+instance). The key is stable and namespaced, so policy engines and audit
+tooling can branch on it. Like the annotations, it is informational and grants
+nothing. The catalog that defines it is
+`docs/developer/mcp/tool_descriptions.yaml`.
+
 For Claude Code, an operator who wants unattended access must add an explicit
 host-side allow rule for the exact configured server/tool name (for example,
 `mcp__mcpsrv_neotoma__retrieve_entities`) in Claude Code settings or pass it

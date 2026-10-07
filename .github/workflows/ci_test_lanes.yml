@@ -225,6 +225,15 @@ jobs:
       - name: Run relationship-write capability surface parity (#2524)
         run: npx vitest run --no-file-parallelism tests/integration/relationship_write_capability_surfaces.test.ts
 
+      # MCP tool catalog delivery (#2058). The catalog is fail-closed, so these
+      # gate the ways a server can lose it: the npm package and container image
+      # must ship it, an installed package must start from outside a checkout,
+      # a stale checkout as project root must not shadow the package's copy, and
+      # the live HTTP tools/list must carry titles and annotations. They live
+      # under tests/integration, which test:unit excludes.
+      - name: Run MCP tool catalog packaging and lookup regressions (#2058)
+        run: npx vitest run --no-file-parallelism tests/integration/mcp_tool_catalog_packaging.test.ts tests/integration/mcp_tool_catalog_lookup_order.test.ts tests/integration/mcp_tools_list_metadata.test.ts
+
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
       # #1842 issue-submit auth) are asserted through BOTH the MCP and offline

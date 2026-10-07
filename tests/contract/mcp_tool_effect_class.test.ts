@@ -61,6 +61,8 @@ describe("MCP tool effect catalog", () => {
       expect(() => loadToolEffectCatalog(yamlPath, NEOTOMA_TOOL_NAMES)).toThrow(
         /titles must match the MCP tool inventory; missing: store/
       );
+      // The error names the exact file that was read.
+      expect(() => loadToolEffectCatalog(yamlPath, NEOTOMA_TOOL_NAMES)).toThrow(yamlPath);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

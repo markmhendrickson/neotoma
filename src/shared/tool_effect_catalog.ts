@@ -28,6 +28,8 @@ export type ToolAnnotations = {
 };
 
 export interface ToolEffectCatalog {
+  /** Absolute path of the catalog file these entries were read from. */
+  sourcePath: string;
   descriptions: Map<string, string>;
   /** Human-readable display name per tool (MCP `Tool.title`). */
   titles: Map<string, string>;
@@ -102,8 +104,29 @@ function validateToolSet(
   }
 }
 
-/** Load and validate the single source of truth for tool descriptions and risk metadata. */
+/**
+ * Load and validate the single source of truth for tool descriptions and risk
+ * metadata. Every failure names the exact file that was read, so an operator
+ * can tell a stale or foreign catalog from a broken install.
+ */
 export function loadToolEffectCatalog(
+  yamlPath: string,
+  expectedToolNames: readonly string[]
+): ToolEffectCatalog {
+  try {
+    return parseToolEffectCatalog(yamlPath, expectedToolNames);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Neotoma cannot start its MCP server: the tool catalog at ${yamlPath} is not ` +
+        `valid for this build (${reason}). The catalog must match the running ` +
+        `version's tool inventory; reinstall the neotoma package, or point ` +
+        `NEOTOMA_PROJECT_ROOT at a checkout of the same version.`
+    );
+  }
+}
+
+function parseToolEffectCatalog(
   yamlPath: string,
   expectedToolNames: readonly string[]
 ): ToolEffectCatalog {
@@ -150,6 +173,7 @@ export function loadToolEffectCatalog(
     : [];
 
   return {
+    sourcePath: yamlPath,
     descriptions: new Map(descriptionEntries),
     titles: new Map(Object.entries(titles).map(([name, title]) => [name, String(title).trim()])),
     effectClasses: new Map(
@@ -160,7 +184,9 @@ export function loadToolEffectCatalog(
     ),
     annotationsFor(toolName: string): ToolAnnotations {
       const effectClass = effectClasses[toolName] as ToolEffectClass | undefined;
-      if (!effectClass) throw new Error(`No effect class declared for MCP tool ${toolName}`);
+      if (!effectClass) {
+        throw new Error(`No effect class declared for MCP tool ${toolName} in ${yamlPath}`);
+      }
       const annotations: ToolAnnotations = {
         ...annotationsForEffectClass(effectClass),
         ...(overrides[toolName] as Partial<ToolAnnotations> | undefined),
@@ -177,10 +203,7 @@ export function loadToolEffectCatalog(
 }
 
 /**
- * Find the catalog under the first root that has it. Callers pass the
- * configured project root first and the running package's own root second, so
- * an installed server still finds the copy it ships when the project root
- * points somewhere else (for example a CLI-configured repo root).
+ * Find the catalog under the first root that has it, in the order given.
  *
  * Throws one clear startup error naming the file and every place searched,
  * rather than a raw ENOENT, because the catalog is fail-closed by design:
@@ -202,13 +225,23 @@ export function resolveToolCatalogPath(roots: readonly string[]): string {
   );
 }
 
-/** Load the catalog from the project root, falling back to the running package's root. */
+/**
+ * Load the catalog that ships with the running code.
+ *
+ * The running package's own root is searched FIRST. The catalog is versioned
+ * data tied to the compiled tool inventory (both directions are checked), so a
+ * copy from any other version fails validation. The configured project root
+ * (cwd, NEOTOMA_PROJECT_ROOT, or a CLI `repo_root`) can be a checkout at a
+ * different version, and searching it first would let that stale file shadow
+ * the package's matching copy and stop the server. The project root is only a
+ * fallback; in a source run the two roots are the same directory anyway.
+ */
 export function loadInstalledToolEffectCatalog(
   projectRoot: string,
   expectedToolNames: readonly string[]
 ): ToolEffectCatalog {
   return loadToolEffectCatalog(
-    resolveToolCatalogPath([projectRoot, resolveNeotomaPackageRoot()]),
+    resolveToolCatalogPath([resolveNeotomaPackageRoot(), projectRoot]),
     expectedToolNames
   );
 }

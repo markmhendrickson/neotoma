@@ -41,9 +41,11 @@ expected:
     tool_name: list_entity_types
     op: gte
     value: 1
-  # Every advertised tool has a title, mirrored into annotations.title.
+  # Every advertised tool has a title, mirrored into annotations.title, and
+  # the inventory is exact: a tool added or dropped must update this count.
   - type: tools_list.all_titled
-    value: 60
+    op: eq
+    value: 65
   # A plain read: read-only, closed-world, no destructive/idempotent hints
   # (MCP defines those only for tools that write).
   - type: tools_list.tool
