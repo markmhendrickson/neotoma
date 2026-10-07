@@ -4498,24 +4498,26 @@ export interface components {
       user_id?: string;
     };
     /**
-     * @description FU-2026-05-002. Plain-text status line (always present) plus an
-     *     optional `ui://` widget URI for ext-apps clients. Agents emit
-     *     `status_line` in the user-visible reply; ext-apps clients additionally
-     *     render the widget inline when `widget_uri` is present.
+     * @description FU-2026-05-002. Per-turn summary of the Neotoma entities a turn
+     *     created, updated, retrieved, or matched ambiguously. Agents relay
+     *     `fallback_text` verbatim at the end of the reply (nothing when it is
+     *     empty) and never compose their own summary; MCP Apps clients render
+     *     the same `card` inline. `status_line` and `widget_uri` are legacy
+     *     fields kept for existing consumers.
      */
     TurnSummaryResponse: {
       /**
-       * @description Single-line plain-text status of the form
+       * @description Legacy single-line status of the form
        *     `msg N/M, stored K, retrieved L` (with optional `, issues J`
-       *     suffix when J > 0). Always present, including bookkeeping-only
-       *     turns where K, L, and J are zero.
+       *     suffix when J > 0). Kept for existing consumers; agents relay
+       *     `fallback_text`, not this line.
        */
       status_line: string;
       /**
        * @description MCP resource URI (`ui://neotoma/turn-summary?...`) resolvable by
        *     the ext-apps widget host. Omitted when no host context is
-       *     available. Clients without ext-apps support fall back to
-       *     `status_line` plain text.
+       *     available. Clients without ext-apps support relay
+       *     `fallback_text`.
        */
       widget_uri?: string | null;
       /**
@@ -4547,6 +4549,27 @@ export interface components {
        *     externally. Empty unless the auto-file flow flagged something.
        */
       issues: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Every entity either message of the turn REFERS_TO, partitioned by
+       *     its observations: `created` (first observation landed this turn),
+       *     `updated` (existed before, observed this turn), `ambiguous` (an
+       *     update resolved by heuristic name match under a schema whose
+       *     `name_collision_policy` is `warn`), `retrieved` (referenced, no
+       *     observation this turn). Chat bookkeeping is excluded.
+       */
+      groups: {
+        created?: components["schemas"]["TurnSummaryEntityRef"][];
+        updated?: components["schemas"]["TurnSummaryEntityRef"][];
+        retrieved?: components["schemas"]["TurnSummaryEntityRef"][];
+        ambiguous?: components["schemas"]["TurnSummaryEntityRef"][];
+      };
+      card: components["schemas"]["TurnSummaryCard"];
+      /**
+       * @description `card` rendered as markdown for clients that cannot show MCP Apps.
+       *     Agents relay it verbatim. Empty string when the turn touched only
+       *     chat bookkeeping.
+       */
+      fallback_text: string;
     };
     /**
      * @description FU-2026-05-003. Index of turns within a conversation, ordered by
@@ -4595,10 +4618,64 @@ export interface components {
       /** @description Entities of `entity_type` `issue` REFERS_TO from this message. */
       issues: components["schemas"]["TurnSummaryEntityRef"][];
     };
+    /**
+     * @description Display data for the in-chat MCP Apps card (`ui://neotoma/turn-summary`).
+     *     `fallback_text` is rendered from this same object, so the card and the
+     *     text cannot disagree.
+     */
+    TurnSummaryCard: {
+      header: {
+        icon: string;
+        title: string;
+        /** @description Which Neotoma answered (instance name, else origin host). */
+        instance: string | null;
+        conversation_label: string | null;
+        conversation_url: string | null;
+      };
+      /**
+       * @description Groups with at least one shown row, in the order Created, Updated,
+       *     Retrieved, Ambiguous.
+       */
+      groups: components["schemas"]["TurnSummaryCardGroup"][];
+      total_count: number;
+      shown_count: number;
+      /** @description Present when rows were truncated. */
+      more: {
+        count: number;
+        label: string;
+        url: string | null;
+      } | null;
+      /** @description Present when issue entities were flagged this turn. */
+      issues: {
+        count: number;
+        label: string;
+        url: string | null;
+      } | null;
+    };
+    TurnSummaryCardGroup: {
+      /** @enum {string} */
+      key: "created" | "updated" | "retrieved" | "ambiguous";
+      label: string;
+      /** @description Full count for the group, including rows hidden by truncation. */
+      count: number;
+      items: components["schemas"]["TurnSummaryCardItem"][];
+    };
+    TurnSummaryCardItem: {
+      entity_id: string;
+      entity_type: string;
+      label: string;
+      icon: string;
+      url: string | null;
+      note: string | null;
+    };
     TurnSummaryEntityRef: {
       entity_id: string;
       entity_type: string;
       canonical_name?: string | null;
+      /** @description Human-readable label (title or name) from the snapshot. */
+      label?: string | null;
+      /** @description identity_rule of the heuristic match, on `ambiguous` entries only. */
+      identity_rule?: string | null;
     };
     GetRelationshipSnapshotRequest: {
       /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */

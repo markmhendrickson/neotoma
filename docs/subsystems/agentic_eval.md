@@ -224,7 +224,8 @@ Supported predicates (see `packages/eval-harness/src/assertions.ts`):
 `reply_text.contains`, `turn_compliance.backfilled`,
 `instruction_profile.served`, `host_tool.invocations`,
 `mcp_tool.invocations`, `tool_result.matches`, `snapshot.field_present`,
-`snapshot.field_absent`, `stats.counter`, `raw_storage.file_count`. Each predicate
+`snapshot.field_absent`, `stats.counter`, `raw_storage.file_count`,
+`reply_text.relays_tool_result`, `served_instructions.contains`. Each predicate
 returns a structured `{ pass, expected, actual, message }` and the
 failure message is what the TTY/JUnit reporter surfaces.
 
@@ -345,6 +346,8 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 | `snapshot.field_absent` | A `field` is absent from a retrieved entity snapshot — e.g. an unknown field landed in raw_fragments, stored-but-invisible (#1703) |
 | `stats.counter` | A numeric key (dotted path allowed, e.g. `sources_count`, `total_observations`) of the post-turn `/stats` payload compares as `op`/`value`. Fails closed: a missing or non-numeric key is a failure, never read as zero (#2493) |
 | `raw_storage.file_count` | Number of files the isolated server wrote under its raw-storage directory compares as `op`/`value`. Pair with the scenario flag `real_storage: true`, because an isolated server (NODE_ENV=test) otherwise skips the byte upload and writes only the `sources` row (#2493) |
+| `reply_text.relays_tool_result` | The reply contains, byte for byte, the non-empty string at `result_key` of the named tool's result (`which` picks the call). For server-rendered text the agent must relay rather than paraphrase, e.g. `neotoma_turn_summary.fallback_text`. Fails when the field is absent or empty |
+| `served_instructions.contains` | The MCP instructions the isolated server serves (`GET /mcp-interaction-instructions`) contain `substring` or match `pattern`. Pins the rule a replayed behavior depends on, so deleting the rule fails the scenario. Pair with the scenario flag `public_base_url` when the relayed text carries links, so it does not depend on the server's random port |
 
 These four `#1703` primitives close the audit gap where wrong-tool / silent-no-op
 behavior was invisible: the older predicates could only observe store-side entity

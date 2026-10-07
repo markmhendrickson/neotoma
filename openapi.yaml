@@ -2868,27 +2868,40 @@ components:
     TurnSummaryResponse:
       type: object
       description: |
-        FU-2026-05-002. Plain-text status line (always present) plus an
-        optional `ui://` widget URI for ext-apps clients. Agents emit
-        `status_line` in the user-visible reply; ext-apps clients additionally
-        render the widget inline when `widget_uri` is present.
-      required: [status_line, turn_number, conversation_message_count, stored, retrieved, issues]
+        FU-2026-05-002. Per-turn summary of the Neotoma entities a turn
+        created, updated, retrieved, or matched ambiguously. Agents relay
+        `fallback_text` verbatim at the end of the reply (nothing when it is
+        empty) and never compose their own summary; MCP Apps clients render
+        the same `card` inline. `status_line` and `widget_uri` are legacy
+        fields kept for existing consumers.
+      required:
+        [
+          status_line,
+          turn_number,
+          conversation_message_count,
+          stored,
+          retrieved,
+          issues,
+          groups,
+          card,
+          fallback_text,
+        ]
       properties:
         status_line:
           type: string
           description: |
-            Single-line plain-text status of the form
+            Legacy single-line status of the form
             `msg N/M, stored K, retrieved L` (with optional `, issues J`
-            suffix when J > 0). Always present, including bookkeeping-only
-            turns where K, L, and J are zero.
+            suffix when J > 0). Kept for existing consumers; agents relay
+            `fallback_text`, not this line.
         widget_uri:
           type: string
           nullable: true
           description: |
             MCP resource URI (`ui://neotoma/turn-summary?...`) resolvable by
             the ext-apps widget host. Omitted when no host context is
-            available. Clients without ext-apps support fall back to
-            `status_line` plain text.
+            available. Clients without ext-apps support relay
+            `fallback_text`.
         turn_number:
           type: integer
           description: |
@@ -2924,6 +2937,40 @@ components:
             externally. Empty unless the auto-file flow flagged something.
           items:
             $ref: "#/components/schemas/TurnSummaryEntityRef"
+        groups:
+          type: object
+          description: |
+            Every entity either message of the turn REFERS_TO, partitioned by
+            its observations: `created` (first observation landed this turn),
+            `updated` (existed before, observed this turn), `ambiguous` (an
+            update resolved by heuristic name match under a schema whose
+            `name_collision_policy` is `warn`), `retrieved` (referenced, no
+            observation this turn). Chat bookkeeping is excluded.
+          properties:
+            created:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+            updated:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+            retrieved:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+            ambiguous:
+              type: array
+              items:
+                $ref: "#/components/schemas/TurnSummaryEntityRef"
+        card:
+          $ref: "#/components/schemas/TurnSummaryCard"
+        fallback_text:
+          type: string
+          description: |
+            `card` rendered as markdown for clients that cannot show MCP Apps.
+            Agents relay it verbatim. Empty string when the turn touched only
+            chat bookkeeping.
     ConversationTurnIndex:
       type: object
       description: |
@@ -2998,6 +3045,103 @@ components:
           description: Entities of `entity_type` `issue` REFERS_TO from this message.
           items:
             $ref: "#/components/schemas/TurnSummaryEntityRef"
+    TurnSummaryCard:
+      type: object
+      description: |
+        Display data for the in-chat MCP Apps card (`ui://neotoma/turn-summary`).
+        `fallback_text` is rendered from this same object, so the card and the
+        text cannot disagree.
+      required: [header, groups, total_count, shown_count, more, issues]
+      properties:
+        header:
+          type: object
+          required: [icon, title, instance, conversation_label, conversation_url]
+          properties:
+            icon:
+              type: string
+            title:
+              type: string
+            instance:
+              type: string
+              nullable: true
+              description: Which Neotoma answered (instance name, else origin host).
+            conversation_label:
+              type: string
+              nullable: true
+            conversation_url:
+              type: string
+              nullable: true
+        groups:
+          type: array
+          description: |
+            Groups with at least one shown row, in the order Created, Updated,
+            Retrieved, Ambiguous.
+          items:
+            $ref: "#/components/schemas/TurnSummaryCardGroup"
+        total_count:
+          type: integer
+        shown_count:
+          type: integer
+        more:
+          type: object
+          nullable: true
+          description: Present when rows were truncated.
+          required: [count, label, url]
+          properties:
+            count:
+              type: integer
+            label:
+              type: string
+            url:
+              type: string
+              nullable: true
+        issues:
+          type: object
+          nullable: true
+          description: Present when issue entities were flagged this turn.
+          required: [count, label, url]
+          properties:
+            count:
+              type: integer
+            label:
+              type: string
+            url:
+              type: string
+              nullable: true
+    TurnSummaryCardGroup:
+      type: object
+      required: [key, label, count, items]
+      properties:
+        key:
+          type: string
+          enum: [created, updated, retrieved, ambiguous]
+        label:
+          type: string
+        count:
+          type: integer
+          description: Full count for the group, including rows hidden by truncation.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TurnSummaryCardItem"
+    TurnSummaryCardItem:
+      type: object
+      required: [entity_id, entity_type, label, icon, url, note]
+      properties:
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        label:
+          type: string
+        icon:
+          type: string
+        url:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
     TurnSummaryEntityRef:
       type: object
       required: [entity_id, entity_type]
@@ -3009,6 +3153,14 @@ components:
         canonical_name:
           type: string
           nullable: true
+        label:
+          type: string
+          nullable: true
+          description: Human-readable label (title or name) from the snapshot.
+        identity_rule:
+          type: string
+          nullable: true
+          description: identity_rule of the heuristic match, on `ambiguous` entries only.
     GetRelationshipSnapshotRequest:
       type: object
       additionalProperties: false

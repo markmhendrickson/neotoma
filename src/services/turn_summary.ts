@@ -15,17 +15,45 @@
  *
  * The status line is a single plain-text line that agents emit verbatim.
  * The widget URI is an MCP resource URI for ext-apps widget hosts.
+ *
+ * On top of that legacy partition, every entity either message REFERS_TO is
+ * classified from its observations into the groups the in-chat card shows:
+ *   - created   — its first observation landed during this turn.
+ *   - updated   — it existed before the turn and gained an observation in it.
+ *   - ambiguous — an update that resolved by heuristic name match under a
+ *                 schema whose `name_collision_policy` is "warn" (the same
+ *                 condition that makes `store` emit HEURISTIC_MERGE).
+ *   - retrieved — referenced this turn with no observation written in it.
+ * `card` carries those groups as display data and `fallback_text` is the same
+ * card rendered as markdown (see turn_summary_view.ts).
  */
 
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import {
+  TURN_SUMMARY_BOOKKEEPING_TYPES,
+  buildTurnSummaryCard,
+  renderTurnSummaryFallbackText,
+  type TurnSummaryCard,
+  type TurnSummaryViewEntity,
+} from "./turn_summary_view.js";
 
-const BOOKKEEPING_TYPES = new Set(["conversation", "conversation_message", "agent_message"]);
+const BOOKKEEPING_TYPES = TURN_SUMMARY_BOOKKEEPING_TYPES;
+
+/** identity_basis values that mean the resolver matched heuristically. */
+const HEURISTIC_IDENTITY_BASES = new Set(["heuristic_name", "heuristic_fallback"]);
+
+/** Snapshot fields tried, in order, for a human-readable entity label. */
+const LABEL_FIELDS = ["title", "name", "full_name", "display_name", "subject", "summary"];
 
 export type TurnSummaryEntityRef = {
   entity_id: string;
   entity_type: string;
   canonical_name?: string | null;
+  /** Human-readable label (title / name), when the snapshot has one. */
+  label?: string | null;
+  /** identity_rule of the heuristic match, on `ambiguous` entries only. */
+  identity_rule?: string | null;
 };
 
 export type TurnSummaryResult = {
@@ -36,6 +64,21 @@ export type TurnSummaryResult = {
   stored: TurnSummaryEntityRef[];
   retrieved: TurnSummaryEntityRef[];
   issues: TurnSummaryEntityRef[];
+  /** Observation-grounded groups, matching the card. */
+  groups: {
+    created: TurnSummaryEntityRef[];
+    updated: TurnSummaryEntityRef[];
+    retrieved: TurnSummaryEntityRef[];
+    ambiguous: TurnSummaryEntityRef[];
+  };
+  /** Display data for the in-chat card (`ui://neotoma/turn-summary`). */
+  card: TurnSummaryCard;
+  /**
+   * `card` rendered as markdown for clients that cannot show MCP Apps.
+   * Empty string when the turn touched only chat bookkeeping. Agents relay it
+   * verbatim.
+   */
+  fallback_text: string;
 };
 
 export class TurnSummaryError extends Error {
@@ -201,7 +244,7 @@ async function fetchReferredEntities(
   if (uniqueIds.length === 0) return [];
   const { data: snapshots } = await db
     .from("entity_snapshots")
-    .select("entity_id, entity_type, canonical_name")
+    .select("entity_id, entity_type, canonical_name, snapshot")
     .eq("user_id", userId)
     .in("entity_id", uniqueIds);
   const refs: TurnSummaryEntityRef[] = [];
@@ -211,9 +254,183 @@ async function fetchReferredEntities(
       entity_id: row.entity_id,
       entity_type: row.entity_type,
       canonical_name: row.canonical_name ?? null,
+      label: labelFromSnapshot(row),
     });
   }
   return refs;
+}
+
+function parseSnapshot(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function labelFromSnapshot(row: SnapshotRow): string | null {
+  const snap = parseSnapshot(row.snapshot);
+  for (const field of LABEL_FIELDS) {
+    const value = snap[field];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return typeof row.canonical_name === "string" && row.canonical_name.trim()
+    ? row.canonical_name
+    : null;
+}
+
+type ObservationRow = {
+  entity_id: string;
+  created_at?: string | null;
+  observed_at?: string | null;
+  source_id?: string | null;
+  identity_basis?: string | null;
+  identity_rule?: string | null;
+};
+
+function observationTime(row: ObservationRow): number {
+  const raw = row.created_at ?? row.observed_at ?? null;
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+async function loadObservations(
+  userId: string,
+  entityIds: string[]
+): Promise<Map<string, ObservationRow[]>> {
+  const byEntity = new Map<string, ObservationRow[]>();
+  if (entityIds.length === 0) return byEntity;
+  const { data, error } = await db
+    .from("observations")
+    .select("entity_id, created_at, observed_at, source_id, identity_basis, identity_rule")
+    .eq("user_id", userId)
+    .in("entity_id", entityIds);
+  if (error) {
+    logger.warn(`turn_summary: failed to load observations: ${error.message ?? String(error)}`);
+    return byEntity;
+  }
+  for (const row of (data ?? []) as ObservationRow[]) {
+    if (typeof row.entity_id !== "string") continue;
+    const list = byEntity.get(row.entity_id) ?? [];
+    list.push(row);
+    byEntity.set(row.entity_id, list);
+  }
+  for (const list of byEntity.values()) {
+    list.sort((a, b) => observationTime(a) - observationTime(b));
+  }
+  return byEntity;
+}
+
+/** Schema-declared name_collision_policy, falling back to the code default. */
+async function loadCollisionPolicy(userId: string, entityType: string): Promise<string> {
+  try {
+    const { schemaRegistry } = await import("./schema_registry.js");
+    const entry = await schemaRegistry.loadActiveSchema(entityType, userId);
+    const policy = (entry?.schema_definition as { name_collision_policy?: string } | undefined)
+      ?.name_collision_policy;
+    if (policy) return policy;
+  } catch {
+    // Fall through to the code default.
+  }
+  try {
+    const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+    const codeSchema = ENTITY_SCHEMAS[entityType];
+    const policy = (codeSchema?.schema_definition as { name_collision_policy?: string } | undefined)
+      ?.name_collision_policy;
+    if (policy) return policy;
+  } catch {
+    // Defensive: a module load failure leaves the default.
+  }
+  return "merge";
+}
+
+type TurnWindow = {
+  /** Earliest observation time of the user message, or null when unknown. */
+  start: number | null;
+  /** source_id(s) of the user-phase store, counted as in-turn regardless of clock. */
+  sources: Set<string>;
+};
+
+/**
+ * Partition referenced entities into created / updated / ambiguous /
+ * retrieved from their observations. Without a turn window (no sibling user
+ * message, e.g. legacy turns) an entity with a single observation counts as
+ * created and any other as updated — best effort, since there is no boundary
+ * to measure against.
+ */
+async function classifyByObservations(
+  userId: string,
+  refs: TurnSummaryEntityRef[],
+  observations: Map<string, ObservationRow[]>,
+  window: TurnWindow
+): Promise<TurnSummaryResult["groups"]> {
+  const groups: TurnSummaryResult["groups"] = {
+    created: [],
+    updated: [],
+    retrieved: [],
+    ambiguous: [],
+  };
+  const policyCache = new Map<string, string>();
+  const isInTurn = (row: ObservationRow): boolean => {
+    if (typeof row.source_id === "string" && window.sources.has(row.source_id)) return true;
+    if (window.start === null) return false;
+    const t = observationTime(row);
+    return Number.isFinite(t) && t >= window.start;
+  };
+
+  for (const ref of refs) {
+    const rows = observations.get(ref.entity_id) ?? [];
+    if (window.start === null && window.sources.size === 0) {
+      if (rows.length === 0) groups.retrieved.push(ref);
+      else if (rows.length === 1) groups.created.push(ref);
+      else groups.updated.push(ref);
+      continue;
+    }
+    const inTurn = rows.filter(isInTurn);
+    if (inTurn.length === 0) {
+      groups.retrieved.push(ref);
+      continue;
+    }
+    if (inTurn.length === rows.length) {
+      groups.created.push(ref);
+      continue;
+    }
+    const heuristic = inTurn.find(
+      (row) =>
+        typeof row.identity_basis === "string" && HEURISTIC_IDENTITY_BASES.has(row.identity_basis)
+    );
+    if (heuristic) {
+      let policy = policyCache.get(ref.entity_type);
+      if (policy === undefined) {
+        policy = await loadCollisionPolicy(userId, ref.entity_type);
+        policyCache.set(ref.entity_type, policy);
+      }
+      if (policy === "warn") {
+        groups.ambiguous.push({ ...ref, identity_rule: heuristic.identity_rule ?? null });
+        continue;
+      }
+    }
+    groups.updated.push(ref);
+  }
+  return groups;
+}
+
+async function loadConversationLabel(
+  userId: string,
+  conversationEntityId: string
+): Promise<string | null> {
+  const { data } = await db
+    .from("entity_snapshots")
+    .select("entity_id, entity_type, canonical_name, snapshot")
+    .eq("user_id", userId)
+    .eq("entity_id", conversationEntityId);
+  const row = ((data ?? []) as SnapshotRow[])[0];
+  return row ? labelFromSnapshot(row) : null;
 }
 
 async function findSiblingUserMessage(
@@ -253,6 +470,12 @@ export async function computeTurnSummary(params: {
   userId: string;
   conversationId: string;
   turnKey: string;
+  /** Public app/Inspector origin used for links; omit when unknown. */
+  origin?: string | null;
+  /** Operator-facing instance name for the header; defaults to the origin host. */
+  instanceName?: string | null;
+  /** Rows shown across all groups before "N more". */
+  maxItems?: number;
 }): Promise<TurnSummaryResult> {
   const { userId, conversationId, turnKey } = params;
   if (!conversationId || !turnKey) {
@@ -312,6 +535,56 @@ export async function computeTurnSummary(params: {
     issues.length
   );
 
+  // Observation-grounded groups for the card and its text rendering. Every
+  // entity either message references is classified once, assistant refs first.
+  const allRefs: TurnSummaryEntityRef[] = [...storedRefs];
+  const seen = new Set(storedRefs.map((r) => r.entity_id));
+  for (const ref of userRefs) {
+    if (!seen.has(ref.entity_id)) {
+      allRefs.push(ref);
+      seen.add(ref.entity_id);
+    }
+  }
+  const observationIds = allRefs.map((r) => r.entity_id);
+  if (userMessageId) observationIds.push(userMessageId);
+  const observations = await loadObservations(userId, observationIds);
+  const window: TurnWindow = { start: null, sources: new Set() };
+  const userObs = userMessageId ? (observations.get(userMessageId) ?? []) : [];
+  if (userObs.length > 0) {
+    // The latest user-message observation opens the turn: earlier ones belong
+    // to replays of the same turn_key in previous turns.
+    const opening = userObs[userObs.length - 1];
+    const t = observationTime(opening);
+    window.start = Number.isFinite(t) ? t : null;
+    if (typeof opening.source_id === "string" && opening.source_id) {
+      window.sources.add(opening.source_id);
+    }
+  }
+  const groups = await classifyByObservations(userId, allRefs, observations, window);
+
+  const conversationLabel = await loadConversationLabel(userId, conversationEntityId).catch(
+    () => null
+  );
+  const toViewEntity = (r: TurnSummaryEntityRef): TurnSummaryViewEntity => ({
+    entity_id: r.entity_id,
+    entity_type: r.entity_type,
+    label: r.label ?? r.canonical_name ?? null,
+    identity_rule: r.identity_rule ?? null,
+  });
+  const card = buildTurnSummaryCard({
+    created: groups.created.map(toViewEntity),
+    updated: groups.updated.map(toViewEntity),
+    retrieved: groups.retrieved.map(toViewEntity),
+    ambiguous: groups.ambiguous.map(toViewEntity),
+    origin: params.origin ?? null,
+    instance_name: params.instanceName ?? null,
+    conversation_entity_id: conversationEntityId,
+    conversation_label: conversationLabel,
+    turn_number: turnNumber,
+    max_items: params.maxItems,
+    issues_count: issues.length,
+  });
+
   return {
     status_line: statusLine,
     widget_uri: widgetUri,
@@ -320,6 +593,9 @@ export async function computeTurnSummary(params: {
     stored,
     retrieved,
     issues,
+    groups,
+    card,
+    fallback_text: renderTurnSummaryFallbackText(card),
   };
 }
 

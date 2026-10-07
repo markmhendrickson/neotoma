@@ -76,7 +76,20 @@ export interface ExpectedAssertion {
     /** Compare a numeric key of the post-turn `/stats` payload (`field`, `op`, `value`). */
     | "stats.counter"
     /** Count files written under the isolated server's raw-storage dir (`op`, `value`). */
-    | "raw_storage.file_count";
+    | "raw_storage.file_count"
+    /**
+     * The assistant reply contains, verbatim (case- and whitespace-exact), the
+     * non-empty string at `result_key` of the `tool_name` result the agent
+     * received. For server-rendered text the agent must relay, not paraphrase.
+     */
+    | "reply_text.relays_tool_result"
+    /**
+     * The MCP instructions the isolated server serves
+     * (`GET /mcp-interaction-instructions`) contain `substring` or match
+     * `pattern`. Pins the instruction a behavior depends on, so removing it
+     * fails the scenario even when the turn itself is replayed.
+     */
+    | "served_instructions.contains";
   /** Numeric comparison op for count-shaped predicates. */
   op?: "eq" | "gte" | "lte";
   value?: number | string | boolean;
@@ -200,6 +213,12 @@ export interface ScenarioFile {
    * from `raw_storage.file_count`. Sets NEOTOMA_TEST_REAL_STORAGE=1.
    */
   real_storage?: boolean;
+  /**
+   * Public origin the isolated server reports for user-visible links
+   * (NEOTOMA_PUBLIC_BASE_URL). Pins otherwise port-dependent link text so a
+   * replayed reply can be compared verbatim.
+   */
+  public_base_url?: string;
   server_faults?: {
     /** Target MCP tool or HTTP endpoint to inject faults on. */
     target: string;

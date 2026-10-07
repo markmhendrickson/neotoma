@@ -594,6 +594,74 @@ export async function evaluatePredicate(
       }
       return null;
     }
+    case "reply_text.relays_tool_result": {
+      const calls = toolCallsNamed(ctx.toolCalls ?? [], predicate.tool_name);
+      const call = pickToolCall(calls, predicate.which);
+      if (!call) {
+        return {
+          predicate,
+          message: `reply_text.relays_tool_result: no invocation of "${predicate.tool_name ?? "(any)"}" was captured.`,
+          expected: predicate,
+          actual: (ctx.toolCalls ?? []).map((c) => c.name),
+        };
+      }
+      const key = predicate.result_key ?? "";
+      const { found, value } = getPath(call.output, key);
+      if (!found || typeof value !== "string" || value.length === 0) {
+        return {
+          predicate,
+          message: `reply_text.relays_tool_result: tool_result["${predicate.tool_name}"].${key} is ${
+            found ? "not a non-empty string" : "absent"
+          }, so there is nothing for the reply to relay.`,
+          expected: { result_key: key },
+          actual: call.output,
+        };
+      }
+      const reply = ctx.assistantText ?? "";
+      if (reply.includes(value)) return null;
+      return {
+        predicate,
+        message: `Expected the assistant reply to contain tool_result["${predicate.tool_name}"].${key} verbatim, but it did not.`,
+        expected: value,
+        actual: reply,
+      };
+    }
+    case "served_instructions.contains": {
+      let served = "";
+      try {
+        const res = await fetch(`${ctx.baseUrl}/mcp-interaction-instructions`);
+        served = res.ok ? await res.text() : "";
+      } catch {
+        served = "";
+      }
+      if (!served) {
+        return {
+          predicate,
+          message: `served_instructions.contains: GET /mcp-interaction-instructions returned no instructions.`,
+          expected: predicate,
+          actual: null,
+        };
+      }
+      if (predicate.pattern) {
+        if (new RegExp(predicate.pattern).test(served)) return null;
+        return {
+          predicate,
+          message: `Expected the served MCP instructions to match /${predicate.pattern}/, but they did not.`,
+          expected: predicate.pattern,
+          actual: `${served.length} chars`,
+        };
+      }
+      const needle = predicate.substring ?? "";
+      if (needle && served.includes(needle)) return null;
+      return {
+        predicate,
+        message: needle
+          ? `Expected the served MCP instructions to contain "${needle}", but they did not.`
+          : `served_instructions.contains requires "substring" or "pattern".`,
+        expected: needle,
+        actual: `${served.length} chars`,
+      };
+    }
     // ── store plan-mode (#2493) state-delta primitives ──
     case "stats.counter": {
       const field = predicate.field ?? "";
