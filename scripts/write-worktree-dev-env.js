@@ -44,7 +44,12 @@ function main(argv) {
     return 1;
   }
   if (argv.includes('--print')) {
-    process.stdout.write(buildWorktreeDevEnv(repoRoot));
+    try {
+      process.stdout.write(buildWorktreeDevEnv(repoRoot));
+    } catch (error) {
+      console.error(`[worktree-env] ${error.message} Nothing written.`);
+      return 1;
+    }
     return 0;
   }
   let result;

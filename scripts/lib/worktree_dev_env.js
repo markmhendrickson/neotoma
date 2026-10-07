@@ -56,8 +56,24 @@ function assertAllowlistIsNonSecret() {
   }
 }
 
-function formatValue(value) {
-  return /^[A-Za-z0-9_./:@+-]+$/.test(value) ? value : JSON.stringify(value);
+/** Characters a generated value may contain. Anything else is rejected, never escaped. */
+const SAFE_VALUE_CHARS = /^[A-Za-z0-9_./:@+ -]*$/u;
+const BARE_VALUE = /^[A-Za-z0-9_./:@+-]+$/;
+
+/**
+ * Generated files are read by both dotenv parsers and shell launchers, so a
+ * value is only written when it is made of characters that mean the same thing
+ * to all of them. Rejected values are not echoed.
+ */
+function formatValue(key, value) {
+  if (!SAFE_VALUE_CHARS.test(value)) {
+    throw new Error(
+      `cannot write ${key}: the value contains characters that are not allowed in a generated ` +
+        'env file (allowed: letters, digits, space and _ . / : @ + -). ' +
+        'Move the checkout to a path made of those characters, or set the value yourself.'
+    );
+  }
+  return BARE_VALUE.test(value) ? value : JSON.stringify(value);
 }
 
 /** Render the dev env file contents for the repository rooted at `repoRoot`. */
@@ -69,7 +85,7 @@ export function buildWorktreeDevEnv(repoRoot) {
     '# yourself (shell environment, or your own gitignored `.env` in this directory).',
   ];
   for (const { key, value } of WORKTREE_DEV_ENV_ALLOWLIST) {
-    lines.push(`${key}=${formatValue(value(repoRoot))}`);
+    lines.push(`${key}=${formatValue(key, value(repoRoot))}`);
   }
   return `${lines.join('\n')}\n`;
 }

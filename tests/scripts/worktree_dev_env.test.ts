@@ -384,6 +384,85 @@ for (const name of ['readFileSync','openSync','createReadStream','readFile','ope
   });
 });
 
+describe("generated values are validated before writing", () => {
+  const LOADER = join(SCRIPTS_DIR, "lib", "neotoma_mcp_source_env.sh");
+
+  /** A Neotoma-shaped checkout whose directory name is `name`. */
+  function checkoutNamed(name: string): string {
+    const dir = join(fixture.root, "named", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "neotoma" }));
+    return dir;
+  }
+
+  /** Evaluate the generated file through the shared shell loader the MCP launchers use. */
+  function loadThroughShellLoader(dir: string) {
+    return spawnSync(
+      "/bin/bash",
+      [
+        "--noprofile",
+        "--norc",
+        "-c",
+        `set -euo pipefail; REPO_ROOT="$1"; source "$2"; printf '%s' "$NEOTOMA_DATA_DIR"`,
+        "bash",
+        dir,
+        LOADER,
+      ],
+      { cwd: dir, encoding: "utf-8", env: { PATH: "/usr/bin:/bin" } }
+    );
+  }
+
+  const SHELL_ACTIVE_NAMES: Array<[string, (marker: string) => string]> = [
+    ["command substitution", (m) => `evil-$(touch ${m})-x`],
+    ["backticks", (m) => `evil-\`touch ${m}\`-x`],
+    ["variable expansion", () => "evil-${HOME}-x"],
+    ["bare variable", () => "evil-$HOME-x"],
+    ["double quote", () => 'evil-"-x'],
+    ["single quote", () => "evil-'-x"],
+    ["backslash", () => "evil-\\-x"],
+    ["newline", () => "evil-\nnewline-x"],
+  ];
+
+  it.each(SHELL_ACTIVE_NAMES)(
+    "refuses a checkout path containing %s: nothing written, nothing executed",
+    (_label, makeName) => {
+      const markerDir = join(fixture.root, "markers");
+      mkdirSync(markerDir, { recursive: true });
+      const marker = join(markerDir, `executed-${Math.random().toString(36).slice(2)}`);
+      const dir = checkoutNamed(makeName(marker));
+
+      const result = runScript([], { cwd: dir });
+      const output = `${result.stdout}${result.stderr}`;
+
+      if (existsSync(join(dir, ".env.development"))) {
+        // Only reachable if the generator wrote it: prove what evaluating it would do.
+        loadThroughShellLoader(dir);
+      }
+      expect(existsSync(marker), "shell-active path text was executed").toBe(false);
+      expect(existsSync(join(dir, ".env.development"))).toBe(false);
+      expect(result.status).not.toBe(0);
+      expect(output).not.toContain("evil-");
+
+      const printed = runScript(["--print"], { cwd: dir });
+      expect(printed.status).not.toBe(0);
+      expect(printed.stdout).toBe("");
+    }
+  );
+
+  it("still writes a path with spaces, and the shell loader reads it back literally", () => {
+    const dir = checkoutNamed("my repo (copy)-v1.2");
+    const parenthesised = runScript([], { cwd: dir });
+    // Parentheses are outside the allowed set, so this name is refused.
+    expect(parenthesised.status).not.toBe(0);
+
+    const spaced = checkoutNamed("my repo v1.2");
+    expect(runScript([], { cwd: spaced }).status).toBe(0);
+    const loaded = loadThroughShellLoader(spaced);
+    expect(loaded.status, loaded.stderr).toBe(0);
+    expect(loaded.stdout).toBe(join(spaced, "data"));
+  });
+});
+
 describe("worktree dev env allowlist", () => {
   it("contains no credential-named key", () => {
     for (const { key } of WORKTREE_DEV_ENV_ALLOWLIST) {
