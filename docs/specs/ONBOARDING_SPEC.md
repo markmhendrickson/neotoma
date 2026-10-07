@@ -22,7 +22,7 @@
 >
 > - **Install front door** — intended: guided architecture-revealing GUI; **today (shipped):** npm + CLI. Terminal is no longer the *primary install surface* for first-time users.
 > - **Activation model** — agent-driven (evaluation → install → activation → tooling) remains the preferred *how value is produced* path. Web UI signup→upload remains complementary *activation*, not the install front door, and is not the SD-001 architecture-revealing installer.
-> - **Hosted path** — in scope as an *optional* path per the SD-001 amendment of 2026-10-07: one shared hosted instance, joined by sign-in, beside the self-hosted install and never in place of it. No onboarding step may require it, and no account is required to use Neotoma. Its onboarding is held to the same architecture-revealing standard as the installer: before a person commits, it shows where their data will live, how members are isolated, which agents hold access, and how to export to a self-hosted instance. It is not zero-install and is not described that way. **Today:** intended and not shipped.
+> - **Hosted path** — in scope as an *optional* path per the SD-001 amendment of 2026-10-07: one shared hosted instance, joined by sign-in, beside the self-hosted install and never in place of it. No onboarding step may require it. Signing in is needed only to join the hosted Neotoma — never to use Neotoma, and never to self-host. Its onboarding is held to the same architecture-revealing standard as the installer: before a person commits, it shows where their data will live, how members are isolated, which agents hold access, and how to export to a self-hosted instance. It is not zero-install and is not described that way. **Today:** intended and not shipped.
 
 ## Scope
 This document covers:

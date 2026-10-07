@@ -143,7 +143,7 @@ The two documents disagree on the defining trait, and it is not a wording gap.
 
 Both are defensible (self-hosted multi-user is not managed SaaS), but read side by side they look contradictory in the two most public documents.
 
-*Update, 2026-10-07:* the SD-001 amendment of this date (`../foundation/scope_decisions.md`) puts one shared hosted instance in scope as an optional path, never a precondition, and keeps the rule that nothing is described as zero-install. That settles the scope side of O4. The ICP side stays open: whether D4 in `primary_icp.md` should still disqualify a prospect who wants only the hosted path. The public README and the functional exclusions remain accurate as statements of what ships today, since the hosted instance is not shipped.
+*Resolved, 2026-10-07:* the SD-001 amendment of this date (`../foundation/scope_decisions.md`) puts one shared hosted Neotoma in scope as an optional path, never a precondition, and keeps the rule that nothing is described as zero-install. An operator ruling the same day narrowed D4 in `primary_icp.md`: a buyer who wants only a hosted product is **future (hosted path intended, not shipped)** and in scope once it ships. The README, `icp_from_functionality.md`, `../getting_started/what_is_neotoma.md`, and `icp_reconciliation.md` were brought into line in the same pass, so the public docs no longer read as contradictory.
 
 ### Unimplemented follow-ups inherited from `icp_reconciliation.md`
 
