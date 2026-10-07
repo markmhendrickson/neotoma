@@ -3,7 +3,14 @@ openapi: 3.1.0
 info:
   title: Neotoma API
   version: 1.0.0
-  description: REST API for Neotoma. Use with any HTTP client, including ChatGPT Actions, Claude, Cursor, MCP servers, CLI tools, and custom integrations.
+  description: |
+    REST API for Neotoma. Use with any HTTP client, including ChatGPT Actions, Claude, Cursor, MCP servers, CLI tools, and custom integrations.
+
+    Optional conversation-turn headers: any request may send `X-Neotoma-Conversation-Id`
+    and `X-Neotoma-Turn-Key` (see `components.parameters`). The server stamps them on the
+    write events of every write the request makes (docs/subsystems/write_events.md).
+    They are self-reported and unverified, identifiers only; a malformed or repeated
+    value is ignored.
 servers:
   - url: https://mcp.neotoma.io
     description: Set from NEOTOMA_HOST_URL when served by the API; default shown for static/codegen use.
@@ -12,6 +19,36 @@ servers:
 security:
   - bearerAuth: []
 components:
+  parameters:
+    XNeotomaConversationId:
+      name: X-Neotoma-Conversation-Id
+      in: header
+      required: false
+      description: |
+        Optional. The client's conversation identifier, stamped on the write events of
+        every write this request makes (docs/subsystems/write_events.md). Self-reported
+        and unverified. At most 200 characters of ASCII letters, digits and
+        `. _ : @ # / -`; any other value, or a repeated header, is ignored (logged at
+        debug with the reason). On an MCP `tools/call`, an `io.neotoma/*` identity in
+        `params._meta` replaces the header identity as a whole.
+      schema:
+        type: string
+        maxLength: 200
+        pattern: "^[A-Za-z0-9._:@#/-]+$"
+    XNeotomaTurnKey:
+      name: X-Neotoma-Turn-Key
+      in: header
+      required: false
+      description: |
+        Optional. The conversation turn that caused this request, as
+        `{session_id}:{turn_id}` (docs/subsystems/conversation_turn.md), stamped on the
+        write events of every write this request makes. Same validation and precedence
+        as `X-Neotoma-Conversation-Id`. A caller can send any turn key, including
+        another caller's, so displays should show the recorded writer alongside it.
+      schema:
+        type: string
+        maxLength: 200
+        pattern: "^[A-Za-z0-9._:@#/-]+$"
   securitySchemes:
     bearerAuth:
       type: http
@@ -37,7 +74,9 @@ components:
       type: object
       description: |
         Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
-        (#2070). Operational metadata only: never persisted, never logged in full.
+        (#2070). Operational metadata only: never persisted, never logged in full,
+        except the optional `io.neotoma/*` turn identifiers, which are stamped on the
+        request's write events (docs/subsystems/write_events.md).
       additionalProperties: true
       properties:
         io.modelcontextprotocol/protocolVersion:
@@ -55,6 +94,16 @@ components:
           properties:
             name: { type: string }
             version: { type: string }
+        io.neotoma/conversation_id:
+          type: string
+          maxLength: 200
+          description: |
+            Optional client conversation id for this call's write events. Any usable
+            `io.neotoma/*` key here replaces the `X-Neotoma-*` header identity as a whole.
+        io.neotoma/turn_key:
+          type: string
+          maxLength: 200
+          description: Optional `{session_id}:{turn_id}` for this call's write events (#2440).
     McpJsonRpcRequest:
       type: object
       required: [jsonrpc, method]

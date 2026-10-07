@@ -18,6 +18,7 @@ import { getDataKey } from "../../repositories/sqlite/local_db_adapter.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { logger } from "../../utils/logger.js";
 import type { SubstrateEvent } from "../../events/types.js";
+import { toDeliverableSubstrateEvent } from "../write_events/write_context.js";
 
 /**
  * Encryption-at-rest for the durable-event-log payload.
@@ -35,7 +36,7 @@ function maybeEncryptPayload(plaintext: string): string {
   return key ? encryptColumn(plaintext, key) : plaintext;
 }
 
-function maybeDecryptPayload(stored: string): string {
+export function maybeDecryptPayload(stored: string): string {
   if (!isEncryptedColumn(stored)) {
     return stored; // legacy plaintext row, or encryption disabled at write time
   }
@@ -51,6 +52,23 @@ export const EVENT_RETENTION_DAYS = Math.max(
   1,
   parseInt(process.env.NEOTOMA_EVENT_RETENTION_DAYS ?? "7", 10) || 7
 );
+
+let durablePersistFailures = 0;
+
+/**
+ * Count a substrate event whose durable persist failed after its write had
+ * already committed. Such an event is absent from the write-event record and
+ * from durable resume. Returns the running total for this process.
+ */
+export function recordDurablePersistFailure(): number {
+  durablePersistFailures += 1;
+  return durablePersistFailures;
+}
+
+/** Durable-persist failures since process start (write events lost). */
+export function getDurablePersistFailureCount(): number {
+  return durablePersistFailures;
+}
 
 export interface DurableEvent {
   seq: number;
@@ -146,7 +164,11 @@ export async function getEventsAfterSeq(
     try {
       out.push({
         seq: row.seq,
-        event: JSON.parse(maybeDecryptPayload(row.payload)) as SubstrateEvent,
+        // Resume delivers to subscribers: strip the server-side write
+        // context the log keeps (write events; turn keys #2440). `listWriteEvents` reads it.
+        event: toDeliverableSubstrateEvent(
+          JSON.parse(maybeDecryptPayload(row.payload)) as SubstrateEvent
+        ),
       });
     } catch {
       // Skip a corrupt or undecryptable payload rather than fail the whole resume.

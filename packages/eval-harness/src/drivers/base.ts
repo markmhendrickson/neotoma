@@ -120,11 +120,78 @@ function resolvePathParams(path: string, input: unknown): string {
   });
 }
 
+const MCP_STATELESS_PROTOCOL = "2026-07-28";
+
+/**
+ * Send one tool call to the isolated server's `/mcp` route as a 2026-07-28
+ * stateless `tools/call`, with optional extra `_meta` keys and headers. Used by
+ * replay when a cassette call sets `transport: "mcp"`.
+ */
+async function postMcpTool(
+  baseUrl: string,
+  toolName: string,
+  input: unknown,
+  token: string,
+  meta: Record<string, unknown> | undefined,
+  extraHeaders: Record<string, string> | undefined
+): Promise<{ output?: unknown; error?: string }> {
+  const body = {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: toolName,
+      arguments: input ?? {},
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": MCP_STATELESS_PROTOCOL,
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": { name: "neotoma-eval-harness", version: "0.0.0" },
+        ...(meta ?? {}),
+      },
+    },
+  };
+  try {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "mcp-protocol-version": MCP_STATELESS_PROTOCOL,
+        "mcp-method": "tools/call",
+        "mcp-name": toolName,
+        ...(extraHeaders ?? {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      return { error: `${toolName} via /mcp returned status ${res.status}: ${text.slice(0, 400)}` };
+    }
+    const reply = JSON.parse(text) as {
+      result?: { content?: Array<{ type?: string; text?: string }>; isError?: boolean };
+      error?: { message?: string };
+    };
+    if (reply.error) return { error: `${toolName} via /mcp: ${reply.error.message ?? "error"}` };
+    const first = reply.result?.content?.find((c) => c.type === "text")?.text;
+    let output: unknown = first ?? reply.result;
+    try {
+      output = first ? JSON.parse(first) : output;
+    } catch {
+      // leave as text
+    }
+    return reply.result?.isError ? { error: String(first ?? "tool error") } : { output };
+  } catch (err) {
+    return { error: `${toolName} via /mcp failed: ${(err as Error).message}` };
+  }
+}
+
 async function postNeotomaTool(
   baseUrl: string,
   toolName: string,
   input: unknown,
-  token: string
+  token: string,
+  extraHeaders?: Record<string, string>
 ): Promise<{ output?: unknown; error?: string }> {
   const rawPath = TOOL_ENDPOINTS[toolName];
   if (!rawPath) return { error: `unknown Neotoma tool ${toolName}` };
@@ -136,6 +203,7 @@ async function postNeotomaTool(
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
+        ...(extraHeaders ?? {}),
       },
       body: isGet ? undefined : JSON.stringify(input ?? {}),
     });
@@ -164,12 +232,22 @@ export async function replayCassetteAgainstServer(
   const replayedCalls: ToolCall[] = [];
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };
-    if (NEOTOMA_TOOL_NAMES.has(call.name)) {
+    if (call.transport === "mcp") {
+      result = await postMcpTool(
+        invocation.neotomaBaseUrl,
+        call.name,
+        call.input,
+        invocation.neotomaToken,
+        call.mcp_meta,
+        call.headers
+      );
+    } else if (NEOTOMA_TOOL_NAMES.has(call.name)) {
       result = await postNeotomaTool(
         invocation.neotomaBaseUrl,
         call.name,
         call.input,
-        invocation.neotomaToken
+        invocation.neotomaToken,
+        call.headers
       );
     } else {
       // Host tools are deterministic stubs by definition.

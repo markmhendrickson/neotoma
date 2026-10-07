@@ -653,6 +653,39 @@ export async function evaluatePredicate(
         actual,
       };
     }
+    case "write_event.recorded": {
+      const expected = typeof predicate.value === "number" ? predicate.value : 1;
+      const op = predicate.op ?? "gte";
+      if (!ctx.dataDir) {
+        return {
+          predicate,
+          message: `write_event.recorded needs the isolated server's data dir, which this run did not provide.`,
+          expected: { op, value: expected },
+          actual: null,
+        };
+      }
+      const rows = await readWriteEvents(ctx.dataDir);
+      if (rows === null) {
+        // Fail closed: an unreadable log is never read as "zero events".
+        return {
+          predicate,
+          message: `write_event.recorded: could not read substrate_events from the isolated server's database.`,
+          expected: { op, value: expected },
+          actual: null,
+        };
+      }
+      const where = predicate.where ?? {};
+      const matching = rows.filter((r) =>
+        Object.entries(where).every(([k, v]) => (r as Record<string, unknown>)[k] === v)
+      );
+      if (compareNumber(matching.length, op, expected)) return null;
+      return {
+        predicate,
+        message: `Expected ${op} ${expected} write event(s) matching ${JSON.stringify(where)}, got ${matching.length}.`,
+        expected: { where, op, value: expected },
+        actual: rows.slice(-10),
+      };
+    }
     case "snapshot.field_present":
     case "snapshot.field_absent": {
       const field = predicate.field ?? "";
@@ -687,6 +720,61 @@ export async function evaluatePredicate(
         actual: Object.keys(snap),
       };
     }
+  }
+}
+
+/** Flattened write-event row as `write_event.recorded` matches it. */
+interface WriteEventRow {
+  event_type?: string;
+  operation?: string;
+  entity_type?: string;
+  turn_key?: string;
+  conversation_id?: string;
+  turn_source?: string;
+  client_name?: string;
+}
+
+/**
+ * Read the isolated server's durable write-event log straight from its SQLite
+ * file. Returns null when the database or table cannot be read. Payloads are
+ * plaintext here: isolated servers run without at-rest encryption.
+ */
+async function readWriteEvents(dataDir: string): Promise<WriteEventRow[] | null> {
+  const candidates = ["neotoma.db", "neotoma.prod.db"].map((f) => join(dataDir, f));
+  const dbPath = candidates.find((p) => existsSync(p));
+  if (!dbPath) return null;
+  try {
+    // Resolved from the repo root at run time; not a declared dependency of
+    // this package, so import it dynamically.
+    const mod = (await import("better-sqlite3" as string)) as {
+      default: new (p: string, o: Record<string, unknown>) => {
+        prepare: (sql: string) => { all: () => Array<{ payload: string }> };
+        close: () => void;
+      };
+    };
+    const db = new mod.default(dbPath, { readonly: true, fileMustExist: true });
+    try {
+      return db
+        .prepare("SELECT payload FROM substrate_events ORDER BY seq ASC")
+        .all()
+        .map((row) => {
+          const ev = JSON.parse(row.payload) as Record<string, any>;
+          const ctx = (ev.write_context ?? {}) as Record<string, any>;
+          return {
+            event_type: ev.event_type,
+            operation: ctx.operation,
+            entity_type: ev.entity_type,
+            turn_key: ctx.turn_key,
+            conversation_id: ctx.conversation_id,
+            turn_source: ctx.turn_source,
+            client_name: ctx.actor?.client_name,
+          };
+        });
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
   }
 }
 

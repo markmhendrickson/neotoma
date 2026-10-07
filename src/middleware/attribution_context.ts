@@ -34,6 +34,7 @@ import {
 } from "../crypto/agent_identity.js";
 import { getAttributionDecisionFromRequest } from "./aauth_verify.js";
 import { runWithRequestContext } from "../services/request_context.js";
+import { turnIdentityFromHeaders } from "../services/write_events/turn_identity.js";
 
 function headerString(req: Request, name: string): string | null {
   const value = req.headers[name];
@@ -112,6 +113,7 @@ export function attributionContext(): RequestHandler {
         agentIdentity: identity,
         attributionDecision: decision,
         externalActor,
+        turn: turnIdentityFromHeaders(req.headers as Record<string, unknown>),
       },
       () => {
         next();

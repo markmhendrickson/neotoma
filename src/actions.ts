@@ -76,6 +76,7 @@ import {
   runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { turnIdentityFromHeaders } from "./services/write_events/turn_identity.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
 import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
@@ -418,6 +419,10 @@ const corsOptions = {
     "X-Requested-With",
     "X-Connection-Id",
     "mcp-session-id",
+    // Client-reported conversation turn for write events
+    // (docs/subsystems/write_events.md).
+    "X-Neotoma-Conversation-Id",
+    "X-Neotoma-Turn-Key",
   ],
   exposedHeaders: ["Content-Type"],
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
@@ -2322,6 +2327,9 @@ app.all("/mcp", async (req, res) => {
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
           mcpConnectionId: connectionIdHeader ?? null,
+          // Header-carried turn identity; a tool call's own `_meta` overrides
+          // it inside the CallTool handler (write events; turn keys #2440, reads #2261).
+          turn: turnIdentityFromHeaders(req.headers as Record<string, unknown>),
         },
         () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
       );
@@ -2506,6 +2514,8 @@ app.all("/mcp", async (req, res) => {
         // The gate's resolved connection id: the MCP server reads this, never
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
+        // Header-carried turn identity (write events; turn keys #2440, reads #2261).
+        turn: turnIdentityFromHeaders(req.headers as Record<string, unknown>),
       },
       () => transport!.handleRequest(req, res, req.body)
     );
@@ -7648,13 +7658,15 @@ app.post("/observations/create", async (req, res) => {
       userId: user_id,
     });
 
+    const priorSnapshot = await getSnapshot(entity_id, user_id);
+    const writeStartedAt = new Date().toISOString();
     const obsData = await createObservation({
       entity_id,
       entity_type,
       schema_version: "1.0",
       source_id: null,
       interpretation_id: null,
-      observed_at: new Date().toISOString(),
+      observed_at: writeStartedAt,
       specificity_score: 1.0,
       source_priority,
       observation_source,
@@ -7665,6 +7677,30 @@ app.post("/observations/create", async (req, res) => {
 
     await recomputeSnapshot(entity_id, user_id);
     const snapshot = await getSnapshot(entity_id, user_id);
+
+    // Durable write record (docs/subsystems/write_events.md). createObservation
+    // returns the existing row on a content-identical replay; only a row it
+    // inserted now is a new write.
+    const insertedNow =
+      typeof obsData.created_at !== "string" || obsData.created_at >= writeStartedAt;
+    if (insertedNow) {
+      const { emitObservationWrite, shallowFieldsChanged: diffFields } =
+        await import("./events/substrate_store_emit.js");
+      emitObservationWrite({
+        user_id,
+        entity_id,
+        entity_type,
+        observation_id: obsData.id,
+        timestamp: obsData.observed_at ?? writeStartedAt,
+        is_new_entity: !priorSnapshot,
+        fields_changed: diffFields(
+          (priorSnapshot?.snapshot as Record<string, unknown> | undefined) ?? {},
+          (snapshot?.snapshot as Record<string, unknown> | undefined) ?? {}
+        ),
+        observation_source: observation_source ?? undefined,
+        source_peer_id: source_peer_id ?? undefined,
+      });
+    }
 
     return res.json({
       observation_id: obsData.id,

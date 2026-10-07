@@ -129,8 +129,10 @@ import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
+  getCurrentTurnIdentity,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { resolveToolCallTurnIdentity } from "./services/write_events/turn_identity.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
 import {
   emitEntitySnapshotChange,
@@ -2498,12 +2500,20 @@ export class NeotomaServer {
         // #2240: carry the signed-in person, when one stands behind this
         // session, so writes record who made them alongside the graph they
         // land in. Null for every non-sign-in auth path.
+        // Write events (turn keys #2440): the conversation turn that caused this
+        // call. The call's own `_meta` wins over a header the enclosing HTTP
+        // request carried; stdio callers can only use `_meta`.
+        const turnForThisCall = resolveToolCallTurnIdentity(
+          (request.params as { _meta?: unknown })._meta,
+          getCurrentTurnIdentity()
+        );
         const result = await runWithRequestContext(
           {
             agentIdentity: identity,
             attributionDecision,
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+            turn: turnForThisCall,
           },
           () => this.executeTool(name, args)
         );
@@ -6057,7 +6067,16 @@ export class NeotomaServer {
     }
 
     if (!existingObservation) {
-      await createObservation({
+      // First observation of this asset entity from any source? Decides
+      // created vs updated on the durable write record.
+      const { data: anyPriorObservation } = await db
+        .from("observations")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("entity_id", entityId)
+        .limit(1)
+        .maybeSingle();
+      const assetObservation = await createObservation({
         entity_id: entityId,
         entity_type: entityType,
         schema_version: "1.0",
@@ -6069,6 +6088,20 @@ export class NeotomaServer {
         fields,
         user_id: userId,
         idempotency_key: idempotencyKey ? `${idempotencyKey}:asset` : null,
+      });
+      // The asset record a file store creates is a write like any other
+      // (docs/subsystems/write_events.md).
+      const { emitObservationWrite } = await import("./events/substrate_store_emit.js");
+      emitObservationWrite({
+        user_id: userId,
+        entity_id: entityId,
+        entity_type: entityType,
+        observation_id: assetObservation.id,
+        timestamp: assetObservation.observed_at,
+        is_new_entity: !anyPriorObservation,
+        fields_changed: Object.keys(fields).sort(),
+        source_id: sourceId,
+        idempotency_key: idempotencyKey ? `${idempotencyKey}:asset` : undefined,
       });
     }
 

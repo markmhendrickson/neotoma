@@ -5,10 +5,17 @@ import { listAllSubscriptions, refreshSubscriptionInIndex } from "./subscription
 import { subscriptionMatchesEvent } from "./subscription_types.js";
 import { queueWebhookDelivery } from "./webhook_delivery.js";
 import { broadcastSubstrateEventToSse, pushSubstrateEventToRing } from "./sse_hub.js";
-import { persistSubstrateEvent } from "./event_log.js";
+import { persistSubstrateEvent, recordDurablePersistFailure } from "./event_log.js";
 import { queuePeerSyncDelivery } from "../sync/sync_webhook_outbound.js";
+import { toDeliverableSubstrateEvent } from "../write_events/write_context.js";
 
-export async function handleSubstrateEventForSubscriptions(event: SubstrateEvent): Promise<void> {
+export async function handleSubstrateEventForSubscriptions(
+  persistedEvent: SubstrateEvent
+): Promise<void> {
+  // The durable log keeps the server-side write context (operation, actor,
+  // turn; write events, turn keys #2440); nothing delivered to a subscriber does. Persist the
+  // full event, deliver the stripped one.
+  const event = toDeliverableSubstrateEvent(persistedEvent);
   try {
     // Durable log (#1464 Tier 2): persist synchronously FIRST so the durable
     // monotonic `seq` becomes the event's id everywhere — ring, SSE frame, and
@@ -17,9 +24,16 @@ export async function handleSubstrateEventForSubscriptions(event: SubstrateEvent
     // must never break delivery, so fall back to the ring's own id.
     let durableSeq: number | null = null;
     try {
-      durableSeq = await persistSubstrateEvent(event, null);
+      durableSeq = await persistSubstrateEvent(persistedEvent, null);
     } catch (err) {
-      logger.warn("[subscriptions] durable event persist failed", {
+      // The write itself has committed; only its durable record is lost. That
+      // event is then missing from the write-event record and from durable
+      // resume, so count it and log at error level rather than warn.
+      const failures = recordDurablePersistFailure();
+      logger.error("[subscriptions] durable event persist failed; write event lost", {
+        event_type: persistedEvent.event_type,
+        operation: persistedEvent.write_context?.operation,
+        failures_since_start: failures,
         message: err instanceof Error ? err.message : String(err),
       });
     }

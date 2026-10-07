@@ -61,6 +61,8 @@ export function aauthAdmission(): RequestHandler {
           agentIdentity: outer?.agentIdentity ?? null,
           attributionDecision: outer?.attributionDecision ?? null,
           aauthAdmission: negative,
+          // Keep the client-reported turn identity (write events; turn keys #2440, reads #2261).
+          turn: outer?.turn ?? null,
         },
         () => {
           next();
@@ -90,6 +92,7 @@ export function aauthAdmission(): RequestHandler {
             agentIdentity: outer?.agentIdentity ?? null,
             attributionDecision: outer?.attributionDecision ?? null,
             aauthAdmission: admission,
+            turn: outer?.turn ?? null,
           },
           () => {
             next();
@@ -111,6 +114,7 @@ export function aauthAdmission(): RequestHandler {
             agentIdentity: outer?.agentIdentity ?? null,
             attributionDecision: outer?.attributionDecision ?? null,
             aauthAdmission: fallback,
+            turn: outer?.turn ?? null,
           },
           () => {
             next(err instanceof Error ? undefined : undefined);

@@ -323,3 +323,60 @@ describe("#2493 raw_storage.file_count", () => {
     expect(await evaluatePredicate(p, ctx())).not.toBeNull();
   });
 });
+
+describe("write_event.recorded", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  const dataDirWithEvents = async (payloads: unknown[]) => {
+    const d = mkdtempSync(join(tmpdir(), "write-event-recorded-"));
+    dirs.push(d);
+    const { default: Database } = await import("better-sqlite3");
+    const db = new Database(join(d, "neotoma.db"));
+    db.exec(
+      "CREATE TABLE substrate_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, ring_id TEXT, event_type TEXT NOT NULL, user_id TEXT, entity_id TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL)"
+    );
+    const ins = db.prepare(
+      "INSERT INTO substrate_events (event_type, payload, created_at) VALUES (?, ?, ?)"
+    );
+    for (const p of payloads) {
+      ins.run((p as { event_type: string }).event_type, JSON.stringify(p), "2026-10-07T00:00:00Z");
+    }
+    db.close();
+    return d;
+  };
+  const created = (turn: string, source: string) => ({
+    event_type: "entity.created",
+    entity_type: "note",
+    write_context: { operation: "created", actor: {}, turn_key: turn, turn_source: source },
+  });
+
+  it("counts events whose flattened fields match `where`", async () => {
+    const d = await dataDirWithEvents([created("s:t1", "mcp_meta"), created("s:t2", "header")]);
+    const one: ExpectedAssertion = {
+      type: "write_event.recorded",
+      where: { turn_key: "s:t1", turn_source: "mcp_meta", operation: "created" },
+      op: "eq",
+      value: 1,
+    };
+    expect(await evaluatePredicate(one, ctx({ dataDir: d }))).toBeNull();
+    const none: ExpectedAssertion = {
+      type: "write_event.recorded",
+      where: { turn_key: "s:t1", turn_source: "header" },
+      op: "eq",
+      value: 1,
+    };
+    const fail = await evaluatePredicate(none, ctx({ dataDir: d }));
+    expect(fail).not.toBeNull();
+    expect(fail!.message).toContain("got 0");
+  });
+
+  it("fails closed with no data dir, and with a data dir that has no database", async () => {
+    const zero: ExpectedAssertion = { type: "write_event.recorded", op: "eq", value: 0 };
+    expect(await evaluatePredicate(zero, ctx())).not.toBeNull();
+    const empty = mkdtempSync(join(tmpdir(), "write-event-recorded-empty-"));
+    dirs.push(empty);
+    expect(await evaluatePredicate(zero, ctx({ dataDir: empty }))).not.toBeNull();
+  });
+});
