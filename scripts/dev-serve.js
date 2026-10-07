@@ -5,18 +5,12 @@ import readline from 'readline';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import { loadDevEnvFiles } from './lib/dev_env_files.js';
 
 const projectRoot = process.cwd();
 const nodeEnv = process.env.NODE_ENV || 'development';
 
-const envFiles =
-  nodeEnv === 'production'
-    ? [path.join(projectRoot, '.env.production'), path.join(projectRoot, '.env')]
-    : [path.join(projectRoot, '.env')];
-
-envFiles.forEach((file) => {
-  dotenv.config({ path: file });
-});
+loadDevEnvFiles(dotenv, projectRoot, nodeEnv);
 
 const bootTimeoutMs = Number(process.env.DEV_SERVE_BOOT_TIMEOUT_MS || 60000);
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';

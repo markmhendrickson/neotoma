@@ -11,11 +11,16 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR/..")
 echo "Setting up Cursor worktree..."
 
 # Write a minimal, non-secret .env.development (credentials are never copied)
-if [ -f "$SCRIPT_DIR/write-worktree-dev-env.js" ]; then
-  echo "Writing non-secret dev environment file..."
-  node "$SCRIPT_DIR/write-worktree-dev-env.js" || {
-    echo "Warning: Failed to write dev env file. You may need to run 'npm run setup:worktree-env' manually."
-  }
+if [ ! -f "$SCRIPT_DIR/write-worktree-dev-env.js" ]; then
+  echo "Error: worktree setup failed: $SCRIPT_DIR/write-worktree-dev-env.js not found." >&2
+  echo "Fix the checkout, then run: npm run setup:worktree-env" >&2
+  exit 1
+fi
+echo "Writing non-secret dev environment file..."
+if ! node "$SCRIPT_DIR/write-worktree-dev-env.js"; then
+  echo "Error: worktree setup failed: could not write the dev env file." >&2
+  echo "Retry with: npm run setup:worktree-env" >&2
+  exit 1
 fi
 
 echo "✓ Worktree setup complete"

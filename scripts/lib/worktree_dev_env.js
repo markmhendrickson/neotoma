@@ -11,7 +11,18 @@
  * (shell environment, or their own gitignored `.env` in the worktree).
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import {
+  closeSync,
+  constants,
+  existsSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 /** Key names that must never appear in a generated worktree env file. */
@@ -77,29 +88,86 @@ export function isNeotomaRepoRoot(dir) {
   }
 }
 
-/** Count (never print) credential-named keys already present in a file inside the repo. */
-function countCredentialNamedKeys(file) {
-  let count = 0;
-  for (const line of readFileSync(file, 'utf-8').split('\n')) {
-    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
-    if (match && CREDENTIAL_KEY_PATTERN.test(match[1])) count += 1;
+/**
+ * Inspect the destination directory entry WITHOUT following links or opening
+ * it. Returns null when nothing is there, otherwise 'file' or 'symlink'.
+ * Anything else (directory, device, socket, ...) is refused.
+ */
+function inspectDestination(destination) {
+  let stat;
+  try {
+    stat = lstatSync(destination);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return null;
+    throw error;
   }
-  return count;
+  if (stat.isSymbolicLink()) return 'symlink';
+  if (stat.isFile()) return 'file';
+  throw new Error(`${destination} exists and is not a regular file; leaving it alone.`);
 }
 
 /**
- * Write `.env.development` in `repoRoot`. An existing file is left alone unless
- * `force` is set, so a developer's own settings are never clobbered.
+ * Create `path` exclusively (never follows a link, never truncates) and write
+ * `contents` to it. Returns false when something already occupies the path.
+ */
+function createExclusive(path, contents) {
+  const flags =
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW || 0);
+  let fd;
+  try {
+    fd = openSync(path, flags, 0o600);
+  } catch (error) {
+    if (error && error.code === 'EEXIST') return false;
+    throw error;
+  }
+  try {
+    writeSync(fd, contents);
+  } finally {
+    closeSync(fd);
+  }
+  return true;
+}
+
+/**
+ * Replace the destination directory entry atomically. The new content goes to
+ * a fresh exclusive temp file beside it, then is renamed over the entry, so a
+ * symlink or hard link at the destination is replaced, never written through.
+ */
+function replaceDestination(repoRoot, destination, contents) {
+  const temp = join(repoRoot, `.env.development.${randomBytes(6).toString('hex')}.tmp`);
+  if (!createExclusive(temp, contents)) {
+    throw new Error('could not create a temporary file for regeneration');
+  }
+  try {
+    renameSync(temp, destination);
+  } catch (error) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      // The temp file is already gone; nothing more to clean up.
+    }
+    throw error;
+  }
+}
+
+/**
+ * Write `.env.development` in `repoRoot`. An existing entry is left alone (and
+ * never opened or read) unless `force` is set; regeneration replaces the
+ * directory entry itself and never writes through a link.
  */
 export function writeWorktreeDevEnv(repoRoot, { force = false } = {}) {
   const destination = join(repoRoot, '.env.development');
-  if (existsSync(destination) && !force) {
-    return {
-      status: 'kept',
-      destination,
-      credentialNamedKeys: countCredentialNamedKeys(destination),
-    };
+  const existing = inspectDestination(destination);
+  if (existing && !force) {
+    return { status: 'kept', destination };
   }
-  writeFileSync(destination, buildWorktreeDevEnv(repoRoot), { encoding: 'utf-8' });
-  return { status: 'written', destination, credentialNamedKeys: 0 };
+  const contents = buildWorktreeDevEnv(repoRoot);
+  if (existing) {
+    replaceDestination(repoRoot, destination, contents);
+    return { status: 'written', destination };
+  }
+  if (!createExclusive(destination, contents)) {
+    return { status: 'kept', destination };
+  }
+  return { status: 'written', destination };
 }

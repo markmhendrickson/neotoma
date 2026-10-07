@@ -47,17 +47,19 @@ function main(argv) {
     process.stdout.write(buildWorktreeDevEnv(repoRoot));
     return 0;
   }
-  const result = writeWorktreeDevEnv(repoRoot, { force: argv.includes('--force') });
+  let result;
+  try {
+    result = writeWorktreeDevEnv(repoRoot, { force: argv.includes('--force') });
+  } catch (error) {
+    console.error(`[worktree-env] ${error.message} Nothing written.`);
+    return 1;
+  }
   if (result.status === 'written') {
     console.log(`[worktree-env] Wrote non-secret dev settings to ${result.destination}`);
   } else {
-    console.log(`[worktree-env] ${result.destination} already exists; left untouched (use --force to regenerate).`);
-    if (result.credentialNamedKeys > 0) {
-      console.warn(
-        `[worktree-env] Warning: it holds ${result.credentialNamedKeys} credential-named key(s). ` +
-          'Remove them unless you set them on purpose.'
-      );
-    }
+    console.log(
+      `[worktree-env] ${result.destination} already exists; left untouched (use --force to regenerate).`
+    );
   }
   return 0;
 }
