@@ -4,19 +4,27 @@ status: "proposal"
 source_plan: "n/a (authored directly as a proposal, not migrated from a plan)"
 migrated_date: "n/a (authored 2026-10-07)"
 priority: "p1"
-estimated_effort: "Medium: identity and admission records, one admission point per transport and phase, client-side acknowledgement check, surface parity, docs"
+estimated_effort: "Medium: identity and admission records, one admission point per transport and phase, client-side acknowledgement check, local instance registry, surface parity, docs"
 ---
 
 # Target-instance check
 
 Design only. No implementation in this change. Design issue: #2589.
 
-Revision 2 addresses the first review round (pm, arch, qa, security, ux). The main
-changes: the asserted target must come from a source independent of the connection
-being checked; only `required` mode prevents a wrong write; an unknown or missing
-identity fails closed; servers that lack the check are detected by the client through a
-mandatory acknowledgement; the CLI gets an assertion source; mode changes need an admin
-credential; and the six open questions are resolved.
+**Revision 3** addresses the second review round. Main changes:
+
+- Connection bindings now defend only against misrouted connections. Under `required`,
+  a write must carry its own target, taken from a routing rule or the user's choice.
+- A local, user-confirmed registry of the user's Neotomas lets a title the user names
+  become an id, so "ask the user" can finish on a strict instance.
+- The identity commands (`restore-identity`, `reidentify`, `confirm-move`) now have
+  authority rules.
+- The admission-settings migration keeps existing instances `optional`.
+- Write admission is keyed on the server's own effect classification.
+
+Revision 2 addressed the first round: assertions come from intent, unknown identity fails
+closed, the client checks for a server acknowledgement, the CLI got an assertion source,
+mode changes are admin-gated, and the six open questions were resolved.
 
 ## Problem
 
@@ -32,8 +40,7 @@ Two failure classes follow, and they need different defences:
    instance B. Every call returns `success: true`. This is #2462: a session configured
    for a hosted instance served a local database for a whole day.
 2. **Misselection.** The client is connected to A and B correctly; the agent picks the
-   wrong connector for a given write. This is the failure #2381 anticipates: two
-   instances that both present as `neotoma`.
+   wrong connector for a given write. This is the failure #2381 anticipates.
 
 Motivating case, stated generically: a team runs several Neotoma instances, one of
 which holds confidential finance data. Writes of that data must never land on any other
@@ -41,278 +48,362 @@ instance, and writes meant for other instances must never land on it.
 
 ## Guarantees and non-goals
 
-State these before the mechanism, because operators choose modes from them.
+Operators choose modes from this section, so it comes before the mechanism.
 
-**What the server prevents.** An instance in `required` mode refuses every write that
-does not carry an id assertion matching that instance. An instance in any mode refuses
-every request whose assertion names a different instance. Neither refusal persists
-anything.
+### Two kinds of assertion, two defences
 
-**The motivating case holds only under these preconditions.** Confidential writes never
-land on a wrong instance only when (1) every instance in the team that could receive
-such a write runs this check in `required` mode, and (2) the writer's assertion comes
-from a source independent of the connection it is using (see "Where the asserted value
-must come from"). `optional` and `warn` do not prevent anything: `warn` gives
-detection, not prevention.
+| Kind | Sources | Phase | Defends against | Satisfies `required`? |
+|---|---|---|---|---|
+| **Connection binding** | `Neotoma-Expected-Instance` header, `?expected_instance=` URL, proxy `--expect-instance`, CLI `--expect-instance` / `NEOTOMA_EXPECTED_INSTANCE`, peer sync's recorded remote id | Connection | Misroute only. A binding describes the connection itself, so it always matches whichever connector the agent picked. | **No.** It is checked for mismatch, never counted as intent. |
+| **Per-write target** | `target_instance` tool argument; `params._meta["io.neotoma/expected_instance"]` set by a client from a routing decision or user choice; CLI `--target-instance` on a write command | Request | Misselection. | **Yes**, an id-form per-write target. |
 
-**What the server cannot catch.** An agent that does not recognise data as
-confidential, and therefore asserts the instance its routing rule names for ordinary
-data (or the instance it is already using), is admitted. An agent that copies the
-served instance's own id into its assertion, against its instructions, is admitted. The
-check makes the agent's routing decision verifiable; it cannot make the decision.
+A proxy never injects a per-write target from its own flag. It carries its binding only
+as the connection header.
+
+### What each configuration prevents
+
+| Configuration on the receiving instance | Misroute (#2462) | Misselection, write carries a per-write target | Misselection, write carries no per-write target |
+|---|---|---|---|
+| `optional`, connection bound | Prevented | Prevented (mismatch) | **Admitted** |
+| `warn`, connection bound | Prevented | Prevented (mismatch) | **Admitted**, with a warning (detection only) |
+| `required`, connection bound | Prevented | Prevented (mismatch) | Rejected, `ERR_TARGET_INSTANCE_REQUIRED` |
+| Any mode, no binding | Not prevented unless a per-write target is present | Prevented (mismatch) | As the mode row above |
+
+"Prevented" assumes the receiving server runs this check, or the client runs the echo
+rule in "Acknowledgement and capability" below.
+
+**The motivating case holds only when all of these are true:**
+
+1. Every instance that could receive a confidential write runs `required`.
+2. Every write's per-write target comes from a routing rule, or from the user's choice
+   resolved through the local registry. It never comes from the connection the write
+   travels on.
+3. Clients run the echo rule, or every reachable server runs the check.
+
+Under these conditions, a confidential write sent through the wrong connector is
+rejected. If it carries the finance id, the wrong instance answers with a mismatch. If
+it carries no target, a `required` instance answers that a target is required. An
+ordinary write sent through the finance connector is rejected the same way.
+
+**Reads.** `read_assertion` defaults to `optional`. By default, an unasserted read can
+pull confidential content into a context that then writes elsewhere. Operators of a
+confidential instance should set `read_assertion: required`.
+
+**What the server cannot catch:**
+
+- An agent that does not recognise data as confidential, and so asserts the target its
+  routing rule names for ordinary data, is admitted.
+- An agent that copies the served id into its per-write target, against its
+  instructions, is admitted.
+- A user who confirms the wrong Neotoma when enrolling it in the registry gets writes
+  admitted to that Neotoma.
+
+The check makes routing decisions verifiable; it cannot make them.
 
 **Non-goals.**
 
-- Not access control. The instance id is public by design. This guards against
+- **Not access control.** The instance id is public by design. This guards against
   accidents among honest Neotoma servers.
-- No guarantee against a hostile or impersonating endpoint, which can return any public
-  id in its metadata. If that guarantee is ever wanted, it needs server authentication
-  (a signed server card or TLS identity), which is outside this design.
-- No disclosure protection. A rejected write has still sent its payload to the wrong
-  server. The check stops persistence. Rejected request bodies must stay out of request
-  logs, error reporters, and audit event contents.
-- No automatic routing. Choosing the connector for the agent stays out of scope, as
-  #2381 ruled.
+- **No guarantee against a hostile or impersonating endpoint.** Such an endpoint can
+  return any public id. That guarantee would need server authentication (a signed server
+  card or TLS identity), which is outside this design.
+- **No disclosure protection.** A rejected write has already sent its payload to the
+  wrong server; the check stops persistence only. Rejected request bodies must stay out
+  of request logs, error reporters, and audit event contents (test 12 checks this).
+- **No automatic routing.** Choosing the connector stays out of scope, as #2381 ruled.
 
 ## Prior art this design builds on
 
 - **#2381** specifies an optional, operator-configured display label
-  (`NEOTOMA_INSTANCE_TITLE`, surfaced as `serverInfo.title`) and rules that a label is
-  never authorization and never a write-destination selector. This design keeps that
-  ruling: the title is for humans; the check keys on a separate stable id.
+  (`NEOTOMA_INSTANCE_TITLE`, surfaced as `serverInfo.title`). It rules that a label is
+  never authorization and never a write-destination selector. The title stays for
+  humans, and the check keys on a separate stable id.
 - **#2462** asks for an additive `instance` object on `GET /session` and
-  `get_session_identity`, and its engineering spec lists fields for it (served origin,
-  deployment kind, policy id, local data directory). This design **extends** that
-  object with `instance_id`, `title`, `target_assertion`, and `read_assertion`; it does
-  not replace the #2462 fields. One shape ships on that key.
-- **Instance policy** (`src/services/instance_policy.ts`) establishes the admission
-  pattern reused here: instance-wide scope, whole-request reject with `0 persisted`, a
-  denied versus unavailable split, and a structural test pinning every write path.
-- **Rules design** (#2565) establishes scoped delivery, mandatory rules, and harness
-  hook packages. Category-to-instance routing is a #2565 rule that produces the
-  assertion.
+  `get_session_identity`, with the fields its engineering spec lists. This design
+  **extends** that object with `instance_id`, `title`, `target_assertion`,
+  `read_assertion`, and pending identity or mode operations. It does not replace the
+  #2462 fields.
+- **Instance policy** (`src/services/instance_policy.ts`) supplies the admission
+  pattern: whole-request reject with `0 persisted`, a denied versus unavailable split,
+  and a structural write-path test.
+- **Rules design** (#2565). Category-to-instance routing is a #2565 rule that produces
+  the per-write target.
 
 ## Design
 
 ### (a) Instance identity and title
 
-**Instance id.** A dedicated single-row identity record, outside the entity graph:
-`instance_id` (`nti_` followed by 26 characters of Crockford base32 from 128 random
-bits), `created_at`, and the serving location last recorded (public origin, or the
-database path for a local instance). Being outside the entity graph, it is unreachable
-from `store`, `correct`, `merge`, `delete`, `restore`, and peer sync.
+**Instance id.** A dedicated single-row identity record outside the entity graph holds:
 
-The id is **bound to the database, not to the process configuration.** This is the
-property that catches #2462. In that incident the configuration was correct and the
-data store was wrong; an id derived from configuration, hostname, or environment would
-have matched. An id stored in the database changes whenever the database behind the
-transport changes. Consequences:
+- `instance_id`: `nti_` followed by 26 Crockford base32 characters from 128 random bits;
+- `created_at`;
+- the serving location last recorded: the public origin, or the database path for a
+  local instance.
 
-- The id is not settable by environment variable or flag.
-- The id survives restarts, upgrades, host moves, and restores of the same database.
-- Peer sync never copies the identity record (asserted from slice 1).
+It is unreachable from `store`, `correct`, `merge`, `delete`, `restore`, and peer sync.
+The server resolves it once, when the database handle opens, not per request. That keeps
+pre-auth checks off the database and still catches a swapped file.
 
-**When an id is minted.** Only in two cases: first initialisation of an empty database,
-and the one-time, versioned upgrade migration that introduces the identity record on a
-pre-feature database. The migration is recorded in the migration ledger. **Server
-startup never mints an id over existing data.** If the ledger says the identity record
-was created and the record is missing, or the database is non-empty and has neither the
-record nor a pre-feature schema version, the instance refuses writes with
-`ERR_TARGET_INSTANCE_UNAVAILABLE` until an operator runs `neotoma instance restore-identity`
-(re-adopt a known id) or `neotoma instance reidentify` (mint a new one). A pre-feature
-backup restored onto a new server goes through the migration and gets a new id; clients
-bound to the old id then fail closed by mismatch, which is the safe outcome.
+The id is **bound to the database, not to the process configuration.** This is what
+catches #2462: there the configuration was right and the data store was wrong. An id
+derived from configuration, hostname, or environment would have matched. Consequences:
 
-**Title.** As specified in #2381: `NEOTOMA_INSTANCE_TITLE`, trimmed, NFC-normalized,
-blank means unset, at most 120 characters, no control characters, disclosed to any
-connecting client including unauthenticated discovery. Not unique, not authenticated,
-never sufficient to admit a write on a `required` instance.
+- The id is not settable by environment variable, flag, or any free-form argument.
+- It survives restarts, upgrades, host moves, and restores of the same database.
+- Peer sync never copies the identity record.
 
-**Short id.** Wherever an abbreviated id is shown (turn-summary header, connector key),
-it is `nti_` followed by the first 6 characters after the prefix, for example
-`nti_7m2k9q`. That gives 30 bits of distinguishing characters, not the 4 that an
-8-character prefix would leave.
+**When an id is minted.** Only on first initialisation of an empty database, or by the
+one-time, ledgered upgrade migration on a pre-feature database. **Startup never mints an
+id over existing data.** A pre-feature backup restored onto a new server goes through
+the migration and gets a new id. Clients bound to the old id then fail closed by
+mismatch.
 
-**Where the identity appears.** One resolver, the same `{ instance_id, title }` on every
-surface:
+**Identity states and what serves them:**
+
+| State | Writes | Asserted reads | Unasserted reads | Code |
+|---|---|---|---|---|
+| Readable, location unchanged | Normal admission | Normal | Per `read_assertion` | (none) |
+| Unreadable, or present but malformed | Refused | Refused (an unknown identity never matches) | Per `read_assertion` from the settings record; results carry `instance_id: null` and no acknowledgement, so echoing clients discard them | `ERR_TARGET_INSTANCE_UNAVAILABLE`, retryable |
+| Missing on a non-empty database whose ledger records it | Refused | Refused | As for unreadable | `ERR_TARGET_INSTANCE_IDENTITY_MISSING`, not retryable |
+| Serving location changed, instance `required` | Refused until confirmed | Normal | Normal | `ERR_TARGET_INSTANCE_MOVE_UNCONFIRMED`, not retryable |
+| Serving location changed, otherwise | Normal, warning in result body | Normal | Normal | (none) |
+
+**Identity commands and their authority.** `neotoma instance restore-identity`,
+`neotoma instance reidentify`, and `neotoma instance confirm-move` share these rules:
+
+- They take the same authority as mode changes: an admin credential, through an operator
+  channel outside MCP, never an agent-scoped token, never an entity path.
+- Each is audited and shown in `/session` and `describe_instance_policy`.
+- **`restore-identity`** runs only while the identity record is missing. It takes the id
+  only from an identity export of *this* database, never as a free-form argument.
+  `neotoma instance export-identity` writes that export, and backups include it. It
+  carries the id plus a fingerprint of the database's earliest records. The command
+  refuses an export whose fingerprint does not match the database it is restoring into.
+- **`reidentify`** mints a fresh random id. It never accepts a supplied id.
+- **`confirm-move`** records the new serving location. It refuses while the previous
+  location still answers with the same id, or still holds a database with that id, and
+  directs the operator to reidentify one of the two. Confirming a copy as a move can
+  therefore never leave two live databases sharing one id.
+- **Error hints name the operator as the actor and give no command arguments.** Example
+  for identity missing: "This Neotoma's identity record is missing, so it cannot confirm
+  which instance it is. Its operator must restore it from this database's own backup.
+  Tell the user; do not retry." No hint suggests running any identity command with a
+  client-supplied id.
+
+**Title.** As specified in #2381: `NEOTOMA_INSTANCE_TITLE`. It is trimmed and
+NFC-normalized, and blank means unset. It is at most 120 characters with no control
+characters, and it is visible to any connecting client, including unauthenticated
+discovery. A title is not unique, not authenticated, and never sufficient to admit a
+write on a `required` instance.
+
+**Short id.** `nti_` followed by the first 6 characters after the prefix, for example
+`nti_7m2k9q`.
+
+**Where the identity appears.** One resolver supplies the same `{ instance_id, title }`
+to every surface:
 
 | Surface | Carrier |
 |---|---|
-| MCP `initialize` | `serverInfo.title` (title); `InitializeResult._meta["io.neotoma/instance"]` (id, title); capability flag (see "Acknowledgement and capability" below). `serverInfo.name` stays `"neotoma"`. |
-| Every MCP tool result | `_meta["io.neotoma/instance"]` with `instance_id`, `title`, `assertion_checked`; the existing `io.modelcontextprotocol/serverInfo` meta key gains `title`. Plus a one-line identity statement in the result content (see below). |
-| Every REST response | `Neotoma-Instance-Id`, `Neotoma-Instance-Title`, `Neotoma-Assertion-Checked` response headers. |
-| `GET /session`, `get_session_identity`, CLI `auth session` | The #2462 `instance` object, extended as stated above. |
-| `describe_instance_policy` and the instance-policy instructions renderer | `target_assertion` and `read_assertion`, so agents learn an instance's admission rules in one place. |
-| Server card (`/.well-known/mcp/server-card.json`) | `serverInfo.title` and an `instance` block. |
+| MCP `initialize` | `serverInfo.title`; `InitializeResult._meta["io.neotoma/instance"]`; capability flag. `serverInfo.name` stays `"neotoma"`. |
+| Every MCP tool result | `_meta["io.neotoma/instance"]` with `instance_id`, `title`, `assertion_checked`. A content identity line, appended as a separate text item after the existing content (following the runtime-update-notice pattern), never edited into `content[0]`. |
+| Every REST response | `Neotoma-Instance-Id`, `Neotoma-Instance-Title`, `Neotoma-Assertion-Checked` headers. |
+| `GET /session`, `get_session_identity`, CLI `auth session` | The extended #2462 `instance` object. |
+| `describe_instance_policy` and its instructions renderer | `target_assertion`, `read_assertion`, pending loosening, pending identity operations. |
+| Server card | `serverInfo.title` and an `instance` block. |
 
-**Model visibility.** In several clients, Claude among them, the model sees result
-content and not protocol `_meta`, and response headers reach only the client. So `_meta`
-and headers are the carrier for clients, proxies, and hooks, and each tool result also
-carries a short content line for the model, for example
-`Neotoma instance: Personal graph (nti_7m2k9q), assertion checked`. The implementing
-slice confirms what reaches the model in Claude Code, Claude Desktop, and Cursor, and
-records the evidence.
+**Content identity line wording.** The line has three forms:
 
-**Correlation.** A stable, unauthenticated id on every response survives host moves and
-can correlate a self-hosted instance across addresses. This design accepts that: the id
-must be readable before authentication for misroute diagnosis and proxy preflight. The
-acceptance is stated in the operator setup docs next to the title disclosure.
+- `Neotoma instance: Personal graph (nti_7m2k9q); target checked`;
+- `...; no target asserted`;
+- `...; identity unknown, result unverified`.
+
+The implementing slice records, as a committed evidence artifact, which carriers reach
+the model in Claude Code, Claude Desktop, and Cursor. The line is plain text, and stored
+content echoed in a result could carry a look-alike line. Clients that can read `_meta`
+rely on `_meta`.
+
+**Correlation.** A stable, unauthenticated id on every response can correlate a
+self-hosted instance across addresses. The design accepts this, because the id must be
+readable before authentication for misroute diagnosis and preflight. The operator setup
+docs state the trade-off.
 
 ### (b) Declaring the intended instance
 
-#### Where the asserted value must come from
+#### Where a per-write target must come from
 
-An assertion only catches misselection if its value comes from **intent**, independent
-of the connection being checked. Valid sources:
+A per-write target catches misselection only if its value comes from intent and is
+independent of the connection the write travels on. There are two valid sources:
 
-1. A **routing rule** (a #2565 rule mapping a data category to an instance id, with the
-   title alongside for display).
-2. A **connection binding the user configured**: a plugin or connector config, a proxy
-   flag, a CLI flag or environment variable.
-3. **The user**, naming the target in the conversation.
+1. **A routing rule.** This is a #2565 rule mapping a data category to an instance id,
+   with the title alongside for display.
+2. **The user's choice, resolved through the local registry.** See below.
 
-**The served instance's own identity is never a valid source.** Headers, result
-`_meta`, the content identity line, the instructions, `get_session_identity`, and the
-server card identify the instance for display and for verification. An agent must not
-copy the id it reads from a connection into an assertion sent over that same connection;
-doing so turns the check into an echo that always passes. When no rule, binding, or user
-statement names a target for a write, the agent asks the user.
+The served instance's own identity is never a valid source. That covers headers, result
+`_meta`, the content line, instructions, `get_session_identity`, and the server card,
+all of which are for display and verification. Connection bindings are not valid
+sources either, since they describe the connection.
+
+#### The local instance registry
+
+Users name Neotomas by title, titles do not satisfy `required`, and copying the served
+id is forbidden. A user's answer therefore needs a trusted mapping from title to id that
+does not come from the connection being written to.
+
+- **What it is.** A local, user-confirmed list of the user's Neotomas. Each entry holds
+  a title or user-chosen alias, the `instance_id`, the short id, and the connector key.
+  It is kept by the client, plugin, or CLI configuration on the user's machine, never on
+  any Neotoma instance.
+- **How entries are added.** Only through enrollment: `neotoma instance enroll`, run by
+  `neotoma mcp config` when the user connects each Neotoma, or run on its own.
+  Enrollment reads the served id and title once, through preflight. It shows them to the
+  user, who confirms them or gives an alias. Aliases must be unique within the registry;
+  the user disambiguates a colliding title at enrollment. Enrollment is a user action
+  through the CLI. Harness hook packages deny agent tool calls that edit the registry
+  file where the harness can refuse tool calls. Every change is logged locally.
+- **Why it is not an echo.** At write time the agent reads the registry, not the
+  connection. The user's words pick the entry, and the entry was confirmed by the user
+  at enrollment, independently of whichever connector the agent is about to use. The
+  registry is never updated from a connection at write time.
+- **How the agent uses it.** The plugin's session-start hook, or
+  `neotoma instance registry list` for the CLI, exposes the registry to the agent. When
+  the user names a target ("Finance graph"), the agent looks up that alias and asserts
+  the entry's id as `target_instance`. If the routing rule's title differs from the
+  registry alias, the agent shows the user the title and short id to confirm. A
+  confirmed choice may be saved as a routing rule, so the next write has a source.
+- **No entry, or several.** If the name matches no entry, the agent does not write to a
+  `required` instance and never falls back to a served id. It tells the user the
+  Neotoma is not enrolled and gives the enrollment command to run. If several entries
+  could match, which only happens with a near-miss name since aliases are unique, the
+  agent lists them by alias and short id and asks the user to choose.
 
 #### Assertion grammar
 
-- Id assertion: matches `^nti_[0-9a-hjkmnp-tv-z]{26}$`.
-- Title assertion: `title:<text>`, where text is trimmed, NFC-normalized, compared
-  case-sensitively, at most 120 characters, no control characters.
-- Empty, whitespace-only, or otherwise malformed values are **not** treated as absent.
-  They are rejected with `ERR_TARGET_INSTANCE_MALFORMED` (HTTP 400), and the malformed
-  value is not echoed.
-- Repeated headers, repeated query parameters (parsed as arrays), and multiple sources
-  are all assertions; every one must match. Never first-wins.
-
-#### Sources
-
-| Source | Set by | Mechanism | Phase checked |
-|---|---|---|---|
-| Connection header | Client config, proxy, SDK | `Neotoma-Expected-Instance` on every request | Connection (pre-auth) |
-| Connection URL | Remote connector config where headers are not configurable | `?expected_instance=<id>` on the MCP URL | Connection (pre-auth) |
-| Proxy flag | Plugin or `mcp.json` launcher | `neotoma mcp proxy --expect-instance <id>`; sends the header; implies `--session-preflight` and `--fail-closed`; refuses to start on an empty value; refuses to serve any tool call when preflight returns no `instance` object, no capability flag, or a different id, naming both ids | Startup and connection |
-| CLI | CLI user or agent | `--expect-instance <id>` or `NEOTOMA_EXPECTED_INSTANCE`; sends the header on the API transport; checked against the local identity record on `--offline` | Connection, or local |
-| Per-call, client | MCP client or SDK | `params._meta["io.neotoma/expected_instance"]` on `tools/call` | Request (post-auth) |
-| Per-call, agent | The model | Reserved top-level argument `target_instance` (string only), MCP only | Request (post-auth) |
-
-The agent-settable argument exists because a model can set tool arguments but not
-request `_meta`. It is defined once in the OpenAPI contract and injected into every MCP
-tool's input schema by the tool-definition builder. The exact top-level key is removed
-before the tool's own validation, so it passes `.strict()` schemas, and it is never
-stored as a field or raw fragment. REST carries the assertion only as the header, so it
-never collides with the closed-schema guard; the CLI carries it as a flag or environment
-variable.
+- Id: `^nti_[0-9a-hjkmnp-tv-z]{26}$`.
+- Title (connection bindings and `optional` or `warn` modes only): `title:<text>`.
+  The text is trimmed, NFC-normalized, compared case-sensitively, at most 120
+  characters, with no control characters.
+- Empty, whitespace-only, or malformed values are rejected with
+  `ERR_TARGET_INSTANCE_MALFORMED` and never echoed.
+- Repeated headers, repeated query parameters, and multiple sources must all match;
+  there is no first-wins.
+- `target_instance` is string-only and MCP-only. It is defined once in OpenAPI and
+  injected by the tool-definition builder. The exact top-level key is removed before the
+  tool's own validation, so it passes `.strict()` schemas and is never stored. REST
+  carries a per-write target in a `Neotoma-Target-Instance` request header, distinct
+  from the binding header. The CLI carries it as `--target-instance`.
 
 **Composition.** Every assertion present must match the served instance. A connection
-bound to A carrying a per-call assertion of B is rejected even when served by A.
+bound to A carrying a per-write target of B is rejected even when served by A.
 
 #### Acknowledgement and capability
 
-A server that predates this feature, or a stray server from an old checkout, ignores
-the header and URL parameter and silently strips `target_instance` (MCP argument
-schemas strip unknown keys). Those stray servers are exactly the #2462 class, so the
-check must not depend on the server reached being a checking server.
+A server without the check ignores the headers and URL parameter and strips
+`target_instance` (MCP argument schemas strip unknown keys). The protection therefore
+cannot rely on the server that is reached.
 
 - **Capability.** `initialize` advertises
   `capabilities.experimental["io.neotoma/target_instance_check"] = { "version": 1 }`.
-- **Acknowledgement.** Every MCP result carries
-  `_meta["io.neotoma/instance"].assertion_checked: true` when one or more assertions were
-  evaluated and matched; every REST response carries `Neotoma-Assertion-Checked: true`
-  in the same case. The content identity line says "assertion checked".
-- **Client-side echo rule.** Every asserting client (proxy, SDK, CLI, and harness hooks
-  that can read results) compares the served `instance_id` on every response with what
-  it asserted. A response with a missing id, a missing acknowledgement, or a different id
-  counts as a mismatch. For a read, the client discards the result. For a write, the
-  write may already have persisted on a non-checking server, so the client raises
-  `ERR_TARGET_INSTANCE_UNVERIFIED`, surfaces the returned entity ids as possibly
-  misplaced, and stops further writes on that connection.
-- **Preflight.** The proxy and CLI check the capability and id before sending any tool
-  call, so a binding to a non-checking server fails before the first write, not after.
-- **Agent rule.** A write result whose content lacks "assertion checked" when the agent
-  asserted a target is unverified; the agent tells the user rather than continuing.
+- **Acknowledgement.** When assertions were evaluated and all matched,
+  `_meta["io.neotoma/instance"].assertion_checked` is `true`, the
+  `Neotoma-Assertion-Checked: true` header is set, and the content line says "target
+  checked".
+- **Client echo rule.** Every asserting client checks the served `instance_id` on every
+  response, including responses after preflight. This covers the proxy, SDK, CLI, and
+  hooks that can read results, so a backend that changes mid-session is caught. A
+  missing id, missing acknowledgement, or different id is a mismatch:
+  - **On a read**, the result is discarded.
+  - **On a write**, the client raises `ERR_TARGET_INSTANCE_UNVERIFIED` and surfaces the
+    returned entity ids as possibly misplaced. It then stops further writes on that
+    connection until the user reviews them and resets the connection: `neotoma mcp
+    proxy` restart, a client reconnect, or CLI `--reset-unverified`.
+- **Preflight.** The proxy and CLI check the capability and id before any tool call.
+  `--expect-instance` implies `--session-preflight` and `--fail-closed`, and an empty
+  value refuses to start.
+- **Agent rule.** If the agent asserted a target and the write result's content lacks
+  "target checked", the write is unverified. The agent makes no further write and tells
+  the user.
 
 ### (c) Server admission
 
-**Two phases.** `/mcp` authenticates inside its route handler before JSON-RPC dispatch,
-so per-call assertions can only be evaluated after auth.
+**Two phases.** `/mcp` authenticates in its route handler before JSON-RPC dispatch.
 
-1. **Connection phase, pre-auth.** Header and URL assertions are checked in the `/mcp`
-   route and in a REST middleware placed ahead of authentication and ahead of
-   `unknownFieldsGuard`, so a misrouted request to a server with a different schema gets
-   the mismatch error, not `ERR_UNKNOWN_FIELD` or an auth failure that sends the agent
-   hunting for tokens. The id and title are already public through discovery, so the
-   error discloses nothing new. Pre-auth rejections write no audit events (a rate-limited
-   log line only), so unauthenticated callers cannot fill the audit log.
-2. **Request phase, post-auth.** `_meta` and `target_instance` are checked in the MCP
-   `tools/call` dispatcher, before the tool handler and before any database write.
+1. **Connection phase, pre-auth.** Binding assertions are checked in the `/mcp` route
+   and in a REST middleware ahead of authentication and `unknownFieldsGuard`. Pre-auth
+   rejections write no audit events, only a rate-limited log line.
+2. **Request phase, post-auth.** Per-write targets are checked in the MCP `tools/call`
+   dispatcher, and REST per-write targets in route middleware after auth. Both run
+   before the handler and before any write.
 
-The CLI's offline path runs the same check against the local identity record. A
-structural test, in the style of `instance_policy_write_path_coverage.test.ts`, pins
-every entry point to its phase. Because the check is on the request envelope, it covers
-raw and file storage, which instance policy does not.
+The CLI offline path checks against the local identity record. A structural test pins
+every entry point to its phase. The envelope-level check also covers raw and file
+storage.
 
-**Read and write classification.** MCP `annotations.readOnlyHint` is the single source,
-required on every tool; a tool without it fails CI. REST routes are classified by method
-and OpenAPI operation. No parallel table.
+**Effect classification.** Write admission keys on the **server's own effect
+classification**, never on client-visible hints:
 
-**Modes.** Two independent, tighten-only axes:
+- Each tool and REST operation declares `effect: read | write` in the server-side tool
+  registry and route table.
+- `readOnlyHint` is generated from that declaration as output, never read as input.
+- A missing or unknown classification is treated as a write **at runtime**, not only
+  in CI.
+- A structural test runs every read-classified tool and route and asserts that every
+  table's row count is unchanged, so a misclassified tool fails.
 
-| Setting | Values | Default | Effect when no assertion is present |
+**Modes.** There are two independent, tighten-only axes:
+
+| Setting | Values | Default | Effect when no per-write target is present |
 |---|---|---|---|
-| `target_assertion` | `optional`, `warn`, `required` | `optional`; `warn` for newly created hosted identity records | `optional`: admitted. `warn`: admitted, with a warning in the result body (the `store_warnings` precedent) and an audit event. `required`: write rejected with `ERR_TARGET_INSTANCE_REQUIRED`. |
-| `read_assertion` | `optional`, `required` | `optional` | `required`: reads rejected with `ERR_TARGET_INSTANCE_REQUIRED`, except identity and discovery calls (`initialize`, `get_session_identity`, `GET /session`, server card, `describe_instance_policy`), which stay exempt so an agent can learn what to verify. |
+| `target_assertion` | `optional`, `warn`, `required` | `optional`; `warn` for newly created hosted instances; existing upgraded instances `optional` | `optional`: admitted. `warn`: admitted, with a warning in the result body and an audit event. `required`: write rejected with `ERR_TARGET_INSTANCE_REQUIRED`. A connection binding does not count. |
+| `read_assertion` | `optional`, `required` | `optional` | `required`: ordinary reads rejected. Identity and discovery calls stay exempt: `initialize`, `get_session_identity`, `GET /session`, the server card, and `describe_instance_policy`. |
 
-Under `required`, only an id assertion satisfies a write; a title assertion does not.
-Under `warn`, a title-only assertion is admitted but still warns, so duplicate titles stay
-visible.
+Under `required`, only an id-form per-write target satisfies a write. Under `warn`, a
+title-only target is admitted but still warns. `warn` is observability and never a
+protection setting.
 
-`warn` is observability. It is never a protection setting, and the operator docs say so
-in the same sentence that introduces it.
+**Where the modes live.** In a separate admission-settings record outside the entity
+graph, not on the identity record.
 
-**Where the modes live.** In a separate admission-settings record, also outside the
-entity graph, **not** on the identity record. If the admission-settings record is
-unreadable or missing while the identity record is present, both axes resolve to
-`required`. `NEOTOMA_TARGET_ASSERTION` and `NEOTOMA_READ_ASSERTION` may tighten the stored
-value, never loosen it. Rules (#2565) may tighten, never loosen or disable.
+- The slice-4 migration creates the record once, with `optional` for every existing
+  instance, and records this in the migration ledger.
+- New instances are created with `optional`, or `warn` if hosted. Only an operator
+  setting up a confidential instance chooses `required`.
+- The record resolves both axes to `required` only when the ledger says it was created
+  and it is now missing or unreadable.
+- Environment variables and #2565 rules may tighten a mode, never loosen it.
 
-**Who can change a mode.** Only an admin credential, through an operator channel outside
-MCP: `neotoma instance set --target-assertion <mode>` and its REST equivalent. Not
-through any MCP tool, not with an agent-scoped token, and not through `store`, `correct`,
-or any other entity path, so an agent that receives `ERR_TARGET_INSTANCE_REQUIRED`
-cannot lower the mode and retry. Tightening takes effect immediately. Loosening requires
-an explicit confirm flag and takes effect only after a cooling delay (default 24 hours,
-cancellable), is audited, and is shown as pending in `describe_instance_policy` and
-`/session`. This depends on admin-gating of instance policy writes, which the
-implementing slice must establish first; the admin predicate is defined there.
+**Who can change a mode.** An admin credential, through an operator channel outside MCP
+and agent tokens, never through any entity path.
 
-**Errors.** One family: the standard envelope in `docs/subsystems/errors.md`
-(`error_code`, `message`, `hint`, `details`), returned in JSON-RPC `data` on MCP and as
-the REST body. The instance-policy `code` shape is not followed, deliberately, because
-connection-phase rejections occur before dispatch and must use the transport envelope.
-All codes are registered in `errors.md` and declared in `openapi.yaml`, with the
-response headers, before implementation.
+- Tightening is immediate.
+- Loosening needs an explicit confirm flag and a cancellable cooling delay (default 24
+  hours). It is audited and shown as pending.
+- This depends on admin-gating of instance policy writes, which slice 4 establishes and
+  defines first.
+
+**Errors.** One family, the standard envelope in `docs/subsystems/errors.md`
+(`error_code`, `message`, `hint`, `details`). On REST it is the body. On MCP it goes in
+JSON-RPC `error.data`, on the same JSON-RPC error path for both phases, with the
+JSON-RPC `error.code` named per row when registered. All codes and headers are declared
+in `openapi.yaml` and `errors.md` before implementation.
 
 | Code | HTTP | Retryable | When |
 |---|---|---|---|
 | `ERR_TARGET_INSTANCE_MISMATCH` | 421 | No | An assertion names a different instance |
-| `ERR_TARGET_INSTANCE_REQUIRED` | 428 | No | `required` mode and no id assertion |
+| `ERR_TARGET_INSTANCE_REQUIRED` | 428 | No | `required` mode and no id-form per-write target |
 | `ERR_TARGET_INSTANCE_MALFORMED` | 400 | No | Empty or malformed assertion |
-| `ERR_TARGET_INSTANCE_UNAVAILABLE` | 503 | Yes | Identity or admission settings unreadable, or identity missing on a non-empty database |
-| `ERR_TARGET_INSTANCE_UNVERIFIED` | client-raised | No | Client-side echo rule failed (no acknowledgement, missing or different id) |
+| `ERR_TARGET_INSTANCE_UNAVAILABLE` | 503 | Yes | Identity or settings record unreadable or malformed (transient) |
+| `ERR_TARGET_INSTANCE_IDENTITY_MISSING` | 503 | No | Identity record missing over existing data (operator action) |
+| `ERR_TARGET_INSTANCE_MOVE_UNCONFIRMED` | 409 | No | Serving location changed on a `required` instance (operator action) |
+| `ERR_TARGET_INSTANCE_UNVERIFIED` | client-raised | No | Client echo rule failed |
 
-Mismatch example. The server knows its own title and the asserted id, never the
-asserted instance's title:
+Mismatch example. The server knows its own title and the asserted id, never the asserted
+instance's title:
 
 ```json
 {
   "error_code": "ERR_TARGET_INSTANCE_MISMATCH",
   "message": "This request was meant for instance nti_4x8r2w... but reached Personal graph; 0 persisted.",
-  "hint": "Do not retry on this connection. Call get_session_identity on each connected Neotoma and use the one whose instance.instance_id equals the id you asserted. If none matches, ask the user which Neotoma is intended.",
+  "hint": "Do not retry on this connection. Find the id you asserted in your local Neotoma registry and use that entry's connector. If no entry has it, ask the user which Neotoma is intended.",
   "details": {
     "served_instance": { "title": "Personal graph", "short_id": "nti_7m2k9q" },
     "asserted": [{ "source": "tool_argument", "value": "nti_4x8r2w..." }]
@@ -326,251 +417,291 @@ Required example:
 {
   "error_code": "ERR_TARGET_INSTANCE_REQUIRED",
   "message": "Writes to Finance graph must name their intended instance; 0 persisted.",
-  "hint": "Assert the instance id that your routing rule or the user names for this data, as target_instance. Do not copy this instance's own id from its session identity or instructions. If nothing names a target, ask the user.",
+  "hint": "Set target_instance to the id your routing rule names for this data, or the id of the Neotoma the user names, looked up in your local registry. Do not copy this connection's own id. If the user's Neotoma is not in the registry, tell them to enroll it.",
   "details": { "served_instance": { "title": "Finance graph" } }
 }
 ```
 
-Rules for both hints: they never offer the served id as the value to retry with; the
-mismatch hint names `get_session_identity` as the lookup and asking the user as the
-fallback; the required envelope does not carry the served id at all. No fragment of the
-submitted payload is echoed, and a title assertion is echoed only after grammar
-validation. Agents relaying a mismatch to the user name the asserted side by the title
-their routing rule carries, since the server cannot supply it.
+Hint rules:
 
-**Unknown identity fails closed.** If the identity record is unreadable, every write is
-refused with `ERR_TARGET_INSTANCE_UNAVAILABLE`, whatever the assertions and whatever the
-mode, because the mode cannot be trusted either. An unknown identity is never a match,
-and never resolved by minting.
+- Hints never offer the served id as a value to retry with.
+- The required envelope's body carries no served id. Response headers still carry it,
+  as on every response.
+- The mismatch hint points to the local registry. Agents without a registry fall back
+  to `get_session_identity` on each connection *only to find the connector for an id
+  they already hold from a rule or the registry*, and to asking the user.
+- No payload fragment is ever echoed.
+- An agent relaying a mismatch names the asserted side by its registry alias or
+  routing-rule title.
 
-**No partial write.** Both phases precede the store transaction, so a rejected batch
-persists nothing in any table (sources, observations, raw fragments, relationship
-observations, timeline events).
+**No partial write.** Both phases precede the store transaction, so nothing persists in
+any table.
 
-**Peer sync.** `add_peer` records the remote's `instance_id`; every outbound sync asserts
-it. Inbound sync to a `required` instance is an ordinary write: rejected unless it
-asserts the receiving instance's id. There is no sync exemption, because an exemption is
-a bypass. Consequence, documented: a `required` instance cannot receive sync from a peer
-that predates this feature.
+**Peer sync.** The operator supplies or confirms the expected remote id at `add_peer`,
+from the local registry or out of band, never copied from the connection being added.
+It is stored outside the entity graph under the same admin gate. Outbound sync asserts
+it as a connection binding, which is correct for sync. Inbound sync to a `required`
+instance is an ordinary write and needs the receiving id as a per-write target; there is
+no exemption. A `required` instance cannot receive sync from a pre-feature peer, and the
+docs say so.
 
 ### (d) How it shows up for users in Claude
 
-- **Connector naming.** Claude Code and similar clients name a server by its
-  configuration key. `neotoma mcp config` and the config scan write keys
-  `neotoma-<slug of title>` and pass `--expect-instance` with the id, so the name the user
-  sees and the binding the server checks are produced together. Untitled instance:
-  `neotoma-<short id without prefix>`, for example `neotoma-7m2k9q`. Two titles that slug
-  to the same key: the second gets `-<short id without prefix>` appended. The scan refuses
-  to overwrite an existing key bound to a different id, and says so. For remote connectors
-  added by URL, the setup docs name the connector by title and put `?expected_instance=`
-  in the URL. Client-assigned UUID prefixes are the client's naming and out of scope.
-- **Instructions.** The first line identifies the instance without inviting an echo:
-  "This connection is the Neotoma instance 'Personal graph' (nti_7m2k9q). Before a write,
-  assert the instance that your routing rule or the user names for the data, as
-  `target_instance`; never this connection's own id unless a rule or the user named this
-  instance. If nothing names one, ask the user." Advisory, since instructions delivery is
-  unreliable (#2187).
-- **CLI agent instructions.** The same rules (assertion sources, never echo the served
-  id, the header format below) are mirrored into `docs/developer/cli_agent_instructions.md`,
-  with the CLI's `--expect-instance` and `NEOTOMA_EXPECTED_INSTANCE` as the assertion
-  source.
-- **Turn-summary header.** The display rule changes from `🧠 Neotoma — [<conversation>]`
-  to `🧠 Neotoma · <title> — [<conversation>]`, with the short id when no title is set.
-  The emoji and separator are decoration; the title carries the meaning. The rule lives in
-  two places (`src/server.ts` and `docs/developer/mcp/instructions.md`) and both change.
-  `neotoma_turn_summary` returns `instance` and prefixes its `status_line` with the title.
-  It runs on one instance and cannot know what others answered, so when a turn touched
-  several instances, the agent assembles one header line per instance from each
-  instance's own summary.
-- **Rejections in the transcript.** The agent relays a mismatch as "that write was
-  refused by Personal graph; it was meant for Finance graph", taking "Finance graph" from
-  its routing rule, and does not retry on the same connection.
+- **Connector naming.** `neotoma mcp config` writes new keys as
+  `neotoma-<slug of title>`.
+  - An untitled instance gets `neotoma-<short id without prefix>`.
+  - A colliding slug gets `-<short id without prefix>` appended.
+  - The scan never overwrites a key bound to a different id.
+  - **It never renames an existing key** unless the user opts in. In Claude Code the
+    key prefixes every tool name, so a rename breaks permission allowlists, hooks, and
+    skills; the scan warns about the tool-name change when the user opts in.
+  - Enrollment in the local registry happens in the same step.
+  - Remote connectors added by URL are named by title, with `?expected_instance=` in the
+    URL, and enrolled with `neotoma instance enroll`.
+- **Instructions.** The first line reads: "This connection is the Neotoma instance
+  'Personal graph' (nti_7m2k9q). Before a write, set `target_instance` to the id your
+  routing rule names for the data, or the id of the Neotoma the user names, looked up in
+  your local registry. Never copy this connection's own id. If neither names a target,
+  ask the user." This is advisory (#2187).
+- **CLI agent instructions.** The same rules are mirrored into
+  `docs/developer/cli_agent_instructions.md`: per-write target sources, the registry,
+  never echoing the served id, `--target-instance` per write versus `--expect-instance`
+  or `NEOTOMA_EXPECTED_INSTANCE` as a binding, and the header format.
+- **Turn-summary header.** `🧠 Neotoma · <title> — [<conversation>]`, with the short id
+  when the instance is untitled. The decoration carries no meaning. Both display-rule
+  locations change (`src/server.ts`, `docs/developer/mcp/instructions.md`).
+  `neotoma_turn_summary` returns `instance` and prefixes `status_line` with the title.
+  For a turn across several instances, the agent assembles one line per instance from
+  each instance's own summary.
+- **Rejections in the transcript.** "That write was refused by Personal graph; it was
+  meant for Finance graph." The agent takes "Finance graph" from the registry or the
+  routing rule, and does not retry on the same connection.
 
 ## Tests that would prove it
 
-Every test offered as proof of a fix must be shown red in its implementing PR. Where the
-plumbing (flags, fields) does not exist on `main`, the red is produced by keeping the
-plumbing and reverting only the admission or verification logic, so the test fails for
-the reason under test and not because an option is unknown. This is an acceptance
-criterion of every implementing PR.
+Every proof test is shown red in its implementing PR. Where the plumbing is new, the PR
+keeps the plumbing and reverts only the admission or verification logic, so the test
+fails for the reason under test. This is an acceptance criterion of every implementing
+PR.
 
 **Server admission**
 
-1. **Planted red, misroute.** Two in-process instances A and B with separate databases.
-   A client bound to A (`--expect-instance <A.id>`) whose transport points at B,
-   reproducing #2462. `store` fails with `ERR_TARGET_INSTANCE_MISMATCH`; B's row counts
-   unchanged in every table; A untouched. With the check reverted, the test asserts the
-   write landed in B, and fails.
-2. **Planted red, identity source.** Same process configuration, database file swapped:
-   the served `instance_id` changes. An id derived from config, hostname, or environment
-   fails this.
-3. **Planted red, misselection (motivating case).** A routing rule maps a data category
-   to instance F. A write of that category, carrying `target_instance = F.id`, is sent
-   through instance P's connection. P rejects with `ERR_TARGET_INSTANCE_MISMATCH` and
-   persists zero rows in every table. Variant: the agent follows P's served instructions;
-   the write is still rejected because the rule names F.
-4. **Hints never offer the served id.** For mismatch and required envelopes on REST and
-   MCP, the hint text does not contain the served id, and the required envelope carries
-   no served id anywhere.
-5. **No partial write.** A 50-entity batch with relationships and an attached raw file,
-   mismatched assertion: zero new rows in sources, observations, raw fragments,
-   relationship observations, timeline events.
-6. **Matrix.** Source (tool argument, `_meta`, header, URL query, proxy flag, CLI flag,
-   CLI environment variable, CLI `--offline`) by outcome (match, mismatch, absent,
-   malformed) by `target_assertion` and `read_assertion` modes by operation (read,
-   write). Asserts response values and row counts.
-7. **Conflicting assertions.** Connection bound to A, per-call asserts B, served by A:
-   rejected.
-8. **Assertion grammar.** Repeated header and repeated query parameter (all must match);
-   empty and whitespace values (malformed, not absent); non-string `target_instance`
-   (rejected); over-length or control-character title (rejected, not echoed); NFC and
-   whitespace variants match; a case difference does not match.
-9. **Title assertions.** Admitted under `optional`; admitted with a warning under `warn`;
-   insufficient for writes under `required`; two instances with the same title: title
-   assertion admitted on both under `optional` (documented), id assertion on only one.
-10. **Every tool classified and gated.** Every MCP tool carries `readOnlyHint`; every
-    entry point (MCP, REST, CLI API, CLI offline) reaches its phase's check; for every
-    tool, `target_instance` passes a `.strict()` schema and never appears as a stored
-    field or raw fragment.
-11. **Ordering.** A connection-phase mismatch on an unauthenticated request returns the
-    mismatch error and writes no audit event. Scoped to header and URL sources only.
-12. **Envelope parity.** REST and MCP envelopes are equal and registered; status codes and
-    `retryable` as in the table; no payload fragment appears.
+1. **Planted red, misroute.** Two in-process instances A and B. A client bound to A,
+   with its transport pointed at B, sends a write. Expect `ERR_TARGET_INSTANCE_MISMATCH`,
+   B unchanged in every table, A untouched. With the check reverted, the test asserts
+   the write landed in B and fails.
+2. **Planted red, identity source.** Same configuration, swapped database file: the
+   served id changes.
+3. **Planted red, misselection (motivating case).** A routing rule maps a category to F.
+   A write of that category with `target_instance = F.id` is sent through P's
+   connection. P rejects it with a mismatch, and zero rows land on P. Variant: the agent
+   follows P's served instructions, and the write is still rejected.
+4. **Planted red, binding does not satisfy `required`.** Two connections bound by the
+   config scan: F in `required`, P in `required`.
+   - (i) An ordinary write through F's connection with no per-write target returns
+     `ERR_TARGET_INSTANCE_REQUIRED`, zero rows on F.
+   - (ii) A confidential write through P's connection with no per-write target returns
+     `ERR_TARGET_INSTANCE_REQUIRED`, zero rows on P.
+   - (iii) The same writes with the correct per-write target are admitted only on the
+     intended instance.
+   - (iv) A proxy configured with `--expect-instance` never emits the per-write `_meta`
+     key.
 
-**Identity and modes**
+   With binding-satisfies-required reintroduced, (i) and (ii) go red.
+5. **Hints.** Mismatch and required hint texts never contain the served id. The required
+   envelope *body* carries no served id; response headers still do.
+6. **No partial write, and no payload in sinks.** Send a 50-entity batch with
+   relationships and a raw file, with a mismatched target. Zero new rows in sources,
+   observations, raw fragments, relationship observations, and timeline events.
+7. **Matrix.** Covers:
+   - sources: tool argument, `_meta`, `Neotoma-Target-Instance`, binding header, URL,
+     proxy flag, CLI `--expect-instance`, CLI `--target-instance`, CLI environment
+     variable, CLI `--offline`;
+   - outcomes: match, mismatch, absent, malformed;
+   - every mode on both axes, for reads and writes.
 
-13. **Planted red, unknown identity.** Make the identity read fail (resolver throws). Send
-    (i) a write with a correct id assertion under `optional` and (ii) an unasserted write
-    under `required`. Both return `ERR_TARGET_INSTANCE_UNAVAILABLE` and persist zero rows.
-    With the fail-closed branch replaced by fail-open, the test goes red.
-14. **No re-mint over data.** Delete the identity row on a non-empty database whose ledger
-    records it: startup does not mint, writes return `ERR_TARGET_INSTANCE_UNAVAILABLE`,
-    and the id is unchanged until `restore-identity` or `reidentify` runs. The upgrade
-    migration on a pre-feature database mints exactly once.
-15. **Admission settings unreadable.** With the identity readable and the settings record
-    unreadable or missing, an unasserted write is rejected as under `required`.
-16. **Mode authority.** A mode change through any MCP tool, an agent-scoped token, `store`,
-    or `correct` is refused. An admin change succeeds and emits an audit event; each `warn`
-    admission emits one. Loosening without the confirm flag is refused; with it, the old
-    mode holds until the cooling delay passes and the pending change is visible.
-    Environment variables tighten and never loosen; stored modes survive restart and host
-    move.
-17. **Peer sync.** The identity record never travels by sync. Inbound sync to a `required`
-    instance without an assertion is rejected; with the receiving id it is admitted.
-18. **Clones.** Planted red: a database cloned through the clone tooling gets a new id; a
-    restore keeps it. A raw file copy keeps the id (documented residual) and, served from
-    a new location, a `required` instance refuses writes until an operator confirms the
-    move or reidentifies, while an `optional` instance only warns.
+   The discovery calls succeed unasserted under `read_assertion: required`, and an
+   ordinary read is rejected.
+8. **Conflicting assertions.** A binding of A with a per-write target of B, served by A,
+   is rejected.
+9. **Grammar.** Repeated header and query values, empty, whitespace, non-string, over
+   length, control characters, NFC and whitespace variants, and case differences.
+10. **Title targets.** Admitted under `optional`; warned under `warn`; insufficient under
+    `required`; the same-title collision case.
+11. **Effect classification.**
+    - Every tool and route declares an effect, and `readOnlyHint` matches it.
+    - An undeclared tool is treated as a write at runtime.
+    - Every read-classified tool and route leaves all row counts unchanged.
+    - Every entry point reaches its phase.
+    - `target_instance` passes `.strict()` schemas and is never stored.
+12. **Ordering and sinks.** A connection-phase mismatch on an unauthenticated request
+    returns the mismatch error and writes no audit event. A sentinel string planted in
+    a rejected payload appears in no request log, error report, or audit event.
+13. **Envelope parity.** REST and MCP envelopes, status codes, `retryable`, and JSON-RPC
+    codes match the table.
 
-**Clients**
+**Identity, commands, and modes**
 
-19. **Planted red, server without the check.** Instance B runs code without the check (or
-    with it disabled). (i) The proxy with `--expect-instance <A.id>` refuses at preflight
-    because the capability and `instance` object are absent, and no tool call is sent.
-    (ii) An SDK or CLI client asserting A writes to B; the response lacks the
-    acknowledgement, and the client raises `ERR_TARGET_INSTANCE_UNVERIFIED`, surfaces the
-    returned entity ids, and sends no further write. With the client echo rule removed,
-    the test goes red.
-20. **Proxy startup.** Empty `--expect-instance` refuses to start. A preflight id that
-    differs refuses to serve, and the error names both ids. `--expect-instance` without
-    `--fail-closed` behaves as fail-closed.
-21. **Surface parity.** `initialize`, every tool result `_meta` and content line, REST
-    headers, server card, `GET /session`, `get_session_identity`, CLI `auth session`, and
-    `describe_instance_policy` agree for one instance and differ for two.
-22. **Connector naming.** Untitled instance gets the short-id key; colliding slugs get the
-    suffix; the scan refuses to overwrite a key bound to a different id.
-23. **Turn summary.** Header and `status_line` carry the title, or the short id
-    (`nti_` plus 6) when untitled, in both display-rule locations.
+14. **Planted red, unknown identity.** Make the identity resolver throw, then send:
+    - (i) a write with a correct target under `optional`;
+    - (ii) an unasserted write under `required`;
+    - (iii) an asserted read.
+
+    All are refused. An unasserted read follows `read_assertion` and carries
+    `instance_id: null` with no acknowledgement. A present but malformed record behaves
+    the same way. Replacing fail-closed with fail-open goes red.
+15. **No re-mint, and the settings migration.**
+    - Delete the identity row on a ledgered non-empty database: startup does not mint,
+      and writes return `ERR_TARGET_INSTANCE_IDENTITY_MISSING`.
+    - The identity migration mints exactly once.
+    - The settings migration creates `optional` on an upgraded instance, and unasserted
+      writes keep working.
+    - A ledgered settings record that is then deleted or made unreadable resolves both
+      axes to `required`: an unasserted write and an unasserted ordinary read are both
+      rejected.
+16. **Mode and identity-command authority.**
+    - Mode changes and every identity command are refused through any MCP tool, an
+      agent-scoped token, `store`, or `correct`.
+    - With an admin credential they succeed and are audited.
+    - `restore-identity` is refused while an identity record exists, is refused with a
+      free-form id, and is refused with an export from another database (fingerprint
+      mismatch). It succeeds with this database's own export.
+    - `reidentify` accepts no id.
+    - `confirm-move` is refused while the old location still answers with the same id.
+    - Loosening without confirm is refused. With confirm, it waits for the cooling
+      delay. Cancelling the pending change restores the old state.
+    - The `IDENTITY_MISSING` hint names no command and no id.
+    - Environment variables only tighten.
+    - Newly created hosted instances default to `warn`.
+17. **Peer sync.**
+    - The identity record never syncs.
+    - `add_peer` takes the expected id from operator input, never from the peer's served
+      identity, and an agent cannot change it through `correct`.
+    - Inbound sync to `required` without the receiving id as a per-write target is
+      rejected.
+18. **Clones and moves.**
+    - Clone tooling gives a new id; restore keeps the id.
+    - A raw copy keeps the id. Served elsewhere on a `required` instance, it returns
+      `ERR_TARGET_INSTANCE_MOVE_UNCONFIRMED`; an `optional` instance warns.
+    - `confirm-move` refuses while the original still answers.
+
+**Clients and registry**
+
+19. **Planted red, server without the check.**
+    - (i) A proxy bound to A refuses at preflight.
+    - (ii) A client writes asserting A, and the response has no acknowledgement:
+      `ERR_TARGET_INSTANCE_UNVERIFIED`, entity ids surfaced, no further write until
+      reset.
+    - (iii) A response carrying the acknowledgement but a different id is a mismatch.
+    - (iv) A read without acknowledgement is discarded.
+    - (v) The backend changes mid-session after preflight, and the proxy echo rule
+      catches it.
+
+    Removing the echo rule goes red.
+20. **Proxy startup.** An empty `--expect-instance` refuses to start. A preflight id
+    that differs refuses to serve, naming both ids. The binding is fail-closed.
+21. **Surface parity** across `initialize`, result `_meta` and content line, REST
+    headers, the server card, `/session`, `get_session_identity`, CLI `auth session`,
+    and `describe_instance_policy`.
+22. **Registry.**
+    - Enrollment requires user confirmation, enforces unique aliases, and logs changes.
+    - The registry is never updated during a write.
+    - Hook packages deny agent edits to the registry file where the harness supports it.
+    - A title with no entry produces no write to a `required` instance and no served-id
+      fallback.
+23. **Connector naming.**
+    - An untitled instance gets the short-id key, and a collision gets a suffix.
+    - The scan does not overwrite a key bound to another id.
+    - It does not rename an existing key without opt-in, and warns when the user opts
+      in.
+24. **Turn summary.** The title, or `nti_` plus 6 characters, appears in both
+    display-rule locations and in `status_line`.
 
 **Agent behaviour (evals, committed in the implementing slices)**
 
-24. **Routing eval.** Eval-harness scenario with two connected instances and a routing rule
-    sending one data category to one of them: the store call carries `target_instance`
-    equal to the rule's id, never the served id of the connection used, and no row lands
-    on the other instance.
-25. **Stop after mismatch.** An `agentic_eval` fixture modelled on
-    `tool_failure_recovery.json`: the agent receives a mismatch envelope, makes no second
-    write on the same connection (asserted with `request_count`), and its reply names both
-    instances (the asserted one by its routing-rule title).
-26. **Header.** Extend the `display_rule_neotoma_section` scenario so the header line names
-    the instance that answered, by title, or by short id when untitled.
+25. **Routing.** Two connected instances and a routing rule. The store call's
+    `target_instance` equals the rule's id, never the served id of the connection used,
+    and no row lands on the other instance.
+26. **User names the target.** A `required` instance with no routing rule, and the user
+    names the target by title.
+    - The agent resolves the title through the registry, completes the write with the
+      correct id, and the same write sent through the other connection is still
+      rejected.
+    - Variant with no registry entry: the agent writes nothing and tells the user to
+      enroll.
+27. **Stop after mismatch.** The agent receives a mismatch envelope. It makes no second
+    write on that connection (`request_count`), and its reply names both instances.
+28. **Stop on a missing acknowledgement.** The agent asserted a target, and the result
+    content lacks "target checked". The agent makes no further write and flags the
+    write to the user as unverified.
+29. **Header.** The `display_rule_neotoma_section` scenario shows the title, or the
+    short id when the instance is untitled.
 
 ## Implementation slices
 
-Slices 1 to 3 close the #2462 misroute class without depending on agent behaviour and land
-first. Slices 4 to 6 depend on the assertion-source rules above. Every slice touches the
-interface contract and takes the arch gate; none takes a bug fast path.
+Slices 1 to 3 close the misroute class without depending on agent behaviour, and land
+first. Every slice takes the arch gate.
 
-1. Identity record, mint and fail-closed rules, migration, `instance` object, title per
-   #2381, `describe_instance_policy` fields. Errors and headers declared in `openapi.yaml`
-   and `errors.md` first.
-2. Result `_meta`, content identity line, REST headers, capability flag, acknowledgement,
-   server card.
-3. Connection-phase admission (header, URL), proxy `--expect-instance` with preflight and
-   echo rule, CLI `--expect-instance` and `NEOTOMA_EXPECTED_INSTANCE`, structural coverage
-   test.
-4. Request-phase admission (`_meta`, `target_instance`), admission-settings record, modes,
-   admin-gated mode changes with confirm and cooling delay, audit events. Depends on
-   admin-gating of instance policy writes.
-5. Config-scan key naming, operator and CLI agent docs.
-6. Turn-summary header, instructions first line, agent evals.
-7. Peer sync assertions.
+1. Identity record, mint and fail-closed rules, the identity states table, the identity
+   commands with admin authority, export and fingerprint, the `instance` object, the
+   title. Errors and headers are declared in `openapi.yaml` and `errors.md` first.
+2. Result `_meta`, the content line, REST headers, the capability flag, the
+   acknowledgement, the server card.
+3. Connection-phase admission, proxy and CLI bindings with preflight and the echo rule,
+   effect classification, the structural tests.
+4. Request-phase admission, the settings record and migration, the modes, admin-gated
+   changes, and audit. Depends on admin-gating of instance policy writes.
+5. The local registry and enrollment, config-scan naming, the operator and CLI agent
+   docs.
+6. The turn-summary header, the instructions line, the agent evals.
+7. Peer sync.
 
 ## Decisions on the six open questions
 
-1. **Cloned databases.** Arch: `reidentify` plus a warning; clone tooling mints a new id by
-   default, restore keeps it with an explicit flag; an origin-derived id is rejected
-   because it breaks host moves and means nothing for local instances. Security: a warning
-   is ignored, so record the serving location, and on a change a `required` instance
-   refuses writes until an operator confirms the move or reidentifies, while an
-   `optional` instance warns. **Decision:** both, since they do not conflict. Tooling
-   distinguishes clone (new id) from restore (keep id); the identity record stores the
-   last serving location (public origin, or database path for local instances); a change
-   blocks writes on `required` instances until confirmed and warns elsewhere. The id is
-   never derived from the location. A raw file copy outside the tooling is a documented
-   residual, covered by test 18.
-2. **Reads under `required`.** Arch and security: yes, as a separate tighten-only axis,
-   off by default, with identity and discovery calls exempt. Pm: decide before slice 4,
-   because an unasserted read of a confidential instance puts its content into a context
-   that can write anywhere. **Decision:** the `read_assertion` axis, default `optional`,
-   decided now and built in slice 4.
-3. **Loosening a strict instance.** Lenses disagree. Arch: no second actor in the first
-   version, since single-operator instances have none and a two-person primitive here
-   would duplicate #2565; require an explicit confirm, audit, and visibility. Security:
-   allow loosening only through an owner channel outside MCP and agent tokens, with a
-   second actor or a cooling delay. **Decision:** admin credential through an operator
-   channel outside MCP and agent tokens, explicit confirm, a cancellable cooling delay
-   (default 24 hours), audit, and visibility of the pending change. The cooling delay meets
-   security's bar on single-operator instances without inventing a two-person primitive;
-   #2565's two-actor retirement is adopted, opt-in per instance, when it lands.
-   Tightening stays immediate and single-actor.
-4. **Hosted default.** Arch, security, pm: `warn` for new hosted instances, as detection,
-   not protection, and only once the warning reaches the agent. **Decision:** newly created
-   hosted identity records default to `warn`, with the warning in the result body (slice
-   4). Existing instances keep `optional` until an operator changes them. Docs state that
-   `warn` protects nothing.
-5. **Reserved argument.** Arch and security: acceptable as a top-level, MCP-only argument
-   defined once in OpenAPI, string-only, exact-key stripping, and only together with the
-   acknowledgement and capability rules, since servers without the check strip it.
-   **Decision:** as stated; settled before slice 4 because it changes every tool schema and
-   is the costliest part to undo.
-6. **Envelope-level setting or #2565 rule.** Arch and security: envelope-level, evaluated
-   before the rules resolver, because it governs the request rather than entity content
-   and covers raw storage. Steelman for a rule: one policy surface and two-actor retirement
-   for free. **Decision:** envelope-level. Rules may tighten it but never loosen or disable
-   it. Category-to-instance routing is a #2565 rule that produces the assertion, and the
-   modes are reported alongside instance policy.
+1. **Cloned databases.**
+   - Arch: clone tooling mints a new id, restore keeps it, and an id derived from the
+     serving location is rejected.
+   - Security: record the serving location; on a change, `required` blocks writes until
+     confirmed.
+   - **Decision: both.** Tooling distinguishes clone from restore. The identity record
+     stores the last serving location, and a change blocks writes on `required`
+     instances until `confirm-move` and warns elsewhere. `confirm-move` refuses while
+     the original still answers, so a copy cannot be confirmed into a duplicate id.
+2. **Reads under `required`.**
+   - Arch and security: a separate opt-in axis, with discovery calls exempt.
+   - Pm: decide this before slice 4.
+   - **Decision:** `read_assertion`, default `optional`. The guarantees section
+     recommends `required` for confidential instances.
+3. **Loosening.** The lenses disagreed.
+   - Arch: no second actor in the first version.
+   - Security: a second actor or a cooling delay.
+   - **Decision:** an admin channel outside MCP and agent tokens, an explicit confirm, a
+     cancellable 24-hour cooling delay, audit, and visibility. The delay works on
+     single-operator instances. #2565 two-actor retirement is opt-in when it lands. The
+     same authority now covers the identity commands.
+4. **Hosted default.**
+   - **Decision:** `warn` for newly created hosted instances, as detection only.
+     Existing instances stay `optional` through the settings migration.
+5. **Reserved argument.**
+   - **Decision:** top-level, MCP-only, string-only, conditional on the acknowledgement
+     and capability. REST uses `Neotoma-Target-Instance`; the CLI uses
+     `--target-instance`.
+6. **Envelope-level setting or #2565 rule.**
+   - **Decision:** envelope-level, evaluated before the rules resolver. Rules may
+     tighten it, never loosen it. Routing is a #2565 rule that produces the per-write
+     target.
 
 ## References
 
 - #2589 design issue
 - #2381 serverInfo.name is hardcoded on every instance
 - #2462 a session configured for a hosted instance served a local database
-- #2565 rules design (core rule and policy types, scoped delivery)
+- #2565 rules design
 - #2187, #2368 handshake metadata not reaching clients
 - `src/services/instance_policy.ts` admission pattern
-- `src/server.ts` initialize handler, display rule, `getServerInfo`
+- `src/server.ts` initialize handler, display rule, runtime update notice, `getServerInfo`
 - `src/actions.ts` `/mcp` route and middleware order
+- `src/tool_definitions.ts` tool annotations
 - `src/mcp_server_card.ts` server card
 - `src/cli/mcp_proxy.ts` proxy options and session preflight
 - `src/services/turn_summary.ts` turn summary
