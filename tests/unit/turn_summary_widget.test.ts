@@ -69,9 +69,7 @@ describe("neotoma_turn_summary MCP Apps widget", () => {
 
     it("rejects ui://neotoma/turn-summary with extra path segments", () => {
       const server = new NeotomaServer();
-      expect(() =>
-        (server as any).parseResourceUri("ui://neotoma/turn-summary/extra")
-      ).toThrow();
+      expect(() => (server as any).parseResourceUri("ui://neotoma/turn-summary/extra")).toThrow();
     });
   });
 
@@ -96,10 +94,10 @@ describe("neotoma_turn_summary MCP Apps widget", () => {
       expect(html).toContain("ui/notifications/tool-result");
     });
 
-    it("renders status counts (stored, retrieved, issues)", () => {
-      expect(html).toMatch(/stored/i);
-      expect(html).toMatch(/retrieved/i);
-      expect(html).toMatch(/issues/i);
+    it("renders the server-built card (header, groups, more) rather than its own counts", () => {
+      expect(html).toContain("payload.card");
+      expect(html).toContain("card.groups");
+      expect(html).toContain("card.more");
     });
 
     it("supports color-scheme light dark", () => {
@@ -107,14 +105,13 @@ describe("neotoma_turn_summary MCP Apps widget", () => {
     });
 
     it("does not load external network resources (no http(s):// references)", () => {
-      // Allow the widget itself to mention "neotoma://issues" for the consent
-      // link; that is a custom scheme handled by the host, not a network fetch.
       const externalUrls = html.match(/https?:\/\/[^\s"'<>]+/g) ?? [];
       expect(externalUrls).toEqual([]);
     });
 
-    it("includes a consent prompt branch for issues > 0", () => {
-      expect(html).toMatch(/flagged this turn/i);
+    it("includes the issues review branch, opened via ui/open-link", () => {
+      expect(html).toContain("card.issues");
+      expect(html).toContain("ui/open-link");
     });
   });
 

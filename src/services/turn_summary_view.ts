@@ -146,7 +146,7 @@ export type BuildTurnSummaryCardInput = {
 export function sanitizeTurnSummaryLabel(value: string, maxLength = MAX_LABEL_LENGTH): string {
   const cleaned = value
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, " ")
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (cleaned.length <= maxLength) return cleaned;

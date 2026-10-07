@@ -311,9 +311,7 @@ async function loadObservations(
     .eq("user_id", userId)
     .in("entity_id", entityIds);
   if (error) {
-    logger.warn(
-      `turn_summary: failed to load observations: ${error.message ?? String(error)}`
-    );
+    logger.warn(`turn_summary: failed to load observations: ${error.message ?? String(error)}`);
     return byEntity;
   }
   for (const row of (data ?? []) as ObservationRow[]) {
@@ -403,7 +401,8 @@ async function classifyByObservations(
       continue;
     }
     const heuristic = inTurn.find(
-      (row) => typeof row.identity_basis === "string" && HEURISTIC_IDENTITY_BASES.has(row.identity_basis)
+      (row) =>
+        typeof row.identity_basis === "string" && HEURISTIC_IDENTITY_BASES.has(row.identity_basis)
     );
     if (heuristic) {
       let policy = policyCache.get(ref.entity_type);
