@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **693**
-- Backend and repo Vitest files: **657**
+- Total automated test files: **697**
+- Backend and repo Vitest files: **661**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,11 +72,11 @@ flowchart TD
 | Vitest unit tests | 189 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 206 |
+| Vitest integration tests | 209 |
 | Vitest CLI tests | 82 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
-| Vitest subscription tests | 7 |
+| Vitest subscription tests | 8 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -439,7 +439,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (206):**
+**Files (209):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -645,7 +645,10 @@ flowchart TD
 - `tests/integration/update_schema_incremental_scope_mismatch.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 - `tests/integration/wellknown_discovery_unauthenticated.test.ts`
+- `tests/integration/write_events_emit_sites.test.ts`
+- `tests/integration/write_events_mcp_route.test.ts`
 - `tests/integration/write_events_record.test.ts`
+- `tests/integration/write_events_stdio_entrypoint.test.ts`
 
 ### Vitest CLI tests
 **Directory:** `tests/cli/`
@@ -798,7 +801,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (7):**
+**Files (8):**
 - `tests/subscriptions/durable_event_log.test.ts`
 - `tests/subscriptions/guest_scope.test.ts`
 - `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
@@ -806,6 +809,7 @@ flowchart TD
 - `tests/subscriptions/sse_ring_gap_detection.test.ts`
 - `tests/subscriptions/subscription_guest_auth.test.ts`
 - `tests/subscriptions/subscription_loop_prevention.test.ts`
+- `tests/subscriptions/write_context_delivery_stripping.test.ts`
 
 ### Vitest agent tests
 **Directory:** `tests/agent/`
