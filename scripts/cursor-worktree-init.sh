@@ -25,6 +25,7 @@ fi
 
 echo "✓ Worktree setup complete"
 echo ""
-echo "If the dev server fails to start, regenerate the non-secret dev env file:"
-echo "  npm run setup:worktree-env"
+echo "If the dev server fails to start, regenerate the non-secret dev env file"
+echo "(this replaces an existing .env.development):"
+echo "  npm run setup:worktree-env -- --force"
 echo "Credentials are never copied into a worktree; set any you need yourself."

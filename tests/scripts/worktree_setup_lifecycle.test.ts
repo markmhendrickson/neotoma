@@ -24,11 +24,14 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import path, { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { WORKTREE_DEV_ENV_ALLOWLIST } from "../../scripts/lib/worktree_dev_env.js";
+import {
+  WORKTREE_DEV_ENV_ALLOWLIST,
+  buildWorktreeDevEnv,
+} from "../../scripts/lib/worktree_dev_env.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HUSKY_BIN = join(REPO_ROOT, "node_modules", ".bin", "husky");
@@ -320,5 +323,64 @@ describe("generated dev settings take effect in the development loaders", () => 
 
     const devServe = readFileSync(join(REPO_ROOT, "scripts", "dev-serve.js"), "utf-8");
     expect(devServe).toContain("loadDevEnvFiles");
+  });
+});
+
+/**
+ * Native Windows cannot be run in CI (the repository has no Windows lane), so a
+ * Windows checkout is simulated: the env file is rendered with the `path.win32`
+ * flavour for real Windows-style roots, written into a throwaway checkout, and
+ * loaded through the real development loaders. What the loaders then see is the
+ * portable (forward-slash) form that Node also accepts on Windows.
+ */
+describe("Windows-style data directories load in the development loaders", () => {
+  const WINDOWS_ROOTS = [
+    "C:\\repos\\neotoma-wt",
+    "C:\\repos\\my worktree",
+    "\\\\fileserver\\share\\neotoma-wt",
+  ];
+  const expectedDataDir = (root: string) => path.win32.join(root, "data").replace(/\\/g, "/");
+
+  function checkoutWithEnvText(text: string) {
+    const dir = realpathSync(mkdtempSync(join(fx.root, "win-")));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "neotoma", type: "module" }));
+    writeFileSync(join(dir, ".env.development"), text);
+    return dir;
+  }
+
+  it.each(WINDOWS_ROOTS)("src/config.ts applies the generated data directory for %s", (root) => {
+    const dir = checkoutWithEnvText(buildWorktreeDevEnv(root, { pathApi: path.win32 }));
+    const script = `import { config } from ${JSON.stringify(
+      pathToFileURL(join(REPO_ROOT, "src", "config.ts")).href
+    )};\nconsole.log("RESULT:" + JSON.stringify({ dataDir: config.dataDir }));\n`;
+    const result = spawnSync(TSX_BIN, ["--eval", script], {
+      cwd: REPO_ROOT,
+      encoding: "utf-8",
+      env: cleanEnv(fx.home, { NEOTOMA_PROJECT_ROOT: dir }),
+    });
+    const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
+    expect(line, `config did not load: ${result.stderr.slice(0, 500)}`).toBeDefined();
+    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(expectedDataDir(root));
+  });
+
+  it.each(WINDOWS_ROOTS)("scripts/dev-serve.js env loading applies it for %s", (root) => {
+    const dir = checkoutWithEnvText(buildWorktreeDevEnv(root, { pathApi: path.win32 }));
+    const helper = pathToFileURL(join(REPO_ROOT, "scripts", "lib", "dev_env_files.js")).href;
+    const dotenvPath = createRequire(join(REPO_ROOT, "package.json")).resolve("dotenv");
+    const script = `
+      import { createRequire } from "node:module";
+      const dotenv = createRequire(${JSON.stringify(pathToFileURL(REPO_ROOT + "/").href)})(${JSON.stringify(dotenvPath)});
+      const { loadDevEnvFiles } = await import(${JSON.stringify(helper)});
+      loadDevEnvFiles(dotenv, process.cwd(), "development");
+      console.log("RESULT:" + JSON.stringify({ dataDir: process.env.NEOTOMA_DATA_DIR }));
+    `;
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+      cwd: dir,
+      encoding: "utf-8",
+      env: cleanEnv(fx.home),
+    });
+    const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
+    expect(line, `loader failed: ${result.stderr.slice(0, 500)}`).toBeDefined();
+    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(expectedDataDir(root));
   });
 });

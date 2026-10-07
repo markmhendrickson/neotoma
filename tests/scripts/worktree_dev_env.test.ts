@@ -13,8 +13,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import path, { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -381,6 +382,83 @@ for (const name of ['readFileSync','openSync','createReadStream','readFile','ope
     );
     expect(leftovers).toEqual([]);
     resetWorktreeEnv();
+  });
+});
+
+describe("Windows-style checkout paths (simulated with path.win32)", () => {
+  // No native Windows run is possible here and the repository has no Windows CI lane.
+  const WINDOWS_ROOTS: Array<[string, string]> = [
+    ["drive path", "C:\\repos\\neotoma-wt"],
+    ["lowercase drive, nested, dots and underscores", "c:\\Users\\dev\\repos\\neotoma_wt-1.2"],
+    ["drive path with spaces", "C:\\repos\\my worktree"],
+    ["trailing separator", "C:\\repos\\neotoma-wt\\"],
+    ["forward-slash drive path", "C:/repos/neotoma-wt"],
+    ["UNC path", "\\\\fileserver\\share\\neotoma-wt"],
+  ];
+
+  it.each(WINDOWS_ROOTS)("generates a portable data directory for a %s", (_label, root) => {
+    const text = buildWorktreeDevEnv(root, { pathApi: path.win32 });
+    const parsed = dotenv.parse(text);
+    const expected = path.win32.join(root, "data").replace(/\\/g, "/");
+    expect(parsed.NEOTOMA_DATA_DIR).toBe(expected);
+    // It names this checkout's data directory once normalised the Windows way.
+    expect(path.win32.normalize(parsed.NEOTOMA_DATA_DIR)).toBe(path.win32.join(root, "data"));
+    const body = text
+      .split("\n")
+      .filter((l) => !l.startsWith("#"))
+      .join("\n");
+    expect(body).not.toContain("\\");
+    expect(keysOf(text)).toEqual(WORKTREE_DEV_ENV_ALLOWLIST.map((e) => e.key));
+  });
+
+  it("a Windows-style path with spaces reads back literally through the shell loader", () => {
+    const text = buildWorktreeDevEnv("C:\\repos\\my worktree", { pathApi: path.win32 });
+    const dir = join(fixture.root, "win-shell");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, ".env.development"), text);
+    const result = spawnSync(
+      "/bin/bash",
+      [
+        "--noprofile",
+        "--norc",
+        "-c",
+        `set -euo pipefail; REPO_ROOT="$1"; source "$2"; printf '%s' "$NEOTOMA_DATA_DIR"`,
+        "bash",
+        dir,
+        join(SCRIPTS_DIR, "lib", "neotoma_mcp_source_env.sh"),
+      ],
+      { cwd: dir, encoding: "utf-8", env: { PATH: "/usr/bin:/bin" } }
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe("C:/repos/my worktree/data");
+  });
+
+  const SHELL_ACTIVE_WINDOWS_ROOTS: Array<[string, string]> = [
+    ["command substitution", "C:\\repos\\a$(x)b"],
+    ["backticks", "C:\\repos\\a`x`b"],
+    ["variable expansion", "C:\\repos\\${HOME}"],
+    ["double quote", 'C:\\repos\\a"b'],
+    ["single quote", "C:\\repos\\a'b"],
+    ["percent expansion", "C:\\repos\\%PATH%"],
+    ["caret", "C:\\repos\\a^b"],
+  ];
+
+  it.each(SHELL_ACTIVE_WINDOWS_ROOTS)(
+    "still rejects %s in a Windows-style path, without echoing it",
+    (_label, root) => {
+      let message = "";
+      try {
+        buildWorktreeDevEnv(root, { pathApi: path.win32 });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).not.toBe("");
+      expect(message).not.toContain("repos");
+    }
+  );
+
+  it("still rejects a backslash that is not a Windows path separator", () => {
+    expect(() => buildWorktreeDevEnv("/repos/a\\b", { pathApi: path.posix })).toThrow(/not allowed/);
   });
 });
 
