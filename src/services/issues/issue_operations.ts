@@ -687,6 +687,7 @@ export async function submitGuestIssue(
             aauthAdmission: currentContext?.aauthAdmission ?? null,
             externalActor: currentContext?.externalActor ?? null,
             authenticatedPrincipal: currentContext?.authenticatedPrincipal ?? null,
+            turn: currentContext?.turn ?? null,
             bypassGuestStoreAccessPolicy: true,
           },
           () => ops.store(input)
