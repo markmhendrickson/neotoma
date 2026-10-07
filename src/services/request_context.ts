@@ -30,6 +30,7 @@ import type {
 } from "../crypto/agent_identity.js";
 import { toAttributionProvenance } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext } from "./protected_entity_types.js";
+import type { TurnIdentity } from "./write_events/turn_identity.js";
 
 export interface RequestContext {
   /** Resolved agent identity, or null when we have nothing to attribute. */
@@ -82,6 +83,15 @@ export interface RequestContext {
    * left unattributed rather than attributed to a default person.
    */
   authenticatedPrincipal?: AuthenticatedPrincipal | null;
+  /**
+   * Conversation turn that caused this request, as the client reported it
+   * (`X-Neotoma-Turn-Key` / `X-Neotoma-Conversation-Id` headers, or the
+   * `io.neotoma/*` keys of an MCP call's `_meta`). Self-reported and
+   * unverified; identifiers only. Stamped onto write events so the server can
+   * answer "what did this turn write" without the model reporting it. Absent
+   * when the client supplied none.
+   */
+  turn?: TurnIdentity | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -123,6 +133,14 @@ export function getCurrentAttribution(): AttributionProvenance {
     store?.externalActor ?? null,
     store?.authenticatedPrincipal ?? null
   );
+}
+
+/**
+ * Return the client-reported conversation turn for the active request, or
+ * `null` when the client supplied none (or no context is active).
+ */
+export function getCurrentTurnIdentity(): TurnIdentity | null {
+  return storage.getStore()?.turn ?? null;
 }
 
 /**
@@ -200,6 +218,7 @@ export function runWithExternalActor<T>(
     bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
     mcpConnectionId: existing?.mcpConnectionId ?? null,
     authenticatedPrincipal: existing?.authenticatedPrincipal ?? null,
+    turn: existing?.turn ?? null,
   };
   return storage.run(merged, fn);
 }

@@ -129,8 +129,10 @@ import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
+  getCurrentTurnIdentity,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { resolveToolCallTurnIdentity } from "./services/write_events/turn_identity.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
 import {
   emitEntitySnapshotChange,
@@ -2498,12 +2500,20 @@ export class NeotomaServer {
         // #2240: carry the signed-in person, when one stands behind this
         // session, so writes record who made them alongside the graph they
         // land in. Null for every non-sign-in auth path.
+        // Write events (#2508 lane 6): the conversation turn that caused this
+        // call. The call's own `_meta` wins over a header the enclosing HTTP
+        // request carried; stdio callers can only use `_meta`.
+        const turnForThisCall = resolveToolCallTurnIdentity(
+          (request.params as { _meta?: unknown })._meta,
+          getCurrentTurnIdentity()
+        );
         const result = await runWithRequestContext(
           {
             agentIdentity: identity,
             attributionDecision,
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+            turn: turnForThisCall,
           },
           () => this.executeTool(name, args)
         );

@@ -1,6 +1,7 @@
 import { getCurrentAgentIdentity } from "../services/request_context.js";
+import { buildWriteContext } from "../services/write_events/write_context.js";
 import { substrateEventBus } from "./substrate_event_bus.js";
-import type { SubstrateEvent } from "./types.js";
+import type { SubstrateEvent, WriteOperation } from "./types.js";
 
 export function shallowFieldsChanged(
   before: Record<string, unknown>,
@@ -32,6 +33,8 @@ export function emitObservationCreated(params: {
   idempotency_key?: string;
   observation_source?: string;
   source_peer_id?: string;
+  /** Override the derived write operation (the correction path passes `corrected`). */
+  write_operation?: WriteOperation;
 }): void {
   const base: Omit<SubstrateEvent, "event_id"> = {
     event_type: "observation.created",
@@ -46,6 +49,7 @@ export function emitObservationCreated(params: {
     agent_thumbprint: thumbprint(),
     observation_source: params.observation_source,
     source_peer_id: params.source_peer_id,
+    write_context: buildWriteContext("observation.created", params.write_operation),
   };
   substrateEventBus.emitSubstrateEvent(base);
 }
@@ -62,6 +66,8 @@ export function emitEntitySnapshotChange(params: {
   idempotency_key?: string;
   observation_source?: string;
   source_peer_id?: string;
+  /** Override the derived write operation (the correction path passes `corrected`). */
+  write_operation?: WriteOperation;
 }): void {
   substrateEventBus.emitSubstrateEvent({
     event_type: params.event_type,
@@ -77,6 +83,7 @@ export function emitEntitySnapshotChange(params: {
     agent_thumbprint: thumbprint(),
     observation_source: params.observation_source,
     source_peer_id: params.source_peer_id,
+    write_context: buildWriteContext(params.event_type, params.write_operation),
   });
 }
 
@@ -114,6 +121,7 @@ export function emitRelationshipLifecycle(params: {
     idempotency_key: params.idempotency_key,
     agent_thumbprint: thumbprint(),
     source_peer_id: params.source_peer_id,
+    write_context: buildWriteContext(params.event_type),
   });
 }
 
@@ -148,5 +156,6 @@ export function emitEntityLifecycle(params: {
     idempotency_key: params.idempotency_key,
     agent_thumbprint: thumbprint(),
     source_peer_id: params.source_peer_id,
+    write_context: buildWriteContext(params.event_type),
   });
 }

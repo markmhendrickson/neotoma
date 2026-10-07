@@ -192,6 +192,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     idempotency_key: idempotency_key,
     observation_source: "human",
     source_peer_id: params.source_peer_id,
+    write_operation: "corrected",
   });
   emitEntitySnapshotChange({
     user_id,
@@ -204,6 +205,7 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     idempotency_key: idempotency_key,
     observation_source: "human",
     source_peer_id: params.source_peer_id,
+    write_operation: "corrected",
   });
 
   return {

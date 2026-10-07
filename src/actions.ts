@@ -76,6 +76,7 @@ import {
   runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { turnIdentityFromHeaders } from "./services/write_events/turn_identity.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
 import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
@@ -2322,6 +2323,9 @@ app.all("/mcp", async (req, res) => {
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
           mcpConnectionId: connectionIdHeader ?? null,
+          // Header-carried turn identity; a tool call's own `_meta` overrides
+          // it inside the CallTool handler (write events, #2508 lane 6).
+          turn: turnIdentityFromHeaders(req.headers as Record<string, unknown>),
         },
         () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
       );
@@ -2506,6 +2510,8 @@ app.all("/mcp", async (req, res) => {
         // The gate's resolved connection id: the MCP server reads this, never
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
+        // Header-carried turn identity (write events, #2508 lane 6).
+        turn: turnIdentityFromHeaders(req.headers as Record<string, unknown>),
       },
       () => transport!.handleRequest(req, res, req.body)
     );
