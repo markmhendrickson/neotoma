@@ -6,6 +6,8 @@ export type ToolInputSchema = Record<string, unknown>;
 
 export interface ToolDefinition {
   name: string;
+  /** Human-readable display name (MCP `Tool.title`); set from the effect catalog. */
+  title?: string;
   description: string;
   inputSchema: ToolInputSchema;
   annotations?: Record<string, unknown>;
@@ -1607,9 +1609,13 @@ export function buildToolDefinitions(
   return tools.map((tool) => {
     const effectClass = toolEffectCatalog.effectClasses.get(tool.name);
     if (!effectClass) throw new Error(`No effect class declared for MCP tool ${tool.name}`);
+    const title = toolEffectCatalog.titles.get(tool.name);
+    if (!title) throw new Error(`No title declared for MCP tool ${tool.name}`);
     return {
       ...tool,
-      annotations: toolEffectCatalog.annotationsFor(tool.name),
+      title,
+      // Older hosts read the display name from annotations.title only.
+      annotations: { title, ...toolEffectCatalog.annotationsFor(tool.name) },
       _meta: {
         ...tool._meta,
         "neotoma/effect_class": effectClass,

@@ -25,7 +25,7 @@ Follow this order; do not skip steps:
 3. **Update `src/shared/contract_mappings.ts`.** Every `operationId` needs a row declaring `adapter: "mcp" | "cli" | "both" | "infra"` and, where applicable, `mcpTool` and `cliCommand` names.
 4. **Implement / update the handler** in `src/actions.ts` (or wherever the route is registered). Use the generated types for the request and response shape.
 5. **Wire MCP / CLI surfaces** if `adapter` includes them:
-   - MCP: add / update `src/tool_definitions.ts` and dispatch in `src/server.ts`; update `docs/developer/mcp/tool_descriptions.yaml`, including the new tool's required `effect_classes` entry. The catalog fails closed when its effect inventory and the registered MCP inventory diverge.
+   - MCP: add / update `src/tool_definitions.ts` and dispatch in `src/server.ts`; update `docs/developer/mcp/tool_descriptions.yaml`, including the new tool's required `titles` and `effect_classes` entries (plus an `annotation_overrides` entry when the class default overstates the risk). The catalog fails closed when its title or effect inventory and the registered MCP inventory diverge.
    - CLI: add / update the command in `src/cli/index.ts`; register coverage in `tests/cli/cli_command_coverage_guard.test.ts`.
 6. **Run contract tests.** Minimum: `npm test -- tests/contract/`. The relevant gates are:
    - `tests/contract/contract_mapping.test.ts` — every OpenAPI `operationId` has a mapping row.

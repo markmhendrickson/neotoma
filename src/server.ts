@@ -2412,6 +2412,7 @@ export class NeotomaServer {
           this.toolEffectCatalog
         ).map((def) => ({
           name: def.name,
+          ...(def.title ? { title: def.title } : {}),
           description: def.description,
           inputSchema: def.inputSchema,
           ...(def.annotations ? { annotations: def.annotations } : {}),

@@ -43,6 +43,133 @@ describe("MCP tool effect catalog", () => {
     }
   });
 
+  it("fails closed when a newly registered tool has no title", () => {
+    const directory = mkdtempSync(join(tmpdir(), "neotoma-tool-titles-"));
+    const yamlPath = join(directory, "tool_descriptions.yaml");
+    try {
+      const source = readFileSync(
+        join(config.projectRoot, "docs", "developer", "mcp", "tool_descriptions.yaml"),
+        "utf8"
+      );
+      const withoutTitle = source.replace(/^  store: Store entities and files\n/m, "");
+      expect(withoutTitle).not.toBe(source);
+      writeFileSync(yamlPath, withoutTitle);
+      expect(() => loadToolEffectCatalog(yamlPath, NEOTOMA_TOOL_NAMES)).toThrow(
+        /titles must match the MCP tool inventory; missing: store/
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("gives every advertised tool a non-empty title and complete annotations", () => {
+    expect(catalog.titles.size).toBe(NEOTOMA_TOOL_NAMES.length);
+    const titles = new Set<string>();
+    for (const definition of definitions) {
+      expect(definition.title, definition.name).toBeTruthy();
+      expect(definition.title!.length, definition.name).toBeLessThanOrEqual(40);
+      expect(definition.annotations?.title, definition.name).toBe(definition.title);
+      expect(typeof definition.annotations?.readOnlyHint, definition.name).toBe("boolean");
+      expect(typeof definition.annotations?.openWorldHint, definition.name).toBe("boolean");
+      if (definition.annotations?.readOnlyHint === false) {
+        expect(typeof definition.annotations?.destructiveHint, definition.name).toBe("boolean");
+        expect(typeof definition.annotations?.idempotentHint, definition.name).toBe("boolean");
+      }
+      titles.add(definition.title!);
+    }
+    // Titles are what a person sees on a permission screen; two tools must
+    // never be indistinguishable there.
+    expect(titles.size).toBe(definitions.length);
+  });
+
+  it("classifies key tools by the rule: destructive means irreversible or outward-facing", () => {
+    const hints = (name: string) => {
+      const { readOnlyHint, destructiveHint, openWorldHint } = tool(name).annotations ?? {};
+      return { readOnlyHint, destructiveHint, openWorldHint };
+    };
+
+    // Reads.
+    for (const name of [
+      "retrieve_entities",
+      "retrieve_entity_snapshot",
+      "list_relationships",
+      "list_relationship_types",
+      "describe_entity_type",
+    ]) {
+      expect(hints(name), name).toEqual({
+        readOnlyHint: true,
+        destructiveHint: undefined,
+        openWorldHint: false,
+      });
+    }
+
+    // Local, reversible writes: soft delete and restore must never demand
+    // confirmation, so they are not destructive.
+    for (const name of [
+      "store",
+      "correct",
+      "create_relationship",
+      "register_relationship_type",
+      "merge_entities",
+      "split_entity",
+      "delete_entity",
+      "delete_relationship",
+      "restore_entity",
+      "restore_relationship",
+      "unsubscribe",
+      "manage_bundles",
+      "register_schema",
+      "update_schema_incremental",
+    ]) {
+      expect(hints(name), name).toEqual({
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+    }
+
+    // Changing peers stays destructive even when the row is soft-deleted.
+    expect(hints("remove_peer")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+
+    // Publishing, sending and peer or grant changes are outward-facing.
+    for (const name of [
+      "publish_rendered_page",
+      "submit_issue",
+      "add_issue_message",
+      "sync_issues",
+      "sync_peer",
+      "add_peer",
+      "subscribe",
+    ]) {
+      expect(hints(name), name).toEqual({
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      });
+    }
+
+    // prefer_remote fetches from a peer URL, but every strategy keeps both
+    // sides (immutable observations), so it is open-world, not destructive.
+    expect(hints("resolve_sync_conflict")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+
+    // Remote probes read beyond the instance without changing anything.
+    for (const name of ["get_peer_status", "npm_check_update", "get_issue_status"]) {
+      expect(hints(name), name).toEqual({
+        readOnlyHint: true,
+        destructiveHint: undefined,
+        openWorldHint: true,
+      });
+    }
+  });
+
   it("makes every advertised tool distinguishable by complete, protocol-native metadata", () => {
     expect(catalog.effectClasses.size).toBe(NEOTOMA_TOOL_NAMES.length);
     expect(definitions).toHaveLength(NEOTOMA_TOOL_NAMES.length);
@@ -102,14 +229,15 @@ describe("MCP tool effect catalog", () => {
     const cardTools = (
       buildSmitheryServerCard().tools as Array<{
         name: string;
+        title?: string;
         annotations: unknown;
         _meta: unknown;
       }>
     )
-      .map(({ name, annotations, _meta }) => ({ name, annotations, _meta }))
+      .map(({ name, title, annotations, _meta }) => ({ name, title, annotations, _meta }))
       .sort((a, b) => a.name.localeCompare(b.name));
     const listTools = definitions
-      .map(({ name, annotations, _meta }) => ({ name, annotations, _meta }))
+      .map(({ name, title, annotations, _meta }) => ({ name, title, annotations, _meta }))
       .sort((a, b) => a.name.localeCompare(b.name));
     expect(cardTools).toEqual(listTools);
   });

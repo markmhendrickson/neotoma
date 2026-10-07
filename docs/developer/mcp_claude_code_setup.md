@@ -158,8 +158,10 @@ After configuring the MCP server:
 
 The MCP connection file installs a server endpoint only. It cannot request, set,
 or persist Claude's **Always allow** choice. Neotoma publishes standard MCP
-`annotations` on every tool (`readOnlyHint`, `destructiveHint`,
-`idempotentHint`, and `openWorldHint` where meaningful) so a host can present
+`annotations` and a human-readable `title` on every tool (`readOnlyHint`,
+`destructiveHint`, `idempotentHint`, and `openWorldHint` where meaningful).
+`destructiveHint` means irreversible or outward-facing: soft deletes and
+restores are reversible and are not marked destructive. A host can present
 or apply a graduated policy, but those annotations are hints rather than an
 authorization control.
 

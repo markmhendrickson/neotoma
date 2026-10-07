@@ -16,12 +16,15 @@ export type ToolAnnotations = {
 
 export interface ToolEffectCatalog {
   descriptions: Map<string, string>;
+  /** Human-readable display name per tool (MCP `Tool.title`). */
+  titles: Map<string, string>;
   effectClasses: Map<string, ToolEffectClass>;
   annotationsFor(toolName: string): ToolAnnotations;
 }
 
 type ToolDescriptionsFile = {
   tools?: Record<string, string>;
+  titles?: Record<string, string>;
   effect_classes?: Record<string, string>;
   annotation_overrides?: Record<string, Partial<ToolAnnotations>>;
 };
@@ -94,10 +97,17 @@ export function loadToolEffectCatalog(
   const data = yaml.load(readFileSync(yamlPath, "utf-8")) as ToolDescriptionsFile | undefined;
   const descriptions = data?.tools && requireRecord(data.tools, "tools");
   const effectClasses = requireRecord(data?.effect_classes, "effect_classes");
+  const titles = requireRecord(data?.titles, "titles");
   const overrides = data?.annotation_overrides
     ? requireRecord(data.annotation_overrides, "annotation_overrides")
     : {};
 
+  validateToolSet("titles", titles, expectedToolNames);
+  for (const [name, value] of Object.entries(titles)) {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error(`tool_descriptions.yaml titles.${name} must be a non-empty string`);
+    }
+  }
   validateToolSet("effect_classes", effectClasses, expectedToolNames);
   for (const [name, value] of Object.entries(effectClasses)) {
     if (typeof value !== "string" || !EFFECT_CLASSES.has(value as ToolEffectClass)) {
@@ -128,6 +138,7 @@ export function loadToolEffectCatalog(
 
   return {
     descriptions: new Map(descriptionEntries),
+    titles: new Map(Object.entries(titles).map(([name, title]) => [name, String(title).trim()])),
     effectClasses: new Map(
       Object.entries(effectClasses).map(([name, effectClass]) => [
         name,
