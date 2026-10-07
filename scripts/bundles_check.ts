@@ -17,6 +17,8 @@
  *      types it lists in `provides_entity_types` — no undeclared schema, no
  *      provided type without a schema — and each schema declares an identity
  *      rule (`canonical_name_fields` or `identity_opt_out`, R2).
+ *   6. Bundle schema aliases are unambiguous: no alias is declared by two
+ *      schemas, and no alias equals a type some bundle provides.
  *
  * Exit 0 on success, 1 on any violation. Pure filesystem read; no network.
  *
@@ -152,6 +154,32 @@ for (const name of bundlesWithSchemas()) {
   for (const type of provided) {
     if (!schemaTypes.has(type)) {
       fail(`bundle "${name}": provides "${type}" but ships no schema for it`);
+    }
+  }
+}
+
+// (6) aliases unambiguous across bundles.
+const allProvided = new Map<string, string>();
+for (const b of bundles) {
+  for (const t of b.manifest.provides_entity_types) allProvided.set(t, b.manifest.name);
+}
+const aliasOwner = new Map<string, string>();
+for (const name of bundlesWithSchemas()) {
+  for (const schema of getBundleSchemas(name)) {
+    for (const rawAlias of schema.schema_definition.aliases ?? []) {
+      const alias = rawAlias.trim().toLowerCase();
+      const owner = `${name}:${schema.entity_type}`;
+      const previous = aliasOwner.get(alias);
+      if (previous && previous !== owner) {
+        fail(`alias "${alias}" is declared by both ${previous} and ${owner}`);
+      }
+      aliasOwner.set(alias, owner);
+      const provider = allProvided.get(alias);
+      if (provider) {
+        fail(
+          `alias "${alias}" (on ${owner}) is also an entity type provided by bundle "${provider}"`
+        );
+      }
     }
   }
 }

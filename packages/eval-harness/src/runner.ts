@@ -15,6 +15,8 @@
  * historical eval data without parsing JUnit XML.
  */
 
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -197,6 +199,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   }
 
   let server: IsolatedServer | null = null;
+  const schemaEnv = schemaModeEnv(plan.scenario);
   let driverResult: DriverResult | undefined;
   let assertionFailures: AssertionFailure[] = [];
   let errorMessage: string | undefined;
@@ -207,6 +210,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       env: {
         NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
         ...(plan.scenario.real_storage ? { NEOTOMA_TEST_REAL_STORAGE: "1" } : {}),
+        ...schemaEnv.env,
       },
       faults: plan.scenario.server_faults,
     });
@@ -260,6 +264,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
     pass = false;
   } finally {
     if (server) await server.stop();
+    schemaEnv.cleanup();
   }
 
   return {
@@ -273,6 +278,34 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
     endedAt: new Date().toISOString(),
     pass,
     errorMessage,
+  };
+}
+
+/**
+ * Env for a scenario's `schema_mode` and `bundle_state`. The bundle state file
+ * lives in its own tmp dir so a scenario never touches the host's real bundle
+ * state; `cleanup` removes it after the cell.
+ */
+export function schemaModeEnv(scenario: ScenarioFile): {
+  env: Record<string, string>;
+  cleanup: () => void;
+} {
+  const env: Record<string, string> = {};
+  let dir: string | null = null;
+  if (scenario.schema_mode) env.NEOTOMA_SCHEMA_MODE = scenario.schema_mode;
+  if (scenario.bundle_state) {
+    dir = mkdtempSync(join(tmpdir(), "neotoma-eval-bundles-"));
+    const statePath = join(dir, "bundle_state.json");
+    const enabled: Record<string, boolean> = {};
+    for (const name of scenario.bundle_state.enabled ?? []) enabled[name] = true;
+    writeFileSync(statePath, JSON.stringify({ version: 1, enabled }, null, 2));
+    env.NEOTOMA_BUNDLE_STATE_PATH = statePath;
+  }
+  return {
+    env,
+    cleanup: () => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    },
   };
 }
 

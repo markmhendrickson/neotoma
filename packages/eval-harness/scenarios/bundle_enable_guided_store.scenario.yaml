@@ -1,0 +1,102 @@
+meta:
+  id: bundle_enable_guided_store
+  description: >
+    The isolated server runs in guided schema mode with no opt-in bundle
+    enabled. The agent's store of a crm type (lead_update) is rejected with an
+    error naming the crm bundle. The agent enables crm through the
+    manage_bundles MCP tool. Both tools replay over the server's real /mcp
+    endpoint, so the MCP handlers under test run;
+    whose result carries schema_seed with the bundle's schemas registered. The
+    retried store succeeds, and describe_entity_type shows lead_update is
+    governed by the bundle's registered schema (metadata.bundle = crm, and a
+    declared field the payload never carried), not one inferred on first
+    write. Cassette
+    outputs are deliberately omitted so every asserted result comes from the
+    real server.
+  tags:
+    - tier2
+    - bundles
+    - schema_mode
+    - guided
+
+schema_mode: guided
+bundle_state:
+  enabled: []
+# The guided-mode gate under test lives in the MCP store handler, so store is
+# replayed through the real MCP tool rather than the REST /store route.
+replay_over_mcp:
+  - store
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Persist what
+  the user asks you to record. If a write is refused because a bundle is not
+  enabled, enable that bundle and retry.
+
+user_prompt: |
+  Log a lead update for today's intro call: we agreed I send a proposal by Friday.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  # 1. Before enable: guided mode rejects the bundle type and names the bundle.
+  - type: tool_result.matches
+    tool_name: store
+    which: first
+    result_contains: "ERR_SCHEMA_MODE_GUIDED_UNPROVIDED"
+  - type: tool_result.matches
+    tool_name: store
+    which: first
+    result_contains: "provided by bundle"
+  - type: tool_result.matches
+    tool_name: store
+    which: first
+    result_contains: "crm"
+  # 2. manage_bundles enable returns schema_seed with the bundle's types registered.
+  - type: tool_result.matches
+    tool_name: manage_bundles
+    result_subset:
+      ok: true
+      enabled: true
+      schema_seed:
+        ok: true
+        failed: []
+  - type: tool_result.matches
+    tool_name: manage_bundles
+    result_contains: "lead_update"
+  # 3. The retried store succeeds...
+  - type: tool_result.matches
+    tool_name: store
+    which: last
+    result_key: error
+    present: false
+  - type: entity.exists
+    entity_type: lead_update
+  # ...and lead_update is governed by the bundle's curated schema, not one
+  # inferred on first write: the active schema is the global row the bundle
+  # registered, and it declares commitment_date, a field the payload never
+  # carried (an inferred schema only has the payload's fields).
+  - type: tool_result.matches
+    tool_name: describe_entity_type
+    result_subset:
+      scope: global
+      metadata:
+        bundle: crm
+      schema_definition:
+        fields:
+          commitment_date:
+            type: date
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: eq
+    value: 2

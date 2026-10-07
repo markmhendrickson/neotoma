@@ -89,11 +89,33 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
       ? (o.seed_entities as ScenarioFile["seed_entities"])
       : undefined,
     real_storage: o.real_storage === true ? true : undefined,
+    replay_over_mcp: Array.isArray(o.replay_over_mcp)
+      ? (o.replay_over_mcp.filter((t) => typeof t === "string") as string[])
+      : undefined,
+    schema_mode:
+      o.schema_mode === "evolving" || o.schema_mode === "guided" || o.schema_mode === "locked"
+        ? o.schema_mode
+        : undefined,
+    bundle_state:
+      o.bundle_state && typeof o.bundle_state === "object"
+        ? {
+            enabled: Array.isArray((o.bundle_state as { enabled?: unknown }).enabled)
+              ? ((o.bundle_state as { enabled: unknown[] }).enabled.filter(
+                  (b) => typeof b === "string",
+                ) as string[])
+              : [],
+          }
+        : undefined,
     server_faults: o.server_faults && typeof o.server_faults === "object"
       ? (o.server_faults as ScenarioFile["server_faults"])
       : undefined,
     expected: o.expected as ScenarioFile["expected"],
   };
+  assertField(
+    o.schema_mode === undefined || scenario.schema_mode !== undefined,
+    `schema_mode must be one of evolving | guided | locked (got ${JSON.stringify(o.schema_mode)})`,
+    file,
+  );
   return scenario;
 }
 

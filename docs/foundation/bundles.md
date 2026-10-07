@@ -166,6 +166,8 @@ A bundle schema's aliases are written to `schema_definition.aliases`, the field 
 
 Built-in aliases work differently, and the split matters for three bundle types. `email_message` and `email_thread` are aliases of the built-in `email`, and `bug_report` is an alias of the built-in `product_feedback`. Until the owning bundle has registered its schema, writes under those names resolve to the built-in. Once registered, the registered schema takes priority over the built-in alias.
 
+Enabling a bundle does not move existing data. Rows written under one of these names before the bundle registered its schema were stored as the built-in type (`email` or `product_feedback`) and stay there. Only writes after registration land on the bundle type. The same holds for a bundle alias such as `decision_record`: anything written under it before enabling became its own inferred type (or was rejected under `guided`) and is not re-typed.
+
 ### Existing schemas keep priority
 
 Seeding registers GLOBAL schemas and never touches an existing one. Schema lookup prefers a schema scoped to the writing user over a global one. So on an instance where a type was already in use, the existing schema keeps governing that user's writes, whether it is a global row or a per-user schema inferred on first write. The bundle's curated field set applies to users and instances that had none.
@@ -174,7 +176,9 @@ Seeding registers GLOBAL schemas and never touches an existing one. Schema looku
 
 Disabling a bundle removes its types from the `guided` provided set. That gate only applies to types with no registered schema, so schemas the bundle already registered stay registered, and writes of those types still succeed. Disable does not block writes; it stops new auto-creation of the bundle's unregistered types. The `disable` message says this.
 
-In `guided` mode, the rejection for a type whose bundle is not enabled names that bundle and how to enable it.
+In `guided` mode, the rejection for a type whose bundle is not enabled names that bundle and how to enable it. The same hint is given for a bundle alias (for example `contact_list`), naming the canonical type and its bundle.
+
+The `guided` gate runs on the MCP `store` handler and on extraction-time interpretation. The REST `POST /store` route does not consult the schema mode today, so a REST write of an unprovided type still auto-creates. That gap predates these bundles and is tracked as a follow-up.
 
 ## Use cases and bundles
 

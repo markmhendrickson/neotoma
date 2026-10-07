@@ -56,6 +56,26 @@ export function getBundleSchemas(bundleName: string): EntitySchema[] {
   return [...(BUNDLE_SCHEMAS[bundleName] ?? [])];
 }
 
+/**
+ * If `name` is an alias declared by a bundle schema (`schema_definition.aliases`),
+ * returns the bundle and the canonical type it maps to. Case-insensitive.
+ * Used to point a `guided`-mode rejection of an alias at the bundle to enable.
+ */
+export function bundleDeclaringAlias(
+  name: string
+): { bundle: string; canonical_entity_type: string } | undefined {
+  const wanted = name.trim().toLowerCase();
+  for (const [bundle, schemas] of Object.entries(BUNDLE_SCHEMAS)) {
+    for (const schema of schemas) {
+      const aliases = schema.schema_definition.aliases ?? [];
+      if (aliases.some((a) => a.trim().toLowerCase() === wanted)) {
+        return { bundle, canonical_entity_type: schema.entity_type };
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Outcome of seeding one bundle's schemas. */
 export interface BundleSeedSummary extends RegistryBootstrapSummary {
   bundle: string;

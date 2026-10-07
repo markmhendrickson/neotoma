@@ -291,6 +291,16 @@ describe("guided rejection names the bundle to enable", () => {
     }
   });
 
+  it("names the bundle and canonical type for an alias of a bundle type", () => {
+    const d = checkAutoCreateAllowed("decision_record", "guided");
+    expect(d.allowed).toBe(false);
+    if (!d.allowed) {
+      expect(d.providingBundle).toBe("engineering");
+      expect(d.message).toMatch(/alias of entity type "architectural_decision"/);
+      expect(d.message).toMatch(/bundle "engineering", which is not enabled/);
+    }
+  });
+
   it("keeps the generic message for a type no bundle declares", () => {
     const d = checkAutoCreateAllowed("totally_new_type", "guided");
     expect(d.allowed).toBe(false);
