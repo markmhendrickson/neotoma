@@ -1,0 +1,39 @@
+# Bundle manifest — see docs/foundation/bundles.md
+# Schema bundle, opt-in (install with `neotoma bundles install crm`).
+# Scope comes from a usage audit of production data: only types with real
+# usage ship. Pipeline types with no real usage (deal, account, engagement,
+# pipeline_stage) are deliberately absent.
+name: crm
+version: 1.0.0
+description: Relationship and lead management — companies, people, leads, opportunities, outreach.
+bundle_type: schema
+requires_bundles:
+  - core
+# `organization` is an alias of `company`; `contact_list` of `contact_group`;
+# `outreach_activity` of `outreach_interaction`. Aliases are not listed here.
+provides_entity_types:
+  - company
+  - person
+  - lead_update
+  - lead_evaluation
+  - opportunity
+  - contact_group
+  - icp
+  - category_membership
+  - outreach_interaction
+# `contact` is originated by `core`; crm reuses it without re-registering
+# (descriptor: ../_shared_schemas/contact.ts).
+references_shared_schemas:
+  - contact
+extends_schemas: []
+provides_skills: []
+compatible_modes:
+  - evolving
+  - guided
+  - locked
+category: crm
+serves_use_cases:
+  - crm
+  - cases
+  - customer_ops
+  - diligence

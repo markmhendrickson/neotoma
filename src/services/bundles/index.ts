@@ -41,6 +41,13 @@ export {
   type AutoCreateDecision,
 } from "./enforcement.js";
 export {
+  bundlesWithSchemas,
+  getBundleSchemas,
+  seedBundleSchemas,
+  seedEnabledBundleSchemas,
+  type BundleSeedSummary,
+} from "./bundle_schemas.js";
+export {
   disableBundle,
   enableBundle,
   getBundleInfo,

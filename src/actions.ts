@@ -13549,6 +13549,30 @@ export async function startHTTPServer() {
     logger.warn(`[SchemaRegistry] failed to seed built-in schemas: ${(err as Error).message}`);
   }
 
+  // Seed schemas for every ENABLED opt-in bundle (crm, engineering,
+  // communications, ...). Same additive contract as the built-in seeder above:
+  // a type with an active global schema is left untouched. Bundles enabled via
+  // the CLI while the server was down are picked up here.
+  try {
+    const { seedEnabledBundleSchemas } = await import("./services/bundles/index.js");
+    for (const summary of await seedEnabledBundleSchemas()) {
+      if (summary.registered.length > 0) {
+        logger.info(
+          `[bundles] seeded ${summary.registered.length} schema(s) for bundle "${summary.bundle}": ` +
+            summary.registered.join(", ")
+        );
+      }
+      if (summary.failed.length > 0) {
+        logger.warn(
+          `[bundles] ${summary.failed.length} schema(s) failed to seed for bundle "${summary.bundle}": ` +
+            summary.failed.map((f) => `${f.entity_type} (${f.error})`).join("; ")
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn(`[bundles] failed to seed bundle schemas: ${(err as Error).message}`);
+  }
+
   // Seed the built-in relationship-type vocabulary (#1972 / G25).
   //
   // Runs immediately after the entity-schema seeder and BEFORE any request can

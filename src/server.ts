@@ -2199,7 +2199,27 @@ export class NeotomaServer {
           : parsed.action === "enable"
             ? enableBundle(bundle)
             : disableBundle(bundle);
-      return this.buildTextResponse({ ok: true, action: parsed.action, ...result });
+      // Enabling a schema bundle registers its schemas now, so the bundle's
+      // curated field set (not an inferred one) governs its first writes.
+      // Best-effort: the state change already succeeded, and boot re-seeds.
+      let schemaSeed: unknown;
+      if (parsed.action === "install" || parsed.action === "enable") {
+        try {
+          const { seedBundleSchemas } = await import("./services/bundles/index.js");
+          schemaSeed = await seedBundleSchemas(bundle);
+        } catch (seedErr) {
+          schemaSeed = {
+            bundle,
+            error: seedErr instanceof Error ? seedErr.message : String(seedErr),
+          };
+        }
+      }
+      return this.buildTextResponse({
+        ok: true,
+        action: parsed.action,
+        ...result,
+        ...(schemaSeed !== undefined ? { schema_seed: schemaSeed } : {}),
+      });
     } catch (err) {
       if (err instanceof McpError) throw err;
       if (err instanceof BundleStateError || err instanceof UnknownBundleError) {
