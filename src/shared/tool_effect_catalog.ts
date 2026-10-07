@@ -1,5 +1,18 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
+import { resolveNeotomaPackageRoot } from "../mcp_instruction_doc.js";
+
+/** Catalog location relative to a Neotoma root (source checkout or installed package). */
+export const TOOL_CATALOG_SEGMENTS = [
+  "docs",
+  "developer",
+  "mcp",
+  "tool_descriptions.yaml",
+] as const;
+
+/** Repo-relative path of the catalog, as shipped in the npm package and the image. */
+export const TOOL_CATALOG_RELATIVE_PATH = TOOL_CATALOG_SEGMENTS.join("/");
 
 /**
  * The product-level effect of a tool. This complements the MCP risk hints:
@@ -161,4 +174,41 @@ export function loadToolEffectCatalog(
       return annotations;
     },
   };
+}
+
+/**
+ * Find the catalog under the first root that has it. Callers pass the
+ * configured project root first and the running package's own root second, so
+ * an installed server still finds the copy it ships when the project root
+ * points somewhere else (for example a CLI-configured repo root).
+ *
+ * Throws one clear startup error naming the file and every place searched,
+ * rather than a raw ENOENT, because the catalog is fail-closed by design:
+ * without it the server cannot advertise titles or permission hints.
+ */
+export function resolveToolCatalogPath(roots: readonly string[]): string {
+  const searched: string[] = [];
+  for (const root of roots) {
+    const candidate = join(resolve(root), ...TOOL_CATALOG_SEGMENTS);
+    if (searched.includes(candidate)) continue;
+    searched.push(candidate);
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(
+    `Neotoma cannot start its MCP server: the tool catalog ${TOOL_CATALOG_RELATIVE_PATH} ` +
+      `is missing. It declares every tool's title and permission hints, and the server ` +
+      `refuses to advertise tools without it. Searched: ${searched.join(", ")}. ` +
+      `Reinstall the neotoma package, or set NEOTOMA_PROJECT_ROOT to a Neotoma checkout.`
+  );
+}
+
+/** Load the catalog from the project root, falling back to the running package's root. */
+export function loadInstalledToolEffectCatalog(
+  projectRoot: string,
+  expectedToolNames: readonly string[]
+): ToolEffectCatalog {
+  return loadToolEffectCatalog(
+    resolveToolCatalogPath([projectRoot, resolveNeotomaPackageRoot()]),
+    expectedToolNames
+  );
 }

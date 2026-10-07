@@ -3,7 +3,6 @@
 This guide explains how to connect the Neotoma MCP server to Claude Code for localhost agent integration.
 
 For other integrations, see:
-
 - [`mcp_cursor_setup.md`](mcp_cursor_setup.md) - Cursor integration
 - [`chatgpt_actions_setup.md`](chatgpt_actions_setup.md) - ChatGPT Custom GPT setup
 
@@ -11,11 +10,11 @@ For other integrations, see:
 
 Use **stdio** when Claude Code runs on the same machine as the Neotoma repo. Claude Code spawns the server; no separate HTTP process. Use **HTTP** for remote access or when connecting to a tunnel/deployed server.
 
-| Criterion          | Stdio                                                                       | HTTP                             |
-| ------------------ | --------------------------------------------------------------------------- | -------------------------------- |
-| **Use case**       | Claude Code on same machine                                                 | Remote, tunnel, deployed         |
-| **After sleep**    | Toggle off/on; client re-spawns                                             | Restart HTTP server, then toggle |
-| **Unified config** | `.cursor/mcp.json` + `npm run sync:mcp` propagates to `.mcp.json` and Codex | Separate config per client       |
+| Criterion | Stdio | HTTP |
+|-----------|-------|------|
+| **Use case** | Claude Code on same machine | Remote, tunnel, deployed |
+| **After sleep** | Toggle off/on; client re-spawns | Restart HTTP server, then toggle |
+| **Unified config** | `.cursor/mcp.json` + `npm run sync:mcp` propagates to `.mcp.json` and Codex | Separate config per client |
 
 **Recommendation:** Use stdio for local Claude Code. See [agent_cli_configuration.md](agent_cli_configuration.md) for the unified `.cursor/mcp.json` + sync workflow shared with Cursor and Codex.
 
@@ -73,7 +72,6 @@ Create `.env` in the project root if needed. For local storage, no env vars are 
 9. **Copy** your `connection_id` for use in MCP configuration
 
 **Benefits:**
-
 - Tokens automatically refresh (no manual updates)
 - More secure than session tokens
 - Connections persist until revoked
@@ -104,7 +102,6 @@ The sync updates `.mcp.json`, which Claude Code may use when opening the Neotoma
 ### Option B: Manual Config
 
 Claude Code config location:
-
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Linux:** `~/.config/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
@@ -161,7 +158,9 @@ or persist Claude's **Always allow** choice. Neotoma publishes standard MCP
 `annotations` and a human-readable `title` on every tool (`readOnlyHint`,
 `destructiveHint`, `idempotentHint`, and `openWorldHint` where meaningful).
 `destructiveHint` means irreversible or outward-facing: soft deletes and
-restores are reversible and are not marked destructive. A host can present
+restores are reversible and are not marked destructive. Read-only tools omit
+`destructiveHint` and `idempotentHint`, which MCP defines only for tools that
+write. A host can present
 or apply a graduated policy, but those annotations are hints rather than an
 authorization control.
 
@@ -191,25 +190,21 @@ Once connected, test the available Neotoma actions:
 ### Example Test Commands
 
 **Store contextual data:**
-
 ```
 Remember that I met with Acme Corp today to discuss the Q4 budget. The meeting was productive and we agreed on $50,000 allocation.
 ```
 
 **Query records:**
-
 ```
 What companies have I mentioned in my records?
 ```
 
 **Retrieve entities:**
-
 ```
 Show me all the people I've referenced recently.
 ```
 
 **Upload a file:**
-
 ```
 Can you upload this invoice PDF and extract the structured data?
 ```
@@ -221,14 +216,12 @@ Neotoma includes project-specific instructions for Claude Code that ensure consi
 ### What's Included
 
 **Generated files:**
-
 - **`.claude/CLAUDE.md`** — Primary entrypoint with document loading order, core constraints, and quick reference
 - **`.claude/rules/`** — ~45 modular instruction files (foundation + repository rules)
 - **`.claude/skills/`** — Slash-invokable workflows (e.g. `/release`, `/fix_feature_bug`)
 - **`.claude/settings.json`** — Permissions and autonomous execution config
 
 **Sources:**
-
 - `foundation/agent_instructions/cursor_rules/` — Foundation-level rules
 - `foundation/agent_instructions/cursor_commands/` — Foundation-level commands
 - `docs/**/*_rules.mdc` — Repository-specific rules
@@ -242,7 +235,6 @@ Instructions are generated from sources via `scripts/setup_claude_instructions.s
 ```
 
 **When to sync:**
-
 - After pulling foundation updates
 - After editing rule sources in `docs/` or `foundation/`
 - When adding new repository-specific rules
@@ -252,25 +244,21 @@ Instructions are generated from sources via `scripts/setup_claude_instructions.s
 ### Key Features
 
 **1. Autonomous execution:**
-
 - Claude proceeds without asking for routine implementation, tests, docs, lint fixes
 - Stops only for high-stakes architectural/design ambiguity that could lead to wrong assumptions
 - See `.claude/rules/autonomous_execution.md` for details
 
 **2. Permissions:**
-
 - `defaultMode: acceptEdits` — File edits auto-accepted
 - Broad `allow` rules for npm, git, and project scripts
 - `deny` rules for `.env`, `docs/private/`, and other sensitive paths
 
 **3. Document loading order:**
-
 - Every session loads `docs/context/index_rules.mdc` first (documentation map)
 - Then foundation docs from `docs/foundation/`
 - Then task-specific docs (architecture, subsystems, testing)
 
 **4. Core constraints:**
-
 - State Layer boundaries (no strategy/execution logic)
 - Determinism (hash-based IDs, no randomness, stable sorting)
 - Immutability (observations/source never modified after creation)
@@ -282,7 +270,6 @@ Instructions are generated from sources via `scripts/setup_claude_instructions.s
 **NEVER edit files in `.claude/` directly** — they are generated and will be overwritten.
 
 **To modify instructions:**
-
 1. Edit source files:
    - Foundation rules: `foundation/agent_instructions/cursor_rules/*.mdc`
    - Foundation commands: `foundation/agent_instructions/cursor_commands/*.md`
@@ -295,7 +282,6 @@ Instructions are generated from sources via `scripts/setup_claude_instructions.s
 Claude Code supports skills that work like slash commands:
 
 **Available skills:**
-
 - `/release` — Create a new release following release workflow
 - `/fix_feature_bug` — Fix a bug in a feature unit with error classification
 - `/create_feature_unit` — Create a new feature unit with spec and manifest
@@ -310,13 +296,11 @@ Skills are generated from foundation commands. To add repository-specific skills
 `.claude/settings.json` configures:
 
 **Permissions:**
-
 - **Allow:** npm scripts, git commands, project scripts, file edits/reads
 - **Deny:** `.env` files, `docs/private/`, destructive commands
 - **DefaultMode:** `acceptEdits` (auto-accept file edits)
 
 **Local overrides:**
-
 - Create `.claude/settings.local.json` for user-specific settings
 - Already gitignored (Claude creates this automatically)
 
@@ -327,21 +311,18 @@ Skills are generated from foundation commands. To add repository-specific skills
 Claude Code's localhost architecture aligns perfectly with Neotoma's privacy-first design:
 
 **Privacy-First Integration:**
-
 - All data stays on your computer
 - No cloud intermediary for memory access
 - User-controlled memory with end-to-end encryption
 - Never used for training or provider access
 
 **Deterministic Context:**
-
 - Claude Code accesses Neotoma's deterministic extraction
 - Same queries return consistent, reproducible results
 - Verifiable domain for stored data
 - Compensates for LLM "jagged intelligence"
 
 **Cross-Platform Memory:**
-
 - Same Neotoma memory works with Cursor, ChatGPT, and Claude Code
 - No platform lock-in
 - Memory persists across all AI tools
@@ -363,14 +344,12 @@ This error means the MCP server didn't receive valid authentication during initi
    - If not active, create a new connection (see Step 3 above)
 
 2. **Check environment variable in config:**
-
    ```bash
    # macOS
    cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | grep NEOTOMA_CONNECTION_ID
    # Linux
    cat ~/.config/Claude/claude_desktop_config.json | grep NEOTOMA_CONNECTION_ID
    ```
-
    Should show: `"NEOTOMA_CONNECTION_ID": "your-connection-id"`
 
 3. **Verify connection ID matches:**
@@ -384,7 +363,6 @@ This error means the MCP server didn't receive valid authentication during initi
 5. **Restart Claude Code** completely (quit and reopen, not just reload)
 
 **If using Session Token (Deprecated - Not Recommended):**
-
 1. **Switch to OAuth** (strongly recommended) - more reliable and secure
 2. Or **get a fresh session token:**
    - Sign in to the Neotoma web UI
@@ -398,7 +376,6 @@ This error means the MCP server didn't receive valid authentication during initi
 The OAuth connection doesn't exist, was revoked, or the connection ID is incorrect.
 
 **Solutions:**
-
 1. **Verify connection exists:**
    - Sign in to Neotoma web UI (http://localhost:5195)
    - Go to MCP Setup → OAuth Connection tab
@@ -419,7 +396,6 @@ The OAuth connection doesn't exist, was revoked, or the connection ID is incorre
 The session token is invalid or expired. **OAuth is recommended** to avoid this issue.
 
 **Solutions:**
-
 1. **Switch to OAuth** (strongly recommended):
    - Follow Step 3 above to create an OAuth connection
    - Update config to use `NEOTOMA_CONNECTION_ID` instead of `NEOTOMA_SESSION_TOKEN`
@@ -436,7 +412,6 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 ### Issue: "MCP server not found" or "Command failed"
 
 **Solutions:**
-
 1. Ensure `npm run build:server` completed successfully
 2. Verify `dist/index.js` exists
 3. Use absolute paths in config (not `~` or relative paths)
@@ -446,7 +421,6 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 ### Issue: "Database connection failed" or "Invalid configuration"
 
 **Solutions:**
-
 1. Verify `.env` file exists in project root (not in `dist/`) if using custom paths
 2. Check `cwd` in config points to project root (where `.env` is)
 3. Run `neotoma init` to create data directory and database
@@ -455,7 +429,6 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 ### Issue: MCP actions not appearing in Claude Code
 
 **Solutions:**
-
 1. Completely quit and restart Claude Code (not just reload)
 2. Check config file syntax (valid JSON)
 3. Verify MCP server is running in background
@@ -467,7 +440,6 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 This means Claude Code can't find the node executable.
 
 **Solutions:**
-
 1. Use absolute path to node: `which node` (macOS/Linux)
 2. If using nvm, use the full nvm path (e.g., `/Users/username/.nvm/versions/node/v20.10.0/bin/node`)
 3. Avoid shell aliases or symbolic links
@@ -475,7 +447,6 @@ This means Claude Code can't find the node executable.
 ### Issue: "Cannot find module" errors
 
 **Solutions:**
-
 1. Ensure dependencies installed: `npm install`
 2. Rebuild: `npm run build:server`
 3. Check `dist/` directory contains all necessary files
@@ -487,11 +458,9 @@ This means Claude Code can't find the node executable.
 If you're actively developing the MCP server:
 
 1. **Run automatic rebuild in watch mode:**
-
    ```bash
    npm run dev:server:tunnel
    ```
-
    This runs `tsc --watch` and automatically rebuilds `dist/` on file changes.
 
 2. **Restart Claude Code** after code changes to reload the MCP server
@@ -507,7 +476,6 @@ If you're actively developing the MCP server:
 If you use Claude Code from different machines or profiles:
 
 1. **Build once** in the Neotoma project:
-
    ```bash
    cd /path/to/neotoma
    npm run build:server
@@ -526,14 +494,12 @@ All instances will share the same Neotoma database (local SQLite).
 ## Privacy and Security Notes
 
 **Localhost Advantages:**
-
 - All MCP communication happens locally via stdin/stdout
 - No network requests for memory access
 - User-controlled memory with encryption
 - Data stays on your computer (local storage)
 
 **Security Best Practices:**
-
 - Use environment variables for credentials when needed
 - Keep `.env` out of version control
 
@@ -566,7 +532,6 @@ npm test
 ```
 
 **Config file location:**
-
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Linux: `~/.config/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { config } from "../../src/config.js";
 import { buildSmitheryServerCard } from "../../src/mcp_server_card.js";
-import { loadToolEffectCatalog } from "../../src/shared/tool_effect_catalog.js";
+import {
+  loadToolEffectCatalog,
+  resolveToolCatalogPath,
+  TOOL_CATALOG_SEGMENTS,
+} from "../../src/shared/tool_effect_catalog.js";
 import { buildToolDefinitions, NEOTOMA_TOOL_NAMES } from "../../src/tool_definitions.js";
 
 const catalog = loadToolEffectCatalog(
@@ -120,6 +124,8 @@ describe("MCP tool effect catalog", () => {
       "manage_bundles",
       "register_schema",
       "update_schema_incremental",
+      // auto_fix rewrites snapshot rows, so this is a write, not a read.
+      "health_check_snapshots",
     ]) {
       expect(hints(name), name).toEqual({
         readOnlyHint: false,
@@ -144,6 +150,8 @@ describe("MCP tool effect catalog", () => {
       "sync_peer",
       "add_peer",
       "subscribe",
+      // Can mint a guest access grant and POST to a custom_webhook mirror.
+      "submit_entity",
     ]) {
       expect(hints(name), name).toEqual({
         readOnlyHint: false,
@@ -167,6 +175,31 @@ describe("MCP tool effect catalog", () => {
         destructiveHint: undefined,
         openWorldHint: true,
       });
+    }
+  });
+
+  it("names the missing catalog file and every searched root instead of a raw ENOENT", () => {
+    const empty = mkdtempSync(join(tmpdir(), "neotoma-tool-catalog-missing-"));
+    try {
+      expect(() => resolveToolCatalogPath([empty])).toThrow(
+        /tool catalog docs\/developer\/mcp\/tool_descriptions\.yaml is missing.*Searched: .*neotoma-tool-catalog-missing-/
+      );
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the next root when the project root has no catalog", () => {
+    const empty = mkdtempSync(join(tmpdir(), "neotoma-tool-catalog-project-"));
+    const installed = mkdtempSync(join(tmpdir(), "neotoma-tool-catalog-package-"));
+    try {
+      const target = join(installed, ...TOOL_CATALOG_SEGMENTS);
+      mkdirSync(join(installed, ...TOOL_CATALOG_SEGMENTS.slice(0, -1)), { recursive: true });
+      writeFileSync(target, "effect_classes: {}\ntitles: {}\n");
+      expect(resolveToolCatalogPath([empty, installed])).toBe(target);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+      rmSync(installed, { recursive: true, force: true });
     }
   });
 

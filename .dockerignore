@@ -34,3 +34,8 @@ fly.toml
 fly.sandbox.toml
 *.md
 !README.md
+
+# Re-include the MCP tool catalog: the runtime stage copies it and the MCP
+# server fails closed without it. Keep this as the last rule so nothing above
+# re-excludes it.
+!docs/developer/mcp/tool_descriptions.yaml

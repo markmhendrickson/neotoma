@@ -122,7 +122,7 @@ titles:
   list_interpretations: List interpretations
   get_authenticated_user: Get authenticated user
   get_session_identity: Get session identity
-  health_check_snapshots: Check snapshot health
+  health_check_snapshots: Check or repair snapshots
   list_recent_changes: List recent changes
   submit_issue: Submit issue
   add_issue_message: Add message to issue
@@ -134,7 +134,7 @@ titles:
   list_entity_submissions: List entity submissions
   sync_entity_submissions: Sync entity submissions
   subscribe: Subscribe to changes
-  unsubscribe: Unsubscribe
+  unsubscribe: Unsubscribe from changes
   list_subscriptions: List subscriptions
   get_subscription_status: Get subscription status
   add_peer: Add sync peer
@@ -193,13 +193,13 @@ effect_classes:
   list_interpretations: read
   get_authenticated_user: read
   get_session_identity: read
-  health_check_snapshots: read
+  health_check_snapshots: write
   list_recent_changes: read
   submit_issue: external
   add_issue_message: external
   get_issue_status: external
   sync_issues: external
-  submit_entity: write
+  submit_entity: external
   add_entity_message: write
   get_entity_submission_status: external
   list_entity_submissions: read
@@ -244,8 +244,6 @@ annotation_overrides:
     destructiveHint: false
   create_interpretation:
     destructiveHint: false
-  submit_entity:
-    destructiveHint: false
   add_entity_message:
     destructiveHint: false
   delete_entity:
@@ -265,6 +263,8 @@ annotation_overrides:
   update_schema_incremental:
     destructiveHint: false
   resolve_sync_conflict:
+    destructiveHint: false
+  health_check_snapshots:
     destructiveHint: false
   get_issue_status:
     readOnlyHint: true

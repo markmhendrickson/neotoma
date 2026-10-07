@@ -1,16 +1,13 @@
-import { join } from "node:path";
 import { config } from "./config.js";
 import { buildToolDefinitions, NEOTOMA_TOOL_NAMES } from "./tool_definitions.js";
 import { readPackageVersion } from "./shared/package_version.js";
-import { loadToolEffectCatalog } from "./shared/tool_effect_catalog.js";
+import { loadInstalledToolEffectCatalog } from "./shared/tool_effect_catalog.js";
 
-const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
 const TURN_SUMMARY_WIDGET_RESOURCE_URI = "ui://neotoma/turn-summary";
 
 function loadToolCatalog() {
-  const yamlPath = join(config.projectRoot, ...MCP_DOCS_SUBDIR, "tool_descriptions.yaml");
-  return loadToolEffectCatalog(yamlPath, NEOTOMA_TOOL_NAMES);
+  return loadInstalledToolEffectCatalog(config.projectRoot, NEOTOMA_TOOL_NAMES);
 }
 
 /**

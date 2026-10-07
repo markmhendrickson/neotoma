@@ -323,3 +323,98 @@ describe("#2493 raw_storage.file_count", () => {
     expect(await evaluatePredicate(p, ctx())).not.toBeNull();
   });
 });
+
+describe("tools_list.tool / tools_list.all_titled", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const listed = [
+    {
+      name: "retrieve_entities",
+      title: "Search entities",
+      annotations: { title: "Search entities", readOnlyHint: true, openWorldHint: false },
+      _meta: { "neotoma/effect_class": "read" },
+    },
+    {
+      name: "delete_entity",
+      title: "Delete entity (restorable)",
+      annotations: {
+        title: "Delete entity (restorable)",
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+  ];
+
+  function stubToolsList(tools: unknown[], init: { status?: number; sse?: boolean } = {}) {
+    const fetchMock = vi.fn(async (_url: string, request: RequestInit) => {
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools } });
+      return new Response(init.sse ? `event: message\ndata: ${body}\n\n` : body, {
+        status: init.status ?? 200,
+        headers: { "content-type": init.sse ? "text/event-stream" : "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("matches a listed tool's annotations and absent paths, with the bearer token", async () => {
+    const fetchMock = stubToolsList(listed);
+    const p: ExpectedAssertion = {
+      type: "tools_list.tool",
+      tool_name: "retrieve_entities",
+      tool_subset: { annotations: { readOnlyHint: true }, _meta: { "neotoma/effect_class": "read" } },
+      absent_paths: ["annotations.destructiveHint"],
+    };
+    expect(await evaluatePredicate(p, ctx({ mcpToken: "tok" }))).toBeNull();
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((request.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    expect(JSON.parse(String(request.body)).method).toBe("tools/list");
+  });
+
+  it("reads an SSE-framed tools/list response", async () => {
+    stubToolsList(listed, { sse: true });
+    const p: ExpectedAssertion = {
+      type: "tools_list.tool",
+      tool_name: "delete_entity",
+      tool_subset: { annotations: { destructiveHint: false } },
+    };
+    expect(await evaluatePredicate(p, ctx())).toBeNull();
+  });
+
+  it("fails when the annotation differs, a path that must be absent is present, or the tool is missing", async () => {
+    stubToolsList(listed);
+    const wrong: ExpectedAssertion = {
+      type: "tools_list.tool",
+      tool_name: "delete_entity",
+      tool_subset: { annotations: { destructiveHint: true } },
+    };
+    expect(await evaluatePredicate(wrong, ctx())).not.toBeNull();
+    const present: ExpectedAssertion = {
+      type: "tools_list.tool",
+      tool_name: "delete_entity",
+      absent_paths: ["annotations.destructiveHint"],
+    };
+    expect((await evaluatePredicate(present, ctx()))!.message).toContain("omit annotations.destructiveHint");
+    const missing: ExpectedAssertion = { type: "tools_list.tool", tool_name: "no_such_tool" };
+    expect((await evaluatePredicate(missing, ctx()))!.message).toContain("not in tools/list");
+  });
+
+  it("all_titled fails on an untitled tool or a title not mirrored into annotations", async () => {
+    stubToolsList(listed);
+    expect(await evaluatePredicate({ type: "tools_list.all_titled", value: 2 }, ctx())).toBeNull();
+    stubToolsList([...listed, { name: "store", annotations: { readOnlyHint: false } }]);
+    const fail = await evaluatePredicate({ type: "tools_list.all_titled" }, ctx());
+    expect(fail!.message).toContain("store");
+    stubToolsList(listed);
+    expect(await evaluatePredicate({ type: "tools_list.all_titled", value: 60 }, ctx())).not.toBeNull();
+  });
+
+  it("fails closed when tools/list cannot be read (never treats an error as an empty list)", async () => {
+    stubToolsList([], { status: 500 });
+    const fail = await evaluatePredicate({ type: "tools_list.all_titled", value: 0 }, ctx());
+    expect(fail!.message).toContain("HTTP 500");
+  });
+});

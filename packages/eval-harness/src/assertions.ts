@@ -40,6 +40,71 @@ export interface AssertionContext {
    * independent of any database row.
    */
   dataDir?: string;
+  /**
+   * Bearer token the isolated server accepts. Used by `tools_list.*` to read
+   * the live MCP `tools/list`, the surface a host's permission screen uses.
+   */
+  mcpToken?: string;
+}
+
+type ListedTool = Record<string, unknown> & { name?: string };
+
+const MCP_STATELESS_VERSION = "2026-07-28";
+const toolsListCache = new WeakMap<AssertionContext, Promise<ListedTool[] | string>>();
+
+/**
+ * Read the live `tools/list` over HTTP with the stateless MCP request shape
+ * (no session handshake). Returns the tools, or an error string so the
+ * predicate can fail with the reason instead of reading an empty list as data.
+ */
+function fetchToolsList(ctx: AssertionContext): Promise<ListedTool[] | string> {
+  const cached = toolsListCache.get(ctx);
+  if (cached) return cached;
+  const pending = (async (): Promise<ListedTool[] | string> => {
+    try {
+      const res = await fetch(`${ctx.baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": MCP_STATELESS_VERSION,
+          "mcp-method": "tools/list",
+          ...(ctx.mcpToken ? { authorization: `Bearer ${ctx.mcpToken}` } : {}),
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/list",
+          params: {
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": MCP_STATELESS_VERSION,
+              "io.modelcontextprotocol/clientCapabilities": {},
+              "io.modelcontextprotocol/clientInfo": { name: "neotoma-eval-harness", version: "0.0.0" },
+            },
+          },
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) return `tools/list returned HTTP ${res.status}: ${text.slice(0, 300)}`;
+      const payload = (res.headers.get("content-type") ?? "").includes("text/event-stream")
+        ? text
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim())
+            .filter(Boolean)
+            .at(-1) ?? ""
+        : text;
+      const body = JSON.parse(payload) as { result?: { tools?: ListedTool[] }; error?: unknown };
+      if (!body.result?.tools) {
+        return `tools/list returned no tools: ${JSON.stringify(body.error ?? body).slice(0, 300)}`;
+      }
+      return body.result.tools;
+    } catch (err) {
+      return `tools/list failed: ${(err as Error).message}`;
+    }
+  })();
+  toolsListCache.set(ctx, pending);
+  return pending;
 }
 
 interface EntitiesQueryResponse {
@@ -651,6 +716,65 @@ export async function evaluatePredicate(
         message: `Expected raw-storage file count ${op} ${expected}, got ${actual}.`,
         expected: { op, value: expected },
         actual,
+      };
+    }
+    case "tools_list.tool": {
+      const tools = await fetchToolsList(ctx);
+      if (typeof tools === "string") {
+        return { predicate, message: tools, expected: predicate, actual: null };
+      }
+      const tool = tools.find((candidate) => candidate.name === predicate.tool_name);
+      if (!tool) {
+        return {
+          predicate,
+          message: `tools_list.tool: "${predicate.tool_name ?? "(none)"}" is not in tools/list.`,
+          expected: predicate,
+          actual: tools.map((candidate) => candidate.name),
+        };
+      }
+      if (predicate.tool_subset && !isSubset(tool, predicate.tool_subset)) {
+        return {
+          predicate,
+          message: `Expected tools/list entry "${predicate.tool_name}" to match ${JSON.stringify(
+            predicate.tool_subset
+          )}.`,
+          expected: predicate.tool_subset,
+          actual: { title: tool.title, annotations: tool.annotations, _meta: tool._meta },
+        };
+      }
+      const present = (predicate.absent_paths ?? []).filter((p) => getPath(tool, p).found);
+      if (present.length > 0) {
+        return {
+          predicate,
+          message: `Expected tools/list entry "${predicate.tool_name}" to omit ${present.join(", ")}.`,
+          expected: { absent_paths: predicate.absent_paths },
+          actual: { annotations: tool.annotations },
+        };
+      }
+      return null;
+    }
+    case "tools_list.all_titled": {
+      const tools = await fetchToolsList(ctx);
+      if (typeof tools === "string") {
+        return { predicate, message: tools, expected: predicate, actual: null };
+      }
+      const minimum = typeof predicate.value === "number" ? predicate.value : 1;
+      const untitled = tools
+        .filter((tool) => {
+          const title = typeof tool.title === "string" ? tool.title.trim() : "";
+          const annotations = (tool.annotations ?? {}) as Record<string, unknown>;
+          return !title || annotations.title !== tool.title;
+        })
+        .map((tool) => tool.name);
+      if (tools.length >= minimum && untitled.length === 0) return null;
+      return {
+        predicate,
+        message:
+          tools.length < minimum
+            ? `Expected at least ${minimum} tools in tools/list, got ${tools.length}.`
+            : `Tools without a title mirrored into annotations.title: ${untitled.join(", ")}.`,
+        expected: { minimum, title_equals_annotations_title: true },
+        actual: { count: tools.length, untitled },
       };
     }
     case "snapshot.field_present":

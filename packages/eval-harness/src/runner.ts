@@ -248,6 +248,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       assistantText: driverResult.assistantText,
       toolCalls: driverResult.toolCalls,
       dataDir: server.dataDir,
+      mcpToken: server.token,
     });
     pass = assertionFailures.length === 0;
     if (!pass) {

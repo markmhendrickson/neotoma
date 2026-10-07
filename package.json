@@ -256,6 +256,7 @@
   "files": [
     "dist",
     "docs/developer/mcp/instructions.md",
+    "docs/developer/mcp/tool_descriptions.yaml",
     "openapi.yaml",
     "openclaw.plugin.json",
     "skills",

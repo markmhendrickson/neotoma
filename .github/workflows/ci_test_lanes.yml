@@ -362,6 +362,13 @@ jobs:
       - name: Run Tier 1 agentic evals
         run: npm run eval:tier1
 
+      # Agent-facing tools/list metadata (titles + permission annotations),
+      # read from a real isolated server the way a host connects to it. Also
+      # runs in the eval_scenarios lane with every other scenario; it is pinned
+      # here so this lane fails if a server cannot load its tool catalog.
+      - name: Run tools/list permission-metadata eval
+        run: npx tsx packages/eval-harness/src/cli.ts run --mode replay --provider stub --reporter tty --scenario tools_list_permission_metadata
+
   eval_scenarios:
     # eval-harness SCENARIO lane (Tier 2). Runs the agent-driving scenarios in
     # packages/eval-harness/scenarios/ against a real in-process isolated

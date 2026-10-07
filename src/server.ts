@@ -25,7 +25,10 @@ import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
 import { readPackageVersion } from "./shared/package_version.js";
 import { filterInstallableSkillNames } from "./shared/skill_deprecation.js";
 import { buildToolDefinitions, NEOTOMA_TOOL_NAMES } from "./tool_definitions.js";
-import { loadToolEffectCatalog, type ToolEffectCatalog } from "./shared/tool_effect_catalog.js";
+import {
+  loadInstalledToolEffectCatalog,
+  type ToolEffectCatalog,
+} from "./shared/tool_effect_catalog.js";
 import {
   MCP_META_SERVER_INFO,
   MCP_MODERN_SUPPORTED_VERSIONS,
@@ -340,10 +343,7 @@ export class NeotomaServer {
       }
     );
 
-    this.toolEffectCatalog = loadToolEffectCatalog(
-      join(this.mcpDocsPath(), "tool_descriptions.yaml"),
-      NEOTOMA_TOOL_NAMES
-    );
+    this.toolEffectCatalog = loadInstalledToolEffectCatalog(config.projectRoot, NEOTOMA_TOOL_NAMES);
     this.toolDescriptions = this.toolEffectCatalog.descriptions;
     this.setupInitializeHandler();
     this.setupToolHandlers();
