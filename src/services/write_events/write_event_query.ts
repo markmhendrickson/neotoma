@@ -1,5 +1,5 @@
 /**
- * Query the durable write record (write events, #2508 lane 6).
+ * Query the durable write record (write events; turn keys #2440, reads #2261).
  *
  * Reads `substrate_events` — the durable log every write already lands in —
  * and returns one {@link WriteEventRecord} per event, including the

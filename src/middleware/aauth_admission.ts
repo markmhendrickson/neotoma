@@ -61,7 +61,7 @@ export function aauthAdmission(): RequestHandler {
           agentIdentity: outer?.agentIdentity ?? null,
           attributionDecision: outer?.attributionDecision ?? null,
           aauthAdmission: negative,
-          // Keep the client-reported turn identity (write events, #2508 lane 6).
+          // Keep the client-reported turn identity (write events; turn keys #2440, reads #2261).
           turn: outer?.turn ?? null,
         },
         () => {

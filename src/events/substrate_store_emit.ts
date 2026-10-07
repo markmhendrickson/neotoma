@@ -159,3 +159,54 @@ export function emitEntityLifecycle(params: {
     write_context: buildWriteContext(params.event_type),
   });
 }
+
+/**
+ * Emit the pair of events an observation write produces: `observation.created`
+ * (when the observation id is known) and the entity-level `entity.created` /
+ * `entity.updated`. For write paths that insert an observation outside the
+ * main store core (REST observation create, the asset record a file store
+ * creates, schema field promotion, schema-lag repair) so they leave the same
+ * durable write record as `store` does (docs/subsystems/write_events.md).
+ */
+export function emitObservationWrite(params: {
+  user_id: string;
+  entity_id: string;
+  entity_type: string;
+  /** Omit when the insert path does not return the observation id. */
+  observation_id?: string;
+  timestamp: string;
+  /** True when this observation is the entity's first. */
+  is_new_entity: boolean;
+  fields_changed?: string[];
+  source_id?: string;
+  idempotency_key?: string;
+  observation_source?: string;
+  source_peer_id?: string;
+}): void {
+  if (params.observation_id) {
+    emitObservationCreated({
+      user_id: params.user_id,
+      entity_id: params.entity_id,
+      entity_type: params.entity_type,
+      observation_id: params.observation_id,
+      timestamp: params.timestamp,
+      source_id: params.source_id,
+      idempotency_key: params.idempotency_key,
+      observation_source: params.observation_source,
+      source_peer_id: params.source_peer_id,
+    });
+  }
+  emitEntitySnapshotChange({
+    user_id: params.user_id,
+    entity_id: params.entity_id,
+    entity_type: params.entity_type,
+    event_type: params.is_new_entity ? "entity.created" : "entity.updated",
+    timestamp: params.timestamp,
+    observation_id: params.observation_id,
+    fields_changed: params.is_new_entity ? undefined : params.fields_changed,
+    source_id: params.source_id,
+    idempotency_key: params.idempotency_key,
+    observation_source: params.observation_source,
+    source_peer_id: params.source_peer_id,
+  });
+}

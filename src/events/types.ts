@@ -25,7 +25,7 @@ export type SubstrateEntityAction =
 
 /**
  * The write operation a substrate event records, in the vocabulary an
- * activity view uses (write events, #2508 lane 6). Derived from the event
+ * activity view uses (write events; turn keys #2440, reads #2261). Derived from the event
  * type, except `corrected`, which the correction path sets explicitly because
  * a correction otherwise looks like any other `entity.updated`.
  */

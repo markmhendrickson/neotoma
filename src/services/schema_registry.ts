@@ -2084,6 +2084,19 @@ export class SchemaRegistryService {
               }
             } else {
               totalMigrated += Object.keys(promotedFields).length;
+              // Promotion writes a new observation onto an existing entity:
+              // record it like any other update (docs/subsystems/write_events.md).
+              // The insert does not return the observation id.
+              const { emitObservationWrite } = await import("../events/substrate_store_emit.js");
+              emitObservationWrite({
+                user_id: firstFragment.user_id,
+                entity_id: entityId,
+                entity_type: options.entity_type,
+                timestamp: observedAt,
+                is_new_entity: false,
+                fields_changed: Object.keys(promotedFields).sort(),
+                source_id: sourceId ?? undefined,
+              });
               logSchemaRegistryInfo(
                 `[SCHEMA_REGISTRY] Migrated ${Object.keys(promotedFields).length} fields for entity ${entityId}`
               );

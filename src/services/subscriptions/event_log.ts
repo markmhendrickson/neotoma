@@ -53,6 +53,23 @@ export const EVENT_RETENTION_DAYS = Math.max(
   parseInt(process.env.NEOTOMA_EVENT_RETENTION_DAYS ?? "7", 10) || 7
 );
 
+let durablePersistFailures = 0;
+
+/**
+ * Count a substrate event whose durable persist failed after its write had
+ * already committed. Such an event is absent from the write-event record and
+ * from durable resume. Returns the running total for this process.
+ */
+export function recordDurablePersistFailure(): number {
+  durablePersistFailures += 1;
+  return durablePersistFailures;
+}
+
+/** Durable-persist failures since process start (write events lost). */
+export function getDurablePersistFailureCount(): number {
+  return durablePersistFailures;
+}
+
 export interface DurableEvent {
   seq: number;
   event: SubstrateEvent;
@@ -148,7 +165,7 @@ export async function getEventsAfterSeq(
       out.push({
         seq: row.seq,
         // Resume delivers to subscribers: strip the server-side write
-        // context the log keeps (#2508 lane 6). `listWriteEvents` reads it.
+        // context the log keeps (write events; turn keys #2440). `listWriteEvents` reads it.
         event: toDeliverableSubstrateEvent(
           JSON.parse(maybeDecryptPayload(row.payload)) as SubstrateEvent
         ),

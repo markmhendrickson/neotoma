@@ -16,6 +16,7 @@
  * fields JSON so the run is fully rollback-safe via rollbackRun().
  */
 
+import { emitObservationWrite } from "../events/substrate_store_emit.js";
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { schemaRegistry } from "./schema_registry.js";
@@ -263,6 +264,18 @@ export async function repairEntityType(
 
     affectedEntityIds.add(group.entityId);
     inserted++;
+    // Repair writes a new observation onto an existing entity: record it like
+    // any other update (docs/subsystems/write_events.md).
+    emitObservationWrite({
+      user_id: group.userId ?? DEFAULT_USER_ID,
+      entity_id: group.entityId,
+      entity_type: entityType,
+      observation_id: deterministicObsId(group.entityId, runId),
+      timestamp: new Date().toISOString(),
+      is_new_entity: false,
+      fields_changed: Object.keys(group.fields).sort(),
+      source_id: group.sourceId ?? undefined,
+    });
   }
 
   // Recompute snapshots.

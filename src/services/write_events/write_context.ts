@@ -1,5 +1,5 @@
 /**
- * Server-side write context for substrate events (write events, #2508 lane 6).
+ * Server-side write context for substrate events (write events; turn keys #2440, reads #2261).
  *
  * Every write the substrate makes already emits a {@link SubstrateEvent}, and
  * every emitted event is persisted to the durable `substrate_events` log. This
