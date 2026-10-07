@@ -161,6 +161,7 @@ import {
 } from "./services/issues/issue_operations.js";
 import { syncIssuesFromGitHub } from "./services/issues/sync_issues_from_github.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import { buildMcpAppBridgeScript } from "./services/mcp_app_bridge.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -1680,9 +1681,10 @@ export class NeotomaServer {
   }
 
   // FU-2026-05-002: neotoma_turn_summary MCP tool.
-  private async handleTurnSummary(
-    args: unknown
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  private async handleTurnSummary(args: unknown): Promise<{
+    content: Array<{ type: string; text: string }>;
+    structuredContent?: Record<string, unknown>;
+  }> {
     const schema = z.object({
       conversation_id: z.string().min(1),
       turn_key: z.string().min(1),
@@ -1695,8 +1697,17 @@ export class NeotomaServer {
         userId,
         conversationId: parsed.conversation_id,
         turnKey: parsed.turn_key,
+        // Same origin get_session_identity reports, so the card's links match
+        // the ones agents were told to use; null means render without links.
+        origin: this.sessionAppOrigin ?? resolveConfiguredSessionOrigin() ?? null,
       });
-      return this.buildTextResponse(result);
+      // structuredContent feeds the MCP Apps card; the JSON text block keeps
+      // existing text-only parsers working; the second text block is the
+      // card rendered as markdown for clients that cannot show MCP Apps.
+      return this.buildStructuredResponse(
+        result,
+        result.fallback_text ? [result.fallback_text] : []
+      );
     } catch (err) {
       if (err instanceof TurnSummaryError) {
         return this.buildTextResponse({
@@ -3206,6 +3217,28 @@ export class NeotomaServer {
     };
   }
 
+  /**
+   * Tool result carrying both `structuredContent` (what MCP Apps widgets read
+   * from `ui/notifications/tool-result`) and the same object as a JSON text
+   * block for text-only clients, optionally followed by extra text blocks.
+   * `structuredContent` goes through the BigInt-safe JSON round trip so the
+   * two copies are identical.
+   */
+  private buildStructuredResponse(
+    data: Record<string, unknown>,
+    extraText: string[] = []
+  ): {
+    content: Array<{ type: string; text: string }>;
+    structuredContent: Record<string, unknown>;
+  } {
+    const textResponse = this.buildTextResponse(data);
+    const json = textResponse.content[0].text;
+    return {
+      content: [...textResponse.content, ...extraText.map((text) => ({ type: "text", text }))],
+      structuredContent: JSON.parse(json) as Record<string, unknown>,
+    };
+  }
+
   private buildTextResponse(data: unknown): {
     content: Array<{ type: string; text: string }>;
   } {
@@ -3362,34 +3395,24 @@ export class NeotomaServer {
     const summaryEl = document.getElementById("summary");
     const payloadEl = document.getElementById("payload");
 
-    function renderPayload(payload) {
-      const safePayload = payload ?? {};
+    window.neotomaAppRender = function (payload) {
+      const safePayload = payload && typeof payload === "object" ? payload : {};
       const events = Array.isArray(safePayload.events) ? safePayload.events : [];
       const total = typeof safePayload.total === "number" ? safePayload.total : events.length;
       summaryEl.textContent = total + " event" + (total === 1 ? "" : "s");
       payloadEl.textContent = JSON.stringify(safePayload, null, 2);
-    }
-
-    window.addEventListener("message", (event) => {
-      const message = event.data;
-      if (!message || typeof message !== "object") return;
-
-      if (message.method === "ui/initialize") {
-        const initial = message.params?.toolResult ?? message.params?.initialToolResult;
-        if (initial) renderPayload(initial);
-        return;
-      }
-
-      if (message.method === "ui/notifications/tool-result") {
-        renderPayload(message.params?.result);
-      }
-    });
+    };
+    ${buildMcpAppBridgeScript("neotoma-timeline")}
   </script>
 </body>
 </html>`;
   }
 
   private buildTurnSummaryWidgetHtml(): string {
+    // Renders the `card` object from the neotoma_turn_summary result: the
+    // same structure `fallback_text` is rendered from (turn_summary_view.ts),
+    // so labels, icons, order and truncation are decided server-side once.
+    // Data is written with textContent only; links open via ui/open-link.
     return `<!doctype html>
 <html>
 <head>
@@ -3414,32 +3437,36 @@ export class NeotomaServer {
       display: flex;
       flex-direction: column;
       gap: 6px;
-    }
-    .status {
       font-size: 13px;
-      font-weight: 500;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
     }
-    .status .label {
-      opacity: 0.7;
-      font-weight: 400;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11px;
+    .header {
       font-weight: 600;
-      background: color-mix(in srgb, currentColor 12%, transparent);
     }
-    .badge.issues {
-      background: color-mix(in srgb, #d97706 30%, transparent);
-      color: color-mix(in srgb, #d97706 80%, canvastext);
+    .header .instance {
+      font-weight: 400;
+      opacity: 0.7;
+    }
+    .group-label {
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    li {
+      line-height: 1.5;
+    }
+    .type, .note {
+      opacity: 0.7;
+    }
+    a {
+      color: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .more {
+      opacity: 0.8;
     }
     .consent {
       font-size: 12px;
@@ -3449,13 +3476,6 @@ export class NeotomaServer {
       border: 1px solid color-mix(in srgb, #d97706 30%, transparent);
       line-height: 1.4;
     }
-    .consent a {
-      display: inline-block;
-      margin-top: 4px;
-      font-weight: 500;
-      color: inherit;
-      text-decoration: underline;
-    }
     .empty {
       font-size: 12px;
       opacity: 0.65;
@@ -3463,82 +3483,83 @@ export class NeotomaServer {
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="status" id="status">
-      <span class="empty" id="empty">Waiting for turn summary...</span>
-    </div>
-    <div id="consent"></div>
+  <div class="card" id="card">
+    <span class="empty">Waiting for turn summary...</span>
   </div>
   <script>
-    const statusEl = document.getElementById("status");
-    const consentEl = document.getElementById("consent");
+    const cardEl = document.getElementById("card");
 
-    function escapeText(value) {
-      return String(value ?? "").replace(/[&<>"']/g, function (ch) {
-        switch (ch) {
-          case "&": return "&amp;";
-          case "<": return "&lt;";
-          case ">": return "&gt;";
-          case '"': return "&quot;";
-          default: return "&#39;";
-        }
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    function linkOrText(text, url) {
+      if (typeof url !== "string" || !url) return document.createTextNode(String(text));
+      const a = el("a", "", text);
+      a.href = url;
+      a.rel = "noopener";
+      a.addEventListener("click", function (event) {
+        event.preventDefault();
+        window.neotomaApp.openLink(url);
       });
+      return a;
     }
 
-    function renderPayload(payload) {
-      const safe = payload && typeof payload === "object" ? payload : {};
-      const turnNumber = typeof safe.turn_number === "number" ? safe.turn_number : null;
-      const totalMessages = typeof safe.conversation_message_count === "number"
-        ? safe.conversation_message_count
-        : null;
-      const storedCount = Array.isArray(safe.stored) ? safe.stored.length : 0;
-      const retrievedCount = Array.isArray(safe.retrieved) ? safe.retrieved.length : 0;
-      const issuesCount = Array.isArray(safe.issues) ? safe.issues.length : 0;
-      const statusLine = typeof safe.status_line === "string" ? safe.status_line : null;
-
-      if (turnNumber === null && !statusLine) {
-        statusEl.innerHTML = '<span class="empty">Waiting for turn summary...</span>';
-        consentEl.innerHTML = "";
+    window.neotomaAppRender = function (payload) {
+      const card = payload && typeof payload === "object" ? payload.card : null;
+      cardEl.textContent = "";
+      if (!card || !Array.isArray(card.groups)) {
+        cardEl.appendChild(el("span", "empty", "Waiting for turn summary..."));
+        return;
+      }
+      if (card.groups.length === 0) {
+        cardEl.appendChild(el("span", "empty", "No Neotoma activity this turn."));
         return;
       }
 
-      const parts = [];
-      if (turnNumber !== null && totalMessages !== null) {
-        parts.push('<span><span class="label">msg</span> ' + escapeText(turnNumber) + '/' + escapeText(totalMessages) + '</span>');
+      const header = el("div", "header");
+      header.appendChild(document.createTextNode(card.header.icon + " " + card.header.title));
+      if (card.header.instance) {
+        header.appendChild(el("span", "instance", " · " + card.header.instance));
       }
-      parts.push('<span class="badge"><span class="label">stored</span> ' + escapeText(storedCount) + '</span>');
-      parts.push('<span class="badge"><span class="label">retrieved</span> ' + escapeText(retrievedCount) + '</span>');
-      if (issuesCount > 0) {
-        parts.push('<span class="badge issues"><span class="label">issues</span> ' + escapeText(issuesCount) + '</span>');
+      if (card.header.conversation_label) {
+        header.appendChild(document.createTextNode(" — "));
+        header.appendChild(linkOrText(card.header.conversation_label, card.header.conversation_url));
       }
-      statusEl.innerHTML = parts.join("");
+      cardEl.appendChild(header);
 
-      if (issuesCount > 0) {
-        const noun = issuesCount === 1 ? "issue" : "issues";
-        consentEl.innerHTML =
-          '<div class="consent">' +
-          escapeText(issuesCount) + ' ' + noun + ' flagged this turn. Review in Neotoma Inspector.' +
-          '<br><a href="neotoma://issues" rel="noopener">View issues</a>' +
-          '</div>';
-      } else {
-        consentEl.innerHTML = "";
-      }
-    }
+      card.groups.forEach(function (group) {
+        cardEl.appendChild(el("div", "group-label", group.label + " (" + group.count + ")"));
+        const list = el("ul");
+        group.items.forEach(function (item) {
+          const li = el("li");
+          li.appendChild(document.createTextNode(item.icon + " " + item.label + " ("));
+          const type = el("span", "type");
+          type.appendChild(linkOrText(item.entity_type, item.url));
+          li.appendChild(type);
+          li.appendChild(document.createTextNode(")"));
+          if (item.note) li.appendChild(el("span", "note", " — " + item.note));
+          list.appendChild(li);
+        });
+        cardEl.appendChild(list);
+      });
 
-    window.addEventListener("message", (event) => {
-      const message = event.data;
-      if (!message || typeof message !== "object") return;
-
-      if (message.method === "ui/initialize") {
-        const initial = message.params?.toolResult ?? message.params?.initialToolResult;
-        if (initial) renderPayload(initial);
-        return;
+      if (card.more) {
+        const more = el("div", "more", "… " + card.more.count + " more — ");
+        more.appendChild(linkOrText(card.more.label, card.more.url));
+        cardEl.appendChild(more);
       }
 
-      if (message.method === "ui/notifications/tool-result") {
-        renderPayload(message.params?.result);
+      if (card.issues) {
+        const consent = el("div", "consent", "🐛 ");
+        consent.appendChild(linkOrText(card.issues.label, card.issues.url));
+        cardEl.appendChild(consent);
       }
-    });
+    };
+    ${buildMcpAppBridgeScript("neotoma-turn-summary")}
   </script>
 </body>
 </html>`;
@@ -4322,9 +4343,10 @@ export class NeotomaServer {
     });
   }
 
-  private async listTimelineEvents(
-    args: unknown
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  private async listTimelineEvents(args: unknown): Promise<{
+    content: Array<{ type: string; text: string }>;
+    structuredContent?: Record<string, unknown>;
+  }> {
     const parsed = TimelineEventsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId();
 
@@ -4378,7 +4400,7 @@ export class NeotomaServer {
       // a query-level error (e.g. the type string is not indexed / not present),
       // return an empty result with an informational note rather than a hard error.
       if (parsed.event_type) {
-        return this.buildTextResponse({
+        return this.buildStructuredResponse({
           events: [],
           total: 0,
           message: `No timeline events found for event_type: "${parsed.event_type}". The type may not exist or have no events yet.`,
@@ -4400,7 +4422,7 @@ export class NeotomaServer {
     if (error) {
       // Same graceful fallback: unknown event_type filter → empty result with hint.
       if (parsed.event_type) {
-        return this.buildTextResponse({
+        return this.buildStructuredResponse({
           events: [],
           total: 0,
           message: `No timeline events found for event_type: "${parsed.event_type}". The type may not exist or have no events yet.`,
@@ -4421,7 +4443,7 @@ export class NeotomaServer {
       result.message = `No timeline events found for event_type: "${parsed.event_type}". The type may not exist or have no events yet.`;
     }
 
-    return this.buildTextResponse(result);
+    return this.buildStructuredResponse(result);
   }
 
   private async retrieveEntityByIdentifier(
