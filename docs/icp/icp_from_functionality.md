@@ -86,16 +86,16 @@ Functionally enabled but not the design center:
 ## Who Neotoma is not for (functionally)
 
 - **Casual note-takers and PKM/Obsidian-style users.** There is no human-first editing experience; the model is agent-written observations with corrections, not freeform documents.
-- **Users who refuse both the hosted option and self-hosting, or who need hosted-only features beyond export parity.** Neotoma is reached by running it yourself or by joining the optional shared hosted Neotoma, and anything the hosted Neotoma offers must export to a self-hosted instance. Wanting an easier installation is not a mismatch — see the note below.
-- **Teams wanting a managed multi-tenant SaaS today.** Storage is local-only in preview; tenancy exists as `user_id` scoping, not a hosted product. The planned shared hosted Neotoma isolates each member and is not a managed team workspace.
-
-**Future (hosted path intended, not shipped): users who want only a hosted product, with nothing running on their own machine.** Once the shared hosted Neotoma ships, they are in scope. Until then the shipped functionality does not serve them, and no copy should promise them the hosted path early. They are not excluded; they are not served yet.
+- **Users who refuse both self-hosting and the hosted path, or who need hosted-only features beyond export parity.** Today Neotoma is reached by running it yourself. Once the hosted Neotoma ships (intended, not shipped), joining it will be the other way in, and anything it offers must export to a self-hosted instance. Wanting an easier installation is not a mismatch — see the note below.
+- **Teams wanting a managed multi-tenant SaaS today.** Storage is local-only in preview; tenancy exists as `user_id` scoping, not a hosted product. The planned hosted Neotoma (intended, not shipped) isolates each member and is not a managed team workspace.
 - **Platform builders whose core product is the memory or state engine itself.** Neotoma is that engine; it is meant to be built upon, not rebuilt.
 - **Pure retrieval/RAG use cases.** The system optimizes for deterministic state integrity, versioning, and audit, not similarity recall (semantic search is an optional secondary capability).
 
+**Future (hosted path intended, not shipped): users who want only a hosted product, with nothing running on their own machine.** They are not part of the exclusion list above. Once the hosted Neotoma ships (intended, not shipped), they are in scope. Until then the shipped functionality does not serve them, and no copy should promise them the hosted path early. They are not excluded; they are not served yet.
+
 **A note on installation.** This list deliberately no longer excludes people who want a guided installation. Neotoma is for people who want to own their agents' state, not for people who enjoy assembling an install from a terminal — and an earlier version of this list conflated the two. **As of 2026-09-15, setup is npm plus the CLI**; a guided installation is the intended path and is not shipped. Guided is not zero-install: the software runs on your machine either way.
 
-**A note on the hosted path (2026-10-07).** The 2026-10-07 amendment to SD-001 ([`../foundation/scope_decisions.md`](../foundation/scope_decisions.md)) puts one shared hosted Neotoma in scope as an optional path beside self-hosting, never in place of it. Signing in is needed only to join the hosted Neotoma — never to use Neotoma, and never to self-host. The hosted exclusion above was narrowed to match, in the same pass as D4 in [`primary_icp.md`](./primary_icp.md), the README, and [`icp_reconciliation.md`](./icp_reconciliation.md). The hosted Neotoma is intended and not shipped.
+**A note on the hosted path (2026-10-07).** The 2026-10-07 amendment to SD-001 ([`../foundation/scope_decisions.md`](../foundation/scope_decisions.md)) puts the hosted Neotoma (intended, not shipped) in scope as an optional path beside self-hosting, never in place of it. Signing in is needed only to join the hosted Neotoma — never to use Neotoma, and never to self-host. The hosted exclusion above was narrowed to match, in the same pass as D4 in [`primary_icp.md`](./primary_icp.md), the README, [`../getting_started/what_is_neotoma.md`](../getting_started/what_is_neotoma.md), and [`icp_reconciliation.md`](./icp_reconciliation.md).
 
 ## Qualification signals
 

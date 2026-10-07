@@ -38,6 +38,15 @@
  *    evaluate string, from README.md, or from what_is_neotoma.md fails — which is the
  *    exact EN↔ES asymmetry the review found, where EN said only "is intended".
  *  - NEGATIVE CONTROL (posture): no surface calls the product zero-install.
+ *
+ * A third invariant was added with the SD-001 amendment of 2026-10-07:
+ *
+ *   3. HOSTED POSTURE. The hosted Neotoma is an optional path that is intended AND
+ *      NOT SHIPPED; signing in is needed only to join it, never to use Neotoma or to
+ *      self-host; and a buyer who wants only a hosted product is "future (hosted path
+ *      intended, not shipped)" under the narrowed D4, not disqualified. A sentence
+ *      that presents the hosted Neotoma without saying it is unshipped reads as
+ *      available, exactly as invariant 2's guided-install sentences would.
  *  - POSITIVE: every surface that states the posture names npm/CLI as today's path
  *    AND names guided install as unavailable; and both locales of `/evaluate` carry
  *    the Candidate-B signal that the docs carry.
@@ -265,6 +274,148 @@ describe("ICP ↔ /evaluate cross-surface parity (#2415)", () => {
       expect(es, "ES omits the unshipped half").toMatch(SAYS_UNSHIPPED);
       expect(en).toMatch(SAYS_INTENDED);
       expect(es).toMatch(SAYS_INTENDED);
+    });
+  });
+
+  describe("invariant 3: the hosted Neotoma is optional, intended AND not shipped (SD-001, 2026-10-07)", () => {
+    /** Surfaces that state the hosted posture or the narrowed D4. */
+    const HOSTED_DOC_SURFACES: readonly Surface[] = [
+      ...DOC_SURFACES,
+      docSurface("docs/icp/icp_reconciliation.md"),
+    ];
+
+    /**
+     * Lines that are live statements rather than recorded history. The ICP docs
+     * quote superseded wording ("D4 previously read …") to record that it changed;
+     * a quotation is not a live claim.
+     */
+    function liveText(text: string): string {
+      return text
+        .split("\n")
+        .filter((l) => !/previously read|D4 previously/i.test(l))
+        .join("\n");
+    }
+
+    /** Sentences naming the hosted offering ("the hosted Neotoma") or the route to it. */
+    function hostedSentences(text: string): string[] {
+      return text
+        .split(/(?<=[.;])\s+|\n/)
+        .map((s) => s.trim())
+        .filter((s) => /hosted Neotoma|hosted path/i.test(s));
+    }
+
+    /** Presents the hosted Neotoma as something a reader could take as on offer. */
+    const PRESENTS_HOSTED = /\b(intended|optional|available|live|launched)\b/i;
+    /** Says it is not shipped yet, or speaks of it only as conditional on shipping. */
+    const HOSTED_UNSHIPPED = new RegExp(
+      `${SAYS_UNSHIPPED.source}|once (it|the hosted Neotoma) ships|until (it|the hosted Neotoma) ships`,
+      "i",
+    );
+    /** Claims the hosted Neotoma can be used now. */
+    const SAYS_HOSTED_AVAILABLE =
+      /\b(available (now|today)|is (now )?(available|live|launched)|has (shipped|launched)|now shipped)\b/i;
+    /** States that an account or sign-in is required to use, run, or self-host Neotoma. */
+    const REQUIRES_SIGN_IN =
+      /(?<!\bno )\b(signing in|sign-in|signing up|sign-up|an account|account creation|account)\s+(is|will be)\s+(required|needed|necessary|mandatory)\s+to\s+(use|run|install|self-host|try)\b|\bmust (sign in|sign up|create an account|have an account)\b|(?<!never )(?<!not )\brequires? (an account|sign-in|signing in)\b/i;
+    /** The marker the narrowed D4 puts on hosted-only buyers until the hosted Neotoma ships. */
+    const FUTURE_MARKER = /future \(hosted path intended, not shipped\)/i;
+    /** The pre-amendment D4 and its mirrors, as live exclusions. */
+    const OLD_HOSTED_EXCLUSION =
+      /requires a fully hosted product with no local component|users who need a fully hosted product with no local component|or users who need a fully hosted product with nothing running/i;
+
+    it("NEGATIVE CONTROL: no sentence presents the hosted Neotoma without saying it is not shipped", () => {
+      const offenders: string[] = [];
+      for (const s of HOSTED_DOC_SURFACES) {
+        for (const sentence of hostedSentences(liveText(s.text))) {
+          if (PRESENTS_HOSTED.test(sentence) && !HOSTED_UNSHIPPED.test(sentence)) {
+            offenders.push(`${s.name}: ${sentence}`);
+          }
+        }
+      }
+      expect(
+        offenders,
+        "A surface presents the hosted Neotoma as intended or optional without saying, in " +
+          "the same sentence, that it is not shipped. A reader of that sentence takes it " +
+          `as available (SD-001 honest status). Offending: ${JSON.stringify(offenders, null, 2)}`,
+      ).toEqual([]);
+    });
+
+    it("NEGATIVE CONTROL: no surface describes the hosted Neotoma as available", () => {
+      const offenders: string[] = [];
+      for (const s of HOSTED_DOC_SURFACES) {
+        for (const sentence of hostedSentences(liveText(s.text))) {
+          if (SAYS_HOSTED_AVAILABLE.test(sentence)) offenders.push(`${s.name}: ${sentence}`);
+        }
+      }
+      expect(
+        offenders,
+        `A surface describes the unshipped hosted Neotoma as available. Offending: ${JSON.stringify(offenders, null, 2)}`,
+      ).toEqual([]);
+    });
+
+    it("NEGATIVE CONTROL: no surface requires an account or sign-in to use or self-host Neotoma", () => {
+      const offenders: string[] = [];
+      for (const s of [...HOSTED_DOC_SURFACES, ...EVALUATE_SURFACES]) {
+        for (const sentence of liveText(s.text).split(/(?<=[.;])\s+|\n/)) {
+          if (REQUIRES_SIGN_IN.test(sentence)) offenders.push(`${s.name}: ${sentence.trim()}`);
+        }
+      }
+      expect(
+        offenders,
+        "A surface says an account or sign-in is required to use Neotoma or to self-host. " +
+          "Signing in is needed only to join the hosted Neotoma (SD-001; redline R9). " +
+          `Offending: ${JSON.stringify(offenders, null, 2)}`,
+      ).toEqual([]);
+    });
+
+    it("NEGATIVE CONTROL: no surface restores the pre-amendment hosted exclusion", () => {
+      const offenders = HOSTED_DOC_SURFACES.filter((s) =>
+        OLD_HOSTED_EXCLUSION.test(liveText(s.text)),
+      ).map((s) => s.name);
+      expect(
+        offenders,
+        "A surface excludes a buyer for wanting a fully hosted product. Under the narrowed " +
+          "D4 that buyer is future, not disqualified. " +
+          `Offending: ${JSON.stringify(offenders)}`,
+      ).toEqual([]);
+    });
+
+    it("POSITIVE: the D4 row carries the future marker", () => {
+      const primary = HOSTED_DOC_SURFACES.find((s) => s.name === "docs/icp/primary_icp.md");
+      const row = primary?.text.split("\n").find((l) => /^\|\s*D4\s*\|/.test(l));
+      expect(row, "primary_icp.md has no D4 row").toBeDefined();
+      expect(row, "the D4 row dropped the future marker").toMatch(FUTURE_MARKER);
+    });
+
+    it("POSITIVE: every ICP doc that states D4 carries the future marker", () => {
+      const statesD4 = [
+        "docs/icp/primary_icp.md",
+        "docs/icp/icp_from_functionality.md",
+        "docs/icp/icp_reconciliation.md",
+      ];
+      const offenders = HOSTED_DOC_SURFACES.filter(
+        (s) => statesD4.includes(s.name) && !FUTURE_MARKER.test(liveText(s.text)),
+      ).map((s) => s.name);
+      expect(
+        offenders,
+        `An ICP doc that states the narrowed D4 dropped the future marker. Offending: ${JSON.stringify(offenders)}`,
+      ).toEqual([]);
+    });
+
+    it("POSITIVE: every line about a hosted-only buyer marks that buyer as future", () => {
+      const offenders: string[] = [];
+      for (const s of HOSTED_DOC_SURFACES) {
+        for (const line of liveText(s.text).split("\n")) {
+          if (/fully hosted product|only a hosted product/i.test(line) && !/\bfuture\b/i.test(line)) {
+            offenders.push(`${s.name}: ${line.trim().slice(0, 160)}`);
+          }
+        }
+      }
+      expect(
+        offenders,
+        "A line discusses a buyer who wants only a hosted product without marking them as " +
+          `future (hosted path intended, not shipped). Offending: ${JSON.stringify(offenders, null, 2)}`,
+      ).toEqual([]);
     });
   });
 });

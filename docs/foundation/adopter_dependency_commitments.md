@@ -175,8 +175,8 @@ The detail for each follows.
 - **Not a managed-service commitment.** This is about the substrate's maturity,
   not about a hosted offering. The self-hosted path is the supported path; any
   managed offering is a separate decision. The 2026-10-07 amendment to SD-001
-  (`docs/foundation/scope_decisions.md`) puts one optional hosted instance in
-  scope. It is not a precondition for anything, does not change this bar, and is
+  (`docs/foundation/scope_decisions.md`) puts the hosted Neotoma in scope as an
+  optional path. It is not a precondition for anything, does not change this bar, and is
   not a managed-service commitment to adopters.
 - **Not go-to-market readiness.** Whether Neotoma can sustain unassisted adoption
   at scale is a separate question, tracked in `docs/icp/general_release_criteria.md`.
