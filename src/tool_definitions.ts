@@ -1,5 +1,6 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
 import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
+import type { ToolEffectCatalog } from "./shared/tool_effect_catalog.js";
 
 export type ToolInputSchema = Record<string, unknown>;
 
@@ -49,11 +50,13 @@ const RELATIONSHIP_TYPE_DESCRIPTION =
  *   widget, attached as _meta on list_timeline_events.
  * @param turnSummaryWidgetResourceUri - Optional resource URI for the turn
  *   summary widget, attached as _meta on neotoma_turn_summary.
+ * @param toolEffectCatalog - Catalog-derived effect and protocol risk metadata.
  */
 export function buildToolDefinitions(
   descriptionOverrides?: Map<string, string>,
   timelineWidgetResourceUri?: string,
-  turnSummaryWidgetResourceUri?: string
+  turnSummaryWidgetResourceUri?: string,
+  toolEffectCatalog?: ToolEffectCatalog
 ): ToolDefinition[] {
   const desc = (name: string, fallback: string): string =>
     descriptionOverrides?.get(name) ?? fallback;
@@ -300,7 +303,6 @@ export function buildToolDefinitions(
       description:
         "Query timeline events with filters (type, date range, source). Returns chronological events derived from date fields in sources.",
       inputSchema: getOpenApiInputSchemaOrThrow("list_timeline_events"),
-      annotations: { readOnlyHint: true },
       ...(timelineWidgetResourceUri
         ? {
             _meta: {
@@ -1082,7 +1084,6 @@ export function buildToolDefinitions(
         },
         required: [],
       },
-      annotations: { readOnlyHint: true },
     },
     {
       name: "submit_entity",
@@ -1142,7 +1143,6 @@ export function buildToolDefinitions(
         },
         required: ["entity_id"],
       },
-      annotations: { readOnlyHint: true },
     },
     {
       name: "list_entity_submissions",
@@ -1159,7 +1159,6 @@ export function buildToolDefinitions(
         },
         required: ["entity_type"],
       },
-      annotations: { readOnlyHint: true },
     },
     {
       name: "sync_entity_submissions",
@@ -1344,7 +1343,6 @@ export function buildToolDefinitions(
         // function-tool compatibility. The server still enforces that callers
         // provide entity_id or issue_number.
       },
-      annotations: { readOnlyHint: true },
     },
     {
       name: "sync_issues",
@@ -1604,7 +1602,20 @@ export function buildToolDefinitions(
     },
   ];
 
-  return tools;
+  if (!toolEffectCatalog) return tools;
+
+  return tools.map((tool) => {
+    const effectClass = toolEffectCatalog.effectClasses.get(tool.name);
+    if (!effectClass) throw new Error(`No effect class declared for MCP tool ${tool.name}`);
+    return {
+      ...tool,
+      annotations: toolEffectCatalog.annotationsFor(tool.name),
+      _meta: {
+        ...tool._meta,
+        "neotoma/effect_class": effectClass,
+      },
+    };
+  });
 }
 
 /** All tool names that Neotoma registers. */
