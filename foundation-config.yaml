@@ -29,7 +29,7 @@ development:
   workflow:
     use_worktrees: true
     worktree_base_path: "../{repo}-{branch}"
-    env_copy_script: "scripts/copy-env-to-worktree.js"  # optional
+    env_copy_script: "scripts/write-worktree-dev-env.js"  # optional; writes non-secret settings only, copies no env file
   
   # Commit format
   commit_format:

@@ -77,6 +77,14 @@ jobs:
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
 
+      # Worktree setup regressions. These live under tests/scripts, which
+      # test:unit does not select, so without this step they would gate nothing.
+      # They drive the real post-checkout hook in a linked worktree, the init
+      # wrapper, destination confinement, the dev config loaders, and the
+      # agent-facing scenario for the worktree environment rules.
+      - name: Run worktree setup regressions (hook, wrapper, confinement, loaders, agent scenario)
+        run: npx vitest run --no-file-parallelism tests/scripts/worktree_dev_env.test.ts tests/scripts/worktree_setup_lifecycle.test.ts tests/scripts/worktree_setup_agent_scenario.test.ts
+
       - name: Validate Playwright coverage map
         run: npm run validate:coverage
 

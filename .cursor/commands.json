@@ -20,10 +20,10 @@
       }
     },
     {
-      "name": "Setup: Copy Env File",
-      "description": "Copy .env file from main repository to this worktree",
+      "name": "Setup: Write Worktree Dev Env",
+      "description": "Write a minimal non-secret .env.development in this worktree (no credentials are copied)",
       "shell": {
-        "command": "npm run copy:env"
+        "command": "npm run setup:worktree-env"
       }
     },
     {

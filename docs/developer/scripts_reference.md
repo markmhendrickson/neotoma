@@ -98,7 +98,7 @@ Local-development helpers. Canonical docs: [`docs/developer/development_workflow
 Onboarding and agent-environment helpers. Canonical docs: [`docs/developer/getting_started.md`](getting_started.md), [`docs/developer/agent_cli_configuration.md`](agent_cli_configuration.md), [`docs/developer/agent_instructions.md`](agent_instructions.md).
 
 - `setup_agent_credentials.sh`, `setup_agent_environment.sh`, `setup_claude_instructions.sh`, `setup_cursor_from_foundation.sh`, `setup_shared_submodule.sh`, `complete_submodule_setup.sh` — first-run install helpers.
-- `setup-test-env.sh`, `setup-data-symlink.js`, `setup-foundation-symlink.js`, `setup-env-copy-hook.sh`, `cursor-worktree-init.sh`, `copy-env-to-worktree.js` — workspace bootstrap.
+- `setup-test-env.sh`, `setup-data-symlink.js`, `setup-foundation-symlink.js`, `cursor-worktree-init.sh`, `write-worktree-dev-env.js` — workspace bootstrap. `write-worktree-dev-env.js` writes a minimal non-secret `.env.development` from an allowlist and never copies credentials.
 - `sync-env-from-1password.sh`, `secrets_manager.js`, `migrate_env_to_secrets.js`, `notify_agents_env_vars.js`, `notify_agents_setup_script.js`, `notify_running_agents_credentials.js`, `respawn_agents_with_credentials.js`, `respawn_single_agent.js`, `instruct_agents_credential_setup.js`, `instruct_agents_env_check.js`, `instruct_agents_run_tests_until_passing.js`, `unblock_agents.js`, `send_agent_followup.js`, `test_agent_env_spawn.js`, `get_secrets_for_agents.js`, `get_mcp_token.sh` — agent-environment automation.
 - `sync_mcp_configs.js` — keeps `.cursor/mcp.json` and `.mcp.json` aligned.
 

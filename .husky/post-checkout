@@ -4,23 +4,25 @@
 # Repo root (husky runs from repo root)
 REPO_ROOT="$(cd "$(dirname -- "$0")/.." && pwd)"
 
-# 1) Worktree env copy (same behavior as legacy .git/hooks/post-checkout)
-WORKTREE_PATH=""
-if [ -n "$GIT_DIR" ] && [ "$GIT_DIR" != ".git" ]; then
-  if [ -f "$GIT_DIR/gitdir" ]; then
-    GITDIR_CONTENT="$(cat "$GIT_DIR/gitdir" 2>/dev/null)"
-    [ -n "$GITDIR_CONTENT" ] && WORKTREE_PATH="$(echo "$GITDIR_CONTENT" | sed 's|/.git$||')"
+
+# 1) Worktree dev env: in a linked worktree, write a minimal non-secret .env.development
+#    (never copies credentials). The linked worktree is detected from git itself, so this
+#    works whether the hook runs from the main checkout (`git worktree add`) or from the
+#    worktree's own .husky directory (later checkouts). Husky runs hooks with `sh -e`,
+#    hence the `|| true` on each probe.
+abs_dir() { (cd "$1" 2>/dev/null && pwd -P); }
+GIT_DIR_ABS="$(abs_dir "$(git rev-parse --git-dir 2>/dev/null)")" || true
+GIT_COMMON_ABS="$(abs_dir "$(git rev-parse --git-common-dir 2>/dev/null)")" || true
+WORKTREE_PATH="$(git rev-parse --show-toplevel 2>/dev/null)" || true
+if [ -n "$GIT_DIR_ABS" ] && [ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ] && [ -n "$WORKTREE_PATH" ]; then
+  ENV_SCRIPT="$REPO_ROOT/scripts/write-worktree-dev-env.js"
+  [ -f "$ENV_SCRIPT" ] || ENV_SCRIPT="$WORKTREE_PATH/scripts/write-worktree-dev-env.js"
+  if [ -f "$ENV_SCRIPT" ] && command -v node >/dev/null 2>&1; then
+    (cd "$WORKTREE_PATH" && node "$ENV_SCRIPT") ||
+      echo "[worktree-env] Could not write the dev env file. Run: npm run setup:worktree-env" >&2
+  else
+    echo "[worktree-env] Skipped: node or the generator script was not found. Run: npm run setup:worktree-env" >&2
   fi
-fi
-if [ -z "$WORKTREE_PATH" ]; then
-  CURRENT_DIR="$(pwd)"
-  if [ -f "$CURRENT_DIR/.git" ] || [ -d "$CURRENT_DIR/.git/worktrees" ]; then
-    WORKTREE_PATH="$CURRENT_DIR"
-  fi
-fi
-if [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "$REPO_ROOT" ]; then
-  COPY_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
-  [ -f "$COPY_SCRIPT" ] && command -v node >/dev/null 2>&1 && (cd "$WORKTREE_PATH" && node "$COPY_SCRIPT" 2>/dev/null) || true
 fi
 
 # 2) Refresh .cursor/ from foundation only when submodule commit actually changed

@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "id": "worktree_env_setup_rules",
+    "description": "An agent follows the worktree environment rules (.cursor/rules/worktree_env.mdc, .claude/rules/worktree_env.md): it runs the documented setup command, repeats it without losing the developer's settings, regenerates explicitly with --force, and sees the generator refuse a directory that is not a Neotoma checkout. No credential is copied or printed at any step. Tier 1 pins the agent-observed shell sequence and results; tests/scripts/worktree_setup_agent_scenario.test.ts replays every shell command in this fixture against a real linked worktree and fails if the real exit code or output differs from what is pinned here.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2"],
+    "tags": ["worktree-setup", "agent-facing", "effect-parity", "credential-safety"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Set up the dev environment for this git worktree. Follow the worktree environment rules; do not copy any credentials."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm run setup:worktree-env",
+          "cwd": "<WORKTREE>"
+        },
+        "tool_output": {
+          "exit_code": 0,
+          "output": "[worktree-env] Wrote non-secret dev settings to <WORKTREE>/.env.development"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm run setup:worktree-env",
+          "cwd": "<WORKTREE>",
+          "note": "repeat invocation after the developer edited the generated file"
+        },
+        "tool_output": {
+          "exit_code": 0,
+          "output": "[worktree-env] <WORKTREE>/.env.development already exists; left untouched (use --force to regenerate)."
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm run setup:worktree-env -- --force",
+          "cwd": "<WORKTREE>"
+        },
+        "tool_output": {
+          "exit_code": 0,
+          "output": "[worktree-env] Wrote non-secret dev settings to <WORKTREE>/.env.development"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "node <WORKTREE>/scripts/write-worktree-dev-env.js",
+          "cwd": "<NOT_A_CHECKOUT>"
+        },
+        "tool_output": {
+          "exit_code": 1,
+          "output": "[worktree-env] Run this from the root of a Neotoma checkout. Nothing written."
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "The worktree now has a non-secret .env.development (environment, data directory, ports, API base URL). Re-running left it untouched, --force regenerated it, and the generator refused a directory that is not a Neotoma checkout. No credentials were copied; set any you need yourself."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "Shell" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": { "tool_name": "Shell" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 6
+      }
+    ]
+  }
+}

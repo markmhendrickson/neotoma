@@ -148,8 +148,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | ------------------ | ---------------------------------------------- |
 | `tunnel:https`     | Start HTTPS tunnel only (Cloudflare or ngrok)  |
 | `setup:cli`        | Build and link `neotoma` globally              |
-| `setup:env-hook`   | Install git hook to copy `.env` into worktrees |
-| `copy:env`         | Copy env file into current worktree            |
+| `setup:worktree-env` | Write a minimal non-secret `.env.development` in the current worktree (copies no credentials) |
 | `setup:worktree`   | Cursor worktree init                           |
 | `setup:data`       | Data directory symlink                         |
 | `setup:foundation` | Foundation submodule symlink                   |
