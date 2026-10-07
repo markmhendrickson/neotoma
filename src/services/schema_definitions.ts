@@ -31,6 +31,14 @@ export interface EntitySchemaMetadata {
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
   guest_access_policy?: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
+  /**
+   * Bundle that originated this schema (e.g. `crm`). Stamped by the bundle
+   * seeder (`src/services/bundles/bundle_schemas.ts`) at registration time and
+   * carried through to `SchemaMetadata.bundle`. Absent for built-in schemas.
+   */
+  bundle?: string;
+  /** Version of the originating bundle at registration time. */
+  bundle_version?: string;
 }
 
 export interface EntitySchema {
