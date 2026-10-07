@@ -34,6 +34,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WORKTREE_DEV_ENV_ALLOWLIST } from "../../scripts/lib/worktree_dev_env.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/**
+ * Where the scripts and package manifest under test come from. Defaults to this
+ * checkout; overridable so the same scenario can be pointed at another tree
+ * (for example the pre-change tree, to show it failing).
+ */
+const SOURCE_ROOT = process.env.WORKTREE_SCENARIO_SOURCE_ROOT
+  ? resolve(process.env.WORKTREE_SCENARIO_SOURCE_ROOT)
+  : REPO_ROOT;
+const FIXTURE_PATH = join(
+  REPO_ROOT,
+  "tests",
+  "fixtures",
+  "agentic_eval",
+  "worktree_env_setup_rules.json"
+);
 const RULE_FILES = [".cursor/rules/worktree_env.mdc", ".claude/rules/worktree_env.md"];
 const CANARY = "canary-bearer-8f3a1c0d";
 
@@ -85,7 +100,7 @@ beforeAll(() => {
   mkdirSync(join(home, ".config", "neotoma"), { recursive: true });
   writeFileSync(join(home, ".config", "neotoma", ".env"), `NEOTOMA_BEARER_TOKEN=${CANARY}\n`);
 
-  const repoPackage = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf-8")) as {
+  const repoPackage = JSON.parse(readFileSync(join(SOURCE_ROOT, "package.json"), "utf-8")) as {
     scripts: Record<string, string>;
   };
   mkdirSync(join(main, "scripts", "lib"), { recursive: true });
@@ -98,7 +113,7 @@ beforeAll(() => {
     })
   );
   for (const rel of ["scripts/write-worktree-dev-env.js", "scripts/lib/worktree_dev_env.js"]) {
-    copyFileSync(join(REPO_ROOT, rel), join(main, rel));
+    if (existsSync(join(SOURCE_ROOT, rel))) copyFileSync(join(SOURCE_ROOT, rel), join(main, rel));
   }
   writeFileSync(join(main, ".gitignore"), ".env\n.env.*\n");
   git(main, ["init", "-q", "-b", "main"]);
@@ -125,7 +140,7 @@ describe("agent follows the worktree environment rules", () => {
   });
 
   it("the documented npm command is a real package script that runs the documented node command", () => {
-    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf-8")) as {
+    const pkg = JSON.parse(readFileSync(join(SOURCE_ROOT, "package.json"), "utf-8")) as {
       scripts: Record<string, string>;
     };
     expect(pkg.scripts["setup:worktree-env"]).toBe(NODE_COMMAND);
@@ -174,5 +189,69 @@ describe("agent follows the worktree environment rules", () => {
     const content = readFileSync(join(worktree, ".env.development"), "utf-8");
     expect(content).not.toContain(CANARY);
     for (const output of transcript) expect(output).not.toContain(CANARY);
+  });
+});
+
+interface FixtureEvent {
+  hook: string;
+  payload: {
+    tool_name?: string;
+    tool_input?: { command: string; cwd: string; note?: string };
+    tool_output?: { exit_code: number; output: string };
+  };
+}
+
+/**
+ * Replays the shell commands pinned in the Tier 1 fixture
+ * tests/fixtures/agentic_eval/worktree_env_setup_rules.json (run by the
+ * `agentic_evals` CI lane) against a real linked worktree, and requires the real
+ * exit code and output to equal what the fixture says the agent observed. The
+ * fixture therefore cannot drift from the behaviour it claims to pin.
+ */
+describe("Tier 1 fixture worktree_env_setup_rules matches real behaviour", () => {
+  const fixture = JSON.parse(readFileSync(FIXTURE_PATH, "utf-8")) as { events: FixtureEvent[] };
+  const shellEvents = fixture.events.filter(
+    (e) => e.hook === "postToolUse" && e.payload.tool_name === "Shell"
+  );
+  const notACheckout = () => join(root, "not-a-checkout");
+
+  it("pins at least the setup, repeat, regenerate and wrong-directory steps", () => {
+    expect(shellEvents.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("every pinned command produces the pinned exit code and output", () => {
+    // Start from a clean slate so the first command is a genuine first setup.
+    rmSync(join(worktree, ".env.development"), { force: true });
+    mkdirSync(notACheckout(), { recursive: true });
+    const substitute = (text: string) =>
+      text.split("<WORKTREE>").join(worktree).split("<NOT_A_CHECKOUT>").join(notACheckout());
+
+    for (const event of shellEvents) {
+      const input = event.payload.tool_input!;
+      const pinned = event.payload.tool_output!;
+      const isRepeat = /repeat/i.test(input.note ?? "");
+      if (isRepeat) writeFileSync(join(worktree, ".env.development"), "PORT=4000\n");
+
+      const result = agentRuns(substitute(input.command), substitute(input.cwd));
+      const observed = `${result.stdout}${result.stderr}`
+        .split("\n")
+        .filter((line) => line.startsWith("[worktree-env]"))
+        .join("\n")
+        .split(worktree)
+        .join("<WORKTREE>");
+
+      expect(result.status, input.command).toBe(pinned.exit_code);
+      expect(observed, input.command).toBe(pinned.output);
+      if (isRepeat) {
+        expect(readFileSync(join(worktree, ".env.development"), "utf-8")).toBe("PORT=4000\n");
+      }
+    }
+    expect(readdirSync(notACheckout())).toEqual([]);
+  });
+
+  it("the fixture's final state holds only allowlisted keys and no canary", () => {
+    const content = readFileSync(join(worktree, ".env.development"), "utf-8");
+    expect(keysOf(content)).toEqual(WORKTREE_DEV_ENV_ALLOWLIST.map((e) => e.key));
+    expect(JSON.stringify(fixture)).not.toContain(CANARY);
   });
 });
