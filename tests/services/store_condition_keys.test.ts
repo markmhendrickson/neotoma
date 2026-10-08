@@ -1,5 +1,6 @@
 /** Native key arbitration only: transport/store adoption is tested separately. */
 import { mkdtempSync, rmSync } from "node:fs";
+import { fork } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -8,7 +9,9 @@ import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver
 import { openLibsqlDatabase } from "../../src/repositories/libsql/libsql_driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../../src/repositories/db/store_condition_schema.js";
 import {
+  canonicalStoreRequest,
   commitConditionalStoreKey,
+  assertConditionalEntityAbsent,
   reserveLegacyStoreKeys,
   storeConditionKeyHash,
   type ConditionalOperationReceipt,
@@ -73,6 +76,123 @@ function operation(db: DbDatabase, overrides: Record<string, unknown> = {}) {
   } as Parameters<typeof commitConditionalStoreKey>[1];
 }
 describe.each(["sqlite", "libsql"] as const)("native store-key modes (%s)", (backend) => {
+  it("arbitrates legacy and conditional modes across separate native processes", async () => {
+    const db = await fixture(backend);
+    // fixture() owns the current serial's file; children open independent handles.
+    const file = path.join(directory, `${backend}-${serial}.db`);
+    await db.pragma("journal_mode = WAL");
+    const states: Array<{ mode: string; applied: boolean; code?: string }> = [];
+    const workers = ["legacy", "conditional"].map((mode) => {
+      const child = fork(
+        path.resolve("tests/fixtures/native-store/key_mode_process.ts"),
+        [backend, file, mode],
+        {
+          execArgv: ["--import", "tsx"],
+          stdio: ["ignore", "pipe", "pipe", "ipc"],
+          env: { PATH: process.env.PATH, NODE_OPTIONS: process.env.NODE_OPTIONS },
+        }
+      );
+      let stderr = "";
+      child.stderr?.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+      const ready = new Promise<void>((resolve, reject) => {
+        child.once("message", (message) => {
+          if ((message as { ready?: boolean }).ready) resolve();
+          else reject(Error("Missing ready witness"));
+        });
+        child.once("error", reject);
+      });
+      const finished = new Promise<void>((resolve, reject) => {
+        child.on("message", (message) => {
+          if ("mode" in (message as object)) states.push(message as (typeof states)[number]);
+        });
+        child.once("exit", (code) =>
+          code === 0 ? resolve() : reject(Error(`Owned race child failed (${code}): ${stderr}`))
+        );
+        child.once("error", reject);
+      });
+      return { child, ready, finished };
+    });
+    try {
+      await Promise.all(workers.map((worker) => worker.ready));
+      for (const worker of workers) worker.child.send("go");
+      await Promise.all(workers.map((worker) => worker.finished));
+      expect(states).toHaveLength(2);
+      expect(states.filter((row) => row.applied)).toHaveLength(1);
+      expect(states.filter((row) => !row.applied)).toEqual([
+        expect.objectContaining({ code: "STORE_KEY_MODE_CONFLICT" }),
+      ]);
+      const winning = states.find((row) => row.applied)!;
+      expect(await db.prepare("SELECT mode FROM store_condition_keys").get()).toEqual({
+        mode: winning.mode,
+      });
+      expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({
+        n: winning.mode === "conditional" ? 1 : 0,
+      });
+    } finally {
+      for (const worker of workers)
+        if (worker.child.exitCode === null) worker.child.kill("SIGKILL");
+    }
+  }, 15000);
+  it("refuses physical live/deleted/merged/unowned identities and foreign owners", async () => {
+    const db = await fixture(backend);
+    await db.exec("CREATE TABLE entities (id TEXT PRIMARY KEY,user_id TEXT,lifecycle TEXT)");
+    for (const [id, owner, state] of [
+      ["LIVE", "synthetic-owner", "live"],
+      ["DELETED", "synthetic-owner", "deleted"],
+      ["MERGED", "synthetic-owner", "merged"],
+      ["UNOWNED", null, "live"],
+      ["FOREIGN", "other-owner", "live"],
+    ]) {
+      await db.prepare("INSERT INTO entities VALUES (?,?,?)").run(id, owner, state);
+      await expect(
+        db.transaction((tx) =>
+          assertConditionalEntityAbsent(tx, {
+            owner: "synthetic-owner",
+            entityId: id!,
+            entityType: "synthetic",
+          })
+        )
+      ).rejects.toMatchObject({ code: id === "FOREIGN" ? "entity_owner_conflict" : "CONFLICT" });
+    }
+    await db.transaction((tx) =>
+      assertConditionalEntityAbsent(tx, {
+        owner: "synthetic-owner",
+        entityId: "ABSENT",
+        entityType: "synthetic",
+      })
+    );
+    expect(await db.prepare("SELECT COUNT(*) n FROM entities").get()).toEqual({ n: 5 });
+  });
+  it("fresh authoritative refusal occurs before a mode claim, replay skips fresh-only guards", async () => {
+    const db = await fixture(backend),
+      args = operation(db);
+    await expect(
+      commitConditionalStoreKey(db, {
+        ...args,
+        beforeClaim: async (tx) => {
+          expect(await tx.prepare("SELECT COUNT(*) n FROM store_condition_keys").get()).toEqual({
+            n: 0,
+          });
+          throw Error("Synthetic pure schema refusal");
+        },
+      })
+    ).rejects.toThrow("Synthetic pure schema refusal");
+    expect(await db.prepare("SELECT COUNT(*) n FROM store_condition_keys").get()).toEqual({ n: 0 });
+    expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({ n: 0 });
+    await commitConditionalStoreKey(db, args);
+    expect(
+      (
+        await commitConditionalStoreKey(db, {
+          ...args,
+          beforeClaim: async () => {
+            throw Error("Replay cannot become a fresh write");
+          },
+        })
+      ).status
+    ).toBe("replayed");
+  });
   it("replays the original marked receipt without a second business effect", async () => {
     const db = await fixture(backend),
       args = operation(db);
@@ -168,8 +288,26 @@ describe.each(["sqlite", "libsql"] as const)("native store-key modes (%s)", (bac
     expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({ n: 1 });
   });
 });
-it("hashes exact UTF-8 keys without trimming or imposing an invented maximum", () => {
-  expect(storeConditionKeyHash(" ")).not.toBe(storeConditionKeyHash("  "));
-  expect(storeConditionKeyHash("x".repeat(2000))).toMatch(/^[a-f0-9]{64}$/);
-  expect(() => storeConditionKeyHash("")).toThrow();
+it("rejects sparse, nonplain, cyclic, accessor and undefined requests before effects", () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  const accessor = Object.defineProperty({}, "value", {
+    enumerable: true,
+    get() {
+      throw Error("Accessor must not execute");
+    },
+  });
+  for (const bad of [
+    new Array(1),
+    new Date(),
+    { value: undefined },
+    { value: Infinity },
+    cyclic,
+    accessor,
+    { value: Symbol("synthetic") },
+  ])
+    expect(() => canonicalStoreRequest(bad)).toThrow("finite plain JSON");
+  expect(canonicalStoreRequest(JSON.parse('{"b":[null,true,1],"a":"synthetic"}'))).toBe(
+    '{"a":"synthetic","b":[null,true,1]}'
+  );
 });

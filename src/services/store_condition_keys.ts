@@ -14,7 +14,8 @@ export class StoreConditionError extends Error {
       | "STORE_KEY_MODE_CONFLICT"
       | "STORE_RECEIPT_UNCERTAIN"
       | "IDEMPOTENCY_CONFLICT"
-      | "VALIDATION_ERROR",
+      | "VALIDATION_ERROR"
+      | "CONFLICT",
     message: string
   ) {
     super(message);
@@ -22,26 +23,53 @@ export class StoreConditionError extends Error {
 }
 
 export function canonicalStoreRequest(value: unknown): string {
-  if (value === null || typeof value === "string" || typeof value === "boolean")
-    return JSON.stringify(value);
-  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalStoreRequest).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.keys(value)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${canonicalStoreRequest((value as Record<string, unknown>)[key])}`
-      )
-      .join(",")}}`;
-  throw new StoreConditionError(
-    "VALIDATION_ERROR",
-    "A conditional store requires finite JSON values."
-  );
+  const ancestors = new Set<object>();
+  function visit(v: unknown): string {
+    if (v === null || typeof v === "string" || typeof v === "boolean") return JSON.stringify(v);
+    if (typeof v === "number" && Number.isFinite(v)) return JSON.stringify(v);
+    if (v && typeof v === "object") {
+      if (ancestors.has(v)) throw invalid();
+      ancestors.add(v);
+      try {
+        if (Array.isArray(v)) {
+          if (Object.keys(v).length !== v.length || Reflect.ownKeys(v).length !== v.length + 1)
+            throw invalid();
+          const values: string[] = [];
+          for (let i = 0; i < v.length; i++) {
+            const descriptor = Object.getOwnPropertyDescriptor(v, String(i));
+            if (!descriptor || !("value" in descriptor)) throw invalid();
+            values.push(visit(descriptor.value));
+          }
+          return `[${values.join(",")}]`;
+        }
+        const proto = Object.getPrototypeOf(v);
+        if (proto !== Object.prototype && proto !== null) throw invalid();
+        const keys = Reflect.ownKeys(v);
+        if (keys.some((key) => typeof key !== "string")) throw invalid();
+        return `{${(keys as string[])
+          .sort()
+          .map((key) => {
+            const descriptor = Object.getOwnPropertyDescriptor(v, key)!;
+            if (!descriptor.enumerable || !("value" in descriptor)) throw invalid();
+            return `${JSON.stringify(key)}:${visit(descriptor.value)}`;
+          })
+          .join(",")}}`;
+      } finally {
+        ancestors.delete(v);
+      }
+    }
+    throw invalid();
+  }
+  function invalid() {
+    return new StoreConditionError(
+      "VALIDATION_ERROR",
+      "A conditional store requires finite plain JSON values."
+    );
+  }
+  return visit(value);
 }
 
 export function storeConditionKeyHash(key: string): string {
-  // Existing store accepts every nonempty string. Do not trim or add a new bound.
   if (typeof key !== "string" || key.length === 0)
     throw new StoreConditionError("VALIDATION_ERROR", "A nonempty store key is required.");
   return createHash("sha256").update(key, "utf8").digest("hex");
@@ -153,6 +181,7 @@ export async function commitConditionalStoreKey(
     owner: string;
     key: string;
     request: unknown;
+    beforeClaim?: (tx: DbConnection) => Promise<void>;
     apply: (tx: DbConnection, fingerprint: string) => Promise<ConditionalOperationReceipt>;
     verify: (tx: DbConnection, original: ConditionalOperationReceipt) => Promise<void>;
   }
@@ -195,6 +224,7 @@ export async function commitConditionalStoreKey(
         "STORE_KEY_MODE_CONFLICT",
         "This owner/key has an existing legacy source."
       );
+    await options.beforeClaim?.(tx);
     await tx
       .prepare(
         "INSERT INTO store_condition_keys (user_id,key_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,'conditional',?,?,NULL)"
@@ -214,4 +244,37 @@ export async function commitConditionalStoreKey(
       );
     return original;
   });
+}
+
+/**
+ * Native physical-ID read, never a reduced-live query. Deleted, merged and
+ * unowned rows remain presence; no adoption or redirection is attempted.
+ * Must execute inside the same native write transaction as the strict insert.
+ */
+export async function assertConditionalEntityAbsent(
+  tx: DbConnection,
+  options: {
+    owner: string;
+    entityId: string;
+    entityType: string;
+  }
+): Promise<void> {
+  assertOwner(options.owner);
+  if (!options.entityId || !options.entityType)
+    throw new StoreConditionError("VALIDATION_ERROR", "A resolved declared identity is required.");
+  const row = (await tx
+    .prepare("SELECT user_id FROM entities WHERE id = ?")
+    .get(options.entityId)) as { user_id: string | null } | undefined;
+  if (!row) return;
+  const { assertNoOwnerConflict } = await import("./entity_resolution.js");
+  assertNoOwnerConflict({
+    entityId: options.entityId,
+    entityType: options.entityType,
+    existingOwnerUserId: row.user_id,
+    writerUserId: options.owner,
+  });
+  throw new StoreConditionError(
+    "CONFLICT",
+    "The declared identity is already present; conditional creation was refused."
+  );
 }
