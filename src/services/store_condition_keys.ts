@@ -69,10 +69,54 @@ export function canonicalStoreRequest(value: unknown): string {
   return visit(value);
 }
 
-export function storeConditionKeyHash(key: string): string {
+export interface StoreKeyIdentity {
+  keyHash: string;
+  identityHash: string;
+}
+/** Bind the exact source-column BINARY equality domain in the authoritative transaction. */
+export async function storeConditionKeyIdentity(
+  tx: DbConnection,
+  key: string
+): Promise<StoreKeyIdentity> {
   if (typeof key !== "string" || key.length === 0)
     throw new StoreConditionError("VALIDATION_ERROR", "A nonempty store key is required.");
-  return createHash("sha256").update(key, "utf8").digest("hex");
+  const schema = (await tx
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sources'")
+    .get()) as { sql?: string } | undefined;
+  const declaration = schema?.sql?.match(
+    /(?:^|[,(])\s*["`[]?idempotency_key["`\]]?\s+([^,]*)/i
+  )?.[1];
+  const collation = declaration?.match(/\bCOLLATE\s+["`[]?(\w+)/i)?.[1];
+  if (!declaration || (collation && collation.toUpperCase() !== "BINARY"))
+    throw new StoreConditionError(
+      "STORE_RECEIPT_UNCERTAIN",
+      "The native source-key equality domain is unsupported."
+    );
+  const row = (await tx.prepare("SELECT CAST(? AS BLOB) AS bytes").get(key)) as
+    | { bytes?: unknown }
+    | undefined;
+  const bytes = row?.bytes instanceof ArrayBuffer ? new Uint8Array(row.bytes) : row?.bytes;
+  if (!(bytes instanceof Uint8Array))
+    throw new StoreConditionError(
+      "STORE_RECEIPT_UNCERTAIN",
+      "The native store key encoding is unavailable."
+    );
+  return {
+    keyHash: createHash("sha256").update(bytes).digest("hex"),
+    identityHash: createHash("sha512").update(bytes).digest("hex"),
+  };
+}
+export async function storeConditionKeyHash(tx: DbConnection, key: string): Promise<string> {
+  return (await storeConditionKeyIdentity(tx, key)).keyHash;
+}
+export function storeConditionObservationKey(owner: string, identity: StoreKeyIdentity): string {
+  assertOwner(owner);
+  return (
+    "conditional-store:" +
+    createHash("sha256")
+      .update(canonicalStoreRequest([owner, identity.keyHash, identity.identityHash]))
+      .digest("hex")
+  );
 }
 export function storeConditionRequestHash(request: unknown): string {
   return createHash("sha256").update(canonicalStoreRequest(request)).digest("hex");
@@ -82,6 +126,7 @@ function assertOwner(owner: string) {
     throw new StoreConditionError("VALIDATION_ERROR", "An authenticated store owner is required.");
 }
 interface KeyRow {
+  key_identity_hash: string | null;
   mode: "legacy" | "conditional";
   request_hash: string | null;
   conditional_receipt: string | null;
@@ -89,13 +134,18 @@ interface KeyRow {
 async function keyRow(
   tx: DbConnection,
   owner: string,
-  keyHash: string
+  identity: StoreKeyIdentity
 ): Promise<KeyRow | undefined> {
   const row = (await tx
     .prepare(
-      "SELECT mode, request_hash, conditional_receipt FROM store_condition_keys WHERE user_id = ? AND key_hash = ?"
+      "SELECT key_identity_hash, mode, request_hash, conditional_receipt FROM store_condition_keys WHERE user_id = ? AND key_hash = ?"
     )
-    .get(owner, keyHash)) as KeyRow | undefined;
+    .get(owner, identity.keyHash)) as KeyRow | undefined;
+  if (row && row.key_identity_hash !== identity.identityHash)
+    throw new StoreConditionError(
+      "STORE_RECEIPT_UNCERTAIN",
+      "The native key identity cannot be verified."
+    );
   if (row && row.mode !== "legacy" && row.mode !== "conditional")
     throw new StoreConditionError("STORE_RECEIPT_UNCERTAIN", "Store mode metadata is invalid.");
   return row;
@@ -108,11 +158,18 @@ export async function reserveLegacyStoreKeys(
   keys: string[]
 ): Promise<void> {
   assertOwner(owner);
-  const hashes = [...new Set(keys.map(storeConditionKeyHash))].sort();
-  if (!hashes.length) return;
+  if (!keys.length) return;
   await database.transaction(async (tx) => {
-    for (const hash of hashes) {
-      const existing = await keyRow(tx, owner, hash);
+    const identities = await Promise.all(keys.map((key) => storeConditionKeyIdentity(tx, key)));
+    const ordered = [
+      ...new Map(
+        identities.map((identity) => [identity.keyHash + ":" + identity.identityHash, identity])
+      ).values(),
+    ].sort(
+      (a, b) => a.keyHash.localeCompare(b.keyHash) || a.identityHash.localeCompare(b.identityHash)
+    );
+    for (const identity of ordered) {
+      const existing = await keyRow(tx, owner, identity);
       if (existing?.mode === "conditional")
         throw new StoreConditionError(
           "STORE_KEY_MODE_CONFLICT",
@@ -126,9 +183,9 @@ export async function reserveLegacyStoreKeys(
       if (!existing)
         await tx
           .prepare(
-            "INSERT INTO store_condition_keys (user_id,key_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,'legacy',NULL,?,NULL)"
+            "INSERT INTO store_condition_keys (user_id,key_hash,key_identity_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,?,'legacy',NULL,?,NULL)"
           )
-          .run(owner, hash, new Date().toISOString());
+          .run(owner, identity.keyHash, identity.identityHash, new Date().toISOString());
     }
   });
 }
@@ -182,15 +239,19 @@ export async function commitConditionalStoreKey(
     key: string;
     request: unknown;
     beforeClaim?: (tx: DbConnection) => Promise<void>;
-    apply: (tx: DbConnection, fingerprint: string) => Promise<ConditionalOperationReceipt>;
+    apply: (
+      tx: DbConnection,
+      fingerprint: string,
+      observationKey: string
+    ) => Promise<ConditionalOperationReceipt>;
     verify: (tx: DbConnection, original: ConditionalOperationReceipt) => Promise<void>;
   }
 ): Promise<ConditionalOperationReceipt> {
   assertOwner(options.owner);
-  const keyHash = storeConditionKeyHash(options.key);
   const fingerprint = storeConditionRequestHash(options.request);
   return database.transaction(async (tx) => {
-    const prior = await keyRow(tx, options.owner, keyHash);
+    const identity = await storeConditionKeyIdentity(tx, options.key);
+    const prior = await keyRow(tx, options.owner, identity);
     if (prior?.mode === "legacy")
       throw new StoreConditionError(
         "STORE_KEY_MODE_CONFLICT",
@@ -227,16 +288,31 @@ export async function commitConditionalStoreKey(
     await options.beforeClaim?.(tx);
     await tx
       .prepare(
-        "INSERT INTO store_condition_keys (user_id,key_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,'conditional',?,?,NULL)"
+        "INSERT INTO store_condition_keys (user_id,key_hash,key_identity_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,?,'conditional',?,?,NULL)"
       )
-      .run(options.owner, keyHash, fingerprint, new Date().toISOString());
-    const original = receipt(await options.apply(tx, fingerprint), fingerprint);
+      .run(
+        options.owner,
+        identity.keyHash,
+        identity.identityHash,
+        fingerprint,
+        new Date().toISOString()
+      );
+    const original = receipt(
+      await options.apply(tx, fingerprint, storeConditionObservationKey(options.owner, identity)),
+      fingerprint
+    );
     await options.verify(tx, original);
     const write = await tx
       .prepare(
-        "UPDATE store_condition_keys SET conditional_receipt = ? WHERE user_id = ? AND key_hash = ? AND mode = 'conditional' AND request_hash = ? AND conditional_receipt IS NULL"
+        "UPDATE store_condition_keys SET conditional_receipt = ? WHERE user_id = ? AND key_hash = ? AND key_identity_hash = ? AND mode = 'conditional' AND request_hash = ? AND conditional_receipt IS NULL"
       )
-      .run(canonicalStoreRequest(original), options.owner, keyHash, fingerprint);
+      .run(
+        canonicalStoreRequest(original),
+        options.owner,
+        identity.keyHash,
+        identity.identityHash,
+        fingerprint
+      );
     if (write.changes !== 1)
       throw new StoreConditionError(
         "STORE_RECEIPT_UNCERTAIN",

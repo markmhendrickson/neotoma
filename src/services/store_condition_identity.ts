@@ -14,6 +14,12 @@ export function deriveConditionalStoreIdentity(
   owner: string
 ) {
   canonicalStoreRequest(fields);
+  const derived = schema.schema_definition.derived_entities;
+  if (derived !== undefined && (!Array.isArray(derived) || derived.length !== 0))
+    throw new StoreConditionError(
+      "VALIDATION_ERROR",
+      "Conditional store requires no derived entities."
+    );
   const rules = schema.schema_definition.canonical_name_fields;
   if (!Array.isArray(rules) || !rules.length)
     throw new StoreConditionError(
