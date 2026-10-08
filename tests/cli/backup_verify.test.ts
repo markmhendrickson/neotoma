@@ -1,10 +1,25 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
 import { runCli } from "../../src/cli/index.ts";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.ts";
+
+if (process.env.NEOTOMA_REQUIRE_NATIVE_SQLITE === "1") {
+  try {
+    const nodeRequire = createRequire(import.meta.url);
+    if (typeof nodeRequire("node:sqlite").DatabaseSync !== "function") {
+      throw new Error("DatabaseSync is not available");
+    }
+  } catch (error) {
+    throw new Error(
+      "NEOTOMA_REQUIRE_NATIVE_SQLITE=1 requires node:sqlite DatabaseSync; native backup coverage cannot be skipped.",
+      { cause: error }
+    );
+  }
+}
 
 async function runNeotomaCli(
   argvSuffix: string[],
@@ -127,7 +142,7 @@ describe("CLI backup verify (smoke)", () => {
     const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
     const pragma = vi
       .spyOn(isolatedDriver.prototype, "pragma")
-      .mockResolvedValue([{ integrity_check: "row 3 missing" }]);
+      .mockResolvedValue([{ integrity_check: "SENSITIVE_PRAGMA_ROW" }]);
     try {
       // Run the human command before any --json invocation: Commander retains
       // global options when runCli is exercised in-process by this test helper.
@@ -154,7 +169,8 @@ describe("CLI backup verify (smoke)", () => {
         error: string;
         hint?: { code?: string; failure_kind?: string };
       };
-      expect(envelope.error).toContain('integrity_check on the snapshot returned "row 3 missing"');
+      expect(envelope.error).toContain("snapshot integrity check failed");
+      expect(envelope.error).not.toContain("SENSITIVE_PRAGMA_ROW");
       expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
     } finally {
       pragma.mockRestore();
@@ -163,10 +179,12 @@ describe("CLI backup verify (smoke)", () => {
 
   it("reports multiple valid non-ok integrity rows as corruption in JSON output", async () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-multi-integrity-failure-");
-    const pragma = vi.spyOn(AsyncSqliteDatabase.prototype, "pragma").mockResolvedValue([
-      { integrity_check: "row 3 missing" },
-      { integrity_check: "row 7 missing" },
-    ]);
+    const pragma = vi
+      .spyOn(AsyncSqliteDatabase.prototype, "pragma")
+      .mockResolvedValue([
+        { integrity_check: "SENSITIVE_PRAGMA_ROW_ONE" },
+        { integrity_check: "SENSITIVE_PRAGMA_ROW_TWO" },
+      ]);
     try {
       const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
         NEOTOMA_DATA_DIR: dataDir,
@@ -176,7 +194,9 @@ describe("CLI backup verify (smoke)", () => {
         error: string;
         hint?: { code?: string; failure_kind?: string };
       };
-      expect(envelope.error).toContain('integrity_check on the snapshot returned "row 3 missing; row 7 missing"');
+      expect(envelope.error).toContain("snapshot integrity check failed");
+      expect(envelope.error).not.toContain("SENSITIVE_PRAGMA_ROW_ONE");
+      expect(envelope.error).not.toContain("SENSITIVE_PRAGMA_ROW_TWO");
       expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
     } finally {
       pragma.mockRestore();
@@ -216,13 +236,14 @@ describe("CLI backup verify (smoke)", () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-instrument-$()-");
     const pragma = vi
       .spyOn(AsyncSqliteDatabase.prototype, "pragma")
-      .mockRejectedValue(new Error("simulated verification driver failure"));
+      .mockRejectedValue(new Error("SENSITIVE_DRIVER_EXCEPTION"));
     try {
       const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
         NEOTOMA_DATA_DIR: dataDir,
       });
       expect(run.exitCode).toBe(1);
       expect(run.stderr).toContain("could not obtain an integrity result");
+      expect(run.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
       expect(run.stderr).not.toContain("SQLite may be corrupted.");
       expect(run.stderr).toContain(`sqlite3 '${parent}`);
       expect(run.stderr).toContain("$()-");
@@ -237,7 +258,7 @@ describe("CLI backup verify (smoke)", () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-corrupt-throw-");
     const pragma = vi
       .spyOn(AsyncSqliteDatabase.prototype, "pragma")
-      .mockRejectedValue(new Error("SQLITE_CORRUPT: database disk image is malformed"));
+      .mockRejectedValue(new Error("SQLITE_CORRUPT: SENSITIVE_DRIVER_EXCEPTION"));
     try {
       const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
         NEOTOMA_DATA_DIR: dataDir,
@@ -247,7 +268,9 @@ describe("CLI backup verify (smoke)", () => {
         error: string;
         hint?: { code?: string; failure_kind?: string };
       };
-      expect(envelope.error).toContain("SQLITE_CORRUPT");
+      expect(envelope.error).toContain("snapshot integrity check failed");
+      expect(envelope.error).not.toContain("SQLITE_CORRUPT");
+      expect(envelope.error).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
       expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
     } finally {
       pragma.mockRestore();

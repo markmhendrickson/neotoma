@@ -39,40 +39,35 @@ describe("getSqliteRecoveryHint", () => {
   it("classifies missing or malformed readback as an instrument failure", () => {
     expect(classifyBackupIntegrityCheck([])).toEqual({
       kind: "verify_instrument_failure",
-      detail: "no result",
     });
     expect(classifyBackupIntegrityCheck([{}])).toEqual({
       kind: "verify_instrument_failure",
-      detail: "malformed result",
     });
     expect(classifyBackupIntegrityCheck([{ integrity_check: null }])).toEqual({
       kind: "verify_instrument_failure",
-      detail: "malformed result",
     });
     expect(
-      classifyBackupIntegrityCheck([{ integrity_check: "ok" }, { integrity_check: "row 3 missing" }])
+      classifyBackupIntegrityCheck([
+        { integrity_check: "ok" },
+        { integrity_check: "row 3 missing" },
+      ])
     ).toEqual({
       kind: "verify_instrument_failure",
-      detail: "malformed result",
     });
     expect(classifyBackupIntegrityCheck([{ result: "ok" }])).toEqual({
       kind: "verify_instrument_failure",
-      detail: "malformed result",
     });
     expect(classifyBackupIntegrityCheck([{ integrity_check: "ok", extra: "unexpected" }])).toEqual({
       kind: "verify_instrument_failure",
-      detail: "malformed result",
     });
   });
 
   it("classifies a real non-ok result as an integrity failure", () => {
     expect(classifyBackupIntegrityCheck([{ integrity_check: "ok" }])).toEqual({
       kind: "verified",
-      detail: "ok",
     });
     expect(classifyBackupIntegrityCheck([{ integrity_check: "row 3 missing" }])).toEqual({
       kind: "integrity_failed",
-      detail: "row 3 missing",
     });
     expect(
       classifyBackupIntegrityCheck([
@@ -81,7 +76,6 @@ describe("getSqliteRecoveryHint", () => {
       ])
     ).toEqual({
       kind: "integrity_failed",
-      detail: "row 3 missing; row 7 missing",
     });
   });
 });

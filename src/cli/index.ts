@@ -1841,7 +1841,6 @@ class CliHintError extends Error {
 
 export type BackupIntegrityVerification = {
   kind: "verified" | "verify_instrument_failure" | "integrity_failed";
-  detail: string;
 };
 
 /**
@@ -1850,12 +1849,12 @@ export type BackupIntegrityVerification = {
  */
 export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVerification {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return { kind: "verify_instrument_failure", detail: "no result" };
+    return { kind: "verify_instrument_failure" };
   }
   const details: string[] = [];
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
-      return { kind: "verify_instrument_failure", detail: "malformed result" };
+      return { kind: "verify_instrument_failure" };
     }
     const record = row as Record<string, unknown>;
     const keys = Object.keys(record);
@@ -1865,18 +1864,18 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
       typeof record.integrity_check !== "string" ||
       record.integrity_check.trim().length === 0
     ) {
-      return { kind: "verify_instrument_failure", detail: "malformed result" };
+      return { kind: "verify_instrument_failure" };
     }
     details.push(record.integrity_check.trim());
   }
 
   if (details.length === 1 && details[0] === "ok") {
-    return { kind: "verified", detail: "ok" };
+    return { kind: "verified" };
   }
   if (details.every((detail) => detail !== "ok")) {
-    return { kind: "integrity_failed", detail: details.join("; ") };
+    return { kind: "integrity_failed" };
   }
-  return { kind: "verify_instrument_failure", detail: "malformed result" };
+  return { kind: "verify_instrument_failure" };
 }
 
 /** Wait for session port file written by API when it binds; returns actual port or preferred on timeout. */
@@ -11217,7 +11216,6 @@ backupCommand
       // #2075 failure silent.
       let integrity: BackupIntegrityVerification = {
         kind: "verify_instrument_failure",
-        detail: "no result",
       };
       let verifyDb: AsyncSqliteDatabase | null = null;
       try {
@@ -11226,7 +11224,6 @@ backupCommand
       } catch (err) {
         integrity = {
           kind: getSqliteRecoveryHint(err) ? "integrity_failed" : "verify_instrument_failure",
-          detail: formatCliError(err),
         };
       } finally {
         await verifyDb?.close().catch(() => {});
@@ -11235,13 +11232,13 @@ backupCommand
       if (integrity.kind !== "verified") {
         const instrumentFailure = integrity.kind === "verify_instrument_failure";
         const message = instrumentFailure
-          ? `Backup verification could not obtain an integrity result (${integrity.detail}). ` +
+          ? "Backup verification could not obtain an integrity result. " +
             "The snapshot has been left in place for inspection at " +
             destDb +
             `. Run \`sqlite3 ${quotePosixShellArgument(destDb)} "PRAGMA integrity_check;"\` directly; ` +
             'if it returns "ok", this is a tooling or driver issue.'
-          : `Backup verification failed: integrity_check on the snapshot returned "${integrity.detail}" ` +
-            '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
+          : "Backup verification failed: the snapshot integrity check failed. " +
+            "The backup is NOT usable and has been left in place for inspection at " +
             destDb;
         writeCliError(
           new CliHintError(message, {

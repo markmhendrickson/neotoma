@@ -245,6 +245,35 @@ jobs:
       - name: Run offline/local-transport parity gate
         run: npm run test:transport-parity
 
+  native_sqlite_backup:
+    # This is deliberately separate from the Node 20 baseline. node:sqlite is
+    # the production-default driver on current Node, and its backup-create
+    # effect path must be proven on a runtime that actually supplies it.
+    # NEOTOMA_REQUIRE_NATIVE_SQLITE makes a missing DatabaseSync a loud failure,
+    # rather than allowing Vitest's skip mechanism to turn missing coverage green.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build server (Vitest global setup requires dist/)
+        run: npm run build:server
+
+      - name: Require native node:sqlite DatabaseSync
+        run: node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+
+      - name: Run healthy native backup-create effect regression
+        run: NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts
+
   frontend:
     runs-on: ubuntu-latest
     steps:
