@@ -937,3 +937,67 @@ it("natural service callers retain unknown option names before interface project
   expect(result.read_contract.coverage.state).toBe("partial");
   expect(JSON.stringify(result.read_contract)).not.toContain("value-must-not-echo");
 });
+
+it("the owned CLI network guard permits real loopback and refuses external socket and DNS before native calls", async () => {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const child = String.raw`
+    const assert = require("node:assert/strict");
+    const net = require("node:net");
+    const dns = require("node:dns");
+    let externalNativeCalls = 0;
+    const connect = net.Socket.prototype.connect;
+    net.Socket.prototype.connect = function(...args) {
+      let a = args; while(Array.isArray(a[0])) a = a[0];
+      const h = typeof a[0] === "object" ? a[0].host : a[1];
+      if (h === "example.invalid" || h === "192.0.2.1") {
+        externalNativeCalls++; throw new Error("Native external socket sentinel");
+      }
+      return connect.apply(this,args);
+    };
+    const lookup = dns.lookup;
+    dns.lookup = function(h,...args) {
+      if(h === "example.invalid") { externalNativeCalls++; throw new Error("Native external DNS sentinel"); }
+      return lookup.call(this,h,...args);
+    };
+    const promised = dns.promises.lookup;
+    dns.promises.lookup = async function(h,...args) {
+      if(h === "example.invalid") { externalNativeCalls++; throw new Error("Native external DNS sentinel"); }
+      return promised.call(this,h,...args);
+    };
+    require(process.argv[1]);
+    (async () => {
+      const server = net.createServer(s => s.end("owned-loopback-positive"));
+      await new Promise(resolve => server.listen(0,"127.0.0.1",resolve));
+      try {
+        const port = server.address().port;
+        const received = await new Promise((resolve,reject) => {
+          const socket = net.createConnection({port,host:"127.0.0.1"});
+          let body = ""; socket.on("data",b => body += b); socket.on("end",() => resolve(body)); socket.on("error",reject);
+        });
+        assert.equal(received,"owned-loopback-positive");
+        assert.equal((await dns.promises.lookup("localhost",{family:4})).family,4);
+        assert.throws(() => new net.Socket().connect({port,host:"example.invalid"}),/Owned harness refused external socket/);
+        assert.throws(() => new net.Socket().connect(port,"192.0.2.1"),/Owned harness refused external socket/);
+        assert.throws(() => dns.lookup("example.invalid",() => {}),/Owned harness refused external DNS/);
+        await assert.rejects(dns.promises.lookup("example.invalid"),/Owned harness refused external DNS/);
+        assert.equal(externalNativeCalls,0);
+        process.stdout.write(JSON.stringify({loopback:true,dns_positive:true,external_native_calls:0,refusals:4}));
+      } finally { await new Promise(resolve => server.close(resolve)); }
+    })().catch(() => { process.stderr.write("Owned network control failed"); process.exitCode=1; });
+  `;
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    ["-e", child, path.join(root, "tests/helpers/owned_loopback_only.cjs")],
+    {
+      cwd: root,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME },
+      timeout: 10000,
+    }
+  );
+  expect(JSON.parse(stdout)).toEqual({
+    loopback: true,
+    dns_positive: true,
+    external_native_calls: 0,
+    refusals: 4,
+  });
+});
