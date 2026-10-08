@@ -121,7 +121,6 @@ import {
 } from "./services/skills/instance_skills.js";
 import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
-import { AgentCapabilityError } from "./services/agent_capabilities.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
 import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { CursorError } from "./services/entity_cursor.js";
