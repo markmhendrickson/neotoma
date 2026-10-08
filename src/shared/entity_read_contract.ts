@@ -12,12 +12,45 @@ export interface EntityReadTrace {
   ordering?: { field: string; direction: "asc" | "desc"; tie_breaker: string | null };
   continuation_supported?: boolean;
   count_exact?: boolean;
+  effective_types?: string[];
+  distance_threshold_applied?: boolean;
 }
 export interface EntityReadRequest {
   raw: Record<string, unknown>;
   surface: "service" | "mcp" | "http_post" | "http_get";
   consumed?: string[];
 }
+/** Internal service callers use camel-case options, but acquisition evidence
+ * speaks the same canonical option names as the public facades. Unknown names
+ * remain observable before any caller-specific projection or stripping. */
+export function serviceEntityReadRequest(params: Record<string, unknown>): EntityReadRequest {
+  const aliases: Record<string, string> = {
+    userId: "user_id",
+    entityType: "entity_type",
+    entityTypes: "entity_types",
+    includeMerged: "include_merged",
+    includeSnapshots: "include_snapshots",
+    sortBy: "sort_by",
+    sortOrder: "sort_order",
+    publishedAfter: "published_after",
+    publishedBefore: "published_before",
+    similarityThreshold: "similarity_threshold",
+    updatedSince: "updated_since",
+    createdSince: "created_since",
+    identityBasis: "identity_basis",
+    snapshotFilters: "snapshot_filters",
+    excludeBookkeeping: "exclude_bookkeeping",
+  };
+  return {
+    surface: "service",
+    raw: Object.fromEntries(
+      Object.entries(params)
+        .filter(([name]) => name !== "readRequest")
+        .map(([name, value]) => [aliases[name] ?? name, value])
+    ),
+  };
+}
+
 type IgnoredOption = { name: string; reason: string };
 const KNOWN = new Set([
   "user_id",
@@ -74,6 +107,7 @@ export function createEntityReadContract(input: {
   trace: EntityReadTrace;
   startedAt: string;
   diagnostics?: EntityReadContract["diagnostics"];
+  bookkeepingOverride?: boolean;
 }): EntityReadContract {
   const raw = input.request?.raw ?? {};
   const consumed = new Set(input.request?.consumed ?? Object.keys(raw));
@@ -90,6 +124,11 @@ export function createEntityReadContract(input: {
       ignored.push({ name: key, reason: "unsupported_on_surface" });
     else if (key === "snapshot_filters" && input.mode !== "none")
       ignored.push({ name: key, reason: "inapplicable_mode" });
+    else if (
+      key === "similarity_threshold" &&
+      (input.mode !== "semantic" || !input.trace.distance_threshold_applied)
+    )
+      ignored.push({ name: key, reason: "inapplicable_mode" });
     else if (key === "exclude_bookkeeping" && raw[key] === true && input.mode === "none")
       ignored.push({ name: key, reason: "inapplicable_mode" });
     else {
@@ -98,6 +137,12 @@ export function createEntityReadContract(input: {
         normalized.push({ name: key, canonical_name: "search", reason: "alias" });
     }
   }
+  if (input.bookkeepingOverride)
+    normalized.push({
+      name: "exclude_bookkeeping",
+      canonical_name: "exclude_bookkeeping",
+      reason: "explicit_bookkeeping_type_override",
+    });
   const reasons = new Set(input.trace.reasons);
   if (ignored.some((option) => option.reason !== "superseded_alias"))
     reasons.add("ignored_scope_option");

@@ -232,6 +232,7 @@ components:
                 - partial
                 - unknown
             reasons:
+              description: Safe executing-path cause codes only. Includes semantic_backend_unavailable for an unusable vector backend and semantic_global_candidate_cap for a bounded global KNN pool; never includes provider exceptions, query text or credential values.
               type: array
               items:
                 type: string

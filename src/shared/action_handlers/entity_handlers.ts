@@ -18,6 +18,7 @@ import {
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 import {
   createEntityReadContract,
+  serviceEntityReadRequest,
   predicateValue,
   type EntityReadRequest,
   type EntityReadTrace,
@@ -446,6 +447,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   } = params;
   const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
   const strategies = new Set<SearchStrategy>();
+  if (params.readTrace) params.readTrace.effective_types = typeFilter;
   const normalizedSearch = normalizeSearchText(search);
   const searchTokens = normalizedSearch.split(" ").filter(Boolean);
   if (searchTokens.length === 0) {
@@ -483,6 +485,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     );
     if (matchingTypes.length > 0) {
       entityQuery = entityQuery.in("entity_type", matchingTypes);
+      if (params.readTrace) params.readTrace.effective_types = matchingTypes;
     } else {
       candidateLimitApplied = true;
       entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
@@ -922,7 +925,8 @@ async function countVisibleEntities(params: {
 async function entityReadDiagnostics(
   userId: string,
   types: string[],
-  fields: string[]
+  fields: string[],
+  readTrace?: EntityReadTrace
 ): Promise<EntityReadContract["diagnostics"]> {
   if (types.length === 0)
     return fields.length
@@ -932,6 +936,7 @@ async function entityReadDiagnostics(
   try {
     rows = await schemaRegistry.listActiveSchemas(userId);
   } catch {
+    readTrace?.reasons.add("schema_registry_unavailable");
     return [{ code: "diagnostics_unavailable", reason: "schema_registry_unavailable" }];
   }
   const grouped = new Map<string, SchemaRegistryEntry[]>();
@@ -968,6 +973,7 @@ async function entityReadDiagnostics(
       typeof selected.schema_definition.fields !== "object" ||
       Array.isArray(selected.schema_definition.fields)
     ) {
+      readTrace?.reasons.add("schema_registry_ambiguous");
       diagnostics.push({
         code: "diagnostics_unavailable",
         reason: "ambiguous_or_invalid_active_schema",
@@ -1137,6 +1143,9 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   let appliedStrategies: Set<SearchStrategy> | undefined;
   let searchMode: EntitySearchMode = "none";
   let fallbackReason: EntityFallbackReason | undefined;
+  let effectiveExcludeBookkeeping = false;
+  const bookkeepingOverride =
+    excludeBookkeeping && typeFilter.some((t) => BOOKKEEPING_ENTITY_TYPES.has(t));
 
   if (search && search.trim()) {
     appliedStrategies = new Set<SearchStrategy>();
@@ -1150,9 +1159,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     // Bookkeeping exclusion is caller-controlled (per docs/foundation/product_principles.md
     // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
     // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
-    const effectiveExcludeBookkeeping =
-      excludeBookkeeping &&
-      !(typeFilter.length > 0 && typeFilter.some((t) => BOOKKEEPING_ENTITY_TYPES.has(t)));
+    effectiveExcludeBookkeeping = excludeBookkeeping && !bookkeepingOverride;
 
     const lexicalParams = {
       readTrace,
@@ -1193,6 +1200,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         total: semanticTotal,
         fallbackReason: semanticFallbackReason,
       } = await semanticSearchEntities({
+        readTrace,
         searchText: trimmedSearch,
         userId,
         entityType,
@@ -1336,6 +1344,25 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       ? (computeNextCursor(entities, { sortBy, sortOrder, limit }) ?? undefined)
       : undefined;
 
+  // Legacy search type-hint lookup is intentionally unchanged. Its derived
+  // filter can name a foreign private schema; the new envelope may describe
+  // that executed predicate by digest, never disclose a private catalog name.
+  const acquiredTypes = readTrace.effective_types ?? typeFilter;
+  let disclosedTypes = acquiredTypes;
+  if (readTrace.effective_types && typeFilter.length === 0 && acquiredTypes.length) {
+    try {
+      const visible = new Set(
+        (await schemaRegistry.listActiveSchemas(userId)).map((row) => row.entity_type)
+      );
+      disclosedTypes = acquiredTypes.filter((type) => visible.has(type));
+    } catch {
+      disclosedTypes = [];
+      readTrace.reasons.add("schema_registry_unavailable");
+    }
+    if (disclosedTypes.length !== acquiredTypes.length)
+      readTrace.reasons.add("applied_type_scope_redacted");
+  }
+
   return {
     entities,
     total,
@@ -1344,10 +1371,13 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     search_mode: searchMode,
     next_cursor: nextCursor,
     read_contract: createEntityReadContract({
-      request: params.readRequest,
+      request:
+        params.readRequest ??
+        serviceEntityReadRequest(params as unknown as Record<string, unknown>),
       mode: searchMode,
       fallbackReason,
-      types: typeFilter,
+      types: disclosedTypes,
+      bookkeepingOverride: searchMode !== "none" && bookkeepingOverride,
       includeMerged,
       includeSnapshots,
       sortBy: searchMode === "none" ? sortBy : "search_rank",
@@ -1362,10 +1392,43 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       trace: readTrace,
       diagnostics: await entityReadDiagnostics(
         userId,
-        typeFilter,
-        Object.keys(snapshotFilters ?? {})
+        disclosedTypes,
+        searchMode === "none" ? Object.keys(snapshotFilters ?? {}) : [],
+        readTrace
       ),
       predicates: [
+        ...(readTrace.effective_types?.length && typeFilter.length === 0
+          ? [{ field: "entity_type", op: "in", value: predicateValue(readTrace.effective_types) }]
+          : []),
+        ...(searchMode !== "none"
+          ? [
+              {
+                field: "search",
+                op: "ranked_query",
+                value: predicateValue(
+                  searchMode === "semantic" ? search!.trim() : normalizeSearchText(search!.trim())
+                ),
+              },
+            ]
+          : []),
+        ...(searchMode !== "none" && excludeBookkeeping
+          ? [
+              {
+                field: "exclude_bookkeeping",
+                op: "eq",
+                value: predicateValue(effectiveExcludeBookkeeping),
+              },
+            ]
+          : []),
+        ...(searchMode === "semantic" && readTrace.distance_threshold_applied
+          ? [
+              {
+                field: "similarity_threshold",
+                op: "lt",
+                value: predicateValue(similarityThreshold),
+              },
+            ]
+          : []),
         ...(published !== undefined
           ? [{ field: "published", op: "eq", value: predicateValue(published) }]
           : []),

@@ -1,5 +1,10 @@
 import { beforeAll, afterAll, it, expect, vi } from "vitest";
 import { createServer } from "node:http";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { mkdir, access } from "node:fs/promises";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -314,6 +319,8 @@ it("an unavailable registry is diagnostic uncertainty rather than a missing type
     expect(result.read_contract.diagnostics).not.toContainEqual(
       expect.objectContaining({ code: "missing_entity_type" })
     );
+    expect(result.read_contract.coverage.reasons).toContain("schema_registry_unavailable");
+    expect(result.read_contract.coverage.scope_exhausted).toBeNull();
   } finally {
     fail.mockRestore();
   }
@@ -611,4 +618,322 @@ it("a legacy cursor emitted from a filtered scan is not certified as a supported
   expect(result.next_cursor).toBeTruthy();
   expect(result.read_contract.coverage.continuation.kind).toBe("unsupported");
   expect(result.read_contract.coverage.scope_exhausted).toBeNull();
+});
+
+it("built CLI list and natural operation requests retain the actual full acquisition envelope", async () => {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const binary = path.join(root, "dist/cli/bootstrap.js");
+  await access(binary);
+  const cwd = path.join(root, ".vitest", "retrieval-cli");
+  await mkdir(cwd, { recursive: true });
+  const env = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    NODE_ENV: "test",
+    NEOTOMA_ENV: "development",
+    NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
+    NODE_OPTIONS:
+      "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
+  };
+  const command = async (args: string[]) => {
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [binary, "--api-only", "--base-url", base, "--json", "--no-log-file", ...args],
+      { cwd, env, timeout: 15000, maxBuffer: 1024 * 1024 }
+    );
+    return JSON.parse(stdout) as any;
+  };
+  const listed = await command(["entities", "list", "--type", entityType]);
+  expect(listed.entities.map((row: any) => row.entity_id).sort()).toEqual([...ids].sort());
+  expect(listed.read_contract.version).toBe("1");
+  expect(listed.read_contract.coverage.returned_count).toBe(3);
+  const queried = await command([
+    "request",
+    "--operation",
+    "queryEntities",
+    "--skip-auth",
+    "--body",
+    JSON.stringify({ entity_type: entityType, unapplied_fixture_scope: "value-must-not-echo" }),
+  ]);
+  expect(queried.entities).toHaveLength(3);
+  expect(queried.read_contract.request_options.ignored).toContainEqual({
+    name: "unapplied_fixture_scope",
+    reason: "unknown_option",
+  });
+  expect(queried.read_contract.coverage.state).toBe("partial");
+  expect(JSON.stringify(queried.read_contract)).not.toContain("value-must-not-echo");
+  const get = await command([
+    "request",
+    "--operation",
+    "listEntities",
+    "--skip-auth",
+    "--query",
+    JSON.stringify({ entity_type: entityType, limit: 3 }),
+  ]);
+  expect(get.read_contract.coverage.scope_exhausted).toBe(false);
+  expect(get.read_contract.coverage.continuation.next_cursor).toBeTruthy();
+}, 60000);
+
+it("executed derived type restriction and explicit bookkeeping override describe the actual lexical scope", async () => {
+  const suffix = randomUUID(),
+    plan = "ent_contract_plan_" + suffix,
+    conversation = "ent_contract_conversation_" + suffix;
+  const marker = "marker" + suffix.replaceAll("-", "");
+  const rows = [
+    { id: plan, user_id: userId, entity_type: "plan", canonical_name: "Synthetic " + marker },
+    {
+      id: conversation,
+      user_id: userId,
+      entity_type: "conversation",
+      canonical_name: "Synthetic " + marker,
+    },
+  ];
+  try {
+    expect((await db.from("entities").insert(rows)).error).toBeNull();
+    expect(
+      (
+        await db.from("entity_snapshots").insert(
+          rows.map((row) => ({
+            entity_id: row.id,
+            user_id: userId,
+            entity_type: row.entity_type,
+            schema_version: "1.0",
+            snapshot: { name: row.canonical_name },
+            observation_count: 0,
+            provenance: {},
+          }))
+        )
+      ).error
+    ).toBeNull();
+    const typed = await queryEntitiesWithCount({ userId, search: "plan " + marker, limit: 100 });
+    expect(typed.entities.map((x) => x.entity_id)).toEqual([plan]);
+    expect(typed.read_contract.applied_scope.entity_types).toEqual(["plan"]);
+    expect(typed.read_contract.applied_scope.predicates).toContainEqual(
+      expect.objectContaining({ field: "search", op: "ranked_query" })
+    );
+    expect(JSON.stringify(typed.read_contract)).not.toContain(marker);
+    const overridden = await queryEntitiesWithCount({
+      userId,
+      entityType: "conversation",
+      search: marker,
+      excludeBookkeeping: true,
+      similarityThreshold: 1.2,
+      limit: 100,
+      readRequest: {
+        surface: "service",
+        raw: {
+          entity_type: "conversation",
+          search: marker,
+          exclude_bookkeeping: true,
+          similarity_threshold: 1.2,
+        },
+      },
+    });
+    expect(overridden.entities.map((x) => x.entity_id)).toContain(conversation);
+    expect(overridden.read_contract.request_options.normalized).toContainEqual({
+      name: "exclude_bookkeeping",
+      canonical_name: "exclude_bookkeeping",
+      reason: "explicit_bookkeeping_type_override",
+    });
+    expect(overridden.read_contract.request_options.ignored).toContainEqual({
+      name: "similarity_threshold",
+      reason: "inapplicable_mode",
+    });
+    expect(overridden.read_contract.applied_scope.predicates).not.toContainEqual(
+      expect.objectContaining({ field: "similarity_threshold" })
+    );
+  } finally {
+    await db.from("entity_snapshots").delete().in("entity_id", [plan, conversation]);
+    await db.from("entities").delete().in("id", [plan, conversation]);
+  }
+});
+
+// An absence-sensitive agent uses exact acquisition evidence; it does not turn
+// this read-interval envelope into a writer fence or a historical snapshot.
+async function nativeToolScan(
+  args: Record<string, unknown>,
+  mutate?: (page: any, index: number) => Promise<any>
+) {
+  const observed = new Set<string>(),
+    cursors = new Set<string>();
+  const pages: any[] = [];
+  let cursor: string | undefined, total: number | undefined, scope: string | undefined;
+  for (let at = 0; at < 10; at++) {
+    const reply = await modernPost(base, {
+      id: 100 + at,
+      method: "tools/call",
+      params: { name: "retrieve_entities", arguments: { ...args, ...(cursor ? { cursor } : {}) } },
+    });
+    if (reply.status !== 200) throw Error("read_failed");
+    let page = toolResultJson(reply.body) as any;
+    if (mutate) page = await mutate(page, at);
+    const c = page.read_contract;
+    if (!c || c.version !== "1" || c.surface !== "entity_collection")
+      throw Error("unsupported_contract");
+    if (
+      c.mode.actual !== "structured" ||
+      c.coverage.kind !== "predicate_population" ||
+      !["complete", "paginated"].includes(c.coverage.state) ||
+      c.coverage.reasons.length ||
+      c.coverage.total.relation !== "exact" ||
+      c.coverage.total.unit !== "entities" ||
+      c.request_options.ignored.length ||
+      c.coverage.returned_count !== page.entities.length
+    )
+      throw Error("unproved_scope");
+    const shape = JSON.stringify({ ...c.applied_scope, pagination: undefined });
+    if (scope !== undefined && scope !== shape) throw Error("scope_drift");
+    scope = shape;
+    if (total !== undefined && total !== c.coverage.total.value) throw Error("count_drift");
+    total = c.coverage.total.value;
+    for (const row of page.entities) {
+      if (observed.has(row.entity_id)) throw Error("duplicate_entity");
+      observed.add(row.entity_id);
+    }
+    pages.push(page);
+    if (c.coverage.scope_exhausted === true) {
+      if (observed.size !== total) throw Error("count_contradiction");
+      return { ids: [...observed].sort(), pages, writer_fence_delivered: false };
+    }
+    const next = c.coverage.continuation.next_cursor;
+    if (c.coverage.continuation.kind !== "cursor" || !next || cursors.has(next))
+      throw Error("nonadvancing_continuation");
+    cursors.add(next);
+    cursor = next;
+  }
+  throw Error("scan_limit");
+}
+
+it("exact-tool adopting agent exhausts full final page and rejects real ignored scope, count drift, duplicates and absent proof", async () => {
+  const baseline = await nativeToolScan({ entity_type: entityType, limit: 1 });
+  expect(baseline.ids).toEqual([...ids].sort());
+  expect(baseline.pages).toHaveLength(4);
+  expect(baseline.writer_fence_delivered).toBe(false);
+  expect(baseline.pages.every((page) => page.read_contract.coherence.common_view === false)).toBe(
+    true
+  );
+  const empty = await nativeToolScan({
+    entity_type: entityType,
+    created_since: "2999-01-01T00:00:00Z",
+    limit: 1,
+  });
+  expect(empty.ids).toEqual([]);
+  await expect(
+    nativeToolScan({
+      entity_type: entityType,
+      created_since: "2999-01-01T00:00:00Z",
+      pretend_scope: "must-not-be-applied",
+    })
+  ).rejects.toThrow("unproved_scope");
+  await expect(
+    nativeToolScan({ entity_type: entityType, limit: 1 }, async (page) => ({
+      ...page,
+      read_contract: undefined,
+    }))
+  ).rejects.toThrow("unsupported_contract");
+  let first: any;
+  await expect(
+    nativeToolScan({ entity_type: entityType, limit: 1 }, async (page, index) => {
+      if (index === 0) {
+        first = page;
+        return page;
+      }
+      return { ...page, entities: first.entities };
+    })
+  ).rejects.toThrow("duplicate_entity");
+  const interleave = ids[2] + "_interleaved";
+  try {
+    await expect(
+      nativeToolScan({ entity_type: entityType, limit: 1 }, async (page, index) => {
+        if (index === 0) {
+          expect(
+            (
+              await db.from("entities").insert({
+                id: interleave,
+                user_id: userId,
+                entity_type: entityType,
+                canonical_name: "Synthetic interleave",
+              })
+            ).error
+          ).toBeNull();
+          expect(
+            (
+              await db.from("entity_snapshots").insert({
+                entity_id: interleave,
+                user_id: userId,
+                entity_type: entityType,
+                schema_version: "1.0",
+                snapshot: {},
+                observation_count: 0,
+                provenance: {},
+              })
+            ).error
+          ).toBeNull();
+        }
+        return page;
+      })
+    ).rejects.toThrow("count_drift");
+  } finally {
+    await db.from("entity_snapshots").delete().eq("entity_id", interleave);
+    await db.from("entities").delete().eq("id", interleave);
+  }
+});
+
+it("legacy derived private type scope is described by digest without exposing foreign catalog names", async () => {
+  const schema = randomUUID(),
+    foreign = randomUUID(),
+    privateType = "Foreignscope" + randomUUID().replaceAll("-", "");
+  try {
+    expect(
+      (
+        await db.from("schema_registry").insert({
+          id: schema,
+          entity_type: privateType,
+          schema_version: "1.0",
+          scope: "user",
+          user_id: foreign,
+          active: true,
+          schema_definition: {
+            fields: { private_field: { type: "string" } },
+            identity_opt_out: "heuristic_canonical_name",
+          },
+          reducer_config: { merge_policies: {} },
+        })
+      ).error
+    ).toBeNull();
+    expect((await db.from("schema_registry").select("id").eq("id", schema)).data).toHaveLength(1);
+    const result = await queryEntitiesWithCount({
+      userId,
+      search: privateType.toLowerCase() + " synthetic",
+      limit: 10,
+    });
+    expect(result.search_mode).toBe("lexical_typed");
+    expect(JSON.stringify(result.read_contract)).not.toContain(privateType);
+    expect(JSON.stringify(result.read_contract)).not.toContain("private_field");
+    expect(result.read_contract.applied_scope.entity_types).toEqual([]);
+    expect(result.read_contract.applied_scope.predicates).toContainEqual(
+      expect.objectContaining({ field: "entity_type", op: "in" })
+    );
+    expect(result.read_contract.coverage.reasons).toContain("applied_type_scope_redacted");
+    expect(result.read_contract.coverage.scope_exhausted).toBeNull();
+  } finally {
+    await db.from("schema_registry").delete().eq("id", schema);
+  }
+});
+
+it("natural service callers retain unknown option names before interface projection", async () => {
+  const result = await queryEntitiesWithCount({
+    userId,
+    entityType,
+    limit: 100,
+    unexecuted_service_scope: "value-must-not-echo",
+  } as Parameters<typeof queryEntitiesWithCount>[0]);
+  expect(result.entities).toHaveLength(3);
+  expect(result.read_contract.request_options.applied).toContain("entity_type");
+  expect(result.read_contract.request_options.ignored).toContainEqual({
+    name: "unexecuted_service_scope",
+    reason: "unknown_option",
+  });
+  expect(result.read_contract.coverage.state).toBe("partial");
+  expect(JSON.stringify(result.read_contract)).not.toContain("value-must-not-echo");
 });

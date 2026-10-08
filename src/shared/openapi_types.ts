@@ -2586,6 +2586,7 @@ export interface components {
           | "synthesized_groups";
         /** @enum {string} */
         state: "complete" | "paginated" | "truncated" | "partial" | "unknown";
+        /** @description Safe executing-path cause codes only. Includes semantic_backend_unavailable for an unusable vector backend and semantic_global_candidate_cap for a bounded global KNN pool; never includes provider exceptions, query text or credential values. */
         reasons: string[];
         returned_count: number;
         total: {
