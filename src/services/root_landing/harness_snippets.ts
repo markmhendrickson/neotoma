@@ -183,7 +183,7 @@ It is a public sandbox with ephemeral per-session workspaces. Anything I store i
     "claude-code":
       mode === "local"
         ? `Register with: \`claude mcp add neotoma -- ${JSON.stringify(stdio)}\`.`
-        : `Register with: \`claude mcp add neotoma --transport http --url ${mcpUrl}\`.`,
+        : `Register with: \`claude mcp add --transport http neotoma ${mcpUrl}\`.`,
     "claude-desktop":
       mode === "local"
         ? `Edit \`claude_desktop_config.json\` and add a \`mcpServers.neotoma\` stdio entry pointing at \`${stdio}\`.`
@@ -276,8 +276,8 @@ command = ${stdioJson}`,
       return {
         format: "shell",
         code: bearer
-          ? `claude mcp add neotoma --transport http --url ${mcpUrl} --header "Authorization: Bearer ${bearer}"`
-          : `claude mcp add neotoma --transport http --url ${mcpUrl}`,
+          ? `claude mcp add --transport http neotoma ${mcpUrl} --header "Authorization: Bearer ${bearer}"`
+          : `claude mcp add --transport http neotoma ${mcpUrl}`,
       };
     case "claude-desktop":
       return {

@@ -17,6 +17,11 @@ import {
   type HarnessId,
   type LandingMode,
 } from "../../src/services/root_landing/harness_snippets.js";
+import {
+  renderLandingHtml,
+  type LandingHtmlContext,
+} from "../../src/services/root_landing/html_template.js";
+import { renderLandingMarkdown } from "../../src/services/root_landing/md_template.js";
 
 const REMOTE_MODES: LandingMode[] = ["sandbox", "personal", "prod"];
 
@@ -64,6 +69,50 @@ describe("harness_snippets: remote modes interpolate mcpUrl", () => {
       expect(h.human.code).not.toMatch(/<your-[\w-]+-host>/);
       expect(h.human.code).not.toMatch(/example\.com\//);
     }
+  });
+});
+
+describe("harness_snippets: Claude Code HTTP command contract", () => {
+  // `claude mcp add --help` declares <name> <commandOrUrl>, not a --url flag.
+  it.each(REMOTE_MODES)("mode=%s uses the positional HTTP URL in both flows", (mode) => {
+    const ctx = ctxFor(mode);
+    const out = buildHarnessSnippet("claude-code", ctx);
+    const command = `claude mcp add --transport http neotoma ${ctx.mcpUrl}`;
+    expect(out.human.code).toBe(command);
+    expect(out.agentPrompt).toContain(`Register with: \`${command}\`.`);
+    expect(out.human.code).not.toContain("--url");
+    expect(out.agentPrompt).not.toContain("--url");
+  });
+
+  it("keeps the session header with the positional URL without registering anything", () => {
+    const ctx = { ...ctxFor("sandbox"), sessionBearer: "synthetic-session-token" };
+    const out = buildHarnessSnippet("claude-code", ctx);
+    expect(out.human.code).toBe(
+      `claude mcp add --transport http neotoma ${ctx.mcpUrl} --header "Authorization: Bearer synthetic-session-token"`
+    );
+    expect(out.human.code).not.toContain("--url");
+    expect(out.agentPrompt).toContain("Anything I store is publicly visible");
+    expect(out.agentPrompt).toContain("do not rely on persistence");
+  });
+
+  it.each(["html", "markdown"])("renders the supported copyable instruction in %s", (format) => {
+    const snippetCtx = ctxFor("sandbox");
+    const ctx: LandingHtmlContext = {
+      ...snippetCtx,
+      configEnvironment: "production",
+      version: "test",
+      gitSha: null,
+      inspectorUrl: null,
+      harnesses: [buildHarnessSnippet("claude-code", snippetCtx)],
+      index: [],
+      endpoints: {},
+    };
+    const output = format === "html" ? renderLandingHtml(ctx) : renderLandingMarkdown(ctx);
+    const command = `claude mcp add --transport http neotoma ${ctx.mcpUrl}`;
+    expect(output.split(command).length - 1).toBe(2);
+    expect(output).not.toContain("--url");
+    expect(output).toContain("Anything I store is publicly visible");
+    expect(output).toContain("do not rely on persistence");
   });
 });
 
