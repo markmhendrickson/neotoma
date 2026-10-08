@@ -1862,11 +1862,12 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
       keys.length !== 1 ||
       keys[0] !== "integrity_check" ||
       typeof record.integrity_check !== "string" ||
-      record.integrity_check.trim().length === 0
+      record.integrity_check.length === 0 ||
+      record.integrity_check.trim() !== record.integrity_check
     ) {
       return { kind: "verify_instrument_failure" };
     }
-    details.push(record.integrity_check.trim());
+    details.push(record.integrity_check);
   }
 
   if (details.length === 1 && details[0] === "ok") {

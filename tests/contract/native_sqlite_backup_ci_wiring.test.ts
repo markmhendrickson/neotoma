@@ -20,14 +20,16 @@ function jobBlock(jobName: string): string {
 }
 
 describe("native SQLite backup CI lane", () => {
-  it("requires a Node 24 native-DatabaseSync backup-create effect test", () => {
-    const nativeLane = jobBlock("native_sqlite_backup");
+  it("runs the Node 24 native-DatabaseSync backup-create effect test in required baseline", () => {
+    const baseline = jobBlock("baseline");
 
-    expect(nativeLane).not.toMatch(/^    if:/m);
-    expect(nativeLane).not.toContain("continue-on-error: true");
-    expect(nativeLane).toMatch(/node-version:\s*["']?24["']?/);
-    expect(nativeLane).toContain('require("node:sqlite")');
-    expect(nativeLane).toContain("NEOTOMA_REQUIRE_NATIVE_SQLITE=1");
-    expect(nativeLane).toContain("tests/cli/backup_verify.test.ts");
+    expect(workflow).not.toMatch(/^  native_sqlite_backup:\s*$/m);
+    expect(baseline).not.toMatch(/^    if:/m);
+    expect(baseline).not.toContain("continue-on-error: true");
+    expect(baseline).toMatch(/node-version:\s*["']?20["']?/);
+    expect(baseline).toMatch(/node-version:\s*["']?24["']?/);
+    expect(baseline).toContain('require("node:sqlite")');
+    expect(baseline).toContain("NEOTOMA_REQUIRE_NATIVE_SQLITE=1");
+    expect(baseline).toContain("tests/cli/backup_verify.test.ts");
   });
 });

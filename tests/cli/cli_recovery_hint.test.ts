@@ -60,6 +60,9 @@ describe("getSqliteRecoveryHint", () => {
     expect(classifyBackupIntegrityCheck([{ integrity_check: "ok", extra: "unexpected" }])).toEqual({
       kind: "verify_instrument_failure",
     });
+    expect(classifyBackupIntegrityCheck([{ integrity_check: " ok " }])).toEqual({
+      kind: "verify_instrument_failure",
+    });
   });
 
   it("classifies a real non-ok result as an integrity failure", () => {
