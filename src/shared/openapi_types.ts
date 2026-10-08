@@ -2611,6 +2611,10 @@ export interface components {
         started_at: string;
         /** Format: date-time */
         completed_at: string;
+        /** @enum {boolean} */
+        common_view: false;
+        /** @enum {string} */
+        collection_and_total: "separate_acquisitions" | "candidate_derived";
       };
       diagnostics: {
         code: string;

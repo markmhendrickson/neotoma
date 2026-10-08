@@ -11,6 +11,7 @@ export interface EntityReadTrace {
   count_capped?: boolean;
   ordering?: { field: string; direction: "asc" | "desc"; tie_breaker: string | null };
   continuation_supported?: boolean;
+  count_exact?: boolean;
 }
 export interface EntityReadRequest {
   raw: Record<string, unknown>;
@@ -72,6 +73,7 @@ export function createEntityReadContract(input: {
   returned: number;
   trace: EntityReadTrace;
   startedAt: string;
+  diagnostics?: EntityReadContract["diagnostics"];
 }): EntityReadContract {
   const raw = input.request?.raw ?? {};
   const consumed = new Set(input.request?.consumed ?? Object.keys(raw));
@@ -157,7 +159,9 @@ export function createEntityReadContract(input: {
         relation: input.trace.count_capped
           ? "lower_bound"
           : structured
-            ? "exact"
+            ? input.trace.count_exact === false || reasons.has("count_contradiction")
+              ? "unknown"
+              : "exact"
             : "candidate_count",
         unit: structured ? "entities" : "candidates",
       },
@@ -173,10 +177,10 @@ export function createEntityReadContract(input: {
       kind: "read_interval" as const,
       started_at: input.startedAt,
       completed_at: new Date().toISOString(),
+      common_view: false,
+      collection_and_total: structured ? "separate_acquisitions" : "candidate_derived",
     },
-    diagnostics: [
-      { code: "diagnostics_unavailable", reason: "bounded_schema_suggestions_not_examined" },
-    ],
+    diagnostics: input.diagnostics ?? [],
   };
 }
 

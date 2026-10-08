@@ -1,4 +1,5 @@
 import { db } from "../../db.js";
+import { getDb } from "../../repositories/db/connection.js";
 import {
   queryEntities,
   normalizeEntityTypeFilter,
@@ -8,7 +9,12 @@ import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
-import { loadConceptTypeSynonyms } from "../../services/schema_registry.js";
+import {
+  loadConceptTypeSynonyms,
+  schemaRegistry,
+  isHigherPrecedenceSchemaRow,
+  type SchemaRegistryEntry,
+} from "../../services/schema_registry.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 import {
   createEntityReadContract,
@@ -676,6 +682,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 }
 
 async function countVisibleEntities(params: {
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   entityTypes?: string[];
@@ -798,6 +805,31 @@ async function countVisibleEntities(params: {
       }
       total += mergedCount ?? 0;
     }
+    if (params.readTrace) {
+      // The legacy snapshot count intentionally omits never-observed rows.
+      // Certify actual membership, not equal aggregate numbers. A
+      // deleted or otherwise unresolved row conservatively leaves the count
+      // unknown; do not reintroduce an observation-log scan or change total.
+      const typeClause = (alias: string) =>
+        typeFilter.length
+          ? ` AND ${alias}.entity_type IN (${typeFilter.map(() => "?").join(",")})`
+          : "";
+      try {
+        const connection = await getDb();
+        const mismatch = await connection
+          .prepare(
+            `SELECT 1 AS mismatch FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL${typeClause("e")} AND s.entity_id IS NULL
+           UNION ALL
+           SELECT 1 AS mismatch FROM entity_snapshots s LEFT JOIN entities e ON e.id=s.entity_id AND e.user_id=s.user_id AND e.entity_type=s.entity_type AND e.merged_to_entity_id IS NULL WHERE s.user_id=?${typeClause("s")} AND e.id IS NULL LIMIT 1`
+          )
+          .get(userId, ...typeFilter, userId, ...typeFilter);
+        params.readTrace.count_exact = mismatch == null;
+      } catch {
+        params.readTrace.count_exact = false;
+      }
+      if (!params.readTrace.count_exact)
+        params.readTrace.reasons.add("count_population_unverified");
+    }
     return total;
   }
 
@@ -877,7 +909,91 @@ async function countVisibleEntities(params: {
     liveCount += count ?? 0;
   }
 
+  if (params.readTrace) {
+    params.readTrace.count_exact = liveCount === entityRows.length;
+    if (!params.readTrace.count_exact) params.readTrace.reasons.add("count_population_unverified");
+  }
+
   return liveCount;
+}
+
+/** Advisory domain diagnostics use the canonical scoped catalog, never the
+ * legacy search type-hint query (which has broader historical visibility). */
+async function entityReadDiagnostics(
+  userId: string,
+  types: string[],
+  fields: string[]
+): Promise<EntityReadContract["diagnostics"]> {
+  if (types.length === 0)
+    return fields.length
+      ? [{ code: "diagnostics_unavailable", reason: "untyped_field_scope" }]
+      : [];
+  let rows: SchemaRegistryEntry[];
+  try {
+    rows = await schemaRegistry.listActiveSchemas(userId);
+  } catch {
+    return [{ code: "diagnostics_unavailable", reason: "schema_registry_unavailable" }];
+  }
+  const grouped = new Map<string, SchemaRegistryEntry[]>();
+  for (const row of rows) {
+    // loadActiveSchema globals are genuinely global/null-owner. Keep this
+    // defensive boundary even if the list helper ever returns an extra row.
+    if (
+      !(row.scope === "global" && row.user_id == null) &&
+      !(row.scope === "user" && row.user_id === userId)
+    )
+      continue;
+    const group = grouped.get(row.entity_type) ?? [];
+    group.push(row);
+    grouped.set(row.entity_type, group);
+  }
+  const diagnostics: EntityReadContract["diagnostics"] = [];
+  for (const type of types) {
+    const group = grouped.get(type) ?? [];
+    if (!group.length) {
+      diagnostics.push({
+        code: "missing_entity_type",
+        reason: "not_in_visible_active_catalog",
+        entity_type: type,
+      });
+      continue;
+    }
+    let selected = group[0];
+    for (const row of group.slice(1))
+      if (isHigherPrecedenceSchemaRow(row, selected, userId)) selected = row;
+    const sameScope = group.filter(
+      (row) => row.scope === selected.scope && row.user_id === selected.user_id
+    );
+    if (
+      sameScope.length !== 1 ||
+      !selected.schema_definition?.fields ||
+      typeof selected.schema_definition.fields !== "object" ||
+      Array.isArray(selected.schema_definition.fields)
+    ) {
+      diagnostics.push({
+        code: "diagnostics_unavailable",
+        reason: "ambiguous_or_invalid_active_schema",
+        entity_type: type,
+      });
+      continue;
+    }
+    for (const field of fields)
+      if (!Object.hasOwn(selected.schema_definition.fields, field))
+        diagnostics.push({
+          code: "missing_field",
+          reason: "not_in_visible_active_schema",
+          entity_type: type,
+          field,
+        });
+  }
+  if (
+    diagnostics.some((item) => item.code === "missing_entity_type" || item.code === "missing_field")
+  )
+    diagnostics.push({
+      code: "diagnostics_unavailable",
+      reason: "bounded_near_miss_suggestions_unavailable",
+    });
+  return diagnostics;
 }
 
 async function queryEntitiesFromLexicalSearch(params: {
@@ -1196,6 +1312,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       if (allMatches.length >= 10000) readTrace.count_capped = true;
     } else {
       total = await countVisibleEntities({
+        readTrace,
         userId,
         entityType,
         entityTypes,
@@ -1245,6 +1362,11 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       returned: entities.length,
       startedAt,
       trace: readTrace,
+      diagnostics: await entityReadDiagnostics(
+        userId,
+        typeFilter,
+        Object.keys(snapshotFilters ?? {})
+      ),
       predicates: [
         ...(published !== undefined
           ? [{ field: "published", op: "eq", value: predicateValue(published) }]

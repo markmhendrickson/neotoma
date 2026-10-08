@@ -295,6 +295,8 @@ components:
             - kind
             - started_at
             - completed_at
+            - common_view
+            - collection_and_total
           properties:
             kind:
               type: string
@@ -306,6 +308,12 @@ components:
             completed_at:
               type: string
               format: date-time
+            common_view:
+              type: boolean
+              enum: [false]
+            collection_and_total:
+              type: string
+              enum: [separate_acquisitions, candidate_derived]
         diagnostics:
           type: array
           items:

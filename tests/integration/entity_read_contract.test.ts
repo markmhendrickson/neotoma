@@ -3,8 +3,10 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
+import { getDb } from "../../src/repositories/db/connection.js";
 import { LOCAL_DEV_USER_ID as userId } from "../../src/services/local_auth.js";
 import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
+import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
 
 // Only the embedding-provider boundary is synthetic; all retrieval/HTTP/MCP/DB paths are native.
@@ -144,6 +146,272 @@ it("a full last keyset page still requires its terminal empty page", async () =>
   });
   expect(end.entities).toHaveLength(0);
   expect(end).toHaveProperty("read_contract.coverage.scope_exhausted", true);
+});
+
+it("a later never-observed entity prevents an exact population count even on a positive short page", async () => {
+  const bare = ids[2] + "_bare";
+  try {
+    expect(
+      (
+        await db.from("entities").insert({
+          id: bare,
+          user_id: userId,
+          entity_type: entityType,
+          canonical_name: "Synthetic bare entity",
+        })
+      ).error
+    ).toBeNull();
+    const first = await queryEntitiesWithCount({ userId, entityType, limit: 1 });
+    expect(first.entities).toHaveLength(1);
+    expect(first.total).toBe(3); // Preserve the accepted legacy snapshot-count behavior.
+    expect(first.read_contract.coverage.total.relation).toBe("unknown");
+    expect(first.read_contract.coverage.reasons).toContain("count_population_unverified");
+    const later = await queryEntitiesWithCount({ userId, entityType, limit: 100 });
+    expect(later.entities.map((e) => e.entity_id)).toContain(bare);
+    expect(later.read_contract.coverage.scope_exhausted).toBeNull();
+  } finally {
+    await db.from("entities").delete().eq("id", bare);
+  }
+});
+
+it("collection and total explicitly disclose separate acquisitions without a common view", async () => {
+  const result = await queryEntitiesWithCount({ userId, entityType, limit: 1 });
+  expect(result.read_contract.coherence).toHaveProperty("common_view", false);
+  expect(result.read_contract.coherence).toHaveProperty(
+    "collection_and_total",
+    "separate_acquisitions"
+  );
+});
+
+it("equal legacy counts do not certify a different snapshot and entity membership", async () => {
+  const bare = ids[2] + "_balanced_bare",
+    ghost = ids[2] + "_balanced_snapshot";
+  try {
+    expect(
+      (
+        await db
+          .from("entities")
+          .insert({
+            id: bare,
+            user_id: userId,
+            entity_type: entityType,
+            canonical_name: "Synthetic never observed",
+          })
+      ).error
+    ).toBeNull();
+    // Ordinary snapshot insertion creates its missing entity. Deliberately
+    // seed inconsistent native membership below that adapter for this audit.
+    await (await getDb())
+      .prepare(
+        "INSERT INTO entity_snapshots (entity_id,user_id,entity_type,schema_version,snapshot,provenance,observation_count) VALUES (?,?,?,?,?,?,?)"
+      )
+      .run(ghost, userId, entityType, "1.0", "{}", "{}", 0);
+    const result = await queryEntitiesWithCount({ userId, entityType, limit: 1 });
+    expect(result.total).toBe(4);
+    expect(
+      (
+        await db
+          .from("entities")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("entity_type", entityType)
+      ).count
+    ).toBe(4);
+    expect(result.read_contract.coverage.total.relation).toBe("unknown");
+    expect(result.read_contract.coverage.reasons).toContain("count_population_unverified");
+  } finally {
+    await db.from("entity_snapshots").delete().eq("entity_id", ghost);
+    await db.from("entities").delete().eq("id", bare);
+  }
+});
+
+it("bounded domain diagnostics use own/global catalog fields and never foreign private fields", async () => {
+  const ownType = entityType + "_own_schema",
+    foreignType = entityType + "_foreign_schema";
+  const foreignOwner = randomUUID();
+  const schema = (id: string, type: string, owner: string, fields: Record<string, unknown>) => ({
+    id,
+    entity_type: type,
+    schema_version: "1.0",
+    active: true,
+    user_id: owner,
+    scope: "user",
+    schema_definition: { fields, identity_opt_out: "heuristic_canonical_name" },
+    reducer_config: { merge_policies: {} },
+  });
+  const ownId = randomUUID(),
+    foreignId = randomUUID();
+  try {
+    expect(
+      (
+        await db.from("schema_registry").insert([
+          schema(ownId, ownType, userId, { status: { type: "string" } }),
+          schema(foreignId, foreignType, foreignOwner, {
+            foreign_private_canary: { type: "string" },
+          }),
+        ])
+      ).error
+    ).toBeNull();
+    const catalog = await schemaRegistry.listActiveSchemas(userId);
+    expect(catalog.map((row) => row.entity_type)).toContain(ownType);
+    expect(catalog.map((row) => row.entity_type)).not.toContain(foreignType);
+    expect((await db.from("schema_registry").select("id").eq("id", foreignId)).data).toHaveLength(
+      1
+    );
+    const good = await queryEntitiesWithCount({
+      userId,
+      entityType: ownType,
+      snapshotFilters: { status: { op: "eq", value: "active" } },
+    });
+    expect(good.read_contract.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "missing_field", field: "status" })
+    );
+    const missing = await queryEntitiesWithCount({
+      userId,
+      entityType: ownType,
+      snapshotFilters: { absent_field: { op: "eq", value: "private-value" } },
+    });
+    expect(missing.read_contract.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "missing_field",
+        field: "absent_field",
+        entity_type: ownType,
+      })
+    );
+    const hidden = await queryEntitiesWithCount({
+      userId,
+      entityType: foreignType,
+      snapshotFilters: { foreign_private_canary: { op: "eq", value: "private-value" } },
+    });
+    expect(hidden.read_contract.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "missing_entity_type", entity_type: foreignType })
+    );
+    expect(JSON.stringify(hidden.read_contract.diagnostics)).not.toContain(
+      "foreign_private_canary"
+    );
+    expect(JSON.stringify(hidden.read_contract)).not.toContain("private-value");
+  } finally {
+    await db.from("schema_registry").delete().in("id", [ownId, foreignId]);
+  }
+});
+
+it("an unavailable registry is diagnostic uncertainty rather than a missing type", async () => {
+  const fail = vi
+    .spyOn(schemaRegistry, "listActiveSchemas")
+    .mockRejectedValueOnce(new Error("synthetic catalog outage"));
+  try {
+    const result = await queryEntitiesWithCount({
+      userId,
+      entityType,
+      snapshotFilters: { status: { op: "eq", value: "active" } },
+    });
+    expect(result.entities).toHaveLength(2);
+    expect(fail).toHaveBeenCalledTimes(1);
+    expect(result.read_contract.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "diagnostics_unavailable",
+        reason: "schema_registry_unavailable",
+      })
+    );
+    expect(result.read_contract.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "missing_entity_type" })
+    );
+  } finally {
+    fail.mockRestore();
+  }
+});
+
+it("global catalog requires null owner, own overrides win, and duplicate active authority stays uncertain", async () => {
+  const type = entityType + "_catalog_authority",
+    hidden = entityType + "_foreign_global";
+  const rowIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  const definition = (field: string) => ({
+    fields: { [field]: { type: "string" } },
+    identity_opt_out: "heuristic_canonical_name",
+  });
+  const foreign = randomUUID();
+  try {
+    expect(
+      (
+        await db.from("schema_registry").insert([
+          {
+            id: rowIds[0],
+            entity_type: type,
+            schema_version: "1.0",
+            active: true,
+            scope: "global",
+            user_id: null,
+            schema_definition: definition("global_only"),
+            reducer_config: { merge_policies: {} },
+          },
+          {
+            id: rowIds[1],
+            entity_type: type,
+            schema_version: "2.0",
+            active: true,
+            scope: "user",
+            user_id: userId,
+            schema_definition: definition("own_only"),
+            reducer_config: { merge_policies: {} },
+          },
+          {
+            id: rowIds[2],
+            entity_type: hidden,
+            schema_version: "1.0",
+            active: true,
+            scope: "global",
+            user_id: foreign,
+            schema_definition: definition("hidden_global_field"),
+            reducer_config: { merge_policies: {} },
+          },
+        ])
+      ).error
+    ).toBeNull();
+    const unscoped = await schemaRegistry.listActiveSchemas();
+    expect(unscoped.map((row) => row.entity_type)).toContain(type);
+    expect(unscoped.map((row) => row.entity_type)).not.toContain(hidden);
+    const scoped = await schemaRegistry.listActiveSchemas(userId);
+    expect(scoped.filter((row) => row.entity_type === type)).toHaveLength(2);
+    expect(scoped.map((row) => row.entity_type)).not.toContain(hidden);
+    const removed = await queryEntitiesWithCount({
+      userId,
+      entityType: type,
+      snapshotFilters: { global_only: { op: "eq", value: "synthetic" } },
+    });
+    expect(removed.read_contract.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "missing_field", field: "global_only" })
+    );
+    expect(
+      (
+        await db.from("schema_registry").insert({
+          id: rowIds[3],
+          entity_type: type,
+          schema_version: "3.0",
+          active: true,
+          scope: "user",
+          user_id: userId,
+          schema_definition: definition("different_own"),
+          reducer_config: { merge_policies: {} },
+        })
+      ).error
+    ).toBeNull();
+    const ambiguous = await queryEntitiesWithCount({
+      userId,
+      entityType: type,
+      snapshotFilters: { own_only: { op: "eq", value: "synthetic" } },
+    });
+    expect(ambiguous.read_contract.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "diagnostics_unavailable",
+        reason: "ambiguous_or_invalid_active_schema",
+      })
+    );
+    expect(ambiguous.read_contract.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "missing_field" })
+    );
+  } finally {
+    await db.from("schema_registry").delete().in("id", rowIds);
+  }
 });
 
 it("actual unavailable embedding fallback declares its reason and never certifies ranked absence", async () => {
