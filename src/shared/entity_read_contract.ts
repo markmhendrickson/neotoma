@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import type { components } from "./openapi_types.js";
+
+export type EntityReadContract = components["schemas"]["EntityReadContract"];
+export type EntityFallbackReason = Exclude<EntityReadContract["mode"]["fallback_reason"], null>;
 
 /** Acquisition evidence belongs to the executing path, never a request-schema guess. */
 export interface EntityReadTrace {
@@ -43,7 +47,7 @@ const safeName = (key: string) => (/^[a-zA-Z0-9_]{1,128}$/.test(key) ? key : "un
 /** Predicate values can contain private text or tokens. Names and typed digests suffice for scope evidence. */
 export function predicateValue(value: unknown) {
   return {
-    kind: "sha256",
+    kind: "sha256" as const,
     value: createHash("sha256")
       .update(JSON.stringify(value) ?? "undefined")
       .digest("hex"),
@@ -53,7 +57,7 @@ export function predicateValue(value: unknown) {
 export function createEntityReadContract(input: {
   request?: EntityReadRequest;
   mode: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
-  fallbackReason?: string;
+  fallbackReason?: EntityFallbackReason;
   types: string[];
   includeMerged: boolean;
   includeSnapshots: boolean;
@@ -63,12 +67,12 @@ export function createEntityReadContract(input: {
   offset: number;
   cursor?: string;
   nextCursor?: string;
-  predicates: Array<{ field: string; op: string; value: unknown }>;
+  predicates: EntityReadContract["applied_scope"]["predicates"];
   total: number;
   returned: number;
   trace: EntityReadTrace;
   startedAt: string;
-}) {
+}): EntityReadContract {
   const raw = input.request?.raw ?? {};
   const consumed = new Set(input.request?.consumed ?? Object.keys(raw));
   const ignored: IgnoredOption[] = [];
@@ -124,7 +128,7 @@ export function createEntityReadContract(input: {
     version: "1" as const,
     surface: "entity_collection" as const,
     mode: {
-      actual: structured ? "structured" : input.mode,
+      actual: structured ? "structured" : (input.mode as Exclude<typeof input.mode, "none">),
       fallback_reason:
         input.mode === "lexical_fallback" ? (input.fallbackReason ?? "unknown") : null,
     },
@@ -175,7 +179,6 @@ export function createEntityReadContract(input: {
     ],
   };
 }
-export type EntityReadContract = ReturnType<typeof createEntityReadContract>;
 
 export function collapsedEntityReadContract(
   contract: EntityReadContract,

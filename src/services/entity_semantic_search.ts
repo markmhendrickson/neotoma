@@ -1,6 +1,7 @@
 // Entity semantic search via pgvector or sqlite-vec (local)
 // Structural filters (user_id, entity_type, merged) always applied
 
+import type { EntityFallbackReason } from "../shared/entity_read_contract.js";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { generateEmbedding, type EmbeddingAcquisitionTrace } from "../embeddings.js";
@@ -22,7 +23,7 @@ export interface SemanticSearchEntitiesOptions {
 export interface SemanticSearchEntitiesResult {
   entityIds: string[];
   total: number;
-  fallbackReason?: string;
+  fallbackReason?: EntityFallbackReason;
 }
 
 /**
@@ -52,7 +53,10 @@ export async function semanticSearchEntities(
     return {
       entityIds: [],
       total: 0,
-      fallbackReason: embeddingTrace.reason ?? "embedding_unavailable",
+      fallbackReason:
+        embeddingTrace.reason === "embedding_not_configured"
+          ? "not_configured"
+          : "embedding_unavailable",
     };
   }
 

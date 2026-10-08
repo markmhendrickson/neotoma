@@ -2517,6 +2517,109 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Additive acquisition evidence from the executing entity collection path. Ranked candidate zero, ignored scope, acquisition caps or degradation cannot establish predicate-population absence. Existing legacy fields retain their meaning. The read interval is not a write fence, revision lease or common database view. See query_convergence and issue #2597. */
+    EntityReadContract: {
+      /** @enum {string} */
+      version: "1";
+      /** @enum {string} */
+      surface: "entity_collection";
+      mode: {
+        /** @enum {string} */
+        actual: "structured" | "semantic" | "lexical_typed" | "lexical_fallback";
+        /** @enum {string|null} */
+        fallback_reason:
+          | "not_configured"
+          | "embedding_unavailable"
+          | "no_usable_candidates"
+          | "filtered_candidates_exhausted"
+          | "unknown"
+          | null;
+      };
+      applied_scope: {
+        /** @enum {string} */
+        owner: "authenticated";
+        entity_types: string[];
+        include_merged: boolean;
+        /** @enum {boolean} */
+        include_deleted: false;
+        include_snapshots: boolean;
+        predicates: {
+          field: string;
+          op: string;
+          value: {
+            /** @enum {string} */
+            kind: "sha256";
+            value: string;
+          };
+        }[];
+        ordering: {
+          field: string;
+          /** @enum {string} */
+          direction: "asc" | "desc";
+          tie_breaker: string | null;
+        };
+        pagination: {
+          /** @enum {string} */
+          kind: "keyset" | "offset";
+          limit: number;
+          offset: number;
+        };
+      };
+      request_options: {
+        applied: string[];
+        normalized: {
+          name: string;
+          canonical_name: string;
+          reason: string;
+        }[];
+        ignored: {
+          name: string;
+          reason: string;
+        }[];
+      };
+      coverage: {
+        /** @enum {string} */
+        kind:
+          | "predicate_population"
+          | "semantic_candidates"
+          | "lexical_candidates"
+          | "synthesized_groups";
+        /** @enum {string} */
+        state: "complete" | "paginated" | "truncated" | "partial" | "unknown";
+        reasons: string[];
+        returned_count: number;
+        total: {
+          value: number;
+          /** @enum {string} */
+          relation: "exact" | "lower_bound" | "candidate_count" | "unknown";
+          /** @enum {string} */
+          unit: "entities" | "candidates" | "groups";
+        };
+        page_exhausted: boolean;
+        scope_exhausted: boolean | null;
+        continuation: {
+          /** @enum {string} */
+          kind: "cursor" | "none" | "unsupported";
+          next_cursor: string | null;
+          next_offset: number | null;
+        };
+      };
+      coherence: {
+        /** @enum {string} */
+        kind: "read_interval";
+        /** Format: date-time */
+        started_at: string;
+        /** Format: date-time */
+        completed_at: string;
+      };
+      diagnostics: {
+        code: string;
+        reason: string;
+        field?: string;
+        entity_type?: string;
+        suggestions?: string[];
+      }[];
+    };
     /** @description A GitHub issue a `/issues/sync` dry run would create or update locally. */
     IssuesSyncPlanIssue: {
       github_number: number;
@@ -5586,6 +5689,7 @@ export interface operations {
         content: {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
+            read_contract?: components["schemas"]["EntityReadContract"];
             total?: number;
             limit?: number;
             offset?: number;
@@ -5775,6 +5879,7 @@ export interface operations {
         content: {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
+            read_contract?: components["schemas"]["EntityReadContract"];
             total?: number;
             limit?: number;
             offset?: number;

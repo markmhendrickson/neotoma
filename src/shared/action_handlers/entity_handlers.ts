@@ -16,6 +16,7 @@ import {
   type EntityReadRequest,
   type EntityReadTrace,
   type EntityReadContract,
+  type EntityFallbackReason,
 } from "../entity_read_contract.js";
 
 // Shared, dependency-free normalizer (#1572). Imported (and re-exported below
@@ -1021,7 +1022,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   // the response omits `applied_search_strategies` entirely.
   let appliedStrategies: Set<SearchStrategy> | undefined;
   let searchMode: EntitySearchMode = "none";
-  let fallbackReason: string | undefined;
+  let fallbackReason: EntityFallbackReason | undefined;
 
   if (search && search.trim()) {
     appliedStrategies = new Set<SearchStrategy>();
