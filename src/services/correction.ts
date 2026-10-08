@@ -246,8 +246,18 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     if (result.deferred_substrate_event) emitCommittedCorrection(result.deferred_substrate_event);
     return { ...result, deferred_substrate_event: undefined };
   }
-  const replay = await findCommittedCorrectionReplay(params);
-  if (replay) return replay;
+  // The grouped transaction owns complete-payload receipt validation. Its
+  // corrections deliberately share a key/hash, so an ordinary per-field lookup
+  // would mistake the second field for a mismatching replay. These internal
+  // fields are not accepted by either public correction transport.
+  const groupedReceipt = params.canonical_hash !== undefined;
+  if (groupedReceipt && !params.deferred_events) {
+    throw new Error("Grouped correction receipts require the enclosing event buffer.");
+  }
+  if (!groupedReceipt) {
+    const replay = await findCommittedCorrectionReplay(params);
+    if (replay) return replay;
+  }
   enforceAttributionPolicy("corrections", getCurrentAgentIdentity());
   assertCanWriteProtected({
     entity_type: params.entity_type,
@@ -379,14 +389,12 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     idempotency_key: idempotency_key || undefined,
     provenance: getCurrentAttribution(),
   });
-  row.canonical_hash = correctionRequestHash(params);
-
-  if (params.canonical_hash) row.canonical_hash = params.canonical_hash;
+  row.canonical_hash = params.canonical_hash ?? correctionRequestHash(params);
 
   const { error: obsError } = await insertObservationRow(row);
 
   if (obsError) {
-    if (obsError.code === "23505") {
+    if (obsError.code === "23505" && !groupedReceipt) {
       const committed = await findCommittedCorrectionReplay(params);
       if (committed) return committed;
     }
@@ -406,7 +414,8 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     idempotency_key: idempotency_key,
     source_peer_id: params.source_peer_id,
   };
-  if (params.deferred_events) params.deferred_events.push(() => emitCommittedCorrection(deferredEvent));
+  if (params.deferred_events)
+    params.deferred_events.push(() => emitCommittedCorrection(deferredEvent));
   else if (!params.defer_substrate_events) emitCommittedCorrection(deferredEvent);
 
   const observationCount = snapshot?.observation_count ?? 0;

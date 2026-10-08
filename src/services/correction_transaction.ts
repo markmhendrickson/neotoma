@@ -226,6 +226,7 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
           value: change.value,
           idempotency_key: receiptKey,
           canonical_hash: hash,
+          in_transaction: true,
           deferred_events: notifications,
         });
     const snapshots = [];

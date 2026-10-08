@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **694**
-- Backend and repo Vitest files: **658**
+- Total automated test files: **700**
+- Backend and repo Vitest files: **664**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 189 |
+| Vitest unit tests | 193 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 205 |
-| Vitest CLI tests | 83 |
+| Vitest integration tests | 206 |
+| Vitest CLI tests | 84 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (189):**
+**Files (193):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -133,6 +133,7 @@ flowchart TD
 - `tests/unit/agent_identity.test.ts`
 - `tests/unit/agent_memory.test.ts`
 - `tests/unit/agents_grants_import.test.ts`
+- `tests/unit/array_item_patch_atomic.test.ts`
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/authenticated_principal_provenance.test.ts`
@@ -181,6 +182,7 @@ flowchart TD
 - `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/env_contamination_audit.test.ts`
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
+- `tests/unit/eval_harness_error_result.test.ts`
 - `tests/unit/eval_harness_quarantine.test.ts`
 - `tests/unit/ext_apps_widget_host.test.ts`
 - `tests/unit/external_actor_badge.test.ts`
@@ -236,6 +238,7 @@ flowchart TD
 - `tests/unit/observation_reducer_comparator.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_highest_priority_tiebreak.test.ts`
+- `tests/unit/observation_reducer_merge_array_by_key.test.ts`
 - `tests/unit/observation_reducer_merge_array_correction.test.ts`
 - `tests/unit/observation_reducer_merge_array_stringified.test.ts`
 - `tests/unit/observation_reducer_observation_source.test.ts`
@@ -243,6 +246,7 @@ flowchart TD
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
+- `tests/unit/patch_array_item_store_policy_envelope.test.ts`
 - `tests/unit/plan_schema_body_field.test.ts`
 - `tests/unit/preference_schema.test.ts`
 - `tests/unit/product_feedback_schema.test.ts`
@@ -440,7 +444,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (205):**
+**Files (206):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -458,6 +462,7 @@ flowchart TD
 - `tests/integration/agentic_eval_matrix.test.ts`
 - `tests/integration/agents_directory_api.test.ts`
 - `tests/integration/anonymous_write_policy.test.ts`
+- `tests/integration/array_item_patch_conflict.test.ts`
 - `tests/integration/attachment_resolution_equivalence.test.ts`
 - `tests/integration/attribution_parity.test.ts`
 - `tests/integration/auto_link_retraction_organization_change.test.ts`
@@ -652,7 +657,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (83):**
+**Files (84):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -660,6 +665,7 @@ flowchart TD
 - `tests/cli/cli_api_commands.test.ts`
 - `tests/cli/cli_api_start_prod_advisory.test.ts`
 - `tests/cli/cli_api_start_watch_flag.test.ts`
+- `tests/cli/cli_array_item_patch_commands.test.ts`
 - `tests/cli/cli_auth_commands.test.ts`
 - `tests/cli/cli_command_coverage_guard.test.ts`
 - `tests/cli/cli_correction_commands.test.ts`
