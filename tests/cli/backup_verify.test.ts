@@ -161,6 +161,28 @@ describe("CLI backup verify (smoke)", () => {
     }
   });
 
+  it("reports multiple valid non-ok integrity rows as corruption in JSON output", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-multi-integrity-failure-");
+    const pragma = vi.spyOn(AsyncSqliteDatabase.prototype, "pragma").mockResolvedValue([
+      { integrity_check: "row 3 missing" },
+      { integrity_check: "row 7 missing" },
+    ]);
+    try {
+      const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+      });
+      expect(run.exitCode).toBe(1);
+      const envelope = JSON.parse(run.stderr) as {
+        error: string;
+        hint?: { code?: string; failure_kind?: string };
+      };
+      expect(envelope.error).toContain('integrity_check on the snapshot returned "row 3 missing; row 7 missing"');
+      expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
+    } finally {
+      pragma.mockRestore();
+    }
+  });
+
   it.each([
     ["empty", []],
     ["malformed", [{ integrity_check: "ok" }, { integrity_check: "ok" }]],
@@ -206,6 +228,27 @@ describe("CLI backup verify (smoke)", () => {
       expect(run.stderr).toContain("$()-");
       expect(run.stderr).toContain('neotoma.db\' \\"PRAGMA integrity_check;\\"');
       expect(run.stderr).not.toContain(`sqlite3 \"${parent}`);
+    } finally {
+      pragma.mockRestore();
+    }
+  });
+
+  it("classifies a corruption-signalling verification throw as an integrity failure", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-corrupt-throw-");
+    const pragma = vi
+      .spyOn(AsyncSqliteDatabase.prototype, "pragma")
+      .mockRejectedValue(new Error("SQLITE_CORRUPT: database disk image is malformed"));
+    try {
+      const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+      });
+      expect(run.exitCode).toBe(1);
+      const envelope = JSON.parse(run.stderr) as {
+        error: string;
+        hint?: { code?: string; failure_kind?: string };
+      };
+      expect(envelope.error).toContain("SQLITE_CORRUPT");
+      expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
     } finally {
       pragma.mockRestore();
     }

@@ -1852,25 +1852,31 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
   if (!Array.isArray(rows) || rows.length === 0) {
     return { kind: "verify_instrument_failure", detail: "no result" };
   }
-  if (rows.length !== 1) {
-    return { kind: "verify_instrument_failure", detail: "malformed result" };
+  const details: string[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      return { kind: "verify_instrument_failure", detail: "malformed result" };
+    }
+    const record = row as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (
+      keys.length !== 1 ||
+      keys[0] !== "integrity_check" ||
+      typeof record.integrity_check !== "string" ||
+      record.integrity_check.trim().length === 0
+    ) {
+      return { kind: "verify_instrument_failure", detail: "malformed result" };
+    }
+    details.push(record.integrity_check.trim());
   }
-  const first = rows[0];
-  if (!first || typeof first !== "object" || Array.isArray(first)) {
-    return { kind: "verify_instrument_failure", detail: "malformed result" };
+
+  if (details.length === 1 && details[0] === "ok") {
+    return { kind: "verified", detail: "ok" };
   }
-  const record = first as Record<string, unknown>;
-  const keys = Object.keys(record);
-  if (
-    keys.length !== 1 ||
-    keys[0] !== "integrity_check" ||
-    typeof record.integrity_check !== "string" ||
-    record.integrity_check.trim().length === 0
-  ) {
-    return { kind: "verify_instrument_failure", detail: "malformed result" };
+  if (details.every((detail) => detail !== "ok")) {
+    return { kind: "integrity_failed", detail: details.join("; ") };
   }
-  const detail = record.integrity_check.trim();
-  return detail === "ok" ? { kind: "verified", detail } : { kind: "integrity_failed", detail };
+  return { kind: "verify_instrument_failure", detail: "malformed result" };
 }
 
 /** Wait for session port file written by API when it binds; returns actual port or preferred on timeout. */
@@ -11219,8 +11225,8 @@ backupCommand
         integrity = classifyBackupIntegrityCheck(await verifyDb.pragma("integrity_check"));
       } catch (err) {
         integrity = {
-          kind: "verify_instrument_failure",
-          detail: err instanceof Error ? err.message : String(err),
+          kind: getSqliteRecoveryHint(err) ? "integrity_failed" : "verify_instrument_failure",
+          detail: formatCliError(err),
         };
       } finally {
         await verifyDb?.close().catch(() => {});

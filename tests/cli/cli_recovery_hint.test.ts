@@ -50,7 +50,7 @@ describe("getSqliteRecoveryHint", () => {
       detail: "malformed result",
     });
     expect(
-      classifyBackupIntegrityCheck([{ integrity_check: "ok" }, { integrity_check: "ok" }])
+      classifyBackupIntegrityCheck([{ integrity_check: "ok" }, { integrity_check: "row 3 missing" }])
     ).toEqual({
       kind: "verify_instrument_failure",
       detail: "malformed result",
@@ -73,6 +73,15 @@ describe("getSqliteRecoveryHint", () => {
     expect(classifyBackupIntegrityCheck([{ integrity_check: "row 3 missing" }])).toEqual({
       kind: "integrity_failed",
       detail: "row 3 missing",
+    });
+    expect(
+      classifyBackupIntegrityCheck([
+        { integrity_check: "row 3 missing" },
+        { integrity_check: "row 7 missing" },
+      ])
+    ).toEqual({
+      kind: "integrity_failed",
+      detail: "row 3 missing; row 7 missing",
     });
   });
 });
