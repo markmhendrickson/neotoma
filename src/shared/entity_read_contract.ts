@@ -1,0 +1,191 @@
+import { createHash } from "node:crypto";
+
+/** Acquisition evidence belongs to the executing path, never a request-schema guess. */
+export interface EntityReadTrace {
+  reasons: Set<string>;
+  candidate_capped?: boolean;
+  count_capped?: boolean;
+}
+export interface EntityReadRequest {
+  raw: Record<string, unknown>;
+  surface: "service" | "mcp" | "http_post" | "http_get";
+  consumed?: string[];
+}
+type IgnoredOption = { name: string; reason: string };
+const KNOWN = new Set([
+  "user_id",
+  "entity_type",
+  "entity_types",
+  "search",
+  "query",
+  "search_query",
+  "similarity_threshold",
+  "limit",
+  "offset",
+  "cursor",
+  "sort_by",
+  "sort_order",
+  "published",
+  "published_after",
+  "published_before",
+  "include_snapshots",
+  "include_merged",
+  "updated_since",
+  "created_since",
+  "identity_basis",
+  "snapshot_filters",
+  "exclude_bookkeeping",
+  "collapse_by",
+]);
+const safeName = (key: string) => (/^[a-zA-Z0-9_]{1,128}$/.test(key) ? key : "unrecognized_option");
+/** Predicate values can contain private text or tokens. Names and typed digests suffice for scope evidence. */
+export function predicateValue(value: unknown) {
+  return {
+    kind: "sha256",
+    value: createHash("sha256")
+      .update(JSON.stringify(value) ?? "undefined")
+      .digest("hex"),
+  };
+}
+
+export function createEntityReadContract(input: {
+  request?: EntityReadRequest;
+  mode: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
+  fallbackReason?: string;
+  types: string[];
+  includeMerged: boolean;
+  includeSnapshots: boolean;
+  sortBy: string;
+  sortOrder: "asc" | "desc";
+  limit: number;
+  offset: number;
+  cursor?: string;
+  nextCursor?: string;
+  predicates: Array<{ field: string; op: string; value: unknown }>;
+  total: number;
+  returned: number;
+  trace: EntityReadTrace;
+  startedAt: string;
+}) {
+  const raw = input.request?.raw ?? {};
+  const consumed = new Set(input.request?.consumed ?? Object.keys(raw));
+  const ignored: IgnoredOption[] = [];
+  const applied: string[] = [];
+  const normalized: Array<{ name: string; canonical_name: string; reason: string }> = [];
+  const selectedSearch = ["search", "search_query", "query"].find((key) => raw[key] != null);
+  for (const key of Object.keys(raw).sort()) {
+    if (!KNOWN.has(key)) ignored.push({ name: safeName(key), reason: "unknown_option" });
+    else if (!consumed.has(key)) ignored.push({ name: key, reason: "unsupported_on_surface" });
+    else if ((key === "query" || key === "search_query") && key !== selectedSearch)
+      ignored.push({ name: key, reason: "superseded_alias" });
+    else if (key === "collapse_by" && input.request?.surface !== "mcp")
+      ignored.push({ name: key, reason: "unsupported_on_surface" });
+    else if (key === "snapshot_filters" && input.mode !== "none")
+      ignored.push({ name: key, reason: "inapplicable_mode" });
+    else if (key === "exclude_bookkeeping" && raw[key] === true && input.mode === "none")
+      ignored.push({ name: key, reason: "inapplicable_mode" });
+    else {
+      applied.push(key);
+      if (key === "query" || key === "search_query")
+        normalized.push({ name: key, canonical_name: "search", reason: "alias" });
+    }
+  }
+  const reasons = new Set(input.trace.reasons);
+  if (ignored.some((option) => option.reason !== "superseded_alias"))
+    reasons.add("ignored_scope_option");
+  const structured = input.mode === "none";
+  const keyset = structured && input.sortBy === "entity_id";
+  const pageExhausted = input.returned < input.limit;
+  const scopeExhausted = structured && keyset ? pageExhausted : null;
+  const capped = input.trace.candidate_capped || input.trace.count_capped;
+  if (input.trace.candidate_capped) reasons.add("candidate_cap");
+  if (input.trace.count_capped) reasons.add("count_cap");
+  if (!structured) reasons.add("ranked_candidates");
+  if (!keyset) reasons.add("unsupported_continuation");
+  if (input.total < input.returned) reasons.add("count_contradiction");
+  const state = reasons.has("ignored_scope_option")
+    ? "partial"
+    : capped
+      ? "truncated"
+      : reasons.size
+        ? "unknown"
+        : pageExhausted
+          ? "complete"
+          : "paginated";
+  return {
+    version: "1" as const,
+    surface: "entity_collection" as const,
+    mode: {
+      actual: structured ? "structured" : input.mode,
+      fallback_reason:
+        input.mode === "lexical_fallback" ? (input.fallbackReason ?? "unknown") : null,
+    },
+    applied_scope: {
+      owner: "authenticated" as const,
+      entity_types: input.types,
+      include_merged: input.includeMerged,
+      include_deleted: false,
+      include_snapshots: input.includeSnapshots,
+      predicates: input.predicates,
+      ordering: {
+        field: input.sortBy,
+        direction: input.sortOrder,
+        tie_breaker: keyset ? "entity_id" : null,
+      },
+      pagination: { kind: keyset ? "keyset" : "offset", limit: input.limit, offset: input.offset },
+    },
+    request_options: { applied, normalized, ignored },
+    coverage: {
+      kind: structured
+        ? "predicate_population"
+        : input.mode === "semantic"
+          ? "semantic_candidates"
+          : "lexical_candidates",
+      state,
+      reasons: [...reasons].sort(),
+      returned_count: input.returned,
+      total: {
+        value: input.total,
+        relation: input.trace.count_capped
+          ? "lower_bound"
+          : structured
+            ? "exact"
+            : "candidate_count",
+        unit: structured ? "entities" : "candidates",
+      },
+      page_exhausted: pageExhausted,
+      scope_exhausted: reasons.size || capped ? null : scopeExhausted,
+      continuation: {
+        kind: keyset ? (input.nextCursor ? "cursor" : "none") : "unsupported",
+        next_cursor: input.nextCursor ?? null,
+        next_offset: null,
+      },
+    },
+    coherence: {
+      kind: "read_interval" as const,
+      started_at: input.startedAt,
+      completed_at: new Date().toISOString(),
+    },
+    diagnostics: [
+      { code: "diagnostics_unavailable", reason: "bounded_schema_suggestions_not_examined" },
+    ],
+  };
+}
+export type EntityReadContract = ReturnType<typeof createEntityReadContract>;
+
+export function collapsedEntityReadContract(
+  contract: EntityReadContract,
+  returned: number
+): EntityReadContract {
+  return {
+    ...contract,
+    coverage: {
+      ...contract.coverage,
+      kind: "synthesized_groups",
+      state: "unknown",
+      scope_exhausted: null,
+      returned_count: returned,
+      reasons: [...new Set([...contract.coverage.reasons, "synthesized_groups"])].sort(),
+    },
+  };
+}

@@ -5127,8 +5127,13 @@ async function runEntitiesQuery(
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies, search_mode, next_cursor } =
+    const { entities, total, applied_search_strategies, search_mode, next_cursor, read_contract } =
       await queryEntitiesWithCount({
+        readRequest: {
+          raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
+          surface: req.method === "GET" ? "http_get" : "http_post",
+          consumed: [...Object.keys(parsed.data), "query", "search_query"],
+        },
         userId,
         entityType: entity_type,
         entityTypes: entity_types,
@@ -5155,6 +5160,7 @@ async function runEntitiesQuery(
       total,
       limit,
       offset,
+      read_contract,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),

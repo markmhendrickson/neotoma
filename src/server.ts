@@ -15,6 +15,7 @@ import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
+import { collapsedEntityReadContract } from "./shared/entity_read_contract.js";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -4234,7 +4235,13 @@ export class NeotomaServer {
       applied_search_strategies,
       search_mode,
       next_cursor,
+      read_contract,
     } = await queryEntitiesWithCount({
+      readRequest: {
+        raw: rawArgs,
+        surface: "mcp",
+        consumed: [...Object.keys(parsed), "query", "search_query"],
+      },
       userId,
       entityType: parsed.entity_type,
       entityTypes: parsed.entity_types,
@@ -4313,6 +4320,7 @@ export class NeotomaServer {
       return this.buildTextResponse({
         entities: [...collapsed, ...noKey],
         total,
+        read_contract: collapsedEntityReadContract(read_contract, collapsed.length + noKey.length),
         excluded_merged,
         collapsed_by: "canonical_key",
         collapse_groups: collapsed.length,
@@ -4326,6 +4334,7 @@ export class NeotomaServer {
       entities,
       total,
       excluded_merged,
+      read_contract,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),

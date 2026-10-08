@@ -10,6 +10,13 @@ import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import { loadConceptTypeSynonyms } from "../../services/schema_registry.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
+import {
+  createEntityReadContract,
+  predicateValue,
+  type EntityReadRequest,
+  type EntityReadTrace,
+  type EntityReadContract,
+} from "../entity_read_contract.js";
 
 // Shared, dependency-free normalizer (#1572). Imported (and re-exported below
 // for back-compat) so the schema registry can use the same function without an
@@ -22,6 +29,7 @@ export interface SnapshotFilter {
 }
 
 interface QueryEntitiesParams {
+  readRequest?: EntityReadRequest;
   userId: string;
   entityType?: string;
   /**
@@ -951,7 +959,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
    * cursor-eligible.
    */
   next_cursor?: string;
+  read_contract: EntityReadContract;
 }> {
+  const startedAt = new Date().toISOString();
+  const readTrace: EntityReadTrace = { reasons: new Set() };
   const {
     userId,
     entityType,
@@ -985,6 +996,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   // the response omits `applied_search_strategies` entirely.
   let appliedStrategies: Set<SearchStrategy> | undefined;
   let searchMode: EntitySearchMode = "none";
+  let fallbackReason: string | undefined;
 
   if (search && search.trim()) {
     appliedStrategies = new Set<SearchStrategy>();
@@ -1090,6 +1102,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           total = lexicalResult.total;
           for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
           searchMode = "lexical_fallback";
+          fallbackReason = "filtered_candidates_exhausted";
         }
       } else {
         const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
@@ -1097,6 +1110,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         total = lexicalResult.total;
         for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
         searchMode = "lexical_fallback";
+        fallbackReason = "no_usable_candidates";
       }
     }
   } else {
@@ -1118,6 +1132,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       createdSince,
       identityBasis,
       snapshotFilters,
+      readTrace,
     });
 
     // R3: when filtering by identity_basis, the visible count must reflect
@@ -1143,6 +1158,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         snapshotFilters,
       });
       total = allMatches.length;
+      if (allMatches.length >= 10000) readTrace.count_capped = true;
     } else {
       total = await countVisibleEntities({
         userId,
@@ -1172,6 +1188,51 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     applied_search_strategies: appliedStrategies ? [...appliedStrategies].sort() : undefined,
     search_mode: searchMode,
     next_cursor: nextCursor,
+    read_contract: createEntityReadContract({
+      request: params.readRequest,
+      mode: searchMode,
+      fallbackReason,
+      types: typeFilter,
+      includeMerged,
+      includeSnapshots,
+      sortBy,
+      sortOrder,
+      limit,
+      offset,
+      cursor,
+      nextCursor,
+      total,
+      returned: entities.length,
+      startedAt,
+      trace: readTrace,
+      predicates: [
+        ...(published !== undefined
+          ? [{ field: "published", op: "eq", value: predicateValue(published) }]
+          : []),
+        ...(publishedAfter
+          ? [{ field: "published_date", op: "gte", value: predicateValue(publishedAfter) }]
+          : []),
+        ...(publishedBefore
+          ? [{ field: "published_date", op: "lte", value: predicateValue(publishedBefore) }]
+          : []),
+        ...(updatedSince
+          ? [{ field: "updated_at", op: "gte", value: predicateValue(updatedSince) }]
+          : []),
+        ...(createdSince
+          ? [{ field: "created_at", op: "gte", value: predicateValue(createdSince) }]
+          : []),
+        ...(identityBasis
+          ? [{ field: "identity_basis", op: "eq", value: predicateValue(identityBasis) }]
+          : []),
+        ...(searchMode === "none"
+          ? Object.entries(snapshotFilters ?? {}).map(([field, filter]) => ({
+              field,
+              op: filter.op,
+              value: predicateValue(filter.value),
+            }))
+          : []),
+      ],
+    }),
   };
 }
 

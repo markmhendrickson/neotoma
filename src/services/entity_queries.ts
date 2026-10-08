@@ -63,6 +63,7 @@ export class InvalidSnapshotFieldError extends Error {
 }
 
 export interface EntityQueryOptions {
+  readTrace?: { reasons: Set<string> };
   userId?: string;
   entityType?: string;
   /**
@@ -307,6 +308,7 @@ async function getDeletedEntityIds(
 export async function queryEntities(
   options: EntityQueryOptions = {}
 ): Promise<EntityWithProvenance[]> {
+  const readTrace = options.readTrace;
   const {
     userId,
     entityType,
@@ -708,12 +710,14 @@ export async function queryEntities(
     user_id: string | null;
   }> = [];
   if (includeSnapshots) {
-    const { data } = await db
+    const { data, error: observationError } = await db
       .from("observations")
       .select("entity_id, source_id, user_id")
       .in("entity_id", filteredEntityIds)
       .not("source_id", "is", null)
       .limit(1000); // Reasonable limit for batch
+    if (observationError) readTrace?.reasons.add("raw_fragment_sources_unavailable");
+    if ((data?.length ?? 0) >= 1000) readTrace?.reasons.add("raw_fragment_source_cap");
     allObservations =
       (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) ||
       [];
@@ -786,11 +790,12 @@ export async function queryEntities(
           fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
-        const { data: observationsForSources } = await db
+        const { data: observationsForSources, error: sourceLinkError } = await db
           .from("observations")
           .select("entity_id, source_id")
           .eq("entity_type", entityType)
           .in("source_id", Array.from(sourceIdsForType));
+        if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
         const legacyEntityCountsBySource = new Map<string, Set<string>>();
         for (const obs of observationsForSources || []) {
           if (!obs.source_id || !obs.entity_id) continue;
@@ -800,7 +805,8 @@ export async function queryEntities(
           legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
         }
 
-        const { data: fragments } = await fragmentQuery;
+        const { data: fragments, error: fragmentError } = await fragmentQuery;
+        if (fragmentError) readTrace?.reasons.add("raw_fragments_unavailable");
 
         if (fragments && fragments.length > 0) {
           // Group fragments by entity (via source_id -> entity_id mapping)
@@ -862,6 +868,11 @@ export async function queryEntities(
 
   return entities.map((entity: any) => {
     const snapshot = snapshotMap.get(entity.id);
+    if (
+      snapshot?.snapshot != null &&
+      (typeof snapshot.snapshot !== "object" || Array.isArray(snapshot.snapshot))
+    )
+      readTrace?.reasons.add("snapshot_decode_partial");
     const rawFragments = rawFragmentsByEntity.get(entity.id);
     const snapshotData = (snapshot?.snapshot ?? {}) as Record<string, unknown>;
     const lightweightStatus = snapshotData["status"];
