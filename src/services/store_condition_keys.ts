@@ -112,7 +112,7 @@ export async function storeConditionKeyHash(tx: DbConnection, key: string): Prom
 export function storeConditionObservationKey(owner: string, identity: StoreKeyIdentity): string {
   assertOwner(owner);
   return (
-    "conditional-store:" +
+    "store-conditional:" +
     createHash("sha256")
       .update(canonicalStoreRequest([owner, identity.keyHash, identity.identityHash]))
       .digest("hex")

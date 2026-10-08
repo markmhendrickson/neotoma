@@ -20,6 +20,12 @@ export function deriveConditionalStoreIdentity(
       "VALIDATION_ERROR",
       "Conditional store requires no derived entities."
     );
+  const references = schema.schema_definition.reference_fields;
+  if (references !== undefined && (!Array.isArray(references) || references.length !== 0))
+    throw new StoreConditionError(
+      "VALIDATION_ERROR",
+      "Conditional store requires no automatic references."
+    );
   const rules = schema.schema_definition.canonical_name_fields;
   if (!Array.isArray(rules) || !rules.length)
     throw new StoreConditionError(

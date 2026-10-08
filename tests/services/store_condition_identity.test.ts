@@ -18,6 +18,46 @@ const schema = {
   reducer_config: { merge_policies: {} },
 } as SchemaRegistryEntry;
 describe("conditional declared identity", () => {
+  it("refuses automatic references rather than silently dropping their effects", () => {
+    const fields = { code: "SYNTHETIC", region: "ONE" };
+    for (const references of [
+      null,
+      {},
+      true,
+      "invalid",
+      [{ field: "code", target_entity_type: "synthetic" }],
+    ])
+      expect(() =>
+        deriveConditionalStoreIdentity(
+          {
+            ...schema,
+            schema_definition: { ...schema.schema_definition, reference_fields: references },
+          } as unknown as SchemaRegistryEntry,
+          fields,
+          "OWNER"
+        )
+      ).toThrow("requires no automatic references");
+    expect(
+      deriveConditionalStoreIdentity(
+        {
+          ...schema,
+          schema_definition: { ...schema.schema_definition, reference_fields: [] },
+        },
+        fields,
+        "OWNER"
+      ).entityId
+    ).toBe(deriveConditionalStoreIdentity(schema, fields, "OWNER").entityId);
+    const legacy = {
+      ...schema.schema_definition,
+      reference_fields: [{ field: "code", target_entity_type: "synthetic" }],
+    };
+    expect(
+      deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, fields, legacy).canonicalName
+    ).toBe(
+      deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, fields, schema.schema_definition)
+        .canonicalName
+    );
+  });
   it("refuses hidden/malformed derived work while absent/empty declarations remain valid", () => {
     for (const derived of [null, {}, true, "invalid", [{ entity_type: "synthetic_child" }]])
       expect(() =>
