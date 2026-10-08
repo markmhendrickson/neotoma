@@ -1297,14 +1297,21 @@ export class SchemaRegistryService {
         "id, entity_type, schema_version, schema_definition, reducer_config, active, created_at, user_id, scope, metadata"
       )
       .eq("active", true);
+    // The native adapter supports flat OR predicates, not nested PostgREST
+    // and(...) groups. Global authority follows scope, as loadGlobalSchema
+    // does, including legacy non-null owner metadata. Only own user-scoped
+    // rows are admitted alongside those globals.
     const query = userId
-      ? base.or(`scope.eq.global,and(scope.eq.user,user_id.eq.${userId})`)
+      ? base.or(`scope.eq.global,user_id.eq.${userId}`)
       : base.eq("scope", "global");
     const { data, error } = await query;
     if (error) {
       throw new Error(`Failed to list active schemas: ${error.message}`);
     }
-    const rows = (data ?? []) as SchemaRegistryEntry[];
+    const rows = ((data ?? []) as SchemaRegistryEntry[]).filter(
+      (row) =>
+        row.scope === "global" || (row.scope === "user" && !!userId && row.user_id === userId)
+    );
     const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
     return applied.filter((e): e is SchemaRegistryEntry => e != null);
   }

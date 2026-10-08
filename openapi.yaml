@@ -23,6 +23,325 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    EntityReadContract:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - surface
+        - mode
+        - applied_scope
+        - request_options
+        - coverage
+        - coherence
+        - diagnostics
+      properties:
+        version:
+          type: string
+          enum:
+            - "1"
+        surface:
+          type: string
+          enum:
+            - entity_collection
+        mode:
+          type: object
+          additionalProperties: false
+          required:
+            - actual
+            - fallback_reason
+          properties:
+            actual:
+              type: string
+              enum:
+                - structured
+                - semantic
+                - lexical_typed
+                - lexical_fallback
+            fallback_reason:
+              type: string
+              nullable: true
+              enum:
+                - not_configured
+                - embedding_unavailable
+                - no_usable_candidates
+                - filtered_candidates_exhausted
+                - unknown
+                - null
+        applied_scope:
+          type: object
+          additionalProperties: false
+          required:
+            - owner
+            - entity_types
+            - include_merged
+            - include_deleted
+            - include_snapshots
+            - predicates
+            - ordering
+            - pagination
+          properties:
+            owner:
+              type: string
+              enum:
+                - authenticated
+            entity_types:
+              type: array
+              items:
+                type: string
+            include_merged:
+              type: boolean
+            include_deleted:
+              type: boolean
+              enum:
+                - false
+            include_snapshots:
+              type: boolean
+            predicates:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - field
+                  - op
+                  - value
+                properties:
+                  field:
+                    type: string
+                  op:
+                    type: string
+                  value:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - kind
+                      - value
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - sha256
+                      value:
+                        type: string
+                        pattern: ^[0-9a-f]{64}$
+            ordering:
+              type: object
+              additionalProperties: false
+              required:
+                - field
+                - direction
+                - tie_breaker
+              properties:
+                field:
+                  type: string
+                direction:
+                  type: string
+                  enum:
+                    - asc
+                    - desc
+                tie_breaker:
+                  type: string
+                  nullable: true
+            pagination:
+              type: object
+              additionalProperties: false
+              required:
+                - kind
+                - limit
+                - offset
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - keyset
+                    - offset
+                limit:
+                  type: integer
+                  minimum: 1
+                offset:
+                  type: integer
+                  minimum: 0
+        request_options:
+          type: object
+          additionalProperties: false
+          required:
+            - applied
+            - normalized
+            - ignored
+          properties:
+            applied:
+              type: array
+              items:
+                type: string
+            normalized:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - name
+                  - canonical_name
+                  - reason
+                properties:
+                  name:
+                    type: string
+                  canonical_name:
+                    type: string
+                  reason:
+                    type: string
+            ignored:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - name
+                  - reason
+                properties:
+                  name:
+                    type: string
+                  reason:
+                    type: string
+        coverage:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - state
+            - reasons
+            - returned_count
+            - total
+            - page_exhausted
+            - scope_exhausted
+            - continuation
+          properties:
+            kind:
+              type: string
+              enum:
+                - predicate_population
+                - semantic_candidates
+                - lexical_candidates
+                - synthesized_groups
+            state:
+              type: string
+              enum:
+                - complete
+                - paginated
+                - truncated
+                - partial
+                - unknown
+            reasons:
+              description: Safe executing-path cause codes only. Includes semantic_backend_unavailable for an unusable vector backend and semantic_global_candidate_cap for a bounded global KNN pool; never includes provider exceptions, query text or credential values.
+              type: array
+              items:
+                type: string
+            returned_count:
+              type: integer
+              minimum: 0
+            total:
+              type: object
+              additionalProperties: false
+              required:
+                - value
+                - relation
+                - unit
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                relation:
+                  type: string
+                  enum:
+                    - exact
+                    - lower_bound
+                    - candidate_count
+                    - unknown
+                unit:
+                  type: string
+                  enum:
+                    - entities
+                    - candidates
+                    - groups
+            page_exhausted:
+              type: boolean
+            scope_exhausted:
+              type: boolean
+              nullable: true
+            continuation:
+              type: object
+              additionalProperties: false
+              required:
+                - kind
+                - next_cursor
+                - next_offset
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - cursor
+                    - none
+                    - unsupported
+                next_cursor:
+                  type: string
+                  nullable: true
+                next_offset:
+                  type: integer
+                  nullable: true
+                  minimum: 0
+        coherence:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - started_at
+            - completed_at
+            - common_view
+            - collection_and_total
+          properties:
+            kind:
+              type: string
+              enum:
+                - read_interval
+            started_at:
+              type: string
+              format: date-time
+            completed_at:
+              type: string
+              format: date-time
+            common_view:
+              type: boolean
+              enum: [false]
+            collection_and_total:
+              type: string
+              enum: [separate_acquisitions, candidate_derived]
+        diagnostics:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - code
+              - reason
+            properties:
+              code:
+                type: string
+              reason:
+                type: string
+              field:
+                type: string
+              entity_type:
+                type: string
+              suggestions:
+                type: array
+                items:
+                  type: string
+                maxItems: 3
+      description: >-
+        Additive acquisition evidence from the executing entity collection path. Ranked candidate zero,
+        ignored scope, acquisition caps or degradation cannot establish predicate-population absence.
+        Existing legacy fields retain their meaning. The read interval is not a write fence, revision
+        lease or common database view. See query_convergence and issue #2597.
     IssuesSyncPlanIssue:
       type: object
       description: A GitHub issue a `/issues/sync` dry run would create or update locally.
@@ -3894,6 +4213,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/EntitySnapshot"
+                  read_contract:
+                    $ref: "#/components/schemas/EntityReadContract"
                   total:
                     type: integer
                   limit:
@@ -4107,6 +4428,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/EntitySnapshot"
+                  read_contract:
+                    $ref: "#/components/schemas/EntityReadContract"
                   total:
                     type: integer
                   limit:
@@ -8045,7 +8368,14 @@ paths:
                   items:
                     type: object
                     additionalProperties: false
-                    required: [entity_id, entity_type, expected_observation_count, expected_snapshot, changes]
+                    required:
+                      [
+                        entity_id,
+                        entity_type,
+                        expected_observation_count,
+                        expected_snapshot,
+                        changes,
+                      ]
                     properties:
                       entity_id:
                         type: string
@@ -8094,10 +8424,10 @@ paths:
                       description: Current entity snapshot and available provenance metadata.
                       required: [entity_id, entity_type, snapshot, observation_count]
                       properties:
-                        entity_id: {type: string}
-                        entity_type: {type: string}
-                        snapshot: {type: object, additionalProperties: true}
-                        observation_count: {type: integer}
+                        entity_id: { type: string }
+                        entity_type: { type: string }
+                        snapshot: { type: object, additionalProperties: true }
+                        observation_count: { type: integer }
         "400":
           description: Invalid transaction, undeclared fields or instance policy denial; nothing committed.
           content:
@@ -8110,27 +8440,27 @@ paths:
           description: Authentication required.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "403":
           description: Calling agent capability, attribution or protected-type policy disallows a correction.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "404":
           description: A transaction target is unavailable in the authenticated graph.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
           description: Stale precondition, changed idempotency payload or snapshot mismatch; no new changes committed.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "500":
           description: Transaction failed and was rolled back.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /correct:
     post:

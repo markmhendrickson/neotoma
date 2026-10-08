@@ -2,6 +2,7 @@
 // Used when storageBackend === "local" and OPENAI_API_KEY is set
 
 import { createRequire } from "node:module";
+import type { EntityReadTrace, EntityFallbackReason } from "../shared/entity_read_contract.js";
 import { AsyncSqliteDatabase, type SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 import type { DbDatabase } from "../repositories/db/driver.js";
 import { config } from "../config.js";
@@ -112,6 +113,7 @@ export async function storeLocalEntityEmbedding(row: {
  */
 export async function searchLocalEntityEmbeddings(options: {
   queryEmbedding: number[];
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string | null;
   /**
@@ -128,7 +130,7 @@ export async function searchLocalEntityEmbeddings(options: {
   distanceThreshold?: number;
   limit: number;
   offset: number;
-}): Promise<{ entityIds: string[]; total: number }> {
+}): Promise<{ entityIds: string[]; total: number; fallbackReason?: EntityFallbackReason }> {
   const {
     queryEmbedding,
     userId,
@@ -162,14 +164,20 @@ export async function searchLocalEntityEmbeddings(options: {
     logger.warn(
       `[searchLocalEntityEmbeddings] early exit: storageBackend=${config.storageBackend} openaiApiKey=${!!config.openaiApiKey} embLen=${queryEmbedding?.length ?? 0}`
     );
-    return { entityIds: [], total: 0 };
+    options.readTrace?.reasons.add("semantic_backend_unavailable");
+    return {
+      entityIds: [],
+      total: 0,
+      fallbackReason: !config.openaiApiKey ? "not_configured" : "embedding_unavailable",
+    };
   }
 
   const db = await getDb();
   const rawDb = rawSqliteHandle(db);
   if (!rawDb || !ensureSqliteVecLoaded(rawDb)) {
     logger.warn("[searchLocalEntityEmbeddings] sqlite-vec not loaded");
-    return { entityIds: [], total: 0 };
+    options.readTrace?.reasons.add("semantic_backend_unavailable");
+    return { entityIds: [], total: 0, fallbackReason: "unknown" };
   }
   ensureVecSchema(rawDb);
 
@@ -197,6 +205,10 @@ export async function searchLocalEntityEmbeddings(options: {
 
   // Oversample for filtering: fetch more candidates then filter and slice
   const oversample = Math.max((limit + offset) * 5, 500);
+  if (options.readTrace && totalRows > oversample) {
+    options.readTrace.candidate_capped = true;
+    options.readTrace.reasons.add("semantic_global_candidate_cap");
+  }
   const float32 = new Float32Array(queryEmbedding);
   const embeddingBlob = Buffer.from(float32.buffer, float32.byteOffset, float32.byteLength);
 
@@ -230,6 +242,8 @@ export async function searchLocalEntityEmbeddings(options: {
       includeMerged ? 1 : 0 /* includeMerged=1: all rows; =0: only non-merged (r.merged=0) */
     )) as Array<{ entity_id: string; distance: number }>;
 
+  if (options.readTrace && distanceThreshold !== undefined)
+    options.readTrace.distance_threshold_applied = true;
   const filtered =
     distanceThreshold !== undefined ? rows.filter((r) => r.distance < distanceThreshold) : rows;
   const sliced = filtered.slice(offset, offset + limit);

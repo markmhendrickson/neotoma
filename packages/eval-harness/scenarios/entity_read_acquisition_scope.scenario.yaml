@@ -1,0 +1,67 @@
+meta:
+  id: entity_read_acquisition_scope
+  description: Executes natural retrieve_entities calls against an isolated native
+    server. A known three-entity population is completely acquired; an unknown
+    scope option survives parsing as partial acquisition rather than certified
+    absence. Complements the native adopting-scanner refusal and interleave eval.
+  tags:
+    - tier2
+    - retrieval
+    - acquisition-contract
+    - absence-refusal
+seed_strategy: generated
+source_pattern: A consumer must distinguish complete predicate population from a
+  plausible collection acquired with an ignored scope option.
+privacy_transform: Synthetic schema, titles and scope names only; no private data.
+system_prompt: Inspect read_contract on retrieve_entities. Certify absence only
+  from supported complete acquisition; hold a result with ignored scope or unknown
+  coverage. Acquisition metadata is not a writer fence or common revision.
+user_prompt: Seed three synthetic entities. Acquire the entire declared population,
+  then repeat with an unsupported scope option and inspect its partial contract.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    op: eq
+    value: 2
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: entities
+    present: true
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 0
+    result_subset:
+      total: 3
+      read_contract:
+        version: "1"
+        mode:
+          actual: structured
+        coverage:
+          state: complete
+          returned_count: 3
+          total:
+            value: 3
+            relation: exact
+            unit: entities
+          scope_exhausted: true
+        coherence:
+          common_view: false
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 1
+    result_subset:
+      total: 3
+      read_contract:
+        request_options:
+          ignored:
+            - name: unsupported_scope
+              reason: unknown_option
+        coverage:
+          state: partial
+          returned_count: 3
+          scope_exhausted: null
