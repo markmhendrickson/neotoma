@@ -49,6 +49,20 @@ describe("getSqliteRecoveryHint", () => {
       kind: "verify_instrument_failure",
       detail: "malformed result",
     });
+    expect(
+      classifyBackupIntegrityCheck([{ integrity_check: "ok" }, { integrity_check: "ok" }])
+    ).toEqual({
+      kind: "verify_instrument_failure",
+      detail: "malformed result",
+    });
+    expect(classifyBackupIntegrityCheck([{ result: "ok" }])).toEqual({
+      kind: "verify_instrument_failure",
+      detail: "malformed result",
+    });
+    expect(classifyBackupIntegrityCheck([{ integrity_check: "ok", extra: "unexpected" }])).toEqual({
+      kind: "verify_instrument_failure",
+      detail: "malformed result",
+    });
   });
 
   it("classifies a real non-ok result as an integrity failure", () => {

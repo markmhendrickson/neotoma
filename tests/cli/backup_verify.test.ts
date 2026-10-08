@@ -4,10 +4,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { runCli } from "../../src/cli/index.ts";
+import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.ts";
 
 async function runNeotomaCli(
   argvSuffix: string[],
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  runCliFn: (argv: string[]) => Promise<void> = runCli
 ): Promise<{ exitCode: number; stdout: string; stderr: string; error?: unknown }> {
   const stdoutParts: string[] = [];
   const stderrParts: string[] = [];
@@ -39,7 +41,7 @@ async function runNeotomaCli(
 
   let caught: unknown;
   try {
-    await runCli(["node", "neotoma", ...argvSuffix]);
+    await runCliFn(["node", "neotoma", ...argvSuffix]);
   } catch (err) {
     caught = err;
   }
@@ -98,6 +100,115 @@ describe("CLI backup verify (smoke)", () => {
     expect(verify.exitCode, verify.stderr + verify.stdout).toBe(0);
     const report = JSON.parse(verify.stdout) as { status?: string };
     expect(report.status).toBe("valid");
+  });
+
+  async function createBackupInput(prefix: string): Promise<{ parent: string; dataDir: string }> {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+    backupRoots.push(parent);
+    const dataDir = path.join(parent, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    const { default: Database } = await import("better-sqlite3");
+    const db = new Database(path.join(dataDir, "neotoma.db"));
+    try {
+      db.exec("create table test_data(value text); insert into test_data values ('ready');");
+    } finally {
+      db.close();
+    }
+    return { parent, dataDir };
+  }
+
+  it("reports a genuine non-ok integrity result as corruption in human and JSON output", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-integrity-failure-");
+    // Import a fresh CLI module so the prior smoke test's --json option cannot
+    // leak through Commander's process-global option state.
+    await vi.resetModules();
+    const { AsyncSqliteDatabase: isolatedDriver } =
+      await import("../../src/repositories/sqlite/sqlite_driver.ts");
+    const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
+    const pragma = vi
+      .spyOn(isolatedDriver.prototype, "pragma")
+      .mockResolvedValue([{ integrity_check: "row 3 missing" }]);
+    try {
+      // Run the human command before any --json invocation: Commander retains
+      // global options when runCli is exercised in-process by this test helper.
+      const human = await runNeotomaCli(
+        ["backup", "create", "--output", parent],
+        {
+          NEOTOMA_DATA_DIR: dataDir,
+        },
+        isolatedRunCli
+      );
+      expect(human.exitCode).toBe(1);
+      expect(human.stderr).toContain("SQLite may be corrupted.");
+      expect(human.stderr).toContain("neotoma storage recover-db");
+
+      const json = await runNeotomaCli(
+        ["--json", "backup", "create", "--output", parent],
+        {
+          NEOTOMA_DATA_DIR: dataDir,
+        },
+        isolatedRunCli
+      );
+      expect(json.exitCode).toBe(1);
+      const envelope = JSON.parse(json.stderr) as {
+        error: string;
+        hint?: { code?: string; failure_kind?: string };
+      };
+      expect(envelope.error).toContain('integrity_check on the snapshot returned "row 3 missing"');
+      expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
+    } finally {
+      pragma.mockRestore();
+    }
+  });
+
+  it.each([
+    ["empty", []],
+    ["malformed", [{ integrity_check: "ok" }, { integrity_check: "ok" }]],
+  ])(
+    "fails closed on a %s verification result without claiming corruption",
+    async (_kind, result) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-instrument-failure-");
+      const pragma = vi.spyOn(AsyncSqliteDatabase.prototype, "pragma").mockResolvedValue(result);
+      try {
+        const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+          NEOTOMA_DATA_DIR: dataDir,
+        });
+        expect(run.exitCode).toBe(1);
+        const envelope = JSON.parse(run.stderr) as {
+          error: string;
+          hint?: { code?: string; failure_kind?: string };
+        };
+        expect(envelope.error).toContain("could not obtain an integrity result");
+        expect(envelope.error).not.toContain("corrupt");
+        expect(envelope.hint).toEqual({
+          code: "VERIFY_INSTRUMENT_FAILURE",
+          failure_kind: "verify_instrument_failure",
+        });
+      } finally {
+        pragma.mockRestore();
+      }
+    }
+  );
+
+  it("fails closed when the verification driver throws and shell-quotes an output-derived path", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-instrument-$()-");
+    const pragma = vi
+      .spyOn(AsyncSqliteDatabase.prototype, "pragma")
+      .mockRejectedValue(new Error("simulated verification driver failure"));
+    try {
+      const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+      });
+      expect(run.exitCode).toBe(1);
+      expect(run.stderr).toContain("could not obtain an integrity result");
+      expect(run.stderr).not.toContain("SQLite may be corrupted.");
+      expect(run.stderr).toContain(`sqlite3 '${parent}`);
+      expect(run.stderr).toContain("$()-");
+      expect(run.stderr).toContain('neotoma.db\' \\"PRAGMA integrity_check;\\"');
+      expect(run.stderr).not.toContain(`sqlite3 \"${parent}`);
+    } finally {
+      pragma.mockRestore();
+    }
   });
 
   // Regression for #2075. The old implementation copied the DB and its -wal as two

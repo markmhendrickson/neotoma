@@ -1852,15 +1852,24 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
   if (!Array.isArray(rows) || rows.length === 0) {
     return { kind: "verify_instrument_failure", detail: "no result" };
   }
+  if (rows.length !== 1) {
+    return { kind: "verify_instrument_failure", detail: "malformed result" };
+  }
   const first = rows[0];
   if (!first || typeof first !== "object" || Array.isArray(first)) {
     return { kind: "verify_instrument_failure", detail: "malformed result" };
   }
-  const values = Object.values(first as Record<string, unknown>);
-  if (values.length !== 1 || typeof values[0] !== "string" || values[0].trim().length === 0) {
+  const record = first as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (
+    keys.length !== 1 ||
+    keys[0] !== "integrity_check" ||
+    typeof record.integrity_check !== "string" ||
+    record.integrity_check.trim().length === 0
+  ) {
     return { kind: "verify_instrument_failure", detail: "malformed result" };
   }
-  const detail = values[0].trim();
+  const detail = record.integrity_check.trim();
   return detail === "ok" ? { kind: "verified", detail } : { kind: "integrity_failed", detail };
 }
 
@@ -3012,6 +3021,11 @@ async function backupFilesWithTimestamp(filePaths: string[], ts: string): Promis
  */
 function quoteSqliteStringLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/** Quote one value for a POSIX shell command shown to a human. */
+function quotePosixShellArgument(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 async function checkpointWal(db: AsyncSqliteDatabase): Promise<void> {
@@ -11218,7 +11232,7 @@ backupCommand
           ? `Backup verification could not obtain an integrity result (${integrity.detail}). ` +
             "The snapshot has been left in place for inspection at " +
             destDb +
-            `. Run \`sqlite3 ${JSON.stringify(destDb)} "PRAGMA integrity_check;"\` directly; ` +
+            `. Run \`sqlite3 ${quotePosixShellArgument(destDb)} "PRAGMA integrity_check;"\` directly; ` +
             'if it returns "ok", this is a tooling or driver issue.'
           : `Backup verification failed: integrity_check on the snapshot returned "${integrity.detail}" ` +
             '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
