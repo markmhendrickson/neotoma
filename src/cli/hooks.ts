@@ -27,6 +27,8 @@ import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 
 import { runDoctor, type DoctorReport } from "./doctor.js";
+import { configureClaudePluginConnector } from "./claude_plugin_connector.js";
+import { readConfig } from "./config.js";
 import type { HookHarnessId, HookStatus } from "./hooks_detect.js";
 import { HOOK_HARNESSES } from "./hooks_detect.js";
 
@@ -92,7 +94,14 @@ function claudeCodePluginDir(repoRoot: string): string | null {
   return existsSync(candidate) ? candidate : null;
 }
 
-/** Matches `packages/claude-code-plugin/.claude-plugin/marketplace.json` `name` and plugin entry `name`. */
+/**
+ * Marketplace name shared, deliberately, by the repo-root catalog
+ * (`.claude-plugin/marketplace.json`, what `markmhendrickson/neotoma` resolves to)
+ * and the package-local one (`packages/claude-code-plugin/.claude-plugin/`).
+ * Both list the same plugin, so the install id is `neotoma@neotoma-marketplace`
+ * whichever source registered it; Claude Code allows one marketplace per name,
+ * so a second registration of the other source is refused, which is harmless.
+ */
 const CLAUDE_NEOTOMA_MARKETPLACE_NAME = "neotoma-marketplace";
 const CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC = `neotoma@${CLAUDE_NEOTOMA_MARKETPLACE_NAME}`;
 
@@ -124,6 +133,8 @@ function printSnippetOnly(tool: HookHarnessId, repoRoot?: string | null): string
         "  `plugin@marketplace` ids — register this folder as a marketplace, then install:",
         `  claude plugin marketplace add ${pluginDir}`,
         `  claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}`,
+        "  Then point the plugin (connector and hooks) at your Neotoma, not the public sandbox:",
+        `  echo '{"neotoma_mcp_url":"http://127.0.0.1:3080/mcp"}' | claude plugin configure ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC} --values-stdin`,
         "See docs/integrations/hooks/claude_code.md.",
       ].join("\n");
     }
@@ -176,6 +187,42 @@ function checkGuardrails(
   return null;
 }
 
+/**
+ * Point the installed Claude plugin at the user's own Neotoma (connector and
+ * hooks), and turn off its bundled connector when Claude Code already has the
+ * user's own Neotoma MCP entry. See claude_plugin_connector.ts.
+ */
+async function configureClaudePluginForLocalNeotoma(
+  report: DoctorReport,
+  dryRun: boolean
+): Promise<{ ok: boolean; message: string }> {
+  let configBaseUrl: string | null = null;
+  try {
+    configBaseUrl = (await readConfig()).base_url ?? null;
+  } catch {
+    configBaseUrl = null;
+  }
+  const own = report.mcp_servers_detected?.claude_code;
+  return configureClaudePluginConnector({
+    installSpec: CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC,
+    urlInputs: {
+      envBaseUrl: process.env.NEOTOMA_BASE_URL ?? null,
+      configBaseUrl,
+      apiBaseUrl: report.api?.base_url ?? null,
+    },
+    hasOwnNeotomaMcp: Boolean(own && (own.has_neotoma || own.has_neotoma_dev)),
+    dryRun,
+  });
+}
+
+/** Exported for tests only. */
+export async function doInstallForTest(
+  opts: HooksCommandOptions,
+  report: DoctorReport
+): Promise<HooksCommandResult> {
+  return doInstall(opts, report);
+}
+
 async function doInstall(
   opts: HooksCommandOptions,
   report: DoctorReport
@@ -194,11 +241,19 @@ async function doInstall(
   }
 
   if (status.present && !opts.force) {
+    // Claude Code: re-running install on an existing (possibly 0.1.x) plugin
+    // still points it at the user's Neotoma, which is the upgrade path.
+    const configured =
+      opts.tool === "claude-code"
+        ? await configureClaudePluginForLocalNeotoma(report, Boolean(opts.dryRun))
+        : null;
     return {
-      ok: true,
+      ok: configured ? configured.ok : true,
       tool: opts.tool,
       action: "install",
-      message: `Neotoma hooks already installed for ${opts.tool} at ${status.path ?? "<unknown>"}.`,
+      message:
+        `Neotoma hooks already installed for ${opts.tool} at ${status.path ?? "<unknown>"}.` +
+        (configured ? ` ${configured.message}` : ""),
       delegated_to: null,
       status: report.hooks,
     };
@@ -233,7 +288,8 @@ async function doInstall(
             action: "install",
             message:
               `[dry-run] would run: claude plugin marketplace add ${pluginDir} && ` +
-              `claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}`,
+              `claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}. ` +
+              (await configureClaudePluginForLocalNeotoma(report, true)).message,
             delegated_to: pluginDir,
             status: report.hooks,
           };
@@ -266,15 +322,25 @@ async function doInstall(
           // claude.cmd on Windows requires shell mode (CVE-2024-27980) or EINVAL.
           { cwd: repoRoot, stdio: "inherit", ...WIN_SHELL }
         );
-        const ok = installRes.status === 0;
+        const installed = installRes.status === 0;
         const addOk = addRes.status === 0;
+        // Never leave a CLI (local) install on the public-sandbox default.
+        const configured = installed
+          ? await configureClaudePluginForLocalNeotoma(report, false)
+          : null;
+        const ok = installed && Boolean(configured?.ok);
         return {
           ok,
           tool: opts.tool,
           action: "install",
-          message: ok
+          message: installed
             ? `Installed Neotoma Claude Code plugin (${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}).` +
-              (addOk ? "" : " (marketplace add returned non-zero; it may already be registered.)")
+              (addOk
+                ? ""
+                : " (marketplace add returned non-zero; it may already be registered, " +
+                  "for example from markmhendrickson/neotoma, which uses the same " +
+                  "marketplace name and plugin.)") +
+              ` ${configured?.message ?? ""}`
             : `claude plugin install failed (status ${installRes.status ?? "unknown"}). ` +
               `Ensure marketplace is registered: claude plugin marketplace add ${pluginDir} ` +
               `then: claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}` +

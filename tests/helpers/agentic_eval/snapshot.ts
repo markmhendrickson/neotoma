@@ -63,7 +63,9 @@ function scrubValue(value: unknown, ctx: { idMap: Map<string, string>; nextId: {
   if (typeof value === "string") {
     // Detect ISO timestamps.
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) return "<ts>";
-    return value;
+    // The mock server listens on an ephemeral loopback port; a hook that
+    // echoes its URL (e.g. a status message) must not make the snapshot flaky.
+    return value.replace(/http:\/\/127\.0\.0\.1:\d+/g, "<mock-server>");
   }
   if (typeof value !== "object") return value;
   if (Array.isArray(value)) {

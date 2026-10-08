@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "id": "claude_plugin_option_routes_capture",
+    "description": "Installed Claude plugin whose Neotoma MCP URL option points at the user's own Neotoma (here the cell's mock server), with NEOTOMA_BASE_URL unset. The hooks must follow the option, the same URL as the bundled connector, and capture the turn there, with no status notice.",
+    "harnesses": ["claude-code-plugin"],
+    "models": ["claude-sonnet-4.5"],
+    "tags": ["claude-plugin", "in-plugin", "turn-lifecycle"],
+    "claude_plugin": {
+      "mcp_url": "{cell_mcp_url}",
+      "neotoma_base_url": null
+    }
+  },
+  "events": [
+    { "hook": "sessionStart", "payload": {} },
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "Sara Lee said the proposal looks great." }
+    },
+    { "hook": "stop", "payload": { "text": "Got it, I will note Sara Lee's feedback." } }
+  ],
+  "assertions": {
+    "default": [
+      { "type": "request_count", "endpoint": "/store", "op": "gte", "value": 1 }
+    ]
+  },
+  "expected_outputs": {
+    "sessionStart": [{ "field": "systemMessage", "presence": "absent" }]
+  }
+}

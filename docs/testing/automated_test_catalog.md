@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **691**
-- Backend and repo Vitest files: **655**
+- Total automated test files: **695**
+- Backend and repo Vitest files: **659**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 188 |
+| Vitest unit tests | 190 |
 | Vitest service tests | 52 |
 | Source-adjacent tests | 68 |
-| Vitest integration tests | 205 |
-| Vitest CLI tests | 82 |
+| Vitest integration tests | 206 |
+| Vitest CLI tests | 83 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (188):**
+**Files (190):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -143,6 +143,7 @@ flowchart TD
 - `tests/unit/bundles_loader.test.ts`
 - `tests/unit/canonical_markdown_body_heading.test.ts`
 - `tests/unit/capability_delta.test.ts`
+- `tests/unit/claude_plugin_hook_url.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
@@ -219,6 +220,7 @@ flowchart TD
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
 - `tests/unit/mcp_instructions_schema_scope_mismatch.test.ts`
 - `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
+- `tests/unit/mcp_prompts.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
 - `tests/unit/mcp_server_authenticated_principal.test.ts`
@@ -438,7 +440,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (205):**
+**Files (206):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -543,6 +545,7 @@ flowchart TD
 - `tests/integration/mcp_oauth_local_login_preflight_gate.test.ts`
 - `tests/integration/mcp_oauth_token_endpoint.test.ts`
 - `tests/integration/mcp_oauth_trusted_callback.test.ts`
+- `tests/integration/mcp_prompts_protocol.test.ts`
 - `tests/integration/mcp_query_variations.test.ts`
 - `tests/integration/mcp_relationship_variations.test.ts`
 - `tests/integration/mcp_resource_variations.test.ts`
@@ -650,9 +653,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (82):**
+**Files (83):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
+- `tests/cli/claude_plugin_connector.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
 - `tests/cli/cli_admin_commands.test.ts`
 - `tests/cli/cli_api_commands.test.ts`

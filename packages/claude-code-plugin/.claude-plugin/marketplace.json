@@ -4,12 +4,13 @@
     "name": "Neotoma",
     "url": "https://neotoma.io"
   },
+  "description": "Local-checkout catalog for the Neotoma Claude plugin, registered by `neotoma hooks install --tool claude-code`. Shares the name neotoma-marketplace with the repo-root catalog (markmhendrickson/neotoma) on purpose: same plugin, same install id.",
   "plugins": [
     {
       "name": "neotoma",
       "source": "./",
-      "description": "Neotoma lifecycle hooks: Claude Code plugin (plugin.json + Python) and in-package Cursor wiring (.cursor/hooks.json + Node). Same reliability goals; hook names and compaction coverage follow each harness. MCP/CLI remain the portable storage path. Complements MCP — structured writes in-channel; hooks for lifecycle MCP cannot see.",
-      "version": "0.1.1",
+      "description": "Neotoma for Claude: bundled MCP connector, onboarding skills (setup, check, recover), starter commands, and Claude Code lifecycle hooks. The same package ships a Cursor hook map (.cursor/hooks.json).",
+      "version": "0.2.0",
       "category": "memory",
       "tags": ["memory", "state", "observability", "provenance", "cross-tool"]
     }

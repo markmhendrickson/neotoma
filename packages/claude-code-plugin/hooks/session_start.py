@@ -28,11 +28,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
     NEOTOMA_BASE_URL,
     get_client,
+    is_public_sandbox,
     harness_provenance,
     log,
     make_idempotency_key,
     read_hook_input,
     record_conversation_turn,
+    status_message,
     write_cached_mcp_instructions,
     write_hook_output,
 )
@@ -41,6 +43,9 @@ from _common import (  # noqa: E402
 def _prefetch_mcp_instructions() -> None:
     """Fetch MCP instructions once at session start and cache them."""
     if _urllib_request is None:
+        return
+    if is_public_sandbox(NEOTOMA_BASE_URL):
+        # Capture is off on the public sandbox; the hooks make no requests.
         return
     url = NEOTOMA_BASE_URL.rstrip("/") + "/mcp-interaction-instructions"
     try:
@@ -56,8 +61,23 @@ def _prefetch_mcp_instructions() -> None:
 def main() -> int:
     payload = read_hook_input()
     _prefetch_mcp_instructions()
+    # One visible line when capture is off or split from the bundled
+    # connector. `systemMessage` is shown to the user; the same text goes to
+    # the model as context so the `check` skill can report it.
+    notice = status_message()
+    output: dict = {}
+    if notice:
+        log("warn", notice)
+        output = {
+            "systemMessage": notice,
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": notice,
+            },
+        }
     client = get_client()
     if client is None:
+        write_hook_output(output)
         return 0
 
     # Claude Code supplies a raw UUID in `session_id`. Persist it under both
@@ -110,7 +130,7 @@ def main() -> int:
     except Exception:
         pass
 
-    write_hook_output({})
+    write_hook_output(output)
     return 0
 
 

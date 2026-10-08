@@ -1,0 +1,17 @@
+{
+  "name": "neotoma-marketplace",
+  "owner": {
+    "name": "Neotoma",
+    "url": "https://neotoma.io"
+  },
+  "description": "Neotoma plugins for Claude. Shares the marketplace name neotoma-marketplace with the package-local catalog on purpose: both list the same plugin, so the install id is neotoma@neotoma-marketplace from either source.",
+  "plugins": [
+    {
+      "name": "neotoma",
+      "source": "./packages/claude-code-plugin",
+      "description": "Connect Claude to Neotoma (Claude Code: your own Neotoma or the public sandbox; Chat and Cowork: see the setup skill), with setup, check, and recover skills and starter commands.",
+      "category": "memory",
+      "tags": ["memory", "state", "provenance", "mcp", "cross-tool"]
+    }
+  ]
+}

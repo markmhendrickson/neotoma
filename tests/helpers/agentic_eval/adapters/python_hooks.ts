@@ -33,6 +33,42 @@ function pythonInterpreter(): string {
   return process.env.NEOTOMA_EVAL_PYTHON ?? "python3";
 }
 
+const CLAUDE_PLUGIN_DIR = join(REPO_ROOT, "packages", "claude-code-plugin");
+
+function expandCellUrl(value: string, ctx: CellContext): string {
+  return value
+    .replace("{cell_mcp_url}", `${ctx.baseUrl.replace(/\/+$/, "")}/mcp`)
+    .replace("{cell_base_url}", ctx.baseUrl);
+}
+
+/**
+ * Plugin context for the claude-code-plugin hooks. Fixtures without a
+ * `meta.claude_plugin` block run the out-of-plugin path (plugin variables
+ * blanked, so an eval launched from inside a Claude plugin session still hits
+ * the cell's mock server). Fixtures with one run the installed-plugin path:
+ * CLAUDE_PLUGIN_ROOT set, the option as given, HOME isolated so a developer's
+ * own Neotoma CLI config cannot leak in.
+ */
+function claudePluginEnv(ctx: CellContext): NodeJS.ProcessEnv {
+  const plugin =
+    ctx.harness === "claude-code-plugin" ? ctx.fixture.meta.claude_plugin : undefined;
+  if (!plugin) {
+    return { CLAUDE_PLUGIN_ROOT: "", CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: "" };
+  }
+  const baseUrl =
+    plugin.neotoma_base_url === undefined
+      ? ctx.baseUrl
+      : plugin.neotoma_base_url === null
+        ? ""
+        : expandCellUrl(plugin.neotoma_base_url, ctx);
+  return {
+    CLAUDE_PLUGIN_ROOT: CLAUDE_PLUGIN_DIR,
+    CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: expandCellUrl(plugin.mcp_url ?? "", ctx),
+    NEOTOMA_BASE_URL: baseUrl,
+    HOME: ctx.hookStateDir,
+  };
+}
+
 async function runPython(
   script: string,
   payload: Record<string, unknown>,
@@ -43,6 +79,7 @@ async function runPython(
     NEOTOMA_HOOK_STATE_DIR: ctx.hookStateDir,
     NEOTOMA_BASE_URL: ctx.baseUrl,
     NEOTOMA_TOKEN: ctx.token,
+    ...claudePluginEnv(ctx),
     NEOTOMA_LOG_LEVEL: "silent",
     NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP:
       process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP ?? "auto",

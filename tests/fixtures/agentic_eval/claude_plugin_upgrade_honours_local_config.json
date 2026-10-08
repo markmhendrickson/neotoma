@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "id": "claude_plugin_upgrade_honours_local_config",
+    "description": "Upgrade from plugin 0.1.x: the option is still the sandbox default, but the user has an explicit NEOTOMA_BASE_URL (here the cell's mock server). The hooks must keep capturing to that existing local configuration rather than fall back to the sandbox, and SessionStart must say visibly that the bundled connector points elsewhere.",
+    "harnesses": ["claude-code-plugin"],
+    "models": ["claude-sonnet-4.5"],
+    "tags": ["claude-plugin", "in-plugin", "upgrade"],
+    "claude_plugin": {
+      "mcp_url": "https://sandbox.neotoma.io/mcp",
+      "neotoma_base_url": "{cell_base_url}"
+    }
+  },
+  "events": [
+    { "hook": "sessionStart", "payload": {} },
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "Sara Lee said the proposal looks great." }
+    },
+    { "hook": "stop", "payload": { "text": "Got it, I will note Sara Lee's feedback." } }
+  ],
+  "assertions": {
+    "default": [
+      { "type": "request_count", "endpoint": "/store", "op": "gte", "value": 1 }
+    ]
+  },
+  "expected_outputs": {
+    "sessionStart": [
+      { "field": "systemMessage", "presence": "present", "matches": "bundled connector points at https://sandbox\\.neotoma\\.io/mcp" }
+    ]
+  }
+}
