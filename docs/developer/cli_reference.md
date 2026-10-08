@@ -202,7 +202,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | Script                                     | Description                   |
 | ------------------------------------------ | ----------------------------- |
 | `cli`, `cli:dev`                           | Run Neotoma CLI (built / dev) |
-| `docs:generate`                            | Generate docs                 |
+| `docs:generate`                            | Export release-pinned public documentation; requires `--release` and `--commit` (see [coverage manifest](../coverage_manifest.md#release-bound-export-pilot)) |
 | `build:docs`, `dev:docs`, `dev:docs:serve` | Docs site build/dev/serve     |
 | `openapi:generate`                         | Generate OpenAPI types        |
 | `branches:prune`                           | Prune merged branches         |
