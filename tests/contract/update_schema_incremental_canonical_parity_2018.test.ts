@@ -50,6 +50,33 @@ describe("update_schema_incremental canonical_name_fields — cross-surface pari
     );
   });
 
+  it("accepts merge_array_by_key only with its reducer key field", () => {
+    const valid = UpdateSchemaIncrementalRequestSchema.safeParse({
+      entity_type: "session_digest",
+      fields_to_add: [
+        {
+          field_name: "tasks_claimed",
+          field_type: "array",
+          reducer_strategy: "merge_array_by_key",
+          reducer_key_field: "claim_id",
+        },
+      ],
+    });
+    expect(valid.success).toBe(true);
+
+    const missingKey = UpdateSchemaIncrementalRequestSchema.safeParse({
+      entity_type: "session_digest",
+      fields_to_add: [
+        {
+          field_name: "tasks_claimed",
+          field_type: "array",
+          reducer_strategy: "merge_array_by_key",
+        },
+      ],
+    });
+    expect(missingKey.success).toBe(false);
+  });
+
   it("accepts an empty array at the request layer (service enforces the R2 constraint)", () => {
     // The Zod contract allows []; whether clearing is legal depends on the
     // schema's identity_opt_out and is enforced service-side (see

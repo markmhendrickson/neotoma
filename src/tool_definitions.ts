@@ -566,9 +566,26 @@ export function buildToolDefinitions(
             type: "string",
             description: "Required. Client-provided idempotency key for replay-safe corrections.",
           },
+          expected_version: {
+            type: "string",
+            description:
+              "Optional opaque entity_version from a current entity read. A stale token returns ERR_FIELD_VERSION_CONFLICT and writes nothing.",
+          },
+          overwrite: {
+            type: "boolean",
+            description: "Apply even when expected_version is stale. Ignored when it is omitted.",
+          },
         },
         required: ["entity_id", "entity_type", "field", "value", "idempotency_key"],
       },
+    },
+    {
+      name: "patch_array_item",
+      description: desc(
+        "patch_array_item",
+        "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write. Loads the current array fresh, finds/replaces the item matching key_field/key_value, and writes the reconciled array as one new observation. Concurrent patches to DIFFERENT keys both survive. Pass expected_item_version (from a prior patch's response) to detect a same-key race, or expected_item_absent for race-safe creation; a conflict returns the current item instead of overwriting."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("patch_array_item"),
     },
     {
       name: "merge_entities",
@@ -1635,6 +1652,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "parse_file",
   "correct",
   "correct_transaction",
+  "patch_array_item",
   "merge_entities",
   "split_entity",
   "list_potential_duplicates",

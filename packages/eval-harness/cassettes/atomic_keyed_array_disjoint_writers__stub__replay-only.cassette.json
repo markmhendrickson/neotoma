@@ -1,0 +1,201 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "atomic_keyed_array_disjoint_writers",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-02T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Register a synthetic keyed claim entity, add independent writer A and B rows, then update A. Refuse a stale same-key writer without observation growth; inspect the returned current item/version and reapply using that version. Retry the identical recovery request, refuse changed payload/key reuse, and read final snapshots preserving B.",
+  "system_prompt": "You are an assistant integrated with Neotoma. For an array governed by merge_array_by_key, use patch_array_item to update one keyed row without replacing rows written by another agent.\n",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_atomic_claim",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "tasks_claimed": {
+              "type": "array",
+              "required": false
+            }
+          },
+          "canonical_name_fields": ["title"]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "title": {
+              "strategy": "last_write"
+            },
+            "tasks_claimed": {
+              "strategy": "merge_array_by_key",
+              "key_field": "claim_id"
+            }
+          }
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "atomic-keyed-array-disjoint-writers-seed",
+        "entities": [
+          {
+            "entity_type": "eval_atomic_claim",
+            "title": "Patch array item atomic conflict target",
+            "tasks_claimed": []
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": {
+          "claim_id": "writer-a",
+          "status": "in_review"
+        },
+        "idempotency_key": "atomic-keyed-array-writer-a"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-b",
+        "item": {
+          "claim_id": "writer-b",
+          "status": "in_progress"
+        },
+        "idempotency_key": "atomic-keyed-array-writer-b"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": {
+          "claim_id": "writer-a",
+          "status": "approved"
+        },
+        "expected_item_version": "b0904541e3672fde0fb84c4a86bafa2357d15700f6d4dee80746ce7c477b92a4",
+        "idempotency_key": "atomic-keyed-array-update-a"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": {
+          "claim_id": "writer-a",
+          "status": "blocked"
+        },
+        "expected_item_version": "b0904541e3672fde0fb84c4a86bafa2357d15700f6d4dee80746ce7c477b92a4",
+        "idempotency_key": "atomic-keyed-array-stale-a"
+      },
+      "sequence": 6
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8"
+      },
+      "sequence": 7
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": {
+          "claim_id": "writer-a",
+          "status": "in_progress"
+        },
+        "expected_item_version": "982867663231c05445a502a0bd73ed0192e5952ddf9f3bf38071304a4bddd7da",
+        "idempotency_key": "atomic-keyed-array-recover-a"
+      },
+      "sequence": 8
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": {
+          "claim_id": "writer-a",
+          "status": "in_progress"
+        },
+        "expected_item_version": "982867663231c05445a502a0bd73ed0192e5952ddf9f3bf38071304a4bddd7da",
+        "idempotency_key": "atomic-keyed-array-recover-a"
+      },
+      "sequence": 9
+    },
+    {
+      "name": "patch_array_item",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8",
+        "entity_type": "eval_atomic_claim",
+        "field": "tasks_claimed",
+        "key_field": "claim_id",
+        "key_value": "writer-a",
+        "item": {
+          "claim_id": "writer-a",
+          "status": "blocked"
+        },
+        "expected_item_version": "982867663231c05445a502a0bd73ed0192e5952ddf9f3bf38071304a4bddd7da",
+        "idempotency_key": "atomic-keyed-array-recover-a"
+      },
+      "sequence": 10
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_30d410d89b465f879c2949f8"
+      },
+      "sequence": 11
+    }
+  ],
+  "assistant_text": "Both disjoint rows survived. The stale same-key attempt returned the committed item/version; the reviewed recovery committed once, its exact retry replayed, and changed payload reuse left state intact."
+}

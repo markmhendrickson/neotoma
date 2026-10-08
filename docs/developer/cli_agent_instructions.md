@@ -87,6 +87,17 @@ For an admitted agent, one `create_relationship` capability entry must cover the
 
 For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
 
+## Structured array patching (CLI backup)
+
+For a field whose schema declares `strategy: "merge_array_by_key"`, patch one item by key instead of reading the whole array and writing it back:
+
+```bash
+neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"in_review"}'
+neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"queued"}' --expected-item-absent
+```
+
+`keyValue` must be a string, boolean, or finite JSON number within the safe-integer range. A stale `--expected-item-version` (from a prior patch's `item_version`) returns a structured conflict (exit code non-zero, `status: "conflict"` with `current_item` / `current_item_version` in the JSON output) instead of overwriting; re-apply your change against `current_item` and retry with the fresh version. `--expected-item-absent` makes creation race-safe: exactly one concurrent creator succeeds. For non-array fields, read `entity_version` with `neotoma entities get`, then pass it to `neotoma corrections create <id> --expected-version <token>`; `--entity-type` is optional because the CLI resolves the stored type. See `docs/developer/mcp/instructions.md` [ENTITY & RELATIONSHIP LIFECYCLE] "Patching structured array fields" for the full contract.
+
 ## Pre-check before storing (CLI backup)
 
 Before storing a new entity, check for an existing record to avoid duplicates:
@@ -137,7 +148,7 @@ neotoma relationships list --entity-id <entity_id>
 
 Use narrow queries first, then expand only if needed.
 
-**Entity-id identifiers:** when the identifier is a literal entity_id (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
+**Entity-id identifiers:** when the identifier is a literal `entity_id` (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
 
@@ -257,3 +268,4 @@ before verification. Repeating the same endpoints/type is idempotent; unrelated
 automatic registry side effect.
 
 Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.
+The committed `atomic_keyed_array_disjoint_writers` replay scenario uses the actual isolated HTTP tool. It binds deterministic portable item-version tokens by asserting the server's returned versions, then verifies a stale same-key conflict with current item/version, reviewed reapplication, exact replay and changed-payload refusal. Snapshot observation counts prove refusals/replay add no writes and the disjoint row survives. The cassette contains requests only. Removing the item-version comparison makes the same scenario fail; simultaneous arrival and post-commit event behavior are separately covered by `tests/unit/array_item_patch_atomic.test.ts`, including queued identical entity-CAS retries. This replay does not claim live-model reasoning or simultaneous HTTP arrival.

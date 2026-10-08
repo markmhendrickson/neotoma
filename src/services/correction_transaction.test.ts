@@ -3,6 +3,8 @@ import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
+import { createCorrectionWithVersionPrecondition } from "./correction.js";
+import * as instancePolicy from "./instance_policy.js";
 import { substrateEventBus } from "../events/substrate_event_bus.js";
 import {
   applyCorrectionTransaction,
@@ -93,6 +95,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   const connection = await getDb();
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_source");
+  await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
 });
 describe("scoped atomic correction transaction", () => {
   it("commits all snapshots and replays an identical request without another observation", async () => {
@@ -213,5 +216,107 @@ describe("scoped atomic correction transaction", () => {
     await expect(
       server.executeTool("correct_transaction", { ...request(), user_id: "test-other-graph" })
     ).rejects.toThrow(/authenticated user/);
+  });
+});
+
+describe("group receipts composed with ordinary entity CAS", () => {
+  function multi(key = "multi-group") {
+    const input = request(key);
+    input.entities[0].changes.push({ field: "title", value: "Approved draft" });
+    input.entities[1].changes.push({ field: "title", value: "Consumed source" });
+    return input;
+  }
+  async function count() {
+    return (await db.from("observations").select("id").eq("user_id", user)).data?.length;
+  }
+  it("commits two fields on each entity under one group receipt, then replays without events", async () => {
+    const input = multi();
+    expect((await applyCorrectionTransaction(input)).status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({
+      status: "approved",
+      title: "Approved draft",
+    });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({
+      remaining: 0,
+      title: "Consumed source",
+    });
+    expect(await count()).toBe(6);
+    expect(events).toHaveLength(8);
+    const receipt = await db
+      .from("observations")
+      .select("idempotency_key,canonical_hash")
+      .eq("user_id", user)
+      .eq("source_priority", 1000);
+    expect(receipt.data).toHaveLength(4);
+    expect(new Set(receipt.data?.map((row) => row.idempotency_key)).size).toBe(1);
+    expect(new Set(receipt.data?.map((row) => row.canonical_hash)).size).toBe(1);
+    expect((await applyCorrectionTransaction(input)).status).toBe("replayed");
+    expect(await count()).toBe(6);
+    expect(events).toHaveLength(8);
+    const changed = multi();
+    changed.entities[0].changes[1].value = "Changed payload";
+    await expect(applyCorrectionTransaction(changed)).rejects.toThrow(/idempotency/i);
+    expect(await count()).toBe(6);
+    expect(events).toHaveLength(8);
+  });
+  it("keeps queued identical ordinary CAS replay and grouped replay independent", async () => {
+    await applyCorrectionTransaction(multi());
+    events.length = 0;
+    const current = await getEntityWithProvenance("ent_atomic_draft", false, user);
+    const params = {
+      entity_id: "ent_atomic_draft",
+      entity_type: "atomic_test",
+      user_id: user,
+      schema_version: "1.0",
+      field: "status",
+      value: "reviewed",
+      idempotency_key: "ordinary-after-group",
+      expected_version: current!.entity_version!,
+    };
+    const results = await Promise.all([
+      createCorrectionWithVersionPrecondition(params),
+      createCorrectionWithVersionPrecondition(params),
+    ]);
+    expect(results.map((row) => row.replayed).sort()).toEqual([false, true]);
+    expect(results[0].observation_id).toBe(results[1].observation_id);
+    expect(await count()).toBe(7);
+    expect(events).toHaveLength(2);
+    expect((await applyCorrectionTransaction(multi())).status).toBe("replayed");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({
+      status: "reviewed",
+      title: "Approved draft",
+    });
+    expect(await count()).toBe(7);
+    expect(events).toHaveLength(2);
+    await expect(
+      createCorrectionWithVersionPrecondition({ ...params, value: "another" })
+    ).rejects.toThrow(/idempotency/i);
+    expect(await count()).toBe(7);
+    expect(events).toHaveLength(2);
+  });
+  it("rolls back the first field when the second sorted field insert fails", async () => {
+    const connection = await getDb();
+    await connection.exec(
+      "CREATE TRIGGER fail_atomic_second_change BEFORE INSERT ON observations WHEN NEW.entity_id = 'ent_atomic_draft' AND json_extract(NEW.fields, '$.title') IS NOT NULL BEGIN SELECT RAISE(ABORT, 'injected second field failure'); END"
+    );
+    await expect(applyCorrectionTransaction(multi())).rejects.toThrow(
+      /injected second field failure/
+    );
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ title: "Draft", status: "ready" });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ title: "Source", remaining: 1 });
+    expect(await count()).toBe(2);
+    expect(events).toHaveLength(0);
+  });
+  it("retains per-field target store-policy enforcement inside the group boundary", async () => {
+    let calls = 0;
+    vi.spyOn(instancePolicy, "assertStorePolicyAllows").mockImplementation(async () => {
+      calls++;
+      if (calls === 2) throw new Error("policy denied second field");
+    });
+    await expect(applyCorrectionTransaction(multi())).rejects.toThrow("policy denied second field");
+    expect(calls).toBe(2);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ title: "Draft", status: "ready" });
+    expect(await count()).toBe(2);
+    expect(events).toHaveLength(0);
   });
 });

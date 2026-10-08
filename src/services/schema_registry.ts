@@ -630,8 +630,23 @@ export interface ReducerConfig {
   merge_policies: Record<
     string,
     {
-      strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+      strategy:
+        | "last_write"
+        | "highest_priority"
+        | "most_specific"
+        | "merge_array"
+        | "merge_array_by_key";
       tie_breaker?: "observed_at" | "source_priority";
+      /**
+       * Required when `strategy` is `merge_array_by_key`. Name of the field
+       * on each array item that identifies it across observations (e.g.
+       * `claim_id`). Within the top-priority tier (same priority-gating rule
+       * as `merge_array` — see reducer.md §3.4), items are reconciled by this
+       * key instead of Set-union: the item with the latest `observed_at`
+       * (ties broken by observation id) wins per key, and every distinct key
+       * survives. Ignored for other strategies.
+       */
+      key_field?: string;
     }
   >;
   /**
@@ -1479,7 +1494,13 @@ export class SchemaRegistryService {
       field_name: string;
       field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
       required?: boolean;
-      reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+      reducer_strategy?:
+        | "last_write"
+        | "highest_priority"
+        | "most_specific"
+        | "merge_array"
+        | "merge_array_by_key";
+      reducer_key_field?: string;
     }>;
     fields_to_remove?: string[];
     /**
@@ -1662,6 +1683,7 @@ export class SchemaRegistryService {
         mergedReducerPolicies[field.field_name] = {
           strategy: field.reducer_strategy || "last_write",
           tie_breaker: "observed_at",
+          ...(field.reducer_key_field ? { key_field: field.reducer_key_field } : {}),
         };
       }
     }
@@ -3114,7 +3136,13 @@ export class SchemaRegistryService {
       throw new Error("Reducer config must have merge_policies object");
     }
 
-    const validStrategies = ["last_write", "highest_priority", "most_specific", "merge_array"];
+    const validStrategies = [
+      "last_write",
+      "highest_priority",
+      "most_specific",
+      "merge_array",
+      "merge_array_by_key",
+    ];
     const validTieBreakers = ["observed_at", "source_priority"];
 
     for (const [fieldName, policy] of Object.entries(config.merge_policies)) {
@@ -3128,6 +3156,12 @@ export class SchemaRegistryService {
 
       if (policy.tie_breaker && !validTieBreakers.includes(policy.tie_breaker)) {
         throw new Error(`Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`);
+      }
+
+      if (policy.strategy === "merge_array_by_key" && !policy.key_field) {
+        throw new Error(
+          `Merge policy for ${fieldName} uses merge_array_by_key but does not declare key_field`
+        );
       }
     }
 

@@ -33,6 +33,7 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   create_relationship: "/create_relationship",
   correct: "/correct",
   correct_transaction: "/corrections/transaction",
+  patch_array_item: "/patch_array_item",
   get_session_identity: "/session",
   // Entity soft-delete lifecycle (#1705 eval-coverage backfill).
   delete_entity: "/delete_entity",
@@ -144,7 +145,10 @@ async function postNeotomaTool(
       // leave as text
     }
     if (!res.ok) {
-      return { error: `${toolName} returned status ${res.status}: ${text.slice(0, 400)}` };
+      const error = `${toolName} returned status ${res.status}: ${text.slice(0, 400)}`;
+      // Preserve the actual structured refusal for recovery assertions while
+      // retaining the existing error.message shape and failure string.
+      return { error, output: { error: { message: error, response: parsed } } };
     }
     return { output: parsed };
   } catch (err) {
