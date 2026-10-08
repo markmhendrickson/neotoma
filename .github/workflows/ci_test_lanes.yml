@@ -222,6 +222,13 @@ jobs:
       - name: Run schema-scope parity (#2356)
         run: npx vitest run --no-file-parallelism tests/integration/schema_scope_surface_parity.test.ts tests/integration/schema_scope_resolution_parity.test.ts
 
+      # #2597 collection evidence and #2611 native scoped catalog. These are
+      # integration suites, so the unit directory lane does not execute them.
+      # The assertions fail when actual caps, scope, membership or query
+      # authority are omitted; unknown/ranked reads cannot certify absence.
+      - name: "Run retrieval acquisition contract (#2597, #2611)"
+        run: npx vitest run --no-file-parallelism tests/integration/entity_read_contract.test.ts tests/integration/entity_search_mode.test.ts tests/integration/entity_queries_cursor.test.ts
+
       # #2524 relationship-write capability, every entrance. The first fix
       # gated REST /store only; MCP store and the standalone relationship
       # routes kept writing any edge. This drives each surface (REST over HTTP,
