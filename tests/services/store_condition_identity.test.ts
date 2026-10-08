@@ -18,6 +18,37 @@ const schema = {
   reducer_config: { merge_policies: {} },
 } as SchemaRegistryEntry;
 describe("conditional declared identity", () => {
+  it("refuses hidden/malformed derived work while absent/empty declarations remain valid", () => {
+    for (const derived of [null, {}, true, "invalid", [{ entity_type: "synthetic_child" }]])
+      expect(() =>
+        deriveConditionalStoreIdentity(
+          {
+            ...schema,
+            schema_definition: { ...schema.schema_definition, derived_entities: derived },
+          } as unknown as SchemaRegistryEntry,
+          { code: "SYNTHETIC", region: "ONE" },
+          "OWNER"
+        )
+      ).toThrow("requires no derived entities");
+    const fields = { code: "SYNTHETIC", region: "ONE" };
+    expect(
+      deriveConditionalStoreIdentity(
+        { ...schema, schema_definition: { ...schema.schema_definition, derived_entities: [] } },
+        fields,
+        "OWNER"
+      ).entityId
+    ).toBe(deriveConditionalStoreIdentity(schema, fields, "OWNER").entityId);
+    const legacy = {
+      ...schema.schema_definition,
+      derived_entities: [{ entity_type: "synthetic_child", field_mappings: {} }],
+    };
+    expect(
+      deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, fields, legacy).canonicalName
+    ).toBe(
+      deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, fields, schema.schema_definition)
+        .canonicalName
+    );
+  });
   it("reuses the native declared composite and owner salt while preserving unknown diagnostics", () => {
     const fields = { code: "SYNTHETIC", region: "ONE", unknown: "advisory" };
     const actual = deriveConditionalStoreIdentity(schema, fields, "OWNER");

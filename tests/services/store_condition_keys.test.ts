@@ -14,6 +14,8 @@ import {
   assertConditionalEntityAbsent,
   reserveLegacyStoreKeys,
   storeConditionKeyHash,
+  storeConditionKeyIdentity,
+  storeConditionObservationKey,
   type ConditionalOperationReceipt,
 } from "../../src/services/store_condition_keys.js";
 const directory = mkdtempSync(path.join(tmpdir(), "store-key-arbitration-"));
@@ -76,6 +78,138 @@ function operation(db: DbDatabase, overrides: Record<string, unknown> = {}) {
   } as Parameters<typeof commitConditionalStoreKey>[1];
 }
 describe.each(["sqlite", "libsql"] as const)("native store-key modes (%s)", (backend) => {
+  it("matches 121 actual source-column key comparisons, including parsed Unicode and long keys", async () => {
+    const db = await fixture(backend);
+    const keys = JSON.parse(
+      JSON.stringify([
+        "\ud800",
+        "\ud801",
+        "\ufffd",
+        "😀",
+        "é",
+        "e\u0301",
+        " ",
+        "  ",
+        "long-" + "x".repeat(4000),
+        "KEY",
+        "key",
+      ])
+    ) as string[];
+    for (let i = 0; i < keys.length; i++)
+      await db
+        .prepare("INSERT INTO sources VALUES (?,?,?)")
+        .run(String(i), "synthetic-owner", keys[i]);
+    const identities = await db.transaction((tx) =>
+      Promise.all(keys.map((key) => storeConditionKeyIdentity(tx, key)))
+    );
+    for (let i = 0; i < keys.length; i++)
+      for (let j = 0; j < keys.length; j++) {
+        const actual = (await db
+          .prepare(
+            "SELECT COUNT(*) n FROM sources WHERE id = ? AND user_id = ? AND idempotency_key = ?"
+          )
+          .get(String(i), "synthetic-owner", keys[j])) as { n: number };
+        expect(identities[i].keyHash === identities[j].keyHash).toBe(actual.n === 1);
+        expect(identities[i].identityHash === identities[j].identityHash).toBe(actual.n === 1);
+        expect(
+          storeConditionObservationKey("synthetic-owner", identities[i]) ===
+            storeConditionObservationKey("synthetic-owner", identities[j])
+        ).toBe(actual.n === 1);
+      }
+  });
+  it.each([
+    ["\ud800", "\ud801"],
+    ["\ud801", "\ud800"],
+    ["\ud800", "\ufffd"],
+    ["\ufffd", "\ud800"],
+    ["\ud801", "\ufffd"],
+    ["\ufffd", "\ud801"],
+  ])("binds actual native equality for escaped surrogate pair %j/%j", async (a, b) => {
+    const db = await fixture(backend);
+    await db.prepare("INSERT INTO sources VALUES ('A','synthetic-owner',?)").run(a);
+    const actual = (await db
+      .prepare("SELECT COUNT(*) n FROM sources WHERE id='A' AND idempotency_key=?")
+      .get(b)) as { n: number };
+    const [left, right] = await db.transaction((tx) =>
+      Promise.all([storeConditionKeyIdentity(tx, a), storeConditionKeyIdentity(tx, b)])
+    );
+    expect(left.keyHash === right.keyHash).toBe(actual.n === 1);
+  });
+  it("refuses a forced primary hash collision or missing secondary proof before apply/claim", async () => {
+    const db = await fixture(backend);
+    const identity = await db.transaction((tx) => storeConditionKeyIdentity(tx, "key"));
+    await db
+      .prepare(
+        "INSERT INTO store_condition_keys(user_id,key_hash,key_identity_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,?,'legacy',NULL,'synthetic',NULL)"
+      )
+      .run("synthetic-owner", identity.keyHash, "f".repeat(128));
+    const before = await db.prepare("SELECT * FROM store_condition_keys").all();
+    await expect(commitConditionalStoreKey(db, operation(db))).rejects.toMatchObject({
+      code: "STORE_RECEIPT_UNCERTAIN",
+    });
+    await expect(
+      reserveLegacyStoreKeys(db, "synthetic-owner", ["key", "another"])
+    ).rejects.toMatchObject({ code: "STORE_RECEIPT_UNCERTAIN" });
+    expect(await db.prepare("SELECT * FROM store_condition_keys").all()).toEqual(before);
+    expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({ n: 0 });
+    await db.prepare("UPDATE store_condition_keys SET key_identity_hash=''").run();
+    await expect(commitConditionalStoreKey(db, operation(db))).rejects.toMatchObject({
+      code: "STORE_RECEIPT_UNCERTAIN",
+    });
+  });
+  it("never replays an applied receipt whose secondary key identity differs", async () => {
+    const db = await fixture(backend),
+      args = operation(db);
+    await commitConditionalStoreKey(db, args);
+    await db.prepare("UPDATE store_condition_keys SET key_identity_hash=?").run("f".repeat(128));
+    const before = await db.prepare("SELECT * FROM store_condition_keys").all();
+    await expect(commitConditionalStoreKey(db, args)).rejects.toMatchObject({
+      code: "STORE_RECEIPT_UNCERTAIN",
+    });
+    expect(await db.prepare("SELECT * FROM store_condition_keys").all()).toEqual(before);
+    expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({ n: 1 });
+  });
+  it("refuses unsupported source collation before mode or business effects", async () => {
+    const db = await fixture(backend);
+    await db.exec(
+      "DROP TABLE sources;CREATE TABLE sources(id TEXT PRIMARY KEY,user_id TEXT,idempotency_key TEXT COLLATE NOCASE)"
+    );
+    await expect(commitConditionalStoreKey(db, operation(db))).rejects.toMatchObject({
+      code: "STORE_RECEIPT_UNCERTAIN",
+    });
+    expect(await db.prepare("SELECT COUNT(*) n FROM store_condition_keys").get()).toEqual({ n: 0 });
+    expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({ n: 0 });
+  });
+  it("uses native aliases for replay and opposite-mode refusal without pinning raw key spelling", async () => {
+    const db = await fixture(backend);
+    const args = operation(db, { key: "\ud800" });
+    const original = await commitConditionalStoreKey(db, args);
+    const actual = await db.transaction(async (tx) => {
+      const a = await storeConditionKeyIdentity(tx, "\ud800"),
+        b = await storeConditionKeyIdentity(tx, "\ud801");
+      return a.keyHash === b.keyHash;
+    });
+    if (actual) {
+      expect((await commitConditionalStoreKey(db, { ...args, key: "\ud801" })).status).toBe(
+        "replayed"
+      );
+      await expect(reserveLegacyStoreKeys(db, "synthetic-owner", ["\ud801"])).rejects.toMatchObject(
+        { code: "STORE_KEY_MODE_CONFLICT" }
+      );
+    } else {
+      await reserveLegacyStoreKeys(db, "synthetic-owner", ["\ud801"]);
+      expect(await db.prepare("SELECT COUNT(*) n FROM store_condition_keys").get()).toEqual({
+        n: 2,
+      });
+    }
+    await expect(
+      commitConditionalStoreKey(db, { ...args, request: { changed: true } })
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    expect((await commitConditionalStoreKey(db, args)).observation_id).toBe(
+      original.observation_id
+    );
+    expect(await db.prepare("SELECT COUNT(*) n FROM effect").get()).toEqual({ n: 1 });
+  });
   it("arbitrates legacy and conditional modes across separate native processes", async () => {
     const db = await fixture(backend);
     // fixture() owns the current serial's file; children open independent handles.
