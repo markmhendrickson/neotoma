@@ -189,14 +189,12 @@ it("equal legacy counts do not certify a different snapshot and entity membershi
   try {
     expect(
       (
-        await db
-          .from("entities")
-          .insert({
-            id: bare,
-            user_id: userId,
-            entity_type: entityType,
-            canonical_name: "Synthetic never observed",
-          })
+        await db.from("entities").insert({
+          id: bare,
+          user_id: userId,
+          entity_type: entityType,
+          canonical_name: "Synthetic never observed",
+        })
       ).error
     ).toBeNull();
     // Ordinary snapshot insertion creates its missing entity. Deliberately
@@ -321,7 +319,7 @@ it("an unavailable registry is diagnostic uncertainty rather than a missing type
   }
 });
 
-it("global catalog requires null owner, own overrides win, and duplicate active authority stays uncertain", async () => {
+it("global catalog follows resolver scope regardless owner, own overrides win, and duplicate active authority stays uncertain", async () => {
   const type = entityType + "_catalog_authority",
     hidden = entityType + "_foreign_global";
   const rowIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
@@ -369,10 +367,24 @@ it("global catalog requires null owner, own overrides win, and duplicate active 
     ).toBeNull();
     const unscoped = await schemaRegistry.listActiveSchemas();
     expect(unscoped.map((row) => row.entity_type)).toContain(type);
-    expect(unscoped.map((row) => row.entity_type)).not.toContain(hidden);
+    expect(unscoped.map((row) => row.entity_type)).toContain(hidden);
     const scoped = await schemaRegistry.listActiveSchemas(userId);
     expect(scoped.filter((row) => row.entity_type === type)).toHaveLength(2);
-    expect(scoped.map((row) => row.entity_type)).not.toContain(hidden);
+    expect(scoped.map((row) => row.entity_type)).toContain(hidden);
+    const authoritative = await schemaRegistry.loadActiveSchema(hidden, userId);
+    expect(authoritative?.id).toBe(rowIds[2]);
+    expect(authoritative?.schema_definition.fields).toHaveProperty("hidden_global_field");
+    const existingGlobal = await queryEntitiesWithCount({
+      userId,
+      entityType: hidden,
+      snapshotFilters: { hidden_global_field: { op: "eq", value: "synthetic" } },
+    });
+    expect(existingGlobal.read_contract.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "missing_entity_type" })
+    );
+    expect(existingGlobal.read_contract.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "missing_field" })
+    );
     const removed = await queryEntitiesWithCount({
       userId,
       entityType: type,

@@ -936,13 +936,9 @@ async function entityReadDiagnostics(
   }
   const grouped = new Map<string, SchemaRegistryEntry[]>();
   for (const row of rows) {
-    // loadActiveSchema globals are genuinely global/null-owner. Keep this
-    // defensive boundary even if the list helper ever returns an extra row.
-    if (
-      !(row.scope === "global" && row.user_id == null) &&
-      !(row.scope === "user" && row.user_id === userId)
-    )
-      continue;
+    // Existing loadGlobalSchema authority is scope-based, irrespective of
+    // legacy owner metadata. Foreign user-scoped rows are never admitted.
+    if (row.scope !== "global" && !(row.scope === "user" && row.user_id === userId)) continue;
     const group = grouped.get(row.entity_type) ?? [];
     group.push(row);
     grouped.set(row.entity_type, group);
@@ -962,7 +958,9 @@ async function entityReadDiagnostics(
     for (const row of group.slice(1))
       if (isHigherPrecedenceSchemaRow(row, selected, userId)) selected = row;
     const sameScope = group.filter(
-      (row) => row.scope === selected.scope && row.user_id === selected.user_id
+      (row) =>
+        row.scope === selected.scope &&
+        (selected.scope === "global" || row.user_id === selected.user_id)
     );
     if (
       sameScope.length !== 1 ||
