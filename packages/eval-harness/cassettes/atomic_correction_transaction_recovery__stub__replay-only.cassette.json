@@ -1,0 +1,300 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "atomic_correction_transaction_recovery",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-08T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Seed two ready synthetic drafts and one remaining source unit. Refuse an initially stale multi-target request without writing either target. Commit the first draft and source unit together, retry the identical uncertain request, then refuse changed-payload key reuse and a stale competing draft. Read all target snapshots.",
+  "system_prompt": "Use correct_transaction for scoped coordinated corrections. Read and bind each target observation count and expected values. Retry an uncertain result with the identical payload and key; never force a stale transition.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "status": {
+              "type": "string"
+            },
+            "remaining": {
+              "type": "number"
+            }
+          },
+          "canonical_name_fields": ["title"]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "title": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            },
+            "status": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            },
+            "remaining": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            }
+          }
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-atomic-seed",
+        "entities": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic draft alpha",
+            "status": "ready"
+          },
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic source capacity",
+            "remaining": 1
+          },
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic draft beta",
+            "status": "ready"
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-initial-stale",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 99
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_721001bcfee64e561dd21c6a"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_e80de22a92c0a3db09747543"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-commit",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 5
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-commit",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 6
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-commit",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": -1
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 7
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-atomic-competing-loser",
+        "entities": [
+          {
+            "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 8
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_721001bcfee64e561dd21c6a"
+      },
+      "sequence": 9
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_e80de22a92c0a3db09747543"
+      },
+      "sequence": 10
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+      },
+      "sequence": 11
+    }
+  ],
+  "assistant_text": "The first coordinated transaction committed once. Exact retry replayed; stale and changed-payload attempts left the prior snapshots and observation counts intact."
+}

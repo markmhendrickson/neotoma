@@ -12,6 +12,14 @@ export interface OpenApiOperationMapping {
 
 export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   {
+    operationId: "correctTransaction",
+    method: "post",
+    path: "/corrections/transaction",
+    adapter: "both",
+    mcpTool: "correct_transaction",
+    cliCommand: "request --operation correctTransaction",
+  },
+  {
     operationId: "getFileUrl",
     method: "get",
     path: "/get_file_url",
@@ -940,6 +948,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   register_schema: "registerSchema",
   register_relationship_type: "registerRelationshipType",
   list_relationship_types: "listRelationshipTypes",
+  correct_transaction: "correctTransaction",
   correct: "correct",
   get_authenticated_user: "getAuthenticatedUser",
   get_session_identity: "getSessionInfo",
@@ -980,6 +989,7 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
   register_schema: "schemas register <entityType>",
+  correct_transaction: "request --operation correctTransaction",
   correct: "corrections create <entityId> <entityType> <field> <value>",
   create_interpretation: "interpretations create",
   list_interpretations: "interpretations list",

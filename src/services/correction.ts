@@ -33,6 +33,10 @@ export interface CreateCorrectionParams {
   user_id: string;
   idempotency_key?: string;
   source_peer_id?: string;
+  /** Internal transaction receipt fingerprint, never caller-controlled priority. */
+  canonical_hash?: string;
+  /** Buffer notifications until the enclosing transaction commits. */
+  deferred_events?: Array<() => void>;
 }
 
 export interface CorrectionResult {
@@ -165,6 +169,8 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     provenance: getCurrentAttribution(),
   });
 
+  if (params.canonical_hash) row.canonical_hash = params.canonical_hash;
+
   const { error: obsError } = await insertObservationRow(row);
 
   if (obsError) {
@@ -183,28 +189,32 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
   const snapshot = await recomputeSnapshot(entity_id, user_id);
   const snap = (snapshot?.snapshot as Record<string, unknown> | null | undefined) ?? null;
   const emitTs = row.observed_at;
-  emitObservationCreated({
-    user_id,
-    entity_id,
-    entity_type,
-    observation_id: observationId,
-    timestamp: emitTs,
-    idempotency_key: idempotency_key,
-    observation_source: "human",
-    source_peer_id: params.source_peer_id,
-  });
-  emitEntitySnapshotChange({
-    user_id,
-    entity_id,
-    entity_type,
-    event_type: "entity.updated",
-    timestamp: emitTs,
-    observation_id: observationId,
-    fields_changed: [field],
-    idempotency_key: idempotency_key,
-    observation_source: "human",
-    source_peer_id: params.source_peer_id,
-  });
+  const notify = () => {
+    emitObservationCreated({
+      user_id,
+      entity_id,
+      entity_type,
+      observation_id: observationId,
+      timestamp: emitTs,
+      idempotency_key: idempotency_key,
+      observation_source: "human",
+      source_peer_id: params.source_peer_id,
+    });
+    emitEntitySnapshotChange({
+      user_id,
+      entity_id,
+      entity_type,
+      event_type: "entity.updated",
+      timestamp: emitTs,
+      observation_id: observationId,
+      fields_changed: [field],
+      idempotency_key: idempotency_key,
+      observation_source: "human",
+      source_peer_id: params.source_peer_id,
+    });
+  };
+  if (params.deferred_events) params.deferred_events.push(notify);
+  else notify();
 
   return {
     observation_id: observationId,

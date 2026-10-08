@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **691**
-- Backend and repo Vitest files: **655**
+- Total automated test files: **694**
+- Backend and repo Vitest files: **658**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 188 |
+| Vitest unit tests | 189 |
 | Vitest service tests | 52 |
-| Source-adjacent tests | 68 |
+| Source-adjacent tests | 69 |
 | Vitest integration tests | 205 |
-| Vitest CLI tests | 82 |
+| Vitest CLI tests | 83 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (188):**
+**Files (189):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -162,6 +162,7 @@ flowchart TD
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
+- `tests/unit/correction_transaction_error_parity.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
@@ -363,7 +364,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (68):**
+**Files (69):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -392,6 +393,7 @@ flowchart TD
 - `src/services/canonical_mirror_git.test.ts`
 - `src/services/canonical_mirror.test.ts`
 - `src/services/capability_delta.test.ts`
+- `src/services/correction_transaction.test.ts`
 - `src/services/docs/doc_frontmatter.test.ts`
 - `src/services/docs/docs_root.test.ts`
 - `src/services/docs/index_builder.test.ts`
@@ -650,7 +652,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (82):**
+**Files (83):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -719,6 +721,7 @@ flowchart TD
 - `tests/cli/processes_command.test.ts`
 - `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
+- `tests/cli/request_atomic_transaction.test.ts`
 - `tests/cli/request_guest_subscription.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`

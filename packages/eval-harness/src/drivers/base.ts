@@ -9,11 +9,7 @@
 
 import { readCassette, type CassetteFile } from "../cassette.js";
 import { createHostToolRegistry, type HostToolRegistry } from "../host_tools.js";
-import type {
-  DriverInvocation,
-  DriverResult,
-  ToolCall,
-} from "../types.js";
+import type { DriverInvocation, DriverResult, ToolCall } from "../types.js";
 
 /**
  * Map MCP tool name → HTTP endpoint we POST to on the isolated server.
@@ -36,6 +32,7 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   retrieve_field_provenance: "/get_field_provenance",
   create_relationship: "/create_relationship",
   correct: "/correct",
+  correct_transaction: "/corrections/transaction",
   get_session_identity: "/session",
   // Entity soft-delete lifecycle (#1705 eval-coverage backfill).
   delete_entity: "/delete_entity",

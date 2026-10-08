@@ -255,3 +255,5 @@ metadata, read it back, then soft-delete the old edge. Do not delete the origina
 before verification. Repeating the same endpoints/type is idempotent; unrelated
 `related_to` edges remain unchanged. This is an explicit consumer migration, never
 automatic registry side effect.
+
+Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.
