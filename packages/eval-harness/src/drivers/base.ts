@@ -145,7 +145,10 @@ async function postNeotomaTool(
       // leave as text
     }
     if (!res.ok) {
-      return { error: `${toolName} returned status ${res.status}: ${text.slice(0, 400)}` };
+      const error = `${toolName} returned status ${res.status}: ${text.slice(0, 400)}`;
+      // Preserve the actual structured refusal for recovery assertions while
+      // retaining the existing error.message shape and failure string.
+      return { error, output: { error: { message: error, response: parsed } } };
     }
     return { output: parsed };
   } catch (err) {

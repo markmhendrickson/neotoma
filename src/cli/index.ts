@@ -16028,6 +16028,7 @@ correctionsCommand
           success: result?.success ?? true,
           status: "applied",
           observation_id: result?.observation_id,
+          correction_id: result?.observation_id ?? result?.correction_id ?? idempotencyKey,
           entity_id: entityId,
           entity_type: entityType,
           field: opts.fieldName,

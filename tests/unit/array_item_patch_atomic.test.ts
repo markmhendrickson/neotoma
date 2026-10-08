@@ -346,6 +346,38 @@ describe("atomic correction primitives", () => {
     expect((rejected as PromiseRejectedResult).reason).toBeInstanceOf(FieldVersionConflictError);
   });
 
+  it("replays identical concurrent entity CAS retries after the first transaction commits", async () => {
+    const before = await getEntityWithProvenance(entityId, false, USER_ID);
+    const events: unknown[] = [];
+    const listener = (event: unknown) => events.push(event);
+    substrateEventBus.on("substrate_event", listener);
+    const payload = {
+      entity_id: entityId,
+      entity_type: TYPE,
+      user_id: USER_ID,
+      field: "title",
+      value: "concurrent committed replay",
+      schema_version: "1.0",
+      expected_version: before!.entity_version!,
+      idempotency_key: `concurrent-cas-replay-${Date.now()}`,
+    };
+    let results: Awaited<ReturnType<typeof createCorrectionWithVersionPrecondition>>[];
+    try {
+      results = await Promise.all([
+        createCorrectionWithVersionPrecondition(payload),
+        createCorrectionWithVersionPrecondition(payload),
+      ]);
+    } finally {
+      substrateEventBus.removeListener("substrate_event", listener);
+    }
+    expect(results.map((result) => result.replayed).sort()).toEqual([false, true]);
+    expect(results[0].observation_id).toBe(results[1].observation_id);
+    expect(events).toHaveLength(2);
+    const after = await getEntityWithProvenance(entityId, false, USER_ID);
+    expect(after!.observation_count).toBe(before!.observation_count + 1);
+    expect((after!.snapshot as Record<string, unknown>).title).toBe(payload.value);
+  });
+
   it("returns the committed correction on replay before CAS and rejects changed payload reuse", async () => {
     const key = `correct-replay-${Date.now()}`;
     const before = await getEntityWithProvenance(entityId, false, USER_ID);

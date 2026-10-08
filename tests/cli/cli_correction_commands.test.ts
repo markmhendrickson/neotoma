@@ -63,6 +63,7 @@ describe("CLI correction commands", () => {
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("correction_id");
+      expect(result.correction_id).toBe(result.observation_id);
       expect(result.entity_id).toBe(testEntityId);
     });
 

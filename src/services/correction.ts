@@ -555,12 +555,12 @@ export async function createCorrectionWithVersionPrecondition(
     before_commit?: () => void | Promise<void>;
   }
 ): Promise<CorrectionResult> {
-  // Replay wins over a stale precondition: return the value/result that was
-  // actually committed for this key, never recompute from retry input.
-  const replay = await findCommittedCorrectionReplay(params);
-  if (replay) return replay;
   const database = await getDb();
   const result = await database.transaction(async () => {
+    // A queued identical retry must see the first commit's receipt before
+    // comparing its now-stale version. Both checks share the write boundary.
+    const replay = await findCommittedCorrectionReplay(params);
+    if (replay) return replay;
     await assertCorrectionVersionPrecondition({
       entityId: params.entity_id,
       field: params.field,
