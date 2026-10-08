@@ -22,6 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Real Docker matcher, synthetic-only FROM scratch context; no registry pull.
+      # Fail the required baseline lane if a local environment variant is copied.
+      - name: Check Docker build context exclusions (#2608)
+        run: python3 -m unittest discover -s tests/scripts -p test_docker_context.py -v
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
