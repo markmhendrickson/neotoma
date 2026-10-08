@@ -1,0 +1,116 @@
+meta:
+  id: atomic_correction_transaction_recovery
+  description: Runs correct_transaction on an isolated real server. A stale target
+    refuses without partial effects; coordinated corrections commit, uncertain exact
+    replay adds no observations, changed payload and a stale final-capacity competitor
+    refuse while prior state survives.
+  tags:
+    - tier2
+    - correct-transaction
+    - atomicity
+    - idempotency
+    - conflict-recovery
+seed_strategy: generated
+source_pattern: A consumer coordinates ordinary corrections across multiple entities
+  and must recover an uncertain response without partial transitions or changed-payload
+  replay.
+privacy_transform: Synthetic schema, titles, values and keys only; no PII.
+system_prompt: Use correct_transaction for scoped coordinated corrections. Read and
+  bind each target observation count and expected values. Retry an uncertain result
+  with the identical payload and key; never force a stale transition.
+user_prompt: Seed two ready synthetic drafts and one remaining source unit. Refuse
+  an initially stale multi-target request without writing either target. Commit the
+  first draft and source unit together, retry the identical uncertain request, then
+  refuse changed-payload key reuse and a stale competing draft. Read all target snapshots.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: correct_transaction
+    op: eq
+    value: 5
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 0
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 3
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 4
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 1
+    result_subset:
+      status: applied
+      entities:
+        - entity_id: ent_721001bcfee64e561dd21c6a
+          observation_count: 2
+          snapshot:
+            status: approved
+        - entity_id: ent_e80de22a92c0a3db09747543
+          observation_count: 2
+          snapshot:
+            remaining: 0
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 2
+    result_subset:
+      status: replayed
+      entities:
+        - entity_id: ent_721001bcfee64e561dd21c6a
+          observation_count: 2
+          snapshot:
+            status: approved
+        - entity_id: ent_e80de22a92c0a3db09747543
+          observation_count: 2
+          snapshot:
+            remaining: 0
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 0
+    result_subset:
+      entity_id: ent_721001bcfee64e561dd21c6a
+      observation_count: 1
+      snapshot:
+        status: ready
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 1
+    result_subset:
+      entity_id: ent_e80de22a92c0a3db09747543
+      observation_count: 1
+      snapshot:
+        remaining: 1
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 2
+    result_subset:
+      entity_id: ent_721001bcfee64e561dd21c6a
+      observation_count: 2
+      snapshot:
+        status: approved
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 3
+    result_subset:
+      entity_id: ent_e80de22a92c0a3db09747543
+      observation_count: 2
+      snapshot:
+        remaining: 0
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 4
+    result_subset:
+      entity_id: ent_7c99c4347b6961e0e5bdde0f
+      observation_count: 1
+      snapshot:
+        status: ready
