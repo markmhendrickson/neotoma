@@ -56,6 +56,10 @@ RUN apk add --no-cache bash
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/openapi.yaml ./openapi.yaml
 
+# MCP tool catalog (titles, effect classes, permission hints). The server
+# refuses to start its MCP surface without it, so the image must ship it.
+COPY docs/developer/mcp/tool_descriptions.yaml ./docs/developer/mcp/tool_descriptions.yaml
+
 # Sandbox weekly reset + seed (see scripts/reset_sandbox.ts, fly.sandbox.toml)
 COPY tests/fixtures/json ./tests/fixtures/json
 COPY tests/fixtures/sandbox ./tests/fixtures/sandbox

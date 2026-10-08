@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "tools_list_permission_metadata",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-07T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "What kinds of records can you keep for me?\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before acting, look at what entity types exist.\n",
+  "tool_calls": [
+    {
+      "name": "list_entity_types",
+      "input": {},
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "I can keep records of the entity types listed on this instance, such as contacts, tasks, events and notes."
+}

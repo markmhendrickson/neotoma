@@ -76,7 +76,20 @@ export interface ExpectedAssertion {
     /** Compare a numeric key of the post-turn `/stats` payload (`field`, `op`, `value`). */
     | "stats.counter"
     /** Count files written under the isolated server's raw-storage dir (`op`, `value`). */
-    | "raw_storage.file_count";
+    | "raw_storage.file_count"
+    // ── tools/list metadata (titles + permission annotations) ──
+    /**
+     * Inspect one tool as advertised by the isolated server's live MCP
+     * `tools/list`: `tool_name`, plus `tool_subset` (deep subset match on the
+     * listed tool object) and/or `absent_paths` (dotted paths that must be absent).
+     */
+    | "tools_list.tool"
+    /**
+     * Every tool in the live `tools/list` has a non-empty `title` equal to
+     * `annotations.title`, and the tool count compares as `op`/`value`
+     * (default `gte 1`; use `eq` to pin the exact inventory).
+     */
+    | "tools_list.all_titled";
   /** Numeric comparison op for count-shaped predicates. */
   op?: "eq" | "gte" | "lte";
   value?: number | string | boolean;
@@ -136,6 +149,10 @@ export interface ExpectedAssertion {
    * (first match). The `field` (above) is the snapshot key checked.
    */
   entity_id?: string;
+  /** For `tools_list.tool`: deep subset match against the listed tool object. */
+  tool_subset?: Record<string, unknown>;
+  /** For `tools_list.tool`: dotted paths on the listed tool that must be absent. */
+  absent_paths?: string[];
 }
 
 export type SeedStrategy = "generated" | "real_derived" | "hybrid_amplified";

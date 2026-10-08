@@ -1,0 +1,105 @@
+meta:
+  id: tools_list_permission_metadata
+  description: >
+    A host decides whether to auto-approve, prompt for, or block each Neotoma
+    tool from the metadata in tools/list: the tool's title and its MCP
+    annotations (readOnlyHint, destructiveHint, openWorldHint). This eval boots
+    a real isolated server, as an agent's host would connect to it, and reads
+    the live tools/list. It asserts every tool carries a title mirrored into
+    annotations.title, that reads are read-only with no destructive or
+    idempotent hints, that soft delete is not destructive, and that
+    outward-facing tools (publishing a page, webhook subscriptions, adding a
+    peer, entity submission) are destructive and open-world. A server that
+    could not load its tool catalog would fail this eval instead of passing
+    contract tests that read the catalog directly.
+  tags:
+    - tier2
+    - mcp-surface
+    - permissions
+    - eval-coverage
+
+seed_strategy: generated
+source_pattern: "Tool permission hints were only checked by contract tests that load the catalog in-process, so a server that could not load the catalog at startup would still pass."
+privacy_transform: "No user data; the eval reads tool metadata only."
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Before acting,
+  look at what entity types exist.
+
+user_prompt: |
+  What kinds of records can you keep for me?
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  # The agent turn ran against the server.
+  - type: mcp_tool.invocations
+    tool_name: list_entity_types
+    op: gte
+    value: 1
+  # Every advertised tool has a title, mirrored into annotations.title, and
+  # the inventory is exact: a tool added or dropped must update this count.
+  - type: tools_list.all_titled
+    op: eq
+    value: 65
+  # A plain read: read-only, closed-world, no destructive/idempotent hints
+  # (MCP defines those only for tools that write).
+  - type: tools_list.tool
+    tool_name: retrieve_entities
+    tool_subset:
+      title: Search entities
+      annotations:
+        readOnlyHint: true
+        openWorldHint: false
+      _meta:
+        neotoma/effect_class: read
+    absent_paths:
+      - annotations.destructiveHint
+      - annotations.idempotentHint
+  # Soft delete is restorable, so it must not be marked destructive.
+  - type: tools_list.tool
+    tool_name: delete_entity
+    tool_subset:
+      annotations:
+        readOnlyHint: false
+        destructiveHint: false
+        openWorldHint: false
+  # Outward-facing tools are destructive and open-world.
+  - type: tools_list.tool
+    tool_name: publish_rendered_page
+    tool_subset:
+      annotations:
+        readOnlyHint: false
+        destructiveHint: true
+        openWorldHint: true
+  - type: tools_list.tool
+    tool_name: subscribe
+    tool_subset:
+      annotations:
+        destructiveHint: true
+        openWorldHint: true
+  - type: tools_list.tool
+    tool_name: add_peer
+    tool_subset:
+      annotations:
+        destructiveHint: true
+        openWorldHint: true
+  - type: tools_list.tool
+    tool_name: submit_entity
+    tool_subset:
+      annotations:
+        destructiveHint: true
+        openWorldHint: true
+      _meta:
+        neotoma/effect_class: external
+  # Keeps both sides of a conflict, but can fetch from a peer URL.
+  - type: tools_list.tool
+    tool_name: resolve_sync_conflict
+    tool_subset:
+      annotations:
+        destructiveHint: false
+        openWorldHint: true

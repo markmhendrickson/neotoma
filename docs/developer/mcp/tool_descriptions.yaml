@@ -76,3 +76,207 @@ tools:
   get_issue_status: "Return issue status and thread messages. Provide entity_id or issue_number (issue_number is an integer). Pass guest_access_token when token-scoped remote read-through is needed."
   npm_check_update: "Check if a newer npm version is available. Returns updateAvailable, message, suggestedCommand, and when include_release_notes is true optional release_url, release_notes_excerpt, breaking_changes_excerpt, enrichment_error. When include_capability_delta is true, adds new_tools (tools added since currentVersion), removed_tools (tools removed since currentVersion), capability_delta_recommendation (upgrade guidance string), and capability_delta_note (present ONLY when delta computation degraded — e.g. unparseable versions or missing manifest — its absence signals no degradation). Call at session start to encourage user to upgrade."
   neotoma_turn_summary: "FU-2026-05-002. Compute the per-turn Neotoma status line (msg N/M, stored K, retrieved L) plus an optional ui:// widget URI for ext-apps clients. Call at the end of every turn after the closing assistant store completes. Pass the assistant message's conversation_id and turn_key; the server resolves stored/retrieved/issue entities, turn ordinal, and total message count. Agents emit the returned status_line in the user-visible reply; ext-apps clients additionally render widget_uri inline when present."
+
+# Required for every MCP tool. A short human-readable name that hosts show in
+# tool lists and permission screens (MCP `Tool.title`, mirrored to
+# `annotations.title` for hosts that only read the older field). Keep titles
+# plain, effect-first, and under 40 characters.
+titles:
+  retrieve_file_url: Get file URL
+  retrieve_entity_snapshot: Get entity snapshot
+  list_observations: List observations
+  retrieve_field_provenance: Get field provenance
+  create_relationship: Create relationship
+  create_relationships: Create relationships (batch)
+  list_relationship_types: List relationship types
+  register_relationship_type: Register relationship type
+  list_relationships: List relationships
+  query_contacts_at_company: Find contacts at a company
+  get_relationship_snapshot: Get relationship snapshot
+  retrieve_entities: Search entities
+  list_timeline_events: List timeline events
+  retrieve_entity_by_identifier: Find entity by identifier
+  identify_entity_by_signals: Identify entity by signals
+  retrieve_related_entities: Get related entities
+  retrieve_graph_neighborhood: Get graph neighborhood
+  store: Store entities and files
+  parse_file: Parse file (no storage)
+  correct: Correct entity field
+  merge_entities: Merge entities
+  split_entity: Split entity
+  list_potential_duplicates: List potential duplicates
+  delete_entity: Delete entity (restorable)
+  delete_relationship: Delete relationship (restorable)
+  restore_entity: Restore deleted entity
+  restore_relationship: Restore deleted relationship
+  get_entity_type_counts: Count entities by type
+  list_entity_types: List entity types
+  describe_entity_type: Describe entity type
+  describe_instance_policy: Describe instance policy
+  analyze_schema_candidates: Analyze schema candidates
+  audit_undeclared_fragments: Audit undeclared fields
+  get_schema_recommendations: Get schema recommendations
+  update_schema_incremental: Update schema fields
+  register_schema: Register schema
+  create_interpretation: Record interpretation
+  list_interpretations: List interpretations
+  get_authenticated_user: Get authenticated user
+  get_session_identity: Get session identity
+  health_check_snapshots: Check or repair snapshots
+  list_recent_changes: List recent changes
+  submit_issue: Submit issue
+  add_issue_message: Add message to issue
+  get_issue_status: Get issue status
+  sync_issues: Sync issues with GitHub
+  submit_entity: Submit entity for review
+  add_entity_message: Add message to submission
+  get_entity_submission_status: Get submission status
+  list_entity_submissions: List entity submissions
+  sync_entity_submissions: Sync entity submissions
+  subscribe: Subscribe to changes
+  unsubscribe: Unsubscribe from changes
+  list_subscriptions: List subscriptions
+  get_subscription_status: Get subscription status
+  add_peer: Add sync peer
+  remove_peer: Remove sync peer
+  list_peers: List sync peers
+  get_peer_status: Check sync peer status
+  sync_peer: Sync with peer
+  resolve_sync_conflict: Resolve sync conflict
+  npm_check_update: Check for Neotoma update
+  neotoma_turn_summary: Summarize turn activity
+  publish_rendered_page: Publish page as share link
+  manage_bundles: Manage bundles
+
+# Required for every MCP tool. `read` has no persistence or egress; `write`
+# changes Neotoma state; `external` can contact or publish beyond this instance.
+# The server derives protocol annotations from this catalog. New tool registrations
+# must add a class here or tools/list and the server card fail closed at startup.
+#
+# Each tool in tools/list and the server card also carries the class verbatim as
+# `_meta["neotoma/effect_class"]` (one of read | write | external). That key is a
+# stable, namespaced vendor field for policy engines, audit tooling and hosts
+# that want Neotoma's own three-way vocabulary. It is informational, like the
+# MCP annotations: a hint about effect, never an authorization control.
+effect_classes:
+  retrieve_file_url: read
+  retrieve_entity_snapshot: read
+  list_observations: read
+  retrieve_field_provenance: read
+  create_relationship: write
+  create_relationships: write
+  list_relationship_types: read
+  register_relationship_type: write
+  list_relationships: read
+  query_contacts_at_company: read
+  get_relationship_snapshot: read
+  retrieve_entities: read
+  list_timeline_events: read
+  retrieve_entity_by_identifier: read
+  identify_entity_by_signals: read
+  retrieve_related_entities: read
+  retrieve_graph_neighborhood: read
+  store: write
+  parse_file: read
+  correct: write
+  merge_entities: write
+  split_entity: write
+  list_potential_duplicates: read
+  delete_entity: write
+  delete_relationship: write
+  restore_entity: write
+  restore_relationship: write
+  get_entity_type_counts: read
+  list_entity_types: read
+  describe_entity_type: read
+  describe_instance_policy: read
+  analyze_schema_candidates: read
+  audit_undeclared_fragments: read
+  get_schema_recommendations: read
+  update_schema_incremental: write
+  register_schema: write
+  create_interpretation: write
+  list_interpretations: read
+  get_authenticated_user: read
+  get_session_identity: read
+  health_check_snapshots: write
+  list_recent_changes: read
+  submit_issue: external
+  add_issue_message: external
+  get_issue_status: external
+  sync_issues: external
+  submit_entity: external
+  add_entity_message: write
+  get_entity_submission_status: external
+  list_entity_submissions: read
+  sync_entity_submissions: external
+  subscribe: external
+  unsubscribe: write
+  list_subscriptions: read
+  get_subscription_status: read
+  add_peer: external
+  remove_peer: write
+  list_peers: read
+  get_peer_status: external
+  sync_peer: external
+  resolve_sync_conflict: external
+  npm_check_update: external
+  neotoma_turn_summary: read
+  publish_rendered_page: external
+  manage_bundles: write
+
+# The protocol defaults for a mutating or external tool are deliberately
+# restrictive. These overrides only make a narrower, handler-backed claim.
+#
+# destructiveHint follows one rule: destructive means irreversible or
+# outward-facing. Soft deletes, restores, merges, splits, deactivations and
+# additive schema changes are reversible and local, so they are not
+# destructive and must not demand confirmation. Anything that permanently
+# erases data, publishes, sends, or changes grants or peers stays destructive.
+annotation_overrides:
+  create_relationship:
+    destructiveHint: false
+  create_relationships:
+    destructiveHint: false
+  register_relationship_type:
+    destructiveHint: false
+  store:
+    destructiveHint: false
+  correct:
+    destructiveHint: false
+  restore_entity:
+    destructiveHint: false
+  restore_relationship:
+    destructiveHint: false
+  create_interpretation:
+    destructiveHint: false
+  add_entity_message:
+    destructiveHint: false
+  delete_entity:
+    destructiveHint: false
+  delete_relationship:
+    destructiveHint: false
+  merge_entities:
+    destructiveHint: false
+  split_entity:
+    destructiveHint: false
+  unsubscribe:
+    destructiveHint: false
+  manage_bundles:
+    destructiveHint: false
+  register_schema:
+    destructiveHint: false
+  update_schema_incremental:
+    destructiveHint: false
+  resolve_sync_conflict:
+    destructiveHint: false
+  health_check_snapshots:
+    destructiveHint: false
+  get_issue_status:
+    readOnlyHint: true
+  get_entity_submission_status:
+    readOnlyHint: true
+  get_peer_status:
+    readOnlyHint: true
+  npm_check_update:
+    readOnlyHint: true
