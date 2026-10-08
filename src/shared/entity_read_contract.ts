@@ -5,6 +5,8 @@ export interface EntityReadTrace {
   reasons: Set<string>;
   candidate_capped?: boolean;
   count_capped?: boolean;
+  ordering?: { field: string; direction: "asc" | "desc"; tie_breaker: string | null };
+  continuation_supported?: boolean;
 }
 export interface EntityReadRequest {
   raw: Record<string, unknown>;
@@ -94,7 +96,13 @@ export function createEntityReadContract(input: {
   if (ignored.some((option) => option.reason !== "superseded_alias"))
     reasons.add("ignored_scope_option");
   const structured = input.mode === "none";
-  const keyset = structured && input.sortBy === "entity_id";
+  const ordering = input.trace.ordering ?? {
+    field: input.sortBy,
+    direction: input.sortOrder,
+    tie_breaker: input.sortBy === "entity_id" ? "entity_id" : null,
+  };
+  const keyset =
+    structured && ordering.field === "entity_id" && input.trace.continuation_supported !== false;
   const pageExhausted = input.returned < input.limit;
   const scopeExhausted = structured && keyset ? pageExhausted : null;
   const capped = input.trace.candidate_capped || input.trace.count_capped;
@@ -127,11 +135,7 @@ export function createEntityReadContract(input: {
       include_deleted: false,
       include_snapshots: input.includeSnapshots,
       predicates: input.predicates,
-      ordering: {
-        field: input.sortBy,
-        direction: input.sortOrder,
-        tie_breaker: keyset ? "entity_id" : null,
-      },
+      ordering,
       pagination: { kind: keyset ? "keyset" : "offset", limit: input.limit, offset: input.offset },
     },
     request_options: { applied, normalized, ignored },

@@ -137,6 +137,7 @@ export function conceptEntityTypeHints(
 }
 
 interface LexicalSearchEntityIdsParams {
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   /** Multi-type filter, OR-combined with `entityType` (#1562). */
@@ -269,7 +270,8 @@ export function textTokensForEntityMatch(
 
 async function loadKnownEntityTypes(
   userId: string,
-  candidateEntityTypes: Iterable<string>
+  candidateEntityTypes: Iterable<string>,
+  readTrace?: EntityReadTrace
 ): Promise<Set<string>> {
   const known = new Set<string>();
   for (const entityType of candidateEntityTypes) {
@@ -281,6 +283,7 @@ async function loadKnownEntityTypes(
 
   const { data, error } = await db.from("schema_registry").select("entity_type").eq("active", true);
   if (error) {
+    readTrace?.reasons.add("schema_registry_unavailable");
     logger.warn(`[lexicalSearch] Failed to load schema entity types: ${error.message}`);
     return known;
   }
@@ -296,13 +299,17 @@ async function loadKnownEntityTypes(
 }
 
 /** Map type-filter tokens to schema `entity_type` strings for a narrow candidate query. */
-async function resolveEntityTypesForTypeFilters(typeFilterTokens: Set<string>): Promise<string[]> {
+async function resolveEntityTypesForTypeFilters(
+  typeFilterTokens: Set<string>,
+  readTrace?: EntityReadTrace
+): Promise<string[]> {
   if (typeFilterTokens.size === 0) {
     return [];
   }
 
   const { data, error } = await db.from("schema_registry").select("entity_type").eq("active", true);
   if (error) {
+    readTrace?.reasons.add("schema_registry_unavailable");
     // Degrade gracefully: a transient schema_registry hiccup should not 500
     // the entire search request. Returning an empty set falls back to the
     // unfiltered candidate query (capped at MAX_LEXICAL_CANDIDATES), matching
@@ -438,7 +445,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     return { entityIds: [], total: 0, strategies };
   }
 
-  const registryTypes = await loadKnownEntityTypes(userId, []);
+  const registryTypes = await loadKnownEntityTypes(userId, [], params.readTrace);
   const typeFilterTokens = refineTypeFilterTokens(
     searchTokens,
     buildEntityTypeFilterTokens(searchTokens, registryTypes)
@@ -451,6 +458,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   const conceptSynonyms = await loadConceptTypeSynonyms(userId);
   const conceptTypeHints = conceptEntityTypeHints(searchTokens, conceptSynonyms);
 
+  let candidateLimitApplied = false;
   let entityQuery = db
     .from("entities")
     .select("id, canonical_name, entity_type")
@@ -462,13 +470,18 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   } else if (typeFilter.length > 1) {
     entityQuery = entityQuery.in("entity_type", typeFilter);
   } else if (typeFilterTokens.size > 0) {
-    const matchingTypes = await resolveEntityTypesForTypeFilters(typeFilterTokens);
+    const matchingTypes = await resolveEntityTypesForTypeFilters(
+      typeFilterTokens,
+      params.readTrace
+    );
     if (matchingTypes.length > 0) {
       entityQuery = entityQuery.in("entity_type", matchingTypes);
     } else {
+      candidateLimitApplied = true;
       entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
     }
   } else {
+    candidateLimitApplied = true;
     entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
   }
 
@@ -480,6 +493,12 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   if (entitiesError) {
     throw new Error(`Failed lexical candidate query: ${entitiesError.message}`);
   }
+  if (
+    candidateLimitApplied &&
+    (entities?.length ?? 0) >= MAX_LEXICAL_CANDIDATES &&
+    params.readTrace
+  )
+    params.readTrace.candidate_capped = true;
   if (!entities || entities.length === 0) {
     return { entityIds: [], total: 0, strategies };
   }
@@ -508,7 +527,8 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 
   const knownEntityTypes = await loadKnownEntityTypes(
     userId,
-    (entities as Array<{ entity_type: string }>).map((entity) => entity.entity_type)
+    (entities as Array<{ entity_type: string }>).map((entity) => entity.entity_type),
+    params.readTrace
   );
   for (const token of typeFilterTokens) {
     knownEntityTypes.add(token);
@@ -860,6 +880,7 @@ async function countVisibleEntities(params: {
 }
 
 async function queryEntitiesFromLexicalSearch(params: {
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   entityTypes?: string[];
@@ -893,6 +914,7 @@ async function queryEntitiesFromLexicalSearch(params: {
     includeMerged: params.includeMerged,
     search: params.search,
     excludeBookkeeping: params.excludeBookkeeping,
+    readTrace: params.readTrace,
   });
 
   if (lexicalIds.length === 0) {
@@ -917,7 +939,10 @@ async function queryEntitiesFromLexicalSearch(params: {
     offset: 0,
     entityIds: paginatedIds,
     identityBasis: params.identityBasis,
+    readTrace: params.readTrace,
   });
+  if (entities.length < paginatedIds.length)
+    params.readTrace?.reasons.add("candidate_materialization_partial");
 
   const orderMap = new Map(paginatedIds.map((id, i) => [id, i]));
   entities.sort((a, b) => {
@@ -1002,7 +1027,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     appliedStrategies = new Set<SearchStrategy>();
     const trimmedSearch = search.trim();
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
-    const registryTypes = await loadKnownEntityTypes(userId, []);
+    const registryTypes = await loadKnownEntityTypes(userId, [], readTrace);
     const typeFilterTokens = refineTypeFilterTokens(
       searchTokens,
       buildEntityTypeFilterTokens(searchTokens, registryTypes)
@@ -1015,6 +1040,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       !(typeFilter.length > 0 && typeFilter.some((t) => BOOKKEEPING_ENTITY_TYPES.has(t)));
 
     const lexicalParams = {
+      readTrace,
       userId,
       entityType,
       entityTypes,
@@ -1047,7 +1073,11 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       logger.info(
         `[queryEntitiesWithCount] semantic search path: userId=${userId} search=${trimmedSearch.slice(0, 50)} entityType=${entityType ?? "(any)"}`
       );
-      const { entityIds, total: semanticTotal } = await semanticSearchEntities({
+      const {
+        entityIds,
+        total: semanticTotal,
+        fallbackReason: semanticFallbackReason,
+      } = await semanticSearchEntities({
         searchText: trimmedSearch,
         userId,
         entityType,
@@ -1076,7 +1106,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           updatedSince,
           createdSince,
           identityBasis,
+          readTrace,
         });
+        if (entities.length < entityIds.length)
+          readTrace.reasons.add("candidate_materialization_partial");
         if (effectiveExcludeBookkeeping) {
           entities = entities.filter((entity) => !BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type));
         }
@@ -1110,7 +1143,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         total = lexicalResult.total;
         for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
         searchMode = "lexical_fallback";
-        fallbackReason = "no_usable_candidates";
+        fallbackReason = semanticFallbackReason ?? "no_usable_candidates";
       }
     }
   } else {
@@ -1156,6 +1189,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         createdSince,
         identityBasis,
         snapshotFilters,
+        readTrace,
       });
       total = allMatches.length;
       if (allMatches.length >= 10000) readTrace.count_capped = true;
@@ -1172,6 +1206,11 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         createdSince,
       });
     }
+  }
+
+  if (searchMode !== "none") {
+    readTrace.ordering = { field: "search_rank", direction: "desc", tie_breaker: "entity_id" };
+    readTrace.continuation_supported = false;
   }
 
   // #1943: only the plain-listing path (no search) supports keyset cursors;
@@ -1195,8 +1234,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       types: typeFilter,
       includeMerged,
       includeSnapshots,
-      sortBy,
-      sortOrder,
+      sortBy: searchMode === "none" ? sortBy : "search_rank",
+      sortOrder: searchMode === "none" ? sortOrder : "desc",
       limit,
       offset,
       cursor,

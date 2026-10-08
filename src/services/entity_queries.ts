@@ -1,3 +1,4 @@
+import type { EntityReadTrace } from "../shared/entity_read_contract.js";
 // FU-134: Query Updates
 // Provenance chain, merged entity exclusion
 
@@ -63,7 +64,7 @@ export class InvalidSnapshotFieldError extends Error {
 }
 
 export interface EntityQueryOptions {
-  readTrace?: { reasons: Set<string> };
+  readTrace?: EntityReadTrace;
   userId?: string;
   entityType?: string;
   /**
@@ -457,6 +458,29 @@ export async function queryEntities(
     published !== undefined ||
     Boolean(publishedAfter) ||
     Boolean(publishedBefore);
+  if (readTrace) {
+    const snapshotOrdering =
+      sortBy === "observation_count" ||
+      sortBy === "last_observation_at" ||
+      sortBy === "submitted_at" ||
+      isSnapshotFieldSort;
+    const field =
+      shouldUseSnapshotDrivenScan && !snapshotOrdering
+        ? "entity_id"
+        : sortBy === "canonical_name" || sortBy === "entity_id" || snapshotOrdering
+          ? sortBy
+          : "entity_id";
+    const direction =
+      shouldUseSnapshotDrivenScan && !snapshotOrdering
+        ? "asc"
+        : field === sortBy
+          ? sortOrder
+          : "asc";
+    readTrace.ordering = { field, direction, tie_breaker: "entity_id" };
+    readTrace.continuation_supported = !shouldUseSnapshotDrivenScan && sortBy === "entity_id";
+    if (field !== sortBy || direction !== sortOrder)
+      readTrace.reasons.add("requested_ordering_unapplied");
+  }
 
   const fetchEntitiesByIds = async (ids: string[]) => {
     if (ids.length === 0) return [];

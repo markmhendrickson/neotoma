@@ -3,7 +3,7 @@
 
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
-import { generateEmbedding } from "../embeddings.js";
+import { generateEmbedding, type EmbeddingAcquisitionTrace } from "../embeddings.js";
 import { searchLocalEntityEmbeddings } from "./local_entity_embedding.js";
 
 export interface SemanticSearchEntitiesOptions {
@@ -22,6 +22,7 @@ export interface SemanticSearchEntitiesOptions {
 export interface SemanticSearchEntitiesResult {
   entityIds: string[];
   total: number;
+  fallbackReason?: string;
 }
 
 /**
@@ -44,10 +45,15 @@ export async function semanticSearchEntities(
     offset,
   } = options;
 
-  const queryEmbedding = await generateEmbedding(searchText);
+  const embeddingTrace: EmbeddingAcquisitionTrace = {};
+  const queryEmbedding = await generateEmbedding(searchText, embeddingTrace);
   if (!queryEmbedding) {
     logger.warn("[entity_semantic_search] No query embedding (OPENAI_API_KEY?)");
-    return { entityIds: [], total: 0 };
+    return {
+      entityIds: [],
+      total: 0,
+      fallbackReason: embeddingTrace.reason ?? "embedding_unavailable",
+    };
   }
 
   const { entityIds, total } = await searchLocalEntityEmbeddings({
