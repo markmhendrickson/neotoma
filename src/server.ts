@@ -2199,7 +2199,52 @@ export class NeotomaServer {
           : parsed.action === "enable"
             ? enableBundle(bundle)
             : disableBundle(bundle);
-      return this.buildTextResponse({ ok: true, action: parsed.action, ...result });
+      // Enabling a schema bundle registers its schemas now, so the bundle's
+      // curated field set (not an inferred one) governs its first writes.
+      if (parsed.action !== "install" && parsed.action !== "enable") {
+        return this.buildTextResponse({ ok: true, action: parsed.action, ...result });
+      }
+      // The enable itself has already succeeded, so `ok` stays true. A seeding
+      // failure is NOT folded into that: it is reported as `schema_seed.ok:
+      // false` plus a top-level `warning`, because until the schemas register,
+      // the bundle's types would auto-create with inferred field sets.
+      let schemaSeed: {
+        ok: boolean;
+        bundle: string;
+        registered: string[];
+        preserved: string[];
+        failed: Array<{ entity_type: string; error: string }>;
+        error?: string;
+      };
+      try {
+        const { seedBundleSchemas } = await import("./services/bundles/index.js");
+        const summary = await seedBundleSchemas(bundle);
+        schemaSeed = { ok: summary.failed.length === 0, ...summary };
+      } catch (seedErr) {
+        schemaSeed = {
+          ok: false,
+          bundle,
+          registered: [],
+          preserved: [],
+          failed: [],
+          error: seedErr instanceof Error ? seedErr.message : String(seedErr),
+        };
+      }
+      const warning = schemaSeed.ok
+        ? undefined
+        : `Bundle "${bundle}" is enabled, but its schemas did not all register ` +
+          `(${
+            schemaSeed.error ??
+            schemaSeed.failed.map((f) => `${f.entity_type}: ${f.error}`).join("; ")
+          }). Until they do, writes of those types use inferred schemas. Retry ` +
+          `manage_bundles (action "enable") or restart the server to re-seed.`;
+      return this.buildTextResponse({
+        ok: true,
+        action: parsed.action,
+        ...result,
+        schema_seed: schemaSeed,
+        ...(warning ? { warning } : {}),
+      });
     } catch (err) {
       if (err instanceof McpError) throw err;
       if (err instanceof BundleStateError || err instanceof UnknownBundleError) {

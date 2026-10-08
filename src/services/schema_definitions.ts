@@ -31,6 +31,14 @@ export interface EntitySchemaMetadata {
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
   guest_access_policy?: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
+  /**
+   * Bundle that originated this schema (e.g. `crm`). Stamped by the bundle
+   * seeder (`src/services/bundles/bundle_schemas.ts`) at registration time and
+   * carried through to `SchemaMetadata.bundle`. Absent for built-in schemas.
+   */
+  bundle?: string;
+  /** Version of the originating bundle at registration time. */
+  bundle_version?: string;
 }
 
 export interface EntitySchema {
@@ -3932,6 +3940,34 @@ export function resolveEntityTypeFromAlias(extractedType: string): string | null
     if (normalized === normalizeForAliasMatch(canonicalType)) return canonicalType;
     const aliases = schema.metadata?.aliases ?? [];
     if (aliases.some((a) => normalizeForAliasMatch(a) === normalized)) return canonicalType;
+  }
+  return null;
+}
+
+/**
+ * Resolve a type name against the `schema_definition.aliases` of REGISTERED
+ * schemas (e.g. those a bundle seeded). Complements
+ * {@link resolveEntityTypeFromAlias}, which only knows built-in aliases.
+ * Same normalization (case- and accent-insensitive). Pure: the caller passes
+ * the registry rows it already loaded.
+ *
+ * @returns the registered canonical entity_type, or null when none matches
+ */
+export function resolveEntityTypeFromRegisteredAliases(
+  extractedType: string,
+  registered: ReadonlyArray<{
+    entity_type: string;
+    schema_definition?: { aliases?: unknown } | null;
+  }>
+): string | null {
+  const normalized = normalizeForAliasMatch(extractedType);
+  if (!normalized) return null;
+  for (const row of registered) {
+    const aliases = row.schema_definition?.aliases;
+    if (!Array.isArray(aliases)) continue;
+    if (aliases.some((a) => typeof a === "string" && normalizeForAliasMatch(a) === normalized)) {
+      return row.entity_type;
+    }
   }
   return null;
 }

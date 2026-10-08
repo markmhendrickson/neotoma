@@ -15,6 +15,7 @@ export { ManifestError, normalizeManifest, parseManifest } from "./manifest.js";
 export {
   ALWAYS_ACTIVE_BUNDLES,
   BundleStateError,
+  bundleDeclaring,
   bundleProviding,
   bundleStatePath,
   bundlesRootDir,
@@ -40,6 +41,14 @@ export {
   type AutoCreateBlockReason,
   type AutoCreateDecision,
 } from "./enforcement.js";
+export {
+  bundleDeclaringAlias,
+  bundlesWithSchemas,
+  getBundleSchemas,
+  seedBundleSchemas,
+  seedEnabledBundleSchemas,
+  type BundleSeedSummary,
+} from "./bundle_schemas.js";
 export {
   disableBundle,
   enableBundle,

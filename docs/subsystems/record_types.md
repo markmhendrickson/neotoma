@@ -18,6 +18,7 @@ This document does NOT cover:
 - Database schema (see `docs/subsystems/schema.md`)
 - MCP action implementations (see `docs/specs/MCP_SPEC.md`)
 - UI component structure (see `docs/ui/`)
+- **Bundle-originated record types** — types shipped by opt-in schema bundles (`crm`, `engineering`, `communications`) are documented beside their schemas, one page per type, under `src/services/bundles/<bundle>/record_types/`. See [`docs/foundation/bundles.md`](../foundation/bundles.md) ("Opt-in schema bundles").
 ## 1. Two-Tier Type System
 Neotoma uses a **two-tier system** to balance implementation granularity with documentation clarity:
 ### Tier 1: Application-Level Types

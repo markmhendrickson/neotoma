@@ -1,0 +1,24 @@
+# Bundle manifest — see docs/foundation/bundles.md
+# Schema bundle, opt-in (install with `neotoma bundles install communications`).
+# Limited to email. Social and publishing types (post, social_post, drafts,
+# schedules) belong to a later content bundle.
+name: communications
+version: 1.0.0
+description: Email — messages, threads, and drafts.
+bundle_type: schema
+requires_bundles: []
+provides_entity_types:
+  - email_message
+  - email_thread
+  - email_draft
+  - email
+references_shared_schemas: []
+extends_schemas: []
+provides_skills: []
+compatible_modes:
+  - evolving
+  - guided
+  - locked
+category: communications
+serves_use_cases:
+  - crm

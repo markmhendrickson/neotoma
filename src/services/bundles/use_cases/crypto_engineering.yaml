@@ -1,4 +1,5 @@
 use_case: crypto_engineering
 description: Crypto and security engineering.
-schema_bundles: [crypto_engineering]
+# `engineering` replaces the planned `crypto_engineering` (and `devops`) bundles.
+schema_bundles: [engineering]
 skill_bundles: [core_workflows]

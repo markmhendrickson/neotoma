@@ -2,11 +2,16 @@
  * `neotoma bundles <list|info|install|enable|disable>` (Bundles m3 activation).
  *
  * Surfaces the bundle registry and toggles persisted enable/disable state via
- * the activation orchestration in `src/services/bundles/activation.ts`. The MCP
- * `manage_bundles` tool mirrors these exact actions.
+ * the activation orchestration in `src/services/bundles/activation.ts`, which
+ * the MCP `manage_bundles` tool also calls.
  *
- * Operates on the local filesystem registry + state file (no running server
- * required), matching the m2 loader which discovers bundles from disk.
+ * The two surfaces differ in WHEN a change takes effect. This CLI writes the
+ * local bundle state file only (no running server required). A running server
+ * reads that file once at startup and registers enabled bundles' schemas then,
+ * so a CLI change reaches it only at its next restart, and never reaches a
+ * server on another machine. `manage_bundles` runs inside the server, so its
+ * changes apply immediately and it registers the bundle's schemas on the spot.
+ * See {@link takesEffectNote}.
  *
  * Tracking: Neotoma plan `ent_089da2ecebc3bd804d63dcf2` (Bundles Strategy, m3).
  */
@@ -32,6 +37,23 @@ function fail(program: Command, message: string): void {
     process.stderr.write(`Error: ${message}\n`);
   }
   process.exitCode = 1;
+}
+
+/**
+ * When a CLI state change takes effect. Shown after install/enable/disable so
+ * the success message does not imply a running server already sees the change.
+ */
+export function takesEffectNote(
+  action: "install" | "enable" | "disable",
+  statePath: string
+): string {
+  const schemas = action === "disable" ? "" : ", when it also registers the bundle's schemas";
+  return (
+    `Recorded in ${statePath}. A running Neotoma server reads this file only at startup, ` +
+    `so this change takes effect at its next restart${schemas}. A server on another ` +
+    `machine never sees it. For immediate effect on a running server, use the ` +
+    `manage_bundles MCP tool (action "${action}") instead.`
+  );
 }
 
 export function registerBundlesCommand(program: Command): void {
@@ -100,10 +122,16 @@ export function registerBundlesCommand(program: Command): void {
     .command("install <bundle>")
     .description("Mark a bundle enabled (validates + records state).")
     .action(async (bundle: string) => {
-      const { installBundle, UnknownBundleError } = await import("../../services/bundles/index.js");
+      const { installBundle, bundleStatePath, UnknownBundleError } =
+        await import("../../services/bundles/index.js");
       try {
         const result = installBundle(bundle);
-        emit(program, { ok: true, ...result }, () => result.message);
+        const takesEffect = takesEffectNote("install", bundleStatePath());
+        emit(
+          program,
+          { ok: true, ...result, takes_effect: takesEffect },
+          () => `${result.message}\n${takesEffect}`
+        );
       } catch (err) {
         if (err instanceof UnknownBundleError) {
           fail(program, err.message);
@@ -117,10 +145,16 @@ export function registerBundlesCommand(program: Command): void {
     .command("enable <bundle>")
     .description("Enable a previously-disabled bundle.")
     .action(async (bundle: string) => {
-      const { enableBundle, UnknownBundleError } = await import("../../services/bundles/index.js");
+      const { enableBundle, bundleStatePath, UnknownBundleError } =
+        await import("../../services/bundles/index.js");
       try {
         const result = enableBundle(bundle);
-        emit(program, { ok: true, ...result }, () => result.message);
+        const takesEffect = takesEffectNote("enable", bundleStatePath());
+        emit(
+          program,
+          { ok: true, ...result, takes_effect: takesEffect },
+          () => `${result.message}\n${takesEffect}`
+        );
       } catch (err) {
         if (err instanceof UnknownBundleError) {
           fail(program, err.message);
@@ -134,11 +168,16 @@ export function registerBundlesCommand(program: Command): void {
     .command("disable <bundle>")
     .description("Disable a bundle. Refuses to disable an always-active default bundle.")
     .action(async (bundle: string) => {
-      const { disableBundle, BundleStateError, UnknownBundleError } =
+      const { disableBundle, bundleStatePath, BundleStateError, UnknownBundleError } =
         await import("../../services/bundles/index.js");
       try {
         const result = disableBundle(bundle);
-        emit(program, { ok: true, ...result }, () => result.message);
+        const takesEffect = takesEffectNote("disable", bundleStatePath());
+        emit(
+          program,
+          { ok: true, ...result, takes_effect: takesEffect },
+          () => `${result.message}\n${takesEffect}`
+        );
       } catch (err) {
         if (err instanceof UnknownBundleError || err instanceof BundleStateError) {
           fail(program, err.message);

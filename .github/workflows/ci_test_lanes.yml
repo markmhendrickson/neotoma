@@ -171,6 +171,16 @@ jobs:
       # fields after validation"). Adding the file would make this lane red for a
       # pre-existing defect this PR did not cause. The IT-008 behaviour it
       # asserts is covered by the merged-entity cases in the file below.
+      # Bundles: guided-mode store gating + manage_bundles schema seeding,
+      # driven through the real MCP store handler and manage_bundles handler.
+      # Lives under tests/integration (excluded from test:unit), so without this
+      # step it would gate nothing. Covers rejection before enable (incl. alias
+      # names), schema_seed on enable, the bundle schema governing the next
+      # write, aliases landing on curated types (store and extraction paths),
+      # and disable leaving registered types writable.
+      - name: Run bundle enable / guided store-path regressions
+        run: npx vitest run --no-file-parallelism tests/integration/bundle_enable_store_path.test.ts
+
       - name: Run entity-query read-latency regressions (#2266)
         run: npx vitest run --no-file-parallelism tests/integration/entity_query_deleted_count.test.ts
 
