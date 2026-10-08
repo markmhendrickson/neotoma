@@ -263,7 +263,12 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        # Node 24 ships npm 11, which rejects sqlite-vec's upstream optional
+        # linux-arm64 manifest entry even on this x64 runner. The established
+        # Node 20 lane uses npm 10 and can reproduce the checked-in lockfile;
+        # pin that installer only, while the build and effect test still run on
+        # Node 24's node:sqlite runtime.
+        run: npm exec --yes --package=npm@10 -- npm ci
 
       - name: Build server (Vitest global setup requires dist/)
         run: npm run build:server
