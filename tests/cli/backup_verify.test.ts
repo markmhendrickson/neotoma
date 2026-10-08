@@ -89,8 +89,10 @@ describe("CLI backup verify (smoke)", () => {
 
     const create = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {});
     expect(create.exitCode, create.stderr + create.stdout).toBe(0);
-    const created = JSON.parse(create.stdout) as { backup_dir?: string };
+    const created = JSON.parse(create.stdout) as { backup_dir?: string; verified?: boolean };
     expect(created.backup_dir).toMatch(/neotoma-backup-/);
+    expect(created.verified).toBe(true);
+    expect(create.stderr).not.toContain("SQLite may be corrupted");
 
     const verify = await runNeotomaCli(["--json", "backup", "verify", created.backup_dir!], {});
     expect(verify.exitCode, verify.stderr + verify.stdout).toBe(0);

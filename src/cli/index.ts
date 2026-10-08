@@ -1331,13 +1331,27 @@ export function getSqliteRecoveryHint(
   err: unknown,
   envHint: "dev" | "prod" = inferCliRecoveryEnvHint()
 ): string | null {
+  if (err instanceof CliHintError && err.hint.code === "INTEGRITY_FAILED") {
+    const checkCommand =
+      envHint === "prod" ? "neotoma prod storage recover-db" : "neotoma storage recover-db";
+    const recoverCommand =
+      envHint === "prod"
+        ? "neotoma prod storage recover-db --recover"
+        : "neotoma storage recover-db --recover";
+    return (
+      "SQLite may be corrupted. Run " +
+      `\`${checkCommand}\`` +
+      " first, then " +
+      `\`${recoverCommand}\`` +
+      " after stopping Neotoma."
+    );
+  }
   const msg = formatCliError(err).toLowerCase();
   const patterns = [
     "database disk image is malformed",
     "sqlite_corrupt",
     "btreeinitpage",
     "rowid out of order",
-    "integrity_check",
   ];
   const matches = patterns.some((pattern) => msg.includes(pattern));
   if (!matches) return null;
@@ -1823,6 +1837,31 @@ class CliHintError extends Error {
     super(message);
     this.name = "CliHintError";
   }
+}
+
+export type BackupIntegrityVerification = {
+  kind: "verified" | "verify_instrument_failure" | "integrity_failed";
+  detail: string;
+};
+
+/**
+ * Preserve the distinction between a negative SQLite conclusion and a check
+ * that did not return a conclusion at all. Only an exact `ok` is success.
+ */
+export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVerification {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { kind: "verify_instrument_failure", detail: "no result" };
+  }
+  const first = rows[0];
+  if (!first || typeof first !== "object" || Array.isArray(first)) {
+    return { kind: "verify_instrument_failure", detail: "malformed result" };
+  }
+  const values = Object.values(first as Record<string, unknown>);
+  if (values.length !== 1 || typeof values[0] !== "string" || values[0].trim().length === 0) {
+    return { kind: "verify_instrument_failure", detail: "malformed result" };
+  }
+  const detail = values[0].trim();
+  return detail === "ok" ? { kind: "verified", detail } : { kind: "integrity_failed", detail };
 }
 
 /** Wait for session port file written by API when it binds; returns actual port or preferred on timeout. */
@@ -11156,27 +11195,39 @@ backupCommand
       // Verify the snapshot is a usable database, not merely a plausible-sized file.
       // The old >1KB check passed happily on corrupt output, which is what made the
       // #2075 failure silent.
-      let integrityOk = false;
-      let integrityDetail = "unknown";
+      let integrity: BackupIntegrityVerification = {
+        kind: "verify_instrument_failure",
+        detail: "no result",
+      };
       let verifyDb: AsyncSqliteDatabase | null = null;
       try {
         verifyDb = new AsyncSqliteDatabase(destDb);
-        const rows = (await verifyDb.pragma("integrity_check")) as Array<Record<string, unknown>>;
-        const first = rows?.[0];
-        const value = first ? String(Object.values(first)[0] ?? "") : "";
-        integrityOk = value === "ok";
-        integrityDetail = value || "no result";
+        integrity = classifyBackupIntegrityCheck(await verifyDb.pragma("integrity_check"));
       } catch (err) {
-        integrityDetail = err instanceof Error ? err.message : String(err);
+        integrity = {
+          kind: "verify_instrument_failure",
+          detail: err instanceof Error ? err.message : String(err),
+        };
       } finally {
         await verifyDb?.close().catch(() => {});
       }
 
-      if (!integrityOk) {
-        writeCliError(
-          `Backup verification failed: integrity_check on the snapshot returned "${integrityDetail}" ` +
+      if (integrity.kind !== "verified") {
+        const instrumentFailure = integrity.kind === "verify_instrument_failure";
+        const message = instrumentFailure
+          ? `Backup verification could not obtain an integrity result (${integrity.detail}). ` +
+            "The snapshot has been left in place for inspection at " +
+            destDb +
+            `. Run \`sqlite3 ${JSON.stringify(destDb)} "PRAGMA integrity_check;"\` directly; ` +
+            'if it returns "ok", this is a tooling or driver issue.'
+          : `Backup verification failed: integrity_check on the snapshot returned "${integrity.detail}" ` +
             '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
-            destDb
+            destDb;
+        writeCliError(
+          new CliHintError(message, {
+            code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
+            failure_kind: integrity.kind,
+          })
         );
         process.exitCode = 1;
         return;
