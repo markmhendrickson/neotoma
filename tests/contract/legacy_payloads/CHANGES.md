@@ -4,7 +4,7 @@ One entry per payload whose declared `outcome` changed in a release. The release
 
 Format: one bullet per flip, keyed by the Neotoma version that introduced the new outcome. Name the fixture path and the before/after state.
 
-## v0.25.0
+## v0.25.1
 
 - `tests/contract/fixtures/legacy_relationship_grant_without_scope.json` records an authorization-seam tightening for pre-`relationship_types` `create_relationship` grants. The grant record remains accepted, but its edge-write outcome changes from admitted by `op` + `entity_types` to `capability_denied` unless one entry also covers the relationship type and both endpoint entity types. Missing or empty `relationship_types` denies the write, and the structured hint names the complete replacement entry. This is an authorization outcome change rather than an HTTP payload-validation flip, so the fixture is exercised by `tests/contract/relationship_write_grant_contract.test.ts` instead of the unauthenticated legacy-payload replay runner.
 
