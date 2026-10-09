@@ -98,6 +98,7 @@ flowchart TD
 
 ## CI lanes
 - Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.
+- Baseline CI also runs `python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v`: six owned native SQLite cases executing the freshly compiled schema release entry, with exact vocabulary/custom-row preservation and nonzero failure assertions. Required prerequisites fail rather than skip.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
 - Python SDK CI runs `pytest packages/client-python/tests/ -v` on Python 3.12.

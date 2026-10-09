@@ -79,6 +79,11 @@ jobs:
       - name: Build server (required by CLI tests)
         run: npm run build:server
 
+      - name: Execute native compiled schema release gate
+        run: |
+          test -f tests/scripts/test_schema_release_gate.py
+          python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v
+
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
 
