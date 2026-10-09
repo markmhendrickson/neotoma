@@ -94,6 +94,9 @@ def child(argv, root, env, seconds=60, expected_denial=False):
 
 
 class SchemaReleaseGate(unittest.TestCase):
+    def skipTest(self, reason):
+        raise AssertionError("required schema release case cannot be skipped: " + reason)
+
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix="schema-release-gate-")
@@ -233,6 +236,19 @@ class SchemaReleaseGate(unittest.TestCase):
         self.assertEqual(sorted(row["entity_type"] for row in after["schemas"]),
                          after["expected_types"])
         self.assertNotIn("REFERS_TO", [r["relationship_type"] for r in after["vocabulary"]])
+
+
+def load_tests(loader, tests, pattern):
+    # Discovery is the consumer surface. Do not turn omitted/disabled cases
+    # into a successful zero-test or partially skipped gate.
+    names = loader.getTestCaseNames(SchemaReleaseGate)
+    if tests.countTestCases() != 6 or len(names) != 6:
+        raise AssertionError("schema release gate requires exactly six native cases")
+    if getattr(SchemaReleaseGate, "__unittest_skip__", False) or any(
+            getattr(getattr(SchemaReleaseGate, name), "__unittest_skip__", False)
+            for name in names):
+        raise AssertionError("required schema release cases cannot be disabled")
+    return tests
 
 
 if __name__ == "__main__":
