@@ -152,7 +152,12 @@ export function sortObservationsInReducerOrder<T extends Pick<Observation, "obse
   return [...observations].sort(compareObservationsByReducerOrder);
 }
 
+export interface SnapshotProjectionOptions {
+  includeClearedFields?: boolean;
+}
+
 export interface EntitySnapshot {
+  cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
   schema_version: string;
@@ -181,7 +186,8 @@ export class ObservationReducer {
     entityId: string,
     observations: Observation[],
     pinnedSchema?: SchemaRegistryEntry,
-    lifecycleContext?: EntityLifecycleContext
+    lifecycleContext?: EntityLifecycleContext,
+    projection: SnapshotProjectionOptions = {}
   ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
@@ -211,6 +217,9 @@ export class ObservationReducer {
     // Load schema and merge policies (pass userId to support user-specific schemas)
     let schemaEntry: SchemaRegistryEntry | null =
       pinnedSchema ?? (await schemaRegistry.loadActiveSchema(entityType, userId));
+    if (!schemaEntry && projection.includeClearedFields) {
+      throw new Error("Nullable winning projection requires an active schema");
+    }
     if (!schemaEntry) {
       const codeSchema = getSchemaDefinition(entityType);
       if (codeSchema) {
@@ -282,7 +291,10 @@ export class ObservationReducer {
         policy?.key_field
       );
 
-      if (result && result.value !== undefined && result.value !== null) {
+      const selectedClear =
+        projection.includeClearedFields &&
+        ["last_write", "highest_priority", "most_specific"].includes(strategy);
+      if (result && result.value !== undefined && (result.value !== null || selectedClear)) {
         snapshot[field] = result.value;
         provenance[field] = result.source_observation_id;
       }
@@ -292,6 +304,7 @@ export class ObservationReducer {
     const lastObservationAt = sortedObservations[0].observed_at;
 
     return {
+      ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
       entity_id: entityId,
       entity_type: entityType,
       schema_version: schemaVersion,

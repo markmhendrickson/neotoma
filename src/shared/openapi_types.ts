@@ -3672,6 +3672,11 @@ export interface components {
       scoped_entity_types?: string[];
     };
     EntitySnapshot: {
+      /**
+       * @description Present only for an accepted nullable winning projection.
+       * @enum {boolean}
+       */
+      cleared_fields_included?: true;
       entity_id?: string;
       entity_type?: string;
       schema_version?: string;
@@ -7358,6 +7363,11 @@ export interface operations {
       content: {
         "application/json": {
           entity_id?: string;
+          /**
+           * @description Include only selected explicit-null fields with winning provenance; requires complete owned acquisition and an active schema.
+           * @default false
+           */
+          include_cleared_fields?: boolean;
           /** @description Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Reflects what *happened* by time T, regardless of when the observation was ingested into Neotoma. Use `at_ingested` instead when you need "what did we actually know at time T" semantics. */
           at?: string;
           /** @description Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `created_at` (row-insertion time) ≤ this timestamp. Excludes backfilled or late-arriving observations that have a past `observed_at` but arrived after this cutoff, preventing look-ahead leaks. When both `at` and `at_ingested` are supplied, both bounds are applied (AND logic): an observation must satisfy `observed_at ≤ at` AND `created_at ≤ at_ingested`. */

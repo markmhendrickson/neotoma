@@ -168,7 +168,9 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
         );
       const snapshots = [];
       for (const entity of entities) {
-        const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+        const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
+          includeClearedFields: true,
+        });
         if (!current || current.entity_id !== entity.entity_id)
           throw new CorrectionTransactionError(
             "CONFLICT",
@@ -182,7 +184,38 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
     // observation count catches concurrent writes even with equal timestamps.
     const prepared = [];
     for (const entity of entities) {
-      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+      // Preserve the established cheap refusal before stricter nullable
+      // acquisition: a stale count/type is already a conflict, even when an
+      // unrelated active-schema dependency is unavailable.
+      const baseline = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+      if (!baseline || baseline.entity_id !== entity.entity_id)
+        throw new CorrectionTransactionError(
+          "RESOURCE_NOT_FOUND",
+          "Transaction entity not found in the authenticated graph."
+        );
+      if (
+        baseline.entity_type !== entity.entity_type ||
+        baseline.observation_count !== entity.expected_observation_count
+      )
+        throw new CorrectionTransactionError(
+          "CONFLICT",
+          "Transaction precondition no longer matches the stored entity."
+        );
+      const schema = await schemaRegistry.loadActiveSchema(entity.entity_type, options.user_id);
+      if (
+        !schema ||
+        entity.changes.some(
+          (change) => !Object.hasOwn(schema.schema_definition.fields, change.field)
+        ) ||
+        validateChangesAgainstSchema(entity.changes, schema).length
+      )
+        throw new CorrectionTransactionError(
+          "VALIDATION_ERROR",
+          "Transaction fields must be declared and valid in the active schema."
+        );
+      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
+        includeClearedFields: true,
+      });
       if (!current || current.entity_id !== entity.entity_id)
         throw new CorrectionTransactionError(
           "RESOURCE_NOT_FOUND",
@@ -200,18 +233,6 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
         throw new CorrectionTransactionError(
           "CONFLICT",
           "Transaction precondition no longer matches the stored entity."
-        );
-      const schema = await schemaRegistry.loadActiveSchema(entity.entity_type, options.user_id);
-      if (
-        !schema ||
-        entity.changes.some(
-          (change) => !Object.hasOwn(schema.schema_definition.fields, change.field)
-        ) ||
-        validateChangesAgainstSchema(entity.changes, schema).length
-      )
-        throw new CorrectionTransactionError(
-          "VALIDATION_ERROR",
-          "Transaction fields must be declared and valid in the active schema."
         );
       prepared.push({ entity, schema });
     }
@@ -231,7 +252,9 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
         });
     const snapshots = [];
     for (const { entity } of prepared) {
-      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
+        includeClearedFields: true,
+      });
       if (
         !current ||
         entity.changes.some(

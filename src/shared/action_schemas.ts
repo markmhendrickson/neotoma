@@ -46,6 +46,7 @@ export const EntityIdSchema = z.object({
 
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
+  include_cleared_fields: z.boolean().optional(),
   /**
    * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
    * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,

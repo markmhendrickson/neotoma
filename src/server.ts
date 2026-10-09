@@ -3577,6 +3577,12 @@ export class NeotomaServer {
     // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
     // ownership; this MCP path historically did not.
     const userId = this.getAuthenticatedUserId();
+    if (parsed.include_cleared_fields && parsed.format !== "json") {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "include_cleared_fields requires explicit format=json"
+      );
+    }
     const responseFormat = parsed.format ?? "markdown";
 
     const renderEntitySnapshotResponse = async (payload: {
@@ -3586,6 +3592,7 @@ export class NeotomaServer {
       snapshot: Record<string, unknown>;
       raw_fragments?: unknown;
       provenance: Record<string, string>;
+      cleared_fields_included?: true;
       computed_at: string | null | undefined;
       observation_count: number;
       last_observation_at: string | null | undefined;
@@ -3654,7 +3661,8 @@ export class NeotomaServer {
     const entity = await getEntityWithProvenance(
       parsed.entity_id,
       Boolean(parsed.at || parsed.at_ingested),
-      userId
+      userId,
+      { includeClearedFields: !parsed.at && !parsed.at_ingested && parsed.include_cleared_fields }
     );
 
     if (!entity) {
@@ -3678,7 +3686,8 @@ export class NeotomaServer {
           entity.entity_id,
           userId,
           parsed.at,
-          parsed.at_ingested
+          parsed.at_ingested,
+          { includeClearedFields: parsed.include_cleared_fields }
         );
 
         if (!historicalResult) {
@@ -3710,6 +3719,7 @@ export class NeotomaServer {
 
     // Return current snapshot (from stored entity_snapshots table)
     return renderEntitySnapshotResponse({
+      ...(entity.cleared_fields_included ? { cleared_fields_included: true as const } : {}),
       entity_id: entity.entity_id,
       entity_type: entity.entity_type,
       schema_version: (entity as { schema_version?: string }).schema_version ?? entity.entity_type,

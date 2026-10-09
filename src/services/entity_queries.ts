@@ -123,6 +123,7 @@ export interface EntityQueryOptions {
 }
 
 export interface EntityWithProvenance {
+  cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
   canonical_name: string;
@@ -985,8 +986,12 @@ export function computeNextCursor(
 export async function getEntityWithProvenance(
   entityId: string,
   includeDeleted: boolean = false,
-  userId?: string
+  userId?: string,
+  projection: { includeClearedFields?: boolean } = {}
 ): Promise<EntityWithProvenance | null> {
+  if (projection.includeClearedFields && !userId) {
+    throw new Error("Nullable winning projection requires an explicit owner");
+  }
   // Get entity. When a userId is supplied, scope by it so a cross-user
   // entity_id cannot be read by id alone (the HTTP callers precheck ownership;
   // the MCP retrieve_entity_snapshot path historically did not).
@@ -1002,7 +1007,7 @@ export async function getEntityWithProvenance(
 
   // Check if entity is merged - redirect to target
   if (entity.merged_to_entity_id) {
-    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId);
+    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId, projection);
   }
 
   if (!includeDeleted) {
@@ -1023,6 +1028,19 @@ export async function getEntityWithProvenance(
       `Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`
     );
     effectiveSnapshot = null;
+  }
+
+  if (projection.includeClearedFields) {
+    const { computeEntitySnapshotAtTime } = await import("./entity_snapshot_at_time.js");
+    const selected = await computeEntitySnapshotAtTime(
+      entityId,
+      userId!,
+      undefined,
+      undefined,
+      projection
+    );
+    if (!selected) return null;
+    effectiveSnapshot = { ...selected, user_id: userId! } as EntitySnapshotRow;
   }
 
   // Get raw_fragments for this entity
@@ -1158,6 +1176,7 @@ export async function getEntityWithProvenance(
   const observationCount = effectiveSnapshot?.observation_count || 0;
   const lastObservationAt = effectiveSnapshot?.last_observation_at || entity.created_at;
   return {
+    ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
     entity_id: entity.id,
     entity_type: entity.entity_type,
     canonical_name: entity.canonical_name,

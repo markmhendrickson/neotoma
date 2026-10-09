@@ -233,6 +233,9 @@ jobs:
       # authority are omitted; unknown/ranked reads cannot certify absence.
       # Offline synthetic cutover only; contains real native HTTP/modern MCP,
       # compiled CLI and the existing Tier 2 named-tool replay driver.
+      - name: Run explicit-null atomic and snapshot surface effects (#2619)
+        run: npx vitest run --no-file-parallelism tests/integration/atomic_null_projection.test.ts tests/unit/nullable_winning_projection.test.ts src/services/correction_transaction.test.ts
+
       - name: Run authenticated lifecycle/cutover effects (#2588)
         run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts
 
