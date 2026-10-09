@@ -186,6 +186,27 @@ async function validateRecordedCutover(
   if (total.n !== members) refuse();
   return { baselines: baselines.length, members };
 }
+
+/** Read-only verification; does not install missing lifecycle storage or replay a migration. */
+export async function verifyEntityLifecycleStorage(
+  tx: DbConnection
+): Promise<{ state: "pre_cutover" | "committed"; baselines: number; members: number }> {
+  if (!(await hasRecordedEntityLifecycleCutover(tx))) {
+    const membership = await tx
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='entity_lifecycle_legacy_membership'"
+      )
+      .get();
+    if (membership) {
+      const count = (await tx
+        .prepare("SELECT COUNT(*) AS n FROM entity_lifecycle_legacy_membership")
+        .get()) as { n: number };
+      if (count.n !== 0) refuse();
+    }
+    return { state: "pre_cutover", baselines: 0, members: 0 };
+  }
+  return { state: "committed", ...(await validateRecordedCutover(tx)) };
+}
 /**
  * One serialized compatibility transition over a supplied local database.
  * No caller in startup/HTTP/MCP invokes it yet: adoption is a separate gate.

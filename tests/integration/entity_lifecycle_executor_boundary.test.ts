@@ -52,6 +52,26 @@ describe("strict lifecycle executor recoverable boundary", () => {
     expect(readFileSync(file)).toEqual(before);
     expect(await database.prepare("SELECT id FROM entities").all()).toEqual([{ id: "ent_owned" }]);
   });
+  it("writable isolated existing open never creates a missing file and escapes URI metacharacters", async () => {
+    const missing = path.join(dir, "missing?#owned.sqlite");
+    expect(() => new AsyncSqliteDatabase(missing, { existing: true, readOnly: false })).toThrow();
+    expect(existsSync(missing)).toBe(false);
+    const file = path.join(dir, "copy?#owned.sqlite");
+    writeFileSync(file, readFileSync(path.join(dir, "owned.sqlite")));
+    const copy = new AsyncSqliteDatabase(file, { existing: true, readOnly: false });
+    try {
+      await copy.prepare("UPDATE entities SET entity_type='changed' WHERE id='ent_owned'").run();
+      expect(await copy.prepare("SELECT entity_type FROM entities").get()).toEqual({
+        entity_type: "changed",
+      });
+      expect(await database.prepare("SELECT entity_type FROM entities").get()).toEqual({
+        entity_type: "synthetic",
+      });
+    } finally {
+      await copy.close();
+    }
+    expect(existsSync(path.join(dir, "copy"))).toBe(false);
+  });
   it("read-only inspection refuses symlinks and directory targets", () => {
     const alias = path.join(dir, "alias.sqlite");
     symlinkSync(path.join(dir, "owned.sqlite"), alias);

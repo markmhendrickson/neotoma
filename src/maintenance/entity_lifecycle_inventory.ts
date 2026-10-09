@@ -38,6 +38,65 @@ function frame(value: string): Buffer {
   length.writeUInt32BE(bytes.length);
   return Buffer.concat([length, bytes]);
 }
+/** Type-aware projected row preservation, retaining native byte/type equality. */
+export async function inspectLifecycleTable(
+  tx: DbConnection,
+  table: string,
+  columns: readonly string[],
+  ids?: ReadonlySet<string>
+): Promise<{ rows: number; sha256: string }> {
+  const name = identifier(table);
+  if (!columns.length || (ids && !columns.includes("id")))
+    throw new Error("LIFECYCLE_INVENTORY_INVALID");
+  // Encode in SQLite: JS must not round 64-bit INTEGERs or decode arbitrary TEXT/BLOB bytes.
+  // SQLite REAL's alternate-form-2 rendering preserves the stored double's significant digits.
+  const terms = columns.flatMap((column, index) => {
+    const columnName = identifier(column);
+    return [
+      `typeof(${columnName}) AS t${index}`,
+      `CASE typeof(${columnName}) WHEN 'null' THEN '' WHEN 'real' THEN printf('%!.26g',${columnName}) WHEN 'integer' THEN CAST(${columnName} AS TEXT) ELSE hex(CAST(${columnName} AS BLOB)) END AS v${index}`,
+    ];
+  });
+  const order = columns.flatMap((_, index) => [
+    `t${index} COLLATE BINARY`,
+    `v${index} COLLATE BINARY`,
+  ]);
+  const hash = createHash("sha256");
+  hash.update(frame(JSON.stringify(columns)));
+  let rows = 0;
+  let scanned = 0;
+  for (;;) {
+    const batch = (await tx
+      .prepare(
+        `SELECT ${terms.join(",")} FROM ${name} ORDER BY ${order.join(",")} LIMIT 250 OFFSET ?`
+      )
+      .all(scanned)) as Record<string, unknown>[];
+    if (!batch.length) break;
+    for (const row of batch) {
+      scanned++;
+      if (ids && !ids.has(row[`v${columns.indexOf("id")}`] as string)) continue;
+      for (let index = 0; index < columns.length; index++) {
+        const type = row[`t${index}`];
+        const value = row[`v${index}`];
+        if (
+          !["null", "text", "blob", "integer", "real"].includes(type as string) ||
+          typeof value !== "string"
+        )
+          throw new Error("LIFECYCLE_INVENTORY_INVALID");
+        hash.update(frame(type as string));
+        hash.update(frame(value));
+      }
+      rows++;
+      if (!Number.isSafeInteger(rows)) throw new Error("LIFECYCLE_INVENTORY_INVALID");
+    }
+  }
+  const count = (await tx.prepare(`SELECT CAST(COUNT(*) AS TEXT) AS n FROM ${name}`).get()) as {
+    n: string;
+  };
+  if (count.n !== String(scanned)) throw new Error("LIFECYCLE_INVENTORY_INVALID");
+  return { rows, sha256: hash.digest("hex") };
+}
+
 /** Caller owns the same read/native transaction for the complete scan. */
 export async function inspectLifecycleDatabase(
   tx: DbConnection
@@ -69,56 +128,17 @@ export async function inspectLifecycleDatabase(
       string,
       unknown
     >[];
-    // Encode in SQLite: JS must not round 64-bit INTEGERs or decode arbitrary TEXT/BLOB bytes.
-    // SQLite REAL's alternate-form-2 rendering preserves the stored double's significant digits.
-    const terms = columns.flatMap((column, index) => {
-      const columnName = identifier(column.name as string);
-      return [
-        `typeof(${columnName}) AS t${index}`,
-        `CASE typeof(${columnName}) WHEN 'null' THEN '' WHEN 'real' THEN printf('%!.26g',${columnName}) WHEN 'integer' THEN CAST(${columnName} AS TEXT) ELSE hex(CAST(${columnName} AS BLOB)) END AS v${index}`,
-      ];
-    });
-    const order = columns.flatMap((_, index) => [
-      `t${index} COLLATE BINARY`,
-      `v${index} COLLATE BINARY`,
-    ]);
-    const hash = createHash("sha256");
-    hash.update(frame(JSON.stringify(columns.map((column) => column.name))));
-    let rows = 0;
-    for (;;) {
-      const batch = (await tx
-        .prepare(
-          `SELECT ${terms.join(",")} FROM ${name} ORDER BY ${order.join(",")} LIMIT 250 OFFSET ?`
-        )
-        .all(rows)) as Record<string, unknown>[];
-      if (!batch.length) break;
-      for (const row of batch) {
-        for (let index = 0; index < columns.length; index++) {
-          const type = row[`t${index}`];
-          const value = row[`v${index}`];
-          if (
-            !["null", "text", "blob", "integer", "real"].includes(type as string) ||
-            typeof value !== "string"
-          )
-            throw new Error("LIFECYCLE_INVENTORY_INVALID");
-          hash.update(frame(type as string));
-          hash.update(frame(value));
-        }
-        rows++;
-        if (!Number.isSafeInteger(rows)) throw new Error("LIFECYCLE_INVENTORY_INVALID");
-      }
-    }
-    const count = (await tx.prepare(`SELECT CAST(COUNT(*) AS TEXT) AS n FROM ${name}`).get()) as {
-      n: string;
-    };
-    if (count.n !== String(rows)) throw new Error("LIFECYCLE_INVENTORY_INVALID");
+    const content = await inspectLifecycleTable(
+      tx,
+      object.name,
+      columns.map((column) => column.name as string)
+    );
     tables.push({
       name: object.name,
       columns,
       foreign_keys,
       indexes,
-      rows,
-      sha256: hash.digest("hex"),
+      ...content,
     });
   }
   const result = {

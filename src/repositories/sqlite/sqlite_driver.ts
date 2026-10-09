@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
 import { lstatSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import {
   NESTED_TRANSACTION_ERROR,
   normalizeParams,
@@ -46,10 +47,10 @@ try {
 
 type UnknownRecord = Record<string, unknown>;
 
-/** Internal no-create inspection; ordinary opens keep their existing behavior. */
+/** Internal no-create inspection or isolated-copy open; ordinary opens keep their existing behavior. */
 export interface ExistingSqliteOpenOptions {
   existing: true;
-  readOnly: true;
+  readOnly: boolean;
 }
 
 class SqliteStatementImpl {
@@ -73,12 +74,12 @@ class SqliteDatabaseImpl {
 
   constructor(path: string, options?: ExistingSqliteOpenOptions) {
     if (options) {
-      if (options.existing !== true || options.readOnly !== true)
+      if (options.existing !== true || typeof options.readOnly !== "boolean")
         throw new Error("SQLITE_EXISTING_OPEN_INVALID");
       const file = lstatSync(path);
       if (!file.isFile() || file.isSymbolicLink()) throw new Error("SQLITE_EXISTING_FILE_REQUIRED");
       this.db = new DatabaseCtor(
-        path,
+        hasNativeSqlite && !options.readOnly ? `${pathToFileURL(path).href}?mode=rw` : path,
         hasNativeSqlite
           ? { readOnly: options.readOnly }
           : { readonly: options.readOnly, fileMustExist: true }
