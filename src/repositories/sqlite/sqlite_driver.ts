@@ -190,7 +190,10 @@ export class AsyncSqliteDatabase implements DbDatabase {
 
   constructor(path: string, options?: ExistingSqliteOpenOptions) {
     this.db = new SqliteDatabaseImpl(path, options);
+    this.inspectionOnly = options?.readOnly === true;
   }
+
+  private readonly inspectionOnly: boolean;
 
   /** @internal Exposes the sync database to statement wrappers. */
   rawDb(): SqliteDatabaseImpl {
@@ -248,7 +251,9 @@ export class AsyncSqliteDatabase implements DbDatabase {
     // hops (observed as cross-process lock failures in ensureSchema).
     return this.gate.runExclusive(() =>
       this.txContext.run(true, async () => {
-        this.db.exec("BEGIN IMMEDIATE");
+        // Read-only inspection acquires a read snapshot, not a writer reservation.
+        // Ordinary callers retain their existing IMMEDIATE transaction behavior.
+        this.db.exec(this.inspectionOnly ? "BEGIN" : "BEGIN IMMEDIATE");
         try {
           const result = await fn(this);
           this.db.exec("COMMIT");
