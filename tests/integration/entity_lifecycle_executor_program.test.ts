@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import { ensureSchema } from "../../src/repositories/sqlite/sqlite_client.js";
@@ -31,10 +31,13 @@ import {
   type ExecutorManifest,
 } from "../../src/maintenance/entity_lifecycle_manifest.js";
 
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { StubDriver } from "../../packages/eval-harness/src/drivers/stub.js";
+import { loadScenarioFile } from "../../packages/eval-harness/src/scenario.js";
 const root = resolve(import.meta.dirname, "../..");
 const program = join(root, "dist/maintenance/entity_lifecycle_migration.js");
 const sourceHash = "67118622342c8e6906e6e027e7221fbbc9b8b931afce8818263052ab1774bca4";
-const owner = "owned_executor_" + randomUUID();
+const owner = LOCAL_DEV_USER_ID;
 const type = "owned_executor_fixture";
 function walks(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -89,8 +92,20 @@ beforeAll(async () => {
     .run(
       "schema_owned",
       type,
-      JSON.stringify({ fields: { title: { type: "string" }, _deleted: { type: "boolean" } } }),
-      JSON.stringify({ merge_policies: { title: { strategy: "last_write" } } }),
+      JSON.stringify({
+        fields: {
+          title: { type: "string" },
+          _deleted: { type: "boolean" },
+          occurred_at: { type: "date" },
+        },
+        temporal_fields: [{ field: "occurred_at", event_type: "owned_fixture_seen" }],
+      }),
+      JSON.stringify({
+        merge_policies: {
+          title: { strategy: "last_write" },
+          occurred_at: { strategy: "last_write" },
+        },
+      }),
       owner
     );
   await db.transaction(async (tx) => {
@@ -298,7 +313,7 @@ describe("compiled strict lifecycle executor", () => {
     expect(outcome.action_methods).toEqual([]);
     expect(outcome.state).toEqual({ state: "committed", baselines: 253, members: 252 });
     expect(readFileSync(manifest.target.database)).not.toEqual(before);
-    expect(readFileSync(source)).toEqual(sourceBytes);
+    expect(sha256(readFileSync(source))).toBe(sha256(sourceBytes));
     const db = new AsyncSqliteDatabase(manifest.target.database, {
       existing: true,
       readOnly: true,
@@ -357,7 +372,7 @@ describe("compiled strict lifecycle executor", () => {
     const result = invoke("verify");
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(readFileSync(output, "utf8")).status).toBe("pre_cutover_verified");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("EMPTY apply refuses even incomplete references before DB and output access", () => {
     manifest.target.database = join(fixture, "absent.sqlite");
@@ -370,7 +385,7 @@ describe("compiled strict lifecycle executor", () => {
     rmSync(manifest.target.database);
     linkSync(source, manifest.target.database);
     const result = invoke("preview");
-    expect(readFileSync(source)).toEqual(sourceBytes);
+    expect(sha256(readFileSync(source))).toBe(sha256(sourceBytes));
     refused(result, "source_alias");
     expect(existsSync(output + ".attempt.jsonl")).toBe(false);
   });
@@ -388,7 +403,7 @@ describe("compiled strict lifecycle executor", () => {
     writeFileSync(manifest.backup.restore.path, '{"tampered":"private_canary"}');
     const before = readFileSync(manifest.target.database);
     const result = invoke("preview");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
     refused(result, "evidence_invalid");
     expect(existsSync(output + ".attempt.jsonl")).toBe(false);
   });
@@ -399,7 +414,7 @@ describe("compiled strict lifecycle executor", () => {
       []
     );
     const result = invoke("preview");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
     refused(result, "materialization_invalid");
     expect(existsSync(output)).toBe(false);
     expect(readFileSync(output + ".attempt.jsonl", "utf8")).toContain('"phase":"failed"');
@@ -411,14 +426,14 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"), "schema_unavailable");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("existing output is never overwritten and repeated invocation never repeats effects", () => {
     writeFileSync(output, "owned previous attempt", { mode: 0o600 });
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"), "recording_unavailable");
     expect(readFileSync(output, "utf8")).toBe("owned previous attempt");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("partial lifecycle metadata is refused by readonly verify without repairs", async () => {
     await mutate(manifest.target.database, async (db) => {
@@ -427,7 +442,7 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("verify"));
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("private output files and attempt records remain protected and existing attempt blocks repeats", async () => {
     const result = invoke("preview");
@@ -438,7 +453,7 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"), "recording_unavailable");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("current valid later facts survive replay without rewriting frozen capture or originals", async () => {
     expect(invoke("preview").status).toBe(0);
@@ -461,7 +476,7 @@ describe("compiled strict lifecycle executor", () => {
     output = join(manifest.evidence.directory, "later-replay.json");
     const result = invoke("preview");
     expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
     const db = new AsyncSqliteDatabase(manifest.target.database, {
       existing: true,
       readOnly: true,
@@ -488,7 +503,7 @@ describe("compiled strict lifecycle executor", () => {
     const before = readFileSync(manifest.target.database);
     output = join(manifest.evidence.directory, "drift.json");
     refused(invoke("verify"), "materialization_invalid");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("strict snapshot persistence failure rolls schema, baseline and partial derived effects back", async () => {
     await mutate(manifest.target.database, async (db) => {
@@ -499,7 +514,7 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"));
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
     expect(existsSync(output)).toBe(false);
   });
   it("strict canonical persistence failure rolls all partial migration effects back", async () => {
@@ -516,7 +531,7 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"));
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("wrong-owner ordinary observation refuses rather than merging foreign facts", async () => {
     await mutate(manifest.target.database, async (db) => {
@@ -525,7 +540,7 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"));
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
   });
   it("raw source changes and candidate pins refuse before any attempt or effects", () => {
     writeFileSync(manifest.expected_before.source_files[0].path, "owned tamper");
@@ -553,7 +568,7 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     const result = invoke("preview");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
     refused(result);
   });
   it("stale snapshots and names are repaired only on the isolated preview copy", async () => {
@@ -607,7 +622,7 @@ describe("compiled strict lifecycle executor", () => {
       await db.close();
     }
     expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(source)).toEqual(sourceBytes);
+    expect(sha256(readFileSync(source))).toBe(sha256(sourceBytes));
   });
   it("loss of final output after copy commit records uncertainty and never repeats migration", async () => {
     const hook = join(fixture, "owned-output-failure.cjs");
@@ -641,6 +656,222 @@ describe("compiled strict lifecycle executor", () => {
     await refreshBefore();
     const before = readFileSync(manifest.target.database);
     refused(invoke("preview"), "recording_unavailable");
-    expect(readFileSync(manifest.target.database)).toEqual(before);
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
+  });
+  it("named-tool readback replay reads the actual compiled preview result through supported routes", async () => {
+    const result = invoke("preview");
+    expect(result.status, result.stderr).toBe(0);
+    // The readback server is an owned test process, never an executor import or migration tool.
+    const serverFile = join(fixture, "owned-readback.mjs");
+    writeFileSync(
+      serverFile,
+      `import {createServer} from 'node:http';import {pathToFileURL} from 'node:url';const {app}=await import(pathToFileURL(process.env.OWNED_APP).href);const server=createServer(app);server.listen(0,'127.0.0.1',()=>process.send({port:server.address().port}));process.on('message',()=>server.close(()=>process.exit(0)));`
+    );
+    const t = manifest.target;
+    const child = spawn(process.execPath, [serverFile], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      env: {
+        PATH: process.env.PATH,
+        HOME: join(fixture, "home"),
+        NODE_OPTIONS: process.env.NODE_OPTIONS || "",
+        NEOTOMA_PROJECT_ROOT: root,
+        NEOTOMA_ENV: "development",
+        NEOTOMA_DATA_DIR: t.data,
+        NEOTOMA_SQLITE_PATH: t.database,
+        NEOTOMA_RAW_STORAGE_DIR: t.raw,
+        NEOTOMA_LOGS_DIR: t.logs,
+        NEOTOMA_DB_BACKEND: "sqlite",
+        NEOTOMA_DB_URL: "",
+        NEOTOMA_ACTIONS_DISABLE_AUTOSTART: "1",
+        NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR: "1",
+        NEOTOMA_HTTP_HOST: "127.0.0.1",
+        OWNED_APP: join(root, "dist/actions.js"),
+      },
+    });
+    let diagnostic = "";
+    child.stdout!.on("data", () => {});
+    child.stderr!.on("data", (chunk) => {
+      diagnostic += chunk.toString();
+    });
+    try {
+      const port = await new Promise<number>((ok, fail) => {
+        const timer = setTimeout(() => fail(new Error("owned server readiness timeout")), 20000);
+        child.once("message", (message: any) => {
+          clearTimeout(timer);
+          ok(message.port);
+        });
+        child.once("exit", () => {
+          clearTimeout(timer);
+          fail(new Error("owned readback server exited: " + diagnostic));
+        });
+      });
+      const scenarioPath = join(fixture, "readback.scenario.yaml");
+      writeFileSync(
+        scenarioPath,
+        `meta:
+  id: strict_executor_readback
+  description: Supported read-only named tools over actual isolated compiled preview.
+seed_strategy: generated
+privacy_transform: Owned synthetic records only.
+system_prompt: Read the supplied synthetic snapshot and visible collection. No mutation tool exists in this scenario.
+user_prompt: Read snapshot and visible count.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entity_snapshot
+    op: eq
+    value: 1
+`
+      );
+      const cassettePath = join(fixture, "readback.cassette.json");
+      json(cassettePath, {
+        meta: {
+          format_version: 1,
+          scenario_id: "strict_executor_readback",
+          provider: "stub",
+          model: "replay-only",
+          instruction_profile: "auto",
+          recorded_at: "2020-01-01T00:00:00Z",
+          cost_usd: 0,
+        },
+        user_prompt: "Read owned fixture.",
+        tool_calls: [
+          {
+            name: "retrieve_entity_snapshot",
+            input: { entity_id: "ent_owned_0250", format: "json" },
+            sequence: 0,
+          },
+          { name: "retrieve_entities", input: { entity_type: type, limit: 300 }, sequence: 1 },
+        ],
+        assistant_text: "",
+      });
+      const replay = await new StubDriver().runOnce({
+        scenario: loadScenarioFile(scenarioPath),
+        model: { provider: "stub", model: "replay-only" },
+        neotomaBaseUrl: "http://127.0.0.1:" + port,
+        neotomaToken: "",
+        effectiveProfile: "auto",
+        mode: "replay",
+        cassettePath,
+      });
+      expect(replay.estimatedCostUsd).toBe(0);
+      expect(replay.toolCalls.map((call) => call.error)).toEqual([undefined, undefined]);
+      expect(replay.toolCalls[0].output).toMatchObject({
+        entity_id: "ent_owned_0250",
+        snapshot: { title: "Fact 250" },
+      });
+      const queried = replay.toolCalls[1].output as {
+        entities: Array<{ entity_id: string }>;
+        total: number;
+      };
+      expect(queried.total).toBe(251);
+      // Preserve the governing #2267 never-observed PAGE/count asymmetry.
+      expect(queried.entities).toHaveLength(252);
+      expect(queried.entities.some((entity) => entity.entity_id === "ent_empty")).toBe(true);
+      expect(
+        queried.entities.some((entity) => ["ent_hidden", "ent_merged"].includes(entity.entity_id))
+      ).toBe(false);
+    } finally {
+      child.send({ stop: true });
+      await new Promise<void>((ok) => {
+        const timer = setTimeout(() => {
+          child.kill();
+          ok();
+        }, 5000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          ok();
+        });
+      });
+    }
+  }, 120000);
+  it("truthy wrong-value read facade refuses the native copy before commit", () => {
+    const loader = join(fixture, "owned-facade-loader.mjs"),
+      bootstrap = join(fixture, "owned-facade-bootstrap.cjs");
+    writeFileSync(
+      loader,
+      String.raw`export async function load(url,context,nextLoad){const result=await nextLoad(url,context);if(url.endsWith('/dist/services/snapshot_computation.js')){const source=typeof result.source==='string'?result.source:Buffer.from(result.source).toString('utf8');const needle='? data\n        : null;';if(source.includes('owned_wrong_facade'))return result;if(!source.includes(needle))throw new Error('owned loader mismatch');return {...result,source:source.replace(needle,'? {...data,snapshot:{title:"owned_wrong_facade"}}\n        : null;')};}return result;}`
+    );
+    writeFileSync(
+      bootstrap,
+      `require('node:module').register(require('node:url').pathToFileURL(process.env.OWNED_FACADE_LOADER));`
+    );
+    const before = readFileSync(manifest.target.database);
+    const result = invoke("preview", {
+      NODE_OPTIONS: [process.env.NODE_OPTIONS || "", "--require " + bootstrap].join(" "),
+      OWNED_FACADE_LOADER: loader,
+    });
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
+    refused(result, "materialization_invalid");
+    expect(existsSync(output)).toBe(false);
+  });
+  it("read-only pre-cutover refuses populated reserved tuples even when complete before evidence agrees", async () => {
+    await mutate(manifest.target.database, async (db) => {
+      await db.exec(
+        "ALTER TABLE observations ADD COLUMN entity_lifecycle_kind TEXT;ALTER TABLE observations ADD COLUMN entity_lifecycle_sequence INTEGER;ALTER TABLE observations ADD COLUMN entity_lifecycle_target_id TEXT;UPDATE observations SET entity_lifecycle_kind='legacy_visible',entity_lifecycle_sequence=0,entity_lifecycle_target_id=entity_id WHERE id='fact_250'"
+      );
+    });
+    await refreshBefore();
+    manifest.expected_after.state = "pre_cutover";
+    manifest.expected_after.baselines = 0;
+    manifest.expected_after.members = 0;
+    manifest.expected_after.schema = null;
+    const before = readFileSync(manifest.target.database);
+    const result = invoke("verify");
+    expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
+    refused(result);
+    expect(existsSync(output)).toBe(false);
+  });
+  it("compiled unknown and duplicate arguments refuse before imports, records or default opens", () => {
+    const before = readFileSync(manifest.target.database);
+    for (const args of [
+      [],
+      ["--mode", "attest"],
+      ["--manifest", manifestPath, "--manifest", manifestPath],
+      ["--unknown", "value"],
+    ]) {
+      const result = spawnSync(process.execPath, [program, ...args], {
+        cwd: root,
+        encoding: "utf8",
+        timeout: 10000,
+        env: {
+          PATH: process.env.PATH,
+          HOME: join(fixture, "home"),
+          NODE_OPTIONS: process.env.NODE_OPTIONS || "",
+        },
+      });
+      refused(result, "arguments_invalid");
+      expect(sha256(readFileSync(manifest.target.database))).toBe(sha256(before));
+      expect(existsSync(output + ".attempt.jsonl")).toBe(false);
+    }
+  });
+  it("a separate native writer after inspection is caught inside the transaction without cutover", async () => {
+    const preload = join(fixture, "owned-interleaving.cjs");
+    writeFileSync(
+      preload,
+      `const fs=require('node:fs');const open=fs.openSync;let applied=false;fs.openSync=function(path,...args){if(!applied&&String(path).endsWith('.attempt.jsonl')){applied=true;const Native=Number(process.versions.node.split('.')[0])>=22?require('node:sqlite').DatabaseSync:require(${JSON.stringify(join(root, "node_modules/better-sqlite3"))});const db=new Native(process.env.NEOTOMA_SQLITE_PATH);try{db.prepare("INSERT INTO observations(id,entity_id,entity_type,schema_version,observed_at,created_at,source_priority,fields,user_id) VALUES('owned_interleaving','ent_owned_0000',?,'1.0','2020-01-03T00:00:00Z','2020-01-03T00:00:00Z',10,'{}',?)").run(${JSON.stringify(type)},${JSON.stringify(owner)});}finally{db.close();}}return open.call(this,path,...args);};`
+    );
+    const result = invoke("preview", {
+      NODE_OPTIONS: [process.env.NODE_OPTIONS || "", "--require " + preload].join(" "),
+    });
+    refused(result, "before_mismatch");
+    await mutate(manifest.target.database, async (db) => {
+      expect(
+        await db
+          .prepare("SELECT COUNT(*) AS n FROM observations WHERE id='owned_interleaving'")
+          .get()
+      ).toEqual({ n: 1 });
+      expect(
+        await db
+          .prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name='entity_lifecycle_cutovers'")
+          .get()
+      ).toEqual({ n: 0 });
+    });
+    expect(sha256(readFileSync(source))).toBe(sha256(sourceBytes));
+    expect(existsSync(output)).toBe(false);
   });
 });
