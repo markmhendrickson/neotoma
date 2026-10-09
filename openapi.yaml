@@ -1800,6 +1800,10 @@ components:
     EntitySnapshot:
       type: object
       properties:
+        cleared_fields_included:
+          type: boolean
+          enum: [true]
+          description: Present only for an accepted nullable winning projection.
         entity_id:
           type: string
         entity_type:
@@ -6247,6 +6251,10 @@ paths:
               properties:
                 entity_id:
                   type: string
+                include_cleared_fields:
+                  type: boolean
+                  default: false
+                  description: Include only selected explicit-null fields with winning provenance; requires complete owned acquisition and an active schema.
                 at:
                   type: string
                   description: >-

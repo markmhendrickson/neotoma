@@ -294,6 +294,37 @@
         "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
       },
       "sequence": 11
+    },
+    {
+      "name": "correct_transaction",
+      "sequence": 12,
+      "input": {
+        "idempotency_key": "eval-atomic-null-clear",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 2,
+            "expected_snapshot": {
+              "status": "approved"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "sequence": 13,
+      "input": {
+        "entity_id": "ent_721001bcfee64e561dd21c6a",
+        "include_cleared_fields": true
+      }
     }
   ],
   "assistant_text": "The first coordinated transaction committed once. Exact retry replayed; stale and changed-payload attempts left the prior snapshots and observation counts intact."

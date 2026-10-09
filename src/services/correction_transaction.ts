@@ -168,7 +168,9 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
         );
       const snapshots = [];
       for (const entity of entities) {
-        const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+        const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
+          includeClearedFields: true,
+        });
         if (!current || current.entity_id !== entity.entity_id)
           throw new CorrectionTransactionError(
             "CONFLICT",
@@ -182,7 +184,9 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
     // observation count catches concurrent writes even with equal timestamps.
     const prepared = [];
     for (const entity of entities) {
-      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
+        includeClearedFields: true,
+      });
       if (!current || current.entity_id !== entity.entity_id)
         throw new CorrectionTransactionError(
           "RESOURCE_NOT_FOUND",
@@ -231,7 +235,9 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
         });
     const snapshots = [];
     for (const { entity } of prepared) {
-      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id);
+      const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
+        includeClearedFields: true,
+      });
       if (
         !current ||
         entity.changes.some(

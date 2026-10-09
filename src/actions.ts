@@ -10158,7 +10158,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, at, at_ingested } = parsed.data;
+  const { entity_id, at, at_ingested, include_cleared_fields } = parsed.data;
 
   let userId: string;
   try {
@@ -10171,9 +10171,16 @@ app.post("/get_entity_snapshot", async (req, res) => {
   // helper so the offline path honours them with the same semantics as the MCP
   // path in server.ts. Without cutoffs, fall through to the fast materialized
   // entity_snapshots table read.
-  if (at || at_ingested) {
+  if (at || at_ingested || include_cleared_fields) {
     try {
-      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested);
+      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested, {
+        includeClearedFields: include_cleared_fields,
+      });
+      if (include_cleared_fields && !at && !at_ingested) {
+        const { isEntityDeleted } = await import("./services/deletion.js");
+        if (await isEntityDeleted(entity_id, userId))
+          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
       if (result === null) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
