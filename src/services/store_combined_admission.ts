@@ -49,7 +49,17 @@ export async function claimCombinedStoreKeys(
   enforceAttributionPolicy("sources", getCurrentAgentIdentity());
   enforceAttributionPolicy("observations", getCurrentAgentIdentity());
   const { preflightStructuredStoreOwnership } = await import("./store_ownership_admission.js");
-  await preflightStructuredStoreOwnership(params, surface);
+  // Preserve the existing structured-source replay priority. Only a fresh
+  // structured leg needs ownership admission before either combined mutation.
+  const { db } = await import("../db.js");
+  const prior = await db
+    .from("sources")
+    .select("id")
+    .eq("user_id", params.userId)
+    .eq("idempotency_key", params.idempotencyKey)
+    .maybeSingle();
+  if (prior.error) throw prior.error;
+  if (!prior.data) await preflightStructuredStoreOwnership(params, surface);
   await reserveLegacyStoreKeys(await getDb(), params.userId, [
     params.idempotencyKey,
     ...(file.key ? [file.key] : []),

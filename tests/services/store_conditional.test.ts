@@ -200,6 +200,13 @@ describe("native conditional store effects", () => {
     await db.from("entities").update({ user_id: changedOwner }).eq("id", legacyEntityId);
     const replayBefore = await counts();
     try {
+      const { claimCombinedStoreKeys } =
+        await import("../../src/services/store_combined_admission.js");
+      await expect(
+        claimCombinedStoreKeys(legacyRequest, {
+          content: Buffer.from("existing replay file").toString("base64"),
+        })
+      ).resolves.toBeUndefined();
       const replay = await storeStructuredForApi(legacyRequest);
       expect(replay.source_id).toBe(legacy.source_id);
       expect(await counts()).toEqual(replayBefore);

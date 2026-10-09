@@ -46,6 +46,7 @@ type State = {
   emitted: number;
   code?: string;
   receipt?: { entity_id: string; original_observation_fields: unknown };
+  native_state: unknown;
 };
 function worker(mode: string, key: string, code: string, status: string) {
   const child = fork(
@@ -111,13 +112,39 @@ describe("actual conditional effects across separate native processes", () => {
       conditional.go();
       const winner = await conditional.finished;
       expect(winner.applied).toBe(true);
+      const before = await snapshot(winner.receipt!.entity_id);
       legacy.go();
       const loser = await legacy.finished;
-      expect(loser).toMatchObject({ applied: false, code: "STORE_KEY_MODE_CONFLICT", emitted: 0 });
       const current = await snapshot(winner.receipt!.entity_id);
+      // Independently verify effects before checking the refusal category.
+      expect(current).toEqual(before);
+      expect(loser.native_state).toEqual(winner.native_state);
+      expect(loser).toMatchObject({ applied: false, emitted: 0 });
       expect(current.snapshot).toEqual({ code: "PAUSED", status: "original-bundle" });
       expect(current.observation_count).toBe(1);
       expect(winner.receipt!.original_observation_fields).toEqual(current.snapshot);
+      expect(loser.code).toBe("STORE_KEY_MODE_CONFLICT");
+    } finally {
+      for (const w of [legacy, conditional]) if (w.child.exitCode === null) w.child.kill("SIGKILL");
+    }
+  }, 20_000);
+  it("retains the original observation when an identical legacy API store resumes after conditional commit", async () => {
+    const legacy = worker("paused-legacy-api", "api-paused-key", "API-PAUSED", "original-bundle");
+    const conditional = worker("conditional", "api-paused-key", "API-PAUSED", "original-bundle");
+    try {
+      await Promise.all([legacy.ready, conditional.ready]);
+      conditional.go();
+      const winner = await conditional.finished;
+      expect(winner.applied).toBe(true);
+      const before = await snapshot(winner.receipt!.entity_id);
+      legacy.go();
+      const loser = await legacy.finished;
+      const after = await snapshot(winner.receipt!.entity_id);
+      expect(after.observation_count).toBe(before.observation_count);
+      expect(after.provenance).toEqual(before.provenance);
+      expect(after.snapshot).toEqual(winner.receipt!.original_observation_fields);
+      expect(loser.native_state).toEqual(winner.native_state);
+      expect(loser).toMatchObject({ applied: false, emitted: 0, code: "STORE_KEY_MODE_CONFLICT" });
     } finally {
       for (const w of [legacy, conditional]) if (w.child.exitCode === null) w.child.kill("SIGKILL");
     }
