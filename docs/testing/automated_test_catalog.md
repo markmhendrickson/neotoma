@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **705**
-- Backend and repo Vitest files: **669**
+- Total automated test files: **709**
+- Backend and repo Vitest files: **673**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,9 +70,9 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 193 |
-| Vitest service tests | 56 |
+| Vitest service tests | 57 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 206 |
+| Vitest integration tests | 209 |
 | Vitest CLI tests | 85 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -309,7 +309,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (56):**
+**Files (57):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -360,6 +360,7 @@ flowchart TD
 - `tests/services/store_condition_identity.test.ts`
 - `tests/services/store_condition_keys.test.ts`
 - `tests/services/store_condition_schema.test.ts`
+- `tests/services/store_conditional_race.test.ts`
 - `tests/services/store_conditional.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
@@ -448,7 +449,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (206):**
+**Files (209):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -498,6 +499,9 @@ flowchart TD
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_query_deleted_count.test.ts`
+- `tests/integration/entity_read_contract_backend.test.ts`
+- `tests/integration/entity_read_contract_semantic.test.ts`
+- `tests/integration/entity_read_contract.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`

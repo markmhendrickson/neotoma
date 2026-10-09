@@ -22,7 +22,8 @@ export async function claimCombinedStoreKeys(
     key?: string;
     content?: string;
     filePath?: string;
-  }
+  },
+  surface: "rest" | "mcp" = "rest"
 ): Promise<void> {
   if (params.commit === false) return;
   // Read/decode is pure; an invalid file cannot leave an arbitration claim.
@@ -47,6 +48,8 @@ export async function claimCombinedStoreKeys(
   );
   enforceAttributionPolicy("sources", getCurrentAgentIdentity());
   enforceAttributionPolicy("observations", getCurrentAgentIdentity());
+  const { preflightStructuredStoreOwnership } = await import("./store_ownership_admission.js");
+  await preflightStructuredStoreOwnership(params, surface);
   await reserveLegacyStoreKeys(await getDb(), params.userId, [
     params.idempotencyKey,
     ...(file.key ? [file.key] : []),

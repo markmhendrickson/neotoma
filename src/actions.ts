@@ -7919,6 +7919,10 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
     });
   }
 
+  const { preflightStructuredStoreOwnership } =
+    await import("./services/store_ownership_admission.js");
+  if (commit) await preflightStructuredStoreOwnership(params);
+
   const { createObservation } = await import("./services/observation_storage.js");
 
   const jsonContent = incomingJsonContent;

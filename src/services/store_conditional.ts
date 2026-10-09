@@ -22,7 +22,11 @@ import {
   getCurrentAAuthAdmission,
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
-import { assertStorePolicyAllows } from "./instance_policy.js";
+import {
+  assertStorePolicyAllows,
+  getInstancePolicyResult,
+  StorePolicyUnavailableError,
+} from "./instance_policy.js";
 import { collectConstraintViolations, ConstraintViolationError } from "./field_constraints.js";
 import { assertAgentGrantFieldValid, assertGrantWriteKeepsPinUnique } from "./agent_grants.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
@@ -38,6 +42,7 @@ import {
   emitEntitySnapshotChange,
 } from "../events/substrate_store_emit.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
+import { refreshEntitySnapshotEmbeddingAfterCommit } from "./entity_snapshot_embedding.js";
 
 export interface ConditionalStoreOptions {
   userId: string;
@@ -162,9 +167,12 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
           definition: schema.schema_definition,
           reducer: schema.reducer_config,
         });
+        const policy = await getInstancePolicyResult({ requireUnambiguous: true });
+        if (policy.lookup_failed) throw new StorePolicyUnavailableError(policy.error);
         await assertStorePolicyAllows(
           [{ entity_type: entityType, fields }],
-          async () => schema.schema_definition
+          async () => schema.schema_definition,
+          policy.policy
         );
         for (const table of ["sources", "observations", "timeline_events"] as const)
           enforceAttributionPolicy(table, getCurrentAgentIdentity());
@@ -375,6 +383,9 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
                 observation_source: observationSource,
               });
             });
+            callbacks.push(() =>
+              refreshEntitySnapshotEmbeddingAfterCommit(prepared.entityId, options.userId)
+            );
             return original;
           }
         ),
@@ -422,6 +433,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     source_id: operation.source_id,
     entities_created: operation.status === "applied" ? 1 : 0,
     observations_created: operation.status === "applied" ? 1 : 0,
+    entities_created_count: operation.status === "applied" ? 1 : 0,
+    observations_created_count: operation.status === "applied" ? 1 : 0,
     unknown_fields_count: operation.unknown_fields_count,
     operation_receipt: { ...operation, original_observation_fields: verifiedFields },
     current_snapshot_status: current.error ? "unavailable" : current.data ? "available" : "absent",

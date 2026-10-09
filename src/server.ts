@@ -5756,7 +5756,8 @@ export class NeotomaServer {
           key: parsed.file_idempotency_key ?? `${idempotencyKey}-file`,
           content: parsed.file_content,
           filePath: parsed.file_path,
-        }
+        },
+        "mcp"
       );
     }
 
@@ -6674,6 +6675,19 @@ export class NeotomaServer {
         });
       }
     }
+
+    const { preflightStructuredStoreOwnership } =
+      await import("./services/store_ownership_admission.js");
+    await preflightStructuredStoreOwnership(
+      {
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        strict,
+      },
+      "mcp"
+    );
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
