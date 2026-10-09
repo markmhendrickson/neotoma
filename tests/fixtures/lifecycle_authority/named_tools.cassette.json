@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "entity_lifecycle_authenticated_cycles",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-09T00:00:00Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Execute synthetic native lifecycle cycles.",
+  "tool_calls": [
+    {
+      "name": "delete_entity",
+      "input": {
+        "entity_id": "$OWNED_FIXTURE_ENTITY",
+        "entity_type": "synthetic_lifecycle_authority"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "synthetic_lifecycle_authority",
+        "limit": 100
+      },
+      "sequence": 1
+    },
+    {
+      "name": "restore_entity",
+      "input": {
+        "entity_id": "$OWNED_FIXTURE_ENTITY",
+        "entity_type": "synthetic_lifecycle_authority"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "$OWNED_FIXTURE_ENTITY",
+        "format": "json"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "delete_entity",
+      "input": {
+        "entity_id": "$OWNED_FIXTURE_ENTITY",
+        "entity_type": "synthetic_lifecycle_authority"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "synthetic_lifecycle_authority",
+        "limit": 100
+      },
+      "sequence": 5
+    },
+    {
+      "name": "restore_entity",
+      "input": {
+        "entity_id": "$OWNED_FIXTURE_ENTITY",
+        "entity_type": "synthetic_lifecycle_authority"
+      },
+      "sequence": 6
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "$OWNED_FIXTURE_ENTITY",
+        "format": "json"
+      },
+      "sequence": 7
+    }
+  ],
+  "assistant_text": "Inspect actual results. No live model or migration is claimed."
+}

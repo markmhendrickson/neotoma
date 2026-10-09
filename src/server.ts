@@ -3649,7 +3649,13 @@ export class NeotomaServer {
     };
 
     // Get entity first to check if it exists and handle merged entity redirection
-    const entity = await getEntityWithProvenance(parsed.entity_id, false, userId);
+    // Historical reads resolve ownership/redirects without applying CURRENT hiding.
+    // The shared temporal selector alone decides the requested past visibility.
+    const entity = await getEntityWithProvenance(
+      parsed.entity_id,
+      Boolean(parsed.at || parsed.at_ingested),
+      userId
+    );
 
     if (!entity) {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
@@ -7423,6 +7429,9 @@ export class NeotomaServer {
             fields: obs.fields,
             created_at: obs.created_at,
             user_id: obs.user_id,
+            entity_lifecycle_kind: obs.entity_lifecycle_kind,
+            entity_lifecycle_sequence: obs.entity_lifecycle_sequence,
+            entity_lifecycle_target_id: obs.entity_lifecycle_target_id,
           }));
 
           // Compute snapshot

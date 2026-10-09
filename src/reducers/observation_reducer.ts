@@ -31,7 +31,18 @@ export class MergeArrayByKeyLimitError extends Error {
   }
 }
 
+import {
+  selectEntityLifecycleVisibility,
+  type EntityLifecycleContext,
+  type EntityLifecycleKind,
+} from "../services/entity_lifecycle_authority.js";
+import { acquireEntityLifecycleContext } from "../services/entity_lifecycle_storage.js";
+import { getDb } from "../repositories/db/connection.js";
+
 export interface Observation {
+  entity_lifecycle_kind?: EntityLifecycleKind | null;
+  entity_lifecycle_sequence?: number | null;
+  entity_lifecycle_target_id?: string | null;
   id: string;
   entity_id: string;
   entity_type: string;
@@ -169,39 +180,30 @@ export class ObservationReducer {
   async computeSnapshot(
     entityId: string,
     observations: Observation[],
-    pinnedSchema?: SchemaRegistryEntry
+    pinnedSchema?: SchemaRegistryEntry,
+    lifecycleContext?: EntityLifecycleContext
   ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
     }
 
-    // Sort observations first to check for deletion
+    const auditObservations = observations;
+    const context =
+      lifecycleContext ??
+      (await acquireEntityLifecycleContext(
+        await getDb(),
+        {
+          id: entityId,
+          user_id: observations[0].user_id,
+          entity_type: observations[0].entity_type,
+        },
+        observations
+      ));
+    const visibility = selectEntityLifecycleVisibility(observations, context);
+    if (visibility.hidden) return null;
+    observations = visibility.factual_observations as Observation[];
+    if (!observations.length) return null; // authority/baseline-only is not factual data
     const sortedObservations = this.sortObservations(observations);
-
-    // Pre-compute observation_source ranking from the schema (or default
-    // order) so deletion / highest-priority / most-specific comparisons
-    // all use the same tie-break axis without re-reading the schema.
-    const deletionRank = buildObservationSourceRank();
-
-    // Check if entity is deleted (highest priority observation with _deleted: true)
-    const highestPriorityObs = [...sortedObservations].sort((a, b) => {
-      // Primary: source_priority DESC
-      if (b.source_priority !== a.source_priority) {
-        return b.source_priority - a.source_priority;
-      }
-      // Secondary: observation_source ranking (ASC — lower rank wins)
-      const rankA = rankForObservationSource(a, deletionRank);
-      const rankB = rankForObservationSource(b, deletionRank);
-      if (rankA !== rankB) return rankA - rankB;
-      // Tertiary: observed_at DESC
-      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-    })[0];
-
-    if (highestPriorityObs.fields._deleted === true) {
-      // Entity is deleted - return null instead of snapshot
-      return null;
-    }
-
     // Get entity type and user from first observation
     const entityType = observations[0].entity_type;
     const userId = observations[0].user_id;
@@ -226,7 +228,18 @@ export class ObservationReducer {
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
       console.warn(`No active entity schema found for entity type ${entityType}, using defaults`);
-      return this.computeSnapshotWithDefaults(entityId, observations);
+      const computed = await this.computeSnapshotWithDefaults(entityId, observations);
+      if (computed)
+        computed.observation_count =
+          context.mode === "historical"
+            ? auditObservations.filter(
+                (o) =>
+                  (!context.at || Date.parse(o.observed_at) <= Date.parse(context.at)) &&
+                  (!context.at_ingested ||
+                    Date.parse(o.created_at) <= Date.parse(context.at_ingested))
+              ).length
+            : auditObservations.length;
+      return computed;
     }
 
     // Use the active schema version (the one used for computation), not the observation's schema_version
@@ -284,7 +297,15 @@ export class ObservationReducer {
       schema_version: schemaVersion,
       snapshot,
       computed_at: lastObservationAt,
-      observation_count: observations.length,
+      observation_count:
+        context.mode === "historical"
+          ? auditObservations.filter(
+              (o) =>
+                (!context.at || Date.parse(o.observed_at) <= Date.parse(context.at)) &&
+                (!context.at_ingested ||
+                  Date.parse(o.created_at) <= Date.parse(context.at_ingested))
+            ).length
+          : auditObservations.length,
       last_observation_at: lastObservationAt,
       provenance,
       user_id: userId,
@@ -700,30 +721,6 @@ export class ObservationReducer {
 
     // Sort observations deterministically
     const sortedObservations = this.sortObservations(observations);
-
-    // Unseeded-type path: use the default observation_source ranking
-    // so sensors / workflow emissions still outrank LLM summaries when
-    // `source_priority` ties, matching the seeded-type behavior.
-    const defaultRank = buildObservationSourceRank();
-
-    // Check if entity is deleted (highest priority observation with _deleted: true)
-    const highestPriorityObs = [...sortedObservations].sort((a, b) => {
-      // Primary: source_priority DESC
-      if (b.source_priority !== a.source_priority) {
-        return b.source_priority - a.source_priority;
-      }
-      // Secondary: observation_source rank ASC
-      const rankA = rankForObservationSource(a, defaultRank);
-      const rankB = rankForObservationSource(b, defaultRank);
-      if (rankA !== rankB) return rankA - rankB;
-      // Tertiary: observed_at DESC
-      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-    })[0];
-
-    if (highestPriorityObs.fields._deleted === true) {
-      // Entity is deleted - return null instead of snapshot
-      return null;
-    }
 
     const entityType = observations[0].entity_type;
     const schemaVersion = observations[0].schema_version || "1.0";

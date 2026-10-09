@@ -46,16 +46,25 @@ export async function getSnapshot(
     throw new Error(`Failed to get snapshot: ${error.message}`);
   }
 
-  return data as SnapshotRecord | null;
+  const { filterCurrentLifecycleRecords } = await import("./entity_queries.js");
+  return data && (await filterCurrentLifecycleRecords([data], userId)).length
+    ? (data as SnapshotRecord)
+    : null;
 }
 
 export async function deleteSnapshot(entityId: string, userId: string): Promise<void> {
-  await db.from("entity_snapshots").delete().eq("entity_id", entityId).eq("user_id", userId);
+  const { error } = await db
+    .from("entity_snapshots")
+    .delete()
+    .eq("entity_id", entityId)
+    .eq("user_id", userId);
+  if (error) throw new Error("Failed to delete entity snapshot");
 }
 
 export async function recomputeSnapshot(
   entityId: string,
-  userId: string
+  userId: string,
+  strictDerivedEffects: boolean = false
 ): Promise<SnapshotRecord | null> {
   // #2340: a snapshot is a function of the observations ATTACHED to the
   // entity, resolved through the declared resolution layer, not of the rows
@@ -66,7 +75,14 @@ export async function recomputeSnapshot(
   // ownership are separate questions.
   const observations = await resolveOwnedObservations(entityId, userId);
   if (observations === null) return null;
-  if (observations.length === 0) return null;
+  if (observations.length === 0) {
+    // A missing physical set must not erase a recorded compatibility proof.
+    // The shared visibility acquisition distinguishes valid empty entities
+    // from incomplete captured membership; pre-cutover behavior is unchanged.
+    const { isEntityDeleted } = await import("./deletion.js");
+    await isEntityDeleted(entityId, userId);
+    return null;
+  }
 
   const computed = await observationReducer.computeSnapshot(entityId, observations);
   if (!computed) {
@@ -93,10 +109,12 @@ export async function recomputeSnapshot(
     );
     schema = entry?.schema_definition ?? null;
   } catch {
+    if (strictDerivedEffects) throw new Error("Lifecycle schema acquisition failed");
     schema = null;
   }
 
   await upsertTimelineEventsForEntitySnapshot({
+    strictPersistence: strictDerivedEffects,
     entityType: computed.entity_type,
     entityId: computed.entity_id,
     sourceId,
@@ -115,6 +133,7 @@ export async function recomputeSnapshot(
   // name; the new name is retrievable via canonical_name/aliases search.
   try {
     await maybeRederiveCanonicalName({
+      strictPersistence: strictDerivedEffects,
       entityId,
       entityType: computed.entity_type,
       userId: computed.user_id || userId,
@@ -122,6 +141,7 @@ export async function recomputeSnapshot(
       schema,
     });
   } catch (err) {
+    if (strictDerivedEffects) throw err;
     logger.warn(
       `[SNAPSHOT] Failed to re-derive canonical_name for ${entityId}: ` +
         (err instanceof Error ? err.message : String(err))
@@ -138,10 +158,13 @@ export async function recomputeSnapshot(
  * rather than going through {@link recomputeSnapshot}, and would otherwise
  * leave the entity-level canonical_name frozen at its creation-time value
  * while the snapshot moved on (issue: stale canonical_name after a corrective
- * observation). Callers MUST treat failure as non-fatal — a store must not
- * fail because a display name could not be refreshed.
+ * observation). Ordinary store callers retain non-fatal refresh behavior.
+ * Atomic lifecycle callers select strictPersistence so acquisition or
+ * persistence failure aborts the entire native transaction.
  */
 export async function maybeRederiveCanonicalName(params: {
+  /** Atomic lifecycle callers abort on persistence/acquisition failure. */
+  strictPersistence?: boolean;
   entityId: string;
   entityType: string;
   userId: string;
@@ -170,8 +193,10 @@ export async function maybeRederiveCanonicalName(params: {
     .select("id, canonical_name, aliases, user_id")
     .eq("id", entityId)
     .maybeSingle();
-  if (fetchError) return;
-  if (!entityRow) return;
+  if (fetchError || !entityRow) {
+    if (params.strictPersistence) throw new Error("Canonical name acquisition failed");
+    return;
+  }
 
   // Tenancy guard: refuse to rename a row owned by a different user.
   //
@@ -191,11 +216,13 @@ export async function maybeRederiveCanonicalName(params: {
   // column — because that would silently converge two distinct records.
   const collisionId = generateEntityId(entityType, newCanonicalName, entityIdTenantSalt(userId));
   if (collisionId !== entityId) {
-    const { data: collisionById } = await db
+    const { data: collisionById, error: collisionIdError } = await db
       .from("entities")
       .select("id")
       .eq("id", collisionId)
       .maybeSingle();
+    if (collisionIdError && params.strictPersistence)
+      throw new Error("Canonical name collision acquisition failed");
     if (collisionById) {
       logger.info(
         `[SNAPSHOT] Skipping canonical_name rename for ${entityId}: ` +
@@ -204,13 +231,15 @@ export async function maybeRederiveCanonicalName(params: {
       return;
     }
   }
-  const { data: collisionByName } = await db
+  const { data: collisionByName, error: collisionNameError } = await db
     .from("entities")
     .select("id")
     .eq("entity_type", entityType)
     .eq("canonical_name", newCanonicalName)
     .not("id", "eq", entityId)
     .limit(1);
+  if (collisionNameError && params.strictPersistence)
+    throw new Error("Canonical name collision acquisition failed");
   if (Array.isArray(collisionByName) && collisionByName.length > 0) {
     logger.info(
       `[SNAPSHOT] Skipping canonical_name rename for ${entityId}: ` +
@@ -240,6 +269,7 @@ export async function maybeRederiveCanonicalName(params: {
     .eq("id", entityId);
 
   if (updateError) {
+    if (params.strictPersistence) throw new Error("Canonical name persistence failed");
     logger.warn(`[SNAPSHOT] canonical_name rename failed for ${entityId}: ${updateError.message}`);
     return;
   }

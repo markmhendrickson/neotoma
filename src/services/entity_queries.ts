@@ -198,49 +198,12 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
 }
 
 /**
- * Resolve which of the given entities are soft-deleted.
- *
- * ateles#576: resolve deletion from the PRESENCE of an entity_snapshots row
- * rather than by re-deriving it from the observation log.
- *
- * A soft-deleted entity has no snapshot row. `ObservationReducer.computeSnapshot`
- * returns null once the highest-priority observation carries `_deleted: true`,
- * and the snapshot writers delete the row when the reducer returns null — the
- * SQLite adapter does this automatically on every observation insert
- * (`recomputeEntitySnapshot`), so a deletion or restoration observation
- * re-materializes liveness as a side effect of being written. That makes
- * "has a snapshot row" the system's existing, self-maintaining record of
- * liveness; this function now simply reads it.
- *
- * The previous implementation instead selected `entity_id, source_priority,
- * observed_at, fields` for EVERY observation of every id in the chunk, sorted
- * the whole result in a temp b-tree (the ORDER BY spans entities, so the
- * per-entity index cannot serve it), then kept only the top row per entity
- * and discarded the rest. The paginated scan calls this once per chunk, so a
- * single request re-read large parts of the observations table — including
- * its `fields` JSON blobs — to recompute something already materialized.
- *
- * #2267 review: snapshot-row ABSENCE is not by itself deletion. Two other
- * states also lack a snapshot row, and conflating them with deletion silently
- * removed live entities from results:
- *
- *   - MERGED-AWAY. `mergeEntities` rewrites the merged-away entity's
- *     observations onto the survivor (step 1) and deletes its snapshot row
- *     (step 9), so it has neither. It is not deleted, and `include_merged: true`
- *     must still return it. Callers pass `merged_to_entity_id` — already on
- *     every candidate row via ENTITY_BASE_SELECT — so this costs no extra query.
- *   - NEVER-OBSERVED. An `entities` row written without any observation never
- *     gets a snapshot (nothing ran the reducer). Treating it as deleted made
- *     live entities vanish from default queries — the IT-008 regression. Such a
- *     row has no deletion observation, so it is live by the prior rule and
- *     stays live here.
- *
- * Both are distinguished WITHOUT reading the observation log, so the
- * performance win is preserved in full: still one indexed snapshot lookup per
- * chunk, plus (only when never-observed rows are actually present) one bounded
- * indexed existence probe against `observations`.
+ * Snapshot presence is derived state. Validate each canonical candidate through
+ * the shared owned lifecycle selector, retaining empty/merged compatibility.
+ * This reads the attached observation log; it is not the old snapshot-only
+ * indexed shortcut and must not certify visibility from stale materialization.
  */
-async function getDeletedEntityIds(
+async function getLegacyDeletedEntityIds(
   candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
   userId?: string
 ): Promise<Set<string>> {
@@ -301,6 +264,58 @@ async function getDeletedEntityIds(
   }
 
   return deletedEntityIds;
+}
+
+async function getDeletedEntityIds(
+  candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
+  userId?: string
+): Promise<Set<string>> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb())))
+    return getLegacyDeletedEntityIds(candidates, userId);
+  const deletedEntityIds = new Set<string>();
+  if (candidates.length === 0) {
+    return deletedEntityIds;
+  }
+
+  // Snapshot presence is derived state, not lifecycle authority. In particular
+  // an empty entity may own only its compatibility baseline and no fact snapshot.
+  const { isEntityDeleted } = await import("./deletion.js");
+  for (const candidate of candidates) {
+    if (candidate.merged_to_entity_id) continue;
+    let owner = userId;
+    if (!owner) {
+      const { data, error } = await db
+        .from("entities")
+        .select("user_id")
+        .eq("id", candidate.id)
+        .single();
+      if (error || typeof data?.user_id !== "string")
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      owner = data.user_id;
+    }
+    if (await isEntityDeleted(candidate.id, owner!)) deletedEntityIds.add(candidate.id);
+  }
+
+  return deletedEntityIds;
+}
+
+/** Reuse the current visibility acquisition for derived snapshot consumers.
+ * Before explicit cutover their existing materialized-read behavior is retained.
+ */
+export async function filterCurrentLifecycleRecords<T extends { entity_id: string }>(
+  records: readonly T[],
+  userId?: string
+): Promise<T[]> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) return [...records];
+  const deleted = await getDeletedEntityIds(
+    records.map((r) => ({ id: r.entity_id })),
+    userId
+  );
+  return records.filter((r) => !deleted.has(r.entity_id));
 }
 
 /**
@@ -990,27 +1005,9 @@ export async function getEntityWithProvenance(
     return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId);
   }
 
-  // Check if entity is deleted (unless explicitly requested)
   if (!includeDeleted) {
-    let deletedCheckQuery = db
-      .from("observations")
-      .select("source_priority, observed_at, fields")
-      .eq("entity_id", entityId);
-    if (userId) {
-      deletedCheckQuery = deletedCheckQuery.eq("user_id", userId);
-    }
-    const { data: observations } = await deletedCheckQuery
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false })
-      .limit(1);
-
-    if (observations && observations.length > 0) {
-      const highestPriorityObs = observations[0];
-      if (highestPriorityObs.fields?._deleted === true) {
-        // Entity is deleted - return null
-        return null;
-      }
-    }
+    const { isEntityDeleted } = await import("./deletion.js");
+    if (await isEntityDeleted(entityId, entity.user_id as string)) return null;
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
