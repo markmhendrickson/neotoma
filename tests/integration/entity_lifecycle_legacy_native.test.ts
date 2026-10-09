@@ -192,4 +192,9 @@ it("an erased captured identity makes historical proof unavailable, never re-inf
     /acquisition/
   );
   await expect(isEntityDeleted(id, owner)).rejects.toThrow(/acquisition/);
+  const refused = await recomputeSnapshot(id, owner).then(
+    () => false,
+    (error) => error.code === "ERR_ENTITY_LIFECYCLE_ACQUISITION"
+  );
+  expect(refused).toBe(true);
 });

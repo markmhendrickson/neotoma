@@ -46,7 +46,10 @@ export async function getSnapshot(
     throw new Error(`Failed to get snapshot: ${error.message}`);
   }
 
-  return data as SnapshotRecord | null;
+  const { filterCurrentLifecycleRecords } = await import("./entity_queries.js");
+  return data && (await filterCurrentLifecycleRecords([data], userId)).length
+    ? (data as SnapshotRecord)
+    : null;
 }
 
 export async function deleteSnapshot(entityId: string, userId: string): Promise<void> {
@@ -72,7 +75,14 @@ export async function recomputeSnapshot(
   // ownership are separate questions.
   const observations = await resolveOwnedObservations(entityId, userId);
   if (observations === null) return null;
-  if (observations.length === 0) return null;
+  if (observations.length === 0) {
+    // A missing physical set must not erase a recorded compatibility proof.
+    // The shared visibility acquisition distinguishes valid empty entities
+    // from incomplete captured membership; pre-cutover behavior is unchanged.
+    const { isEntityDeleted } = await import("./deletion.js");
+    await isEntityDeleted(entityId, userId);
+    return null;
+  }
 
   const computed = await observationReducer.computeSnapshot(entityId, observations);
   if (!computed) {
@@ -148,8 +158,9 @@ export async function recomputeSnapshot(
  * rather than going through {@link recomputeSnapshot}, and would otherwise
  * leave the entity-level canonical_name frozen at its creation-time value
  * while the snapshot moved on (issue: stale canonical_name after a corrective
- * observation). Callers MUST treat failure as non-fatal — a store must not
- * fail because a display name could not be refreshed.
+ * observation). Ordinary store callers retain non-fatal refresh behavior.
+ * Atomic lifecycle callers select strictPersistence so acquisition or
+ * persistence failure aborts the entire native transaction.
  */
 export async function maybeRederiveCanonicalName(params: {
   /** Atomic lifecycle callers abort on persistence/acquisition failure. */

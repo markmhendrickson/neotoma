@@ -30,7 +30,7 @@ import { softDeleteEntity, restoreEntity, isEntityDeleted } from "../../src/serv
 import { createCorrection } from "../../src/services/correction.js";
 import { computeEntitySnapshotAtTime } from "../../src/services/entity_snapshot_at_time.js";
 
-import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
+import { recomputeSnapshot, getSnapshot } from "../../src/services/snapshot_computation.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import { mergeEntities } from "../../src/services/entity_merge.js";
 import { splitEntity } from "../../src/services/entity_split.js";
@@ -177,6 +177,7 @@ describe("authenticated entity lifecycle", () => {
     const initial = (await db.from("entity_snapshots").select("*").eq("entity_id", id).single())
       .data;
     expect(initial?.snapshot.title).toBe("Synthetic factual value");
+    expect((await getSnapshot(id, owner))?.snapshot.title).toBe("Synthetic factual value");
     expect(
       (await exportEntitySnapshots({ user_id: owner, entity_types: [type] })).total_entities
     ).toBe(1);
@@ -200,6 +201,7 @@ describe("authenticated entity lifecycle", () => {
     ).toBe(0);
     expect(readFileSync(memoryPath, "utf8")).not.toContain(id);
     expect(await outbound()).toEqual([]);
+    expect(await getSnapshot(id, owner)).toBeNull();
     expect((await getDashboardStats(owner)).entities_by_type[type]).toBeUndefined();
     const query = await queryEntitiesWithCount({ userId: owner, entityType: type, limit: 100 });
     expect(query.entities).toEqual([]);
@@ -217,6 +219,7 @@ describe("authenticated entity lifecycle", () => {
       (await queryEntitiesWithCount({ userId: owner, entityType: type, limit: 100 })).total
     ).toBe(1);
     expect((await outbound()).some((row) => row.entity_id === id)).toBe(true);
+    expect((await getSnapshot(id, owner))?.snapshot.title).toBe("Synthetic factual value");
   });
   it("modern MCP cycles and historical retrieval do not confuse present hiding with past visibility", async () => {
     const first = await tool("delete_entity", { entity_id: id, entity_type: type });
