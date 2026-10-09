@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **717**
-- Backend and repo Vitest files: **681**
+- Total automated test files: **720**
+- Backend and repo Vitest files: **684**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 193 |
+| Vitest unit tests | 194 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 215 |
+| Vitest integration tests | 217 |
 | Vitest CLI tests | 85 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (193):**
+**Files (194):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -235,6 +235,7 @@ flowchart TD
 - `tests/unit/mirror_writeback.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
 - `tests/unit/null_cleared_field_warning.test.ts`
+- `tests/unit/nullable_winning_projection.test.ts`
 - `tests/unit/observation_insert_primitive.test.ts`
 - `tests/unit/observation_reducer_comparator.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
@@ -452,7 +453,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (215):**
+**Files (217):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -471,6 +472,7 @@ flowchart TD
 - `tests/integration/agents_directory_api.test.ts`
 - `tests/integration/anonymous_write_policy.test.ts`
 - `tests/integration/array_item_patch_conflict.test.ts`
+- `tests/integration/atomic_null_projection.test.ts`
 - `tests/integration/attachment_resolution_equivalence.test.ts`
 - `tests/integration/attribution_parity.test.ts`
 - `tests/integration/auto_link_retraction_organization_change.test.ts`
@@ -500,6 +502,7 @@ flowchart TD
 - `tests/integration/entity_lifecycle_authority.test.ts`
 - `tests/integration/entity_lifecycle_cutover.test.ts`
 - `tests/integration/entity_lifecycle_executor_boundary.test.ts`
+- `tests/integration/entity_lifecycle_executor_program.test.ts`
 - `tests/integration/entity_lifecycle_ingress.test.ts`
 - `tests/integration/entity_lifecycle_inventory.test.ts`
 - `tests/integration/entity_lifecycle_legacy_native.test.ts`
