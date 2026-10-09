@@ -7,6 +7,9 @@ import { createHash } from "node:crypto";
 import type { DbConnection, DbDatabase } from "../repositories/db/driver.js";
 
 export class StoreConditionError extends Error {
+  toErrorEnvelope() {
+    return { code: this.code, message: this.message, hint: this.hint };
+  }
   readonly hint =
     "Retry the exact original request to determine its outcome; do not change its mode or payload under this key.";
   constructor(

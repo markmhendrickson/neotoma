@@ -302,6 +302,8 @@ export function deriveTimelineEventsFromRawFragments(
 }
 
 export interface UpsertTimelineEventsForSnapshotParams {
+  /** An atomic caller must abort instead of downgrading persistence failure. */
+  strictPersistence?: boolean;
   entityType: string;
   entityId: string;
   sourceId: string;
@@ -385,6 +387,7 @@ export async function upsertTimelineEventsForEntitySnapshot(
       { onConflict: "id" }
     );
     if (evtError) {
+      if (params.strictPersistence) throw new Error("Conditional timeline persistence failed.");
       logger.warn(`Failed to upsert timeline event ${row.id}:`, evtError.message);
     }
   }

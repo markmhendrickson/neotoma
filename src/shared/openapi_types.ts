@@ -4181,6 +4181,15 @@ export interface components {
      *     remain intentionally open so schema-driven fields flow through.
      */
     StoreRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities?: {
         [key: string]: unknown;
       }[];
@@ -4266,6 +4275,15 @@ export interface components {
      *     schema-driven fields flow through (see description on `entities[]`).
      */
     StoreStructuredRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities: {
         [key: string]: unknown;
       }[];
@@ -4322,6 +4340,21 @@ export interface components {
       source_peer_id?: string;
     };
     StoreStructuredResponse: {
+      /**
+       * @description Conditional stores return the original operation proof, binding the
+       *     owner/request fingerprint to the original source and observation.
+       *     Current entity snapshots are separate and do not substitute for it.
+       */
+      operation_receipt?: {
+        [key: string]: unknown;
+      };
+      /**
+       * @description Notification attempts run after commit. An uncertain notification
+       *     outcome does not mean the applied transaction was rolled back.
+       */
+      postcommit_notifications?: {
+        [key: string]: unknown;
+      };
       success?: boolean;
       /**
        * @description Echoes the request's `commit` flag. `false` means this response

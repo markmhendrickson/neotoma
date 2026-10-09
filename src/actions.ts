@@ -7760,6 +7760,7 @@ async function completeInterpretationRun(params: {
 }
 
 export async function storeStructuredForApi(params: {
+  expectedEntityAbsent?: boolean;
   userId: string;
   entities: Record<string, unknown>[];
   sourcePriority: number;
@@ -7790,6 +7791,17 @@ export async function storeStructuredForApi(params: {
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
+  const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+  assertConditionalStoreRequest({
+    entities,
+    idempotency_key: idempotencyKey,
+    expected_entity_absent: params.expectedEntityAbsent,
+    commit,
+    relationships,
+    interpretation,
+    interpretation_source_id: interpretationSourceId,
+    source_peer_id: sourcePeerId ?? undefined,
+  });
 
   // Access policy: when the caller is a guest (AAuth-verified but not admitted
   // via a grant), check per-entity-type access policies. If the policy allows
@@ -7941,6 +7953,19 @@ export async function storeStructuredForApi(params: {
     if (detection.detected) {
       throw new FlatPackedRowsError(detection);
     }
+  }
+
+  if (params.expectedEntityAbsent === true) {
+    const { storeConditionalStructured } = await import("./services/store_conditional.js");
+    return storeConditionalStructured({
+      userId,
+      entities,
+      sourcePriority,
+      observationSource,
+      idempotencyKey,
+      originalFilename,
+      strict,
+    });
   }
 
   // Compute hash of incoming content before querying so we can detect
@@ -9419,6 +9444,8 @@ async function handleStorePost(
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed.data);
     const hasEntities = Boolean(parsed.data.entities?.length);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
@@ -9523,6 +9550,7 @@ async function handleStorePost(
         storeStructuredForApi({
           userId,
           entities: parsed.data.entities as Record<string, unknown>[],
+          expectedEntityAbsent: parsed.data.expected_entity_absent,
           sourcePriority: parsed.data.source_priority ?? 100,
           observationSource: parsed.data.observation_source,
           sourcePeerId: parsed.data.source_peer_id,
@@ -9587,6 +9615,16 @@ async function handleStorePost(
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+    const { StoreConditionError } = await import("./services/store_condition_keys.js");
+    if (error instanceof StoreConditionError) {
+      const status =
+        error.code === "VALIDATION_ERROR"
+          ? 400
+          : error.code === "STORE_RECEIPT_UNCERTAIN"
+            ? 503
+            : 409;
+      return res.status(status).json({ error: error.toErrorEnvelope() });
+    }
     if (isGrantPinConflict(error)) {
       logWarn("AgentGrantPinConflict:store", req, { code: error.code });
       return sendError(res, 409, error.code, error.message, { field: error.field });

@@ -2521,6 +2521,16 @@ export class NeotomaServer {
         if (error instanceof McpError) {
           throw error;
         }
+        const { StoreConditionError } = await import("./services/store_condition_keys.js");
+        if (error instanceof StoreConditionError) {
+          throw new McpError(
+            error.code === "STORE_RECEIPT_UNCERTAIN"
+              ? ErrorCode.InternalError
+              : ErrorCode.InvalidRequest,
+            error.message,
+            error.toErrorEnvelope()
+          );
+        }
         if (error instanceof AttributionPolicyError) {
           // Surface policy rejections as structured MCP errors so clients can
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
@@ -5644,6 +5654,7 @@ export class NeotomaServer {
 
     const schema = z
       .object({
+        expected_entity_absent: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
@@ -5704,6 +5715,9 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed);
+
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
       if (parsed.commit === false) {
@@ -5761,6 +5775,7 @@ export class NeotomaServer {
         {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
+          expectedEntityAbsent: parsed.expected_entity_absent,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -6218,6 +6233,7 @@ export class NeotomaServer {
     originalFilename?: string,
     relationships?: StoreRelationshipRef[],
     options: {
+      expectedEntityAbsent?: boolean;
       commit?: boolean;
       strict?: boolean;
       observationSource?: import("./shared/action_schemas.js").ObservationSource;
@@ -6226,6 +6242,19 @@ export class NeotomaServer {
       interpretationSourceId?: string;
     } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (options.expectedEntityAbsent === true) {
+      const { storeStructuredForApi } = await import("./actions.js");
+      const result = await storeStructuredForApi({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        relationships,
+        ...options,
+      });
+      return this.buildTextResponse(result);
+    }
     const commit = options.commit !== false;
     const strict = options.strict === true;
     const observationSource = options.observationSource;

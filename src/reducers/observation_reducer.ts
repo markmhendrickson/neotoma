@@ -168,7 +168,8 @@ export class ObservationReducer {
    */
   async computeSnapshot(
     entityId: string,
-    observations: Observation[]
+    observations: Observation[],
+    pinnedSchema?: SchemaRegistryEntry
   ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
@@ -206,10 +207,8 @@ export class ObservationReducer {
     const userId = observations[0].user_id;
 
     // Load schema and merge policies (pass userId to support user-specific schemas)
-    let schemaEntry: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(
-      entityType,
-      userId
-    );
+    let schemaEntry: SchemaRegistryEntry | null =
+      pinnedSchema ?? (await schemaRegistry.loadActiveSchema(entityType, userId));
     if (!schemaEntry) {
       const codeSchema = getSchemaDefinition(entityType);
       if (codeSchema) {

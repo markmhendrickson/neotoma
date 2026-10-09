@@ -2539,6 +2539,15 @@ components:
         `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
         remain intentionally open so schema-driven fields flow through.
       properties:
+        expected_entity_absent:
+          type: boolean
+          description: |
+            When true, atomically create exactly one structured entity only if
+            its complete schema-declared physical identity is absent. Requires
+            commit=true and a nonempty idempotency_key; file, relationship,
+            interpretation, intake, target and sync combinations are refused.
+            Omitted or false preserves ordinary upsert behavior. Exact retries
+            return the original immutable operation receipt without new effects.
         entities:
           type: array
           items:
@@ -2650,6 +2659,15 @@ components:
         fields inside `entities[]` remain intentionally open so
         schema-driven fields flow through (see description on `entities[]`).
       properties:
+        expected_entity_absent:
+          type: boolean
+          description: |
+            When true, atomically create exactly one structured entity only if
+            its complete schema-declared physical identity is absent. Requires
+            commit=true and a nonempty idempotency_key; file, relationship,
+            interpretation, intake, target and sync combinations are refused.
+            Omitted or false preserves ordinary upsert behavior. Exact retries
+            return the original immutable operation receipt without new effects.
         entities:
           type: array
           items:
@@ -2719,6 +2737,19 @@ components:
     StoreStructuredResponse:
       type: object
       properties:
+        operation_receipt:
+          type: object
+          additionalProperties: true
+          description: |
+            Conditional stores return the original operation proof, binding the
+            owner/request fingerprint to the original source and observation.
+            Current entity snapshots are separate and do not substitute for it.
+        postcommit_notifications:
+          type: object
+          additionalProperties: true
+          description: |
+            Notification attempts run after commit. An uncertain notification
+            outcome does not mean the applied transaction was rolled back.
         success:
           type: boolean
         commit:
