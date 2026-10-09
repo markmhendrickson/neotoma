@@ -16,10 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  ObservationReducer,
-  type Observation,
-} from "../../src/reducers/observation_reducer.js";
+import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 
 // ---------------------------------------------------------------------------
 // Mocks required by ObservationReducer
@@ -43,13 +40,13 @@ vi.mock("../../src/services/schema_definitions.js", () => ({
 }));
 
 vi.mock("../../src/services/field_validation.js", () => ({
-  validateFieldWithConverters: vi.fn().mockImplementation(
-    (_field: string, value: unknown, _fieldDef: unknown) => ({
+  validateFieldWithConverters: vi
+    .fn()
+    .mockImplementation((_field: string, value: unknown, _fieldDef: unknown) => ({
       isValid: true,
       value,
       shouldRouteToRawFragments: false,
-    }),
-  ),
+    })),
 }));
 
 import { schemaRegistry } from "../../src/services/schema_registry.js";
@@ -59,7 +56,7 @@ import { schemaRegistry } from "../../src/services/schema_registry.js";
 // ---------------------------------------------------------------------------
 
 function makeConversationObs(
-  overrides: Partial<Observation> & { fields: Record<string, unknown> },
+  overrides: Partial<Observation> & { fields: Record<string, unknown> }
 ): Observation {
   return {
     id: "obs_default",
@@ -70,8 +67,9 @@ function makeConversationObs(
     observed_at: "2026-05-15T00:00:00Z",
     source_priority: 500,
     observation_source: "llm_summary",
-    is_deletion: false,
-    is_correction: false,
+    user_id: "synthetic-conversation-owner",
+    created_at: "2026-05-15T00:00:00Z",
+    specificity_score: null,
     ...overrides,
   };
 }
@@ -132,7 +130,7 @@ describe("conversation schema declaration — session_uuid bridge", () => {
     const fields = schema?.schema_definition?.fields ?? {};
     expect(
       fields["session_uuid"],
-      'conversation schema_definition.fields must include "session_uuid"',
+      'conversation schema_definition.fields must include "session_uuid"'
     ).toBeDefined();
     expect(fields["session_uuid"]?.type).toBe("string");
     expect(fields["session_uuid"]?.required).toBe(false);
@@ -144,10 +142,7 @@ describe("conversation schema declaration — session_uuid bridge", () => {
     const version = ENTITY_SCHEMAS["conversation"]?.schema_version ?? "0";
     const [major, minor] = version.split(".").map(Number);
     const atLeast14 = major > 1 || (major === 1 && minor >= 4);
-    expect(
-      atLeast14,
-      `conversation schema_version "${version}" must be >= 1.4`,
-    ).toBe(true);
+    expect(atLeast14, `conversation schema_version "${version}" must be >= 1.4`).toBe(true);
   });
 
   it("conversation reducer_config includes a merge_policy for session_uuid", async () => {
@@ -156,7 +151,7 @@ describe("conversation schema declaration — session_uuid bridge", () => {
     const policies = ENTITY_SCHEMAS["conversation"]?.reducer_config?.merge_policies ?? {};
     expect(
       policies["session_uuid"],
-      'conversation reducer_config.merge_policies must declare a policy for "session_uuid"',
+      'conversation reducer_config.merge_policies must declare a policy for "session_uuid"'
     ).toBeDefined();
   });
 });
@@ -168,6 +163,21 @@ describe("conversation schema declaration — session_uuid bridge", () => {
 describe("conversation snapshot — session_uuid projection", () => {
   const TEST_UUID = "550e8400-e29b-41d4-a716-446655440000";
   const reducer = new ObservationReducer();
+
+  // Complete in-memory projection fixtures use the selected pre-migration
+  // context. Runtime callers still acquire and validate persisted authority.
+  function computePureConversationSnapshot(observations: Observation[]) {
+    const first = observations[0];
+    return reducer.computeSnapshot(first.entity_id, observations, undefined, {
+      acquisition: "complete",
+      target: {
+        id: first.entity_id,
+        user_id: first.user_id,
+        entity_type: first.entity_type,
+      },
+      mode: "pre_migration",
+    });
+  }
 
   beforeEach(() => {
     vi.mocked(schemaRegistry.loadActiveSchema).mockResolvedValue(conversationSchemaV14());
@@ -183,7 +193,7 @@ describe("conversation snapshot — session_uuid projection", () => {
       },
     });
 
-    const result = await reducer.computeSnapshot("ent_conv_1", [obs]);
+    const result = await computePureConversationSnapshot([obs]);
 
     expect(result).not.toBeNull();
     expect(result!.snapshot["session_uuid"]).toBe(TEST_UUID);
@@ -201,7 +211,7 @@ describe("conversation snapshot — session_uuid projection", () => {
       },
     });
 
-    const result = await reducer.computeSnapshot("ent_conv_2", [obs]);
+    const result = await computePureConversationSnapshot([obs]);
 
     expect(result).not.toBeNull();
     expect(result!.snapshot["conversation_id"]).toBe("non-claude-code-session");
@@ -229,9 +239,14 @@ describe("conversation snapshot — session_uuid projection", () => {
       },
     });
 
-    const result = await reducer.computeSnapshot("ent_conv_3", [obs1, obs2]);
+    const result = await computePureConversationSnapshot([obs1, obs2]);
 
     expect(result).not.toBeNull();
     expect(result!.snapshot["session_uuid"]).toBe(TEST_UUID);
+  });
+
+  it("refuses an incomplete owner even in an explicit pure projection context", async () => {
+    const obs = makeConversationObs({ user_id: "", fields: { session_uuid: TEST_UUID } });
+    await expect(computePureConversationSnapshot([obs])).rejects.toThrow(/acquisition/);
   });
 });
