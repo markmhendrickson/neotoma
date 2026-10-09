@@ -174,7 +174,13 @@ function target(manifest: ExecutorManifest, mode: string): void {
     process.env.NEOTOMA_DB_AUTH_TOKEN ||
     process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
-    process.env.NEOTOMA_MCP_ENABLE_LOGGING === "1"
+    process.env.NEOTOMA_MCP_ENABLE_LOGGING === "1" ||
+    [
+      "NEOTOMA_API_TOKEN",
+      "NEOTOMA_BEARER_TOKEN",
+      "NEOTOMA_AUTH_TOKEN",
+      "NEOTOMA_ENCRYPTION_KEY",
+    ].some((key) => Boolean(process.env[key]))
   )
     refuse("environment_mismatch");
   for (const path of [t.database, t.isolation.source_database]) {
