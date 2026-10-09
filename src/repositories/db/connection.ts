@@ -9,6 +9,7 @@
  */
 
 import { mkdirSync } from "fs";
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "path";
 import { config } from "../../config.js";
 import {
@@ -21,6 +22,25 @@ import type { DbDatabase } from "./driver.js";
 
 let cachedDb: DbDatabase | null = null;
 let opening: Promise<DbDatabase> | null = null;
+const lifecycleDatabase = new AsyncLocalStorage<{ database: DbDatabase; active: boolean }>();
+let lifecycleBindingActive = false;
+
+/** Fresh dedicated-process scope only: adapters share the already validated handle. */
+export async function withExistingLifecycleDatabase<T>(
+  database: DbDatabase,
+  operation: () => Promise<T>
+): Promise<T> {
+  if (cachedDb || opening || lifecycleBindingActive || lifecycleDatabase.getStore())
+    throw new Error("LIFECYCLE_DATABASE_BINDING_UNAVAILABLE");
+  lifecycleBindingActive = true;
+  const scope = { database, active: true };
+  try {
+    return await lifecycleDatabase.run(scope, operation);
+  } finally {
+    scope.active = false;
+    lifecycleBindingActive = false;
+  }
+}
 
 function libsqlUrl(): string {
   return config.dbUrl || `file:${config.sqlitePath}`;
@@ -108,6 +128,13 @@ async function openDb(): Promise<DbDatabase> {
  * Concurrent first calls share one open — no double-initialization race.
  */
 export function getDb(): Promise<DbDatabase> {
+  const bound = lifecycleDatabase.getStore();
+  if (bound) {
+    if (!bound.active) return Promise.reject(new Error("LIFECYCLE_DATABASE_BINDING_EXPIRED"));
+    return Promise.resolve(bound.database);
+  }
+  if (lifecycleBindingActive)
+    return Promise.reject(new Error("LIFECYCLE_DATABASE_BINDING_UNAVAILABLE"));
   if (cachedDb) return Promise.resolve(cachedDb);
   if (!opening) {
     opening = openDb()
@@ -140,6 +167,7 @@ export function peekCachedDb(): DbDatabase | null {
  * while the server was running).
  */
 export function clearDbCache(): void {
+  if (lifecycleBindingActive) throw new Error("LIFECYCLE_DATABASE_BINDING_UNAVAILABLE");
   if (cachedDb) {
     const stale = cachedDb;
     cachedDb = null;

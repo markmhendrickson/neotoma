@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
+import { lstatSync } from "node:fs";
 import {
   NESTED_TRANSACTION_ERROR,
   normalizeParams,
@@ -11,7 +12,7 @@ import {
 } from "../db/driver.js";
 
 const nodeRequire = createRequire(import.meta.url);
-let DatabaseCtor: new (path: string) => any;
+let DatabaseCtor: new (path: string, options?: Record<string, unknown>) => any;
 let hasNativeSqlite = false;
 
 try {
@@ -30,15 +31,26 @@ try {
     }
     return (originalEmit as (...a: unknown[]) => boolean)(event, ...args);
   } as typeof process.emit;
-  const nativeModule = nodeRequire("node:sqlite") as { DatabaseSync: new (path: string) => any };
+  const nativeModule = nodeRequire("node:sqlite") as {
+    DatabaseSync: new (path: string, options?: Record<string, unknown>) => any;
+  };
   process.emit = originalEmit;
   DatabaseCtor = nativeModule.DatabaseSync;
   hasNativeSqlite = true;
 } catch {
-  DatabaseCtor = nodeRequire("better-sqlite3") as new (path: string) => any;
+  DatabaseCtor = nodeRequire("better-sqlite3") as new (
+    path: string,
+    options?: Record<string, unknown>
+  ) => any;
 }
 
 type UnknownRecord = Record<string, unknown>;
+
+/** Internal no-create inspection; ordinary opens keep their existing behavior. */
+export interface ExistingSqliteOpenOptions {
+  existing: true;
+  readOnly: true;
+}
 
 class SqliteStatementImpl {
   constructor(private readonly statement: any) {}
@@ -59,8 +71,20 @@ class SqliteStatementImpl {
 class SqliteDatabaseImpl {
   private readonly db: any;
 
-  constructor(path: string) {
-    this.db = new DatabaseCtor(path);
+  constructor(path: string, options?: ExistingSqliteOpenOptions) {
+    if (options) {
+      if (options.existing !== true || options.readOnly !== true)
+        throw new Error("SQLITE_EXISTING_OPEN_INVALID");
+      const file = lstatSync(path);
+      if (!file.isFile() || file.isSymbolicLink()) throw new Error("SQLITE_EXISTING_FILE_REQUIRED");
+      this.db = new DatabaseCtor(
+        path,
+        hasNativeSqlite
+          ? { readOnly: options.readOnly }
+          : { readonly: options.readOnly, fileMustExist: true }
+      );
+      if (options.readOnly) this.db.exec("PRAGMA query_only = ON");
+    } else this.db = new DatabaseCtor(path);
   }
 
   prepare(sql: string): SqliteStatementImpl {
@@ -164,8 +188,8 @@ export class AsyncSqliteDatabase implements DbDatabase {
   private readonly gate = new TransactionGate();
   private readonly txContext = new AsyncLocalStorage<boolean>();
 
-  constructor(path: string) {
-    this.db = new SqliteDatabaseImpl(path);
+  constructor(path: string, options?: ExistingSqliteOpenOptions) {
+    this.db = new SqliteDatabaseImpl(path, options);
   }
 
   /** @internal Exposes the sync database to statement wrappers. */
