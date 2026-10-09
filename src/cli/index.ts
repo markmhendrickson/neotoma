@@ -1331,13 +1331,27 @@ export function getSqliteRecoveryHint(
   err: unknown,
   envHint: "dev" | "prod" = inferCliRecoveryEnvHint()
 ): string | null {
+  if (err instanceof CliHintError && err.hint.code === "INTEGRITY_FAILED") {
+    const checkCommand =
+      envHint === "prod" ? "neotoma prod storage recover-db" : "neotoma storage recover-db";
+    const recoverCommand =
+      envHint === "prod"
+        ? "neotoma prod storage recover-db --recover"
+        : "neotoma storage recover-db --recover";
+    return (
+      "SQLite may be corrupted. Run " +
+      `\`${checkCommand}\`` +
+      " first, then " +
+      `\`${recoverCommand}\`` +
+      " after stopping Neotoma."
+    );
+  }
   const msg = formatCliError(err).toLowerCase();
   const patterns = [
     "database disk image is malformed",
     "sqlite_corrupt",
     "btreeinitpage",
     "rowid out of order",
-    "integrity_check",
   ];
   const matches = patterns.some((pattern) => msg.includes(pattern));
   if (!matches) return null;
@@ -1823,6 +1837,46 @@ class CliHintError extends Error {
     super(message);
     this.name = "CliHintError";
   }
+}
+
+export type BackupIntegrityVerification = {
+  kind: "verified" | "verify_instrument_failure" | "integrity_failed";
+};
+
+/**
+ * Preserve the distinction between a negative SQLite conclusion and a check
+ * that did not return a conclusion at all. Only an exact `ok` is success.
+ */
+export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVerification {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { kind: "verify_instrument_failure" };
+  }
+  const details: string[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      return { kind: "verify_instrument_failure" };
+    }
+    const record = row as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (
+      keys.length !== 1 ||
+      keys[0] !== "integrity_check" ||
+      typeof record.integrity_check !== "string" ||
+      record.integrity_check.length === 0 ||
+      record.integrity_check.trim() !== record.integrity_check
+    ) {
+      return { kind: "verify_instrument_failure" };
+    }
+    details.push(record.integrity_check);
+  }
+
+  if (details.length === 1 && details[0] === "ok") {
+    return { kind: "verified" };
+  }
+  if (details.every((detail) => detail !== "ok")) {
+    return { kind: "integrity_failed" };
+  }
+  return { kind: "verify_instrument_failure" };
 }
 
 /** Wait for session port file written by API when it binds; returns actual port or preferred on timeout. */
@@ -2973,6 +3027,11 @@ async function backupFilesWithTimestamp(filePaths: string[], ts: string): Promis
  */
 function quoteSqliteStringLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/** Quote one value for a POSIX shell command shown to a human. */
+function quotePosixShellArgument(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 async function checkpointWal(db: AsyncSqliteDatabase): Promise<void> {
@@ -11156,27 +11215,37 @@ backupCommand
       // Verify the snapshot is a usable database, not merely a plausible-sized file.
       // The old >1KB check passed happily on corrupt output, which is what made the
       // #2075 failure silent.
-      let integrityOk = false;
-      let integrityDetail = "unknown";
+      let integrity: BackupIntegrityVerification = {
+        kind: "verify_instrument_failure",
+      };
       let verifyDb: AsyncSqliteDatabase | null = null;
       try {
         verifyDb = new AsyncSqliteDatabase(destDb);
-        const rows = (await verifyDb.pragma("integrity_check")) as Array<Record<string, unknown>>;
-        const first = rows?.[0];
-        const value = first ? String(Object.values(first)[0] ?? "") : "";
-        integrityOk = value === "ok";
-        integrityDetail = value || "no result";
+        integrity = classifyBackupIntegrityCheck(await verifyDb.pragma("integrity_check"));
       } catch (err) {
-        integrityDetail = err instanceof Error ? err.message : String(err);
+        integrity = {
+          kind: getSqliteRecoveryHint(err) ? "integrity_failed" : "verify_instrument_failure",
+        };
       } finally {
         await verifyDb?.close().catch(() => {});
       }
 
-      if (!integrityOk) {
+      if (integrity.kind !== "verified") {
+        const instrumentFailure = integrity.kind === "verify_instrument_failure";
+        const message = instrumentFailure
+          ? "Backup verification could not obtain an integrity result. " +
+            "The snapshot has been left in place for inspection at " +
+            destDb +
+            `. Run \`sqlite3 ${quotePosixShellArgument(destDb)} "PRAGMA integrity_check;"\` directly; ` +
+            'if it returns "ok", this is a tooling or driver issue.'
+          : "Backup verification failed: the snapshot integrity check failed. " +
+            "The backup is NOT usable and has been left in place for inspection at " +
+            destDb;
         writeCliError(
-          `Backup verification failed: integrity_check on the snapshot returned "${integrityDetail}" ` +
-            '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
-            destDb
+          new CliHintError(message, {
+            code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
+            failure_kind: integrity.kind,
+          })
         );
         process.exitCode = 1;
         return;

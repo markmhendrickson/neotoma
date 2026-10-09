@@ -75,6 +75,9 @@ class SqliteDatabaseImpl {
     if (typeof this.db.pragma === "function") {
       return this.db.pragma(command) as unknown[];
     }
+    if (typeof this.db.prepare === "function") {
+      return this.db.prepare(`PRAGMA ${command}`).all() as unknown[];
+    }
     this.db.exec(`PRAGMA ${command}`);
     return [];
   }

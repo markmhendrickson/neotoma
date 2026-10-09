@@ -104,6 +104,35 @@ jobs:
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 
+      # The required `baseline` status check runs its regular suite on Node 20
+      # above. The native backup-create effect must run in this same required
+      # job: a separate job is not merge-enforced by the main ruleset.
+      # node:sqlite is the production-default driver on current Node, so prove
+      # this path on a runtime that actually supplies it.
+      # NEOTOMA_REQUIRE_NATIVE_SQLITE makes a missing DatabaseSync a loud failure,
+      # rather than allowing Vitest's skip mechanism to turn missing coverage green.
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Node 24 dependencies
+        # Node 24 ships npm 11, which rejects sqlite-vec's upstream optional
+        # linux-arm64 manifest entry even on this x64 runner. The established
+        # Node 20 lane uses npm 10 and can reproduce the checked-in lockfile;
+        # pin that installer only, while the build and effect test still run on
+        # Node 24's node:sqlite runtime.
+        run: npm exec --yes --package=npm@10 -- npm ci
+
+      - name: Build server for Node 24 native backup test
+        run: npm run build:server
+
+      - name: Require native node:sqlite DatabaseSync
+        run: node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+
+      - name: Run healthy native backup-create effect regression
+        run: NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts
+
   contract_parity:
     # Focused PR-time cross-surface contract-parity lane.
     #
