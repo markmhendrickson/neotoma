@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
+import Database, { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import { migrateEntityLifecycleAuthority } from "../../src/services/entity_lifecycle_storage.js";
 import { getDb, withExistingLifecycleDatabase } from "../../src/repositories/db/connection.js";
 import {
@@ -24,6 +24,34 @@ describe("strict lifecycle executor recoverable boundary", () => {
   afterEach(async () => {
     await database.close();
     rmSync(dir, { recursive: true, force: true });
+  });
+  it("default sync facade retains its legacy option-ignoring open behavior", () => {
+    const file = path.join(dir, "legacy-sync.sqlite");
+    let legacy: Database | undefined;
+    expect(() => {
+      legacy = new Database(file, { readonly: true });
+    }).not.toThrow();
+    try {
+      legacy!.exec("CREATE TABLE owned(value TEXT);INSERT INTO owned VALUES('kept')");
+      expect(legacy!.prepare("SELECT value FROM owned").get()).toEqual({ value: "kept" });
+    } finally {
+      legacy?.close();
+    }
+  });
+  it("async existing-file options remain literal and restrictive for malformed inspection requests", () => {
+    for (const options of [
+      { existing: false, readOnly: true },
+      { existing: "true", readOnly: true },
+      { existing: true, readOnly: 1 },
+      { readOnly: true },
+      { readonly: true },
+    ]) {
+      const file = path.join(dir, "malformed-inspection.sqlite");
+      expect(() => new AsyncSqliteDatabase(file, options as never)).toThrow(
+        "SQLITE_EXISTING_OPEN_INVALID"
+      );
+      expect(existsSync(file)).toBe(false);
+    }
   });
   it("existing read-only open neither creates missing files nor allows actual writes", async () => {
     const missing = path.join(dir, "missing.sqlite");

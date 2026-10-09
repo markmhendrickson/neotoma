@@ -276,6 +276,12 @@ export class AsyncSqliteDatabase implements DbDatabase {
   }
 }
 
-export default class Database extends SqliteDatabaseImpl {}
+export default class Database extends SqliteDatabaseImpl {
+  /** This legacy sync facade historically ignored extra JS options. Inspection is Async-only. */
+  constructor(path: string, legacyOptions?: unknown) {
+    super(path);
+    void legacyOptions;
+  }
+}
 export type SqliteDatabase = SqliteDatabaseImpl;
 export type SqliteStatement = SqliteStatementImpl;
