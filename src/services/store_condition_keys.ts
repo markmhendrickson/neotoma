@@ -8,7 +8,7 @@ import type { DbConnection, DbDatabase } from "../repositories/db/driver.js";
 
 export class StoreConditionError extends Error {
   toErrorEnvelope() {
-    return { code: this.code, message: this.message, hint: this.hint };
+    return { code: this.code, message: this.message, hint: this.hint, ...(this.outcome ?? {}) };
   }
   readonly hint =
     "Retry the exact original request to determine its outcome; do not change its mode or payload under this key.";
@@ -18,8 +18,10 @@ export class StoreConditionError extends Error {
       | "STORE_RECEIPT_UNCERTAIN"
       | "IDEMPOTENCY_CONFLICT"
       | "VALIDATION_ERROR"
+      | "STORE_CONDITIONAL_FAILED"
       | "CONFLICT",
-    message: string
+    message: string,
+    readonly outcome?: { committed: false | "unknown"; private_storage_residue_possible: boolean }
   ) {
     super(message);
   }
@@ -193,6 +195,25 @@ export async function reserveLegacyStoreKeys(
   });
 }
 
+/** Read-only early replay guard. Fresh mutations still require the atomic mode claim. */
+export async function assertLegacyStoreKeyMode(
+  database: DbDatabase,
+  owner: string,
+  key: string
+): Promise<void> {
+  assertOwner(owner);
+  await database.transaction(async (tx) => {
+    const row = await keyRow(tx, owner, await storeConditionKeyIdentity(tx, key));
+    if (row?.mode === "conditional")
+      throw new StoreConditionError(
+        "STORE_KEY_MODE_CONFLICT",
+        "This owner/key belongs to a conditional store."
+      );
+    if (row && (row.request_hash !== null || row.conditional_receipt !== null))
+      throw new StoreConditionError("STORE_RECEIPT_UNCERTAIN", "Legacy mode metadata is invalid.");
+  });
+}
+
 export interface ConditionalOperationReceipt {
   version: 1;
   status: "applied" | "replayed";
@@ -252,77 +273,86 @@ export async function commitConditionalStoreKey(
 ): Promise<ConditionalOperationReceipt> {
   assertOwner(options.owner);
   const fingerprint = storeConditionRequestHash(options.request);
-  return database.transaction(async (tx) => {
-    const identity = await storeConditionKeyIdentity(tx, options.key);
-    const prior = await keyRow(tx, options.owner, identity);
-    if (prior?.mode === "legacy")
-      throw new StoreConditionError(
-        "STORE_KEY_MODE_CONFLICT",
-        "This owner/key belongs to a legacy store."
-      );
-    if (prior) {
-      if (prior.request_hash !== fingerprint)
+  let commitAttempted = false;
+  try {
+    return await database.transaction(async (tx) => {
+      const identity = await storeConditionKeyIdentity(tx, options.key);
+      const prior = await keyRow(tx, options.owner, identity);
+      if (prior?.mode === "legacy")
         throw new StoreConditionError(
-          "IDEMPOTENCY_CONFLICT",
-          "The original conditional request differs."
+          "STORE_KEY_MODE_CONFLICT",
+          "This owner/key belongs to a legacy store."
         );
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(prior.conditional_receipt ?? "");
-      } catch {
-        throw new StoreConditionError(
-          "STORE_RECEIPT_UNCERTAIN",
-          "The original conditional receipt is missing or malformed."
-        );
+      if (prior) {
+        if (prior.request_hash !== fingerprint)
+          throw new StoreConditionError(
+            "IDEMPOTENCY_CONFLICT",
+            "The original conditional request differs."
+          );
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(prior.conditional_receipt ?? "");
+        } catch {
+          throw new StoreConditionError(
+            "STORE_RECEIPT_UNCERTAIN",
+            "The original conditional receipt is missing or malformed."
+          );
+        }
+        const original = receipt(parsed, fingerprint);
+        await options.verify(tx, original);
+        commitAttempted = true;
+        return { ...original, status: "replayed" };
       }
-      const original = receipt(parsed, fingerprint);
-      await options.verify(tx, original);
-      return { ...original, status: "replayed" };
-    }
-    // A pre-migration source is already legacy even if it has no mode row.
-    const oldSource = await tx
-      .prepare("SELECT id FROM sources WHERE user_id = ? AND idempotency_key = ? LIMIT 1")
-      .get(options.owner, options.key);
-    if (oldSource)
-      throw new StoreConditionError(
-        "STORE_KEY_MODE_CONFLICT",
-        "This owner/key has an existing legacy source."
-      );
-    await options.beforeClaim?.(tx);
-    await tx
-      .prepare(
-        "INSERT INTO store_condition_keys (user_id,key_hash,key_identity_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,?,'conditional',?,?,NULL)"
-      )
-      .run(
-        options.owner,
-        identity.keyHash,
-        identity.identityHash,
-        fingerprint,
-        new Date().toISOString()
-      );
-    const original = receipt(
-      await options.apply(tx, fingerprint, storeConditionObservationKey(options.owner, identity)),
-      fingerprint
-    );
-    await options.verify(tx, original);
-    const write = await tx
-      .prepare(
-        "UPDATE store_condition_keys SET conditional_receipt = ? WHERE user_id = ? AND key_hash = ? AND key_identity_hash = ? AND mode = 'conditional' AND request_hash = ? AND conditional_receipt IS NULL"
-      )
-      .run(
-        canonicalStoreRequest(original),
-        options.owner,
-        identity.keyHash,
-        identity.identityHash,
+      // A pre-migration source is already legacy even if it has no mode row.
+      const oldSource = await tx
+        .prepare("SELECT id FROM sources WHERE user_id = ? AND idempotency_key = ? LIMIT 1")
+        .get(options.owner, options.key);
+      if (oldSource)
+        throw new StoreConditionError(
+          "STORE_KEY_MODE_CONFLICT",
+          "This owner/key has an existing legacy source."
+        );
+      await options.beforeClaim?.(tx);
+      await tx
+        .prepare(
+          "INSERT INTO store_condition_keys (user_id,key_hash,key_identity_hash,mode,request_hash,created_at,conditional_receipt) VALUES (?,?,?,'conditional',?,?,NULL)"
+        )
+        .run(
+          options.owner,
+          identity.keyHash,
+          identity.identityHash,
+          fingerprint,
+          new Date().toISOString()
+        );
+      const original = receipt(
+        await options.apply(tx, fingerprint, storeConditionObservationKey(options.owner, identity)),
         fingerprint
       );
-    if (write.changes !== 1)
-      throw new StoreConditionError(
-        "STORE_RECEIPT_UNCERTAIN",
-        "The conditional receipt could not be committed."
-      );
-    return original;
-  });
+      await options.verify(tx, original);
+      const write = await tx
+        .prepare(
+          "UPDATE store_condition_keys SET conditional_receipt = ? WHERE user_id = ? AND key_hash = ? AND key_identity_hash = ? AND mode = 'conditional' AND request_hash = ? AND conditional_receipt IS NULL"
+        )
+        .run(
+          canonicalStoreRequest(original),
+          options.owner,
+          identity.keyHash,
+          identity.identityHash,
+          fingerprint
+        );
+      if (write.changes !== 1)
+        throw new StoreConditionError(
+          "STORE_RECEIPT_UNCERTAIN",
+          "The conditional receipt could not be committed."
+        );
+      commitAttempted = true;
+      return original;
+    });
+  } catch (error) {
+    if (error && typeof error === "object")
+      Object.assign(error, { conditional_commit_attempted: commitAttempted });
+    throw error;
+  }
 }
 
 /**

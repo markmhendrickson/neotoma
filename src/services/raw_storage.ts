@@ -11,6 +11,7 @@ import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { claimRawStoreKey } from "./store_mutation_authority.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -61,6 +62,8 @@ export async function storeRawContent(options: RawStorageOptions): Promise<RawSt
   // Compute content hash
   const contentHash = computeContentHash(fileBuffer);
   const fileSize = fileBuffer.length;
+
+  await claimRawStoreKey(userId, idempotencyKey);
 
   if (idempotencyKey) {
     const { data: existingByKey, error: existingByKeyError } = await db
@@ -391,6 +394,8 @@ export async function storeRawReference(
   const sizeBytes = stat.size;
   const mtime = stat.mtime.toISOString();
   const hostId = os.hostname();
+
+  await claimRawStoreKey(userId, idempotencyKey);
 
   // Auto-detect MIME type from extension when not provided
   const ext = path.extname(absolutePath).toLowerCase();

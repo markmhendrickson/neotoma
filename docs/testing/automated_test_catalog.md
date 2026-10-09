@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **704**
-- Backend and repo Vitest files: **668**
+- Total automated test files: **705**
+- Backend and repo Vitest files: **669**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -73,7 +73,7 @@ flowchart TD
 | Vitest service tests | 56 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 206 |
-| Vitest CLI tests | 84 |
+| Vitest CLI tests | 85 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -661,7 +661,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (84):**
+**Files (85):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -732,6 +732,7 @@ flowchart TD
 - `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
 - `tests/cli/request_atomic_transaction.test.ts`
+- `tests/cli/request_conditional_store.test.ts`
 - `tests/cli/request_guest_subscription.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`

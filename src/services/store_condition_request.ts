@@ -32,6 +32,7 @@ export function assertConditionalStoreRequest(input: Record<string, unknown>): v
       "VALIDATION_ERROR",
       "Conditional store requires one keyed structured entity and no file, reference, interpretation, relationship or sync operation."
     );
+  canonicalStoreRequest(input.entities);
   const entity = input.entities[0] as Record<string, unknown>;
   canonicalStoreRequest(entity);
   if (

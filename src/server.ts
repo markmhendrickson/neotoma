@@ -2524,7 +2524,7 @@ export class NeotomaServer {
         const { StoreConditionError } = await import("./services/store_condition_keys.js");
         if (error instanceof StoreConditionError) {
           throw new McpError(
-            error.code === "STORE_RECEIPT_UNCERTAIN"
+            error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
               ? ErrorCode.InternalError
               : ErrorCode.InvalidRequest,
             error.message,
@@ -5739,6 +5739,27 @@ export class NeotomaServer {
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
 
+    if (hasEntities && hasUnstructured && parsed.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.entities!,
+          sourcePriority: parsed.source_priority,
+          idempotencyKey,
+          relationships: parsed.relationships,
+          interpretation: parsed.interpretation,
+          sourcePeerId: parsed.source_peer_id,
+          strict: parsed.strict,
+        },
+        {
+          key: parsed.file_idempotency_key ?? `${idempotencyKey}-file`,
+          content: parsed.file_content,
+          filePath: parsed.file_path,
+        }
+      );
+    }
+
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
     if (hasEntities && hasUnstructured && parsed.interpretation?.source_ref === "unstructured") {
@@ -6243,8 +6264,9 @@ export class NeotomaServer {
     } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     if (options.expectedEntityAbsent === true) {
-      const { storeStructuredForApi } = await import("./actions.js");
-      const result = await storeStructuredForApi({
+      const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
+      const { storeConditionalStructured } = await import("./services/store_conditional.js");
+      await preflightStructuredStoreAdmission({
         userId,
         entities,
         sourcePriority,
@@ -6252,6 +6274,15 @@ export class NeotomaServer {
         originalFilename,
         relationships,
         ...options,
+      });
+      const result = await storeConditionalStructured({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        strict: options.strict,
+        observationSource: options.observationSource,
       });
       return this.buildTextResponse(result);
     }
@@ -6468,6 +6499,10 @@ export class NeotomaServer {
       const incomingContentHash = createHash("sha256")
         .update(JSON.stringify(entities, null, 2))
         .digest("hex");
+      const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+      const { getDb } = await import("./repositories/db/connection.js");
+      await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
         .select("id, content_hash")
