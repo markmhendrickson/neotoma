@@ -199,6 +199,106 @@ describe("ordinary lifecycle metadata boundaries", () => {
     },
     60000
   );
+  it.each([false, true])(
+    "compiled raw rebuild cycle=%s preserves snapshots on acquisition refusal",
+    async (cycle) => {
+      const dir = mkdtempSync(path.join(tmpdir(), "neotoma-synthetic-rebuild-"));
+      const sourcePath = path.join(dir, "source.sqlite"),
+        targetPath = path.join(dir, "target.sqlite");
+      const { ensureDbInitialized } = await import("../../src/repositories/db/connection.js");
+      await ensureDbInitialized(sourcePath);
+      await ensureDbInitialized(targetPath);
+      const target = new AsyncSqliteDatabase(targetPath);
+      try {
+        for (const eid of ["synthetic-a", "synthetic-b"]) {
+          await target
+            .prepare(
+              "INSERT INTO entities(id,entity_type,canonical_name,user_id,merged_to_entity_id) VALUES (?,'synthetic_rebuild','Synthetic',?,?)"
+            )
+            .run(
+              eid,
+              owner,
+              cycle ? (eid === "synthetic-a" ? "synthetic-b" : "synthetic-a") : null
+            );
+        }
+        await target
+          .prepare(
+            "INSERT INTO observations(id,entity_id,entity_type,schema_version,user_id,observed_at,created_at,fields,source_priority) VALUES ('synthetic-observation','synthetic-a','synthetic_rebuild','1.0',?,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',?,1)"
+          )
+          .run(owner, JSON.stringify({ title: "Synthetic rebuilt value" }));
+        await target
+          .prepare(
+            "INSERT INTO entity_snapshots(entity_id,entity_type,schema_version,user_id,snapshot) VALUES ('synthetic-a','synthetic_rebuild','1.0',?,?)"
+          )
+          .run(owner, JSON.stringify({ title: "Synthetic previous value" }));
+        await target
+          .prepare(
+            "INSERT INTO relationship_snapshots(relationship_key,relationship_type,source_entity_id,target_entity_id,schema_version,user_id,snapshot) VALUES ('synthetic-rel','synthetic','synthetic-a','synthetic-b','1.0',?,'{}')"
+          )
+          .run(owner);
+        const entitiesBefore = await target.prepare("SELECT * FROM entity_snapshots").all();
+        const relationshipsBefore = await target
+          .prepare("SELECT * FROM relationship_snapshots")
+          .all();
+        expect(entitiesBefore).toHaveLength(1);
+        expect(relationshipsBefore).toHaveLength(1);
+        const root = fileURLToPath(new URL("../../", import.meta.url));
+        const result = await promisify(execFile)(
+          process.execPath,
+          [
+            path.join(root, "dist/cli/bootstrap.js"),
+            "--json",
+            "--no-log-file",
+            "storage",
+            "merge-db",
+            "--source",
+            sourcePath,
+            "--target",
+            targetPath,
+            "--mode",
+            "keep-target",
+          ],
+          {
+            cwd: dir,
+            env: {
+              PATH: process.env.PATH,
+              HOME: dir,
+              NODE_ENV: "test",
+              NEOTOMA_ENV: "development",
+              NEOTOMA_DATA_DIR: path.join(dir, "data"),
+              NODE_OPTIONS:
+                "--require " +
+                JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
+            },
+            timeout: 15000,
+          }
+        ).then(
+          () => ({ refused: false }),
+          () => ({ refused: true })
+        );
+        expect(result.refused).toBe(cycle);
+        if (cycle) {
+          expect(await target.prepare("SELECT * FROM entity_snapshots").all()).toEqual(
+            entitiesBefore
+          );
+          expect(await target.prepare("SELECT * FROM relationship_snapshots").all()).toEqual(
+            relationshipsBefore
+          );
+        } else {
+          expect(
+            await target
+              .prepare("SELECT snapshot FROM entity_snapshots WHERE entity_id='synthetic-a'")
+              .get()
+          ).toEqual({ snapshot: '{"title":"Synthetic rebuilt value"}' });
+          expect(await target.prepare("SELECT * FROM relationship_snapshots").all()).toEqual([]);
+        }
+      } finally {
+        await target.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    60000
+  );
   it("raw ordinary import succeeds, populated authority and metadata import refuse", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "neotoma-synthetic-import-"));
     const database = new AsyncSqliteDatabase(path.join(dir, "synthetic.sqlite"));

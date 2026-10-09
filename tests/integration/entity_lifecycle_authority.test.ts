@@ -163,7 +163,17 @@ describe("authenticated entity lifecycle", () => {
     expect((await db.from("observations").select("id").eq("entity_id", id)).data).toEqual(before);
   });
   it("current export, memory, dashboard and count reject a stale hidden materialization then expose restored facts", async () => {
+    const { listEntitySnapshotsForPeerSyncOutbound } =
+      await import("../../src/services/sync/peer_sync_batch.js");
+    const outbound = () =>
+      listEntitySnapshotsForPeerSyncOutbound({
+        userId: owner,
+        entityTypes: [type],
+        observedAfterIso: null,
+        limit: 100,
+      });
     await recomputeSnapshot(id, owner);
+    expect((await outbound()).some((row) => row.entity_id === id)).toBe(true);
     const initial = (await db.from("entity_snapshots").select("*").eq("entity_id", id).single())
       .data;
     expect(initial?.snapshot.title).toBe("Synthetic factual value");
@@ -189,6 +199,7 @@ describe("authenticated entity lifecycle", () => {
         .total_entities
     ).toBe(0);
     expect(readFileSync(memoryPath, "utf8")).not.toContain(id);
+    expect(await outbound()).toEqual([]);
     expect((await getDashboardStats(owner)).entities_by_type[type]).toBeUndefined();
     const query = await queryEntitiesWithCount({ userId: owner, entityType: type, limit: 100 });
     expect(query.entities).toEqual([]);
@@ -205,6 +216,7 @@ describe("authenticated entity lifecycle", () => {
     expect(
       (await queryEntitiesWithCount({ userId: owner, entityType: type, limit: 100 })).total
     ).toBe(1);
+    expect((await outbound()).some((row) => row.entity_id === id)).toBe(true);
   });
   it("modern MCP cycles and historical retrieval do not confuse present hiding with past visibility", async () => {
     const first = await tool("delete_entity", { entity_id: id, entity_type: type });
@@ -225,6 +237,36 @@ describe("authenticated entity lifecycle", () => {
     const counted = await tool("retrieve_entities", { entity_type: type, limit: 100 });
     expect(counted.total).toBe(0);
     expect(counted.entities).toEqual([]);
+  });
+  it("natural owner-scoped audit exposes authority provenance without granting current visibility", async () => {
+    const original = (await db.from("observations").select("*").eq("entity_id", id)).data!;
+    expect(original).toHaveLength(1);
+    const result = await post("delete_entity", { entity_id: id, entity_type: type });
+    expect(result.status).toBe(200);
+    const audit = await post("observations/query", { entity_id: id, limit: 100, offset: 0 });
+    expect(audit.status).toBe(200);
+    expect(audit.body.total).toBe(2);
+    expect(audit.body.observations.find((row: any) => row.id === original[0].id)).toEqual(
+      original[0]
+    );
+    expect(
+      audit.body.observations.find((row: any) => row.id === result.body.observation_id)
+    ).toMatchObject({
+      entity_lifecycle_kind: "delete",
+      entity_lifecycle_sequence: 1,
+      entity_lifecycle_target_id: id,
+      user_id: owner,
+    });
+    expect(
+      (await queryEntities({ userId: owner, entityType: type })).map((row) => row.entity_id)
+    ).not.toContain(id);
+    expect((await post("get_entity_snapshot", { entity_id: id })).status).toBe(404);
+    const duplicate = await post("delete_entity", { entity_id: id, entity_type: type });
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body.observation_id).not.toBe(result.body.observation_id);
+    expect(
+      (await post("observations/query", { entity_id: id, limit: 100, offset: 0 })).body.total
+    ).toBe(3);
   });
   it("current HTTP snapshot refuses malformed authority despite a previously materialized fact", async () => {
     expect((await post("get_entity_snapshot", { entity_id: id })).body.snapshot.title).toBe(
@@ -603,6 +645,88 @@ describe("authenticated entity lifecycle", () => {
       substrateEventBus.off("substrate_event", listener);
     }
   });
+  it.each(["timeline", "canonical_name"])(
+    "%s persistence failure rolls back a restoration and all derived effects",
+    async (effect) => {
+      const database = await getDb();
+      expect(
+        (
+          await db
+            .from("observations")
+            .update({ fields: { title: "Synthetic old display", date: "2025-01-01" } })
+            .eq("entity_id", id)
+        ).error
+      ).toBeNull();
+      await recomputeSnapshot(id, owner);
+      expect((await db.from("timeline_events").select("*").eq("entity_id", id)).data).toHaveLength(
+        1
+      );
+      expect((await softDeleteEntity(id, type, owner)).success).toBe(true);
+      expect(
+        (
+          await db.from("observations").insert({
+            id: randomUUID(),
+            entity_id: id,
+            entity_type: type,
+            schema_version: "1.0",
+            user_id: owner,
+            source_priority: 3000,
+            observed_at: "2026-02-01T00:00:00Z",
+            fields: { title: "Synthetic new display", date: "2025-02-01" },
+          })
+        ).error
+      ).toBeNull();
+      const rowsBefore = await database
+        .prepare("SELECT * FROM observations WHERE entity_id=?")
+        .all(id);
+      const entityBefore = await database.prepare("SELECT * FROM entities WHERE id=?").get(id);
+      const timelineBefore = await database
+        .prepare("SELECT * FROM timeline_events WHERE entity_id=?")
+        .all(id);
+      const events: string[] = [];
+      const listener = (event: any) => {
+        if (event.entity_id === id) events.push(event.event_id);
+      };
+      substrateEventBus.onSubstrateEvent(listener);
+      const sql =
+        effect === "timeline"
+          ? `CREATE TRIGGER synthetic_derived_failure BEFORE INSERT ON timeline_events WHEN NEW.entity_id='${id}' BEGIN SELECT RAISE(ABORT,'Synthetic timeline fault'); END;`
+          : `CREATE TRIGGER synthetic_derived_failure BEFORE UPDATE ON entities WHEN OLD.id='${id}' AND NEW.canonical_name IS NOT OLD.canonical_name BEGIN SELECT RAISE(ABORT,'Synthetic canonical fault'); END;`;
+      await database.exec(sql);
+      try {
+        expect((await restoreEntity(id, type, owner)).success).toBe(false);
+        expect(
+          await database.prepare("SELECT * FROM observations WHERE entity_id=?").all(id)
+        ).toEqual(rowsBefore);
+        expect(await database.prepare("SELECT * FROM entities WHERE id=?").get(id)).toEqual(
+          entityBefore
+        );
+        expect(
+          await database.prepare("SELECT * FROM timeline_events WHERE entity_id=?").all(id)
+        ).toEqual(timelineBefore);
+        expect((await db.from("entity_snapshots").select("*").eq("entity_id", id)).data).toEqual(
+          []
+        );
+        expect(events).toEqual([]);
+      } finally {
+        await database.exec("DROP TRIGGER synthetic_derived_failure");
+        substrateEventBus.off("substrate_event", listener);
+      }
+      expect((await restoreEntity(id, type, owner)).success).toBe(true);
+      expect(
+        (await db.from("entity_snapshots").select("snapshot").eq("entity_id", id).single()).data!
+          .snapshot.title
+      ).toBe("Synthetic new display");
+      expect(
+        (await db.from("entities").select("canonical_name").eq("id", id).single()).data!
+          .canonical_name
+      ).toBe("Synthetic new display");
+      expect((await db.from("timeline_events").select("*").eq("entity_id", id)).data).toHaveLength(
+        2
+      );
+      await db.from("timeline_events").delete().eq("entity_id", id);
+    }
+  );
   it("stored type, ownership and sequence exhaustion refuse without append", async () => {
     const database = await getDb();
     const before = (await db.from("observations").select("id").eq("entity_id", id)).data;
@@ -779,6 +903,218 @@ describe("authenticated entity lifecycle", () => {
     const mcp = await tool("retrieve_entity_snapshot", { ...args, format: "json" });
     expect(mcp.snapshot.title).toBe("Synthetic backdated ordinary fact");
     expect(await isEntityDeleted(id, owner)).toBe(false);
+  });
+  it("ordinary fragment repair and rollback preserve action authority", async () => {
+    const entityType = "synthetic_lifecycle_repair_" + randomUUID().replaceAll("-", "");
+    const { repairEntityType, rollbackRun } =
+      await import("../../src/services/schema_lag_repair.js");
+    await tool("register_schema", {
+      entity_type: entityType,
+      schema_version: "1.0",
+      activate: true,
+      schema_definition: {
+        fields: {
+          title: { type: "string" },
+          status: { type: "string" },
+          _deleted: { type: "boolean" },
+        },
+        canonical_name_fields: ["title"],
+      },
+      reducer_config: {
+        merge_policies: {
+          title: { strategy: "last_write" },
+          status: { strategy: "last_write" },
+          _deleted: { strategy: "last_write" },
+        },
+      },
+    });
+    const stored = await tool("store", {
+      entities: [
+        { entity_type: entityType, title: "Synthetic repaired identity", status: "original" },
+      ],
+      idempotency_key: randomUUID(),
+    });
+    const target = stored.entities[0].entity_id;
+    const run = "synthetic-repair-" + randomUUID();
+    try {
+      await db
+        .from("observations")
+        .update({ observed_at: "2020-01-01T00:00:00Z" })
+        .eq("entity_id", target);
+      expect((await softDeleteEntity(target, entityType, owner)).success).toBe(true);
+      const authorityBefore = (
+        await db.from("observations").select("*").eq("entity_id", target)
+      ).data!.filter((row) => row.entity_lifecycle_kind);
+      for (const [key, value] of Object.entries({ status: "repaired", _deleted: false })) {
+        expect(
+          (
+            await db.from("raw_fragments").insert({
+              id: randomUUID(),
+              entity_id: target,
+              entity_type: entityType,
+              user_id: owner,
+              fragment_key: key,
+              fragment_value: value,
+              fragment_envelope: { reason: "unknown_field" },
+              frequency_count: 1,
+            })
+          ).error
+        ).toBeNull();
+      }
+      const repaired = await repairEntityType(entityType, owner, run, ["status", "_deleted"]);
+      expect(repaired).toEqual({ inserted: 1, recomputed: 0, errors: [] });
+      expect(await isEntityDeleted(target, owner)).toBe(true);
+      const promoted = (
+        await db.from("observations").select("*").eq("entity_id", target)
+      ).data!.filter((row) => row.fields._migration_run_id === run);
+      expect(promoted).toHaveLength(1);
+      expect(promoted[0].entity_lifecycle_kind).toBeNull();
+      expect(promoted[0].entity_lifecycle_sequence).toBeNull();
+      expect(promoted[0].entity_lifecycle_target_id).toBeNull();
+      expect((await restoreEntity(target, entityType, owner)).success).toBe(true);
+      expect((await post("get_entity_snapshot", { entity_id: target })).body.snapshot.status).toBe(
+        "repaired"
+      );
+      const authorityAfter = (
+        await db.from("observations").select("*").eq("entity_id", target)
+      ).data!.filter((row) => row.entity_lifecycle_kind);
+      expect(authorityAfter).toHaveLength(authorityBefore.length + 1);
+      expect((await rollbackRun(run)).deleted_observations).toBe(1);
+      expect(
+        (await db.from("observations").select("*").eq("entity_id", target)).data!.filter(
+          (row) => row.entity_lifecycle_kind
+        )
+      ).toEqual(authorityAfter);
+      expect((await post("get_entity_snapshot", { entity_id: target })).body.snapshot.status).toBe(
+        "original"
+      );
+    } finally {
+      await db.from("raw_fragments").delete().eq("entity_id", target);
+      await db.from("entity_snapshots").delete().eq("entity_id", target);
+      await db.from("observations").delete().eq("entity_id", target);
+      await db.from("entities").delete().eq("id", target);
+      await db.from("schema_registry").delete().eq("entity_type", entityType);
+    }
+  });
+  it("signed owned-loopback sync remains ordinary and cannot restore hidden identity", async () => {
+    const entityType = "synthetic_lifecycle_sync_" + randomUUID().replaceAll("-", "");
+    const { seedPeerConfigSchema } = await import("../../src/services/sync/seed_peer_schema.js");
+    const { addPeerForUser } = await import("../../src/services/sync/peer_ops.js");
+    const { applyInboundSyncWebhook } =
+      await import("../../src/services/sync/sync_webhook_inbound.js");
+    const { signWebhookBody } =
+      await import("../../src/services/subscriptions/webhook_delivery.js");
+    await tool("register_schema", {
+      entity_type: entityType,
+      schema_version: "1.0",
+      activate: true,
+      schema_definition: {
+        fields: {
+          title: { type: "string" },
+          status: { type: "string" },
+          _deleted: { type: "boolean" },
+        },
+        canonical_name_fields: ["title"],
+      },
+      reducer_config: {
+        merge_policies: {
+          title: { strategy: "last_write" },
+          status: { strategy: "last_write" },
+          _deleted: { strategy: "last_write" },
+        },
+      },
+    });
+    const stored = await tool("store", {
+      entities: [
+        { entity_type: entityType, title: "Synthetic synced identity", status: "original" },
+      ],
+      idempotency_key: randomUUID(),
+    });
+    const target = stored.entities[0].entity_id;
+    let fetches = 0;
+    const remote = createServer((req, res) => {
+      fetches++;
+      expect(req.url).toBe("/entities/" + target);
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          entity_type: entityType,
+          snapshot: { title: "Synthetic synced identity", status: "synced", _deleted: false },
+        })
+      );
+    });
+    await new Promise<void>((ok) => remote.listen(0, "127.0.0.1", ok));
+    const addr = remote.address();
+    if (!addr || typeof addr === "string") throw new Error("Owned loopback required");
+    const remoteBase = "http://127.0.0.1:" + addr.port;
+    const peerId = "synthetic-peer-" + randomUUID();
+    const secret = randomUUID();
+    let peerEntity: string | undefined;
+    try {
+      await seedPeerConfigSchema();
+      peerEntity = (
+        await addPeerForUser({
+          userId: owner,
+          peer_id: peerId,
+          peer_name: "Synthetic peer",
+          peer_url: remoteBase,
+          direction: "bidirectional",
+          entity_types: [entityType],
+          sync_scope: "all",
+          auth_method: "shared_secret",
+          conflict_strategy: "last_write_wins",
+          shared_secret: secret,
+        })
+      ).entity_id;
+      expect((await softDeleteEntity(target, entityType, owner)).success).toBe(true);
+      const rowsBefore = (await db.from("observations").select("*").eq("entity_id", target)).data!;
+      const rawBody = JSON.stringify({
+        sender_peer_id: peerId,
+        sender_peer_url: remoteBase,
+        target_user_id: owner,
+        entity_id: target,
+        source_observation_id: randomUUID(),
+      });
+      await expect(
+        applyInboundSyncWebhook({ rawBody, signatureHeader: "sha256=invalid" })
+      ).rejects.toThrow("SIGNATURE_INVALID");
+      expect(fetches).toBe(0);
+      expect((await db.from("observations").select("*").eq("entity_id", target)).data).toEqual(
+        rowsBefore
+      );
+      expect(
+        await applyInboundSyncWebhook({
+          rawBody,
+          signatureHeader: signWebhookBody(secret, rawBody),
+        })
+      ).toEqual({ status: "applied", entity_id: target });
+      expect(fetches).toBe(1);
+      expect(await isEntityDeleted(target, owner)).toBe(true);
+      const synced = (
+        await db.from("observations").select("*").eq("entity_id", target)
+      ).data!.filter((row) => row.observation_source === "sync");
+      expect(synced).toHaveLength(1);
+      expect(synced[0].fields.status).toBe("synced");
+      expect(synced[0].entity_lifecycle_kind).toBeNull();
+      expect(synced[0].entity_lifecycle_sequence).toBeNull();
+      expect(synced[0].entity_lifecycle_target_id).toBeNull();
+      await applyInboundSyncWebhook({ rawBody, signatureHeader: signWebhookBody(secret, rawBody) });
+      expect(
+        (await db.from("observations").select("id").eq("entity_id", target)).data
+      ).toHaveLength(rowsBefore.length + 1);
+      expect((await restoreEntity(target, entityType, owner)).success).toBe(true);
+      expect((await post("get_entity_snapshot", { entity_id: target })).body.snapshot.status).toBe(
+        "synced"
+      );
+    } finally {
+      await new Promise<void>((ok) => remote.close(() => ok()));
+      for (const eid of [target, peerEntity].filter((value): value is string => !!value)) {
+        await db.from("entity_snapshots").delete().eq("entity_id", eid);
+        await db.from("observations").delete().eq("entity_id", eid);
+        await db.from("entities").delete().eq("id", eid);
+      }
+      await db.from("schema_registry").delete().eq("entity_type", entityType);
+    }
   });
 });
 

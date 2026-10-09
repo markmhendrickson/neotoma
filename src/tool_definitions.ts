@@ -641,7 +641,7 @@ export function buildToolDefinitions(
       name: "delete_entity",
       description: desc(
         "delete_entity",
-        "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use."
+        "Hide an entity from current snapshots and queries through an immutable lifecycle observation. After the explicit authority cutover, serialized action sequence controls visibility; before cutover, existing legacy behavior applies. Each accepted request is a separate action, without an idempotency key or conditional rollback baseline. Physical legal erasure is a separate operation."
       ),
       inputSchema: {
         type: "object",
@@ -706,7 +706,7 @@ export function buildToolDefinitions(
       name: "restore_entity",
       description: desc(
         "restore_entity",
-        "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."
+        "Restore visibility of an entity through an immutable lifecycle observation and expose its current factual reduction, including ordinary facts accepted while hidden. After the explicit authority cutover, serialized action sequence controls visibility; before cutover, existing legacy behavior applies. Each accepted request is a separate action, without an idempotency key or historical beforeimage restoration."
       ),
       inputSchema: {
         type: "object",

@@ -99,10 +99,12 @@ export async function recomputeSnapshot(
     );
     schema = entry?.schema_definition ?? null;
   } catch {
+    if (strictDerivedEffects) throw new Error("Lifecycle schema acquisition failed");
     schema = null;
   }
 
   await upsertTimelineEventsForEntitySnapshot({
+    strictPersistence: strictDerivedEffects,
     entityType: computed.entity_type,
     entityId: computed.entity_id,
     sourceId,
@@ -121,6 +123,7 @@ export async function recomputeSnapshot(
   // name; the new name is retrievable via canonical_name/aliases search.
   try {
     await maybeRederiveCanonicalName({
+      strictPersistence: strictDerivedEffects,
       entityId,
       entityType: computed.entity_type,
       userId: computed.user_id || userId,
@@ -149,6 +152,8 @@ export async function recomputeSnapshot(
  * fail because a display name could not be refreshed.
  */
 export async function maybeRederiveCanonicalName(params: {
+  /** Atomic lifecycle callers abort on persistence/acquisition failure. */
+  strictPersistence?: boolean;
   entityId: string;
   entityType: string;
   userId: string;
@@ -177,8 +182,10 @@ export async function maybeRederiveCanonicalName(params: {
     .select("id, canonical_name, aliases, user_id")
     .eq("id", entityId)
     .maybeSingle();
-  if (fetchError) return;
-  if (!entityRow) return;
+  if (fetchError || !entityRow) {
+    if (params.strictPersistence) throw new Error("Canonical name acquisition failed");
+    return;
+  }
 
   // Tenancy guard: refuse to rename a row owned by a different user.
   //
@@ -198,11 +205,13 @@ export async function maybeRederiveCanonicalName(params: {
   // column — because that would silently converge two distinct records.
   const collisionId = generateEntityId(entityType, newCanonicalName, entityIdTenantSalt(userId));
   if (collisionId !== entityId) {
-    const { data: collisionById } = await db
+    const { data: collisionById, error: collisionIdError } = await db
       .from("entities")
       .select("id")
       .eq("id", collisionId)
       .maybeSingle();
+    if (collisionIdError && params.strictPersistence)
+      throw new Error("Canonical name collision acquisition failed");
     if (collisionById) {
       logger.info(
         `[SNAPSHOT] Skipping canonical_name rename for ${entityId}: ` +
@@ -211,13 +220,15 @@ export async function maybeRederiveCanonicalName(params: {
       return;
     }
   }
-  const { data: collisionByName } = await db
+  const { data: collisionByName, error: collisionNameError } = await db
     .from("entities")
     .select("id")
     .eq("entity_type", entityType)
     .eq("canonical_name", newCanonicalName)
     .not("id", "eq", entityId)
     .limit(1);
+  if (collisionNameError && params.strictPersistence)
+    throw new Error("Canonical name collision acquisition failed");
   if (Array.isArray(collisionByName) && collisionByName.length > 0) {
     logger.info(
       `[SNAPSHOT] Skipping canonical_name rename for ${entityId}: ` +
@@ -247,6 +258,7 @@ export async function maybeRederiveCanonicalName(params: {
     .eq("id", entityId);
 
   if (updateError) {
+    if (params.strictPersistence) throw new Error("Canonical name persistence failed");
     logger.warn(`[SNAPSHOT] canonical_name rename failed for ${entityId}: ${updateError.message}`);
     return;
   }
