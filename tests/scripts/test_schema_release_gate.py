@@ -67,6 +67,7 @@ def closed_environment(home, data, root, journal):
             "NEOTOMA_DB_BACKEND": "sqlite", "NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR": "1",
             "NEOTOMA_ACTIONS_DISABLE_AUTOSTART": "1", "NEOTOMA_TUNNEL_AUTO_DISCOVER": "0",
             "SCHEMA_GATE_NETWORK_JOURNAL": str(journal),
+            "SCHEMA_GATE_IPC_ROOT": str(home),
             "NODE_OPTIONS": "--require=" + json.dumps(str(root / NETWORK))}
 
 

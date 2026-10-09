@@ -129,7 +129,7 @@ This builds the clean pinned candidate in an owned copy with a closed environmen
 then executes the actual `node dist/seed_schemas_entry.js` against six native SQLite
 fixtures. It checks exact built-in vocabulary, complete custom-row preservation,
 repeat invocation and nonzero native failures. Build and fixture children inherit
-the validated loopback-only Node network control and bounded deadlines. Tooling
+the validated loopback/owned-IPC Node network control and bounded deadlines. Tooling
 absence, skipped tests, external attempts and changed candidate bindings fail.
 Partial additive registry writes on failure are retained; no rollback, remote
 image, deployment or real-instance schema authority is inferred.
