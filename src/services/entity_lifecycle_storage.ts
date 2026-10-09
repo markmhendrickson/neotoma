@@ -186,6 +186,27 @@ async function validateRecordedCutover(
   if (total.n !== members) refuse();
   return { baselines: baselines.length, members };
 }
+
+/** Read-only verification; does not install missing lifecycle storage or replay a migration. */
+export async function verifyEntityLifecycleStorage(
+  tx: DbConnection
+): Promise<{ state: "pre_cutover" | "committed"; baselines: number; members: number }> {
+  if (!(await hasRecordedEntityLifecycleCutover(tx))) {
+    const membership = await tx
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='entity_lifecycle_legacy_membership'"
+      )
+      .get();
+    if (membership) {
+      const count = (await tx
+        .prepare("SELECT COUNT(*) AS n FROM entity_lifecycle_legacy_membership")
+        .get()) as { n: number };
+      if (count.n !== 0) refuse();
+    }
+    return { state: "pre_cutover", baselines: 0, members: 0 };
+  }
+  return { state: "committed", ...(await validateRecordedCutover(tx)) };
+}
 /**
  * One serialized compatibility transition over a supplied local database.
  * No caller in startup/HTTP/MCP invokes it yet: adoption is a separate gate.
@@ -193,12 +214,29 @@ async function validateRecordedCutover(
  */
 export async function migrateEntityLifecycleAuthority(
   database: DbDatabase,
-  materialize?: (tx: DbConnection, targets: readonly LifecycleTarget[]) => Promise<void>
+  materialize?: (tx: DbConnection, targets: readonly LifecycleTarget[]) => Promise<void>,
+  validation?: {
+    before(tx: DbConnection): Promise<void>;
+    after(
+      tx: DbConnection,
+      outcome: { baselines: number; members: number; replay: boolean }
+    ): Promise<void>;
+  }
 ): Promise<{ baselines: number; members: number; replay: boolean }> {
+  if (
+    validation &&
+    (typeof validation.before !== "function" || typeof validation.after !== "function")
+  )
+    refuse();
   return database.transaction(async (tx) => {
+    if (validation) await validation.before(tx);
     await installEntityLifecycleStorage(tx);
     const existing = await tx.prepare("SELECT cutover_id FROM entity_lifecycle_cutovers").get();
-    if (existing) return { ...(await validateRecordedCutover(tx)), replay: true };
+    if (existing) {
+      const outcome = { ...(await validateRecordedCutover(tx)), replay: true };
+      if (validation) await validation.after(tx, outcome);
+      return outcome;
+    }
     const populated = (await tx
       .prepare(
         "SELECT COUNT(*) AS n FROM observations WHERE entity_lifecycle_kind IS NOT NULL OR entity_lifecycle_sequence IS NOT NULL OR entity_lifecycle_target_id IS NOT NULL"
@@ -300,7 +338,9 @@ export async function migrateEntityLifecycleAuthority(
     const validated = await validateRecordedCutover(tx);
     if (validated.baselines !== baselines || validated.members !== members) refuse();
     if (materialize) await materialize(tx, capturedTargets);
-    return { baselines, members, replay: false };
+    const outcome = { baselines, members, replay: false };
+    if (validation) await validation.after(tx, outcome);
+    return outcome;
   });
 }
 
