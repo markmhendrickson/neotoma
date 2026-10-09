@@ -68,6 +68,9 @@ def closed_environment(home, data, root, journal):
             "NEOTOMA_ACTIONS_DISABLE_AUTOSTART": "1", "NEOTOMA_TUNNEL_AUTO_DISCOVER": "0",
             "SCHEMA_GATE_NETWORK_JOURNAL": str(journal),
             "SCHEMA_GATE_IPC_ROOT": str(home),
+            "npm_config_update_notifier": "false", "npm_config_audit": "false",
+            "npm_config_fund": "false", "npm_config_cache": str(home / "npm-cache"),
+            "npm_config_userconfig": str(home / "empty-npmrc"),
             "NODE_OPTIONS": "--require=" + json.dumps(str(root / NETWORK))}
 
 
