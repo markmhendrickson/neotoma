@@ -1,5 +1,6 @@
 /** Internal lifecycle storage. Not a public store/correct/import parameter. */
 import { createHash } from "node:crypto";
+import { fromDbRow, toDbValue } from "../repositories/sqlite/local_db_adapter.js";
 import type { DbConnection, DbDatabase } from "../repositories/db/driver.js";
 import {
   ENTITY_LIFECYCLE_CUTOVER_ID,
@@ -10,6 +11,8 @@ import {
   selectLegacyEntityVisibility,
   type LifecycleObservation,
   type LifecycleTarget,
+  type EntityLifecycleContext,
+  type LegacyMembershipCertificate,
 } from "./entity_lifecycle_authority.js";
 function refuse(): never {
   throw new EntityLifecycleAcquisitionError();
@@ -18,7 +21,7 @@ interface EntityRow extends LifecycleTarget {
   merged_to_entity_id?: string | null;
 }
 function observation(raw: Record<string, unknown>): LifecycleObservation {
-  const fields = typeof raw.fields === "string" ? JSON.parse(raw.fields) : raw.fields;
+  const fields = fromDbRow("observations", raw).fields;
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) refuse();
   return { ...raw, fields } as LifecycleObservation;
 }
@@ -146,7 +149,8 @@ async function validateRecordedCutover(
  * Original observations are never updated; replay validates the frozen capture.
  */
 export async function migrateEntityLifecycleAuthority(
-  database: DbDatabase
+  database: DbDatabase,
+  materialize?: (tx: DbConnection, targets: readonly LifecycleTarget[]) => Promise<void>
 ): Promise<{ baselines: number; members: number; replay: boolean }> {
   return database.transaction(async (tx) => {
     await installEntityLifecycleStorage(tx);
@@ -158,6 +162,11 @@ export async function migrateEntityLifecycleAuthority(
       )
       .get()) as { n: number };
     if (populated.n !== 0) refuse();
+    const hasSnapshots = await tx
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entity_snapshots'")
+      .get();
+    if (hasSnapshots && !materialize) refuse(); // no half-cutover over a materialized store
+    const capturedTargets: LifecycleTarget[] = [];
     const recordedAt = new Date().toISOString();
     await tx
       .prepare(
@@ -229,7 +238,7 @@ export async function migrateEntityLifecycleAuthority(
             target.entity_type,
             recordedAt,
             recordedAt,
-            JSON.stringify(fields),
+            toDbValue("observations", "fields", fields),
             target.user_id,
             selected.hidden ? "legacy_hidden" : "legacy_visible",
             target.id
@@ -240,12 +249,186 @@ export async function migrateEntityLifecycleAuthority(
               "INSERT INTO entity_lifecycle_legacy_membership(cutover_id, owner_id, observation_id, target_id) VALUES (?, ?, ?, ?)"
             )
             .run(ENTITY_LIFECYCLE_CUTOVER_ID, target.user_id, originalId, target.id);
+        capturedTargets.push(target);
         baselines++;
         members += ids.length;
       }
     }
     const validated = await validateRecordedCutover(tx);
     if (validated.baselines !== baselines || validated.members !== members) refuse();
+    if (materialize) await materialize(tx, capturedTargets);
     return { baselines, members, replay: false };
   });
+}
+
+/** Current/native acquisition is verified against the complete physical attachment set.
+ * Temporal callers supply all rows and explicit bounds; filtered arrays cannot
+ * silently become a current authority proof. Missing metadata is never inferred.
+ */
+export async function acquireEntityLifecycleContext(
+  tx: DbConnection,
+  target: LifecycleTarget,
+  rows: readonly LifecycleObservation[],
+  temporal?: { at?: string; at_ingested?: string }
+): Promise<EntityLifecycleContext> {
+  const tables = await tx
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'entity_lifecycle_cutovers'"
+    )
+    .all();
+  if (tables.length === 0) {
+    if (rows.some(hasEntityLifecycleAuthority)) refuse();
+    return { acquisition: "complete", target, mode: "pre_migration" };
+  }
+  const registry = (await tx.prepare("SELECT * FROM entity_lifecycle_cutovers").all()) as {
+    cutover_id: string;
+    selector_version: string;
+    recorded_at: string;
+  }[];
+  if (registry.length === 0) {
+    const invalid = await tx
+      .prepare(
+        "SELECT id FROM observations WHERE entity_lifecycle_kind IS NOT NULL OR entity_lifecycle_sequence IS NOT NULL OR entity_lifecycle_target_id IS NOT NULL LIMIT 1"
+      )
+      .get();
+    if (invalid || rows.some(hasEntityLifecycleAuthority)) refuse();
+    return { acquisition: "complete", target, mode: "pre_migration" };
+  }
+  if (
+    registry.length !== 1 ||
+    registry[0].cutover_id !== ENTITY_LIFECYCLE_CUTOVER_ID ||
+    registry[0].selector_version !== ENTITY_LEGACY_SELECTOR_VERSION ||
+    !Number.isFinite(Date.parse(registry[0].recorded_at))
+  )
+    refuse();
+  const physicalTarget = await entity(tx, target.id, target.user_id);
+  if (physicalTarget.entity_type !== target.entity_type || physicalTarget.merged_to_entity_id)
+    refuse();
+  const physical = (await tx
+    .prepare("SELECT id FROM observations WHERE entity_id = ? AND user_id = ? ORDER BY id")
+    .all(target.id, target.user_id)) as { id: string }[];
+  const suppliedIds = rows.map((r) => r.id).sort();
+  if (
+    new Set(suppliedIds).size !== suppliedIds.length ||
+    JSON.stringify(physical.map((r) => r.id)) !== JSON.stringify(suppliedIds)
+  )
+    refuse();
+  const targetIds = new Set([target.id]);
+  for (const row of rows)
+    if (hasEntityLifecycleAuthority(row)) targetIds.add(row.entity_lifecycle_target_id!);
+  const attachedMemberships = (await tx
+    .prepare(
+      "SELECT m.target_id FROM entity_lifecycle_legacy_membership m JOIN observations o ON o.id=m.observation_id WHERE o.entity_id=? AND m.owner_id=? GROUP BY m.target_id"
+    )
+    .all(target.id, target.user_id)) as { target_id: string }[];
+  for (const row of attachedMemberships) targetIds.add(row.target_id);
+  const targets: LifecycleTarget[] = [];
+  const certificates: LegacyMembershipCertificate[] = [];
+  for (const id of targetIds) {
+    const ownerTarget = await entity(tx, id, target.user_id);
+    if (ownerTarget.entity_type !== target.entity_type) refuse();
+    targets.push(ownerTarget);
+    const baselines = (await tx
+      .prepare(
+        "SELECT * FROM observations WHERE user_id=? AND entity_lifecycle_target_id=? AND entity_lifecycle_sequence=0"
+      )
+      .all(target.user_id, id)) as Record<string, unknown>[];
+    if (baselines.length > 1) refuse();
+    const members = (await tx
+      .prepare(
+        "SELECT observation_id FROM entity_lifecycle_legacy_membership WHERE cutover_id=? AND owner_id=? AND target_id=? ORDER BY observation_id"
+      )
+      .all(ENTITY_LIFECYCLE_CUTOVER_ID, target.user_id, id)) as { observation_id: string }[];
+    if (!baselines.length) {
+      if (members.length) refuse();
+      continue;
+    }
+    const baseline = observation(baselines[0]);
+    if (
+      !hasEntityLifecycleAuthority(baseline) ||
+      baseline.entity_type !== target.entity_type ||
+      baseline.fields.selector_version !== ENTITY_LEGACY_SELECTOR_VERSION
+    )
+      refuse();
+    const ids = members.map((m) => m.observation_id);
+    if (
+      baseline.fields.legacy_membership_count !== ids.length ||
+      baseline.fields.legacy_membership_sha256 !== legacyMembershipDigest(ids)
+    )
+      refuse();
+    // Verify captured identity ownership even if merge changed attachment.
+    for (const memberId of ids) {
+      const original = (await tx
+        .prepare("SELECT user_id,entity_type FROM observations WHERE id=?")
+        .get(memberId)) as { user_id: string; entity_type: string } | undefined;
+      if (
+        !original ||
+        original.user_id !== target.user_id ||
+        original.entity_type !== target.entity_type
+      )
+        refuse();
+    }
+    certificates.push({
+      target: ownerTarget,
+      observation_ids: ids,
+      count: ids.length,
+      sha256: legacyMembershipDigest(ids),
+    });
+  }
+  return {
+    acquisition: "complete",
+    target,
+    mode: temporal ? "historical" : "current",
+    cutover_id: ENTITY_LIFECYCLE_CUTOVER_ID,
+    selector_version: ENTITY_LEGACY_SELECTOR_VERSION,
+    recorded_at: registry[0].recorded_at,
+    legacy_memberships: certificates,
+    authority_targets: targets,
+    ...temporal,
+  };
+}
+
+/** Private SQL authority append: called only by the owned lifecycle transaction. */
+export async function appendEntityLifecycleAction(
+  tx: DbConnection,
+  target: LifecycleTarget,
+  kind: "delete" | "restore",
+  fields: Record<string, unknown>,
+  observedAt: string
+): Promise<string> {
+  if (!Number.isFinite(Date.parse(observedAt))) refuse();
+  const registry = await tx
+    .prepare("SELECT cutover_id FROM entity_lifecycle_cutovers WHERE cutover_id=?")
+    .get(ENTITY_LIFECYCLE_CUTOVER_ID);
+  if (!registry) refuse();
+  const physical = await entity(tx, target.id, target.user_id);
+  if (physical.entity_type !== target.entity_type || physical.merged_to_entity_id) refuse();
+  const maximum = (await tx
+    .prepare(
+      "SELECT MAX(entity_lifecycle_sequence) AS n FROM observations WHERE user_id=? AND entity_lifecycle_target_id=?"
+    )
+    .get(target.user_id, target.id)) as { n: number | null };
+  const next = (maximum.n ?? 0) + 1;
+  if (!Number.isSafeInteger(next) || next < 1) refuse();
+  const createdAt = new Date().toISOString();
+  const id = createHash("sha256")
+    .update(JSON.stringify(["entity_lifecycle_action_v1", target.user_id, target.id, next]))
+    .digest("hex");
+  await tx
+    .prepare(
+      "INSERT INTO observations(id,entity_id,entity_type,schema_version,source_id,observed_at,created_at,source_priority,fields,user_id,entity_lifecycle_kind,entity_lifecycle_sequence,entity_lifecycle_target_id) VALUES (?,?,?,'1.0',NULL,?,?,0,?,?,?,?,?)"
+    )
+    .run(
+      id,
+      target.id,
+      target.entity_type,
+      observedAt,
+      createdAt,
+      toDbValue("observations", "fields", fields),
+      target.user_id,
+      kind,
+      next,
+      target.id
+    );
+  return id;
 }

@@ -1,4 +1,8 @@
 import crypto from "crypto";
+import {
+  assertOrdinaryLifecyclePayload,
+  assertOrdinaryLifecycleUpsert,
+} from "../../services/entity_lifecycle_ingress.js";
 import { mkdirSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
@@ -157,7 +161,7 @@ function toBindValue(value: unknown): unknown {
   return value;
 }
 
-function toDbValue(table: string, column: string, value: unknown): unknown {
+export function toDbValue(table: string, column: string, value: unknown): unknown {
   if (value === undefined) {
     return null;
   }
@@ -246,7 +250,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
+export function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
   const booleanColumns = BOOLEAN_COLUMNS[table];
   if (booleanColumns) {
@@ -551,8 +555,12 @@ async function recomputeEntitySnapshot(db: DbDatabase, entityId: string): Promis
   // tombstone) resolves to its survivor but owns no snapshot row; writing the
   // survivor's snapshot back under it would manufacture a duplicate the flat
   // fetch never produced.
-  const { ownsSnapshotSqlite } = await import("../../services/attachment_resolution_sqlite.js");
-  if (!(await ownsSnapshotSqlite(db, entityId))) return;
+  const { resolveAttachmentTargetSqlite } =
+    await import("../../services/attachment_resolution_sqlite.js");
+  const target = await resolveAttachmentTargetSqlite(db, entityId);
+  if (target.truncated)
+    throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+  if (target.resolvedEntityId !== entityId) return;
 
   const rows = (await db
     .prepare("SELECT * FROM observations WHERE entity_id = ?")
@@ -563,7 +571,14 @@ async function recomputeEntitySnapshot(db: DbDatabase, entityId: string): Promis
     return;
   }
 
-  const snapshot = await reducer.computeSnapshot(entityId, observations);
+  const { acquireEntityLifecycleContext } =
+    await import("../../services/entity_lifecycle_storage.js");
+  const context = await acquireEntityLifecycleContext(
+    db,
+    { id: entityId, user_id: observations[0].user_id, entity_type: observations[0].entity_type },
+    observations
+  );
+  const snapshot = await reducer.computeSnapshot(entityId, observations, undefined, context);
   if (!snapshot) {
     await db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(entityId);
     return;
@@ -890,6 +905,17 @@ class LocalQueryBuilder {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const db = await getDb();
         try {
+          if (this.operation !== "select" && this.operation !== "delete") {
+            const payloads =
+              this.insertPayload ??
+              this.upsertPayload ??
+              (this.updatePayload ? [this.updatePayload] : []);
+            assertOrdinaryLifecyclePayload(this.table, payloads);
+            if (this.table === "observations" && this.operation === "upsert")
+              await assertOrdinaryLifecycleUpsert(db, payloads);
+          }
+          if (this.operation === "delete" && this.table.startsWith("entity_lifecycle_"))
+            assertOrdinaryLifecyclePayload(this.table, []);
           if (this.operation === "select") {
             const countRow = this.countExact
               ? ((await db

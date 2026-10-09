@@ -50,12 +50,18 @@ export async function getSnapshot(
 }
 
 export async function deleteSnapshot(entityId: string, userId: string): Promise<void> {
-  await db.from("entity_snapshots").delete().eq("entity_id", entityId).eq("user_id", userId);
+  const { error } = await db
+    .from("entity_snapshots")
+    .delete()
+    .eq("entity_id", entityId)
+    .eq("user_id", userId);
+  if (error) throw new Error("Failed to delete entity snapshot");
 }
 
 export async function recomputeSnapshot(
   entityId: string,
-  userId: string
+  userId: string,
+  strictDerivedEffects: boolean = false
 ): Promise<SnapshotRecord | null> {
   // #2340: a snapshot is a function of the observations ATTACHED to the
   // entity, resolved through the declared resolution layer, not of the rows
@@ -122,6 +128,7 @@ export async function recomputeSnapshot(
       schema,
     });
   } catch (err) {
+    if (strictDerivedEffects) throw err;
     logger.warn(
       `[SNAPSHOT] Failed to re-derive canonical_name for ${entityId}: ` +
         (err instanceof Error ? err.message : String(err))

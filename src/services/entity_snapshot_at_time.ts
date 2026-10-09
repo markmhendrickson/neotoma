@@ -21,7 +21,8 @@
  */
 
 import { db } from "../db.js";
-import { logger } from "../utils/logger.js";
+import { acquireEntityLifecycleContext } from "./entity_lifecycle_storage.js";
+import { getDb } from "../repositories/db/connection.js";
 import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import type { Observation } from "../reducers/observation_reducer.js";
@@ -117,29 +118,18 @@ export async function computeEntitySnapshotAtTime(
   const attachmentTarget = await resolveAttachmentTarget(entityId, userId);
   const resolvedEntityId = attachmentTarget.resolvedEntityId;
   if (attachmentTarget.truncated) {
-    logger.warn(
-      `[SNAPSHOT_AT_TIME] Attachment resolution for ${entityId} was truncated ` +
-        `(${attachmentTarget.truncationReason}); the point-in-time snapshot is ` +
-        `computed from a partially resolved id (${resolvedEntityId}).`
-    );
+    throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
   }
   const entityType: string = entityRow.entity_type as string;
 
   // ------------------------------------------------------------------
   // 3. Build and execute the observations query with optional cutoffs.
   // ------------------------------------------------------------------
-  let obsQuery = db
+  const obsQuery = db
     .from("observations")
     .select("*")
     .eq("entity_id", resolvedEntityId)
     .eq("user_id", userId);
-
-  if (at) {
-    obsQuery = obsQuery.lte("observed_at", at);
-  }
-  if (atIngested) {
-    obsQuery = obsQuery.lte("created_at", atIngested);
-  }
 
   const { data: observations, error: obsError } = await obsQuery.order("observed_at", {
     ascending: false,
@@ -183,12 +173,33 @@ export async function computeEntitySnapshotAtTime(
     fields: obs.fields,
     created_at: obs.created_at,
     user_id: obs.user_id,
+    entity_lifecycle_kind: obs.entity_lifecycle_kind,
+    entity_lifecycle_sequence: obs.entity_lifecycle_sequence,
+    entity_lifecycle_target_id: obs.entity_lifecycle_target_id,
   }));
 
-  const historicalSnapshot = await observationReducer.computeSnapshot(
-    resolvedEntityId,
-    mappedObservations
+  const lifecycleContext = await acquireEntityLifecycleContext(
+    await getDb(),
+    { id: resolvedEntityId, user_id: userId, entity_type: entityType },
+    mappedObservations,
+    { at, at_ingested: atIngested }
   );
+  const replayRows =
+    lifecycleContext.mode === "pre_migration"
+      ? mappedObservations.filter(
+          (o) =>
+            (!at || Date.parse(o.observed_at) <= Date.parse(at)) &&
+            (!atIngested || Date.parse(o.created_at) <= Date.parse(atIngested))
+        )
+      : mappedObservations;
+  const historicalSnapshot = replayRows.length
+    ? await observationReducer.computeSnapshot(
+        resolvedEntityId,
+        replayRows,
+        undefined,
+        lifecycleContext
+      )
+    : null;
 
   if (!historicalSnapshot) {
     // Reducer returned null → entity is deleted at this point in time.

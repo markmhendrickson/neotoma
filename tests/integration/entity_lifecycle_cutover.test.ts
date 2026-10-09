@@ -32,6 +32,32 @@ describe("owned local lifecycle cutover", () => {
     await database.close();
     rmSync(dir, { recursive: true, force: true });
   });
+  it("requires materialization for stores with snapshots and rolls back a failed callback", async () => {
+    await database.exec(
+      "CREATE TABLE entity_snapshots(entity_id TEXT PRIMARY KEY,snapshot TEXT);INSERT INTO entity_snapshots VALUES ('ent_one','{\"title\":\"Synthetic fact\"}');"
+    );
+    await expect(migrateEntityLifecycleAuthority(database)).rejects.toThrow(/acquisition/);
+    expect(
+      await database
+        .prepare("SELECT name FROM sqlite_master WHERE name='entity_lifecycle_cutovers'")
+        .get()
+    ).toBeUndefined();
+    await expect(
+      migrateEntityLifecycleAuthority(database, async (tx, targets) => {
+        expect(targets).toHaveLength(1);
+        await tx.prepare("DELETE FROM entity_snapshots").run();
+        throw new Error("Synthetic materialization fault");
+      })
+    ).rejects.toThrow(/Synthetic materialization fault/);
+    expect(await database.prepare("SELECT * FROM entity_snapshots").all()).toEqual([
+      { entity_id: "ent_one", snapshot: '{"title":"Synthetic fact"}' },
+    ]);
+    expect(
+      await database
+        .prepare("SELECT name FROM sqlite_master WHERE name='entity_lifecycle_cutovers'")
+        .get()
+    ).toBeUndefined();
+  });
   it("captures truthful legacy membership while original row values remain byte-exact", async () => {
     const original = (await database.prepare("SELECT * FROM observations").get()) as Record<
       string,

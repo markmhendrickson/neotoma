@@ -17,6 +17,10 @@
  */
 
 import { randomUUID } from "node:crypto";
+import {
+  hasEntityLifecycleAuthority,
+  type LifecycleObservation,
+} from "./entity_lifecycle_authority.js";
 import { db } from "../db.js";
 import { deleteSnapshot, recomputeSnapshot } from "./snapshot_computation.js";
 import {
@@ -287,7 +291,11 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
 
   const rawRows: unknown[] = observations ?? [];
   const allRows: ObservationRow[] = rawRows.filter(isObservationRow);
-  const matched = allRows.filter((o: ObservationRow) => observationMatchesPredicate(o, predicate));
+  const matched = allRows.filter(
+    (o: ObservationRow) =>
+      !hasEntityLifecycleAuthority(o as unknown as LifecycleObservation) &&
+      observationMatchesPredicate(o, predicate)
+  );
 
   if (matched.length === 0) {
     throw new SplitPredicateMatchedNothingError(

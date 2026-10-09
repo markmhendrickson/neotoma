@@ -3027,6 +3027,9 @@ async function mergeSqliteDatabase(
   };
   try {
     sourceDb = new AsyncSqliteDatabase(sourceDbPath);
+    const { assertOrdinaryLifecycleImport } =
+      await import("../services/entity_lifecycle_ingress.js");
+    await assertOrdinaryLifecycleImport(sourceDb);
     targetDb = new AsyncSqliteDatabase(targetDbPath);
     await checkpointWal(sourceDb);
     await checkpointWal(targetDb);
@@ -3278,6 +3281,8 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
       // A redirected id owns no snapshot of its own: skip it rather than
       // writing the survivor's snapshot under a merge tombstone.
       const target = await resolveAttachmentTargetSqlite(db, entityId);
+      if (target.truncated)
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
       if (target.resolvedEntityId !== entityId) continue;
 
       const observations = (
@@ -3295,9 +3300,19 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
       });
       if (observations.length === 0) continue;
       try {
+        const { acquireEntityLifecycleContext } =
+          await import("../services/entity_lifecycle_storage.js");
+        const first = observations[0] as any;
+        const context = await acquireEntityLifecycleContext(
+          db,
+          { id: entityId, user_id: first.user_id, entity_type: first.entity_type },
+          observations as any[]
+        );
         const snapshot = (await observationReducer.computeSnapshot(
           entityId,
-          observations as unknown as any[]
+          observations as unknown as any[],
+          undefined,
+          context
         )) as Record<string, unknown> | null;
         if (!snapshot) continue;
         const payload: Record<string, unknown> = { ...snapshot };

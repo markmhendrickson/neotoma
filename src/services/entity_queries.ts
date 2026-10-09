@@ -249,55 +249,23 @@ async function getDeletedEntityIds(
     return deletedEntityIds;
   }
 
-  const entityIds = candidates.map((row) => row.id);
-
-  // Tenant scoping: `entity_snapshots` and `observations` are user-owned tables,
-  // so both reads below are scoped to the requesting user per change-guardrail
-  // MUST #5 (GHSA-wrr4-782v-jhwh regression class). `userId` is optional only
-  // because queryEntities itself treats it as optional; when absent no scoping
-  // filter can be applied and the caller has already opted out of it.
-  let snapshotQuery = db.from("entity_snapshots").select("entity_id").in("entity_id", entityIds);
-  if (userId) {
-    snapshotQuery = snapshotQuery.eq("user_id", userId);
-  }
-  const { data: rows, error } = await snapshotQuery;
-
-  if (error) {
-    throw new Error(`Failed to resolve deleted entities: ${error.message}`);
-  }
-
-  const alive = new Set<string>((rows || []).map((row: { entity_id: string }) => row.entity_id));
-
-  // Snapshot-less candidates that are merged-away are not deleted; drop them
-  // from consideration here and let the caller's `include_merged` filter decide.
-  const unresolved = candidates.filter((row) => !alive.has(row.id) && !row.merged_to_entity_id);
-  if (unresolved.length === 0) {
-    return deletedEntityIds;
-  }
-
-  // Remaining snapshot-less candidates are either genuinely deleted (a
-  // `_deleted` observation drove the reducer to null) or never observed at all.
-  // One bounded, indexed probe over `observations` separates them: an id with
-  // NO observation row was never observed, so it is live.
-  const unresolvedIds = unresolved.map((row) => row.id);
-  let observationQuery = db.from("observations").select("entity_id").in("entity_id", unresolvedIds);
-  if (userId) {
-    observationQuery = observationQuery.eq("user_id", userId);
-  }
-  const { data: observedRows, error: observedError } = await observationQuery;
-
-  if (observedError) {
-    throw new Error(`Failed to resolve deleted entities: ${observedError.message}`);
-  }
-
-  const observed = new Set<string>(
-    (observedRows || []).map((row: { entity_id: string }) => row.entity_id)
-  );
-
-  for (const id of unresolvedIds) {
-    if (observed.has(id)) {
-      deletedEntityIds.add(id);
+  // Snapshot presence is derived state, not lifecycle authority. In particular
+  // an empty entity may own only its compatibility baseline and no fact snapshot.
+  const { isEntityDeleted } = await import("./deletion.js");
+  for (const candidate of candidates) {
+    if (candidate.merged_to_entity_id) continue;
+    let owner = userId;
+    if (!owner) {
+      const { data, error } = await db
+        .from("entities")
+        .select("user_id")
+        .eq("id", candidate.id)
+        .single();
+      if (error || typeof data?.user_id !== "string")
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      owner = data.user_id;
     }
+    if (await isEntityDeleted(candidate.id, owner!)) deletedEntityIds.add(candidate.id);
   }
 
   return deletedEntityIds;
@@ -990,27 +958,9 @@ export async function getEntityWithProvenance(
     return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId);
   }
 
-  // Check if entity is deleted (unless explicitly requested)
   if (!includeDeleted) {
-    let deletedCheckQuery = db
-      .from("observations")
-      .select("source_priority, observed_at, fields")
-      .eq("entity_id", entityId);
-    if (userId) {
-      deletedCheckQuery = deletedCheckQuery.eq("user_id", userId);
-    }
-    const { data: observations } = await deletedCheckQuery
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false })
-      .limit(1);
-
-    if (observations && observations.length > 0) {
-      const highestPriorityObs = observations[0];
-      if (highestPriorityObs.fields?._deleted === true) {
-        // Entity is deleted - return null
-        return null;
-      }
-    }
+    const { isEntityDeleted } = await import("./deletion.js");
+    if (await isEntityDeleted(entityId, entity.user_id as string)) return null;
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)

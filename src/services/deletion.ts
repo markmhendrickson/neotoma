@@ -9,6 +9,121 @@
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
 import { getDb } from "../repositories/db/connection.js";
+import {
+  appendEntityLifecycleAction,
+  acquireEntityLifecycleContext,
+} from "./entity_lifecycle_storage.js";
+import { selectEntityLifecycleVisibility } from "./entity_lifecycle_authority.js";
+import { resolveAttachmentTarget, resolveAttachedObservations } from "./attachment_resolution.js";
+import { recomputeSnapshot } from "./snapshot_computation.js";
+
+async function authoritativeEntityAction(
+  entityId: string,
+  entityType: string,
+  userId: string,
+  kind: "delete" | "restore",
+  reason?: string,
+  timestamp?: string
+): Promise<DeletionResult | null> {
+  const database = await getDb();
+  const table = await database
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='entity_lifecycle_cutovers'"
+    )
+    .get();
+  if (!table) return null; // explicit pre-migration compatibility, no implicit adoption
+  const registry = await database.prepare("SELECT cutover_id FROM entity_lifecycle_cutovers").get();
+  if (!registry) {
+    const populated = await database
+      .prepare(
+        "SELECT id FROM observations WHERE entity_lifecycle_kind IS NOT NULL OR entity_lifecycle_sequence IS NOT NULL OR entity_lifecycle_target_id IS NOT NULL LIMIT 1"
+      )
+      .get();
+    if (populated)
+      throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+    return null;
+  }
+  const observedAt = timestamp ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(observedAt)))
+    return { success: false, entity_id: entityId, error: "Invalid lifecycle timestamp" };
+  let committed: { id: string; type: string; observationId: string } | undefined;
+  try {
+    const outcome = await database.transaction(async (tx) => {
+      const initial = (await tx
+        .prepare("SELECT * FROM entities WHERE id=? AND user_id=?")
+        .get(entityId, userId)) as { id: string; entity_type: string } | undefined;
+      if (!initial)
+        return {
+          success: false,
+          entity_id: entityId,
+          error: ENTITY_NOT_FOUND_MESSAGE,
+          not_found: true,
+        };
+      const resolution = await resolveAttachmentTarget(entityId, userId);
+      if (resolution.truncated)
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      const target = (await tx
+        .prepare("SELECT id,entity_type,user_id FROM entities WHERE id=? AND user_id=?")
+        .get(resolution.resolvedEntityId, userId)) as
+        | { id: string; entity_type: string; user_id: string }
+        | undefined;
+      if (
+        !target ||
+        target.entity_type !== entityType ||
+        initial.entity_type !== target.entity_type
+      )
+        return {
+          success: false,
+          entity_id: entityId,
+          error: ENTITY_NOT_FOUND_MESSAGE,
+          not_found: true,
+        };
+      if (kind === "restore" && target.entity_type === "agent_grant") {
+        const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+        await assertGrantEntityPinsUnique(userId, target.id);
+      }
+      const attached = await resolveAttachedObservations(target.id, userId);
+      if (attached.truncated)
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      const context = await acquireEntityLifecycleContext(tx, target, attached.observations);
+      selectEntityLifecycleVisibility(attached.observations, context); // refuse corrupt prior state before append
+      const fields: Record<string, unknown> =
+        kind === "delete"
+          ? {
+              _deleted: true,
+              deleted_at: observedAt,
+              deleted_by: userId,
+              ...(reason ? { deletion_reason: reason } : {}),
+            }
+          : {
+              _deleted: false,
+              restored_at: observedAt,
+              restored_by: userId,
+              ...(reason ? { restoration_reason: reason } : {}),
+            };
+      const observationId = await appendEntityLifecycleAction(tx, target, kind, fields, observedAt);
+      await recomputeSnapshot(target.id, userId, true);
+      committed = { id: target.id, type: target.entity_type, observationId };
+      return { success: true, entity_id: entityId, observation_id: observationId };
+    });
+    if (outcome.success && committed)
+      emitEntityLifecycle({
+        user_id: userId,
+        entity_id: committed.id,
+        entity_type: committed.type,
+        event_type: kind === "delete" ? "entity.deleted" : "entity.restored",
+        timestamp: observedAt,
+        observation_id: committed.observationId,
+      });
+    return outcome;
+  } catch {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: "Entity lifecycle action could not be committed",
+    };
+  }
+}
 
 import { emitEntityLifecycle, emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 
@@ -109,6 +224,16 @@ export async function softDeleteEntity(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  const authoritative = await authoritativeEntityAction(
+    entityId,
+    entityType,
+    userId,
+    "delete",
+    reason,
+    timestamp
+  );
+  if (authoritative) return authoritative;
+
   // Verify entity exists and belongs to user before creating deletion observation
   const { data: existing, error: fetchError } = await db
     .from("entities")
@@ -314,6 +439,16 @@ export async function restoreEntity(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  const authoritative = await authoritativeEntityAction(
+    entityId,
+    entityType,
+    userId,
+    "restore",
+    reason,
+    timestamp
+  );
+  if (authoritative) return authoritative;
+
   // Same ownership check as softDeleteEntity: only an entity the caller owns
   // can be restored. A missing entity and another user's entity get the same
   // not-found result.
@@ -620,28 +755,17 @@ export async function restoreRelationship(
  * @returns True if entity is deleted
  */
 export async function isEntityDeleted(entityId: string, userId: string): Promise<boolean> {
-  const { data, error } = await db
-    .from("observations")
-    .select("fields, source_priority, observed_at")
-    .eq("entity_id", entityId)
-    .eq("user_id", userId);
-
-  if (error || !data || data.length === 0) {
-    return false;
-  }
-
-  // Sort by priority and observed_at to find highest priority observation
-  const sorted = [...data].sort((a, b) => {
-    // Primary: source_priority DESC
-    if (b.source_priority !== a.source_priority) {
-      return b.source_priority - a.source_priority;
-    }
-    // Secondary: observed_at DESC
-    return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-  });
-
-  const highestPriorityObs = sorted[0];
-  return highestPriorityObs.fields?._deleted === true;
+  const attached = await resolveAttachedObservations(entityId, userId);
+  if (attached.truncated)
+    throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+  const rows = attached.observations;
+  if (!rows.length) return false;
+  const context = await acquireEntityLifecycleContext(
+    await getDb(),
+    { id: attached.resolvedEntityId, user_id: userId, entity_type: rows[0].entity_type },
+    rows
+  );
+  return selectEntityLifecycleVisibility(rows, context).hidden;
 }
 
 /**
