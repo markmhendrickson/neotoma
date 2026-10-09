@@ -344,7 +344,8 @@ async function nativeMaterialization(database: DbDatabase): Promise<void> {
           if (stable(physical[key]) !== stable(value)) refuse("materialization_invalid");
       } else if (physical) refuse("materialization_invalid");
       const facade = await getSnapshot(last, entity.user_id);
-      if (Boolean(facade) !== Boolean(expected)) refuse("materialization_invalid");
+      if (Boolean(facade) !== Boolean(expected) || (facade && stable(facade) !== stable(physical)))
+        refuse("materialization_invalid");
     }
   }
 }
