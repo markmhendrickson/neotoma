@@ -179,7 +179,7 @@ export async function computeEntitySnapshotAtTime(
     observations = acquired.data;
   }
   const pinnedSchema = projection.includeClearedFields
-    ? await schemaRegistry.loadActiveSchema(entityType, userId)
+    ? await schemaRegistry.loadActiveSchemaInTransaction(await getDb(), entityType, userId)
     : undefined;
   if (projection.includeClearedFields && !pinnedSchema) {
     throw new Error("Nullable winning projection requires an active schema");

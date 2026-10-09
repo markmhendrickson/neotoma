@@ -371,10 +371,87 @@ it("requires explicit owner and an actual active schema without default fallback
       includeClearedFields: true,
     })
   ).toBeNull();
-  const load = vi.spyOn(schemaRegistry, "loadActiveSchema").mockResolvedValue(null);
+  const load = vi
+    .spyOn(schemaRegistry, "loadActiveSchemaInTransaction")
+    .mockRejectedValue(new Error("Owned active schema unavailable"));
   try {
     expect((await nullable(row.entity_id)).status).toBe(500);
   } finally {
     load.mockRestore();
   }
+});
+
+it("missing actual active schema refuses nullable certification while default cached reads stay unchanged", async () => {
+  const row = await target();
+  const before = (await request("/get_entity_snapshot", { entity_id: row.entity_id })).body;
+  expect(
+    (await db.from("schema_registry").update({ active: false }).eq("entity_type", kind)).error
+  ).toBeNull();
+  try {
+    expect((await nullable(row.entity_id)).status).toBe(500);
+    const after = (await request("/get_entity_snapshot", { entity_id: row.entity_id })).body;
+    expect(after).toEqual(before);
+  } finally {
+    expect(
+      (await db.from("schema_registry").update({ active: true }).eq("entity_type", kind)).error
+    ).toBeNull();
+  }
+});
+
+it.each(["markdown", undefined])(
+  "MCP opted-in view refuses unselected format %s",
+  async (format) => {
+    const row = await target();
+    const positive = await modernPost(base, {
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "retrieve_entity_snapshot",
+        arguments: { entity_id: row.entity_id, format: "json", include_cleared_fields: true },
+      },
+    });
+    expect(toolResultJson(positive.body)).toMatchObject({
+      cleared_fields_included: true,
+      snapshot: { reason: "initial" },
+    });
+    const args: any = { entity_id: row.entity_id, include_cleared_fields: true };
+    if (format !== undefined) args.format = format;
+    const negative = await modernPost(base, {
+      id: 2,
+      method: "tools/call",
+      params: { name: "retrieve_entity_snapshot", arguments: args },
+    });
+    expect(negative.body.error || negative.body.result?.isError).toBeTruthy();
+  }
+);
+it("default MCP format and false flag retain ordinary markdown", async () => {
+  const row = await target();
+  for (const flag of [undefined, false]) {
+    const args: any = { entity_id: row.entity_id };
+    if (flag !== undefined) args.include_cleared_fields = flag;
+    const r = await modernPost(base, {
+      id: 3,
+      method: "tools/call",
+      params: { name: "retrieve_entity_snapshot", arguments: args },
+    });
+    expect(r.body.error || r.body.result?.isError).toBeFalsy();
+    expect(r.body.result.content[0].text).not.toContain("cleared_fields_included");
+    expect(() => JSON.parse(r.body.result.content[0].text)).toThrow();
+  }
+});
+it("opt-in current merged alias preserves target deletion hiding", async () => {
+  const alias = await target(),
+    targetRow = await target();
+  const merged = await request("/entities/merge", {
+    from_entity_id: alias.entity_id,
+    to_entity_id: targetRow.entity_id,
+  });
+  expect(merged.status, JSON.stringify(merged.body)).toBe(200);
+  expect((await nullable(alias.entity_id)).status).toBe(200);
+  expect(
+    (await request("/delete_entity", { entity_id: targetRow.entity_id, entity_type: kind })).status
+  ).toBe(200);
+  expect((await nullable(targetRow.entity_id)).status).toBe(404);
+  expect((await request("/entities/" + alias.entity_id)).status).toBe(404);
+  expect((await nullable(alias.entity_id)).status).toBe(404);
 });

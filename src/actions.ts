@@ -10178,7 +10178,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
       });
       if (include_cleared_fields && !at && !at_ingested) {
         const { isEntityDeleted } = await import("./services/deletion.js");
-        if (await isEntityDeleted(entity_id, userId))
+        if (result && (await isEntityDeleted(result.entity_id, userId)))
           return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
       if (result === null) {

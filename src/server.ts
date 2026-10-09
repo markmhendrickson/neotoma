@@ -3577,7 +3577,13 @@ export class NeotomaServer {
     // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
     // ownership; this MCP path historically did not.
     const userId = this.getAuthenticatedUserId();
-    const responseFormat = parsed.include_cleared_fields ? "json" : (parsed.format ?? "markdown");
+    if (parsed.include_cleared_fields && parsed.format !== "json") {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "include_cleared_fields requires explicit format=json"
+      );
+    }
+    const responseFormat = parsed.format ?? "markdown";
 
     const renderEntitySnapshotResponse = async (payload: {
       entity_id: string;
