@@ -2521,6 +2521,16 @@ export class NeotomaServer {
         if (error instanceof McpError) {
           throw error;
         }
+        const { StoreConditionError } = await import("./services/store_condition_keys.js");
+        if (error instanceof StoreConditionError) {
+          throw new McpError(
+            error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
+              ? ErrorCode.InternalError
+              : ErrorCode.InvalidRequest,
+            error.message,
+            error.toErrorEnvelope()
+          );
+        }
         if (error instanceof AttributionPolicyError) {
           // Surface policy rejections as structured MCP errors so clients can
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
@@ -5644,6 +5654,7 @@ export class NeotomaServer {
 
     const schema = z
       .object({
+        expected_entity_absent: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
@@ -5704,6 +5715,9 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed);
+
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
       if (parsed.commit === false) {
@@ -5724,6 +5738,28 @@ export class NeotomaServer {
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+
+    if (hasEntities && hasUnstructured && parsed.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.entities!,
+          sourcePriority: parsed.source_priority,
+          idempotencyKey,
+          relationships: parsed.relationships,
+          interpretation: parsed.interpretation,
+          sourcePeerId: parsed.source_peer_id,
+          strict: parsed.strict,
+        },
+        {
+          key: parsed.file_idempotency_key ?? `${idempotencyKey}-file`,
+          content: parsed.file_content,
+          filePath: parsed.file_path,
+        },
+        "mcp"
+      );
+    }
 
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
@@ -5761,6 +5797,7 @@ export class NeotomaServer {
         {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
+          expectedEntityAbsent: parsed.expected_entity_absent,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -6218,6 +6255,7 @@ export class NeotomaServer {
     originalFilename?: string,
     relationships?: StoreRelationshipRef[],
     options: {
+      expectedEntityAbsent?: boolean;
       commit?: boolean;
       strict?: boolean;
       observationSource?: import("./shared/action_schemas.js").ObservationSource;
@@ -6226,6 +6264,29 @@ export class NeotomaServer {
       interpretationSourceId?: string;
     } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (options.expectedEntityAbsent === true) {
+      const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
+      const { storeConditionalStructured } = await import("./services/store_conditional.js");
+      await preflightStructuredStoreAdmission({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        relationships,
+        ...options,
+      });
+      const result = await storeConditionalStructured({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        strict: options.strict,
+        observationSource: options.observationSource,
+      });
+      return this.buildTextResponse(result);
+    }
     const commit = options.commit !== false;
     const strict = options.strict === true;
     const observationSource = options.observationSource;
@@ -6439,6 +6500,10 @@ export class NeotomaServer {
       const incomingContentHash = createHash("sha256")
         .update(JSON.stringify(entities, null, 2))
         .digest("hex");
+      const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+      const { getDb } = await import("./repositories/db/connection.js");
+      await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
         .select("id, content_hash")
@@ -6610,6 +6675,19 @@ export class NeotomaServer {
         });
       }
     }
+
+    const { preflightStructuredStoreOwnership } =
+      await import("./services/store_ownership_admission.js");
+    await preflightStructuredStoreOwnership(
+      {
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        strict,
+      },
+      "mcp"
+    );
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)

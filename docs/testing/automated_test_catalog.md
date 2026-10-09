@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **700**
-- Backend and repo Vitest files: **664**
+- Total automated test files: **709**
+- Backend and repo Vitest files: **673**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,10 +70,10 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 193 |
-| Vitest service tests | 52 |
+| Vitest service tests | 57 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 206 |
-| Vitest CLI tests | 84 |
+| Vitest integration tests | 209 |
+| Vitest CLI tests | 85 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -309,7 +309,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (52):**
+**Files (57):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -357,6 +357,11 @@ flowchart TD
 - `tests/services/schema_seeding_fresh_instance_gap.test.ts`
 - `tests/services/schema_seeding_preserves_custom_identity.test.ts`
 - `tests/services/session_seed_schema.test.ts`
+- `tests/services/store_condition_identity.test.ts`
+- `tests/services/store_condition_keys.test.ts`
+- `tests/services/store_condition_schema.test.ts`
+- `tests/services/store_conditional_race.test.ts`
+- `tests/services/store_conditional.test.ts`
 - `tests/services/summary.test.ts`
 - `tests/services/sync_issues_from_github.test.ts`
 - `tests/services/sync_issues_missing_token.test.ts`
@@ -444,7 +449,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (206):**
+**Files (209):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -494,6 +499,9 @@ flowchart TD
 - `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_query_deleted_count.test.ts`
+- `tests/integration/entity_read_contract_backend.test.ts`
+- `tests/integration/entity_read_contract_semantic.test.ts`
+- `tests/integration/entity_read_contract.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
@@ -657,7 +665,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (84):**
+**Files (85):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -728,6 +736,7 @@ flowchart TD
 - `tests/cli/relationship_types_cli.test.ts`
 - `tests/cli/reporter_setup.test.ts`
 - `tests/cli/request_atomic_transaction.test.ts`
+- `tests/cli/request_conditional_store.test.ts`
 - `tests/cli/request_guest_subscription.test.ts`
 - `tests/cli/run_neotoma_mcp_launchers_bash_syntax.test.ts`
 - `tests/cli/schemas_describe.test.ts`

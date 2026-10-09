@@ -1477,11 +1477,24 @@ function formatApiError(error: unknown): string {
 
 function formatRequestError(error: unknown): string {
   if (error && typeof error === "object") {
-    const envelope = error as { error_code?: unknown; message?: unknown };
+    const envelope = error as {
+      error_code?: unknown;
+      code?: unknown;
+      message?: unknown;
+      hint?: unknown;
+      error?: unknown;
+    };
     if (typeof envelope.error_code === "string") {
       const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
       return `${envelope.error_code}${message}`;
     }
+    if (typeof envelope.code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      const hint = typeof envelope.hint === "string" ? ` ${envelope.hint}` : "";
+      return `${envelope.code}${message}${hint}`;
+    }
+    if (envelope.error && typeof envelope.error === "object")
+      return formatRequestError(envelope.error);
   }
   return formatApiError(error);
 }

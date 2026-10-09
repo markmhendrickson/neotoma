@@ -2539,6 +2539,15 @@ components:
         `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
         remain intentionally open so schema-driven fields flow through.
       properties:
+        expected_entity_absent:
+          type: boolean
+          description: |
+            When true, atomically create exactly one structured entity only if
+            its complete schema-declared physical identity is absent. Requires
+            commit=true and a nonempty idempotency_key; file, relationship,
+            interpretation, intake, target and sync combinations are refused.
+            Omitted or false preserves ordinary upsert behavior. Exact retries
+            return the original immutable operation receipt without new effects.
         entities:
           type: array
           items:
@@ -2650,6 +2659,15 @@ components:
         fields inside `entities[]` remain intentionally open so
         schema-driven fields flow through (see description on `entities[]`).
       properties:
+        expected_entity_absent:
+          type: boolean
+          description: |
+            When true, atomically create exactly one structured entity only if
+            its complete schema-declared physical identity is absent. Requires
+            commit=true and a nonempty idempotency_key; file, relationship,
+            interpretation, intake, target and sync combinations are refused.
+            Omitted or false preserves ordinary upsert behavior. Exact retries
+            return the original immutable operation receipt without new effects.
         entities:
           type: array
           items:
@@ -2716,9 +2734,102 @@ components:
         source_peer_id:
           type: string
           description: Optional peer id stamped on observations for sync loop prevention.
+    ConditionalStoreReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          version,
+          status,
+          request_fingerprint,
+          source_id,
+          entity_id,
+          entity_type,
+          observation_id,
+          schema_identity_digest,
+          unknown_fields_count,
+          diagnostics,
+          original_observation_fields,
+        ]
+      description: |
+        Original committed operation facts, verified against the immutable native
+        observation and owner/source linkage. Current snapshots are separate.
+      properties:
+        version: { type: integer, enum: [1] }
+        status: { type: string, enum: [applied, replayed] }
+        request_fingerprint: { type: string }
+        source_id: { type: string }
+        entity_id: { type: string }
+        entity_type: { type: string }
+        observation_id: { type: string }
+        schema_identity_digest: { type: string }
+        unknown_fields_count: { type: integer, minimum: 0 }
+        original_observation_fields:
+          type: object
+          additionalProperties: true
+          description: Original declared observation fields, never a current snapshot substitute.
+        diagnostics:
+          type: object
+          additionalProperties: false
+          required: [fields_sha256, schema_version, unknown_fields, constraint_warnings]
+          properties:
+            fields_sha256: { type: string }
+            schema_version: { type: string }
+            unknown_fields: { type: array, items: { type: string } }
+            constraint_warnings:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [field, constraint]
+                properties:
+                  field: { type: string }
+                  constraint: { type: string }
+    ConditionalStoreError:
+      type: object
+      additionalProperties: false
+      required: [code, message, hint]
+      properties:
+        code:
+          type: string
+          enum:
+            [
+              VALIDATION_ERROR,
+              CONFLICT,
+              IDEMPOTENCY_CONFLICT,
+              STORE_KEY_MODE_CONFLICT,
+              STORE_RECEIPT_UNCERTAIN,
+              STORE_CONDITIONAL_FAILED,
+            ]
+        message: { type: string }
+        hint: { type: string }
+        committed:
+          oneOf:
+            - { type: boolean, enum: [false] }
+            - { type: string, enum: [unknown] }
+        private_storage_residue_possible: { type: boolean }
     StoreStructuredResponse:
       type: object
       properties:
+        operation_receipt:
+          $ref: "#/components/schemas/ConditionalStoreReceipt"
+        current_snapshot_status:
+          type: string
+          enum: [available, absent, unavailable]
+          description: Current snapshot availability, separate from the retained original receipt.
+        postcommit_notifications:
+          type: object
+          additionalProperties: false
+          required: [attempted, failed, status]
+          properties:
+            attempted: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+            status:
+              type: string
+              enum: [completed, uncertain, not_repeated]
+          description: |
+            Notification attempts run after commit. An uncertain notification
+            outcome does not mean the applied transaction was rolled back.
         success:
           type: boolean
         commit:
@@ -6070,6 +6181,10 @@ paths:
                   - { $ref: "#/components/schemas/ConstraintViolationErrorEnvelope" }
                   - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
                   - { $ref: "#/components/schemas/ErrorEnvelope" }
+                  - {
+                      type: object,
+                      properties: { error: { $ref: "#/components/schemas/ConditionalStoreError" } },
+                    }
         "403":
           description: |
             Write rejected by policy. `OVERRIDE_POLICY_VIOLATION` is returned
@@ -6081,14 +6196,24 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
           description: |
-            Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+            Conditional physical presence, changed payload or mode conflict,
+            or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
             idempotency_key was already used for a store call with different
             content. Use a new idempotency_key to write the updated payload.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
+                  - {
+                      type: object,
+                      properties: { error: { $ref: "#/components/schemas/ConditionalStoreError" } },
+                    }
         "503":
           description: |
+            Conditional failure/uncertain acknowledgment carries explicit database
+            commit and possible private storage residue details when applicable.
+            Exact request replay reconciles the original receipt. This is separate from
             `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
             read, so the write could not be checked against it. Nothing was
             persisted. Retry the request UNCHANGED; the envelope carries
@@ -6101,7 +6226,13 @@ paths:
             silently storing less — the failure this split exists to prevent.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+                  - {
+                      type: object,
+                      properties: { error: { $ref: "#/components/schemas/ConditionalStoreError" } },
+                    }
 
   /get_entity_snapshot:
     post:

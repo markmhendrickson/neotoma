@@ -1,3 +1,8 @@
+import {
+  preflightStructuredStoreAdmission,
+  type StructuredStoreApiParams,
+  type StoreRelationshipRef,
+} from "./services/store_admission.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -56,12 +61,7 @@ import {
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
-import { enforceRelationshipWriteCapabilities } from "./services/relationship_write_capability.js";
-import {
-  assertGuestWriteAllowed,
-  AccessPolicyError,
-  type GuestIdentity,
-} from "./services/access_policy.js";
+import { AccessPolicyError, type GuestIdentity } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
 import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
@@ -71,7 +71,6 @@ import {
   getCurrentAgentIdentity,
   getCurrentAttribution,
   getCurrentExternalActor,
-  getRequestContext,
   runWithAuthenticatedPrincipal,
   runWithExternalActor,
   runWithRequestContext,
@@ -247,7 +246,6 @@ import {
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
   StoreRequestSchema,
-  type StoreInterpretationInput,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
@@ -7697,15 +7695,6 @@ app.post("/observations/create", async (req, res) => {
   }
 });
 
-type StoreRelationshipRef = {
-  relationship_type: string;
-  source_index?: number;
-  target_index?: number;
-  source_entity_id?: string;
-  target_entity_id?: string;
-  metadata?: Record<string, unknown>;
-};
-
 function normalizeInterpretationConfig(
   configInput?: Record<string, unknown>
 ): Record<string, unknown> {
@@ -7759,21 +7748,7 @@ async function completeInterpretationRun(params: {
     .eq("id", params.interpretationId);
 }
 
-export async function storeStructuredForApi(params: {
-  userId: string;
-  entities: Record<string, unknown>[];
-  sourcePriority: number;
-  observationSource?: import("./shared/action_schemas.js").ObservationSource;
-  /** When set, written observations carry this peer id for sync loop prevention. */
-  sourcePeerId?: string | null;
-  idempotencyKey: string;
-  originalFilename?: string;
-  relationships?: StoreRelationshipRef[];
-  interpretation?: StoreInterpretationInput;
-  interpretationSourceId?: string;
-  commit?: boolean;
-  strict?: boolean;
-}) {
+export async function storeStructuredForApi(params: StructuredStoreApiParams) {
   const {
     userId,
     entities,
@@ -7790,140 +7765,9 @@ export async function storeStructuredForApi(params: {
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
-
-  // Access policy: when the caller is a guest (AAuth-verified but not admitted
-  // via a grant), check per-entity-type access policies. If the policy allows
-  // guest writes, the request proceeds without requiring an agent_grant.
-  const requestContext = getRequestContext();
-  const agentIdentity = getCurrentAgentIdentity();
-  const admission = getCurrentAAuthAdmission();
-  const isAAuthVerified = agentIdentity?.thumbprint != null;
-  const isGuest = isAAuthVerified && (!admission || !admission.admitted);
-
-  if (isGuest && !requestContext?.bypassGuestStoreAccessPolicy) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    const guestId: GuestIdentity = {
-      thumbprint: agentIdentity.thumbprint,
-      sub: agentIdentity.sub,
-      iss: agentIdentity.iss,
-    };
-    await assertGuestWriteAllowed(entityTypes, guestId);
-  }
-
-  // usage_digest store-seam redaction guard (server-side backstop).
-  // Scope: strictly usage_digest entities only — no impact on any other entity type.
-  // For each incoming usage_digest entity, scan free-text fields `notes` and
-  // `friction_notes` via the pure redactUsageDigestEntity helper, and write the
-  // redacted copies back onto the entity object so the raw input is never persisted.
-  // This is a redact-and-store (scan) approach, not hard-reject, so a digest is
-  // never silently dropped on a client-side redaction miss.
-  //
-  // NOTE: Single telemetry sink today — entity_type === "usage_digest" is the only
-  // branch. If a second redacted-free-text entity_type appears, lift these field
-  // names into schema metadata (redact_free_text_fields) rather than adding another
-  // branch here.
-  {
-    const hasUsageDigest = entities.some(
-      (e) => (e as Record<string, unknown>)?.entity_type === "usage_digest"
-    );
-    if (hasUsageDigest) {
-      const { redactUsageDigestEntity } =
-        await import("./services/feedback/usage_digest_redaction.js");
-      for (const entityData of entities) {
-        const ed = entityData as Record<string, unknown>;
-        if (ed.entity_type !== "usage_digest") continue;
-        const result = redactUsageDigestEntity(ed as Parameters<typeof redactUsageDigestEntity>[0]);
-        if (result.applied) {
-          logger.warn(
-            `[STORE] usage_digest server-side redaction applied: ${result.hits} hit(s) in free-text fields.`
-          );
-        }
-      }
-    }
-  }
-
-  // Capability scoping: when the caller is an AAuth-verified agent covered
-  // by the capability registry, gate store_structured by entity_type here
-  // before any writes touch the DB. Guests who passed access policy above
-  // skip grant-based capability enforcement. Unknown / anonymous callers
-  // fall through (attribution_policy still gates their writes downstream).
-  const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
-  if (capabilityCtx && !isGuest) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    enforceAgentCapability("store", entityTypes, capabilityCtx);
-    if (Array.isArray(relationships) && relationships.length > 0) {
-      // Same shared check the MCP store and every standalone relationship
-      // entrance run (services/relationship_write_capability.ts).
-      await enforceRelationshipWriteCapabilities({
-        userId,
-        entities,
-        relationships,
-        capabilityCtx,
-      });
-    }
-  }
-
-  // Relationship-type validation, UP FRONT and BEFORE any entity is persisted
-  // (#1972 / G25).
-  //
-  // This closes the more damaging half of the closed-vocabulary defect. The
-  // relationships leg further down catches per edge and downgrades to
-  // logger.warn, so a store carrying an edge the substrate would not accept
-  // returned SUCCESS with the edge silently absent — a caller believed it had
-  // written a graph it had not written, and nothing in the response said
-  // otherwise. Validating here means an unacceptable type is a refusal the
-  // caller sees, and no entities are written that would have been orphaned by
-  // the edge that was going to fail anyway.
-  if (commit && Array.isArray(relationships) && relationships.length > 0) {
-    const { relationshipsService } = await import("./services/relationships.js");
-    const seen = new Set<string>();
-    for (const rel of relationships) {
-      const type = rel?.relationship_type;
-      if (typeof type !== "string" || seen.has(type)) continue;
-      seen.add(type);
-      await relationshipsService.assertRegisteredType(type, userId);
-    }
-  }
-
-  // Protected-entity-types guard: governance state (`agent_grant`, etc.)
-  // is gated by an explicit capability on the admitted grant. Mirrors
-  // the same check made deep in `createObservation` so callers see a
-  // structured `capability_denied` envelope before any writes.
-  {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    assertCanWriteProtectedBatch({
-      entity_types: entityTypes,
-      op: "store",
-      identity: getCurrentAgentIdentity(),
-      admission: getCurrentAAuthAdmission(),
-    });
-  }
-
-  // A key thumbprint may be pinned by agent_grants under one owner only.
-  // Checked before any write so a refused pin persists nothing; the same
-  // check runs again at the observation insert.
-  if (entities.some((entity) => entity?.entity_type === "agent_grant")) {
-    const { assertGrantWriteKeepsPinUnique } = await import("./services/agent_grants.js");
-    for (const entity of entities) {
-      if (entity?.entity_type !== "agent_grant") continue;
-      await assertGrantWriteKeepsPinUnique({
-        userId,
-        entityType: "agent_grant",
-        fields: entity,
-      });
-    }
-  }
-
+  await preflightStructuredStoreAdmission(params);
   const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
     await import("./services/entity_resolution.js");
-  const { detectFlatPackedRows, FlatPackedRowsError } =
-    await import("./services/flat_packed_detection.js");
   // R4: lazy import so the structured-store handler can attach required
   // identity-field hints when resolving fails under a reject policy.
   const registryModule = await import("./services/schema_registry.js");
@@ -7932,15 +7776,17 @@ export async function storeStructuredForApi(params: {
     Awaited<ReturnType<typeof deriveRequiredIdentityFields>>
   >;
 
-  // Reject flat-packed rows (whole tables smuggled into a single entity as
-  // `<prefix>_<index>_<suffix>` keys). These cannot produce per-row snapshots
-  // and are almost always a caller bug. The caller should split into one
-  // entity per row and retry.
-  for (const entityData of entities) {
-    const detection = detectFlatPackedRows(entityData as Record<string, unknown>);
-    if (detection.detected) {
-      throw new FlatPackedRowsError(detection);
-    }
+  if (params.expectedEntityAbsent === true) {
+    const { storeConditionalStructured } = await import("./services/store_conditional.js");
+    return storeConditionalStructured({
+      userId,
+      entities,
+      sourcePriority,
+      observationSource,
+      idempotencyKey,
+      originalFilename,
+      strict,
+    });
   }
 
   // Compute hash of incoming content before querying so we can detect
@@ -7953,6 +7799,12 @@ export async function storeStructuredForApi(params: {
   });
   const { computeContentHash: _computeContentHash } = await import("./services/raw_storage.js");
   const incomingContentHash = _computeContentHash(Buffer.from(incomingJsonContent, "utf-8"));
+
+  if (commit) {
+    const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+    const { getDb } = await import("./repositories/db/connection.js");
+    await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+  }
 
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
@@ -8066,6 +7918,10 @@ export async function storeStructuredForApi(params: {
       return entry?.schema_definition ?? null;
     });
   }
+
+  const { preflightStructuredStoreOwnership } =
+    await import("./services/store_ownership_admission.js");
+  if (commit) await preflightStructuredStoreOwnership(params);
 
   const { createObservation } = await import("./services/observation_storage.js");
 
@@ -9419,10 +9275,33 @@ async function handleStorePost(
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed.data);
     const hasEntities = Boolean(parsed.data.entities?.length);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
     const hasUnstructured = hasFileContent || hasFilePath;
+
+    if (hasEntities && hasUnstructured && parsed.data.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.data.entities!,
+          sourcePriority: parsed.data.source_priority,
+          idempotencyKey: parsed.data.idempotency_key!,
+          relationships: parsed.data.relationships,
+          interpretation: parsed.data.interpretation,
+          sourcePeerId: parsed.data.source_peer_id,
+          strict: parsed.data.strict,
+        },
+        {
+          key: parsed.data.file_idempotency_key,
+          content: parsed.data.file_content,
+          filePath: parsed.data.file_path,
+        }
+      );
+    }
 
     let structuredResult: Record<string, unknown> | undefined;
     let unstructuredResult: Record<string, unknown> | undefined;
@@ -9523,6 +9402,7 @@ async function handleStorePost(
         storeStructuredForApi({
           userId,
           entities: parsed.data.entities as Record<string, unknown>[],
+          expectedEntityAbsent: parsed.data.expected_entity_absent,
           sourcePriority: parsed.data.source_priority ?? 100,
           observationSource: parsed.data.observation_source,
           sourcePeerId: parsed.data.source_peer_id,
@@ -9587,6 +9467,16 @@ async function handleStorePost(
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+    const { StoreConditionError } = await import("./services/store_condition_keys.js");
+    if (error instanceof StoreConditionError) {
+      const status =
+        error.code === "VALIDATION_ERROR"
+          ? 400
+          : error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
+            ? 503
+            : 409;
+      return res.status(status).json({ error: error.toErrorEnvelope() });
+    }
     if (isGrantPinConflict(error)) {
       logWarn("AgentGrantPinConflict:store", req, { code: error.code });
       return sendError(res, 409, error.code, error.message, { field: error.field });

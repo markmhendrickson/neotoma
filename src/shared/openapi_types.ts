@@ -4181,6 +4181,15 @@ export interface components {
      *     remain intentionally open so schema-driven fields flow through.
      */
     StoreRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities?: {
         [key: string]: unknown;
       }[];
@@ -4266,6 +4275,15 @@ export interface components {
      *     schema-driven fields flow through (see description on `entities[]`).
      */
     StoreStructuredRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities: {
         [key: string]: unknown;
       }[];
@@ -4321,7 +4339,67 @@ export interface components {
       /** @description Optional peer id stamped on observations for sync loop prevention. */
       source_peer_id?: string;
     };
+    /**
+     * @description Original committed operation facts, verified against the immutable native
+     *     observation and owner/source linkage. Current snapshots are separate.
+     */
+    ConditionalStoreReceipt: {
+      /** @enum {integer} */
+      version: 1;
+      /** @enum {string} */
+      status: "applied" | "replayed";
+      request_fingerprint: string;
+      source_id: string;
+      entity_id: string;
+      entity_type: string;
+      observation_id: string;
+      schema_identity_digest: string;
+      unknown_fields_count: number;
+      /** @description Original declared observation fields, never a current snapshot substitute. */
+      original_observation_fields: {
+        [key: string]: unknown;
+      };
+      diagnostics: {
+        fields_sha256: string;
+        schema_version: string;
+        unknown_fields: string[];
+        constraint_warnings: {
+          field: string;
+          constraint: string;
+        }[];
+      };
+    };
+    ConditionalStoreError: {
+      /** @enum {string} */
+      code:
+        | "VALIDATION_ERROR"
+        | "CONFLICT"
+        | "IDEMPOTENCY_CONFLICT"
+        | "STORE_KEY_MODE_CONFLICT"
+        | "STORE_RECEIPT_UNCERTAIN"
+        | "STORE_CONDITIONAL_FAILED";
+      message: string;
+      hint: string;
+      committed?: false | "unknown";
+      private_storage_residue_possible?: boolean;
+    };
     StoreStructuredResponse: {
+      operation_receipt?: components["schemas"]["ConditionalStoreReceipt"];
+      /**
+       * @description Current snapshot availability, separate from the retained original receipt.
+       * @enum {string}
+       */
+      current_snapshot_status?: "available" | "absent" | "unavailable";
+      /**
+       * @description Notification attempts run after commit. An uncertain notification
+       *     outcome does not mean the applied transaction was rolled back.
+       */
+      postcommit_notifications?: {
+        attempted: number;
+        failed: number;
+        /** @enum {string} */
+        status: "completed" | "uncertain" | "not_repeated";
+      };
       success?: boolean;
       /**
        * @description Echoes the request's `commit` flag. `false` means this response
@@ -7202,7 +7280,10 @@ export interface operations {
             | components["schemas"]["StoreResolutionErrorEnvelope"]
             | components["schemas"]["ConstraintViolationErrorEnvelope"]
             | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
-            | components["schemas"]["ErrorEnvelope"];
+            | components["schemas"]["ErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
       /**
@@ -7220,7 +7301,8 @@ export interface operations {
         };
       };
       /**
-       * @description Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+       * @description Conditional physical presence, changed payload or mode conflict,
+       *     or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
        *     idempotency_key was already used for a store call with different
        *     content. Use a new idempotency_key to write the updated payload.
        */
@@ -7229,11 +7311,18 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
       /**
-       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+       * @description Conditional failure/uncertain acknowledgment carries explicit database
+       *     commit and possible private storage residue details when applicable.
+       *     Exact request replay reconciles the original receipt. This is separate from
+       *     `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
        *     read, so the write could not be checked against it. Nothing was
        *     persisted. Retry the request UNCHANGED; the envelope carries
        *     `retryable: true`.
@@ -7249,7 +7338,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["StorePolicyUnavailableErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
     };

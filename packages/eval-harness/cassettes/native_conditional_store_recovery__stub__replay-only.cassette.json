@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "native_conditional_store_recovery",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-09T00:00:00Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Create one synthetic original bundle; replay its uncertain acknowledgement exactly and refuse changed payload, appeared identity, mixed mode and malformed conditions.",
+  "system_prompt": "Use the existing store with an explicit absence condition. Preserve the original receipt and generation fields; never change the mode or payload for an uncertain key.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_conditional_store",
+        "schema_version": "1.0",
+        "activate": true,
+        "schema_definition": {
+          "fields": {
+            "code": {
+              "type": "string",
+              "required": true
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "canonical_name_fields": ["code"]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "code": {
+              "strategy": "highest_priority"
+            },
+            "status": {
+              "strategy": "highest_priority"
+            }
+          }
+        }
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_store",
+            "code": "ONLY",
+            "status": "original"
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_store",
+            "code": "ONLY",
+            "status": "original"
+          }
+        ]
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_store",
+            "code": "ONLY",
+            "status": "changed"
+          }
+        ]
+      },
+      "sequence": 3
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-other",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_store",
+            "code": "ONLY",
+            "status": "original"
+          }
+        ]
+      },
+      "sequence": 4
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": false,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_store",
+            "code": "ONLY",
+            "status": "original"
+          }
+        ]
+      },
+      "sequence": 5
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": "true",
+        "entities": [
+          {
+            "entity_type": "eval_conditional_store",
+            "code": "ONLY",
+            "status": "original"
+          }
+        ]
+      },
+      "sequence": 6
+    }
+  ],
+  "assistant_text": "The original bundle is retained; refusals add no business observations."
+}
