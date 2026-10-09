@@ -39,6 +39,9 @@ import { queryEntities } from "../../src/services/entity_queries.js";
 import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
 import { substrateEventBus } from "../../src/events/substrate_event_bus.js";
 import { createGrant, AgentGrantPinConflictError } from "../../src/services/agent_grants.js";
+import { exportEntitySnapshots } from "../../src/services/snapshot_export.js";
+import { exportMemory } from "../../src/services/memory_export.js";
+import { getDashboardStats } from "../../src/services/dashboard_stats.js";
 import { migrateEntityLifecycleAuthority } from "../../src/services/entity_lifecycle_storage.js";
 
 // These exercise the natural SQLite services. The three regressions are
@@ -158,6 +161,50 @@ describe("authenticated entity lifecycle", () => {
       (await post("delete_entity", { entity_id: id, entity_type: "foreign_type" })).status
     ).toBe(404);
     expect((await db.from("observations").select("id").eq("entity_id", id)).data).toEqual(before);
+  });
+  it("current export, memory, dashboard and count reject a stale hidden materialization then expose restored facts", async () => {
+    await recomputeSnapshot(id, owner);
+    const initial = (await db.from("entity_snapshots").select("*").eq("entity_id", id).single())
+      .data;
+    expect(initial?.snapshot.title).toBe("Synthetic factual value");
+    expect(
+      (await exportEntitySnapshots({ user_id: owner, entity_types: [type] })).total_entities
+    ).toBe(1);
+    const memoryPath = path.join(isolated.root, "synthetic-memory.md");
+    expect(
+      (await exportMemory({ user_id: owner, include_types: [type], path: memoryPath }))
+        .total_entities
+    ).toBe(1);
+    expect((await getDashboardStats(owner)).entities_by_type[type]).toBe(1);
+    expect((await softDeleteEntity(id, type, owner)).success).toBe(true);
+    expect((await db.from("entity_snapshots").select("*").eq("entity_id", id)).data).toEqual([]);
+    // Derived state may be stale; it is not lifecycle authority. Controlled
+    // synthetic insertion tests the consumers without changing the receipt.
+    expect((await db.from("entity_snapshots").upsert(initial)).error).toBeNull();
+    expect(
+      (await exportEntitySnapshots({ user_id: owner, entity_types: [type] })).total_entities
+    ).toBe(0);
+    expect(
+      (await exportMemory({ user_id: owner, include_types: [type], path: memoryPath }))
+        .total_entities
+    ).toBe(0);
+    expect(readFileSync(memoryPath, "utf8")).not.toContain(id);
+    expect((await getDashboardStats(owner)).entities_by_type[type]).toBeUndefined();
+    const query = await queryEntitiesWithCount({ userId: owner, entityType: type, limit: 100 });
+    expect(query.entities).toEqual([]);
+    expect(query.total).toBe(0);
+    expect((await restoreEntity(id, type, owner)).success).toBe(true);
+    expect(
+      (await exportEntitySnapshots({ user_id: owner, entity_types: [type] })).entities[0].snapshot
+        .title
+    ).toBe("Synthetic factual value");
+    expect(
+      (await exportMemory({ user_id: owner, include_types: [type], path: memoryPath }))
+        .total_entities
+    ).toBe(1);
+    expect(
+      (await queryEntitiesWithCount({ userId: owner, entityType: type, limit: 100 })).total
+    ).toBe(1);
   });
   it("modern MCP cycles and historical retrieval do not confuse present hiding with past visibility", async () => {
     const first = await tool("delete_entity", { entity_id: id, entity_type: type });
@@ -705,6 +752,33 @@ describe("authenticated entity lifecycle", () => {
     expect(ingestionOnly?.observation_count).toBe(1);
     expect(both?.snapshot.title).toBe("Synthetic factual value");
     expect(both?.observation_count).toBe(1);
+  });
+  it("post-cutover backdated ordinary fields cannot invent captured historical authority", async () => {
+    expect(
+      (
+        await db.from("observations").insert({
+          id: randomUUID(),
+          entity_id: id,
+          entity_type: type,
+          schema_version: "1.0",
+          user_id: owner,
+          observed_at: "2020-01-01T00:00:00Z",
+          created_at: "2020-01-01T00:00:00Z",
+          source_priority: 99999,
+          fields: { _deleted: true, title: "Synthetic backdated ordinary fact" },
+        })
+      ).error
+    ).toBeNull();
+    const args = { entity_id: id, at: "2021-01-01T00:00:00Z", at_ingested: "2021-01-01T00:00:00Z" };
+    const native = await computeEntitySnapshotAtTime(id, owner, args.at, args.at_ingested);
+    expect(native?.snapshot.title).toBe("Synthetic backdated ordinary fact");
+    expect(native?.observation_count).toBe(1);
+    const http = await post("get_entity_snapshot", args);
+    expect(http.status).toBe(200);
+    expect(http.body.snapshot.title).toBe("Synthetic backdated ordinary fact");
+    const mcp = await tool("retrieve_entity_snapshot", { ...args, format: "json" });
+    expect(mcp.snapshot.title).toBe("Synthetic backdated ordinary fact");
+    expect(await isEntityDeleted(id, owner)).toBe(false);
   });
 });
 

@@ -301,6 +301,23 @@ async function getDeletedEntityIds(
   return deletedEntityIds;
 }
 
+/** Reuse the current visibility acquisition for derived snapshot consumers.
+ * Before explicit cutover their existing materialized-read behavior is retained.
+ */
+export async function filterCurrentLifecycleRecords<T extends { entity_id: string }>(
+  records: readonly T[],
+  userId?: string
+): Promise<T[]> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) return [...records];
+  const deleted = await getDeletedEntityIds(
+    records.map((r) => ({ id: r.entity_id })),
+    userId
+  );
+  return records.filter((r) => !deleted.has(r.entity_id));
+}
+
 /**
  * Query entities with merged entity exclusion
  */

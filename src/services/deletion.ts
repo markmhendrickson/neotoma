@@ -763,12 +763,13 @@ export async function isEntityDeleted(entityId: string, userId: string): Promise
   if (attached.truncated)
     throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
   const rows = attached.observations;
-  if (!rows.length) return false;
-  const context = await acquireEntityLifecycleContext(
-    await getDb(),
-    { id: attached.resolvedEntityId, user_id: userId, entity_type: rows[0].entity_type },
-    rows
-  );
+  const target = (await (await getDb())
+    .prepare("SELECT id,user_id,entity_type FROM entities WHERE id=? AND user_id=?")
+    .get(attached.resolvedEntityId, userId)) as
+    | { id: string; user_id: string; entity_type: string }
+    | undefined;
+  if (!target) return false;
+  const context = await acquireEntityLifecycleContext(await getDb(), target, rows);
   return selectEntityLifecycleVisibility(rows, context).hidden;
 }
 

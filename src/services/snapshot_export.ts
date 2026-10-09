@@ -28,6 +28,7 @@
  */
 
 import { db } from "../db.js";
+import { filterCurrentLifecycleRecords } from "./entity_queries.js";
 import type { AttributionTier } from "../crypto/agent_identity.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
 
@@ -141,7 +142,10 @@ export async function exportEntitySnapshots(
     throw new Error(`Failed to read entity_snapshots: ${snapErr.message}`);
   }
 
-  const snapshots = (snapshotsRaw ?? []) as SnapshotRow[];
+  const snapshots = await filterCurrentLifecycleRecords(
+    (snapshotsRaw ?? []) as SnapshotRow[],
+    filter.user_id
+  );
   if (snapshots.length === 0) {
     return buildDocument(filter, []);
   }

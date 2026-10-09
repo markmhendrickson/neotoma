@@ -21,7 +21,10 @@
  */
 
 import { db } from "../db.js";
-import { acquireEntityLifecycleContext } from "./entity_lifecycle_storage.js";
+import {
+  acquireEntityLifecycleContext,
+  hasRecordedEntityLifecycleCutover,
+} from "./entity_lifecycle_storage.js";
 import { getDb } from "../repositories/db/connection.js";
 import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
@@ -144,6 +147,20 @@ export async function computeEntitySnapshotAtTime(
   //    at the requested cutoff).
   // ------------------------------------------------------------------
   if (!observations || observations.length === 0) {
+    if (await hasRecordedEntityLifecycleCutover(await getDb())) {
+      // No rows is not proof of an empty historical population when recorded
+      // capture metadata still references unavailable evidence.
+      await acquireEntityLifecycleContext(
+        await getDb(),
+        {
+          id: resolvedEntityId,
+          user_id: userId,
+          entity_type: entityType,
+        },
+        [],
+        { at, at_ingested: atIngested }
+      );
+    }
     return {
       entity_id: resolvedEntityId,
       entity_type: entityType,

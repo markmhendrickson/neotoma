@@ -91,6 +91,54 @@ describe("owned local lifecycle cutover", () => {
     });
     expect(readFileSync(path.join(dir, "synthetic.sqlite"))).toEqual(before);
   });
+  it("captures a population beyond one keyset batch with measured metadata growth and no truncation", async () => {
+    await database.transaction(async (tx) => {
+      for (let i = 0; i < 250; i++) {
+        const id = "ent_population_" + String(i).padStart(4, "0");
+        await tx
+          .prepare("INSERT INTO entities(id,user_id,entity_type) VALUES (?,'owner','synthetic')")
+          .run(id);
+        await tx
+          .prepare(
+            "INSERT INTO observations(id,entity_id,user_id,entity_type,schema_version,observed_at,created_at,source_priority,fields) VALUES (?,?,'owner','synthetic','1.0','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z',10,'{}')"
+          )
+          .run("obs_population_" + i, id);
+      }
+    });
+    const pagesBefore = (await database.prepare("PRAGMA page_count").get()) as {
+      page_count: number;
+    };
+    expect(await migrateEntityLifecycleAuthority(database)).toEqual({
+      baselines: 251,
+      members: 251,
+      replay: false,
+    });
+    const pagesAfter = (await database.prepare("PRAGMA page_count").get()) as {
+      page_count: number;
+    };
+    const size = (await database.prepare("PRAGMA page_size").get()) as { page_size: number };
+    expect((pagesAfter.page_count - pagesBefore.page_count) * size.page_size).toBeGreaterThan(0);
+    expect(
+      (await database
+        .prepare("SELECT COUNT(*) AS n FROM entity_lifecycle_legacy_membership")
+        .get()) as { n: number }
+    ).toEqual({ n: 251 });
+    expect(
+      (await database.prepare("SELECT COUNT(*) AS n FROM observations").get()) as { n: number }
+    ).toEqual({ n: 502 });
+    expect(
+      (await database
+        .prepare(
+          "SELECT COUNT(DISTINCT entity_lifecycle_target_id) AS n FROM observations WHERE entity_lifecycle_sequence=0"
+        )
+        .get()) as { n: number }
+    ).toEqual({ n: 251 });
+    expect(await migrateEntityLifecycleAuthority(database)).toEqual({
+      baselines: 251,
+      members: 251,
+      replay: true,
+    });
+  });
   it("preserves a pre-cutover ordinary marker as observed compatibility rather than asserting old actor authority", async () => {
     await database
       .prepare(

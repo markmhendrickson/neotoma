@@ -20,11 +20,14 @@ import { migrateEntityLifecycleAuthority } from "../../src/services/entity_lifec
 import { recomputeSnapshot } from "../../src/services/snapshot_computation.js";
 import { isEntityDeleted, restoreEntity } from "../../src/services/deletion.js";
 import { computeEntitySnapshotAtTime } from "../../src/services/entity_snapshot_at_time.js";
+import { applyCorrectionTransaction } from "../../src/services/correction_transaction.js";
+import { getEntityWithProvenance } from "../../src/services/entity_queries.js";
 const owner = "synthetic-legacy-owner",
   type = "synthetic_legacy_cutover";
 const id = "ent_synthetic_legacy_" + randomUUID();
 const fact = randomUUID(),
   marker = randomUUID();
+const visibleId = "ent_synthetic_legacy_visible_" + randomUUID();
 let before: Record<string, unknown>[];
 beforeAll(async () => {
   await db
@@ -36,23 +39,48 @@ beforeAll(async () => {
   ] as const) {
     expect(
       (
-        await db
-          .from("observations")
-          .insert({
-            id: observationId,
-            entity_id: id,
-            entity_type: type,
-            user_id: owner,
-            schema_version: "1.0",
-            fields,
-            source_priority: priority,
-            observed_at: "2025-01-01T00:00:00Z",
-            created_at: "2025-01-01T00:00:00Z",
-          })
+        await db.from("observations").insert({
+          id: observationId,
+          entity_id: id,
+          entity_type: type,
+          user_id: owner,
+          schema_version: "1.0",
+          fields,
+          source_priority: priority,
+          observed_at: "2025-01-01T00:00:00Z",
+          created_at: "2025-01-01T00:00:00Z",
+        })
       ).error
     ).toBeNull();
   }
   expect(await isEntityDeleted(id, owner)).toBe(true);
+  expect(
+    (
+      await db.from("entities").insert({
+        id: visibleId,
+        user_id: owner,
+        entity_type: type,
+        canonical_name: "Synthetic visible legacy",
+      })
+    ).error
+  ).toBeNull();
+  expect(
+    (
+      await db.from("observations").insert({
+        id: randomUUID(),
+        entity_id: visibleId,
+        entity_type: type,
+        user_id: owner,
+        schema_version: "1.0",
+        fields: { title: "Synthetic visible fact" },
+        source_priority: 10,
+        observed_at: "2025-01-01T00:00:00Z",
+        created_at: "2025-01-01T00:00:00Z",
+      })
+    ).error
+  ).toBeNull();
+  await recomputeSnapshot(visibleId, owner);
+  expect((await getEntityWithProvenance(visibleId, false, owner))?.observation_count).toBe(1);
   const database = await getDb();
   before = (await database
     .prepare("SELECT * FROM observations WHERE entity_id=? ORDER BY id")
@@ -113,6 +141,44 @@ it("native cutover preserves original bytes, real audit growth and independent t
   const sourceBytes = audit.data?.filter((r) => [fact, marker].includes(r.id));
   expect(sourceBytes).toHaveLength(2);
 });
+it("the compatibility baseline invalidates an old observation-count CAS without modifying its receipt", async () => {
+  const database = await getDb();
+  const beforeRows = await database
+    .prepare("SELECT * FROM observations WHERE entity_id=? ORDER BY id")
+    .all(visibleId);
+  const beforeReceipts = await database
+    .prepare("SELECT id FROM observations WHERE idempotency_key LIKE 'correction-transaction:%'")
+    .all();
+  expect((await getEntityWithProvenance(visibleId, false, owner))?.observation_count).toBe(2);
+  await expect(
+    applyCorrectionTransaction({
+      user_id: owner,
+      idempotency_key: "synthetic-stale-cutover-" + randomUUID(),
+      entities: [
+        {
+          entity_id: visibleId,
+          entity_type: type,
+          expected_observation_count: 1,
+          expected_snapshot: { title: "Synthetic visible fact" },
+          changes: [{ field: "title", value: "Must not apply" }],
+        },
+      ],
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(
+    await database
+      .prepare("SELECT * FROM observations WHERE entity_id=? ORDER BY id")
+      .all(visibleId)
+  ).toEqual(beforeRows);
+  expect(
+    await database
+      .prepare("SELECT id FROM observations WHERE idempotency_key LIKE 'correction-transaction:%'")
+      .all()
+  ).toEqual(beforeReceipts);
+  expect((await getEntityWithProvenance(visibleId, false, owner))?.snapshot.title).toBe(
+    "Synthetic visible fact"
+  );
+});
 it("an erased captured identity makes historical proof unavailable, never re-infers membership", async () => {
   await db.from("observations").delete().eq("id", fact);
   await expect(computeEntitySnapshotAtTime(id, owner, "2025-12-31T00:00:00Z")).rejects.toThrow(
@@ -121,4 +187,9 @@ it("an erased captured identity makes historical proof unavailable, never re-inf
   await expect(migrateEntityLifecycleAuthority(await getDb(), async () => {})).rejects.toThrow(
     /acquisition/
   );
+  await db.from("observations").delete().eq("entity_id", id);
+  await expect(computeEntitySnapshotAtTime(id, owner, "2025-12-31T00:00:00Z")).rejects.toThrow(
+    /acquisition/
+  );
+  await expect(isEntityDeleted(id, owner)).rejects.toThrow(/acquisition/);
 });

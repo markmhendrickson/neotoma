@@ -95,16 +95,17 @@ export function selectLegacyEntityVisibility(
   }
   const rank = new Map<string, number>(DEFAULT_OBSERVATION_SOURCE_PRIORITY.map((v, i) => [v, i]));
   const ordered = [...observations].sort((a, b) => {
-    const time = Date.parse(b.observed_at) - Date.parse(a.observed_at);
-    return time || a.id.localeCompare(b.id);
+    const timeA = Date.parse(a.observed_at),
+      timeB = Date.parse(b.observed_at);
+    return timeB !== timeA ? timeB - timeA : a.id.localeCompare(b.id);
   });
   // Stable sort retains the reducer's existing observation/id tie order.
   ordered.sort((a, b) => {
-    const priority = b.source_priority - a.source_priority;
+    if (b.source_priority !== a.source_priority) return b.source_priority - a.source_priority;
     const sourceRank =
       (rank.get(a.observation_source ?? "") ?? Number.MAX_SAFE_INTEGER) -
       (rank.get(b.observation_source ?? "") ?? Number.MAX_SAFE_INTEGER);
-    return priority || sourceRank || Date.parse(b.observed_at) - Date.parse(a.observed_at);
+    return sourceRank || Date.parse(b.observed_at) - Date.parse(a.observed_at);
   });
   return {
     hidden: ordered[0]?.fields._deleted === true,
