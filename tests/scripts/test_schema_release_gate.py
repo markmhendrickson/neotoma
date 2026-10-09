@@ -84,7 +84,7 @@ def child(argv, root, env, seconds=60, expected_denial=False):
         if process.poll() is None:
             raise AssertionError("schema release child did not terminate")
     if journal.read_text() and not expected_denial:
-        raise AssertionError("unexpected external network attempt")
+        raise AssertionError("unexpected external network attempt: " + stderr + stdout)
     return {"argv": argv, "returncode": process.returncode,
             "stdout": stdout, "stderr": stderr}
 
