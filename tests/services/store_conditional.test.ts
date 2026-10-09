@@ -214,6 +214,134 @@ describe("native conditional store effects", () => {
       await db.from("entities").update({ user_id: owner }).eq("id", legacyEntityId);
     }
   });
+  it("preserves exact combined replay after a policy change and rejects fresh combined writes before any effects", async () => {
+    const { storeStructuredForApi } = await import("../../src/actions.js");
+    const legacyRequest = {
+      ...request("combined-policy-replay"),
+      entities: [{ entity_type: schema.entity_type, code: "LEGACY_POLICY", status: "old" }],
+    };
+    const original = await storeStructuredForApi(legacyRequest);
+    const connection = await getDb();
+    const originalObservations = await connection
+      .prepare("SELECT * FROM observations WHERE user_id = ? AND source_id = ? ORDER BY id")
+      .all(owner, original.source_id);
+    const originalSnapshot = await db
+      .from("entity_snapshots")
+      .select("*")
+      .eq("entity_id", (original.entities as Array<{ entity_id: string }>)[0].entity_id)
+      .single();
+    expect(originalSnapshot.error).toBeNull();
+    const policyId = "test-combined-replay-policy";
+    const inserted = await db
+      .from("entities")
+      .upsert({
+        id: policyId,
+        entity_type: "instance_policy",
+        canonical_name: policyId,
+        aliases: [],
+        user_id: owner,
+      });
+    expect(inserted.error).toBeNull();
+    const policy = await db
+      .from("entity_snapshots")
+      .upsert({
+        entity_id: policyId,
+        entity_type: "instance_policy",
+        snapshot: { enforcement: "enforced", out_of_scope_entity_types: [schema.entity_type] },
+        provenance: {},
+        observation_count: 1,
+        user_id: owner,
+        schema_version: "1.0",
+        last_observation_at: new Date().toISOString(),
+        computed_at: new Date().toISOString(),
+      });
+    expect(policy.error).toBeNull();
+    const api = `http://127.0.0.1:${process.env.NEOTOMA_SESSION_DEV_PORT ?? "19080"}`;
+    const body = (key: string, fileKey: string) => ({
+      user_id: owner,
+      idempotency_key: key,
+      entities: legacyRequest.entities,
+      file_idempotency_key: fileKey,
+      file_content: Buffer.from("synthetic safe combined policy fixture").toString("base64"),
+      mime_type: "text/plain",
+    });
+    const mcpBody = (key: string, fileKey: string) => {
+      const payload = body(key, fileKey);
+      const { user_id: _userId, ...input } = payload;
+      return input;
+    };
+    const post = (payload: Record<string, unknown>) =>
+      fetch(`${api}/store`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    try {
+      const service = await import("../../src/services/instance_policy.js");
+      expect((await service.getInstancePolicyResult()).policy).toMatchObject({
+        enforcement: "enforced",
+        out_of_scope_entity_types: [schema.entity_type],
+      });
+      const beforeFresh = await counts();
+      events.length = 0;
+      const fresh = await post(body("combined-policy-fresh", "combined-policy-fresh-file"));
+      expect(fresh.status).toBe(400);
+      expect(await fresh.json()).toMatchObject({ error: { code: "ERR_STORE_POLICY_DENIED" } });
+      await expect(
+        new NeotomaServer().executeToolForCli(
+          "store",
+          mcpBody("combined-policy-mcp-fresh", "combined-policy-mcp-fresh-file"),
+          owner
+        )
+      ).rejects.toMatchObject({ code: "ERR_STORE_POLICY_DENIED" });
+      expect(await counts()).toEqual(beforeFresh);
+      expect(events).toHaveLength(0);
+      const direct = await storeStructuredForApi(legacyRequest);
+      expect(direct.source_id).toBe(original.source_id);
+      const replay = await post(body(legacyRequest.idempotencyKey, "combined-policy-file"));
+      const replayBody = await replay.json();
+      expect(replay.status, JSON.stringify(replayBody)).toBe(200);
+      expect(replayBody.structured).toMatchObject({
+        source_id: original.source_id,
+        replayed: true,
+      });
+      const beforeSecond = await counts();
+      events.length = 0;
+      const repeated = await post(body(legacyRequest.idempotencyKey, "combined-policy-file"));
+      expect(repeated.status).toBe(200);
+      expect(await repeated.json()).toMatchObject({
+        structured: { source_id: original.source_id, replayed: true },
+      });
+      expect(await counts()).toEqual(beforeSecond);
+      expect(events).toHaveLength(0);
+      // The existing MCP core deliberately evaluates instance policy before
+      // its own replay. Preserve that surface's denial ordering rather than
+      // changing it as part of the REST combined-admission repair.
+      await expect(
+        new NeotomaServer().executeToolForCli(
+          "store",
+          mcpBody(legacyRequest.idempotencyKey, "combined-policy-file"),
+          owner
+        )
+      ).rejects.toMatchObject({ code: "ERR_STORE_POLICY_DENIED" });
+      expect(await counts()).toEqual(beforeSecond);
+      expect(events).toHaveLength(0);
+      const afterSnapshot = await db
+        .from("entity_snapshots")
+        .select("*")
+        .eq("entity_id", (original.entities as Array<{ entity_id: string }>)[0].entity_id)
+        .single();
+      expect(afterSnapshot.data).toEqual(originalSnapshot.data);
+      expect(
+        await connection
+          .prepare("SELECT * FROM observations WHERE user_id = ? AND source_id = ? ORDER BY id")
+          .all(owner, original.source_id)
+      ).toEqual(originalObservations);
+    } finally {
+      await db.from("entity_snapshots").delete().eq("entity_id", policyId);
+      await db.from("entities").delete().eq("id", policyId);
+    }
+  });
   it("refuses legacy cross-owner targets before reserving metadata or uploading a source", async () => {
     const original = await storeConditionalStructured(request());
     const foreign = owner + "-foreign";

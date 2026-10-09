@@ -33,19 +33,6 @@ export async function claimCombinedStoreKeys(
     fs.readFileSync(resolved);
   } else if (file.content !== undefined) decodeFileContent(file.content);
   await preflightStructuredStoreAdmission(params);
-  await assertStorePolicyAllows(
-    params.entities.map((entity) => {
-      const fields = { ...entity };
-      delete fields.entity_type;
-      delete fields.type;
-      return {
-        entity_type: (entity.entity_type as string) || (entity.type as string) || "generic",
-        fields,
-      };
-    }),
-    async (entityType) =>
-      (await schemaRegistry.loadActiveSchema(entityType, params.userId))?.schema_definition ?? null
-  );
   enforceAttributionPolicy("sources", getCurrentAgentIdentity());
   enforceAttributionPolicy("observations", getCurrentAgentIdentity());
   const { preflightStructuredStoreOwnership } = await import("./store_ownership_admission.js");
@@ -59,7 +46,25 @@ export async function claimCombinedStoreKeys(
     .eq("idempotency_key", params.idempotencyKey)
     .maybeSingle();
   if (prior.error) throw prior.error;
-  if (!prior.data) await preflightStructuredStoreOwnership(params, surface);
+  if (!prior.data) {
+    // Instance policy, like ownership, is a fresh-write admission. The
+    // established structured-source replay precedes changes to that policy.
+    await assertStorePolicyAllows(
+      params.entities.map((entity) => {
+        const fields = { ...entity };
+        delete fields.entity_type;
+        delete fields.type;
+        return {
+          entity_type: (entity.entity_type as string) || (entity.type as string) || "generic",
+          fields,
+        };
+      }),
+      async (entityType) =>
+        (await schemaRegistry.loadActiveSchema(entityType, params.userId))?.schema_definition ??
+        null
+    );
+    await preflightStructuredStoreOwnership(params, surface);
+  }
   await reserveLegacyStoreKeys(await getDb(), params.userId, [
     params.idempotencyKey,
     ...(file.key ? [file.key] : []),
