@@ -66,3 +66,22 @@ export async function assertOrdinaryLifecycleImport(tx: DbConnection): Promise<v
   )
     throw new EntityLifecycleIngressError();
 }
+
+/** The CLI's already-attached ordinary source cannot REPLACE local authority. */
+export async function assertOrdinaryLifecycleImportTarget(tx: DbConnection): Promise<void> {
+  const source = await tx
+    .prepare("SELECT name FROM src.sqlite_master WHERE type='table' AND name='observations'")
+    .get();
+  if (!source) return;
+  const columns = (await tx.prepare("PRAGMA main.table_info(observations)").all()) as {
+    name: string;
+  }[];
+  const found = ENTITY_LIFECYCLE_COLUMNS.filter((c) => columns.some((r) => r.name === c));
+  if (!found.length) return;
+  const collision = await tx
+    .prepare(
+      `SELECT t.id FROM main.observations t JOIN src.observations s ON s.id=t.id WHERE ${found.map((c) => `t.${c} IS NOT NULL`).join(" OR ")} LIMIT 1`
+    )
+    .get();
+  if (collision) throw new EntityLifecycleIngressError();
+}

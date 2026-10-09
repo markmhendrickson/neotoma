@@ -10185,8 +10185,24 @@ app.post("/get_entity_snapshot", async (req, res) => {
     }
   }
 
-  // Fast path: no cutoffs — read the materialized snapshot directly, scoped to
-  // the authenticated user.
+  // Materialization is derived state. Validate owned current authority before
+  // serving its row, including restrictive corruption acquisition failures.
+  try {
+    const { isEntityDeleted } = await import("./services/deletion.js");
+    const { hasRecordedEntityLifecycleCutover } =
+      await import("./services/entity_lifecycle_storage.js");
+    const { getDb } = await import("./repositories/db/connection.js");
+    if (
+      (await hasRecordedEntityLifecycleCutover(await getDb())) &&
+      (await isEntityDeleted(entity_id, userId))
+    )
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+  } catch (err) {
+    logError("Error:get_entity_snapshot:authority", req, err);
+    return sendError(res, 500, "DB_QUERY_FAILED", "Entity lifecycle authority acquisition failed");
+  }
+
+  // No cutoffs: return the existing owned materialized factual snapshot.
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")

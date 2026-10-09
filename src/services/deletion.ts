@@ -12,6 +12,7 @@ import { getDb } from "../repositories/db/connection.js";
 import {
   appendEntityLifecycleAction,
   acquireEntityLifecycleContext,
+  hasRecordedEntityLifecycleCutover,
 } from "./entity_lifecycle_storage.js";
 import { selectEntityLifecycleVisibility } from "./entity_lifecycle_authority.js";
 import { resolveAttachmentTarget, resolveAttachedObservations } from "./attachment_resolution.js";
@@ -26,23 +27,7 @@ async function authoritativeEntityAction(
   timestamp?: string
 ): Promise<DeletionResult | null> {
   const database = await getDb();
-  const table = await database
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='entity_lifecycle_cutovers'"
-    )
-    .get();
-  if (!table) return null; // explicit pre-migration compatibility, no implicit adoption
-  const registry = await database.prepare("SELECT cutover_id FROM entity_lifecycle_cutovers").get();
-  if (!registry) {
-    const populated = await database
-      .prepare(
-        "SELECT id FROM observations WHERE entity_lifecycle_kind IS NOT NULL OR entity_lifecycle_sequence IS NOT NULL OR entity_lifecycle_target_id IS NOT NULL LIMIT 1"
-      )
-      .get();
-    if (populated)
-      throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
-    return null;
-  }
+  if (!(await hasRecordedEntityLifecycleCutover(database))) return null; // no implicit adoption
   const observedAt = timestamp ?? new Date().toISOString();
   if (!Number.isFinite(Date.parse(observedAt)))
     return { success: false, entity_id: entityId, error: "Invalid lifecycle timestamp" };
@@ -116,7 +101,11 @@ async function authoritativeEntityAction(
         observation_id: committed.observationId,
       });
     return outcome;
-  } catch {
+  } catch (error) {
+    // Preserve the existing grant conflict class and transport response. The
+    // transaction has already rolled back before this error reaches the caller.
+    const { AgentGrantPinConflictError } = await import("./agent_grants.js");
+    if (error instanceof AgentGrantPinConflictError) throw error;
     return {
       success: false,
       entity_id: entityId,
@@ -755,6 +744,21 @@ export async function restoreRelationship(
  * @returns True if entity is deleted
  */
 export async function isEntityDeleted(entityId: string, userId: string): Promise<boolean> {
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) {
+    // Preserve this facade's actual legacy comparator until the explicit cutover.
+    const { data, error } = await db
+      .from("observations")
+      .select("fields, source_priority, observed_at")
+      .eq("entity_id", entityId)
+      .eq("user_id", userId);
+    if (error || !data?.length) return false;
+    const sorted = [...data].sort(
+      (a, b) =>
+        b.source_priority - a.source_priority ||
+        new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
+    );
+    return sorted[0].fields?._deleted === true;
+  }
   const attached = await resolveAttachedObservations(entityId, userId);
   if (attached.truncated)
     throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");

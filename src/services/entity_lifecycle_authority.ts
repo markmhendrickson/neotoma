@@ -80,17 +80,22 @@ export function legacyMembershipDigest(ids: readonly string[]): string {
     .digest("hex");
 }
 /** Frozen legacy reducer selection: preserve its pre-sort/tie/source-rank order. */
-export function selectLegacyEntityVisibility(observations: readonly LifecycleObservation[]): {
+export function selectLegacyEntityVisibility(
+  observations: readonly LifecycleObservation[],
+  validateForCutover = true
+): {
   hidden: boolean;
   selected_observation_id: string | null;
 } {
   for (const row of observations) {
-    validTime(row.observed_at);
-    if (!Number.isFinite(row.source_priority) || !row.id || !row.fields) refuse();
+    if (validateForCutover) {
+      validTime(row.observed_at);
+      if (!Number.isFinite(row.source_priority) || !row.id || !row.fields) refuse();
+    }
   }
   const rank = new Map<string, number>(DEFAULT_OBSERVATION_SOURCE_PRIORITY.map((v, i) => [v, i]));
   const ordered = [...observations].sort((a, b) => {
-    const time = validTime(b.observed_at) - validTime(a.observed_at);
+    const time = Date.parse(b.observed_at) - Date.parse(a.observed_at);
     return time || a.id.localeCompare(b.id);
   });
   // Stable sort retains the reducer's existing observation/id tie order.
@@ -99,7 +104,7 @@ export function selectLegacyEntityVisibility(observations: readonly LifecycleObs
     const sourceRank =
       (rank.get(a.observation_source ?? "") ?? Number.MAX_SAFE_INTEGER) -
       (rank.get(b.observation_source ?? "") ?? Number.MAX_SAFE_INTEGER);
-    return priority || sourceRank || validTime(b.observed_at) - validTime(a.observed_at);
+    return priority || sourceRank || Date.parse(b.observed_at) - Date.parse(a.observed_at);
   });
   return {
     hidden: ordered[0]?.fields._deleted === true,
@@ -164,7 +169,10 @@ export function selectEntityLifecycleVisibility(
   }
   if (context.mode === "pre_migration") {
     if (observations.some(hasEntityLifecycleAuthority)) refuse();
-    const legacy = selectLegacyEntityVisibility(observations);
+    // Prior to the explicit migration, retain the existing reducer's permissive
+    // comparator behavior. Cutover capture and historical fallback validate the
+    // comparator inputs; loading new software alone does not migrate old data.
+    const legacy = selectLegacyEntityVisibility(observations, false);
     return {
       hidden: legacy.hidden,
       selected_authority_id: null,

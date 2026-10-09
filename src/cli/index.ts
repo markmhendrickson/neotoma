@@ -3027,7 +3027,7 @@ async function mergeSqliteDatabase(
   };
   try {
     sourceDb = new AsyncSqliteDatabase(sourceDbPath);
-    const { assertOrdinaryLifecycleImport } =
+    const { assertOrdinaryLifecycleImport, assertOrdinaryLifecycleImportTarget } =
       await import("../services/entity_lifecycle_ingress.js");
     await assertOrdinaryLifecycleImport(sourceDb);
     targetDb = new AsyncSqliteDatabase(targetDbPath);
@@ -3035,6 +3035,7 @@ async function mergeSqliteDatabase(
     await checkpointWal(targetDb);
     await targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
     attached = true;
+    await assertOrdinaryLifecycleImportTarget(targetDb);
 
     const targetTables = (await targetDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
@@ -3251,124 +3252,130 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     const observationReducer = new ObservationReducer();
     const relationshipReducer = new RelationshipReducer();
 
-    const entityIds = (
-      (await db
-        .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
-        .all()) as Array<{
-        entity_id: string;
-      }>
-    ).map((row) => row.entity_id);
-    const relationshipKeys = (
-      (await db
-        .prepare(
-          "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
-        )
-        .all()) as Array<{ relationship_key: string }>
-    ).map((row) => row.relationship_key);
-
-    await db.prepare("DELETE FROM entity_snapshots").run();
-    await db.prepare("DELETE FROM relationship_snapshots").run();
-
-    // #2343: the merge-import rebuild runs against an ARBITRARY target
-    // database opened by path, so it cannot use the service-layer seam (which
-    // resolves against the process's configured db). It shares the RULES via
-    // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
-    // cycle guard, same depth bound.
-    const { resolveAttachmentTargetSqlite } =
-      await import("../services/attachment_resolution_sqlite.js");
-
-    for (const entityId of entityIds) {
-      // A redirected id owns no snapshot of its own: skip it rather than
-      // writing the survivor's snapshot under a merge tombstone.
-      const target = await resolveAttachmentTargetSqlite(db, entityId);
-      if (target.truncated)
-        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
-      if (target.resolvedEntityId !== entityId) continue;
-
-      const observations = (
-        await db
+    const { EntityLifecycleAcquisitionError } =
+      await import("../services/entity_lifecycle_authority.js");
+    await db.transaction(async (tx) => {
+      const entityIds = (
+        (await tx
+          .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
+          .all()) as Array<{
+          entity_id: string;
+        }>
+      ).map((row) => row.entity_id);
+      const relationshipKeys = (
+        (await tx
           .prepare(
-            "SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC"
+            "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
           )
-          .all(entityId)
-      ).map((row) => {
-        const observation = row as Record<string, unknown>;
-        if ("fields" in observation) {
-          observation.fields = parseJsonLike(observation.fields);
+          .all()) as Array<{ relationship_key: string }>
+      ).map((row) => row.relationship_key);
+
+      await tx.prepare("DELETE FROM entity_snapshots").run();
+      await tx.prepare("DELETE FROM relationship_snapshots").run();
+
+      // #2343: the merge-import rebuild runs against an ARBITRARY target
+      // database opened by path, so it cannot use the service-layer seam (which
+      // resolves against the process's configured db). It shares the RULES via
+      // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
+      // cycle guard, same depth bound.
+      const { resolveAttachmentTargetSqlite } =
+        await import("../services/attachment_resolution_sqlite.js");
+
+      for (const entityId of entityIds) {
+        // A redirected id owns no snapshot of its own: skip it rather than
+        // writing the survivor's snapshot under a merge tombstone.
+        const target = await resolveAttachmentTargetSqlite(tx, entityId);
+        if (target.truncated) throw new EntityLifecycleAcquisitionError();
+        if (target.resolvedEntityId !== entityId) continue;
+
+        const observations = (
+          await tx
+            .prepare(
+              "SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC"
+            )
+            .all(entityId)
+        ).map((row) => {
+          const observation = row as Record<string, unknown>;
+          if ("fields" in observation) {
+            observation.fields = parseJsonLike(observation.fields);
+          }
+          return observation;
+        });
+        if (observations.length === 0) continue;
+        try {
+          const { acquireEntityLifecycleContext } =
+            await import("../services/entity_lifecycle_storage.js");
+          const first = observations[0] as any;
+          const context = await acquireEntityLifecycleContext(
+            tx,
+            { id: entityId, user_id: first.user_id, entity_type: first.entity_type },
+            observations as any[]
+          );
+          const snapshot = (await observationReducer.computeSnapshot(
+            entityId,
+            observations as unknown as any[],
+            undefined,
+            context
+          )) as Record<string, unknown> | null;
+          if (!snapshot) continue;
+          const payload: Record<string, unknown> = { ...snapshot };
+          if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+          if ("provenance" in payload)
+            payload.provenance = JSON.stringify(payload.provenance ?? {});
+          const cols = Object.keys(payload);
+          const placeholders = cols.map(() => "?").join(", ");
+          const vals = cols.map((k) => payload[k]);
+          await tx
+            .prepare(
+              `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+            )
+            .run(vals);
+          stats.entity_snapshots_recomputed += 1;
+        } catch (err) {
+          if (err instanceof EntityLifecycleAcquisitionError) throw err;
+          stats.entity_snapshot_recompute_errors += 1;
         }
-        return observation;
-      });
-      if (observations.length === 0) continue;
-      try {
-        const { acquireEntityLifecycleContext } =
-          await import("../services/entity_lifecycle_storage.js");
-        const first = observations[0] as any;
-        const context = await acquireEntityLifecycleContext(
-          db,
-          { id: entityId, user_id: first.user_id, entity_type: first.entity_type },
-          observations as any[]
-        );
-        const snapshot = (await observationReducer.computeSnapshot(
-          entityId,
-          observations as unknown as any[],
-          undefined,
-          context
-        )) as Record<string, unknown> | null;
-        if (!snapshot) continue;
-        const payload: Record<string, unknown> = { ...snapshot };
-        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
-        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
-        const cols = Object.keys(payload);
-        const placeholders = cols.map(() => "?").join(", ");
-        const vals = cols.map((k) => payload[k]);
-        await db
-          .prepare(
-            `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-          )
-          .run(vals);
-        stats.entity_snapshots_recomputed += 1;
-      } catch {
-        stats.entity_snapshot_recompute_errors += 1;
       }
-    }
 
-    for (const relationshipKey of relationshipKeys) {
-      const relationshipObservations = (
-        await db
-          .prepare(
-            "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
-          )
-          .all(relationshipKey)
-      ).map((row) => {
-        const observation = row as Record<string, unknown>;
-        if ("metadata" in observation) {
-          observation.metadata = parseJsonLike(observation.metadata);
+      for (const relationshipKey of relationshipKeys) {
+        const relationshipObservations = (
+          await tx
+            .prepare(
+              "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
+            )
+            .all(relationshipKey)
+        ).map((row) => {
+          const observation = row as Record<string, unknown>;
+          if ("metadata" in observation) {
+            observation.metadata = parseJsonLike(observation.metadata);
+          }
+          return observation;
+        });
+        if (relationshipObservations.length === 0) continue;
+        try {
+          const snapshot = (await relationshipReducer.computeSnapshot(
+            relationshipKey,
+            relationshipObservations as unknown as any[]
+          )) as unknown as Record<string, unknown> | null;
+          if (!snapshot) continue;
+          const payload: Record<string, unknown> = { ...snapshot };
+          if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+          if ("provenance" in payload)
+            payload.provenance = JSON.stringify(payload.provenance ?? {});
+          const cols = Object.keys(payload);
+          const placeholders = cols.map(() => "?").join(", ");
+          const vals = cols.map((k) => payload[k]);
+          await tx
+            .prepare(
+              `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+            )
+            .run(vals);
+          stats.relationship_snapshots_recomputed += 1;
+        } catch {
+          stats.relationship_snapshot_recompute_errors += 1;
         }
-        return observation;
-      });
-      if (relationshipObservations.length === 0) continue;
-      try {
-        const snapshot = (await relationshipReducer.computeSnapshot(
-          relationshipKey,
-          relationshipObservations as unknown as any[]
-        )) as unknown as Record<string, unknown> | null;
-        if (!snapshot) continue;
-        const payload: Record<string, unknown> = { ...snapshot };
-        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
-        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
-        const cols = Object.keys(payload);
-        const placeholders = cols.map(() => "?").join(", ");
-        const vals = cols.map((k) => payload[k]);
-        await db
-          .prepare(
-            `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-          )
-          .run(vals);
-        stats.relationship_snapshots_recomputed += 1;
-      } catch {
-        stats.relationship_snapshot_recompute_errors += 1;
       }
-    }
+    });
   } finally {
     await db.close();
   }

@@ -281,7 +281,7 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   // (the shipped merge flow uses the same "one SQL update per eq" pattern).
   const { data: observations, error: obsError } = await db
     .from("observations")
-    .select("id, entity_id, observed_at, source_id, fields")
+    .select("*")
     .eq("entity_id", sourceEntityId)
     .eq("user_id", userId);
 

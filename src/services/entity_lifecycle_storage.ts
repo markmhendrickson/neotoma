@@ -25,6 +25,49 @@ function observation(raw: Record<string, unknown>): LifecycleObservation {
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) refuse();
   return { ...raw, fields } as LifecycleObservation;
 }
+/** Explicit installed cutover state; never learn it from a marker payload. */
+export async function hasRecordedEntityLifecycleCutover(tx: DbConnection): Promise<boolean> {
+  const columns = (await tx.prepare("PRAGMA table_info(observations)").all()) as { name: string }[];
+  const names = [
+    "entity_lifecycle_kind",
+    "entity_lifecycle_sequence",
+    "entity_lifecycle_target_id",
+  ];
+  const found = names.filter((name) => columns.some((c) => c.name === name));
+  if (found.length && found.length !== names.length) refuse();
+  const table = await tx
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='entity_lifecycle_cutovers'"
+    )
+    .get();
+  const rows = table
+    ? ((await tx.prepare("SELECT * FROM entity_lifecycle_cutovers").all()) as Record<
+        string,
+        unknown
+      >[])
+    : [];
+  if (!rows.length) {
+    if (
+      found.length &&
+      (await tx
+        .prepare(
+          `SELECT id FROM observations WHERE ${names.map((n) => `${n} IS NOT NULL`).join(" OR ")} LIMIT 1`
+        )
+        .get())
+    )
+      refuse();
+    return false;
+  }
+  if (
+    found.length !== names.length ||
+    rows.length !== 1 ||
+    rows[0].cutover_id !== ENTITY_LIFECYCLE_CUTOVER_ID ||
+    rows[0].selector_version !== ENTITY_LEGACY_SELECTOR_VERSION ||
+    !Number.isFinite(Date.parse(rows[0].recorded_at as string))
+  )
+    refuse();
+  return true;
+}
 /** Schema only: deliberately does not initiate a compatibility migration. */
 export async function installEntityLifecycleStorage(tx: DbConnection): Promise<void> {
   const columns = (await tx.prepare("PRAGMA table_info(observations)").all()) as { name: string }[];
