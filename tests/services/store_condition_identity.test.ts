@@ -117,6 +117,86 @@ describe("conditional declared identity", () => {
         "incomplete or invalid"
       );
   });
+  it.each(["constructor", "toString", "valueOf", "__proto__"])(
+    "requires a successfully typed own %s value for declared identity",
+    (name) => {
+      const declared = {
+        ...schema,
+        schema_definition: {
+          fields: { [name]: { type: "string" as const }, region: { type: "string" as const } },
+          canonical_name_fields: [name, "region"],
+        },
+      };
+      for (const fields of [
+        { region: "ONE" },
+        { [name]: null, region: "ONE" },
+        { [name]: 14, region: "ONE" },
+      ]) {
+        expect(() => deriveConditionalStoreIdentity(declared, fields, "OWNER")).toThrow(
+          "incomplete or invalid"
+        );
+      }
+      const fields = { [name]: "ACTUAL", region: "ONE" };
+      const actual = deriveConditionalStoreIdentity(declared, fields, "OWNER");
+      const native = deriveCanonicalNameFromFieldsWithTrace(
+        declared.entity_type,
+        fields,
+        declared.schema_definition
+      );
+      expect(actual.canonicalName).toBe(native.canonicalName);
+      expect(actual.entityId).toBe(
+        generateEntityId(declared.entity_type, native.canonicalName, entityIdTenantSalt("OWNER"))
+      );
+      expect(actual.validFields).toEqual(fields);
+      expect(Object.hasOwn(actual.validFields, name)).toBe(true);
+    }
+  );
+  it("preserves ordered valid own fallback and complete primary rule precedence", () => {
+    const ordered = {
+      ...schema,
+      schema_definition: {
+        fields: {
+          toString: { type: "string" as const },
+          code: { type: "string" as const },
+          region: { type: "string" as const },
+        },
+        canonical_name_fields: ["toString", { composite: ["code", "region"] }],
+      },
+    };
+    for (const primary of [{}, { toString: null }, { toString: 14 }]) {
+      const result = deriveConditionalStoreIdentity(
+        ordered,
+        { ...primary, code: "FALLBACK", region: "ONE" },
+        "OWNER"
+      );
+      expect(result.identityRule).toBe("composite:code+region");
+      expect(result.canonicalName).toBe("synthetic:FALLBACK|ONE");
+    }
+    const primary = deriveConditionalStoreIdentity(
+      ordered,
+      { toString: "PRIMARY", code: "FALLBACK", region: "ONE" },
+      "OWNER"
+    );
+    expect(primary.identityRule).toBe("toString");
+    expect(primary.canonicalName).toBe("synthetic:PRIMARY");
+    for (const fields of [{ code: "INCOMPLETE" }, { code: "INVALID", region: 14 }]) {
+      expect(() => deriveConditionalStoreIdentity(ordered, fields, "OWNER")).toThrow(
+        "incomplete or invalid"
+      );
+    }
+  });
+  it("refuses an identity field absent from the own schema declaration", () => {
+    expect(() =>
+      deriveConditionalStoreIdentity(
+        {
+          ...schema,
+          schema_definition: { ...schema.schema_definition, canonical_name_fields: ["toString"] },
+        },
+        { toString: "ACTUAL" },
+        "OWNER"
+      )
+    ).toThrow("declared identity is invalid");
+  });
   it("refuses opt-out and identity rules that reference undeclared fields", () => {
     expect(() =>
       deriveConditionalStoreIdentity(

@@ -40,7 +40,7 @@ export function deriveConditionalStoreIdentity(
     if (
       !Array.isArray(names) ||
       !names.length ||
-      names.some((name) => !schema.schema_definition.fields[name])
+      names.some((name) => !Object.hasOwn(schema.schema_definition.fields, name))
     )
       throw new StoreConditionError("VALIDATION_ERROR", "The declared identity is invalid.");
     for (const name of names) identityFields.add(name);
@@ -63,9 +63,16 @@ export function deriveConditionalStoreIdentity(
   }
   const validated = validateFieldsWithConverters(converterFields, schema.schema_definition.fields);
   validated.validFields = { ...validated.validFields, ...declaredNulls };
+  // Identity rules may consume only successfully typed own inputs. Keep the
+  // shared derivation and its ordered fallbacks, but give it a lookup map where
+  // an absent or rejected field stays absent even for unusual declared names.
+  const identityInputs: Record<string, unknown> = Object.assign(
+    Object.create(null),
+    validated.validFields
+  );
   let derivation;
   try {
-    derivation = deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, validated.validFields, {
+    derivation = deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, identityInputs, {
       canonical_name_fields: rules,
       canonical_name_strict: true,
     });

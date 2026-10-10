@@ -343,6 +343,163 @@ describe("conditional original declared-null native HTTP", () => {
     }
   );
 
+  it.each(["HTTP", "modern MCP"] as const)(
+    "uses typed own identity fields and valid ordered fallback through %s",
+    async (surface) => {
+      const entityType =
+        surface === "HTTP" ? "conditional_identity_http" : "conditional_identity_mcp";
+      const identityDefinition = {
+        fields: {
+          toString: { type: "string" },
+          code: { type: "string" },
+          region: { type: "string" },
+          text: { type: "string" },
+        },
+        canonical_name_fields: ["toString", { composite: ["code", "region"] }],
+      };
+      const registrationRequest = {
+        ...registration,
+        entity_type: entityType,
+        schema_definition: identityDefinition,
+        reducer_config: {
+          merge_policies: Object.fromEntries(
+            Object.keys(identityDefinition.fields).map((name) => [name, { strategy: "last_write" }])
+          ),
+        },
+      };
+      const registered = await call("/register_schema", registrationRequest);
+      expect(registered.status, JSON.stringify(registered.body)).toBe(200);
+      const active = await call(`/schemas/${entityType}`);
+      expect(active.status).toBe(200);
+      expect(active.body.schema_definition).toEqual(identityDefinition);
+      const request = async (fields: Record<string, unknown>, key: string) => {
+        const args = {
+          entities: [{ entity_type: entityType, ...fields }],
+          expected_entity_absent: true,
+          idempotency_key: key,
+          strict: true,
+        };
+        if (surface === "HTTP") return { args, response: await call("/store", args) };
+        const wire = await modernPost(
+          server.baseUrl,
+          {
+            id: 1,
+            method: "tools/call",
+            params: { name: "store", arguments: args },
+          },
+          { headers: { Authorization: `Bearer ${server.token}` } }
+        );
+        expect(wire.status, wire.text).toBe(200);
+        return { args, response: wire.body };
+      };
+      const control = await request({ toString: "CONTROL", text: null }, entityType + "-control");
+      if (surface === "HTTP") expect(control.response.status).toBe(200);
+      else expect(control.response.error).toBeUndefined();
+      const controlBody =
+        surface === "HTTP" ? control.response.body : toolResultJson(control.response);
+      expect(controlBody.operation_receipt.original_observation_fields).toEqual({
+        toString: "CONTROL",
+        text: null,
+      });
+      const controlRaw = await call("/observations/query", {
+        observation_id: controlBody.operation_receipt.observation_id,
+      });
+      expect(controlRaw.status).toBe(200);
+      expect(controlRaw.body.observations).toHaveLength(1);
+      expect(controlRaw.body.observations[0].fields).toEqual({ toString: "CONTROL", text: null });
+      const beforeRefusals = await nativeCounts();
+      expect(beforeRefusals.entities).toBeGreaterThan(0);
+      const refusals = [];
+      const positives = [];
+      (evidence.cases as unknown[]).push({
+        identity_validation_surface: surface,
+        registrationRequest,
+        active,
+        control,
+        controlRaw,
+        beforeRefusals,
+        refusals,
+        positives,
+      });
+      for (const fields of [
+        { toString: null, text: null },
+        { text: null },
+        { toString: 14, text: null },
+        { code: "INCOMPLETE", text: null },
+        { code: "INVALID", region: 14, text: null },
+      ]) {
+        const result = await request(fields, entityType + "-refused");
+        const after = await nativeCounts();
+        refusals.push({ ...result, before: beforeRefusals, after });
+        if (surface === "HTTP") {
+          expect(result.response.status).toBe(400);
+          expect(result.response.body.error.code).toBe("VALIDATION_ERROR");
+        } else {
+          expect(result.response.error).toBeDefined();
+          expect(result.response.error.data?.error_code ?? result.response.error.data?.code).toBe(
+            "VALIDATION_ERROR"
+          );
+        }
+        expect(after).toEqual(beforeRefusals);
+      }
+      for (const fields of [
+        { code: "FALLBACK", region: "ONE", text: null },
+        { toString: null, code: "FALLBACK", region: "TWO", text: null },
+        { toString: "PRIMARY", code: "FALLBACK", region: "THREE", text: null },
+      ]) {
+        const key =
+          positives.length === 0 ? entityType + "-refused" : entityType + "-" + positives.length;
+        const result = await request(fields, key);
+        let stored;
+        if (surface === "HTTP") {
+          expect(result.response.status, JSON.stringify(result.response.body)).toBe(200);
+          stored = result.response.body;
+        } else {
+          expect(result.response.result.isError).not.toBe(true);
+          stored = toolResultJson(result.response);
+        }
+        const expected = { ...fields } as Record<string, unknown>;
+        if (expected.toString === null) delete expected.toString;
+        const receipt = stored.operation_receipt;
+        expect(receipt.original_observation_fields).toEqual(expected);
+        expect(receipt.diagnostics.fields_sha256).toBe(storeConditionRequestHash(expected));
+        const raw = await call("/observations/query", { observation_id: receipt.observation_id });
+        expect(raw.status).toBe(200);
+        expect(raw.body.observations).toHaveLength(1);
+        expect(raw.body.observations[0].fields).toEqual(expected);
+        expect(raw.body.observations[0].identity_basis).toBe("schema_rule");
+        expect(raw.body.observations[0].identity_rule).toBe(
+          typeof fields.toString === "string" ? "toString" : "composite:code+region"
+        );
+        const current = await call("/get_entity_snapshot", {
+          entity_id: receipt.entity_id,
+          include_cleared_fields: true,
+        });
+        expect(current.status).toBe(200);
+        expect(current.body.snapshot.text).toBeNull();
+        expect(current.body.provenance.text).toBe(receipt.observation_id);
+        const implicit = await call("/get_entity_snapshot", { entity_id: receipt.entity_id });
+        expect(implicit.status).toBe(200);
+        expect(Object.hasOwn(implicit.body.snapshot, "text")).toBe(false);
+        const beforeReplay = await nativeCounts();
+        const replay = await request(fields, key);
+        const replayBody =
+          surface === "HTTP" ? replay.response.body : toolResultJson(replay.response);
+        expect(replayBody.operation_receipt).toEqual({ ...receipt, status: "replayed" });
+        expect(await nativeCounts()).toEqual(beforeReplay);
+        positives.push({
+          ...result,
+          receipt,
+          expected,
+          raw,
+          current,
+          implicit,
+          beforeReplay,
+          replay,
+        });
+      }
+    }
+  );
   it("retains own declared JSON keys in native original raw, digest and replay", async () => {
     const fields = JSON.parse('{"__proto__":null}');
     const original = await store("own-key", fields);
