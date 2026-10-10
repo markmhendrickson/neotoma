@@ -1,0 +1,148 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "native_conditional_null_retention",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-10T01:19:02.320652+00:00",
+    "cost_usd": 0
+  },
+  "user_prompt": "Create one synthetic original bundle; replay its uncertain acknowledgement exactly and refuse changed payload, appeared identity, mixed mode and malformed conditions.",
+  "system_prompt": "Use the existing store with an explicit absence condition. Preserve the original receipt and generation fields; never change the mode or payload for an uncertain key.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_conditional_null",
+        "schema_version": "1.0",
+        "activate": true,
+        "schema_definition": {
+          "fields": {
+            "code": {
+              "type": "string",
+              "required": true
+            },
+            "status": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "canonical_name_fields": ["code"]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "code": {
+              "strategy": "highest_priority"
+            },
+            "status": {
+              "strategy": "highest_priority"
+            },
+            "note": {
+              "strategy": "highest_priority"
+            }
+          }
+        }
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_null",
+            "code": "ONLY",
+            "status": "original",
+            "note": null
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_null",
+            "code": "ONLY",
+            "status": "original",
+            "note": null
+          }
+        ]
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_null",
+            "code": "ONLY",
+            "status": "original"
+          }
+        ]
+      },
+      "sequence": 3
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-other",
+        "expected_entity_absent": true,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_null",
+            "code": "ONLY",
+            "status": "original",
+            "note": null
+          }
+        ]
+      },
+      "sequence": 4
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": false,
+        "entities": [
+          {
+            "entity_type": "eval_conditional_null",
+            "code": "ONLY",
+            "status": "original",
+            "note": null
+          }
+        ]
+      },
+      "sequence": 5
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conditional-eval",
+        "expected_entity_absent": "true",
+        "entities": [
+          {
+            "entity_type": "eval_conditional_null",
+            "code": "ONLY",
+            "status": "original",
+            "note": null
+          }
+        ]
+      },
+      "sequence": 6
+    }
+  ],
+  "assistant_text": "The original explicit-null bundle is retained; exact replay and refusals add no observations."
+}
