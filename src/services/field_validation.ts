@@ -148,11 +148,16 @@ export function validateFieldsWithConverters(
   const originalValues: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(data)) {
-    const fieldDef = fields[key];
+    const fieldDef = Object.hasOwn(fields, key) ? fields[key] : undefined;
 
     if (!fieldDef) {
       // Unknown field - route to raw_fragments
-      unknownFields[key] = value;
+      Object.defineProperty(unknownFields, key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
       continue;
     }
 
@@ -160,11 +165,26 @@ export function validateFieldsWithConverters(
     const result = validateFieldWithConverters(key, value, fieldDef);
 
     if (result.shouldRouteToRawFragments) {
-      unknownFields[key] = value;
+      Object.defineProperty(unknownFields, key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     } else {
-      validFields[key] = result.value;
+      Object.defineProperty(validFields, key, {
+        value: result.value,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
       if (result.wasConverted && result.originalValue !== undefined) {
-        originalValues[key] = result.originalValue;
+        Object.defineProperty(originalValues, key, {
+          value: result.originalValue,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
     }
   }

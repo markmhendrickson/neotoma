@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { StoreRequestSchema } from "../../src/shared/action_schemas.js";
+import { assertConditionalStoreRequest } from "../../src/services/store_condition_request.js";
 import { deriveConditionalStoreIdentity } from "../../src/services/store_condition_identity.js";
+import { validateFieldsWithConverters } from "../../src/services/field_validation.js";
 import type { SchemaRegistryEntry } from "../../src/services/schema_registry.js";
 import {
   deriveCanonicalNameFromFieldsWithTrace,
@@ -114,6 +117,86 @@ describe("conditional declared identity", () => {
         "incomplete or invalid"
       );
   });
+  it.each(["constructor", "toString", "valueOf", "__proto__"])(
+    "requires a successfully typed own %s value for declared identity",
+    (name) => {
+      const declared = {
+        ...schema,
+        schema_definition: {
+          fields: { [name]: { type: "string" as const }, region: { type: "string" as const } },
+          canonical_name_fields: [name, "region"],
+        },
+      };
+      for (const fields of [
+        { region: "ONE" },
+        { [name]: null, region: "ONE" },
+        { [name]: 14, region: "ONE" },
+      ]) {
+        expect(() => deriveConditionalStoreIdentity(declared, fields, "OWNER")).toThrow(
+          "incomplete or invalid"
+        );
+      }
+      const fields = { [name]: "ACTUAL", region: "ONE" };
+      const actual = deriveConditionalStoreIdentity(declared, fields, "OWNER");
+      const native = deriveCanonicalNameFromFieldsWithTrace(
+        declared.entity_type,
+        fields,
+        declared.schema_definition
+      );
+      expect(actual.canonicalName).toBe(native.canonicalName);
+      expect(actual.entityId).toBe(
+        generateEntityId(declared.entity_type, native.canonicalName, entityIdTenantSalt("OWNER"))
+      );
+      expect(actual.validFields).toEqual(fields);
+      expect(Object.hasOwn(actual.validFields, name)).toBe(true);
+    }
+  );
+  it("preserves ordered valid own fallback and complete primary rule precedence", () => {
+    const ordered = {
+      ...schema,
+      schema_definition: {
+        fields: {
+          toString: { type: "string" as const },
+          code: { type: "string" as const },
+          region: { type: "string" as const },
+        },
+        canonical_name_fields: ["toString", { composite: ["code", "region"] }],
+      },
+    };
+    for (const primary of [{}, { toString: null }, { toString: 14 }]) {
+      const result = deriveConditionalStoreIdentity(
+        ordered,
+        { ...primary, code: "FALLBACK", region: "ONE" },
+        "OWNER"
+      );
+      expect(result.identityRule).toBe("composite:code+region");
+      expect(result.canonicalName).toBe("synthetic:FALLBACK|ONE");
+    }
+    const primary = deriveConditionalStoreIdentity(
+      ordered,
+      { toString: "PRIMARY", code: "FALLBACK", region: "ONE" },
+      "OWNER"
+    );
+    expect(primary.identityRule).toBe("toString");
+    expect(primary.canonicalName).toBe("synthetic:PRIMARY");
+    for (const fields of [{ code: "INCOMPLETE" }, { code: "INVALID", region: 14 }]) {
+      expect(() => deriveConditionalStoreIdentity(ordered, fields, "OWNER")).toThrow(
+        "incomplete or invalid"
+      );
+    }
+  });
+  it("refuses an identity field absent from the own schema declaration", () => {
+    expect(() =>
+      deriveConditionalStoreIdentity(
+        {
+          ...schema,
+          schema_definition: { ...schema.schema_definition, canonical_name_fields: ["toString"] },
+        },
+        { toString: "ACTUAL" },
+        "OWNER"
+      )
+    ).toThrow("declared identity is invalid");
+  });
   it("refuses opt-out and identity rules that reference undeclared fields", () => {
     expect(() =>
       deriveConditionalStoreIdentity(
@@ -162,5 +245,143 @@ describe("conditional declared identity", () => {
     const result = deriveConditionalStoreIdentity(converted, { code: 42 }, "OWNER");
     expect(result.validFields).toEqual({ code: "42" });
     expect(result.unknownFields).toEqual({});
+  });
+});
+
+describe("conditional explicit declared nulls", () => {
+  const nullable = {
+    ...schema,
+    schema_definition: {
+      fields: {
+        code: { type: "string" as const },
+        text: { type: "string" as const, required: true },
+        amount: { type: "number" as const },
+        enabled: { type: "boolean" as const },
+        at: { type: "date" as const },
+        items: { type: "array" as const },
+        detail: { type: "object" as const },
+        converted: {
+          type: "string" as const,
+          converters: [
+            {
+              from: "number" as const,
+              to: "string" as const,
+              function: "number_to_string",
+              deterministic: true,
+            },
+          ],
+        },
+      },
+      canonical_name_fields: ["code"],
+    },
+  };
+  it.each(["text", "amount", "enabled", "at", "items", "detail", "converted"])(
+    "retains declared nonidentity %s null without converting or fragmenting it",
+    (field) => {
+      const actual = deriveConditionalStoreIdentity(
+        nullable,
+        { code: "ONE", [field]: null },
+        "OWNER"
+      );
+      expect(actual.validFields).toEqual({ code: "ONE", [field]: null });
+      expect(actual.unknownFields).toEqual({});
+      expect(actual.originalValues).toEqual({});
+    }
+  );
+  it("keeps absent fields absent and undeclared null advisory; preserves nonnull conversion", () => {
+    const actual = deriveConditionalStoreIdentity(
+      nullable,
+      { code: "ONE", converted: 42, undeclared: null },
+      "OWNER"
+    );
+    expect(actual.validFields).toEqual({ code: "ONE", converted: "42" });
+    expect(actual.unknownFields).toEqual({ undeclared: null });
+    expect(actual.originalValues).toEqual({ converted: 42 });
+    expect(Object.hasOwn(actual.validFields, "text")).toBe(false);
+    expect(() =>
+      deriveConditionalStoreIdentity(nullable, { code: null, text: null }, "OWNER")
+    ).toThrow("incomplete or invalid");
+  });
+  it("leaves ordinary converter null routing unchanged for every declared type", () => {
+    const fields = {
+      text: null,
+      amount: null,
+      enabled: null,
+      at: null,
+      items: null,
+      detail: null,
+      converted: null,
+    };
+    const ordinary = validateFieldsWithConverters(fields, nullable.schema_definition.fields);
+    expect(ordinary.validFields).toEqual({});
+    expect(ordinary.unknownFields).toEqual(fields);
+    expect(ordinary.originalValues).toEqual({});
+  });
+  it("retains every own declared JSON field without invoking object setters", () => {
+    const fields = JSON.parse('{"code":{"type":"string"},"__proto__":{"type":"string"}}');
+    const actual = deriveConditionalStoreIdentity(
+      { ...nullable, schema_definition: { fields, canonical_name_fields: ["code"] } },
+      JSON.parse('{"code":"ONE","__proto__":null}'),
+      "OWNER"
+    );
+    expect(actual.validFields).toEqual(JSON.parse('{"code":"ONE","__proto__":null}'));
+    expect(Object.hasOwn(actual.validFields, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(actual.validFields)).toBe(Object.prototype);
+    expect(actual.unknownFields).toEqual({});
+  });
+});
+
+describe("conditional parsed original admission", () => {
+  it("restores only explicit own nulls for conditional requests and leaves ordinary parsing unchanged", () => {
+    const raw = JSON.parse(
+      '{"entities":[{"entity_type":"synthetic","code":"ONE","__proto__":null}],"idempotency_key":"KEY"}'
+    );
+    const ordinary = StoreRequestSchema.parse(raw);
+    assertConditionalStoreRequest(ordinary, raw.entities);
+    expect(Object.hasOwn(ordinary.entities![0], "__proto__")).toBe(false);
+    raw.expected_entity_absent = true;
+    const conditional = StoreRequestSchema.parse(raw);
+    assertConditionalStoreRequest(conditional, raw.entities);
+    expect(conditional.entities![0]).toEqual(raw.entities[0]);
+    expect(Object.getPrototypeOf(conditional.entities![0])).toBe(Object.prototype);
+    expect(Object.prototype).not.toHaveProperty("code");
+    const nonnull = JSON.parse(JSON.stringify(raw));
+    Object.defineProperty(nonnull.entities[0], "__proto__", {
+      value: "unselected",
+      enumerable: true,
+    });
+    const parsed = StoreRequestSchema.parse(nonnull);
+    assertConditionalStoreRequest(parsed, nonnull.entities);
+    expect(Object.hasOwn(parsed.entities![0], "__proto__")).toBe(false);
+  });
+  it("retains malformed JSON, override and undeclared-field validation boundaries", () => {
+    expect(
+      StoreRequestSchema.safeParse({ entities: [{}], expected_entity_absent: "true" }).success
+    ).toBe(false);
+    const base = {
+      entities: [{ entity_type: "synthetic", code: "ONE" }],
+      expected_entity_absent: true,
+      idempotency_key: "KEY",
+    };
+    const parsed = StoreRequestSchema.parse(base);
+    const accessor = { entity_type: "synthetic", code: "ONE" };
+    Object.defineProperty(accessor, "private", {
+      get() {
+        throw new Error("must not read");
+      },
+      enumerable: true,
+    });
+    expect(() => assertConditionalStoreRequest(parsed, [accessor])).toThrow("finite plain JSON");
+    const forbidden = {
+      ...base,
+      entities: [{ entity_type: "synthetic", code: "ONE", target_id: null }],
+    };
+    expect(() =>
+      assertConditionalStoreRequest(StoreRequestSchema.parse(forbidden), forbidden.entities)
+    ).toThrow("without target");
+    const fields = { code: "ONE", region: "TWO", undeclared: null };
+    const result = deriveConditionalStoreIdentity(schema, fields, "OWNER");
+    expect(Object.hasOwn(result.validFields, "undeclared")).toBe(false);
+    expect(result.unknownFields).toHaveProperty("undeclared", null);
   });
 });

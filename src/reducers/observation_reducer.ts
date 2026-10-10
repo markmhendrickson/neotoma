@@ -295,8 +295,19 @@ export class ObservationReducer {
         projection.includeClearedFields &&
         ["last_write", "highest_priority", "most_specific"].includes(strategy);
       if (result && result.value !== undefined && (result.value !== null || selectedClear)) {
-        snapshot[field] = result.value;
-        provenance[field] = result.source_observation_id;
+        // Accepted field names must become own data properties, including __proto__.
+        Object.defineProperty(snapshot, field, {
+          value: result.value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+        Object.defineProperty(provenance, field, {
+          value: result.source_observation_id,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
     }
 
@@ -759,8 +770,19 @@ export class ObservationReducer {
       );
 
       if (result.value !== undefined && result.value !== null) {
-        snapshot[field] = result.value;
-        provenance[field] = result.source_observation_id;
+        // Accepted field names must become own data properties, including __proto__.
+        Object.defineProperty(snapshot, field, {
+          value: result.value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+        Object.defineProperty(provenance, field, {
+          value: result.source_observation_id,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
     }
 
