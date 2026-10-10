@@ -10,6 +10,7 @@ import {
   startIsolatedNeotomaServer,
   type IsolatedServer,
 } from "../../packages/eval-harness/src/isolated_server.js";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { storeConditionRequestHash } from "../../src/services/store_condition_keys.js";
 let server: IsolatedServer;
 const type = "conditional_null_test";
@@ -113,7 +114,235 @@ afterAll(async () => {
     );
   await server?.stop();
 });
+type ReadSurface = "HTTP" | "modern MCP" | "CLI body" | "CLI params";
+const readSurfaces: ReadSurface[] = ["HTTP", "modern MCP", "CLI body", "CLI params"];
+async function readSnapshot(
+  surface: ReadSurface,
+  entityId: string,
+  option?: boolean,
+  atIngested?: string
+) {
+  const args = {
+    entity_id: entityId,
+    ...(option === undefined ? {} : { include_cleared_fields: option }),
+    ...(atIngested === undefined ? {} : { at_ingested: atIngested }),
+  };
+  if (surface === "HTTP") {
+    const r = await call("/get_entity_snapshot", args);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    return r.body;
+  }
+  if (surface === "modern MCP") {
+    const r = await modernPost(
+      server.baseUrl,
+      {
+        id: 1,
+        method: "tools/call",
+        params: { name: "retrieve_entity_snapshot", arguments: { ...args, format: "json" } },
+      },
+      { headers: { Authorization: `Bearer ${server.token}` } }
+    );
+    expect(r.status, r.text).toBe(200);
+    expect(r.body?.result?.isError).not.toBe(true);
+    return toolResultJson(r.body);
+  }
+  const flag = surface === "CLI body" ? "body" : "params";
+  const out = await promisify(execFile)(
+    process.execPath,
+    [
+      "dist/cli/index.js",
+      "--no-log-file",
+      "--json",
+      "--base-url",
+      server.baseUrl,
+      "request",
+      "--operation",
+      "getEntitySnapshot",
+      `--${flag}`,
+      JSON.stringify(flag === "params" ? { body: args } : args),
+    ],
+    {
+      timeout: 20000,
+      env: {
+        ...process.env,
+        NEOTOMA_BEARER_TOKEN: server.token,
+        NEOTOMA_FORCE_LOCAL_TRANSPORT: "false",
+      },
+    }
+  );
+  return JSON.parse(out.stdout);
+}
+function assertNullView(view: any, entityId: string, origin: string) {
+  expect(view.entity_id).toBe(entityId);
+  expect(view.cleared_fields_included).toBe(true);
+  expect(Object.hasOwn(view.snapshot, "text")).toBe(true);
+  expect(view.snapshot.text).toBeNull();
+  expect(view.provenance.text).toBe(origin);
+  expect(Object.hasOwn(view.snapshot, "amount")).toBe(false);
+  expect(Object.hasOwn(view.provenance, "amount")).toBe(false);
+}
+async function assertDefaultViews(surface: ReadSurface, entityId: string, atIngested?: string) {
+  const implicit = await readSnapshot(surface, entityId, undefined, atIngested);
+  const explicitFalse = await readSnapshot(surface, entityId, false, atIngested);
+  expect(explicitFalse).toEqual(implicit);
+  expect(Object.hasOwn(implicit.snapshot, "text")).toBe(false);
+  expect(Object.hasOwn(implicit.provenance, "text")).toBe(false);
+  expect(Object.hasOwn(implicit.snapshot, "amount")).toBe(false);
+  expect(Object.hasOwn(implicit, "cleared_fields_included")).toBe(false);
+  return { implicit, explicitFalse };
+}
+
 describe("conditional original declared-null native HTTP", () => {
+  it.each(readSurfaces)(
+    "reads conditional original snapshot and its history via %s",
+    async (surface) => {
+      const code = "projection-" + surface.toLowerCase().replaceAll(" ", "-");
+      const first = await store(code, { text: null });
+      expect(first.status).toBe(200);
+      const receipt = first.body.operation_receipt;
+      const raw = await call("/observations/query", { observation_id: receipt.observation_id });
+      expect(raw.status).toBe(200);
+      expect(raw.body.observations).toHaveLength(1);
+      const original = raw.body.observations[0];
+      expect(original.entity_id).toBe(receipt.entity_id);
+      expect(original.fields.text).toBeNull();
+      expect(original.user_id).toBe(LOCAL_DEV_USER_ID);
+      const current = await readSnapshot(surface, receipt.entity_id, true);
+      assertNullView(current, receipt.entity_id, original.id);
+      const historical = await readSnapshot(surface, receipt.entity_id, true, original.created_at);
+      assertNullView(historical, receipt.entity_id, original.id);
+      expect(historical.observation_count).toBe(1);
+      const defaults = await assertDefaultViews(surface, receipt.entity_id);
+      const historicalDefaults = await assertDefaultViews(
+        surface,
+        receipt.entity_id,
+        original.created_at
+      );
+      (evidence.cases as unknown[]).push({
+        conditional_original_projection_surface: surface,
+        receipt,
+        original,
+        current,
+        historical,
+        defaults,
+        historicalDefaults,
+      });
+    }
+  );
+  it.each(readSurfaces)(
+    "does not relabel a later equal-null winner or nonnull winner on replay via %s",
+    async (surface) => {
+      const code = "winner-" + surface.toLowerCase().replaceAll(" ", "-");
+      const first = await store(code, { text: null });
+      expect(first.status).toBe(200);
+      const receipt = first.body.operation_receipt;
+      const raw = await call("/observations/query", { observation_id: receipt.observation_id });
+      expect(raw.status).toBe(200);
+      expect(raw.body.observations).toHaveLength(1);
+      const original = raw.body.observations[0];
+      expect(original.entity_id).toBe(receipt.entity_id);
+      expect(original.user_id).toBe(LOCAL_DEV_USER_ID);
+      const current = await readSnapshot(surface, receipt.entity_id, true);
+      assertNullView(current, receipt.entity_id, original.id);
+      const human = await call("/corrections/transaction", {
+        idempotency_key: code + "-human-null",
+        entities: [
+          {
+            entity_id: receipt.entity_id,
+            entity_type: type,
+            expected_observation_count: current.observation_count,
+            expected_snapshot: current.snapshot,
+            changes: [{ field: "text", value: null }],
+          },
+        ],
+      });
+      expect(human.status, JSON.stringify(human.body)).toBe(200);
+      const laterRaw = await call("/observations/query", {
+        entity_id: receipt.entity_id,
+        limit: 10,
+      });
+      expect(laterRaw.body.observations).toHaveLength(2);
+      const later = laterRaw.body.observations.find((o: any) => o.id !== original.id);
+      expect(later).toBeDefined();
+      expect(later.fields).toEqual({ text: null });
+      expect(later.user_id).toBe(original.user_id);
+      expect(Date.parse(later.created_at)).toBeGreaterThan(Date.parse(original.created_at));
+      const winner = await readSnapshot(surface, receipt.entity_id, true);
+      assertNullView(winner, receipt.entity_id, later.id);
+      expect(winner.provenance.text).not.toBe(receipt.observation_id);
+      const historical = await readSnapshot(surface, receipt.entity_id, true, original.created_at);
+      assertNullView(historical, receipt.entity_id, original.id);
+      expect(historical.observation_count).toBe(1);
+      const defaultLater = await assertDefaultViews(surface, receipt.entity_id);
+      const defaultHistorical = await assertDefaultViews(
+        surface,
+        receipt.entity_id,
+        original.created_at
+      );
+      const beforeReplay = await nativeCounts();
+      const replay = await store(code, { text: null });
+      expect(replay.status).toBe(200);
+      expect(replay.body.operation_receipt).toEqual({ ...receipt, status: "replayed" });
+      expect(await nativeCounts()).toEqual(beforeReplay);
+      const afterReplay = await readSnapshot(surface, receipt.entity_id, true);
+      assertNullView(afterReplay, receipt.entity_id, later.id);
+      const nonnull = await call("/corrections/transaction", {
+        idempotency_key: code + "-human-nonnull",
+        entities: [
+          {
+            entity_id: receipt.entity_id,
+            entity_type: type,
+            expected_observation_count: afterReplay.observation_count,
+            expected_snapshot: afterReplay.snapshot,
+            changes: [{ field: "text", value: "later human value" }],
+          },
+        ],
+      });
+      expect(nonnull.status, JSON.stringify(nonnull.body)).toBe(200);
+      const finalRaw = await call("/observations/query", {
+        entity_id: receipt.entity_id,
+        limit: 10,
+      });
+      expect(finalRaw.body.observations).toHaveLength(3);
+      const finalOrigin = finalRaw.body.observations.find(
+        (o: any) => o.fields.text === "later human value"
+      );
+      expect(finalOrigin).toBeDefined();
+      const final = await readSnapshot(surface, receipt.entity_id, true);
+      expect(final.cleared_fields_included).toBe(true);
+      expect(final.snapshot.text).toBe("later human value");
+      expect(final.provenance.text).toBe(finalOrigin.id);
+      expect(final.provenance.text).not.toBe(receipt.observation_id);
+      const beforeFinalReplay = await nativeCounts();
+      const finalReplay = await store(code, { text: null });
+      expect(finalReplay.body.operation_receipt).toEqual({ ...receipt, status: "replayed" });
+      expect(finalReplay.body.entities[0].entity_snapshot_after.text).toBe("later human value");
+      expect(await nativeCounts()).toEqual(beforeFinalReplay);
+      expect((await readSnapshot(surface, receipt.entity_id, true)).provenance.text).toBe(
+        finalOrigin.id
+      );
+      (evidence.cases as unknown[]).push({
+        conditional_later_winner_surface: surface,
+        receipt,
+        original,
+        human,
+        later,
+        winner,
+        historical,
+        defaultLater,
+        defaultHistorical,
+        replay,
+        afterReplay,
+        nonnull,
+        finalOrigin,
+        final,
+        finalReplay,
+        beforeReplay,
+        beforeFinalReplay,
+      });
+    }
+  );
+
   it("retains own declared JSON keys in native original raw, digest and replay", async () => {
     const fields = JSON.parse('{"__proto__":null}');
     const original = await store("own-key", fields);
