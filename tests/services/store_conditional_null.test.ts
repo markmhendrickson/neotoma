@@ -29,6 +29,7 @@ const definition = {
       ],
     },
     constrained: { type: "string", constraints: { enum: ["allowed"] } },
+    ["__proto__"]: { type: "string" },
   },
   canonical_name_fields: ["code"],
 };
@@ -113,6 +114,29 @@ afterAll(async () => {
   await server?.stop();
 });
 describe("conditional original declared-null native HTTP", () => {
+  it("retains own declared JSON keys in native original raw, digest and replay", async () => {
+    const fields = JSON.parse('{"__proto__":null}');
+    const original = await store("own-key", fields);
+    expect(original.status).toBe(200);
+    const receipt = original.body.operation_receipt;
+    const expected = JSON.parse('{"code":"own-key","__proto__":null}');
+    const raw = await call("/observations/query", {
+      observation_id: receipt.observation_id,
+      limit: 2,
+    });
+    (evidence.cases as unknown[]).push({ own_declared_key: true, original, raw, expected });
+    expect(receipt.original_observation_fields).toEqual(expected);
+    expect(Object.hasOwn(receipt.original_observation_fields, "__proto__")).toBe(true);
+    expect(receipt.diagnostics.fields_sha256).toBe(storeConditionRequestHash(expected));
+    expect(raw.body.observations).toHaveLength(1);
+    expect(raw.body.observations[0].fields).toEqual(expected);
+    const replay = await store("own-key", fields);
+    expect(replay.status).toBe(200);
+    expect(replay.body.operation_receipt).toEqual({ ...receipt, status: "replayed" });
+    const after = await call("/observations/query", { entity_id: receipt.entity_id, limit: 10 });
+    expect(after.body.observations).toHaveLength(1);
+    (evidence.cases as unknown[]).push({ own_declared_key: true, replay, after });
+  });
   it.each(["text", "amount", "enabled", "at", "items", "detail", "converted"])(
     "retains explicit %s null in original raw, receipt, digest and replay",
     async (field) => {
@@ -186,6 +210,40 @@ describe("conditional original declared-null native HTTP", () => {
       constraint_null: constraint.body,
     });
   });
+  it("retains zero-growth malformed request refusals and does not promote undeclared fields", async () => {
+    const before = await nativeCounts();
+    const key = "shape-refusal";
+    for (const entities of [
+      null,
+      [
+        { entity_type: type, code: "shape" },
+        { entity_type: type, code: "second" },
+      ],
+      [{ entity_type: type, code: "shape", target_id: null }],
+    ]) {
+      const result = await call("/store", {
+        entities,
+        expected_entity_absent: true,
+        idempotency_key: key,
+        strict: true,
+      });
+      expect(result.status).toBe(400);
+      expect(await nativeCounts()).toEqual(before);
+    }
+    const after = await store("shape", {}, key);
+    expect(after.status).toBe(200);
+    const unknown = await store("undeclared", { undeclared: null });
+    expect(unknown.status).toBe(200);
+    expect(unknown.body.operation_receipt.original_observation_fields).toEqual({
+      code: "undeclared",
+    });
+    expect(unknown.body.operation_receipt.diagnostics.unknown_fields).toContain("undeclared");
+    (evidence.cases as unknown[]).push({
+      malformed_refusal_zero_growth: true,
+      unconsumed_key_after_refusals: after.body,
+      undeclared_existing_behavior: unknown.body,
+    });
+  });
   it("preserves ordinary null omission and concurrent conditional replay without observation growth", async () => {
     const ordinary = await call("/store", {
       entities: [{ entity_type: type, code: "ordinary", text: null, at: null }],
@@ -230,7 +288,16 @@ describe("conditional original declared-null native HTTP", () => {
     const args = {
       expected_entity_absent: true,
       idempotency_key: "modern-null",
-      entities: [{ entity_type: type, code: "modern", text: null, at: null, converted: null }],
+      entities: [
+        {
+          entity_type: type,
+          code: "modern",
+          text: null,
+          at: null,
+          converted: null,
+          ...JSON.parse('{"__proto__":null}'),
+        },
+      ],
     };
     const send = () =>
       modernPost(
@@ -247,10 +314,14 @@ describe("conditional original declared-null native HTTP", () => {
       text: null,
       at: null,
       converted: null,
+      ...JSON.parse('{"__proto__":null}'),
     });
     const raw = await call("/observations/query", { observation_id: receipt.observation_id });
     expect(raw.body.observations).toHaveLength(1);
     expect(raw.body.observations[0].fields).toEqual(receipt.original_observation_fields);
+    expect((receipt.diagnostics as Record<string, unknown>).fields_sha256).toBe(
+      storeConditionRequestHash(receipt.original_observation_fields)
+    );
     const before = await nativeCounts();
     expect(toolResultJson((await send()).body).operation_receipt).toEqual({
       ...receipt,
@@ -271,7 +342,14 @@ describe("conditional original declared-null native HTTP", () => {
         expected_entity_absent: true,
         idempotency_key: "cli-null-" + flag,
         entities: [
-          { entity_type: type, code: "cli-" + flag, text: null, at: null, converted: null },
+          {
+            entity_type: type,
+            code: "cli-" + flag,
+            text: null,
+            at: null,
+            converted: null,
+            ...JSON.parse('{"__proto__":null}'),
+          },
         ],
       };
       const run = promisify(execFile);
@@ -308,7 +386,11 @@ describe("conditional original declared-null native HTTP", () => {
         text: null,
         at: null,
         converted: null,
+        ...JSON.parse('{"__proto__":null}'),
       });
+      expect(receipt.diagnostics.fields_sha256).toBe(
+        storeConditionRequestHash(receipt.original_observation_fields)
+      );
       const before = await nativeCounts();
       expect((await send()).operation_receipt).toEqual({ ...receipt, status: "replayed" });
       expect(await nativeCounts()).toEqual(before);

@@ -50,7 +50,7 @@ export function deriveConditionalStoreIdentity(
   // identity input retain the shared validator's existing behavior. Constraints
   // and policy still inspect these retained values inside the write transaction.
   const converterFields = { ...fields };
-  const declaredNulls: Record<string, null> = {};
+  const declaredNulls: Record<string, null> = Object.create(null);
   for (const [name, value] of Object.entries(fields)) {
     if (
       value === null &&
@@ -62,7 +62,7 @@ export function deriveConditionalStoreIdentity(
     }
   }
   const validated = validateFieldsWithConverters(converterFields, schema.schema_definition.fields);
-  Object.assign(validated.validFields, declaredNulls);
+  validated.validFields = { ...validated.validFields, ...declaredNulls };
   let derivation;
   try {
     derivation = deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, validated.validFields, {

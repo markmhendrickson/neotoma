@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { StoreRequestSchema } from "../../src/shared/action_schemas.js";
+import { assertConditionalStoreRequest } from "../../src/services/store_condition_request.js";
 import { deriveConditionalStoreIdentity } from "../../src/services/store_condition_identity.js";
 import { validateFieldsWithConverters } from "../../src/services/field_validation.js";
 import type { SchemaRegistryEntry } from "../../src/services/schema_registry.js";
@@ -234,5 +236,72 @@ describe("conditional explicit declared nulls", () => {
     expect(ordinary.validFields).toEqual({});
     expect(ordinary.unknownFields).toEqual(fields);
     expect(ordinary.originalValues).toEqual({});
+  });
+  it("retains every own declared JSON field without invoking object setters", () => {
+    const fields = JSON.parse('{"code":{"type":"string"},"__proto__":{"type":"string"}}');
+    const actual = deriveConditionalStoreIdentity(
+      { ...nullable, schema_definition: { fields, canonical_name_fields: ["code"] } },
+      JSON.parse('{"code":"ONE","__proto__":null}'),
+      "OWNER"
+    );
+    expect(actual.validFields).toEqual(JSON.parse('{"code":"ONE","__proto__":null}'));
+    expect(Object.hasOwn(actual.validFields, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(actual.validFields)).toBe(Object.prototype);
+    expect(actual.unknownFields).toEqual({});
+  });
+});
+
+describe("conditional parsed original admission", () => {
+  it("restores only explicit own nulls for conditional requests and leaves ordinary parsing unchanged", () => {
+    const raw = JSON.parse(
+      '{"entities":[{"entity_type":"synthetic","code":"ONE","__proto__":null}],"idempotency_key":"KEY"}'
+    );
+    const ordinary = StoreRequestSchema.parse(raw);
+    assertConditionalStoreRequest(ordinary, raw.entities);
+    expect(Object.hasOwn(ordinary.entities![0], "__proto__")).toBe(false);
+    raw.expected_entity_absent = true;
+    const conditional = StoreRequestSchema.parse(raw);
+    assertConditionalStoreRequest(conditional, raw.entities);
+    expect(conditional.entities![0]).toEqual(raw.entities[0]);
+    expect(Object.getPrototypeOf(conditional.entities![0])).toBe(Object.prototype);
+    expect(Object.prototype).not.toHaveProperty("code");
+    const nonnull = JSON.parse(JSON.stringify(raw));
+    Object.defineProperty(nonnull.entities[0], "__proto__", {
+      value: "unselected",
+      enumerable: true,
+    });
+    const parsed = StoreRequestSchema.parse(nonnull);
+    assertConditionalStoreRequest(parsed, nonnull.entities);
+    expect(Object.hasOwn(parsed.entities![0], "__proto__")).toBe(false);
+  });
+  it("retains malformed JSON, override and undeclared-field validation boundaries", () => {
+    expect(
+      StoreRequestSchema.safeParse({ entities: [{}], expected_entity_absent: "true" }).success
+    ).toBe(false);
+    const base = {
+      entities: [{ entity_type: "synthetic", code: "ONE" }],
+      expected_entity_absent: true,
+      idempotency_key: "KEY",
+    };
+    const parsed = StoreRequestSchema.parse(base);
+    const accessor = { entity_type: "synthetic", code: "ONE" };
+    Object.defineProperty(accessor, "private", {
+      get() {
+        throw new Error("must not read");
+      },
+      enumerable: true,
+    });
+    expect(() => assertConditionalStoreRequest(parsed, [accessor])).toThrow("finite plain JSON");
+    const forbidden = {
+      ...base,
+      entities: [{ entity_type: "synthetic", code: "ONE", target_id: null }],
+    };
+    expect(() =>
+      assertConditionalStoreRequest(StoreRequestSchema.parse(forbidden), forbidden.entities)
+    ).toThrow("without target");
+    const fields = { code: "ONE", region: "TWO", undeclared: null };
+    const result = deriveConditionalStoreIdentity(schema, fields, "OWNER");
+    expect(Object.hasOwn(result.validFields, "undeclared")).toBe(false);
+    expect(result.unknownFields).toHaveProperty("undeclared", null);
   });
 });
