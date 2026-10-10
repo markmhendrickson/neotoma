@@ -1,6 +1,6 @@
 /**
  * Unit tests for Field Canonicalization
- * 
+ *
  * Tests canonical hashing for deterministic field processing.
  */
 
@@ -18,10 +18,10 @@ describe("Field Canonicalization", () => {
         name: "test company",
         address: "123 main st",
       };
-      
+
       const hash1 = hashCanonicalFields(fields);
       const hash2 = hashCanonicalFields(fields);
-      
+
       expect(hash1).toBe(hash2);
       expect(typeof hash1).toBe("string");
       expect(hash1.length).toBeGreaterThan(0);
@@ -31,14 +31,14 @@ describe("Field Canonicalization", () => {
       const fields1 = {
         name: "company a",
       };
-      
+
       const fields2 = {
         name: "company b",
       };
-      
+
       const hash1 = hashCanonicalFields(fields1);
       const hash2 = hashCanonicalFields(fields2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
@@ -49,17 +49,17 @@ describe("Field Canonicalization", () => {
           city: "new york",
         },
       };
-      
+
       const fields2 = {
         address: {
           street: "123 main st",
           city: "new york",
         },
       };
-      
+
       const hash1 = hashCanonicalFields(fields1);
       const hash2 = hashCanonicalFields(fields2);
-      
+
       expect(hash1).toBe(hash2);
     });
 
@@ -67,10 +67,10 @@ describe("Field Canonicalization", () => {
       const fields = {
         tags: ["alpha", "beta", "gamma"],
       };
-      
+
       const hash1 = hashCanonicalFields(fields);
       const hash2 = hashCanonicalFields(fields);
-      
+
       expect(hash1).toBe(hash2);
     });
 
@@ -85,19 +85,19 @@ describe("Field Canonicalization", () => {
         amount: 1234.56,
         active: true,
       };
-      
+
       const hash1 = hashCanonicalFields(fields);
       const hash2 = hashCanonicalFields(fields);
-      
+
       expect(hash1).toBe(hash2);
       expect(hash1.length).toBeGreaterThan(0);
     });
 
     it("should handle empty objects", () => {
       const fields = {};
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -107,9 +107,9 @@ describe("Field Canonicalization", () => {
         name: "test",
         optional: null,
       };
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -120,9 +120,9 @@ describe("Field Canonicalization", () => {
         count: 10,
         negative: -5.5,
       };
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -132,9 +132,9 @@ describe("Field Canonicalization", () => {
         active: true,
         verified: false,
       };
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -148,9 +148,9 @@ describe("Field Canonicalization", () => {
         array: [1, 2, 3],
         object: { nested: "value" },
       };
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -160,15 +160,15 @@ describe("Field Canonicalization", () => {
         name: "test",
         amount: 100,
       };
-      
+
       const fields2 = {
         name: "test",
         count: 100, // Different field name
       };
-      
+
       const hash1 = hashCanonicalFields(fields1);
       const hash2 = hashCanonicalFields(fields2);
-      
+
       expect(hash1).not.toBe(hash2);
     });
 
@@ -178,9 +178,9 @@ describe("Field Canonicalization", () => {
         email: "test@example.com",
         url: "https://example.com/path?query=value",
       };
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -190,9 +190,9 @@ describe("Field Canonicalization", () => {
         name: "Tëst Çömpány 你好",
         description: "Unicode content: émojis 🎉",
       };
-      
+
       const hash = hashCanonicalFields(fields);
-      
+
       expect(typeof hash).toBe("string");
       expect(hash.length).toBeGreaterThan(0);
     });
@@ -203,12 +203,12 @@ describe("Field Canonicalization", () => {
         amount: 999.99,
         tags: ["a", "b", "c"],
       };
-      
+
       const hashes = [];
       for (let i = 0; i < 10; i++) {
         hashes.push(hashCanonicalFields(fields));
       }
-      
+
       // All hashes should be identical
       const uniqueHashes = new Set(hashes);
       expect(uniqueHashes.size).toBe(1);
@@ -270,5 +270,32 @@ describe("preserveWhitespace — exact retention vs default normalize (#2392)", 
     const out = canonicalizeFields({ transcription_text: exactText }, schema);
     // Default path: trim + CRLF→LF + \\s+ collapse (newlines become spaces).
     expect(out.transcription_text).toBe("Exact Synthetic transcript. Second line.");
+  });
+});
+
+describe("own field canonicalization properties", () => {
+  it("retains accepted own __proto__ in top-level and nested maps", () => {
+    const schema = { fields: { ["__proto__"]: { type: "object" } } } as SchemaDefinition;
+    const result = canonicalizeFields(
+      { ["__proto__"]: { ["__proto__"]: { retained: true } } },
+      schema
+    );
+    expect(Object.hasOwn(result, "__proto__")).toBe(true);
+    const nested = result["__proto__"] as Record<string, unknown>;
+    expect(Object.hasOwn(nested, "__proto__")).toBe(true);
+    expect(nested["__proto__"]).toEqual({ retained: true });
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(nested)).toBe(Object.prototype);
+    expect(Object.hasOwn(Object.prototype, "retained")).toBe(false);
+  });
+});
+
+describe("canonical field declaration ownership", () => {
+  it("does not canonicalize an inherited schema key as declared", () => {
+    const result = canonicalizeFields({ ["__proto__"]: "unknown" }, {
+      fields: {},
+    } as SchemaDefinition);
+    expect(Object.hasOwn(result, "__proto__")).toBe(false);
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   });
 });

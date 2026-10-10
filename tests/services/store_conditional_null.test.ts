@@ -634,4 +634,191 @@ describe("conditional original declared-null native HTTP", () => {
       });
     }
   );
+
+  it.each(readSurfaces)("projects declared own-key null and provenance via %s", async (surface) => {
+    const code = "own-key-projection-" + surface;
+    const fields = JSON.parse('{"__proto__":null}');
+    const first = await store(code, fields);
+    expect(first.status).toBe(200);
+    const receipt = first.body.operation_receipt;
+    expect(Object.hasOwn(receipt.original_observation_fields, "__proto__")).toBe(true);
+    const raw = await call("/observations/query", { observation_id: receipt.observation_id });
+    expect(raw.status).toBe(200);
+    expect(raw.body.observations).toHaveLength(1);
+    const origin = raw.body.observations[0];
+    expect(Object.hasOwn(origin.fields, "__proto__")).toBe(true);
+    const current = await readSnapshot(surface, receipt.entity_id, true);
+    const historical = await readSnapshot(surface, receipt.entity_id, true, origin.created_at);
+    (evidence.cases as unknown[]).push({
+      own_key_projection_surface: surface,
+      receipt,
+      raw,
+      current,
+      historical,
+    });
+    for (const view of [current, historical]) {
+      expect(view.cleared_fields_included).toBe(true);
+      expect.soft(Object.hasOwn(view.snapshot, "__proto__")).toBe(true);
+      expect.soft(view.snapshot["__proto__"]).toBeNull();
+      expect.soft(Object.hasOwn(view.provenance, "__proto__")).toBe(true);
+      expect.soft(view.provenance["__proto__"]).toBe(receipt.observation_id);
+      expect(Object.hasOwn(view.snapshot, "amount")).toBe(false);
+      expect(Object.hasOwn(view.provenance, "amount")).toBe(false);
+      expect(Object.getPrototypeOf(view.snapshot)).toBe(Object.prototype);
+      expect(Object.getPrototypeOf(view.provenance)).toBe(Object.prototype);
+    }
+    for (const at of [undefined, origin.created_at]) {
+      const implicit = await readSnapshot(surface, receipt.entity_id, undefined, at);
+      const explicitFalse = await readSnapshot(surface, receipt.entity_id, false, at);
+      expect(explicitFalse).toEqual(implicit);
+      expect(Object.hasOwn(implicit.snapshot, "__proto__")).toBe(false);
+      expect(Object.hasOwn(implicit.provenance, "__proto__")).toBe(false);
+      expect(Object.hasOwn(implicit, "cleared_fields_included")).toBe(false);
+    }
+    const winners: unknown[] = [];
+    let selected = current;
+    for (const value of [null, "later own value"]) {
+      const correction = await call("/corrections/transaction", {
+        idempotency_key: code + "-" + String(value),
+        entities: [
+          {
+            entity_id: receipt.entity_id,
+            entity_type: type,
+            expected_observation_count: selected.observation_count,
+            expected_snapshot: selected.snapshot,
+            changes: [{ field: "__proto__", value }],
+          },
+        ],
+      });
+      expect(correction.status, JSON.stringify(correction.body)).toBe(200);
+      const allRaw = await call("/observations/query", { entity_id: receipt.entity_id, limit: 10 });
+      const later = allRaw.body.observations.find(
+        (o: any) => o.id !== origin.id && o.fields["__proto__"] === value
+      );
+      expect(later).toBeDefined();
+      selected = await readSnapshot(surface, receipt.entity_id, true);
+      expect(Object.hasOwn(selected.snapshot, "__proto__")).toBe(true);
+      expect(selected.snapshot["__proto__"]).toBe(value);
+      expect(Object.hasOwn(selected.provenance, "__proto__")).toBe(true);
+      expect(selected.provenance["__proto__"]).toBe(later.id);
+      for (const [at, expectedValue, expectedId] of [
+        [origin.created_at, null, origin.id],
+        [later.created_at, value, later.id],
+      ]) {
+        const view = await readSnapshot(surface, receipt.entity_id, true, at);
+        expect(Object.hasOwn(view.snapshot, "__proto__")).toBe(true);
+        expect(view.snapshot["__proto__"]).toBe(expectedValue);
+        expect(view.provenance["__proto__"]).toBe(expectedId);
+        const historicalDefault = await readSnapshot(surface, receipt.entity_id, undefined, at);
+        expect(await readSnapshot(surface, receipt.entity_id, false, at)).toEqual(
+          historicalDefault
+        );
+        expect(Object.hasOwn(historicalDefault.snapshot, "__proto__")).toBe(expectedValue !== null);
+        expect(Object.hasOwn(historicalDefault.provenance, "__proto__")).toBe(
+          expectedValue !== null
+        );
+      }
+      const implicit = await readSnapshot(surface, receipt.entity_id);
+      expect(await readSnapshot(surface, receipt.entity_id, false)).toEqual(implicit);
+      expect(Object.hasOwn(implicit.snapshot, "__proto__")).toBe(value !== null);
+      const beforeReplay = await nativeCounts();
+      const replay = await store(code, fields);
+      expect(replay.body.operation_receipt).toEqual({ ...receipt, status: "replayed" });
+      expect(
+        Object.hasOwn(replay.body.operation_receipt.original_observation_fields, "__proto__")
+      ).toBe(true);
+      expect(replay.body.operation_receipt.original_observation_fields["__proto__"]).toBeNull();
+      expect(await nativeCounts()).toEqual(beforeReplay);
+      expect(Object.hasOwn(replay.body.entities[0].entity_snapshot_after, "__proto__")).toBe(
+        value !== null
+      );
+      if (value !== null)
+        expect(replay.body.entities[0].entity_snapshot_after["__proto__"]).toBe(value);
+      const afterReplay = await readSnapshot(surface, receipt.entity_id, true);
+      expect(afterReplay.snapshot["__proto__"]).toBe(value);
+      expect(afterReplay.provenance["__proto__"]).toBe(later.id);
+      expect(Object.getPrototypeOf(afterReplay.snapshot)).toBe(Object.prototype);
+      expect(Object.getPrototypeOf(afterReplay.provenance)).toBe(Object.prototype);
+      const originalAfter = await call("/observations/query", { observation_id: origin.id });
+      expect(originalAfter.body.observations[0]).toEqual(origin);
+      winners.push({
+        value,
+        correction,
+        later,
+        selected,
+        implicit,
+        replay,
+        beforeReplay,
+        afterReplay,
+        originalAfter,
+      });
+    }
+    (evidence.cases as unknown[]).push({ own_key_winners_surface: surface, winners });
+    expect(Object.hasOwn(Object.prototype, "code")).toBe(false);
+  });
+
+  it.each(readSurfaces)(
+    "projects accepted own-key ordinary corrections via %s",
+    async (surface) => {
+      const code = "own-key-ordinary-" + surface;
+      const ordinary = await call("/store", {
+        entities: [{ entity_type: type, code, amount: null }],
+        idempotency_key: code,
+        strict: true,
+      });
+      expect(ordinary.status, JSON.stringify(ordinary.body)).toBe(200);
+      const entityId = ordinary.body.entities[0].entity_id;
+      const originalRaw = await call("/observations/query", { entity_id: entityId, limit: 10 });
+      const original = originalRaw.body.observations[0];
+      const initial = await readSnapshot(surface, entityId);
+      const correction = await call("/corrections/transaction", {
+        idempotency_key: code + "-correction",
+        entities: [
+          {
+            entity_id: entityId,
+            entity_type: type,
+            expected_observation_count: initial.observation_count,
+            expected_snapshot: initial.snapshot,
+            changes: [{ field: "__proto__", value: "ordinary own value" }],
+          },
+        ],
+      });
+      expect(correction.status, JSON.stringify(correction.body)).toBe(200);
+      const correctedRaw = await call("/observations/query", { entity_id: entityId, limit: 10 });
+      expect(correctedRaw.body.observations).toHaveLength(2);
+      const origin = correctedRaw.body.observations.find((o: any) => o.id !== original.id);
+      expect(Object.hasOwn(origin.fields, "__proto__")).toBe(true);
+      expect(origin.fields["__proto__"]).toBe("ordinary own value");
+      const current = await readSnapshot(surface, entityId);
+      const historical = await readSnapshot(surface, entityId, undefined, origin.created_at);
+      for (const view of [current, historical]) {
+        expect(Object.hasOwn(view.snapshot, "__proto__")).toBe(true);
+        expect(view.snapshot["__proto__"]).toBe("ordinary own value");
+        expect(Object.hasOwn(view.provenance, "__proto__")).toBe(true);
+        expect(view.provenance["__proto__"]).toBe(origin.id);
+        expect(Object.hasOwn(view.snapshot, "amount")).toBe(false);
+        expect(Object.hasOwn(view, "cleared_fields_included")).toBe(false);
+        expect(Object.getPrototypeOf(view.snapshot)).toBe(Object.prototype);
+        expect(Object.getPrototypeOf(view.provenance)).toBe(Object.prototype);
+      }
+      expect(await readSnapshot(surface, entityId, false)).toEqual(current);
+      const before = await readSnapshot(surface, entityId, undefined, original.created_at);
+      expect(Object.hasOwn(before.snapshot, "__proto__")).toBe(false);
+      expect(Object.hasOwn(before.provenance, "__proto__")).toBe(false);
+      const originalAfter = await call("/observations/query", { observation_id: original.id });
+      expect(originalAfter.body.observations[0]).toEqual(original);
+      (evidence.cases as unknown[]).push({
+        own_key_ordinary_correction_surface: surface,
+        ordinary,
+        original,
+        correction,
+        origin,
+        current,
+        historical,
+        before,
+        originalAfter,
+      });
+      expect(Object.hasOwn(Object.prototype, "code")).toBe(false);
+    }
+  );
 });

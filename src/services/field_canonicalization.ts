@@ -130,7 +130,7 @@ export function canonicalizeFields(
 
   for (const key of sortedKeys) {
     const value = fields[key];
-    const fieldDef = schema.fields[key];
+    const fieldDef = Object.hasOwn(schema.fields, key) ? schema.fields[key] : undefined;
 
     if (!fieldDef) {
       // Unknown field - should not happen after validation, but handle it
@@ -167,7 +167,12 @@ export function canonicalizeFields(
     };
 
     // Canonicalize based on field type
-    canonical[key] = canonicalizeValue(value, fieldDef.type, fieldOptions);
+    Object.defineProperty(canonical, key, {
+      value: canonicalizeValue(value, fieldDef.type, fieldOptions),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
 
   return canonical;
@@ -364,23 +369,58 @@ function canonicalizeObject(
 
     // Skip null/undefined
     if (val === null || val === undefined) {
-      canonical[key] = null;
+      Object.defineProperty(canonical, key, {
+        value: null,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
       continue;
     }
 
     // Recursively canonicalize based on type
     if (typeof val === "string") {
-      canonical[key] = canonicalizeString(val, options);
+      Object.defineProperty(canonical, key, {
+        value: canonicalizeString(val, options),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     } else if (typeof val === "number") {
-      canonical[key] = canonicalizeNumber(val, options);
+      Object.defineProperty(canonical, key, {
+        value: canonicalizeNumber(val, options),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     } else if (val instanceof Date || (typeof val === "string" && !isNaN(Date.parse(val)))) {
-      canonical[key] = canonicalizeDate(val, options);
+      Object.defineProperty(canonical, key, {
+        value: canonicalizeDate(val, options),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     } else if (Array.isArray(val)) {
-      canonical[key] = canonicalizeArray(val, options);
+      Object.defineProperty(canonical, key, {
+        value: canonicalizeArray(val, options),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     } else if (typeof val === "object") {
-      canonical[key] = canonicalizeObject(val, options);
+      Object.defineProperty(canonical, key, {
+        value: canonicalizeObject(val, options),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     } else {
-      canonical[key] = val;
+      Object.defineProperty(canonical, key, {
+        value: val,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
   }
 
