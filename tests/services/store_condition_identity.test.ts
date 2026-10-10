@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveConditionalStoreIdentity } from "../../src/services/store_condition_identity.js";
+import { validateFieldsWithConverters } from "../../src/services/field_validation.js";
 import type { SchemaRegistryEntry } from "../../src/services/schema_registry.js";
 import {
   deriveCanonicalNameFromFieldsWithTrace,
@@ -162,5 +163,76 @@ describe("conditional declared identity", () => {
     const result = deriveConditionalStoreIdentity(converted, { code: 42 }, "OWNER");
     expect(result.validFields).toEqual({ code: "42" });
     expect(result.unknownFields).toEqual({});
+  });
+});
+
+describe("conditional explicit declared nulls", () => {
+  const nullable = {
+    ...schema,
+    schema_definition: {
+      fields: {
+        code: { type: "string" as const },
+        text: { type: "string" as const, required: true },
+        amount: { type: "number" as const },
+        enabled: { type: "boolean" as const },
+        at: { type: "date" as const },
+        items: { type: "array" as const },
+        detail: { type: "object" as const },
+        converted: {
+          type: "string" as const,
+          converters: [
+            {
+              from: "number" as const,
+              to: "string" as const,
+              function: "number_to_string",
+              deterministic: true,
+            },
+          ],
+        },
+      },
+      canonical_name_fields: ["code"],
+    },
+  };
+  it.each(["text", "amount", "enabled", "at", "items", "detail", "converted"])(
+    "retains declared nonidentity %s null without converting or fragmenting it",
+    (field) => {
+      const actual = deriveConditionalStoreIdentity(
+        nullable,
+        { code: "ONE", [field]: null },
+        "OWNER"
+      );
+      expect(actual.validFields).toEqual({ code: "ONE", [field]: null });
+      expect(actual.unknownFields).toEqual({});
+      expect(actual.originalValues).toEqual({});
+    }
+  );
+  it("keeps absent fields absent and undeclared null advisory; preserves nonnull conversion", () => {
+    const actual = deriveConditionalStoreIdentity(
+      nullable,
+      { code: "ONE", converted: 42, undeclared: null },
+      "OWNER"
+    );
+    expect(actual.validFields).toEqual({ code: "ONE", converted: "42" });
+    expect(actual.unknownFields).toEqual({ undeclared: null });
+    expect(actual.originalValues).toEqual({ converted: 42 });
+    expect(Object.hasOwn(actual.validFields, "text")).toBe(false);
+    expect(() =>
+      deriveConditionalStoreIdentity(nullable, { code: null, text: null }, "OWNER")
+    ).toThrow("incomplete or invalid");
+  });
+  it("leaves ordinary converter null routing unchanged for every declared type", () => {
+    const fields = {
+      text: null,
+      amount: null,
+      enabled: null,
+      at: null,
+      items: null,
+      detail: null,
+      converted: null,
+    };
+    const ordinary = validateFieldsWithConverters(fields, nullable.schema_definition.fields);
+    expect(ordinary.validFields).toEqual({});
+    expect(ordinary.unknownFields).toEqual(fields);
+    expect(ordinary.originalValues).toEqual({});
   });
 });
