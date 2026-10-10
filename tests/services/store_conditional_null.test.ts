@@ -3,7 +3,8 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { promisify } from "node:util";
 import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
 import { execFile, execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.js";
 import {
@@ -172,6 +173,98 @@ async function readSnapshot(
   );
   return JSON.parse(out.stdout);
 }
+async function independentCorrection(request: Record<string, unknown>) {
+  const clientRoot = mkdtempSync(path.join(tmpdir(), "conditional-writer-"));
+  const home = path.join(clientRoot, "home");
+  const cwd = path.join(clientRoot, "cwd");
+  const data = path.join(clientRoot, "data");
+  for (const dir of [home, cwd, data]) mkdirSync(dir);
+  try {
+    const root = process.cwd();
+    const { stdout, stderr } = await promisify(execFile)(
+      process.execPath,
+      [
+        path.join(root, "tests/fixtures/native-store/independent_cli.mjs"),
+        root,
+        server.baseUrl,
+        "correctTransaction",
+        JSON.stringify(request),
+      ],
+      {
+        cwd,
+        timeout: 20000,
+        env: {
+          PATH: process.env.PATH,
+          HOME: home,
+          NODE_ENV: "test",
+          ...(process.env.NODE_OPTIONS ? { NODE_OPTIONS: process.env.NODE_OPTIONS } : {}),
+          NEOTOMA_DATA_DIR: data,
+          NEOTOMA_DB_BACKEND: "sqlite",
+          NEOTOMA_ENCRYPTION_ENABLED: "false",
+          NEOTOMA_CLI_AAUTH_DISABLE: "1",
+          NEOTOMA_FORCE_LOCAL_TRANSPORT: "false",
+          NEOTOMA_DISABLE_OFFLINE_FALLBACK: "true",
+          NEOTOMA_BEARER_TOKEN: server.token,
+        },
+      }
+    );
+    const client = JSON.parse(
+      stderr
+        .split("\n")
+        .find((l) => l.startsWith("INDEPENDENT_CLIENT "))!
+        .slice(19)
+    );
+    const http = JSON.parse(
+      stderr
+        .split("\n")
+        .find((l) => l.startsWith("INDEPENDENT_HTTP "))!
+        .slice(17)
+    );
+    expect(client.pid).not.toBe(process.pid);
+    expect(client.parent_pid).toBe(process.pid);
+    expect(http.route).toBe("/corrections/transaction");
+    expect(http.request).toEqual(request);
+    expect(http.response_status).toBe(200);
+    expect(http.acknowledgment.status).toBe("applied");
+    const { _neotoma: transport, ...answer } = JSON.parse(stdout);
+    expect(transport).toEqual({ base_url: server.baseUrl, data_dir: null, transport: "api" });
+    expect(answer).toEqual(http.acknowledgment);
+    return { client, http };
+  } finally {
+    rmSync(clientRoot, { recursive: true, force: true });
+  }
+}
+async function nativeTuple(receipt: any) {
+  const connection = new AsyncSqliteDatabase(path.join(server.dataDir, "neotoma.db"), {
+    existing: true,
+    readOnly: true,
+  });
+  try {
+    return {
+      observation: await connection
+        .prepare("SELECT * FROM observations WHERE id=?")
+        .get(receipt.observation_id),
+      source: await connection.prepare("SELECT * FROM sources WHERE id=?").get(receipt.source_id),
+      key: await connection
+        .prepare("SELECT * FROM store_condition_keys WHERE user_id=? AND request_hash=?")
+        .get(LOCAL_DEV_USER_ID, receipt.request_fingerprint),
+    };
+  } finally {
+    await connection.close();
+  }
+}
+async function retainedLater(id: string) {
+  const connection = new AsyncSqliteDatabase(path.join(server.dataDir, "neotoma.db"), {
+    existing: true,
+    readOnly: true,
+  });
+  try {
+    return (await connection.prepare("SELECT * FROM observations WHERE id=?").get(id)) as any;
+  } finally {
+    await connection.close();
+  }
+}
+
 function assertNullView(view: any, entityId: string, origin: string) {
   expect(view.entity_id).toBe(entityId);
   expect(view.cleared_fields_included).toBe(true);
@@ -193,6 +286,78 @@ async function assertDefaultViews(surface: ReadSurface, entityId: string, atInge
 }
 
 describe("conditional original declared-null native HTTP", () => {
+  it.each([null, "independent later value"])(
+    "separately launched natural software operation wins with %s",
+    async (value) => {
+      const code = value === null ? "independent-null" : "independent-nonnull";
+      const first = await store(code, { text: null });
+      expect(first.status).toBe(200);
+      const receipt = first.body.operation_receipt;
+      const originalTuple = await nativeTuple(receipt);
+      expect(originalTuple.observation).toBeDefined();
+      expect(originalTuple.source).toBeDefined();
+      expect(originalTuple.key).toBeDefined();
+      const baseline = await readSnapshot("HTTP", receipt.entity_id, true);
+      const request = {
+        idempotency_key: code + "-separate-operation",
+        entities: [
+          {
+            entity_id: receipt.entity_id,
+            entity_type: type,
+            expected_observation_count: baseline.observation_count,
+            expected_snapshot: baseline.snapshot,
+            changes: [{ field: "text", value }],
+          },
+        ],
+      };
+      const launch = await independentCorrection(request);
+      const selected = await readSnapshot("HTTP", receipt.entity_id, true);
+      const laterId = selected.provenance.text;
+      expect(laterId).not.toBe(receipt.observation_id);
+      const later = await retainedLater(laterId);
+      expect(later.entity_id).toBe(receipt.entity_id);
+      expect(later.entity_type).toBe(type);
+      expect(later.user_id).toBe(LOCAL_DEV_USER_ID);
+      expect(later.source_id).toBeNull();
+      expect(later.observation_source).toBeNull();
+      expect(later.idempotency_key).toMatch(/^correction-transaction:/);
+      expect(typeof later.canonical_hash).toBe("string");
+      expect(JSON.parse(later.fields)).toEqual({ text: value });
+      expect(later.provenance).toBeNull();
+      const actor = { effective_session: launch.client.session, persisted_provenance: null };
+      expect(actor.effective_session.attribution.tier).toBe("anonymous");
+      expect(Object.hasOwn(actor.effective_session.attribution, "agent_thumbprint")).toBe(false);
+      expect(Object.hasOwn(actor.effective_session, "authenticated_actor_id")).toBe(false);
+      expect(launch.http.client_name_header).toBeNull();
+      expect(launch.http.acknowledgment.entities[0].provenance.text).toBe(later.id);
+      const beforeReplay = await nativeCounts();
+      const replay = await store(code, { text: null });
+      expect(replay.body.operation_receipt).toEqual({ ...receipt, status: "replayed" });
+      expect(await nativeCounts()).toEqual(beforeReplay);
+      expect(await nativeTuple(receipt)).toEqual(originalTuple);
+      const views = [];
+      for (const surface of readSurfaces) {
+        const view = await readSnapshot(surface, receipt.entity_id, true);
+        expect(view.cleared_fields_included).toBe(true);
+        expect(view.snapshot.text).toBe(value);
+        expect(view.provenance.text).toBe(later.id);
+        views.push({ surface, view });
+      }
+      (evidence.cases as unknown[]).push({
+        independent_software_operation: code,
+        first,
+        originalTuple,
+        launch,
+        later,
+        actor,
+        beforeReplay,
+        replay,
+        views,
+        source_identity_claim: "software operation separation only; not human/member/signer",
+      });
+    }
+  );
+
   it.each(readSurfaces)(
     "reads conditional original snapshot and its history via %s",
     async (surface) => {
