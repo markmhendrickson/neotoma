@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **720**
-- Backend and repo Vitest files: **684**
+- Total automated test files: **721**
+- Backend and repo Vitest files: **685**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -70,7 +70,7 @@ flowchart TD
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 194 |
-| Vitest service tests | 59 |
+| Vitest service tests | 60 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 217 |
 | Vitest CLI tests | 85 |
@@ -311,7 +311,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (59):**
+**Files (60):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -364,6 +364,7 @@ flowchart TD
 - `tests/services/store_condition_identity.test.ts`
 - `tests/services/store_condition_keys.test.ts`
 - `tests/services/store_condition_schema.test.ts`
+- `tests/services/store_conditional_null.test.ts`
 - `tests/services/store_conditional_race.test.ts`
 - `tests/services/store_conditional.test.ts`
 - `tests/services/summary.test.ts`

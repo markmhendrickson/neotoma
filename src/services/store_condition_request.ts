@@ -1,7 +1,10 @@
 /** Pure shape gate shared by public store facades, before either leg can write. */
 import { canonicalStoreRequest, StoreConditionError } from "./store_condition_keys.js";
 
-export function assertConditionalStoreRequest(input: Record<string, unknown>): void {
+export function assertConditionalStoreRequest(
+  input: Record<string, unknown>,
+  originalEntities?: unknown
+): void {
   const flag = input.expected_entity_absent;
   if (flag !== undefined && typeof flag !== "boolean")
     throw new StoreConditionError(
@@ -32,8 +35,30 @@ export function assertConditionalStoreRequest(input: Record<string, unknown>): v
       "VALIDATION_ERROR",
       "Conditional store requires one keyed structured entity and no file, reference, interpretation, relationship or sync operation."
     );
+  // Preserve explicit own nulls that a record parser may omit. The original
+  // values must still be finite plain JSON; active schema, identity, policy
+  // and constraint validation remain inside the conditional transaction.
+  if (originalEntities !== undefined) {
+    canonicalStoreRequest(originalEntities);
+    if (!Array.isArray(originalEntities) || originalEntities.length !== 1)
+      throw new StoreConditionError("VALIDATION_ERROR", "Conditional entities must match.");
+    const original = originalEntities[0];
+    if (!original || typeof original !== "object" || Array.isArray(original))
+      throw new StoreConditionError("VALIDATION_ERROR", "A conditional entity must be an object.");
+    const entity = { ...((input.entities as unknown[])[0] as Record<string, unknown>) };
+    for (const [name, value] of Object.entries(original)) {
+      if (value === null && !Object.hasOwn(entity, name))
+        Object.defineProperty(entity, name, {
+          value: null,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+    }
+    input.entities = [entity];
+  }
   canonicalStoreRequest(input.entities);
-  const entity = input.entities[0] as Record<string, unknown>;
+  const entity = (input.entities as unknown[])[0] as Record<string, unknown>;
   canonicalStoreRequest(entity);
   if (
     !entity ||

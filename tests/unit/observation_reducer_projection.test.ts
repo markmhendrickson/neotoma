@@ -6,10 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  ObservationReducer,
-  type Observation,
-} from "../../src/reducers/observation_reducer.js";
+import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 
 vi.mock("../../src/services/schema_registry.js", () => ({
   DEFAULT_OBSERVATION_SOURCE_PRIORITY: [
@@ -29,18 +26,20 @@ vi.mock("../../src/services/schema_definitions.js", () => ({
 }));
 
 vi.mock("../../src/services/field_validation.js", () => ({
-  validateFieldWithConverters: vi.fn().mockImplementation(
-    (_field: string, value: unknown, _fieldDef: unknown) => ({
+  validateFieldWithConverters: vi
+    .fn()
+    .mockImplementation((_field: string, value: unknown, _fieldDef: unknown) => ({
       isValid: true,
       value,
       shouldRouteToRawFragments: false,
-    }),
-  ),
+    })),
 }));
 
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
-function makeObs(overrides: Partial<Observation> & { fields: Record<string, unknown> }): Observation {
+function makeObs(
+  overrides: Partial<Observation> & { fields: Record<string, unknown> }
+): Observation {
   return {
     id: "obs_default",
     entity_id: "ent_test",
@@ -535,9 +534,7 @@ describe("ObservationReducer - Null-clear edge cases per strategy", () => {
   it("computeSnapshotWithDefaults: null observation clears the field in the no-schema path", async () => {
     // No schema — force the defaults path
     (schemaRegistry.loadActiveSchema as any).mockResolvedValue(null);
-    const { getSchemaDefinition } = await import(
-      "../../src/services/schema_definitions.js"
-    );
+    const { getSchemaDefinition } = await import("../../src/services/schema_definitions.js");
     (getSchemaDefinition as any).mockReturnValue(null);
 
     const observations: Observation[] = [
@@ -569,5 +566,74 @@ describe("ObservationReducer - Null-clear edge cases per strategy", () => {
     // is absent from the snapshot.
     expect(snapshot!.snapshot.notes).toBeUndefined();
     expect(snapshot!.provenance.notes).toBeUndefined();
+  });
+
+  it.each([false, true])(
+    "preserves selected own-key data without changing prototypes (cleared=%s)",
+    async (includeClearedFields) => {
+      (schemaRegistry.loadActiveSchema as any).mockResolvedValue({
+        schema_version: "1.0",
+        schema_definition: { fields: { ["__proto__"]: { type: "string" } } },
+        reducer_config: { merge_policies: { ["__proto__"]: { strategy: "last_write" } } },
+      });
+      const context = {
+        acquisition: "complete",
+        mode: "pre_migration",
+        target: {
+          id: "ent_test",
+          user_id: "00000000-0000-0000-0000-000000000000",
+          entity_type: "test_type",
+        },
+      } as const;
+      for (const value of [null, { retained: true }]) {
+        const result = await reducer.computeSnapshot(
+          "ent_test",
+          [
+            makeObs({
+              id: "obs_own",
+              fields: { ["__proto__"]: value },
+            }),
+          ],
+          undefined,
+          context,
+          { includeClearedFields }
+        );
+        const included = value !== null || includeClearedFields;
+        expect(Object.hasOwn(result!.snapshot, "__proto__")).toBe(included);
+        expect(Object.hasOwn(result!.provenance, "__proto__")).toBe(included);
+        if (included) {
+          expect(result!.snapshot["__proto__"]).toEqual(value);
+          expect(result!.provenance["__proto__"]).toBe("obs_own");
+          expect(Object.getOwnPropertyDescriptor(result!.snapshot, "__proto__")).toEqual({
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+        }
+        expect(Object.getPrototypeOf(result!.snapshot)).toBe(Object.prototype);
+        expect(Object.getPrototypeOf(result!.provenance)).toBe(Object.prototype);
+        expect(Object.hasOwn(result!.snapshot, "retained")).toBe(false);
+        expect(Object.hasOwn(Object.prototype, "retained")).toBe(false);
+      }
+    }
+  );
+
+  it("preserves ordinary fallback own-key values and provenance without prototype mutation", async () => {
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue(null);
+    const result = await reducer.computeSnapshot("ent_test", [
+      makeObs({
+        id: "obs_fallback",
+        fields: { ["__proto__"]: { retained: true }, amount: null },
+      }),
+    ]);
+    expect(Object.hasOwn(result!.snapshot, "__proto__")).toBe(true);
+    expect(result!.snapshot["__proto__"]).toEqual({ retained: true });
+    expect(Object.hasOwn(result!.provenance, "__proto__")).toBe(true);
+    expect(result!.provenance["__proto__"]).toBe("obs_fallback");
+    expect(Object.hasOwn(result!.snapshot, "amount")).toBe(false);
+    expect(Object.getPrototypeOf(result!.snapshot)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(result!.provenance)).toBe(Object.prototype);
+    expect(Object.hasOwn(Object.prototype, "retained")).toBe(false);
   });
 });

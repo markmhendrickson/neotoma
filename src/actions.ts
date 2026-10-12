@@ -9276,7 +9276,7 @@ async function handleStorePost(
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
-    assertConditionalStoreRequest(parsed.data);
+    assertConditionalStoreRequest(parsed.data, req.body.entities);
     const hasEntities = Boolean(parsed.data.entities?.length);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
