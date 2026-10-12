@@ -272,8 +272,12 @@ annotation_overrides:
     destructiveHint: false
   health_check_snapshots:
     destructiveHint: false
+  # Not read-only: unless skip_sync is true, a stale or never-synced GitHub
+  # mirror is refreshed and the fetched issue and comments are stored as new
+  # observations. That adds local history without removing any, so it is
+  # open-world but not destructive.
   get_issue_status:
-    readOnlyHint: true
+    destructiveHint: false
   get_entity_submission_status:
     readOnlyHint: true
   get_peer_status:

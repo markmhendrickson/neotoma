@@ -170,8 +170,17 @@ describe("MCP tool effect catalog", () => {
       openWorldHint: true,
     });
 
+    // Unless skip_sync is true, a stale GitHub mirror is re-fetched and stored
+    // as new observations, so this read writes the graph. It only adds history,
+    // so it is not destructive.
+    expect(hints("get_issue_status")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+
     // Remote probes read beyond the instance without changing anything.
-    for (const name of ["get_peer_status", "npm_check_update", "get_issue_status"]) {
+    for (const name of ["get_peer_status", "npm_check_update"]) {
       expect(hints(name), name).toEqual({
         readOnlyHint: true,
         destructiveHint: undefined,
@@ -254,6 +263,8 @@ describe("MCP tool effect catalog", () => {
       "sync_peer",
       "publish_rendered_page",
       "submit_issue",
+      // Syncs a stale GitHub mirror into the graph unless skip_sync is true.
+      "get_issue_status",
     ]) {
       expect(tool(name).annotations?.readOnlyHint, name).toBe(false);
       expect(tool(name)._meta?.["neotoma/effect_class"], name).not.toBe("read");
