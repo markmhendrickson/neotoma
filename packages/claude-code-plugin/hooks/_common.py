@@ -9,6 +9,7 @@ Code prints it in verbose mode but the turn still proceeds.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
@@ -61,6 +62,8 @@ LEGACY_LOCAL_BASE_URL = "http://127.0.0.1:3080"
 # Hostnames that serve the shared public sandbox (custom domain and the
 # hosting platform's alias for the same app).
 PUBLIC_SANDBOX_HOSTS = frozenset({"sandbox.neotoma.io", "neotoma-sandbox.fly.dev"})
+# Unicode full stops that IDNA (and so the httpx transport) treat as ".".
+_UNICODE_FULL_STOPS = ("\u3002", "\uff0e", "\uff61")
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
@@ -91,14 +94,53 @@ def mcp_url_to_base_url(url: str) -> str:
     return base
 
 
-def url_host(url: str) -> str:
-    """Normalised hostname: lowercase, no trailing dot, scheme optional."""
+def _idna_ascii(host: str) -> str:
+    """ASCII form of a hostname under IDNA mapping. Raises if it has none.
+
+    Prefers the `idna` package (a dependency of httpx, the transport) with
+    UTS-46 mapping, which folds case, full-width forms and the Unicode full
+    stops U+3002/U+FF0E/U+FF61 to ASCII. Falls back to the stdlib IDNA 2003
+    codec, which maps the same full stops and full-width forms.
+    """
+    try:
+        import idna  # type: ignore
+    except ImportError:
+        idna = None  # type: ignore[assignment]
+    if idna is not None:
+        return idna.encode(host, uts46=True).decode("ascii")
+    for stop in _UNICODE_FULL_STOPS:
+        host = host.replace(stop, ".")
+    return host.encode("idna").decode("ascii")
+
+
+def url_host(url: str) -> str | None:
+    """Hostname as the HTTP client resolves it, or None when it cannot be read.
+
+    The sandbox guard must compare the host a request actually goes to. The
+    client (httpx, and urllib for the instructions prefetch) maps Unicode
+    full stops and IDNA forms such as `sandbox\u3002neotoma\u3002io` to the
+    ASCII host, so the guard maps them the same way, or more strictly.
+    """
     try:
         from urllib.parse import urlparse
 
-        return (urlparse(_with_scheme(url)).hostname or "").lower().rstrip(".")
+        host = urlparse(_with_scheme(url)).hostname or ""
+        if not host:
+            return None
+        try:
+            return str(ipaddress.ip_address(host))
+        except ValueError:
+            pass
+        # ASCII hosts pass through as the client sends them (IDNA would
+        # reject e.g. `neotoma_api`); only non-ASCII hosts need mapping.
+        # Strip the trailing dot only after mapping: a trailing U+3002 is a
+        # dot only once mapped.
+        if not host.isascii():
+            host = _idna_ascii(host)
+        host = host.lower().rstrip(".")
+        return host or None
     except Exception:
-        return ""
+        return None
 
 
 def url_origin(url: str) -> str:
@@ -109,9 +151,16 @@ def url_origin(url: str) -> str:
         parsed = urlparse(_with_scheme(url))
         scheme = (parsed.scheme or "").lower()
         port = parsed.port or (443 if scheme == "https" else 80)
-        return f"{scheme}://{url_host(url)}:{port}"
+        host = url_host(url)
+        if host is None:
+            return ""
+        return f"{scheme}://{host}:{port}"
     except Exception:
         return ""
+
+
+def is_unreadable_url(url: str) -> bool:
+    return url_host(url) is None
 
 
 def is_public_sandbox(url: str) -> bool:
@@ -173,11 +222,16 @@ def resolve_token(base_url: str, environ: Any = None) -> str | None:
     token = (environ.get("NEOTOMA_TOKEN") or "").strip()
     if not token:
         return None
+    if is_unreadable_url(base_url) or is_public_sandbox(base_url):
+        return None
     if base_url.strip().lower().startswith("http://") and not is_loopback(base_url):
         return None
     paired = (environ.get("NEOTOMA_BASE_URL") or "").strip()
     if paired:
-        return token if url_origin(paired) == url_origin(base_url) else None
+        paired_origin, base_origin = url_origin(paired), url_origin(base_url)
+        if not paired_origin or not base_origin:
+            return None
+        return token if paired_origin == base_origin else None
     return token if is_loopback(base_url) else None
 
 
@@ -190,6 +244,12 @@ def status_message(environ: Any = None) -> str | None:
     """One user-visible line about capture, or None when all is well."""
     environ = os.environ if environ is None else environ
     base, source = resolve_neotoma_url(environ)
+    if is_unreadable_url(base):
+        return (
+            f"Neotoma: could not read the host in the Neotoma URL {base!r}, so "
+            "lifecycle capture is off. Check /plugin > neotoma > Configure options > "
+            "Neotoma MCP URL, or NEOTOMA_BASE_URL."
+        )
     if is_public_sandbox(base):
         return (
             "Neotoma: connected to the shared public sandbox, so lifecycle capture is off. "
@@ -216,8 +276,12 @@ NEOTOMA_TOKEN = resolve_token(NEOTOMA_BASE_URL)
 
 
 def capture_enabled() -> bool:
-    """False on the public sandbox: the hooks then make no requests at all."""
-    return not is_public_sandbox(NEOTOMA_BASE_URL)
+    """False on the public sandbox, or when the URL's host cannot be read.
+
+    Every hook network call checks this; when it is False the hooks make no
+    requests at all.
+    """
+    return not is_unreadable_url(NEOTOMA_BASE_URL) and not is_public_sandbox(NEOTOMA_BASE_URL)
 
 
 def log(level: str, message: str) -> None:
@@ -259,7 +323,10 @@ def get_client() -> Any | None:
         # capture every prompt and reply, so they never write there; the
         # connector (agent-driven, deliberate writes) still works. The
         # SessionStart hook tells the user (status_message()).
-        log("warn", "Neotoma is the public sandbox; lifecycle capture is off.")
+        if is_unreadable_url(NEOTOMA_BASE_URL):
+            log("warn", "Neotoma URL host could not be read; lifecycle capture is off.")
+        else:
+            log("warn", "Neotoma is the public sandbox; lifecycle capture is off.")
         return None
     if NeotomaClient is None:
         log(

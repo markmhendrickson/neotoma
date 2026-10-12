@@ -78,8 +78,11 @@ function runPython(args: string[], vars: Vars, input = ""): string {
   return res.stdout.trim();
 }
 
-function probe(vars: Vars): Probe {
-  return JSON.parse(runPython(["-c", PROBE], vars)) as Probe;
+function probe(vars: Vars, opts: { blockIdna?: boolean } = {}): Probe {
+  // blockIdna exercises the stdlib IDNA fallback used when the idna package
+  // (an httpx dependency) is not importable.
+  const script = opts.blockIdna ? `import sys\nsys.modules["idna"] = None\n${PROBE}` : PROBE;
+  return JSON.parse(runPython(["-c", script], vars)) as Probe;
 }
 
 function normalize(url: string): string {
@@ -206,6 +209,116 @@ describe("Claude plugin hooks never capture into the public sandbox", () => {
     expect(r.status).toMatch(/public sandbox.*capture is off/);
   });
 
+  // The transport (httpx) maps Unicode full stops and IDNA forms to the ASCII
+  // host, so the guard must too, or the sandbox check is bypassed.
+  const IDEOGRAPHIC = "\u3002";
+  const FULLWIDTH = "\uff0e";
+  const HALFWIDTH = "\uff61";
+  const separatorVariants = (host: string): string[] => {
+    const labels = host.split(".");
+    return [
+      ...[IDEOGRAPHIC, FULLWIDTH, HALFWIDTH].map((sep) => `https://${labels.join(sep)}/mcp`),
+      `https://${labels[0]}${IDEOGRAPHIC}${labels.slice(1).join(FULLWIDTH)}/mcp`,
+      `https://${labels.join(HALFWIDTH)}${IDEOGRAPHIC}/mcp`,
+      `https://${labels.join(".")}${FULLWIDTH}/mcp`,
+    ];
+  };
+  const fullwidthUpper = (s: string): string =>
+    [...s.toUpperCase()]
+      .map((ch) => (/[A-Z]/.test(ch) ? String.fromCharCode(ch.charCodeAt(0) + 0xfee0) : ch))
+      .join("");
+  const UNICODE_SANDBOX_URLS = ["sandbox.neotoma.io", "neotoma-sandbox.fly.dev"].flatMap((host) => [
+    ...separatorVariants(host),
+    `https://${fullwidthUpper(host.split(".")[0])}${IDEOGRAPHIC}${host.split(".").slice(1).join(FULLWIDTH)}/mcp`,
+    // Full-width letters and a soft hyphen: httpx refuses these, but the
+    // guard still recognises the sandbox (stricter than the client is safe).
+    `https://${fullwidthUpper(host)}/mcp`,
+    `https://${host.slice(0, 3)}\u00ad${host.slice(3)}/mcp`,
+  ]);
+
+  it.each(UNICODE_SANDBOX_URLS)(
+    "treats Unicode-separator form %s as the sandbox: capture off, visible notice",
+    (url) => {
+      const r = probe({ CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: url });
+      expect(r.capture).toBe(false);
+      expect(r.status).toMatch(/public sandbox.*capture is off/);
+    }
+  );
+
+  it.each(UNICODE_SANDBOX_URLS)(
+    "the same with the idna package unavailable (stdlib IDNA fallback): %s",
+    (url) => {
+      const r = probe({ CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: url }, { blockIdna: true });
+      expect(r.capture).toBe(false);
+      expect(r.status).toMatch(/public sandbox.*capture is off/);
+    }
+  );
+
+  it("fails closed: a host that cannot be read turns capture off", () => {
+    for (const url of [`https://\u00e4${"a".repeat(70)}.example/mcp`, "https://:3080/mcp"]) {
+      for (const blockIdna of [false, true]) {
+        const r = probe({ CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: url }, { blockIdna });
+        expect(r.capture).toBe(false);
+        expect(r.status).toMatch(/could not read the host.*capture is off/);
+      }
+    }
+  });
+
+  it("whenever capture is on, the httpx transport is not sending to the sandbox", () => {
+    // Ties the guard to the client: any spelling httpx maps to a sandbox host
+    // must turn capture off, including spellings added in future httpx/idna.
+    const urls = [
+      ...UNICODE_SANDBOX_URLS,
+      "https://SANDBOX.neotoma.io./mcp",
+      "https://sandbox%2Eneotoma.io/mcp",
+      "https://u:p@sandbox.neotoma.io:443/mcp",
+      "https://mine.example/mcp",
+      "http://neotoma_api:3080/mcp",
+      "http://127.0.0.1:3080/mcp",
+      "https://[::1]:3080/mcp",
+    ];
+    const out = runPython(
+      [
+        "-c",
+        `
+import json, os, sys
+sys.path.insert(0, ${JSON.stringify(HOOKS_DIR)})
+import httpx, importlib
+res = []
+for u in json.loads(sys.argv[1]):
+    os.environ["CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL"] = u
+    import _common as c
+    c = importlib.reload(c)
+    try:
+        t = httpx.URL(c.NEOTOMA_BASE_URL).host.lower().rstrip(".")
+    except Exception:
+        t = None
+    res.append([u, c.capture_enabled(), t])
+print(json.dumps(res))
+`,
+        JSON.stringify(urls),
+      ],
+      {}
+    );
+    const rows = JSON.parse(out) as Array<[string, boolean, string | null]>;
+    const SANDBOX_HOSTS = ["sandbox.neotoma.io", "neotoma-sandbox.fly.dev"];
+    for (const [url, capture, transport] of rows) {
+      if (capture)
+        expect({ url, transport: SANDBOX_HOSTS.includes(transport ?? "") }).toEqual({
+          url,
+          transport: false,
+        });
+    }
+    // Positive control: the probe really resolves hosts, and plain hosts capture.
+    expect(rows.filter(([, c]) => c).map(([u]) => u)).toEqual([
+      "https://sandbox%2Eneotoma.io/mcp",
+      "https://mine.example/mcp",
+      "http://neotoma_api:3080/mcp",
+      "http://127.0.0.1:3080/mcp",
+      "https://[::1]:3080/mcp",
+    ]);
+  });
+
   it("captures for any other Neotoma", () => {
     const r = probe({
       ...IN_PLUGIN,
@@ -262,6 +375,43 @@ describe("Claude plugin hooks send NEOTOMA_TOKEN only to its own Neotoma", () =>
 
   it("never sends it over plain http to a non-local host", () => {
     const r = probe({ NEOTOMA_BASE_URL: "http://mine.example", NEOTOMA_TOKEN: "tok" });
+    expect(r.token).toBeNull();
+  });
+
+  it("loopback hosts, IPv6 included, still count as local and get the token", () => {
+    for (const url of [
+      "http://127.0.0.1:3080/mcp",
+      "http://[::1]:3080/mcp",
+      "http://localhost:3080/mcp",
+    ]) {
+      const r = probe({
+        ...IN_PLUGIN,
+        CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: url,
+        NEOTOMA_TOKEN: "tok",
+      });
+      expect({ url, capture: r.capture, token: r.token }).toEqual({
+        url,
+        capture: true,
+        token: "tok",
+      });
+    }
+  });
+
+  it("never pairs the token with a URL whose host cannot be read", () => {
+    const r = probe({
+      ...IN_PLUGIN,
+      CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: "https://:443/mcp",
+      NEOTOMA_BASE_URL: "https://:443",
+      NEOTOMA_TOKEN: "tok",
+    });
+    expect(r.token).toBeNull();
+    expect(r.capture).toBe(false);
+  });
+
+  it("does not send the token to a Unicode spelling of the sandbox", () => {
+    const url = "https://sandbox\u3002neotoma\u3002io";
+    const r = probe({ NEOTOMA_BASE_URL: url, NEOTOMA_TOKEN: "tok" });
+    expect(r.capture).toBe(false);
     expect(r.token).toBeNull();
   });
 

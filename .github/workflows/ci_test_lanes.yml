@@ -74,6 +74,17 @@ jobs:
       - name: Build server (required by CLI tests)
         run: npm run build:server
 
+      # tests/unit/claude_plugin_hook_url.test.ts runs the plugin's Python hooks
+      # and checks their sandbox guard against the httpx transport they send
+      # through, so the httpx branch needs httpx installed.
+      - name: Setup Python for claude-code-plugin hook tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install claude-code-plugin hook dependencies
+        run: python -m pip install httpx
+
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
 
