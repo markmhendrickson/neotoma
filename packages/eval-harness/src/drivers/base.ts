@@ -95,8 +95,14 @@ export const NEOTOMA_TOOL_NAMES = new Set<string>(Object.keys(TOOL_ENDPOINTS));
  * `manage_bundles` mutates bundle state, which deliberately has no REST
  * mutation route; replaying it over MCP exercises the real tool handler.
  * A scenario can route other tools the same way with `replay_over_mcp`.
+ *
+ * "No REST route" means absent from MCP_TOOL_TO_OPERATION_ID in
+ * src/shared/contract_mappings.ts; it is not "MCP-only" (no CLI equivalent).
+ * This package cannot import from the root src/ (rootDir: "src"), so
+ * tests/contract/eval_harness_no_rest_route_parity.test.ts keeps this list
+ * in step with the canonical maps.
  */
-export const NEOTOMA_MCP_ONLY_TOOL_NAMES = new Set<string>(["manage_bundles"]);
+export const NEOTOMA_NO_REST_ROUTE_TOOL_NAMES = new Set<string>(["manage_bundles"]);
 
 const MCP_PROTOCOL_VERSION = "2026-07-28";
 
@@ -242,8 +248,8 @@ export async function replayCassetteAgainstServer(
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };
     const overMcp =
-      NEOTOMA_MCP_ONLY_TOOL_NAMES.has(call.name) ||
-      (invocation.scenario.replay_over_mcp ?? []).includes(call.name);
+      NEOTOMA_NO_REST_ROUTE_TOOL_NAMES.has(call.name) ||
+      (invocation.scenario?.replay_over_mcp ?? []).includes(call.name);
     if (overMcp) {
       result = await callNeotomaMcpTool(
         invocation.neotomaBaseUrl,

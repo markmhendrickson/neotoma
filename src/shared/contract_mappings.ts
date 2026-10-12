@@ -925,6 +925,17 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   },
 ];
 
+/**
+ * Two distinct "MCP tool without X" ideas; keep them apart:
+ *
+ * - No REST route: the tool is ABSENT from MCP_TOOL_TO_OPERATION_ID. Such a
+ *   tool is reachable only over MCP (and its CLI equivalent, if mapped in
+ *   MCP_TOOL_TO_CLI_COMMAND). The eval harness's
+ *   NEOTOMA_NO_REST_ROUTE_TOOL_NAMES lists the ones it replays over `/mcp`.
+ * - MCP-only: the tool has NO CLI equivalent at all (neither an operationId
+ *   nor a MCP_TOOL_TO_CLI_COMMAND entry). MCP_ONLY_TOOLS names these, and the
+ *   parity contract pins it empty.
+ */
 export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   retrieve_file_url: "getFileUrl",
   retrieve_entity_snapshot: "getEntitySnapshot",
@@ -1010,6 +1021,8 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   patch_array_item: "array-item patch <entityId> <entityType> <field> <keyField> <keyValue>",
   create_interpretation: "interpretations create",
   list_interpretations: "interpretations list",
+  // No REST route: bundle mutations go through the MCP tool or this CLI.
+  manage_bundles: "bundles <action> [bundle]",
 };
 
 export function getOpenApiOperationMapping(
