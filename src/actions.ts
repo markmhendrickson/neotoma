@@ -10194,25 +10194,28 @@ app.post("/get_entity_snapshot", async (req, res) => {
   // entity_snapshots table read.
   if (at || at_ingested || include_cleared_fields) {
     try {
-      const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-      const ownedEntity = await getEntityWithProvenance(entity_id, true, userId);
-      if (!ownedEntity) return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-      const result = await computeEntitySnapshotAtTime(
-        ownedEntity.entity_id,
-        userId,
-        at,
-        at_ingested,
-        {
-          includeClearedFields: include_cleared_fields,
-        }
-      );
-      if (include_cleared_fields && !at && !at_ingested) {
-        const { isEntityDeleted } = await import("./services/deletion.js");
-        if (result && (await isEntityDeleted(result.entity_id, userId)))
-          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-      }
+      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested, {
+        includeClearedFields: include_cleared_fields,
+      });
       if (result === null) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      // The replay already resolved aliases with cycle and depth guards.
+      // Read owner metadata from that exact resolved row, without a second
+      // unbounded detail traversal or a reducer-authored ownership fallback.
+      const { data: ownedEntity, error: ownerError } = await db
+        .from("entities")
+        .select("id, user_id")
+        .eq("id", result.entity_id)
+        .eq("user_id", userId)
+        .single();
+      if (ownerError || !ownedEntity || ownedEntity.user_id !== userId) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      if (include_cleared_fields && !at && !at_ingested) {
+        const { isEntityDeleted } = await import("./services/deletion.js");
+        if (await isEntityDeleted(result.entity_id, userId))
+          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
       logDebug("Success:get_entity_snapshot:at_time", req, { entity_id, at, at_ingested });
       return res.json({ ...result, user_id: ownedEntity.user_id });
@@ -10240,13 +10243,29 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   // No cutoffs: return the existing owned materialized factual snapshot.
-  const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-  const ownedEntity = await getEntityWithProvenance(entity_id, false, userId);
-  if (!ownedEntity) return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+  const { resolveAttachmentTarget } = await import("./services/attachment_resolution.js");
+  const target = await resolveAttachmentTarget(entity_id, userId);
+  if (target.truncated) {
+    return sendError(
+      res,
+      500,
+      "DB_QUERY_FAILED",
+      "Entity lifecycle authority acquisition is incomplete or inconsistent"
+    );
+  }
+  const { data: ownedEntity, error: ownerError } = await db
+    .from("entities")
+    .select("id, user_id")
+    .eq("id", target.resolvedEntityId)
+    .eq("user_id", userId)
+    .single();
+  if (ownerError || !ownedEntity || ownedEntity.user_id !== userId) {
+    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+  }
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")
-    .eq("entity_id", ownedEntity.entity_id)
+    .eq("entity_id", ownedEntity.id)
     .eq("user_id", userId)
     .single();
 

@@ -42,6 +42,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { MAX_ATTACHMENT_RESOLUTION_DEPTH } from "../../src/services/attachment_resolution.js";
 import { canonicalAauthAuthority, routeAllowsLocalIssueWriteFallback } from "../../src/actions.js";
 import { mintCliAgentTokenJwt, type LoadedSignerConfig } from "../../src/cli/aauth_signer.js";
 import {
@@ -250,6 +251,69 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
       }
     );
     expect(JSON.parse(stdout).user_id).toBe(PARITY_USER_ID);
+  });
+
+  it("refuses cyclic and over-depth aliases on historical and cleared reads", async () => {
+    const prefix = `ent_owner_bound_${randomUUID().replace(/-/g, "")}`;
+    const cycle = [`${prefix}_cycle_a`, `${prefix}_cycle_b`];
+    const crossOwner = [`${prefix}_local_alias`, `${prefix}_foreign_target`];
+    const deep = Array.from(
+      { length: MAX_ATTACHMENT_RESOLUTION_DEPTH + 2 },
+      (_, index) => `${prefix}_depth_${index}`
+    );
+    createdEntityIds.push(...cycle, ...crossOwner, ...deep);
+    for (const id of [...cycle, ...crossOwner, ...deep]) {
+      const inserted = await db.from("entities").insert({
+        id,
+        entity_type: "note",
+        canonical_name: id,
+        user_id: id === crossOwner[1] ? "22222222-2222-4222-8222-222222222222" : PARITY_USER_ID,
+      });
+      expect(inserted.error).toBeNull();
+    }
+    for (const [from, to] of [
+      [cycle[0], cycle[1]],
+      [cycle[1], cycle[0]],
+      [crossOwner[0], crossOwner[1]],
+      ...deep.slice(0, -1).map((id, index) => [id, deep[index + 1]]),
+    ]) {
+      const updated = await db.from("entities").update({ merged_to_entity_id: to }).eq("id", from);
+      expect(updated.error).toBeNull();
+    }
+    for (const projection of [{ at: new Date().toISOString() }, { include_cleared_fields: true }]) {
+      for (const id of [cycle[0], deep[0]]) {
+        const response = await callHttp(offline.base, "/get_entity_snapshot", {
+          entity_id: id,
+          ...projection,
+        });
+        expect(response.status).toBe(500);
+        expect(JSON.stringify(response.json)).toContain(
+          "Entity lifecycle authority acquisition is incomplete or inconsistent"
+        );
+      }
+      for (const id of [deep.at(-1)!, deep.at(-2)!]) {
+        const response = await callHttp(offline.base, "/get_entity_snapshot", {
+          entity_id: id,
+          ...projection,
+        });
+        expect(response.status).toBe(200);
+        expect(response.json.user_id).toBe(PARITY_USER_ID);
+        expect(response.json.entity_id).toBe(deep.at(-1));
+      }
+      const denied = await callHttp(offline.base, "/get_entity_snapshot", {
+        entity_id: crossOwner[0],
+        ...projection,
+      });
+      expect(denied.status).toBe(404);
+      expect(JSON.stringify(denied.json)).not.toContain(crossOwner[1]);
+    }
+    for (const id of [cycle[0], deep[0]]) {
+      const current = await callHttp(offline.base, "/get_entity_snapshot", { entity_id: id });
+      expect(current.status).toBe(500);
+      expect(JSON.stringify(current.json)).toContain(
+        "Entity lifecycle authority acquisition is incomplete or inconsistent"
+      );
+    }
   });
 
   it("does not disclose the new owner to guests or expand an alias grant", async () => {
