@@ -5,8 +5,8 @@
 REPO_ROOT="$(cd "$(dirname -- "$0")/.." && pwd)"
 
 
-# 1) Worktree dev env: in a linked worktree, write a minimal non-secret .env.development
-#    (never copies credentials). The linked worktree is detected from git itself, so this
+# 1) Worktree env: in a linked worktree, call the no-write default mode.
+#    The linked worktree is detected from git itself, so this
 #    works whether the hook runs from the main checkout (`git worktree add`) or from the
 #    worktree's own .husky directory (later checkouts). Husky runs hooks with `sh -e`,
 #    hence the `|| true` on each probe.
@@ -15,13 +15,13 @@ GIT_DIR_ABS="$(abs_dir "$(git rev-parse --git-dir 2>/dev/null)")" || true
 GIT_COMMON_ABS="$(abs_dir "$(git rev-parse --git-common-dir 2>/dev/null)")" || true
 WORKTREE_PATH="$(git rev-parse --show-toplevel 2>/dev/null)" || true
 if [ -n "$GIT_DIR_ABS" ] && [ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ] && [ -n "$WORKTREE_PATH" ]; then
-  ENV_SCRIPT="$REPO_ROOT/scripts/write-worktree-dev-env.js"
-  [ -f "$ENV_SCRIPT" ] || ENV_SCRIPT="$WORKTREE_PATH/scripts/write-worktree-dev-env.js"
+  ENV_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
+  [ -f "$ENV_SCRIPT" ] || ENV_SCRIPT="$WORKTREE_PATH/scripts/copy-env-to-worktree.js"
   if [ -f "$ENV_SCRIPT" ] && command -v node >/dev/null 2>&1; then
     (cd "$WORKTREE_PATH" && node "$ENV_SCRIPT") ||
-      echo "[worktree-env] Could not write the dev env file. Run: npm run setup:worktree-env" >&2
+      echo "[worktree-env] Bootstrap check failed. Run: npm run copy:env" >&2
   else
-    echo "[worktree-env] Skipped: node or the generator script was not found. Run: npm run setup:worktree-env" >&2
+    echo "[worktree-env] Skipped: node or bootstrap script was not found. Run: npm run copy:env" >&2
   fi
 fi
 

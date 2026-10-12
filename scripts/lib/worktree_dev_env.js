@@ -21,7 +21,7 @@ import {
   readFileSync,
   renameSync,
   unlinkSync,
-  writeSync,
+  writeFileSync,
 } from 'node:fs';
 import path, { join } from 'node:path';
 
@@ -155,7 +155,7 @@ function createExclusive(path, contents) {
     throw error;
   }
   try {
-    writeSync(fd, contents);
+    writeFileSync(fd, contents);
   } finally {
     closeSync(fd);
   }
@@ -195,7 +195,16 @@ export function writeWorktreeDevEnv(repoRoot, { force = false } = {}) {
   if (existing && !force) {
     return { status: 'kept', destination };
   }
-  const contents = buildWorktreeDevEnv(repoRoot);
+  return writeWorktreeEnvContents(repoRoot, buildWorktreeDevEnv(repoRoot), { force });
+}
+
+/** Write selected env contents with the same destination confinement as safe defaults. */
+export function writeWorktreeEnvContents(repoRoot, contents, { force = false } = {}) {
+  const destination = join(repoRoot, '.env.development');
+  const existing = inspectDestination(destination);
+  if (existing && !force) {
+    return { status: 'kept', destination };
+  }
   if (existing) {
     replaceDestination(repoRoot, destination, contents);
     return { status: 'written', destination };

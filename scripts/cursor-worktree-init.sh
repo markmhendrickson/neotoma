@@ -10,22 +10,21 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR/..")
 
 echo "Setting up Cursor worktree..."
 
-# Write a minimal, non-secret .env.development (credentials are never copied)
-if [ ! -f "$SCRIPT_DIR/write-worktree-dev-env.js" ]; then
-  echo "Error: worktree setup failed: $SCRIPT_DIR/write-worktree-dev-env.js not found." >&2
-  echo "Fix the checkout, then run: npm run setup:worktree-env" >&2
+# Automatic bootstrap uses the shared no-write default.
+if [ ! -f "$SCRIPT_DIR/copy-env-to-worktree.js" ]; then
+  echo "Error: worktree setup failed: bootstrap script not found." >&2
+  echo "Fix the checkout, then run: npm run copy:env" >&2
   exit 1
 fi
-echo "Writing non-secret dev environment file..."
-if ! node "$SCRIPT_DIR/write-worktree-dev-env.js"; then
-  echo "Error: worktree setup failed: could not write the dev env file." >&2
-  echo "Retry with: npm run setup:worktree-env" >&2
+echo "Checking worktree environment (no file written by default)..."
+if ! node "$SCRIPT_DIR/copy-env-to-worktree.js"; then
+  echo "Error: worktree setup failed: bootstrap check failed." >&2
+  echo "Retry with: npm run copy:env" >&2
   exit 1
 fi
 
 echo "✓ Worktree setup complete"
 echo ""
-echo "If the dev server fails to start, regenerate the non-secret dev env file"
-echo "(this replaces an existing .env.development):"
-echo "  npm run setup:worktree-env -- --force"
-echo "Credentials are never copied into a worktree; set any you need yourself."
+echo "To create a keys-only template: npm run copy:env -- --template"
+echo "To copy a local env deliberately: npm run copy:env -- --live"
+echo "For non-secret dev defaults: npm run setup:worktree-env"

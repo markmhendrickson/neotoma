@@ -28,10 +28,7 @@ import path, { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  WORKTREE_DEV_ENV_ALLOWLIST,
-  buildWorktreeDevEnv,
-} from "../../scripts/lib/worktree_dev_env.js";
+import { buildWorktreeDevEnv } from "../../scripts/lib/worktree_dev_env.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HUSKY_BIN = join(REPO_ROOT, "node_modules", ".bin", "husky");
@@ -48,10 +45,14 @@ function gitNoHooks(cwd: string, args: string[], home: string) {
   return execFileSync(
     "git",
     [
-      "-c", "user.name=t",
-      "-c", "user.email=t@example.invalid",
-      "-c", "commit.gpgsign=false",
-      "-c", "core.hooksPath=/dev/null",
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "-c",
+      "core.hooksPath=/dev/null",
       ...args,
     ],
     { cwd, stdio: "pipe", env: cleanEnv(home) }
@@ -67,13 +68,6 @@ function copyInto(root: string, relPath: string) {
   const target = join(root, relPath);
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(join(REPO_ROOT, relPath), target);
-}
-
-function keysOf(content: string): string[] {
-  return content
-    .split("\n")
-    .map((l) => /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l)?.[1])
-    .filter((k): k is string => Boolean(k));
 }
 
 interface Fixture {
@@ -96,6 +90,7 @@ function buildMainCheckout(): Fixture {
   gitNoHooks(main, ["init", "-q", "-b", "main"], home);
   writeFileSync(join(main, "package.json"), JSON.stringify({ name: "neotoma", type: "module" }));
   for (const rel of [
+    "scripts/copy-env-to-worktree.js",
     "scripts/write-worktree-dev-env.js",
     "scripts/lib/worktree_dev_env.js",
     "scripts/lib/dev_env_files.js",
@@ -127,35 +122,32 @@ describe("post-checkout hook in a real linked worktree", () => {
   const worktree = () => join(fx.root, "wt");
   const generated = () => join(worktree(), ".env.development");
 
-  it("git worktree add produces the non-secret .env.development with no manual step", () => {
+  it("git worktree add leaves .env.development absent despite a live source", () => {
     // A credential-bearing file in the main checkout must not be carried across.
     writeFileSync(join(fx.main, ".env"), `NEOTOMA_BEARER_TOKEN=${CANARY_VALUE}\n`);
 
     const add = gitWithHooks(fx.main, ["worktree", "add", worktree(), "-b", "wt-branch"], fx.home);
     expect(add.status, add.stderr).toBe(0);
 
-    expect(existsSync(generated())).toBe(true);
-    const content = readFileSync(generated(), "utf-8");
-    expect(keysOf(content)).toEqual(WORKTREE_DEV_ENV_ALLOWLIST.map((e) => e.key));
-    expect(content).toContain(`NEOTOMA_DATA_DIR=${join(worktree(), "data")}`);
-    expect(content).not.toContain(CANARY_VALUE);
+    expect(existsSync(generated())).toBe(false);
     expect(`${add.stdout}${add.stderr}`).not.toContain(CANARY_VALUE);
     rmSync(join(fx.main, ".env"), { force: true });
   });
 
-  it("a checkout run from the worktree's own hook path regenerates a missing file", () => {
+  it("a checkout run from the worktree's own hook path still leaves the file absent", () => {
     rmSync(generated(), { force: true });
     // `npm install` in the worktree generates its own Husky shims; hooks then run from its own path.
-    const husky = spawnSync(HUSKY_BIN, [], { cwd: worktree(), encoding: "utf-8", env: cleanEnv(fx.home) });
+    const husky = spawnSync(HUSKY_BIN, [], {
+      cwd: worktree(),
+      encoding: "utf-8",
+      env: cleanEnv(fx.home),
+    });
     expect(husky.status, husky.stderr).toBe(0);
 
     const checkout = gitWithHooks(worktree(), ["checkout", "-b", "second-branch"], fx.home);
     expect(checkout.status, checkout.stderr).toBe(0);
 
-    expect(existsSync(generated())).toBe(true);
-    expect(keysOf(readFileSync(generated(), "utf-8"))).toEqual(
-      WORKTREE_DEV_ENV_ALLOWLIST.map((e) => e.key)
-    );
+    expect(existsSync(generated())).toBe(false);
   });
 
   it("keeps a developer's existing settings on a later checkout", () => {
@@ -171,23 +163,23 @@ describe("post-checkout hook in a real linked worktree", () => {
     expect(existsSync(join(fx.main, ".env.development"))).toBe(false);
   });
 
-  it("reports a generator failure on stderr and never fails the checkout", () => {
+  it("reports a bootstrap failure on stderr and never fails the checkout", () => {
     rmSync(generated(), { force: true });
-    const original = readFileSync(join(worktree(), "scripts", "write-worktree-dev-env.js"), "utf-8");
-    writeFileSync(join(worktree(), "scripts", "write-worktree-dev-env.js"), "process.exit(3);\n");
+    const original = readFileSync(join(worktree(), "scripts", "copy-env-to-worktree.js"), "utf-8");
+    writeFileSync(join(worktree(), "scripts", "copy-env-to-worktree.js"), "process.exit(3);\n");
     try {
       const checkout = gitWithHooks(worktree(), ["checkout", "-b", "fourth-branch"], fx.home);
       expect(checkout.status, checkout.stderr).toBe(0);
       expect(checkout.stderr).toMatch(/\[worktree-env\].*(fail|could not)/i);
-      expect(checkout.stderr).toContain("npm run setup:worktree-env");
+      expect(checkout.stderr).toContain("npm run copy:env");
     } finally {
-      writeFileSync(join(worktree(), "scripts", "write-worktree-dev-env.js"), original);
+      writeFileSync(join(worktree(), "scripts", "copy-env-to-worktree.js"), original);
     }
   });
 });
 
 describe("scripts/cursor-worktree-init.sh", () => {
-  function initFixture(generatorSource: string | null) {
+  function initFixture(bootstrapSource: string | null) {
     const dir = realpathSync(mkdtempSync(join(fx.root, "init-")));
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "neotoma", type: "module" }));
     mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
@@ -195,17 +187,17 @@ describe("scripts/cursor-worktree-init.sh", () => {
       join(REPO_ROOT, "scripts", "cursor-worktree-init.sh"),
       join(dir, "scripts", "cursor-worktree-init.sh")
     );
-    if (generatorSource === null) {
+    if (bootstrapSource === null) {
       copyFileSync(
-        join(REPO_ROOT, "scripts", "write-worktree-dev-env.js"),
-        join(dir, "scripts", "write-worktree-dev-env.js")
+        join(REPO_ROOT, "scripts", "copy-env-to-worktree.js"),
+        join(dir, "scripts", "copy-env-to-worktree.js")
       );
       copyFileSync(
         join(REPO_ROOT, "scripts", "lib", "worktree_dev_env.js"),
         join(dir, "scripts", "lib", "worktree_dev_env.js")
       );
     } else {
-      writeFileSync(join(dir, "scripts", "write-worktree-dev-env.js"), generatorSource);
+      writeFileSync(join(dir, "scripts", "copy-env-to-worktree.js"), bootstrapSource);
     }
     return dir;
   }
@@ -217,25 +209,23 @@ describe("scripts/cursor-worktree-init.sh", () => {
       env: cleanEnv(fx.home),
     });
 
-  it("reports failure and exits non-zero when the generator fails", () => {
+  it("reports failure and exits non-zero when the bootstrap helper fails", () => {
     const dir = initFixture("process.stderr.write('simulated failure\\n'); process.exit(2);\n");
     const result = run(dir);
     const output = `${result.stdout}${result.stderr}`;
     expect(result.status).not.toBe(0);
     expect(output).not.toMatch(/Worktree setup complete/);
     expect(output).toMatch(/fail/i);
-    expect(output).toContain("npm run setup:worktree-env");
+    expect(output).toContain("npm run copy:env");
     expect(existsSync(join(dir, ".env.development"))).toBe(false);
   });
 
-  it("reports success, writes the file, and exits 0 when the generator succeeds", () => {
+  it("reports success without writing a file when bootstrap succeeds", () => {
     const dir = initFixture(null);
     const result = run(dir);
     expect(result.status, result.stderr).toBe(0);
     expect(`${result.stdout}${result.stderr}`).toMatch(/Worktree setup complete/);
-    expect(keysOf(readFileSync(join(dir, ".env.development"), "utf-8"))).toEqual(
-      WORKTREE_DEV_ENV_ALLOWLIST.map((e) => e.key)
-    );
+    expect(existsSync(join(dir, ".env.development"))).toBe(false);
   });
 });
 
@@ -360,7 +350,9 @@ describe("Windows-style data directories load in the development loaders", () =>
     });
     const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
     expect(line, `config did not load: ${result.stderr.slice(0, 500)}`).toBeDefined();
-    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(expectedDataDir(root));
+    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(
+      expectedDataDir(root)
+    );
   });
 
   it.each(WINDOWS_ROOTS)("scripts/dev-serve.js env loading applies it for %s", (root) => {
@@ -381,6 +373,8 @@ describe("Windows-style data directories load in the development loaders", () =>
     });
     const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
     expect(line, `loader failed: ${result.stderr.slice(0, 500)}`).toBeDefined();
-    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(expectedDataDir(root));
+    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(
+      expectedDataDir(root)
+    );
   });
 });

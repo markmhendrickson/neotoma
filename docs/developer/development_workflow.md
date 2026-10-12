@@ -63,7 +63,7 @@ cd ../neotoma-FU-XXX
 # Verify branch is based on main
 git branch --show-current  # Should show feature/FU-XXX-short-description
 git log --oneline -1       # Should show latest main commit
-# Setup worktree environment (writes a minimal non-secret .env.development; copies no credentials)
+# Optional: write non-secret dev defaults. Automatic setup leaves the env file absent.
 npm run setup:worktree-env
 # Install dependencies in worktree
 npm install
@@ -74,7 +74,7 @@ git push -u origin feature/FU-XXX-short-description
 - **Isolation:** Each Feature Unit has its own `node_modules`, `.env`, and build artifacts
 - **Parallel Development:** Work on multiple Feature Units simultaneously without conflicts
 - **Clean Context Switching:** Each worktree is independent
-- **Environment Management:** `scripts/write-worktree-dev-env.js` writes a minimal non-secret `.env.development` (data dir, environment, ports, base URL). It never copies credentials; set any you need yourself in your shell or your own gitignored `.env`
+- **Environment Management:** Automatic setup writes no env file. `npm run setup:worktree-env` deliberately writes non-secret development defaults. `npm run copy:env -- --template` writes blank keys from tracked `.env.example`; `npm run copy:env -- --live` explicitly copies local credentials with mode 0600. Use the live option only when this worktree needs it.
 - **Existing worktrees:** `npm run worktree:list-env` lists paths containing `.env`, `.env.dev`, or `.env.development` for manual review. It reads no values and removes nothing. The pre-commit hook refuses those exact basenames even when `.gitignore` is bypassed.
 **Alternative: Traditional Branching (if not using worktrees)**
 ```bash
@@ -295,7 +295,7 @@ Load when:
 1. **Always branch from `main`**: Cut feature, bugfix, and hotfix branches from `main`
 2. **One Feature Unit per branch**: Keep changes atomic
 3. **Use worktrees for isolation**: Each Feature Unit should have its own worktree when possible
-4. **Setup worktree environment**: Run `npm run setup:worktree-env` after creating worktree (writes non-secret dev settings only; never copy credentials into a worktree)
+4. **Setup worktree environment**: Automatic setup leaves env files absent. Run `npm run setup:worktree-env` for non-secret dev settings, or explicitly choose `npm run copy:env -- --template` or `npm run copy:env -- --live` as needed.
 5. **Reference Feature Unit ID**: In commit messages and PR titles
 6. **Follow commit message format**: Include "References:" line
 7. **Verify tests pass**: Before creating PR

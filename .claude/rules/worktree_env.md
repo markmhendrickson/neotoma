@@ -7,18 +7,18 @@ alwaysApply: false
 
 When working in a git worktree (especially Cursor worktrees):
 
-1. Worktree setup writes a minimal, **non-secret** `.env.development` from an explicit allowlist (environment, data directory, ports, API base URL). It does **not** copy any env file.
-2. To (re)generate it in the current worktree, run:
+1. Automatic worktree setup uses `none`: it leaves `.env.development` absent and does not read live env sources. Existing files remain untouched for manual review.
+2. To generate minimal, **non-secret** development defaults deliberately, run:
    - `npm run setup:worktree-env`
    - or `node scripts/write-worktree-dev-env.js` (`--force` overwrites an existing file; `--help` explains)
-3. The `post-checkout` hook and `.cursor/worktrees.json` call the same generator automatically.
-4. The generator reads nothing outside the repository: not the home directory, not `~/.config/neotoma`, not another checkout.
-5. Credentials are never copied into a worktree. If a task needs credentials, the developer sets them deliberately (shell environment, or their own gitignored `.env` in the worktree).
+3. The `post-checkout` hook, Cursor setup, and `cursor-worktree-init.sh` call `scripts/copy-env-to-worktree.js` at its no-write default.
+4. `npm run copy:env -- --template` writes blank keys from tracked `.env.example` only. `npm run copy:env -- --live` explicitly copies a local env source with mode 0600. Neither mode runs automatically; use `--force` only to replace an existing destination.
+5. Credentials are never copied automatically. A developer can instead provide them deliberately in the shell or use the explicit `--live` command when authorized.
 6. Env files are gitignored and MUST NOT be committed.
 7. The pre-commit hook also rejects staged files named `.env`, `.env.dev`, or `.env.development`, even if ignore rules are bypassed. Run `npm run worktree:list-env` to list possible existing env copies by path; it does not read values or delete files.
 
 Agents should:
 
 - Suggest `npm run setup:worktree-env` when a worktree is missing its dev env file
-- Never copy, print, or commit `.env*` files or any private config file
-- Never copy credentials from the main checkout or the home directory into a worktree
+- Never copy credentials automatically, print env values, or commit `.env*` files
+- Use explicit `--live` only when the worktree needs it; run `npm run worktree:list-env` to review stale copies
