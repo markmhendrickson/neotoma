@@ -75,6 +75,7 @@ git push -u origin feature/FU-XXX-short-description
 - **Parallel Development:** Work on multiple Feature Units simultaneously without conflicts
 - **Clean Context Switching:** Each worktree is independent
 - **Environment Management:** `scripts/write-worktree-dev-env.js` writes a minimal non-secret `.env.development` (data dir, environment, ports, base URL). It never copies credentials; set any you need yourself in your shell or your own gitignored `.env`
+- **Existing worktrees:** `npm run worktree:list-env` lists paths containing `.env`, `.env.dev`, or `.env.development` for manual review. It reads no values and removes nothing. The pre-commit hook refuses those exact basenames even when `.gitignore` is bypassed.
 **Alternative: Traditional Branching (if not using worktrees)**
 ```bash
 # Ensure you're on main and up to date

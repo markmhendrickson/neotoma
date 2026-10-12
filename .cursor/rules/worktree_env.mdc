@@ -14,6 +14,7 @@ When working in a git worktree (especially Cursor worktrees):
 4. The generator reads nothing outside the repository: not the home directory, not `~/.config/neotoma`, not another checkout.
 5. Credentials are never copied into a worktree. If a task needs credentials, the developer sets them deliberately (shell environment, or their own gitignored `.env` in the worktree).
 6. Env files are gitignored and MUST NOT be committed.
+7. The pre-commit hook also rejects staged files named `.env`, `.env.dev`, or `.env.development`, even if ignore rules are bypassed. Run `npm run worktree:list-env` to list possible existing env copies by path; it does not read values or delete files.
 
 Agents should:
 - Suggest `npm run setup:worktree-env` when a worktree is missing its dev env file

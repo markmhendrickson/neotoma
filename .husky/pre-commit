@@ -38,6 +38,9 @@ on_hook_exit() {
 trap on_hook_exit EXIT
 # ---------------------------------------------------------------------------
 
+# Refuse exact env filenames in the index, independently of .gitignore.
+node scripts/deny-staged-env-files.js || exit 1
+
 pick_free_port() {
   node scripts/pick-port.js "$1"
 }
