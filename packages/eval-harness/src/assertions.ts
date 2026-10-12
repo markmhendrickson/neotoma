@@ -579,6 +579,21 @@ export async function evaluatePredicate(
           };
         }
       }
+      // (a2) result_contains substring check over the serialized result.
+      if (predicate.result_contains !== undefined) {
+        const serialized =
+          typeof result === "string" ? result : JSON.stringify(result ?? null);
+        if (!serialized.includes(predicate.result_contains)) {
+          return {
+            predicate,
+            message: `Expected tool_result["${predicate.tool_name}"] to contain ${JSON.stringify(
+              predicate.result_contains,
+            )}, but it did not.`,
+            expected: { result_contains: predicate.result_contains },
+            actual: result,
+          };
+        }
+      }
       // (b) result_subset structural match.
       if (predicate.result_subset) {
         if (!isSubset(result, predicate.result_subset)) {

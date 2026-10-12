@@ -50,9 +50,9 @@ describe("parseManifest", () => {
   });
 
   it("rejects a missing required field", () => {
-    expect(() =>
-      parseManifest(`version: 1.0.0\ndescription: x\nbundle_type: schema`)
-    ).toThrow(ManifestError);
+    expect(() => parseManifest(`version: 1.0.0\ndescription: x\nbundle_type: schema`)).toThrow(
+      ManifestError
+    );
   });
 
   it("rejects an invalid bundle_type", () => {
@@ -171,10 +171,17 @@ describe("default install (real bundle dirs)", () => {
   beforeEach(() => resetBundleRegistryForTesting());
   afterEach(() => resetBundleRegistryForTesting());
 
-  it("discovers exactly the three default bundles", () => {
+  it("discovers the three default bundles plus the opt-in schema bundles", () => {
     const reg = getBundleRegistry();
     const names = reg.bundles.map((b) => b.manifest.name).sort();
-    expect(names).toEqual(["core", "core_workflows", "infrastructure"]);
+    expect(names).toEqual([
+      "communications",
+      "core",
+      "core_workflows",
+      "crm",
+      "engineering",
+      "infrastructure",
+    ]);
   });
 
   it("core_workflows is a skill bundle requiring core with empty provides", () => {

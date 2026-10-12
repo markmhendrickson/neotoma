@@ -131,6 +131,55 @@ Uninstall is not supported. Bundles MAY be **disabled**:
 
 This removes the orphan-data problem that uninstall would introduce.
 
+## Opt-in schema bundles
+
+Beyond the default install, these schema bundles ship today. Each is disabled until installed (`neotoma bundles install <name>` or the `manage_bundles` MCP tool). Their scope comes from a usage audit of production data: a type ships only if it has real usage, and its field set is the generic subset of how it is written today. Deployment-specific or provider-specific fields stay in `raw_fragments`.
+
+| Bundle           | Provides                                                                                                                                                                        | References (shared)             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `crm`            | `company` (alias `organization`), `person`, `lead_update`, `lead_evaluation`, `opportunity`, `contact_group`, `icp`, `category_membership`, `outreach_interaction`              | `contact` (from `core`)         |
+| `engineering`    | `repository`, `pull_request`, `pr_review`, `pr_comment`, `issue_spec`, `security_finding`, `release_result`, `deployment_configuration`, `architectural_decision`, `bug_report` | `issue` (from `infrastructure`) |
+| `communications` | `email_message`, `email_thread`, `email_draft`, `email`                                                                                                                         | —                               |
+
+Deliberately excluded: `deal`, `account`, `engagement`, and `pipeline_stage` (no real usage), and post/social types (a later content bundle). Per-type docs live in each bundle's `record_types/` directory.
+
+### Bundle schemas and seeding
+
+A bundle-originated schema lives at `<bundle>/schemas/<entity_type>.ts` and is mapped to its bundle in `src/services/bundles/bundle_schemas.ts`. It is **not** added to the built-in `ENTITY_SCHEMAS`: a built-in is a code-level fallback present on every install, so the `guided` gate never runs for it. Keeping bundle schemas out of it means a bundle type is unprovided (rejected under `guided`) until its bundle is enabled.
+
+Some provided types already had built-in definitions (`company`, `person`, `pull_request`, `issue_spec`, `email`). The bundle reuses those definitions rather than duplicating them, and they stay built-ins, so they remain storable on every install whatever the bundle state. Moving them out of `ENTITY_SCHEMAS` would change behavior for existing `evolving` installs and is out of scope here.
+
+Enabling a bundle registers its schemas through the same additive seeder as the built-ins (`seedSchemaRegistryIfEmpty`): a type with an active global schema is left untouched, so seeding is idempotent and never reverts an operator's custom schema. Registered rows carry `metadata.bundle` and `metadata.bundle_version`. Seeding runs:
+
+- at server boot, for every enabled bundle (right after the built-in seeder);
+- immediately on `manage_bundles install|enable`, reported as `schema_seed` in the response.
+
+`manage_bundles` runs inside the server, so its changes apply at once. If seeding fails, the response keeps `ok: true` (the bundle is enabled), sets `schema_seed.ok: false`, and adds a top-level `warning`.
+
+`neotoma bundles install|enable|disable` from the CLI only writes the local bundle state file. A running server reads that file once at startup, so a CLI change reaches it at its next restart (when enabled bundles are also seeded), and never reaches a server on another machine. The CLI says so in its output. Use `manage_bundles` for immediate effect.
+
+`npm run bundles:check` enforces that a bundle's schemas and its `provides_entity_types` match exactly, and that every schema declares an identity rule.
+
+### Aliases
+
+A bundle schema's aliases are written to `schema_definition.aliases`, the field read for registered schemas: by the store path's type-equivalence check and by extraction-time alias resolution. After the bundle registers its schemas, a write under `contact_list`, `outreach_activity`, or `decision_record` lands on `contact_group`, `outreach_interaction`, or `architectural_decision`. Before that, these names are unknown types.
+
+Built-in aliases work differently, and the split matters for three bundle types. `email_message` and `email_thread` are aliases of the built-in `email`, and `bug_report` is an alias of the built-in `product_feedback`. Until the owning bundle has registered its schema, writes under those names resolve to the built-in. Once registered, the registered schema takes priority over the built-in alias.
+
+Enabling a bundle does not move existing data. Rows written under one of these names before the bundle registered its schema were stored as the built-in type (`email` or `product_feedback`) and stay there. Only writes after registration land on the bundle type. The same holds for a bundle alias such as `decision_record`: anything written under it before enabling became its own inferred type (or was rejected under `guided`) and is not re-typed.
+
+### Existing schemas keep priority
+
+Seeding registers GLOBAL schemas and never touches an existing one. Schema lookup prefers a schema scoped to the writing user over a global one. So on an instance where a type was already in use, the existing schema keeps governing that user's writes, whether it is a global row or a per-user schema inferred on first write. The bundle's curated field set applies to users and instances that had none.
+
+### Disable
+
+Disabling a bundle removes its types from the `guided` provided set. That gate only applies to types with no registered schema, so schemas the bundle already registered stay registered, and writes of those types still succeed. Disable does not block writes; it stops new auto-creation of the bundle's unregistered types. The `disable` message says this.
+
+In `guided` mode, the rejection for a type whose bundle is not enabled names that bundle and how to enable it. The same hint is given for a bundle alias (for example `contact_list`), naming the canonical type and its bundle.
+
+The `guided` gate runs on the MCP `store` handler and on extraction-time interpretation. The REST `POST /store` route does not consult the schema mode today, so a REST write of an unprovided type still auto-creates. That gap predates these bundles and is tracked as a follow-up.
+
 ## Use cases and bundles
 
 Use cases and bundles are many-to-many. A use case lists the set of bundles that together serve it; a bundle lists the use cases it contributes to (`serves_use_cases`). This decoupling lets a single bundle (e.g. `financial_ops`) serve many use cases (`diligence`, `portfolio`, `procurement`, `trading`) without duplication.
@@ -148,7 +197,7 @@ The 16 use cases under `docs/use_cases/` map to the following bundle composition
 | `compliance`         | `contracts`, `compliance`                        | `core_workflows` | Vendor risk and regulatory compliance.      |
 | `contracts`          | `contracts`                                      | `core_workflows` | Contract lifecycle management.              |
 | `crm`                | `crm`, `communications`                          | `core_workflows` | Customer relationship management.           |
-| `crypto_engineering` | `crypto_engineering`                             | `core_workflows` | Crypto and security engineering.            |
+| `crypto_engineering` | `engineering`                                    | `core_workflows` | Crypto and security engineering.            |
 | `customer_ops`       | `crm`, `customer_ops`                            | `core_workflows` | Support and CX operations.                  |
 | `diligence`          | `crm`, `financial_ops`, `contracts`, `diligence` | `core_workflows` | M&A and investment diligence.               |
 | `financial_ops`      | `financial_ops`                                  | `core_workflows` | Financial operations and accounting.        |
@@ -163,8 +212,9 @@ The 16 use cases under `docs/use_cases/` map to the following bundle composition
 ### Catalog notes
 
 - `cases` is treated as a single use case covering both legal cases and support investigation casework, per the existing `docs/use_cases/cases.md`. If usage diverges, a future split is possible without breaking the bundle model.
-- `communications` is referenced as a shared schema bundle by `crm`. It is not present as a standalone use case; its types are expected to live in `crm` until a second consumer triggers shared-schema ownership transfer.
-- New schema bundles introduced by this catalog (not yet implemented; m2 deliverable): `agent_auth`, `cases`, `compliance`, `crypto_engineering`, `customer_ops`, `diligence`, `government`, `healthcare`, `logistics`, `portfolio`, `procurement`, `trading`.
+- `communications` ships as its own schema bundle (email only) and is composed with `crm` by the `crm` use case. It is not present as a standalone use case.
+- `engineering` replaces the planned `devops` and `crypto_engineering` bundles; the `crypto_engineering` use case is served by it.
+- Schema bundles in this catalog not yet implemented: `agent_auth`, `cases`, `compliance`, `customer_ops`, `diligence`, `government`, `healthcare`, `logistics`, `portfolio`, `procurement`, `trading`.
 
 ## Related documents
 

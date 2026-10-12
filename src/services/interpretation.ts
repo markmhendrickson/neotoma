@@ -16,6 +16,7 @@ import {
   getSchemaDefinition,
   getRegisteredEntityTypes,
   resolveEntityTypeFromAlias,
+  resolveEntityTypeFromRegisteredAliases,
   refineEntityTypeFromExtractedFields,
 } from "./schema_definitions.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
@@ -407,7 +408,9 @@ export async function runInterpretation(
       // user-registered type like `organization` is not silently remapped to
       // the built-in `company` alias.
       if (!dbTypes.has(entityType) && !getSchemaDefinition(entityType)) {
-        const resolvedType = resolveEntityTypeFromAlias(entityType);
+        const resolvedType =
+          resolveEntityTypeFromAlias(entityType) ??
+          resolveEntityTypeFromRegisteredAliases(entityType, dbSchemas);
         if (resolvedType) entityType = resolvedType;
       }
       // Refine type by field fit (considers dynamic + code schemas when another schema fits better)

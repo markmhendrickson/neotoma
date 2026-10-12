@@ -1,0 +1,34 @@
+# Bundle manifest — see docs/foundation/bundles.md
+# Schema bundle, opt-in (install with `neotoma bundles install engineering`).
+# Replaces the planned `devops` and `crypto_engineering` bundles. Scope comes
+# from a usage audit of production data: only types with real usage ship.
+name: engineering
+version: 1.0.0
+description: Software engineering records — repositories, pull requests, reviews, findings, releases, deploys, decisions, bugs.
+bundle_type: schema
+requires_bundles:
+  - infrastructure
+provides_entity_types:
+  - repository
+  - pull_request
+  - pr_review
+  - pr_comment
+  - issue_spec
+  - security_finding
+  - release_result
+  - deployment_configuration
+  - architectural_decision
+  - bug_report
+# `issue` is originated by `infrastructure`; engineering reuses it without
+# moving or re-registering it (descriptor: ../_shared_schemas/issue.ts).
+references_shared_schemas:
+  - issue
+extends_schemas: []
+provides_skills: []
+compatible_modes:
+  - evolving
+  - guided
+  - locked
+category: engineering
+serves_use_cases:
+  - crypto_engineering

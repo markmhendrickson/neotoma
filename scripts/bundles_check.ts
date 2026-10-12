@@ -13,6 +13,12 @@
  *      have a descriptor in `_shared_schemas/<type>.ts` exporting `originated_by`.
  *   4. `requires_bundles` resolve to installed bundles (no missing deps, no
  *      cycles).
+ *   5. A bundle that ships schemas (`bundle_schemas.ts`) registers exactly the
+ *      types it lists in `provides_entity_types` — no undeclared schema, no
+ *      provided type without a schema — and each schema declares an identity
+ *      rule (`canonical_name_fields` or `identity_opt_out`, R2).
+ *   6. Bundle schema aliases are unambiguous: no alias is declared by two
+ *      schemas, and no alias equals a type some bundle provides.
  *
  * Exit 0 on success, 1 on any violation. Pure filesystem read; no network.
  *
@@ -23,7 +29,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ManifestError, loadBundlesFrom, resolveRequires } from "../src/services/bundles/index.js";
+import {
+  ManifestError,
+  bundlesWithSchemas,
+  getBundleSchemas,
+  loadBundlesFrom,
+  resolveRequires,
+} from "../src/services/bundles/index.js";
 import type { LoadedBundle } from "../src/services/bundles/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -105,6 +117,69 @@ for (const b of bundles) {
         `bundle "${b.manifest.name}" references shared schema "${type}" but ` +
           `_shared_schemas/${type}.ts is missing or lacks originated_by`
       );
+    }
+  }
+}
+
+// (5) bundle schemas match provides_entity_types.
+const bundleNames = new Set(bundles.map((b) => b.manifest.name));
+for (const name of bundlesWithSchemas()) {
+  if (!bundleNames.has(name)) {
+    fail(`bundle_schemas.ts maps schemas for "${name}" but no such bundle dir exists`);
+    continue;
+  }
+  const manifest = bundles.find((b) => b.manifest.name === name)!.manifest;
+  const provided = new Set(manifest.provides_entity_types);
+  const schemas = getBundleSchemas(name);
+  const schemaTypes = new Set<string>();
+  for (const schema of schemas) {
+    if (schemaTypes.has(schema.entity_type)) {
+      fail(`bundle "${name}": duplicate schema for "${schema.entity_type}"`);
+    }
+    schemaTypes.add(schema.entity_type);
+    if (!provided.has(schema.entity_type)) {
+      fail(
+        `bundle "${name}": ships a schema for "${schema.entity_type}" that is not in ` +
+          `provides_entity_types`
+      );
+    }
+    const def = schema.schema_definition;
+    if (def.canonical_name_fields === undefined && def.identity_opt_out === undefined) {
+      fail(
+        `bundle "${name}": schema "${schema.entity_type}" declares neither ` +
+          `canonical_name_fields nor identity_opt_out (R2)`
+      );
+    }
+  }
+  for (const type of provided) {
+    if (!schemaTypes.has(type)) {
+      fail(`bundle "${name}": provides "${type}" but ships no schema for it`);
+    }
+  }
+}
+
+// (6) aliases unambiguous across bundles.
+const allProvided = new Map<string, string>();
+for (const b of bundles) {
+  for (const t of b.manifest.provides_entity_types) allProvided.set(t, b.manifest.name);
+}
+const aliasOwner = new Map<string, string>();
+for (const name of bundlesWithSchemas()) {
+  for (const schema of getBundleSchemas(name)) {
+    for (const rawAlias of schema.schema_definition.aliases ?? []) {
+      const alias = rawAlias.trim().toLowerCase();
+      const owner = `${name}:${schema.entity_type}`;
+      const previous = aliasOwner.get(alias);
+      if (previous && previous !== owner) {
+        fail(`alias "${alias}" is declared by both ${previous} and ${owner}`);
+      }
+      aliasOwner.set(alias, owner);
+      const provider = allProvided.get(alias);
+      if (provider) {
+        fail(
+          `alias "${alias}" (on ${owner}) is also an entity type provided by bundle "${provider}"`
+        );
+      }
     }
   }
 }

@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "bundle_enable_guided_store",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-07T18:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Log a lead update for today's intro call: we agreed I send a proposal by Friday.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Persist what the user asks you to record. If a write is refused because a bundle is not enabled, enable that bundle and retry.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "bundle-enable-guided-store-attempt-1",
+        "entities": [
+          {
+            "entity_type": "lead_update",
+            "name": "Intro call",
+            "what_happened": "Intro call held.",
+            "commitments_made": "Send a proposal by Friday.",
+            "bespoke_score": "7"
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "manage_bundles",
+      "input": {
+        "action": "enable",
+        "bundle": "crm"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "bundle-enable-guided-store-attempt-2",
+        "entities": [
+          {
+            "entity_type": "lead_update",
+            "name": "Intro call",
+            "what_happened": "Intro call held.",
+            "commitments_made": "Send a proposal by Friday.",
+            "bespoke_score": "7"
+          }
+        ]
+      },
+      "sequence": 2
+    },
+    {
+      "name": "describe_entity_type",
+      "input": {
+        "entity_type": "lead_update"
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "The first save was refused: this instance runs in guided mode and lead updates come from the crm bundle, which was not enabled. I enabled crm and its schemas registered. The retried save succeeded; the lead update records that you will send a proposal by Friday."
+}

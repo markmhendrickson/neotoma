@@ -184,6 +184,17 @@ export function bundleProviding(entityType: string): string | undefined {
   return getBundleRegistry().providedEntityTypes.get(entityType);
 }
 
+/**
+ * Returns the bundle that DECLARES `entityType` in its `provides_entity_types`,
+ * whether or not that bundle is enabled. Used to name the bundle to enable in
+ * a `guided`-mode rejection. Returns `undefined` when no bundle declares it.
+ */
+export function bundleDeclaring(entityType: string): string | undefined {
+  return getBundleRegistry().bundles.find((b) =>
+    b.manifest.provides_entity_types.includes(entityType)
+  )?.manifest.name;
+}
+
 /** Test-only: clears the cached registry so the next call re-discovers. */
 export function resetBundleRegistryForTesting(): void {
   cached = undefined;

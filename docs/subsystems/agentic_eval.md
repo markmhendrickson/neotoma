@@ -289,6 +289,9 @@ Scenarios carry optional metadata describing how they were derived:
 | `privacy_transform` | How PII was transformed for the committed scenario |
 | `seed_entities[]` | Entities pre-seeded into the isolated DB before the driver runs |
 | `real_storage` | When `true`, the isolated server writes raw bytes to disk (sets `NEOTOMA_TEST_REAL_STORAGE=1`), so `raw_storage.file_count` can observe stored files |
+| `schema_mode` | Sets the isolated server's `NEOTOMA_SCHEMA_MODE` (`evolving`, `guided`, `locked`). Omit for the default |
+| `bundle_state.enabled[]` | Opt-in bundles enabled at server boot. The runner writes this to a scenario-private bundle state file (`NEOTOMA_BUNDLE_STATE_PATH`), never the host's, and removes it after the cell. An empty list means only the default-install bundles |
+| `replay_over_mcp[]` | Tools whose cassette calls replay through the MCP tool on the server's `/mcp` endpoint instead of the REST route, for behaviour that lives in the MCP handler (e.g. `[store]` for guided-mode gating). `manage_bundles` has no REST route and always replays over MCP |
 
 Scenarios that need pre-existing DB state (retrieval, dedup) use
 `seed_entities[]` — the runner POSTs these to the isolated server's
@@ -322,6 +325,7 @@ Scenarios that need pre-existing DB state (retrieval, dedup) use
 | `entity_type_reuse_no_duplicate_type` | Schema: use established type, no proliferation | `entity` |
 | `store_failure_retry` | Errors: retry once on store failure | `failure_injection` |
 | `store_failure_surfaces_error` | Errors: surface error to user, do not silently skip | `failure_injection` |
+| `bundle_enable_guided_store` | Bundles: guided store rejected, `manage_bundles enable` returns `schema_seed`, retried store governed by the bundle schema | — |
 
 ### Assertion types
 
@@ -340,7 +344,7 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 | `instruction_profile.served` | Whether the requested profile was served |
 | `host_tool.invocations` | Host tool invocation count |
 | `mcp_tool.invocations` | Count invocations of a named neotoma MCP tool, with optional `arg_subset` structural match on the call's input (#1703) |
-| `tool_result.matches` | Inspect the JSON result the agent received from a named tool: `result_subset` (deep subset), or `result_key` + `present` (dotted-path key present/absent, incl. `error.code` envelopes); `which` picks first/last/index (#1703) |
+| `tool_result.matches` | Inspect the JSON result the agent received from a named tool: `result_subset` (deep subset), `result_key` + `present` (dotted-path key present/absent, incl. `error.code` envelopes), or `result_contains` (substring of the serialized result, e.g. an error message); `which` picks first/last/index (#1703) |
 | `snapshot.field_present` | A `field` is present on a retrieved entity snapshot (resolved by `entity_id` or `entity_type`+`where`) (#1703) |
 | `snapshot.field_absent` | A `field` is absent from a retrieved entity snapshot — e.g. an unknown field landed in raw_fragments, stored-but-invisible (#1703) |
 | `stats.counter` | A numeric key (dotted path allowed, e.g. `sources_count`, `total_observations`) of the post-turn `/stats` payload compares as `op`/`value`. Fails closed: a missing or non-numeric key is a failure, never read as zero (#2493) |
