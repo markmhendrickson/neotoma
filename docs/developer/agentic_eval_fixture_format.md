@@ -112,6 +112,7 @@ Each predicate has a `type` discriminator:
 | `turn_compliance`   | `status` (`backfilled_by_hook`\|`absent`), optional `missed_includes: string[]`            | Asserts the presence/absence of a `turn_compliance` observation.                                  |
 | `request_field_eq`  | `endpoint`, `path: string` (dot path), `value`                                             | Inspects the most recent payload to that endpoint and asserts a field matches.                    |
 | `no_writes`         | (no extra fields)                                                                          | Asserts the harness made zero `/store` and `/create_relationship` calls. Useful for failure paths.|
+| `outbound_connect_count` | `op` (`eq`\|`gte`\|`lte`), `value: number`, optional `exclude_loopback: boolean` | Counts outbound connection attempts (DNS lookups included) the hook processes made, recorded at the socket layer by `tests/helpers/agentic_eval/python_net_guard/sitecustomize.py`. Installed-plugin (`meta.claude_plugin`) cells only; those cells also refuse any non-loopback host. Fails when the guard did not load, so a broken wiring cannot pass as zero. |
 | `turn_diagnosis`    | optional `classification`, `confidence`, `local_build`, `reminder_injected`, `recommends_includes` | Asserts the `conversation_turn` entity carries `instruction_diagnostics` fields matching the given values. `recommends_includes` checks that at least one `recommended_repairs` entry contains the substring. |
 
 ### `expected_outputs`

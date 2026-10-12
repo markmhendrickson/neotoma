@@ -55,6 +55,18 @@ export type AssertionPredicate =
     }
   | { type: "no_writes" }
   | {
+      /**
+       * Outbound connection attempts the hook processes made, recorded at the
+       * socket layer by the eval net guard (DNS lookups included). Fails if
+       * the guard did not load, so a wiring break cannot pass vacuously.
+       */
+      type: "outbound_connect_count";
+      op: "eq" | "gte" | "lte";
+      value: number;
+      /** Ignore attempts to loopback hosts (the cell's mock server). */
+      exclude_loopback?: boolean;
+    }
+  | {
       type: "turn_diagnosis";
       classification?: string;
       confidence?: string;
@@ -173,6 +185,17 @@ export interface CellResult {
   capturedOutputs: CapturedHookOutput[];
   /** Adapter-emitted skips (e.g. unsupported event for this harness). */
   skippedEvents: Array<{ hook: CanonicalHook; reason: string }>;
+  /**
+   * Outbound connection attempts logged by the eval net guard; null when the
+   * guard did not load for this cell.
+   */
+  outboundConnects?: OutboundConnect[] | null;
+}
+
+export interface OutboundConnect {
+  fn: string;
+  host: string;
+  port: string;
 }
 
 /**

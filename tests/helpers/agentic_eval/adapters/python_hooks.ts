@@ -7,7 +7,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 
 import type {
   CanonicalHook,
@@ -34,6 +34,9 @@ function pythonInterpreter(): string {
 }
 
 const CLAUDE_PLUGIN_DIR = join(REPO_ROOT, "packages", "claude-code-plugin");
+/** Test-only sitecustomize that records (and can deny) outbound connections. */
+const NET_GUARD_DIR = resolve(__dirname, "..", "python_net_guard");
+export const NET_LOG_FILE = "net.jsonl";
 
 function expandCellUrl(value: string, ctx: CellContext): string {
   return value
@@ -47,7 +50,10 @@ function expandCellUrl(value: string, ctx: CellContext): string {
  * blanked, so an eval launched from inside a Claude plugin session still hits
  * the cell's mock server). Fixtures with one run the installed-plugin path:
  * CLAUDE_PLUGIN_ROOT set, the option as given, HOME isolated so a developer's
- * own Neotoma CLI config cannot leak in.
+ * own Neotoma CLI config cannot leak in. Installed-plugin cells also load the
+ * outbound-network guard (python_net_guard/sitecustomize.py): every connection
+ * attempt is logged to <hookStateDir>/net.jsonl for `outbound_connect_count`,
+ * and any non-loopback host is refused, so no plugin eval reaches a real server.
  */
 function claudePluginEnv(ctx: CellContext): NodeJS.ProcessEnv {
   const plugin =
@@ -61,11 +67,15 @@ function claudePluginEnv(ctx: CellContext): NodeJS.ProcessEnv {
       : plugin.neotoma_base_url === null
         ? ""
         : expandCellUrl(plugin.neotoma_base_url, ctx);
+  const pythonPath = [NET_GUARD_DIR, process.env.PYTHONPATH].filter(Boolean).join(delimiter);
   return {
     CLAUDE_PLUGIN_ROOT: CLAUDE_PLUGIN_DIR,
     CLAUDE_PLUGIN_OPTION_NEOTOMA_MCP_URL: expandCellUrl(plugin.mcp_url ?? "", ctx),
     NEOTOMA_BASE_URL: baseUrl,
     HOME: ctx.hookStateDir,
+    PYTHONPATH: pythonPath,
+    NEOTOMA_EVAL_NET_LOG: join(ctx.hookStateDir, NET_LOG_FILE),
+    NEOTOMA_EVAL_NET_DENY: "1",
   };
 }
 

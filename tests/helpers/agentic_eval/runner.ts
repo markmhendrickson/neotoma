@@ -12,7 +12,7 @@
  *   - `summarizeRun(results)`: aggregate report string for CLI mode
  */
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -23,6 +23,7 @@ import {
 import {
   createClaudeCodeAdapter,
   createCodexHooksAdapter,
+  NET_LOG_FILE,
 } from "./adapters/python_hooks.js";
 import {
   createOpencodePluginAdapter,
@@ -44,6 +45,7 @@ import type {
   CellResult,
   HarnessAdapter,
   HarnessId,
+  OutboundConnect,
 } from "./types.js";
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..");
@@ -135,6 +137,17 @@ export function expandMatrix(fixture: AgenticEvalFixture): Cell[] {
   return cells;
 }
 
+/** Connections logged by the eval net guard, or null if it never loaded. */
+function readOutboundConnects(hookStateDir: string): OutboundConnect[] | null {
+  const log = join(hookStateDir, NET_LOG_FILE);
+  if (!existsSync(`${log}.loaded`)) return null;
+  if (!existsSync(log)) return [];
+  return readFileSync(log, "utf-8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as OutboundConnect);
+}
+
 function makeContext(cell: Cell, server: MockNeotomaServer): CellContext {
   const hookStateDir = mkdtempSync(join(tmpdir(), `neotoma-eval-${cell.cellId}-`));
   return {
@@ -190,6 +203,7 @@ export async function runCell(
       }
     }
     result.capturedRequests = server.takeCellRequests(cell.cellId);
+    result.outboundConnects = readOutboundConnects(ctx.hookStateDir);
   } finally {
     try {
       rmSync(ctx.hookStateDir, { recursive: true, force: true });

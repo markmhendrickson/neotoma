@@ -122,6 +122,11 @@ function whereMatches(
   return true;
 }
 
+function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  return h === "localhost" || h === "::1" || /^127\./.test(h);
+}
+
 function compareNumber(
   actual: number,
   op: "eq" | "gte" | "lte",
@@ -157,6 +162,31 @@ function evaluatePredicate(
         message: `Expected ${predicate.endpoint} request count ${predicate.op} ${predicate.value}, got ${count}.`,
         expected: { op: predicate.op, value: predicate.value, endpoint: predicate.endpoint },
         actual: count,
+      };
+    }
+    case "outbound_connect_count": {
+      const log = cell.outboundConnects;
+      if (log == null) {
+        return {
+          predicate,
+          message:
+            "Expected the eval net guard to record outbound connections, but it did not load " +
+            "(check PYTHONPATH wiring in adapters/python_hooks.ts).",
+          expected: { op: predicate.op, value: predicate.value },
+          actual: null,
+        };
+      }
+      const counted = predicate.exclude_loopback
+        ? log.filter((c) => !isLoopbackHost(c.host))
+        : log;
+      if (compareNumber(counted.length, predicate.op, predicate.value)) return null;
+      return {
+        predicate,
+        message: `Expected outbound connection attempts ${predicate.op} ${predicate.value}, got ${counted.length}: ${counted
+          .map((c) => `${c.fn} ${c.host}:${c.port}`)
+          .join(", ")}.`,
+        expected: { op: predicate.op, value: predicate.value },
+        actual: counted,
       };
     }
     case "entity_stored": {

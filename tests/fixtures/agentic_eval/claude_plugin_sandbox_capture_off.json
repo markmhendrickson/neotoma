@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "claude_plugin_sandbox_capture_off",
-    "description": "Installed Claude plugin on its default connector (the shared public sandbox), with no local Neotoma configured. The hooks must make no requests at all, and SessionStart must tell the user that lifecycle capture is off.",
+    "description": "Installed Claude plugin on its default connector (the shared public sandbox), with no local Neotoma configured. The hooks must make no requests at all (checked at the socket layer by the eval net guard, since nothing points the hooks at the cell's mock server), and SessionStart must tell the user that lifecycle capture is off.",
     "harnesses": ["claude-code-plugin"],
     "models": ["claude-sonnet-4.5"],
     "tags": ["claude-plugin", "in-plugin", "sandbox", "privacy"],
@@ -21,7 +21,8 @@
   "assertions": {
     "default": [
       { "type": "no_writes" },
-      { "type": "request_count", "endpoint": "/store", "op": "eq", "value": 0 }
+      { "type": "request_count", "endpoint": "/store", "op": "eq", "value": 0 },
+      { "type": "outbound_connect_count", "op": "eq", "value": 0 }
     ]
   },
   "expected_outputs": {
