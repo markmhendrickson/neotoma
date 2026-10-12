@@ -2,20 +2,20 @@ openapi: 3.1.0
 info:
   title: Neotoma API
   version: 1.0.0
-  description: 'REST API for Neotoma. Use with any HTTP client, including ChatGPT
+  description: "REST API for Neotoma. Use with any HTTP client, including ChatGPT
     Actions, Claude, Cursor, MCP servers, CLI tools, and custom integrations.
 
 
     This Actions-focused spec intentionally includes a curated subset of endpoints
-    to stay within GPT Actions operation limits.'
+    to stay within GPT Actions operation limits."
 servers:
-- url: https://mcp.neotoma.io
-  description: Set from NEOTOMA_HOST_URL when served by the API; default shown for
-    static/codegen use.
-- url: http://localhost:3080
-  description: Local development server
+  - url: https://mcp.neotoma.io
+    description: Set from NEOTOMA_HOST_URL when served by the API; default shown for
+      static/codegen use.
+  - url: http://localhost:3080
+    description: Local development server
 security:
-- bearerAuth: []
+  - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -81,6 +81,12 @@ components:
     EntitySnapshot:
       type: object
       properties:
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: Authoritative owner from the resolved entities row, not snapshot content. Omitted for guest detail responses.
         entity_id:
           type: string
         entity_type:
@@ -155,11 +161,11 @@ components:
           type: string
           nullable: true
           enum:
-          - sensor
-          - llm_summary
-          - workflow_state
-          - human
-          - import
+            - sensor
+            - llm_summary
+            - workflow_state
+            - human
+            - import
           description: Kind of write that produced this observation (sensor,
             llm_summary, workflow_state, human, import). Orthogonal to
             source_priority and to provenance/AAuth.
@@ -286,16 +292,16 @@ components:
             properties: {}
         relationships:
           type: array
-          description: 'Optional. Create relationships between entities in this request.
+          description: "Optional. Create relationships between entities in this request.
             Indices refer to the entities array (0-based).
 
-            '
+            "
           items:
             type: object
             required:
-            - relationship_type
-            - source_index
-            - target_index
+              - relationship_type
+              - source_index
+              - target_index
             properties:
               relationship_type:
                 type: string
@@ -315,11 +321,11 @@ components:
         observation_source:
           type: string
           enum:
-          - sensor
-          - llm_summary
-          - workflow_state
-          - human
-          - import
+            - sensor
+            - llm_summary
+            - workflow_state
+            - human
+            - import
           description: Kind of write (sensor, llm_summary, workflow_state, human,
             import). Defaults to llm_summary when unspecified.
         idempotency_key:
@@ -356,14 +362,14 @@ components:
       type: object
       properties:
         structured:
-          $ref: '#/components/schemas/StoreStructuredResponse'
+          $ref: "#/components/schemas/StoreStructuredResponse"
         unstructured:
-          $ref: '#/components/schemas/StoreUnstructuredResponse'
+          $ref: "#/components/schemas/StoreUnstructuredResponse"
     StoreStructuredRequest:
       type: object
       required:
-      - entities
-      - idempotency_key
+        - entities
+        - idempotency_key
       properties:
         entities:
           type: array
@@ -384,9 +390,9 @@ components:
           items:
             type: object
             required:
-            - relationship_type
-            - source_index
-            - target_index
+              - relationship_type
+              - source_index
+              - target_index
             properties:
               relationship_type:
                 type: string
@@ -408,11 +414,11 @@ components:
         observation_source:
           type: string
           enum:
-          - sensor
-          - llm_summary
-          - workflow_state
-          - human
-          - import
+            - sensor
+            - llm_summary
+            - workflow_state
+            - human
+            - import
           description: Kind of write (sensor, llm_summary, workflow_state, human,
             import). Defaults to llm_summary when unspecified.
         idempotency_key:
@@ -421,12 +427,12 @@ components:
           type: string
         original_filename:
           type: string
-          description: 'Optional. For agent-provided structured data, omit so the
+          description: "Optional. For agent-provided structured data, omit so the
             source has no filename (null).
 
             Pass only when mirroring a real file name or when a display label is desired.
 
-            '
+            "
     StoreStructuredResponse:
       type: object
       properties:
@@ -446,8 +452,8 @@ components:
     StoreUnstructuredRequest:
       type: object
       required:
-      - file_content
-      - mime_type
+        - file_content
+        - mime_type
       properties:
         file_content:
           type: string
@@ -489,9 +495,9 @@ components:
     GetRelationshipSnapshotRequest:
       type: object
       required:
-      - relationship_type
-      - source_entity_id
-      - target_entity_id
+        - relationship_type
+        - source_entity_id
+        - target_entity_id
       properties:
         relationship_type:
           type: string
@@ -507,11 +513,11 @@ components:
     GetRelationshipSnapshotResponse:
       type: object
       required:
-      - snapshot
-      - observations
+        - snapshot
+        - observations
       properties:
         snapshot:
-          $ref: '#/components/schemas/RelationshipSnapshot'
+          $ref: "#/components/schemas/RelationshipSnapshot"
         observations:
           type: array
           items:
@@ -533,7 +539,7 @@ components:
     OAuthInitiateRequest:
       type: object
       required:
-      - connection_id
+        - connection_id
       properties:
         connection_id:
           type: string
@@ -565,7 +571,7 @@ paths:
       operationId: healthCheck
       security: []
       responses:
-        '200':
+        "200":
           description: Server is healthy
           content:
             application/json:
@@ -579,7 +585,7 @@ paths:
       summary: Get current authenticated user
       operationId: getMe
       responses:
-        '200':
+        "200":
           description: Current user details
           content:
             application/json:
@@ -596,17 +602,17 @@ paths:
                       storage_backend:
                         type: string
                         enum:
-                        - local
+                          - local
                       data_dir:
                         type: string
                       sqlite_db:
                         type: string
-        '401':
+        "401":
           description: Not authenticated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /entities/query:
     post:
       summary: Query entities
@@ -636,16 +642,16 @@ paths:
                 sort_by:
                   type: string
                   enum:
-                  - entity_id
-                  - canonical_name
-                  - observation_count
-                  - last_observation_at
+                    - entity_id
+                    - canonical_name
+                    - observation_count
+                    - last_observation_at
                   description: "Non-default values cannot be combined with `search`."
                 sort_order:
                   type: string
                   enum:
-                  - asc
-                  - desc
+                    - asc
+                    - desc
                   description: "`desc` cannot be combined with `search`."
                 published:
                   type: boolean
@@ -664,7 +670,7 @@ paths:
                 user_id:
                   type: string
       responses:
-        '200':
+        "200":
           description: Entity list
           content:
             application/json:
@@ -674,7 +680,7 @@ paths:
                   entities:
                     type: array
                     items:
-                      $ref: '#/components/schemas/EntitySnapshot'
+                      $ref: "#/components/schemas/EntitySnapshot"
                   total:
                     type: integer
                   limit:
@@ -686,36 +692,36 @@ paths:
       summary: Get entity by ID
       operationId: getEntityById
       parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Entity
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EntitySnapshot'
-        '404':
+                $ref: "#/components/schemas/EntitySnapshot"
+        "404":
           description: Entity not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: "#/components/schemas/ErrorEnvelope"
   /entities/{id}/observations:
     get:
       summary: List observations for entity
       operationId: getEntityObservations
       parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Observations
           content:
             application/json:
@@ -725,19 +731,19 @@ paths:
                   observations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Observation'
+                      $ref: "#/components/schemas/Observation"
   /entities/{id}/relationships:
     get:
       summary: List relationships for entity
       operationId: getEntityRelationships
       parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Relationships
           content:
             application/json:
@@ -747,52 +753,52 @@ paths:
                   relationships:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
   /timeline:
     get:
       summary: List timeline events
       operationId: listTimeline
       parameters:
-      - in: query
-        name: start_date
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: end_date
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: event_type
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: user_id
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      - in: query
-        name: offset
-        required: false
-        schema:
-          type: integer
-      - in: query
-        name: order_by
-        required: false
-        description: Sort column descending. event_timestamp = dates from extracted data; created_at = when the timeline row was written (better for "recent activity").
-        schema:
-          type: string
-          enum: [event_timestamp, created_at]
-          default: event_timestamp
+        - in: query
+          name: start_date
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: end_date
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: event_type
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: order_by
+          required: false
+          description: Sort column descending. event_timestamp = dates from extracted data; created_at = when the timeline row was written (better for "recent activity").
+          schema:
+            type: string
+            enum: [event_timestamp, created_at]
+            default: event_timestamp
       responses:
-        '200':
+        "200":
           description: Timeline events
           content:
             application/json:
@@ -802,24 +808,24 @@ paths:
                   events:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TimelineEvent'
+                      $ref: "#/components/schemas/TimelineEvent"
   /timeline/{id}:
     get:
       summary: Get timeline event by ID
       operationId: getTimelineById
       parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: query
-        name: user_id
-        required: false
-        schema:
-          type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Timeline event
           content:
             application/json:
@@ -827,19 +833,19 @@ paths:
                 type: object
                 properties:
                   event:
-                    $ref: '#/components/schemas/TimelineEvent'
+                    $ref: "#/components/schemas/TimelineEvent"
   /schemas:
     get:
       summary: List entity schemas
       operationId: listSchemas
       parameters:
-      - in: query
-        name: user_id
-        required: false
-        schema:
-          type: string
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Schemas
           content:
             application/json:
@@ -849,24 +855,24 @@ paths:
                   schemas:
                     type: array
                     items:
-                      $ref: '#/components/schemas/EntitySchema'
+                      $ref: "#/components/schemas/EntitySchema"
   /schemas/{entity_type}:
     get:
       summary: Get schema by entity type
       operationId: getSchemaByEntityType
       parameters:
-      - in: path
-        name: entity_type
-        required: true
-        schema:
-          type: string
+        - in: path
+          name: entity_type
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Schema
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EntitySchema'
+                $ref: "#/components/schemas/EntitySchema"
   /store:
     post:
       summary: Store structured entities, unstructured files, or both
@@ -876,17 +882,17 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StoreRequest'
+              $ref: "#/components/schemas/StoreRequest"
       responses:
-        '200':
+        "200":
           description: Store result
           content:
             application/json:
               schema:
                 oneOf:
-                - $ref: '#/components/schemas/StoreStructuredResponse'
-                - $ref: '#/components/schemas/StoreUnstructuredResponse'
-                - $ref: '#/components/schemas/StoreResponse'
+                  - $ref: "#/components/schemas/StoreStructuredResponse"
+                  - $ref: "#/components/schemas/StoreUnstructuredResponse"
+                  - $ref: "#/components/schemas/StoreResponse"
   /get_entity_snapshot:
     post:
       summary: Get entity snapshot with provenance
@@ -926,12 +932,12 @@ paths:
                     deterministic markdown for KV-cache stability. `json` returns the raw
                     snapshot payload for programmatic callers.
       responses:
-        '200':
+        "200":
           description: Entity snapshot
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EntitySnapshot'
+                $ref: "#/components/schemas/EntitySnapshot"
   /list_observations:
     post:
       summary: List observations for entity
@@ -950,7 +956,7 @@ paths:
                 offset:
                   type: integer
       responses:
-        '200':
+        "200":
           description: Observations
           content:
             application/json:
@@ -960,7 +966,7 @@ paths:
                   observations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Observation'
+                      $ref: "#/components/schemas/Observation"
   /get_field_provenance:
     post:
       summary: Get field provenance
@@ -977,7 +983,7 @@ paths:
                 field:
                   type: string
       responses:
-        '200':
+        "200":
           description: Provenance
           content:
             application/json:
@@ -998,12 +1004,12 @@ paths:
               additionalProperties: true
               properties: {}
       responses:
-        '200':
+        "200":
           description: Relationship created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RelationshipSnapshot'
+                $ref: "#/components/schemas/RelationshipSnapshot"
   /list_relationships:
     post:
       summary: List relationships
@@ -1017,7 +1023,7 @@ paths:
               additionalProperties: true
               properties: {}
       responses:
-        '200':
+        "200":
           description: Relationships
           content:
             application/json:
@@ -1027,7 +1033,7 @@ paths:
                   relationships:
                     type: array
                     items:
-                      $ref: '#/components/schemas/RelationshipSnapshot'
+                      $ref: "#/components/schemas/RelationshipSnapshot"
   /retrieve_entity_by_identifier:
     post:
       summary: Retrieve entity by identifier
@@ -1040,7 +1046,7 @@ paths:
             schema:
               type: object
               required:
-              - identifier
+                - identifier
               properties:
                 identifier:
                   type: string
@@ -1049,7 +1055,7 @@ paths:
                   type: string
                   description: Optional entity type to limit search
       responses:
-        '200':
+        "200":
           description: Entity search results
           content:
             application/json:
@@ -1059,15 +1065,15 @@ paths:
                   entities:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Entity'
+                      $ref: "#/components/schemas/Entity"
                   total:
                     type: integer
-        '400':
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: "#/components/schemas/ErrorEnvelope"
   /retrieve_related_entities:
     post:
       summary: Retrieve related entities
@@ -1080,7 +1086,7 @@ paths:
             schema:
               type: object
               required:
-              - entity_id
+                - entity_id
               properties:
                 entity_id:
                   type: string
@@ -1091,9 +1097,9 @@ paths:
                 direction:
                   type: string
                   enum:
-                  - inbound
-                  - outbound
-                  - both
+                    - inbound
+                    - outbound
+                    - both
                   default: both
                 max_hops:
                   type: integer
@@ -1102,7 +1108,7 @@ paths:
                   type: boolean
                   default: true
       responses:
-        '200':
+        "200":
           description: Related entities
           content:
             application/json:
@@ -1123,15 +1129,15 @@ paths:
             schema:
               type: object
               required:
-              - node_id
+                - node_id
               properties:
                 node_id:
                   type: string
                 node_type:
                   type: string
                   enum:
-                  - entity
-                  - source
+                    - entity
+                    - source
                   default: entity
                 include_relationships:
                   type: boolean
@@ -1146,7 +1152,7 @@ paths:
                   type: boolean
                   default: false
       responses:
-        '200':
+        "200":
           description: Graph neighborhood
           content:
             application/json:
