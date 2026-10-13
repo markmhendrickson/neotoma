@@ -36,7 +36,9 @@ describe("mcp_instruction_doc", () => {
     expect(body).toMatch(
       /FORBIDDEN: storing entities with a `source_file`\/`source_document`-style field when no corresponding file asset was stored/
     );
-    expect(body).toMatch(/synthesizing, re-generating, or re-typing a replacement asset.*FORBIDDEN/);
+    expect(body).toMatch(
+      /synthesizing, re-generating, or re-typing a replacement asset.*FORBIDDEN/
+    );
   });
 
   it("includes the dangling source-file citation self-audit check", () => {
