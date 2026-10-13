@@ -48,13 +48,15 @@ export function AgentInstructionsStoreRecipesPage() {
           and <code>turn_key "chat:&lt;turn&gt;"</code>.
         </li>
         <li className={listItem}>
-          <strong className="text-foreground">observation_source.</strong> Optional flag
-          describing the kind of write, <code>sensor</code> (deterministic tool/telemetry),{" "}
+          <strong className="text-foreground">observation_source.</strong> Flag describing
+          the kind of write, <code>sensor</code> (deterministic tool/telemetry),{" "}
           <code>workflow_state</code> (state-machine transitions),{" "}
-          <code>llm_summary</code> (the default; omit it for ordinary chat),{" "}
-          <code>human</code> (direct edit/acceptance), or <code>import</code> (batch/ETL).
-          Used as a tie-break after <code>source_priority</code>; one value applies to every
-          observation produced by the request.
+          <code>llm_summary</code> (LLM-authored content, set it for ordinary chat),{" "}
+          <code>human</code> (direct edit/acceptance), <code>import</code> (batch/ETL), or{" "}
+          <code>sync</code> (peer replication). Omitting it stores <code>unspecified</code> and
+          returns an <code>OBSERVATION_SOURCE_OMITTED</code> store warning. Used as a tie-break
+          after <code>source_priority</code>; one value applies to every observation produced
+          by the request.
         </li>
       </ul>
 

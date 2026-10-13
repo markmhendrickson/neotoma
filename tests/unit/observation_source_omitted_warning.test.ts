@@ -54,19 +54,28 @@ describe("buildObservationSourceOmittedWarning", () => {
 
   it("does not warn when the caller sent unspecified explicitly", () => {
     expect(
-      buildObservationSourceOmittedWarning({ rawObservationSource: "unspecified", firstStored: FIRST })
+      buildObservationSourceOmittedWarning({
+        rawObservationSource: "unspecified",
+        firstStored: FIRST,
+      })
     ).toBeNull();
   });
 
   it("does not warn for an explicit llm_summary", () => {
     expect(
-      buildObservationSourceOmittedWarning({ rawObservationSource: "llm_summary", firstStored: FIRST })
+      buildObservationSourceOmittedWarning({
+        rawObservationSource: "llm_summary",
+        firstStored: FIRST,
+      })
     ).toBeNull();
   });
 
   it("does not warn when nothing was stored", () => {
     expect(
-      buildObservationSourceOmittedWarning({ rawObservationSource: undefined, firstStored: undefined })
+      buildObservationSourceOmittedWarning({
+        rawObservationSource: undefined,
+        firstStored: undefined,
+      })
     ).toBeNull();
   });
 

@@ -183,6 +183,11 @@ describe("observation_source omission is recorded as unspecified (#2241)", () =>
       expect(body.error).toBeUndefined();
       const entityId = body.entities![0].entity_id;
 
+      // The effect first: what was persisted (pre-#2241 this read llm_summary).
+      const observations = await restObservations(entityId);
+      expect(observations.length).toBeGreaterThan(0);
+      for (const obs of observations) expect(obs.observation_source).toBe("unspecified");
+
       const warnings = omittedWarnings(body);
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toMatchObject({
@@ -192,10 +197,6 @@ describe("observation_source omission is recorded as unspecified (#2241)", () =>
       });
       expect(warnings[0].message).toContain("observation_source");
       expect(warnings[0].message).toContain('"unspecified"');
-
-      const observations = await restObservations(entityId);
-      expect(observations.length).toBeGreaterThan(0);
-      for (const obs of observations) expect(obs.observation_source).toBe("unspecified");
     });
 
     it.each(["llm_summary", "import"])(
@@ -267,6 +268,11 @@ describe("observation_source omission is recorded as unspecified (#2241)", () =>
       expect(body.error).toBeUndefined();
       const entityId = body.entities![0].entity_id;
 
+      // The effect first: what was persisted (pre-#2241 this read llm_summary).
+      const observations = await mcpObservations(server, entityId);
+      expect(observations.length).toBeGreaterThan(0);
+      for (const obs of observations) expect(obs.observation_source).toBe("unspecified");
+
       const warnings = omittedWarnings(body);
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toMatchObject({
@@ -274,10 +280,6 @@ describe("observation_source omission is recorded as unspecified (#2241)", () =>
         entity_type: ENTITY_TYPE,
         entity_id: entityId,
       });
-
-      const observations = await mcpObservations(server, entityId);
-      expect(observations.length).toBeGreaterThan(0);
-      for (const obs of observations) expect(obs.observation_source).toBe("unspecified");
 
       // Tenant isolation: the same entity is invisible to a different user.
       expect(await mcpObservations(server, entityId, OTHER_USER_ID)).toEqual([]);

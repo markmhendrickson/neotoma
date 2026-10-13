@@ -57,30 +57,31 @@ describe("CLI store: observation_source omission (#2241)", () => {
   it("no --observation-source → persisted unspecified and the warning is in the output", async () => {
     const out = await cliStore("omitted");
     const entityId = out.entities![0].entity_id;
+    // The effect first: what was persisted (pre-#2241 this read llm_summary).
+    expect(await cliObservationSources(entityId)).toEqual(["unspecified"]);
     const warnings = (out.store_warnings ?? []).filter(
       (w) => w.code === "OBSERVATION_SOURCE_OMITTED"
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0].entity_id).toBe(entityId);
-    expect(await cliObservationSources(entityId)).toEqual(["unspecified"]);
   });
 
   it.each(["llm_summary", "import"])(
     "--observation-source %s → persisted exactly, no omission warning",
     async (kind) => {
       const out = await cliStore(`explicit-${kind}`, `--observation-source ${kind}`);
-      expect(
-        (out.store_warnings ?? []).some((w) => w.code === "OBSERVATION_SOURCE_OMITTED")
-      ).toBe(false);
+      expect((out.store_warnings ?? []).some((w) => w.code === "OBSERVATION_SOURCE_OMITTED")).toBe(
+        false
+      );
       expect(await cliObservationSources(out.entities![0].entity_id)).toEqual([kind]);
     }
   );
 
   it("--observation-source unspecified is accepted and does not warn", async () => {
     const out = await cliStore("explicit-unspecified", "--observation-source unspecified");
-    expect(
-      (out.store_warnings ?? []).some((w) => w.code === "OBSERVATION_SOURCE_OMITTED")
-    ).toBe(false);
+    expect((out.store_warnings ?? []).some((w) => w.code === "OBSERVATION_SOURCE_OMITTED")).toBe(
+      false
+    );
     expect(await cliObservationSources(out.entities![0].entity_id)).toEqual(["unspecified"]);
   });
 });
