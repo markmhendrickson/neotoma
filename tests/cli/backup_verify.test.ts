@@ -247,6 +247,56 @@ describe("CLI backup verify (smoke)", () => {
     }
   );
 
+  it.each([
+    ["empty", []],
+    ["malformed", [{ integrity_check: "ok" }, { integrity_check: "ok" }]],
+  ])(
+    "does not infer corruption from a sqlite_corrupt output path on %s readback",
+    async (_kind, result) => {
+      const { parent, dataDir } = await createBackupInput(
+        "neotoma-backup-sqlite_corrupt-instrument-"
+      );
+      // A fresh Commander instance is needed so the human invocation is not
+      // affected by --json from earlier in-process CLI tests.
+      await vi.resetModules();
+      const { AsyncSqliteDatabase: isolatedDriver } =
+        await import("../../src/repositories/sqlite/sqlite_driver.ts");
+      const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
+      const pragma = vi.spyOn(isolatedDriver.prototype, "pragma").mockResolvedValue(result);
+      try {
+        const human = await runNeotomaCli(
+          ["backup", "create", "--output", parent],
+          { NEOTOMA_DATA_DIR: dataDir },
+          isolatedRunCli
+        );
+        const json = await runNeotomaCli(
+          ["--json", "backup", "create", "--output", parent],
+          { NEOTOMA_DATA_DIR: dataDir },
+          isolatedRunCli
+        );
+        const envelope = JSON.parse(json.stderr) as {
+          error: string;
+          hint?: { code?: string; failure_kind?: string; message?: string };
+        };
+
+        expect(human.exitCode).toBe(1);
+        expect(human.stderr).toContain("could not obtain an integrity result");
+        expect(human.stderr).not.toContain("SQLite may be corrupted");
+        expect(human.stderr).not.toContain("recover-db");
+        expect(json.exitCode).toBe(1);
+        expect(envelope.error).toContain("could not obtain an integrity result");
+        expect(envelope.hint).toEqual({
+          code: "VERIFY_INSTRUMENT_FAILURE",
+          failure_kind: "verify_instrument_failure",
+        });
+        expect(json.stderr).not.toContain("SQLite may be corrupted");
+        expect(json.stderr).not.toContain("recover-db");
+      } finally {
+        pragma.mockRestore();
+      }
+    }
+  );
+
   it("fails closed when the verification driver throws and shell-quotes an output-derived path", async () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-instrument-$()-");
     const pragma = vi

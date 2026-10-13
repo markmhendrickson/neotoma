@@ -1331,6 +1331,12 @@ export function getSqliteRecoveryHint(
   err: unknown,
   envHint: "dev" | "prod" = inferCliRecoveryEnvHint()
 ): string | null {
+  // The classified result is authoritative. Its message may contain a user-
+  // selected path with words like sqlite_corrupt, which is not evidence that
+  // the database itself failed an integrity check.
+  if (err instanceof CliHintError && err.hint.code === "VERIFY_INSTRUMENT_FAILURE") {
+    return null;
+  }
   if (err instanceof CliHintError && err.hint.code === "INTEGRITY_FAILED") {
     const checkCommand =
       envHint === "prod" ? "neotoma prod storage recover-db" : "neotoma storage recover-db";
