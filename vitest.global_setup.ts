@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, realpathSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   BUILT_CURSOR_HOOK_PACKAGE,
@@ -91,6 +91,92 @@ function announceMissingPrerequisites(): void {
   }
 }
 
+type OwnedNativeSqlite = { dbPath: string; dev: number; ino: number; runDir: string; runDev: number; runIno: number };
+
+function assertPrivateNativeRoot(dataRoot: string): void {
+  const stats = lstatSync(dataRoot);
+  const parent = path.dirname(dataRoot);
+  const parentStats = lstatSync(parent);
+  if (!stats.isDirectory() || stats.uid !== process.getuid() ||
+      (stats.mode & 0o022) !== 0 || realpathSync(dataRoot) !== path.resolve(dataRoot) ||
+      !parentStats.isDirectory() || parentStats.uid !== process.getuid() ||
+      (parentStats.mode & 0o022) !== 0 || realpathSync(parent) !== path.resolve(parent)) {
+    throw new Error("Fresh SQLite allocation required: selected native parent is not owner-held and non-writable by others");
+  }
+}
+
+/** Bind the selected native contract to a database that did not exist before this run. */
+function allocateOwnedNativeSqlite(projectRoot: string): OwnedNativeSqlite | undefined {
+  if (!process.env.OWNED_NATIVE_ARGS) return undefined;
+  const dbPath = process.env.NEOTOMA_SQLITE_PATH;
+  const dataRoot = path.join(projectRoot, ".vitest");
+  assertPrivateNativeRoot(dataRoot);
+  if (!dbPath || path.basename(dbPath) !== "state.sqlite") {
+    throw new Error("Fresh SQLite allocation required: selected native path is invalid");
+  }
+  const runDir = path.dirname(dbPath);
+  const canonicalRoot = realpathSync(dataRoot);
+  const canonicalRunDir = realpathSync(runDir);
+  const runStats = lstatSync(runDir);
+  if (canonicalRunDir !== path.resolve(runDir) ||
+      !canonicalRunDir.startsWith(canonicalRoot + path.sep) ||
+      !runStats.isDirectory() || runStats.uid !== process.getuid() ||
+      (runStats.mode & 0o777) !== 0o700) {
+    throw new Error("Fresh SQLite allocation required: selected native directory is not private");
+  }
+  for (const suffix of ["-wal", "-shm", "-journal"]) {
+    if (lstatSync(dbPath + suffix, { throwIfNoEntry: false })) {
+      throw new Error("Fresh SQLite allocation required: selected native sidecar already exists");
+    }
+  }
+  let fd: number;
+  try {
+    fd = openSync(dbPath, "wx", 0o600);
+  } catch (error) {
+    throw new Error("Fresh SQLite allocation required: selected native database already exists or cannot be created", { cause: error });
+  }
+  let owned: OwnedNativeSqlite | undefined;
+  try {
+    const stats = fstatSync(fd);
+    owned = { dbPath, dev: stats.dev, ino: stats.ino, runDir,
+      runDev: runStats.dev, runIno: runStats.ino };
+    if (!stats.isFile() || stats.uid !== process.getuid() || (stats.mode & 0o777) !== 0o600 || stats.size !== 0) {
+      throw new Error("Fresh SQLite allocation required: selected native database is not private and empty");
+    }
+  } catch (error) {
+    if (owned) removeOwnedNativeSqlite(owned);
+    throw error;
+  } finally {
+    closeSync(fd);
+  }
+  return owned;
+}
+
+/** Never remove a caller's pre-existing or replaced path. */
+function removeOwnedNativeSqlite(owned: OwnedNativeSqlite): void {
+  const runStats = lstatSync(owned.runDir, { throwIfNoEntry: false });
+  if (!runStats || !runStats.isDirectory() || runStats.uid !== process.getuid() ||
+      (runStats.mode & 0o777) !== 0o700 || runStats.dev !== owned.runDev || runStats.ino !== owned.runIno) {
+    throw new Error("Selected native SQLite directory changed before cleanup");
+  }
+  assertPrivateNativeRoot(path.dirname(owned.runDir));
+  const dbStats = lstatSync(owned.dbPath, { throwIfNoEntry: false });
+  if (dbStats && (!dbStats.isFile() || dbStats.uid !== process.getuid() ||
+      dbStats.dev !== owned.dev || dbStats.ino !== owned.ino)) {
+    throw new Error("Selected native SQLite file changed before cleanup");
+  }
+  for (const suffix of ["-wal", "-shm", "-journal"]) {
+    const sidecar = owned.dbPath + suffix;
+    const stats = lstatSync(sidecar, { throwIfNoEntry: false });
+    if (!stats) continue;
+    if (!stats.isFile() || stats.uid !== process.getuid()) {
+      throw new Error("Selected native SQLite sidecar changed before cleanup");
+    }
+    unlinkSync(sidecar);
+  }
+  if (dbStats) unlinkSync(owned.dbPath);
+}
+
 /**
  * Global Vitest setup.
  *
@@ -102,8 +188,10 @@ export default async function globalSetup() {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
   requireBuiltServer(projectRoot);
   announceMissingPrerequisites();
-  isolateHomeDirectoryForTests(projectRoot);
   const vitestDir = path.join(projectRoot, ".vitest");
+  mkdirSync(vitestDir, { recursive: true });
+  if (process.env.OWNED_NATIVE_ARGS) assertPrivateNativeRoot(vitestDir);
+  isolateHomeDirectoryForTests(projectRoot);
   mkdirSync(path.join(vitestDir, "sources"), { recursive: true });
 
   process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || vitestDir;
@@ -149,20 +237,32 @@ export default async function globalSetup() {
   // Shared with eval + playwright harnesses via resolveHarnessForceMode.
   process.env.NEOTOMA_FORCE_MODE = resolveHarnessForceMode(process.env);
 
-  const { startHTTPServer } = await import("./src/actions.ts");
-  const started = await startHTTPServer();
-  if (started?.port) {
-    process.env.NEOTOMA_SESSION_DEV_PORT = String(started.port);
-    process.env.NEOTOMA_SESSION_ENV = "dev";
-  }
+  // The HTTP server imports the SQLite config and can open the selected path.
+  // Claim it exclusively first; a caller-supplied proof file cannot certify freshness.
+  const ownedSqlite = allocateOwnedNativeSqlite(projectRoot);
+  try {
+    const { startHTTPServer } = await import("./src/actions.ts");
+    const started = await startHTTPServer();
+    if (started?.port) {
+      process.env.NEOTOMA_SESSION_DEV_PORT = String(started.port);
+      process.env.NEOTOMA_SESSION_ENV = "dev";
+    }
 
-  return async () => {
-    await new Promise<void>((resolve) => {
-      if (!started?.server) {
-        resolve();
-        return;
+    return async () => {
+      try {
+        await new Promise<void>((resolve) => {
+          if (!started?.server) {
+            resolve();
+            return;
+          }
+          started.server.close(() => resolve());
+        });
+      } finally {
+        if (ownedSqlite) removeOwnedNativeSqlite(ownedSqlite);
       }
-      started.server.close(() => resolve());
-    });
-  };
+    };
+  } catch (error) {
+    if (ownedSqlite) removeOwnedNativeSqlite(ownedSqlite);
+    throw error;
+  }
 }
