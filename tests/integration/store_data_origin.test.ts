@@ -417,6 +417,37 @@ describe("store data_origin (#2242)", () => {
     ).rejects.toThrow(/data_origin/);
   });
 
+  it("interpretation-linked stores stamp the origin on REST and MCP alike", async () => {
+    const marker = randomUUID();
+    const restResp = await rest("/store", {
+      user_id: USER_ID,
+      idempotency_key: `origin-interp-rest-${marker}`,
+      data_origin: SHEET_ORIGIN,
+      interpretation: {
+        source_ref: "structured",
+        interpretation_config: { extractor_type: "test" },
+      },
+      entities: [{ entity_type: ENTITY_TYPE, title: `interp rest ${marker}`, content: "x" }],
+    });
+    expect(restResp.status).toBe(200);
+    const mcpResp = await tool("store", {
+      idempotency_key: `origin-interp-mcp-${marker}`,
+      data_origin: SHEET_ORIGIN,
+      interpretation: {
+        source_ref: "structured",
+        interpretation_config: { extractor_type: "test" },
+      },
+      entities: [{ entity_type: ENTITY_TYPE, title: `interp mcp ${marker}`, content: "x" }],
+    });
+    const [restId] = entityIdsFrom(restResp.json);
+    const [mcpId] = entityIdsFrom(mcpResp);
+    for (const id of [restId!, mcpId!]) {
+      const observations = await restObservations(id);
+      expect(observations[0]!.interpretation_id).toBeTruthy();
+      expect(provenanceOf(observations[0]!).data_origin).toEqual(SHEET_ORIGIN);
+    }
+  });
+
   it("snapshot origin lookup is scoped to the requesting user", async () => {
     const marker = randomUUID();
     const { json } = await rest("/store", {
