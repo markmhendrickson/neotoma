@@ -32,13 +32,25 @@
 
 import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { calculateJwkThumbprint, exportJWK, generateKeyPair } from "jose";
+import { fetch as signedFetch } from "@hellocoop/httpsig";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
-import { routeAllowsLocalIssueWriteFallback } from "../../src/actions.js";
+import { MAX_ATTACHMENT_RESOLUTION_DEPTH } from "../../src/services/attachment_resolution.js";
+import { canonicalAauthAuthority, routeAllowsLocalIssueWriteFallback } from "../../src/actions.js";
+import { mintCliAgentTokenJwt, type LoadedSignerConfig } from "../../src/cli/aauth_signer.js";
+import {
+  generateGuestAccessToken,
+  hashGuestAccessToken,
+} from "../../src/services/guest_access_token.js";
+import { createGoogleSignInHarness, perEmailUserId } from "../helpers/google_sign_in.js";
+import { modernPost, toolResultJson } from "../helpers/mcp_http_modern.js";
 import {
   PARITY_USER_ID,
   TRANSPORT_PARITY_MATRIX,
@@ -54,6 +66,38 @@ import {
   startOfflineServer,
   stopServer,
 } from "../helpers/transport_parity_matrix.js";
+
+// The real app captured its canonical public authority at import time. This
+// loopback fixture is its internal transport, like a reverse proxy: sign the
+// configured public authority, then forward those unchanged headers/body.
+const signingAuthority = canonicalAauthAuthority();
+async function signedFixturePost(
+  base: string,
+  route: string,
+  body: string,
+  headers: Record<string, string>,
+  signer: LoadedSignerConfig
+): Promise<Response> {
+  const jwt = await mintCliAgentTokenJwt(signer);
+  const signed = (await signedFetch(`http://${signingAuthority}${route}`, {
+    method: "POST",
+    body,
+    headers,
+    signingKey: signer.privateJwk as JsonWebKey,
+    signatureKey: { type: "jwt", jwt },
+    label: "aasig",
+    components: [
+      "@method",
+      "@authority",
+      "@path",
+      "content-type",
+      "content-digest",
+      "signature-key",
+    ],
+    dryRun: true,
+  })) as unknown as { headers: Headers };
+  return fetch(`${base}${route}`, { method: "POST", body, headers: signed.headers });
+}
 
 describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)", () => {
   let mcpServer: NeotomaServer;
@@ -95,6 +139,710 @@ describe("OFFLINE/local-transport parity gate (curated MCP↔offline behaviors)"
       "null_cleared_field_warning",
       "issue_submit_local_auth_fallback",
     ]);
+  });
+
+  it("serves ownership guidance through canonical instructions and CLI print", async () => {
+    const response = await fetch(`${offline.base}/mcp-interaction-instructions`);
+    expect(response.status).toBe(200);
+    const instructions = await response.text();
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      ["dist/cli/index.js", "--base-url", offline.base, "--json", "instructions", "print"],
+      { env: { ...process.env, NEOTOMA_BEARER_TOKEN: "", NEOTOMA_ISSUES_TARGET_URL: "" } }
+    );
+    const printed = JSON.parse(stdout).body;
+    for (const text of [instructions, printed]) {
+      expect(text).toContain("Ownership metadata:");
+      expect(text).toMatch(/outer `user_id` is server-owned/);
+      expect(text).toContain("snapshot.user_id");
+      expect(text).toContain("format: json");
+      expect(text).toMatch(/not.*blanket authorization/);
+      expect(text).toMatch(/producers MUST NOT substitute/);
+      expect(text).toMatch(/consumers MUST fail closed/);
+      expect(text).toMatch(/Guest.*omit/);
+    }
+  });
+
+  it("serves the ownership distinction in the MCP snapshot tool description", async () => {
+    const listed = await modernPost(offline.base, { id: randomUUID(), method: "tools/list" });
+    expect(listed.status).toBe(200);
+    const tools = listed.body?.result?.tools as Array<{ name: string; description: string }>;
+    const description = tools.find((tool) => tool.name === "retrieve_entity_snapshot")?.description;
+    expect(description).toContain("server-owned outer user_id");
+    expect(description).toContain("snapshot.user_id");
+    expect(description).toContain("format=json");
+    expect(description).toContain("markdown omits");
+    expect(description).toContain("fail closed");
+    expect(description).toContain("Guest");
+    expect(description).toContain("not blanket authorization");
+  });
+
+  it("preserves authoritative outer ownership through HTTP, MCP JSON, CLI and historical projections", async () => {
+    const entityId = `ent_owner_parity_${randomUUID().replace(/-/g, "")}`;
+    const sourceId = await insertSource("owner");
+    createdEntityIds.push(entityId);
+    createdSourceIds.push(sourceId);
+    const now = new Date().toISOString();
+    const nestedOwner = "22222222-2222-4222-8222-222222222222";
+    await db.from("entities").insert({
+      id: entityId,
+      entity_type: "task",
+      canonical_name: entityId,
+      user_id: PARITY_USER_ID,
+    });
+    await insertObservation({
+      entityId,
+      sourceId,
+      observedAt: now,
+      createdAt: now,
+      fields: { title: "Synthetic ownership fixture", user_id: nestedOwner },
+    });
+    const snapshotInsert = await db.from("entity_snapshots").upsert({
+      entity_id: entityId,
+      entity_type: "task",
+      schema_version: "1.0",
+      user_id: PARITY_USER_ID,
+      snapshot: { title: "Synthetic ownership fixture", user_id: nestedOwner },
+      provenance: {},
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+    expect(snapshotInsert.error).toBeNull();
+
+    const detailResponse = await fetch(`${offline.base}/entities/${entityId}`);
+    expect(detailResponse.status).toBe(200);
+    const detail = await detailResponse.json();
+    expect(detail.user_id).toBe(PARITY_USER_ID);
+    expect(detail.snapshot.user_id).toBe(nestedOwner);
+    for (const projection of [
+      {},
+      { at: now },
+      { at_ingested: now },
+      { include_cleared_fields: true },
+    ]) {
+      const mcp = await callMcp(mcpServer, "retrieve_entity_snapshot", {
+        entity_id: entityId,
+        format: "json",
+        ...projection,
+      });
+      const http = await callHttp(offline.base, "/get_entity_snapshot", {
+        entity_id: entityId,
+        ...projection,
+      });
+      expect(http.status).toBe(200);
+      expect(mcp.user_id).toBe(PARITY_USER_ID);
+      expect(http.json.user_id).toBe(PARITY_USER_ID);
+    }
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        "dist/cli/index.js",
+        "--base-url",
+        offline.base,
+        "--api-only",
+        "--json",
+        "entities",
+        "get",
+        entityId,
+      ],
+      {
+        env: { ...process.env, NEOTOMA_BEARER_TOKEN: "", NEOTOMA_ISSUES_TARGET_URL: "" },
+      }
+    );
+    expect(JSON.parse(stdout).user_id).toBe(PARITY_USER_ID);
+  });
+
+  it("refuses cyclic and over-depth aliases on historical and cleared reads", async () => {
+    const prefix = `ent_owner_bound_${randomUUID().replace(/-/g, "")}`;
+    const cycle = [`${prefix}_cycle_a`, `${prefix}_cycle_b`];
+    const crossOwner = [`${prefix}_local_alias`, `${prefix}_foreign_target`];
+    const deep = Array.from(
+      { length: MAX_ATTACHMENT_RESOLUTION_DEPTH + 2 },
+      (_, index) => `${prefix}_depth_${index}`
+    );
+    createdEntityIds.push(...cycle, ...crossOwner, ...deep);
+    for (const id of [...cycle, ...crossOwner, ...deep]) {
+      const inserted = await db.from("entities").insert({
+        id,
+        entity_type: "note",
+        canonical_name: id,
+        user_id: id === crossOwner[1] ? "22222222-2222-4222-8222-222222222222" : PARITY_USER_ID,
+      });
+      expect(inserted.error).toBeNull();
+    }
+    for (const [from, to] of [
+      [cycle[0], cycle[1]],
+      [cycle[1], cycle[0]],
+      [crossOwner[0], crossOwner[1]],
+      ...deep.slice(0, -1).map((id, index) => [id, deep[index + 1]]),
+    ]) {
+      const updated = await db.from("entities").update({ merged_to_entity_id: to }).eq("id", from);
+      expect(updated.error).toBeNull();
+    }
+    for (const projection of [{ at: new Date().toISOString() }, { include_cleared_fields: true }]) {
+      for (const id of [cycle[0], deep[0]]) {
+        const response = await callHttp(offline.base, "/get_entity_snapshot", {
+          entity_id: id,
+          ...projection,
+        });
+        expect(response.status).toBe(500);
+        expect(JSON.stringify(response.json)).toContain(
+          "Entity lifecycle authority acquisition is incomplete or inconsistent"
+        );
+      }
+      for (const id of [deep.at(-1)!, deep.at(-2)!]) {
+        const response = await callHttp(offline.base, "/get_entity_snapshot", {
+          entity_id: id,
+          ...projection,
+        });
+        expect(response.status).toBe(200);
+        expect(response.json.user_id).toBe(PARITY_USER_ID);
+        expect(response.json.entity_id).toBe(deep.at(-1));
+      }
+      const denied = await callHttp(offline.base, "/get_entity_snapshot", {
+        entity_id: crossOwner[0],
+        ...projection,
+      });
+      expect(denied.status).toBe(404);
+      expect(JSON.stringify(denied.json)).not.toContain(crossOwner[1]);
+    }
+    for (const id of [cycle[0], deep[0]]) {
+      const current = await callHttp(offline.base, "/get_entity_snapshot", { entity_id: id });
+      expect(current.status).toBe(500);
+      expect(JSON.stringify(current.json)).toContain(
+        "Entity lifecycle authority acquisition is incomplete or inconsistent"
+      );
+    }
+  });
+
+  it("does not disclose the new owner to guests or expand an alias grant", async () => {
+    const alias = `ent_guest_owner_${randomUUID().replace(/-/g, "")}`;
+    const target = `ent_guest_target_${randomUUID().replace(/-/g, "")}`;
+    for (const id of [alias, target]) {
+      createdEntityIds.push(id);
+      await db
+        .from("entities")
+        .insert({ id, entity_type: "issue", canonical_name: id, user_id: PARITY_USER_ID });
+    }
+    // Synthetic capability exists only inside the isolated test database.
+    const token = await generateGuestAccessToken({ entityIds: [alias], userId: PARITY_USER_ID });
+    createdEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+    const direct = await fetch(`${offline.base}/entities/${alias}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(direct.status).toBe(200);
+    expect(await direct.json()).not.toHaveProperty("user_id");
+    await db.from("entities").update({ merged_to_entity_id: target }).eq("id", alias);
+    const denied = await fetch(`${offline.base}/entities/${alias}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(denied.ok).toBe(false);
+    expect(await denied.text()).not.toContain(PARITY_USER_ID);
+  });
+
+  it("enforces authenticated ownership and alias scope on HTTP, MCP wire and CLI", async () => {
+    const keys = [
+      "NEOTOMA_GOOGLE_CLIENT_ID",
+      "NEOTOMA_GOOGLE_CLIENT_SECRET",
+      "NEOTOMA_APPROVED_EMAILS",
+      "NEOTOMA_SHARED_GRAPH_USER_ID",
+      "NEOTOMA_BEARER_TOKEN",
+      "NEOTOMA_ACCESS_POLICY_NOTE",
+      "NEOTOMA_ACCESS_POLICY_RENDERED_PAGE",
+    ];
+    const previous = keys.map((key) => process.env[key]);
+    const email = `owner-${randomUUID()}@example.com`;
+    const clientId = "ownership-test-client";
+    process.env.NEOTOMA_GOOGLE_CLIENT_ID = clientId;
+    process.env.NEOTOMA_GOOGLE_CLIENT_SECRET = "synthetic-test-secret";
+    process.env.NEOTOMA_APPROVED_EMAILS = email;
+    delete process.env.NEOTOMA_SHARED_GRAPH_USER_ID;
+    delete process.env.NEOTOMA_BEARER_TOKEN;
+    delete process.env.NEOTOMA_ACCESS_POLICY_NOTE;
+    const harness = await createGoogleSignInHarness({ apiBase: () => offline.base, clientId });
+    try {
+      const userId = await perEmailUserId(email);
+      const { accessToken } = await harness.signIn(email);
+      const pair = await generateKeyPair("ES256", { extractable: true });
+      const privateJwk = { ...(await exportJWK(pair.privateKey)), alg: "ES256" };
+      const thumbprint = await calculateJwkThumbprint(await exportJWK(pair.publicKey));
+      const signer = {
+        privateJwk,
+        sub: "apis@ateles-swarm",
+        iss: "https://agent.example.com",
+        kid: thumbprint,
+        tokenTtlSec: 120,
+      };
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      };
+      const unadmitted = await signedFixturePost(
+        offline.base,
+        "/store",
+        JSON.stringify({
+          entities: [{ entity_type: "note", title: randomUUID(), content: "Must not persist" }],
+          idempotency_key: randomUUID(),
+        }),
+        headers,
+        signer
+      );
+      expect(unadmitted.status).toBe(500);
+      expect((await unadmitted.json()).message).toContain('Access policy "closed"');
+      const absent = await db
+        .from("observations")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("entity_type", "note");
+      expect(absent.error).toBeNull();
+      expect(absent.data).toHaveLength(0);
+      const granted = await fetch(`${offline.base}/agents/grants`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          label: "Synthetic ownership fixture",
+          match_sub: signer.sub,
+          match_iss: signer.iss,
+          match_thumbprint: thumbprint,
+          capabilities: [
+            { op: "store", entity_types: ["note", "task", "checkpoint_brief"] },
+            { op: "correct", entity_types: ["note", "task", "checkpoint_brief"] },
+          ],
+        }),
+      });
+      expect(granted.status, await granted.clone().text()).toBe(201);
+      createdEntityIds.push((await granted.json()).grant.grant_id);
+      const stored = await signedFixturePost(
+        offline.base,
+        "/store",
+        JSON.stringify({
+          entities: [{ entity_type: "note", title: randomUUID(), content: "Synthetic owner" }],
+          idempotency_key: randomUUID(),
+        }),
+        headers,
+        signer
+      );
+      expect(stored.status, await stored.clone().text()).toBe(200);
+      const body = await stored.json();
+      const entityId = body.entities?.[0]?.entity_id ?? body.structured?.entities?.[0]?.entity_id;
+      expect(entityId).toBeTypeOf("string");
+      createdEntityIds.push(entityId);
+      const corrected = await signedFixturePost(
+        offline.base,
+        "/correct",
+        JSON.stringify({
+          entity_id: entityId,
+          entity_type: "note",
+          field: "content",
+          value: "Corrected synthetic owner",
+          idempotency_key: randomUUID(),
+        }),
+        headers,
+        signer
+      );
+      expect(corrected.status).toBe(200);
+      const observed = await fetch(`${offline.base}/entities/${entityId}/observations`, {
+        headers,
+      });
+      expect(observed.status).toBe(200);
+      const observations = (await observed.json()).observations;
+      expect(observations.length).toBeGreaterThanOrEqual(2);
+      for (const observation of observations) {
+        expect(observation.provenance).toMatchObject({
+          attribution_tier: "software",
+          agent_sub: signer.sub,
+          agent_thumbprint: thumbprint,
+        });
+      }
+      // Explicit sibling-test binding; ordinary single-repo CI does not claim
+      // this optional joined evidence without the supplied Ateles checkout.
+      if (process.env.ATELES_TEST_ROOT) {
+        const resolverPair = await generateKeyPair("ES256", { extractable: true });
+        const resolverJwk = { ...(await exportJWK(resolverPair.privateKey)), alg: "ES256" };
+        const resolverJkt = await calculateJwkThumbprint(await exportJWK(resolverPair.publicKey));
+        const resolverGrant = await fetch(`${offline.base}/agents/grants`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            label: "Synthetic resolver fixture",
+            match_sub: "ateles@ateles-swarm",
+            match_iss: signer.iss,
+            match_thumbprint: resolverJkt,
+            capabilities: [{ op: "correct", entity_types: ["checkpoint_brief"] }],
+          }),
+        });
+        expect(resolverGrant.status, await resolverGrant.clone().text()).toBe(201);
+        createdEntityIds.push((await resolverGrant.json()).grant.grant_id);
+        const taskFields = {
+          title: { type: "string" },
+          status: { type: "string" },
+          blocked_reason: { type: "string" },
+          assigned_to: { type: "string" },
+          action_type: { type: "string" },
+          confidence: { type: "number" },
+        };
+        const taskSchema = await fetch(`${offline.base}/register_schema`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            entity_type: "task",
+            schema_version: "1.0",
+            user_specific: true,
+            activate: true,
+            schema_definition: { fields: taskFields, canonical_name_fields: ["title"] },
+            reducer_config: {
+              merge_policies: Object.fromEntries(
+                Object.keys(taskFields).map((field) => [field, { strategy: "last_write" }])
+              ),
+            },
+          }),
+        });
+        expect(taskSchema.status, await taskSchema.clone().text()).toBe(200);
+        const taskStored = await signedFixturePost(
+          offline.base,
+          "/store",
+          JSON.stringify({
+            entities: [
+              {
+                entity_type: "task",
+                title: randomUUID(),
+                status: "awaiting_approval",
+                blocked_reason: "Synthetic hold",
+                assigned_to: "cicada",
+                action_type: "local_edit",
+                confidence: 0.3,
+              },
+            ],
+            idempotency_key: randomUUID(),
+          }),
+          headers,
+          signer
+        );
+        expect(taskStored.status, await taskStored.clone().text()).toBe(200);
+        const taskBody = await taskStored.json();
+        const taskId =
+          taskBody.entities?.[0]?.entity_id ?? taskBody.structured?.entities?.[0]?.entity_id;
+        createdEntityIds.push(taskId);
+        const task = await (await fetch(`${offline.base}/entities/${taskId}`, { headers })).json();
+        const bridgeInput = {
+          base: offline.base,
+          canonical_base: `http://${signingAuthority}`,
+          access_token: accessToken,
+          producer_jkt: thumbprint,
+          resolver_jkt: resolverJkt,
+          user_id: userId,
+          task,
+        };
+        const bridge = async (mode: string, extra: Record<string, unknown> = {}) => {
+          const stdout = await new Promise<string>((resolve, reject) => {
+            const child = execFile(
+              "python3",
+              ["execution/evals/checkpoint_recovery/real_transport_bridge.py", mode],
+              {
+                cwd: process.env.ATELES_TEST_ROOT,
+                env: { ...process.env, PYTHONPATH: ".", PYTHONDONTWRITEBYTECODE: "1" },
+              },
+              (error, output, stderr) => {
+                if (error) reject(new Error(`Synthetic bridge failed: ${stderr}`));
+                else resolve(output);
+              }
+            );
+            child.stdin?.end(JSON.stringify({ ...bridgeInput, ...extra }));
+          });
+          return JSON.parse(stdout);
+        };
+        const envelope = await bridge("envelope");
+        const checkpointFields = {
+          title: { type: "string" },
+          body: { type: "string" },
+          task_entity_id: { type: "string" },
+          policy_entity_id: { type: "string" },
+          gate_action: { type: "string" },
+          blast_radius: { type: "string" },
+          handler: { type: "string" },
+          status: { type: "string" },
+          resolved_dispatched: { type: "boolean" },
+        };
+        const schemaResponse = await fetch(`${offline.base}/register_schema`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            entity_type: "checkpoint_brief",
+            schema_version: "1.0",
+            user_specific: true,
+            activate: true,
+            schema_definition: { fields: checkpointFields, canonical_name_fields: ["title"] },
+            reducer_config: {
+              merge_policies: Object.fromEntries(
+                Object.keys(checkpointFields).map((field) => [field, { strategy: "last_write" }])
+              ),
+            },
+          }),
+        });
+        expect(schemaResponse.status, await schemaResponse.clone().text()).toBe(200);
+        try {
+          const checkpointStored = await signedFixturePost(
+            offline.base,
+            "/store",
+            JSON.stringify({
+              entities: [
+                {
+                  entity_type: "checkpoint_brief",
+                  title: randomUUID(),
+                  ...envelope,
+                  task_entity_id: taskId,
+                  handler: "apis",
+                  status: "awaiting_operator",
+                  resolved_dispatched: false,
+                },
+              ],
+              idempotency_key: randomUUID(),
+            }),
+            headers,
+            signer
+          );
+          expect(checkpointStored.status, await checkpointStored.clone().text()).toBe(200);
+          const checkpointBody = await checkpointStored.json();
+          const checkpointId =
+            checkpointBody.entities?.[0]?.entity_id ??
+            checkpointBody.structured?.entities?.[0]?.entity_id;
+          createdEntityIds.push(checkpointId);
+          const effect = await bridge("resolve", {
+            checkpoint_id: checkpointId,
+            task_id: taskId,
+            resolver_jwk: resolverJwk,
+          });
+          expect(effect).toMatchObject({
+            creation_verified: true,
+            serialized_outer_owner_bound: true,
+            resolver_attribution_verified: true,
+            dispatch_count: 1,
+            replay_denied: true,
+          });
+        } finally {
+          for (const entityType of ["checkpoint_brief", "task"]) {
+            await db
+              .from("schema_registry")
+              .delete()
+              .eq("entity_type", entityType)
+              .eq("user_id", userId);
+          }
+        }
+      }
+      const alias = `ent_authenticated_alias_${randomUUID().replace(/-/g, "")}`;
+      const foreign = `ent_authenticated_foreign_${randomUUID().replace(/-/g, "")}`;
+      createdEntityIds.push(alias, foreign);
+      for (const [id, owner] of [
+        [alias, userId],
+        [foreign, "22222222-2222-4222-8222-222222222222"],
+      ]) {
+        const inserted = await db
+          .from("entities")
+          .insert({ id, entity_type: "note", canonical_name: id, user_id: owner });
+        expect(inserted.error).toBeNull();
+      }
+      await db.from("entities").update({ merged_to_entity_id: entityId }).eq("id", alias);
+      for (const id of [entityId, alias]) {
+        const response = await fetch(`${offline.base}/entities/${id}`, { headers });
+        expect(response.status).toBe(200);
+        const detail = await response.json();
+        expect(detail.user_id).toBe(userId);
+        expect(detail.snapshot.content).toBe("Corrected synthetic owner");
+        const wire = await modernPost(
+          offline.base,
+          {
+            id: randomUUID(),
+            method: "tools/call",
+            params: {
+              name: "retrieve_entity_snapshot",
+              arguments: { entity_id: id, format: "json" },
+            },
+          },
+          { headers }
+        );
+        expect(wire.status).toBe(200);
+        expect(wire.body?.result?.isError).not.toBe(true);
+        expect(toolResultJson(wire.body).user_id).toBe(userId);
+        const { stdout } = await promisify(execFile)(
+          process.execPath,
+          [
+            "dist/cli/index.js",
+            "--base-url",
+            offline.base,
+            "--api-only",
+            "--json",
+            "entities",
+            "get",
+            id,
+          ],
+          {
+            env: {
+              ...process.env,
+              NEOTOMA_BEARER_TOKEN: accessToken,
+              NEOTOMA_ISSUES_TARGET_URL: "",
+            },
+          }
+        );
+        expect(JSON.parse(stdout).user_id).toBe(userId);
+      }
+      await db.from("entities").update({ merged_to_entity_id: foreign }).eq("id", alias);
+      const denied = await fetch(`${offline.base}/entities/${alias}`, { headers });
+      expect(denied.ok).toBe(false);
+      const wireDenied = await modernPost(
+        offline.base,
+        {
+          id: randomUUID(),
+          method: "tools/call",
+          params: {
+            name: "retrieve_entity_snapshot",
+            arguments: { entity_id: alias, format: "json" },
+          },
+        },
+        { headers }
+      );
+      expect(wireDenied.body?.error?.code).toBe(-32602);
+      expect(wireDenied.body?.result).toBeUndefined();
+      await expect(
+        promisify(execFile)(
+          process.execPath,
+          [
+            "dist/cli/index.js",
+            "--base-url",
+            offline.base,
+            "--api-only",
+            "--json",
+            "entities",
+            "get",
+            alias,
+          ],
+          {
+            env: {
+              ...process.env,
+              NEOTOMA_BEARER_TOKEN: accessToken,
+              NEOTOMA_ISSUES_TARGET_URL: "",
+            },
+          }
+        )
+      ).rejects.toMatchObject({ code: 1 });
+
+      // The rendered detail routes use the same merge traversal as JSON detail.
+      // Exercise actual entrypoints with the authenticated fixture, not a mocked
+      // owner resolver. Direct DB setup is synthetic read-only fixture content.
+      const pages = {
+        alias: `ent_page_alias_${randomUUID().replace(/-/g, "")}`,
+        own: `ent_page_own_${randomUUID().replace(/-/g, "")}`,
+        foreign: `ent_page_foreign_${randomUUID().replace(/-/g, "")}`,
+        missingOwner: `ent_page_missing_${randomUUID().replace(/-/g, "")}`,
+      };
+      const ownMarker = `Synthetic own page ${randomUUID()}`;
+      const foreignMarker = `Synthetic restricted page ${randomUUID()}`;
+      for (const [id, owner, marker] of [
+        [pages.alias, userId, ownMarker],
+        [pages.own, userId, ownMarker],
+        [pages.foreign, "22222222-2222-4222-8222-222222222222", foreignMarker],
+        [pages.missingOwner, null, ownMarker],
+      ] as const) {
+        createdEntityIds.push(id);
+        const row = await db.from("entities").insert({
+          id,
+          entity_type: "rendered_page",
+          canonical_name: id,
+          user_id: owner,
+        });
+        expect(row.error).toBeNull();
+        const snapshot = await db.from("entity_snapshots").upsert({
+          entity_id: id,
+          entity_type: "rendered_page",
+          schema_version: "1.0",
+          user_id: owner,
+          snapshot: { title: marker, html_body: `<p>${marker}</p>` },
+          provenance: {},
+          observation_count: 0,
+          last_observation_at: new Date().toISOString(),
+          computed_at: new Date().toISOString(),
+        });
+        expect(snapshot.error).toBeNull();
+      }
+      await db.from("entities").update({ merged_to_entity_id: pages.own }).eq("id", pages.alias);
+      for (const format of ["markdown", "html"]) {
+        for (const id of [pages.own, pages.alias]) {
+          const response = await fetch(`${offline.base}/entities/${id}/${format}`, { headers });
+          expect(response.status).toBe(200);
+          expect(await response.text()).toContain(ownMarker);
+        }
+      }
+      const aliasOnlyToken = await generateGuestAccessToken({
+        entityIds: [pages.alias],
+        userId,
+      });
+      const allowedToken = await generateGuestAccessToken({
+        entityIds: [pages.alias, pages.own, pages.missingOwner],
+        userId,
+      });
+      for (const token of [aliasOnlyToken, allowedToken]) {
+        createdEntityIds.push(`guest_token_${hashGuestAccessToken(token).slice(0, 16)}`);
+      }
+      // Arrange existing supported guest policy only in this disposable app;
+      // exercise its restrictive branch before the normal scoped-read branch.
+      process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE = "closed";
+      const closedGuest = await fetch(`${offline.base}/entities/${pages.own}/html`, {
+        headers: { Authorization: `Bearer ${allowedToken}` },
+      });
+      expect(closedGuest.ok).toBe(false);
+      expect(await closedGuest.text()).not.toContain(ownMarker);
+      process.env.NEOTOMA_ACCESS_POLICY_RENDERED_PAGE = "submitter_scoped";
+      const guestAliasDenied = await fetch(`${offline.base}/entities/${pages.alias}/html`, {
+        headers: { Authorization: `Bearer ${aliasOnlyToken}` },
+      });
+      expect.soft(guestAliasDenied.ok).toBe(false);
+      expect.soft(await guestAliasDenied.text()).not.toContain(ownMarker);
+      for (const id of [pages.own, pages.alias]) {
+        const allowed = await fetch(`${offline.base}/entities/${id}/html`, {
+          headers: { Authorization: `Bearer ${allowedToken}` },
+        });
+        expect(allowed.status, await allowed.clone().text()).toBe(200);
+        const html = await allowed.text();
+        expect(html).toContain(ownMarker);
+        expect(html).not.toContain(userId);
+      }
+      for (const suffix of ["", "/html"]) {
+        const guestMissingOwner = await fetch(
+          `${offline.base}/entities/${pages.missingOwner}${suffix}`,
+          { headers: { Authorization: `Bearer ${allowedToken}` } }
+        );
+        expect(guestMissingOwner.ok).toBe(false);
+        expect(await guestMissingOwner.text()).not.toContain(ownMarker);
+      }
+      await db
+        .from("entities")
+        .update({ merged_to_entity_id: pages.foreign })
+        .eq("id", pages.alias);
+      for (const format of ["markdown", "html"]) {
+        const crossOwner = await fetch(`${offline.base}/entities/${pages.alias}/${format}`, {
+          headers,
+        });
+        expect.soft(crossOwner.status).toBe(404);
+        expect.soft(await crossOwner.text()).not.toContain(foreignMarker);
+        const missingOwner = await fetch(
+          `${offline.base}/entities/${pages.missingOwner}/${format}`,
+          { headers }
+        );
+        expect(missingOwner.status).toBe(404);
+        expect(await missingOwner.text()).not.toContain(ownMarker);
+      }
+      const guestCrossOwner = await fetch(`${offline.base}/entities/${pages.alias}/html`, {
+        headers: { Authorization: `Bearer ${allowedToken}` },
+      });
+      expect.soft(guestCrossOwner.ok).toBe(false);
+      expect.soft(await guestCrossOwner.text()).not.toContain(foreignMarker);
+    } finally {
+      harness.restoreFetch();
+      keys.forEach((key, i) => {
+        if (previous[i] === undefined) delete process.env[key];
+        else process.env[key] = previous[i];
+      });
+    }
   });
 
   // -------------------------------------------------------------------------

@@ -3586,6 +3586,7 @@ export class NeotomaServer {
     const responseFormat = parsed.format ?? "markdown";
 
     const renderEntitySnapshotResponse = async (payload: {
+      user_id?: string | null;
       entity_id: string;
       entity_type: string;
       schema_version: string;
@@ -3704,6 +3705,7 @@ export class NeotomaServer {
 
         return renderEntitySnapshotResponse({
           ...historicalResult,
+          user_id: entity.user_id,
           raw_fragments: currentEntity?.raw_fragments,
         });
       } catch (error) {
@@ -3720,6 +3722,7 @@ export class NeotomaServer {
     // Return current snapshot (from stored entity_snapshots table)
     return renderEntitySnapshotResponse({
       ...(entity.cleared_fields_included ? { cleared_fields_included: true as const } : {}),
+      user_id: entity.user_id,
       entity_id: entity.entity_id,
       entity_type: entity.entity_type,
       schema_version: (entity as { schema_version?: string }).schema_version ?? entity.entity_type,

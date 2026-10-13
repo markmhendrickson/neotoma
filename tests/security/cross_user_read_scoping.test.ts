@@ -81,6 +81,7 @@ describe("cross-user read scoping", () => {
       const got = await getEntityWithProvenance(alice.entityId, false, alice.userId);
       expect(got).not.toBeNull();
       expect(got?.entity_id).toBe(alice.entityId);
+      expect(got?.user_id).toBe(alice.userId);
     });
 
     it("does NOT return another user's entity when scoped by userId", async () => {
@@ -97,6 +98,18 @@ describe("cross-user read scoping", () => {
     it("remains unscoped when no userId is supplied (back-compat for ownership-prechecked callers)", async () => {
       const got = await getEntityWithProvenance(bob.entityId);
       expect(got).not.toBeNull();
+    });
+
+    it("keeps merged traversal scoped to the authenticated owner", async () => {
+      await db
+        .from("entities")
+        .update({ merged_to_entity_id: bob.entityId })
+        .eq("id", alice.entityId);
+      try {
+        expect(await getEntityWithProvenance(alice.entityId, false, alice.userId)).toBeNull();
+      } finally {
+        await db.from("entities").update({ merged_to_entity_id: null }).eq("id", alice.entityId);
+      }
     });
   });
 

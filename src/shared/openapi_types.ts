@@ -3673,6 +3673,11 @@ export interface components {
     };
     EntitySnapshot: {
       /**
+       * Format: uuid
+       * @description Authoritative owner from the resolved entities row, not snapshot content. Omitted for guest detail responses.
+       */
+      readonly user_id?: string | null;
+      /**
        * @description Present only for an accepted nullable winning projection.
        * @enum {boolean}
        */

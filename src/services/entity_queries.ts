@@ -123,6 +123,8 @@ export interface EntityQueryOptions {
 }
 
 export interface EntityWithProvenance {
+  /** Server-owned metadata from the resolved entities row, never reducer fields. */
+  user_id?: string | null;
   cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
@@ -1181,6 +1183,7 @@ export async function getEntityWithProvenance(
     entity_type: entity.entity_type,
     canonical_name: entity.canonical_name,
     schema_version: effectiveSnapshot?.schema_version || "1.0",
+    user_id: entity.user_id ?? null,
     snapshot: effectiveSnapshot?.snapshot || {},
     raw_fragments: Object.keys(rawFragments).length > 0 ? rawFragments : undefined,
     observation_count: observationCount,

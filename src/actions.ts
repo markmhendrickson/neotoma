@@ -4342,7 +4342,13 @@ async function resolveGuestScopedEntityAccess(
     .eq("id", entityId)
     .single();
 
-  if (entityError || !entity || (expectedEntityType && entity.entity_type !== expectedEntityType)) {
+  if (
+    entityError ||
+    !entity ||
+    typeof entity.user_id !== "string" ||
+    entity.user_id.trim().length === 0 ||
+    (expectedEntityType && entity.entity_type !== expectedEntityType)
+  ) {
     throw new Error(
       expectedEntityType === "issue" ? "Issue entity not found." : "Entity not found."
     );
@@ -5338,10 +5344,12 @@ app.get("/entities/:id", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
+    let ownerScope: string;
     if (principal.kind === "guest") {
-      await resolveGuestScopedEntityAccess(principal, entityId);
+      ownerScope = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
     } else {
       const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      ownerScope = userId;
       const { data: entity, error: entityError } = await db
         .from("entities")
         .select("id, user_id")
@@ -5355,13 +5363,21 @@ app.get("/entities/:id", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const entityWithProvenance = await getEntityWithProvenance(entityId);
+    const entityWithProvenance = await getEntityWithProvenance(entityId, false, ownerScope);
 
     if (!entityWithProvenance) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     // OpenAPI + clients expect `EntitySnapshot` at the root (not `{ entity: ... }`).
+    if (principal.kind === "guest") {
+      // An alias grant must not silently expand to its canonical target.
+      if (entityWithProvenance.entity_id !== entityId) {
+        await resolveGuestScopedEntityAccess(principal, entityWithProvenance.entity_id);
+      }
+      const { user_id: _owner, ...guestDetail } = entityWithProvenance;
+      return res.json(guestDetail);
+    }
     return res.json(entityWithProvenance);
   } catch (error) {
     return handleApiError(
@@ -5396,7 +5412,7 @@ app.get("/entities/:id/markdown", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const current = await getEntityWithProvenance(entityId);
+    const current = await getEntityWithProvenance(entityId, false, userId);
     if (!current) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
@@ -5453,10 +5469,12 @@ app.get("/entities/:id/html", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
+    let ownerScope: string;
     if (principal.kind === "guest") {
-      await resolveGuestScopedEntityAccess(principal, entityId);
+      ownerScope = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
     } else {
       const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      ownerScope = userId;
       const { data: entity, error: entityError } = await db
         .from("entities")
         .select("id, user_id, entity_type")
@@ -5469,9 +5487,12 @@ app.get("/entities/:id/html", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const current = await getEntityWithProvenance(entityId);
+    const current = await getEntityWithProvenance(entityId, false, ownerScope);
     if (!current) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+    if (principal.kind === "guest" && current.entity_id !== entityId) {
+      await resolveGuestScopedEntityAccess(principal, current.entity_id);
     }
     if (current.entity_type !== "rendered_page") {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity is not a rendered_page");
@@ -10176,16 +10197,28 @@ app.post("/get_entity_snapshot", async (req, res) => {
       const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested, {
         includeClearedFields: include_cleared_fields,
       });
-      if (include_cleared_fields && !at && !at_ingested) {
-        const { isEntityDeleted } = await import("./services/deletion.js");
-        if (result && (await isEntityDeleted(result.entity_id, userId)))
-          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-      }
       if (result === null) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
+      // The replay already resolved aliases with cycle and depth guards.
+      // Read owner metadata from that exact resolved row, without a second
+      // unbounded detail traversal or a reducer-authored ownership fallback.
+      const { data: ownedEntity, error: ownerError } = await db
+        .from("entities")
+        .select("id, user_id")
+        .eq("id", result.entity_id)
+        .eq("user_id", userId)
+        .single();
+      if (ownerError || !ownedEntity || ownedEntity.user_id !== userId) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
+      if (include_cleared_fields && !at && !at_ingested) {
+        const { isEntityDeleted } = await import("./services/deletion.js");
+        if (await isEntityDeleted(result.entity_id, userId))
+          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
       logDebug("Success:get_entity_snapshot:at_time", req, { entity_id, at, at_ingested });
-      return res.json(result);
+      return res.json({ ...result, user_id: ownedEntity.user_id });
     } catch (err) {
       logError("Error:get_entity_snapshot:at_time", req, err);
       return sendError(res, 500, "DB_QUERY_FAILED", (err as Error).message);
@@ -10210,10 +10243,29 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   // No cutoffs: return the existing owned materialized factual snapshot.
+  const { resolveAttachmentTarget } = await import("./services/attachment_resolution.js");
+  const target = await resolveAttachmentTarget(entity_id, userId);
+  if (target.truncated) {
+    return sendError(
+      res,
+      500,
+      "DB_QUERY_FAILED",
+      "Entity lifecycle authority acquisition is incomplete or inconsistent"
+    );
+  }
+  const { data: ownedEntity, error: ownerError } = await db
+    .from("entities")
+    .select("id, user_id")
+    .eq("id", target.resolvedEntityId)
+    .eq("user_id", userId)
+    .single();
+  if (ownerError || !ownedEntity || ownedEntity.user_id !== userId) {
+    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+  }
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")
-    .eq("entity_id", entity_id)
+    .eq("entity_id", ownedEntity.id)
     .eq("user_id", userId)
     .single();
 
@@ -10226,7 +10278,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
-  return res.json(data);
+  return res.json({ ...data, user_id: ownedEntity.user_id });
 });
 
 // List observations for entity

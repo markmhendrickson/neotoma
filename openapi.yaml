@@ -1800,6 +1800,12 @@ components:
     EntitySnapshot:
       type: object
       properties:
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: Authoritative owner from the resolved entities row, not snapshot content. Omitted for guest detail responses.
         cleared_fields_included:
           type: boolean
           enum: [true]
