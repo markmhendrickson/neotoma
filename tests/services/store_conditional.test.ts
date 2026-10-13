@@ -759,6 +759,52 @@ describe("conditional store data_origin (#2242)", () => {
     expect(await counts()).toEqual(before);
   });
 
+  it("omitted observation_source + data_origin: one OBSERVATION_SOURCE_OMITTED warning, stored unspecified, origin kept (#2241 x #2242)", async () => {
+    // request() carries no observationSource, so this is the omitted case.
+    const first = await storeConditionalStructured({
+      ...request("omitted-source-origin"),
+      dataOrigin: origin,
+    });
+    expect(first.operation_receipt.status).toBe("applied");
+    const warnings = (
+      (first as { store_warnings?: Array<{ code: string; entity_id: string }> }).store_warnings ??
+      []
+    ).filter((w) => w.code === "OBSERVATION_SOURCE_OMITTED");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.entity_id).toBe(first.operation_receipt.entity_id);
+    const { data: row } = await db
+      .from("observations")
+      .select("observation_source, provenance")
+      .eq("id", first.operation_receipt.observation_id)
+      .single();
+    expect(row!.observation_source).toBe("unspecified");
+    const provenance =
+      typeof row!.provenance === "string" ? JSON.parse(row!.provenance) : row!.provenance;
+    expect(provenance.data_origin).toEqual(origin);
+
+    // The receipt check compares observation_source AND data_origin: the
+    // identical retry verifies and replays (repeating no warning), while
+    // changing either one under the same key is a different request.
+    const before = await counts();
+    const replay = await storeConditionalStructured({
+      ...request("omitted-source-origin"),
+      dataOrigin: origin,
+    });
+    expect(replay.operation_receipt).toEqual({ ...first.operation_receipt, status: "replayed" });
+    expect((replay as { store_warnings?: unknown[] }).store_warnings).toBeUndefined();
+    await expect(
+      storeConditionalStructured({
+        ...request("omitted-source-origin"),
+        observationSource: "llm_summary",
+        dataOrigin: origin,
+      })
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    await expect(
+      storeConditionalStructured({ ...request("omitted-source-origin") })
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    expect(await counts()).toEqual(before);
+  });
+
   it("writes no data_origin key when none is supplied", async () => {
     const first = await storeConditionalStructured(request("no-origin"));
     const { data: row } = await db

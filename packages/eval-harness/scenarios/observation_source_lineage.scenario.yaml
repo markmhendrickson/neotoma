@@ -1,0 +1,99 @@
+meta:
+  id: observation_source_lineage
+  description: "Replay three real store calls that differ only in
+    observation_source (omitted, explicit unspecified, explicit import) and
+    read each back through list_observations. Omission must persist as
+    unspecified and return one OBSERVATION_SOURCE_OMITTED warning; explicit
+    values persist as sent with no warning. Design basis: #2241;
+    docs/testing/testing_standard.md#integration-tests."
+  tags:
+    - tier2
+    - store
+    - provenance
+    - eval-coverage
+seed_strategy: generated
+source_pattern: An omitted observation_source was persisted as llm_summary,
+  turning silence into a false claim of model authorship (#2241). Omission
+  must be recorded as unspecified and surfaced as a warning, and must stay
+  distinguishable from an explicit unspecified.
+privacy_transform: Synthetic schema and entities only. Scripted replay
+  cassette, no recorded user data or model output.
+system_prompt: Store each supplied synthetic record with the observation_source
+  given, then read its observations back.
+user_prompt: Store one record with observation_source omitted, one with
+  unspecified and one with import, and read back each record's observations.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: tool_result.matches
+    tool_name: register_schema
+    which: 0
+    result_subset:
+      success: true
+  # (1) observation_source omitted -> one OBSERVATION_SOURCE_OMITTED warning.
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      success: true
+      store_warnings:
+        - code: OBSERVATION_SOURCE_OMITTED
+          observation_index: 0
+          entity_type: qa_obs_source_record
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: store_warnings.1
+    present: false
+  # ...and the observation reads back as unspecified, not llm_summary.
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 0
+    result_subset:
+      observations:
+        - observation_source: unspecified
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 0
+    result_key: observations.1
+    present: false
+  # (2) explicit unspecified -> stored as unspecified, no warning.
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_key: store_warnings.0
+    present: false
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 1
+    result_subset:
+      observations:
+        - observation_source: unspecified
+  # (3) explicit import -> stored as import, no warning.
+  - type: tool_result.matches
+    tool_name: store
+    which: 2
+    result_subset:
+      success: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 2
+    result_key: store_warnings.0
+    present: false
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 2
+    result_subset:
+      observations:
+        - observation_source: import
+  - type: entity.count
+    entity_type: qa_obs_source_record
+    op: eq
+    value: 3

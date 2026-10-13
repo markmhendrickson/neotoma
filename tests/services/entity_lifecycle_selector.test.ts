@@ -94,6 +94,56 @@ describe("context-explicit entity lifecycle selector", () => {
       }).hidden
     ).toBe(true);
   });
+  it("pre-migration ranks an unlisted `unspecified` level with `llm_summary`, so recency decides (#2241)", () => {
+    const older = "2026-01-01T00:00:00Z";
+    const newer = "2026-10-13T00:00:00Z";
+    // A newer omitted-source (unspecified) row beats an older llm_summary row,
+    // matching the reducer's shared rank map.
+    expect(
+      selectLegacyEntityVisibility([
+        row("old_llm", {
+          observed_at: older,
+          observation_source: "llm_summary",
+          fields: { _deleted: true },
+        }),
+        row("new_unspecified", {
+          observed_at: newer,
+          observation_source: "unspecified",
+          fields: { _deleted: false },
+        }),
+      ])
+    ).toEqual({ hidden: false, selected_observation_id: "new_unspecified" });
+    // Same tier, so a newer llm_summary row beats an older unspecified one.
+    expect(
+      selectLegacyEntityVisibility([
+        row("old_unspecified", {
+          observed_at: older,
+          observation_source: "unspecified",
+          fields: { _deleted: false },
+        }),
+        row("new_llm", {
+          observed_at: newer,
+          observation_source: "llm_summary",
+          fields: { _deleted: true },
+        }),
+      ])
+    ).toEqual({ hidden: true, selected_observation_id: "new_llm" });
+    // sensor still outranks a newer unspecified row.
+    expect(
+      selectLegacyEntityVisibility([
+        row("old_sensor", {
+          observed_at: older,
+          observation_source: "sensor",
+          fields: { _deleted: true },
+        }),
+        row("new_unspecified", {
+          observed_at: newer,
+          observation_source: "unspecified",
+          fields: { _deleted: false },
+        }),
+      ])
+    ).toEqual({ hidden: true, selected_observation_id: "old_sensor" });
+  });
   it("pre-migration refuses populated authority without a cutover", () => {
     expect(() =>
       selectEntityLifecycleVisibility([action("delete", 1, "delete")], {

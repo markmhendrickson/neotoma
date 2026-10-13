@@ -164,7 +164,7 @@ export interface Observation {
   entity_id: string;
   entity_type: string;
   schema_version?: string;
-  /** Write classification (sensor, llm_summary, workflow_state, human, import, sync). */
+  /** Write classification (sensor, llm_summary, workflow_state, human, import, sync, unspecified). */
   observation_source?: string | null;
   /** Cross-instance sync: originating Neotoma peer id when replayed from a peer. */
   source_peer_id?: string | null;

@@ -4,7 +4,7 @@
  *
  * Exercises the local SQLite write path end-to-end:
  *   1. Callers that omit `observation_source` fall through to the
- *      documented default (`llm_summary`).
+ *      documented default (`unspecified` since #2241; `llm_summary` before).
  *   2. Every documented enum value round-trips to the row unchanged.
  *   3. Reading back via `listObservationsForEntity` preserves the value
  *      (guards against column pruning / serialization drift).
@@ -65,7 +65,7 @@ describe("observation_source round-trip", () => {
     });
     tracker.trackObservation(obs.id);
 
-    expect(DEFAULT_OBSERVATION_SOURCE).toBe("llm_summary");
+    expect(DEFAULT_OBSERVATION_SOURCE).toBe("unspecified");
     expect(obs.observation_source).toBe(DEFAULT_OBSERVATION_SOURCE);
   });
 

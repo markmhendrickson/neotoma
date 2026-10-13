@@ -146,6 +146,7 @@ export const OBSERVATION_SOURCE_CLI_VALUES = [
   "human",
   "import",
   "sync",
+  "unspecified",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
@@ -15089,7 +15090,7 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .option(
@@ -15358,7 +15359,7 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option(
     "--source-upload",
@@ -16817,7 +16818,7 @@ snapshotsCommand
   )
   .option(
     "--observation-source <kind>",
-    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync (custom v0.17 values → use data_source)"
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync | unspecified (custom v0.17 values → use data_source)"
   )
   .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
   .option("--limit <n>", "Cap on returned entities (default: 500)")

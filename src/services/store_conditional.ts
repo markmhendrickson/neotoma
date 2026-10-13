@@ -46,6 +46,7 @@ import {
   DATA_ORIGIN_PROVENANCE_KEY,
   entitiesWithStoredDataOrigins,
 } from "./provenance_data_origin.js";
+import { buildObservationSourceOmittedWarning } from "./observation_source_warning.js";
 import { refreshEntitySnapshotEmbeddingAfterCommit } from "./entity_snapshot_embedding.js";
 
 export interface ConditionalStoreOptions {
@@ -445,6 +446,20 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     .eq("entity_id", operation.entity_id)
     .eq("user_id", options.userId)
     .maybeSingle();
+  // A replay repeats no write, so it repeats no warning: the warning
+  // describes what the original write did. Same rule as the plain store
+  // paths, which return before building it on replay.
+  const obsSourceWarn =
+    operation.status === "replayed"
+      ? null
+      : buildObservationSourceOmittedWarning({
+          rawObservationSource: options.observationSource,
+          firstStored: {
+            observation_index: 0,
+            entity_type: operation.entity_type,
+            entity_id: operation.entity_id,
+          },
+        });
   return {
     success: true,
     replayed: operation.status === "replayed",
@@ -470,5 +485,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
         deduplicated: operation.status === "replayed",
       },
     ],
+    // #2241: same OBSERVATION_SOURCE_OMITTED signal as the ordinary store
+    // paths, so a conditional store is not the one place omission stays silent.
+    ...(obsSourceWarn ? { store_warnings: [obsSourceWarn] } : {}),
   };
 }

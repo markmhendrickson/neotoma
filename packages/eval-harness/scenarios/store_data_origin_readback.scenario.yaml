@@ -3,7 +3,9 @@ meta:
   description: "Replay synthetic store calls that carry data_origin (#2242).
     One store sets a request-level origin and overrides it on one entity; the
     replay then reads each origin back through list_observations and
-    retrieve_field_provenance. A second store carries a malformed origin (file
+    retrieve_field_provenance. The store omits observation_source, so it must
+    return exactly one OBSERVATION_SOURCE_OMITTED warning and both observations
+    must read back as unspecified with their origins intact (#2241). A second store carries a malformed origin (file
     kind with no locator) and must be refused with nothing written. Design
     basis: docs/subsystems/agent_attribution_integration.md#8a-data-origin-provenance-2242;
     docs/testing/testing_standard.md#integration-tests."
@@ -41,6 +43,34 @@ expected:
     entity_type: eval_origin_record
     where:
       title: origin email 18c2f0a9d1
+  # observation_source is omitted on this store (#2241 x #2242): exactly one
+  # OBSERVATION_SOURCE_OMITTED warning for the request, and both observations
+  # read back as unspecified while keeping their origins (asserted below).
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      store_warnings:
+        - code: OBSERVATION_SOURCE_OMITTED
+          observation_index: 0
+          entity_type: eval_origin_record
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: store_warnings.1
+    present: false
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 0
+    result_subset:
+      observations:
+        - observation_source: unspecified
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 1
+    result_subset:
+      observations:
+        - observation_source: unspecified
   # The origin is a provenance facet, never an entity field.
   - type: snapshot.field_absent
     entity_type: eval_origin_record

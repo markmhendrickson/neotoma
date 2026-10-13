@@ -160,8 +160,11 @@ components:
           - workflow_state
           - human
           - import
+          - sync
+          - unspecified
           description: Kind of write that produced this observation (sensor,
-            llm_summary, workflow_state, human, import). Orthogonal to
+            llm_summary, workflow_state, human, import, sync, unspecified).
+            unspecified means the writer omitted the field. Orthogonal to
             source_priority and to provenance/AAuth.
         fields:
           type: object
@@ -320,8 +323,12 @@ components:
           - workflow_state
           - human
           - import
+          - sync
+          - unspecified
           description: Kind of write (sensor, llm_summary, workflow_state, human,
-            import). Defaults to llm_summary when unspecified.
+            import, sync, unspecified). When omitted, observations are stored as unspecified
+            and store_warnings carries OBSERVATION_SOURCE_OMITTED; set llm_summary
+            explicitly for model-authored content.
         data_origin:
           type: object
           additionalProperties: false
@@ -456,8 +463,12 @@ components:
           - workflow_state
           - human
           - import
+          - sync
+          - unspecified
           description: Kind of write (sensor, llm_summary, workflow_state, human,
-            import). Defaults to llm_summary when unspecified.
+            import, sync, unspecified). When omitted, observations are stored as unspecified
+            and store_warnings carries OBSERVATION_SOURCE_OMITTED; set llm_summary
+            explicitly for model-authored content.
         idempotency_key:
           type: string
         user_id:

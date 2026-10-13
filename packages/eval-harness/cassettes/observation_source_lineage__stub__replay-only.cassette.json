@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "observation_source_lineage",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-13T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Store one record with observation_source omitted, one with unspecified and one with import, and read back each record's observations.",
+  "system_prompt": "Store each supplied synthetic record with the observation_source given, then read its observations back.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "qa_obs_source_record",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "name"
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_obs_source_record",
+            "name": "obs_source_omitted",
+            "content": "synthetic body"
+          }
+        ],
+        "idempotency_key": "observation_source_lineage-omitted"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_obs_source_record",
+            "name": "obs_source_unspecified",
+            "content": "synthetic body"
+          }
+        ],
+        "idempotency_key": "observation_source_lineage-unspecified",
+        "observation_source": "unspecified"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "qa_obs_source_record",
+            "name": "obs_source_import",
+            "content": "synthetic body"
+          }
+        ],
+        "idempotency_key": "observation_source_lineage-import",
+        "observation_source": "import"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "list_observations",
+      "input": {
+        "entity_id": "ent_bad229c61ee7038765673353"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "list_observations",
+      "input": {
+        "entity_id": "ent_6bc4a6682b6388b822e43320"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "list_observations",
+      "input": {
+        "entity_id": "ent_98bdcbcddbf24ded291603d4"
+      },
+      "sequence": 6
+    }
+  ],
+  "assistant_text": ""
+}

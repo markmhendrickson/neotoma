@@ -198,6 +198,53 @@ describe("store data_origin (#2242)", () => {
     expect(snapText).toContain('locator="msg-18c2f0a9d1"');
   });
 
+  it("omitted observation_source + data_origin: ONE OBSERVATION_SOURCE_OMITTED warning, unspecified stored, origin kept on read-back (#2241 x #2242, REST and MCP)", async () => {
+    const omitted = (body: Record<string, any>) =>
+      ((body.store_warnings ?? []) as Array<Record<string, any>>).filter(
+        (w) => w.code === "OBSERVATION_SOURCE_OMITTED"
+      );
+
+    // REST: no observation_source, a request-level origin and a per-entity override.
+    const restMarker = randomUUID();
+    const restResp = await rest("/store", {
+      user_id: USER_ID,
+      idempotency_key: `origin-omitted-source-rest-${restMarker}`,
+      data_origin: SHEET_ORIGIN,
+      entities: batch(restMarker),
+    });
+    expect(restResp.status).toBe(200);
+    const [restDefault, restOverride] = entityIdsFrom(restResp.json);
+    const restWarnings = omitted(restResp.json);
+    expect(restWarnings).toHaveLength(1);
+    expect(restWarnings[0]).toMatchObject({ observation_index: 0, entity_id: restDefault });
+    const [restDefaultObs] = await restObservations(restDefault!);
+    const [restOverrideObs] = await restObservations(restOverride!);
+    expect(restDefaultObs!.observation_source).toBe("unspecified");
+    expect(restOverrideObs!.observation_source).toBe("unspecified");
+    expect(provenanceOf(restDefaultObs!).data_origin).toEqual(SHEET_ORIGIN);
+    expect(provenanceOf(restOverrideObs!).data_origin).toEqual(EMAIL_ORIGIN);
+    const restFp = await rest("/get_field_provenance", { entity_id: restDefault, field: "title" });
+    expect(restFp.status).toBe(200);
+    expect(provenanceOf(restFp.json.observations[0]).data_origin).toEqual(SHEET_ORIGIN);
+
+    // MCP: same request through the store tool, read back through MCP tools.
+    const mcpMarker = randomUUID();
+    const mcpResp = await tool("store", {
+      idempotency_key: `origin-omitted-source-mcp-${mcpMarker}`,
+      data_origin: SHEET_ORIGIN,
+      entities: batch(mcpMarker),
+    });
+    const [mcpDefault, mcpOverride] = entityIdsFrom(mcpResp);
+    const mcpWarnings = omitted(mcpResp);
+    expect(mcpWarnings).toHaveLength(1);
+    expect(mcpWarnings[0]).toMatchObject({ observation_index: 0, entity_id: mcpDefault });
+    const mcpListed = await tool("list_observations", { entity_id: mcpOverride });
+    expect(mcpListed.observations[0].observation_source).toBe("unspecified");
+    expect(provenanceOf(mcpListed.observations[0]).data_origin).toEqual(EMAIL_ORIGIN);
+    const mcpFp = await tool("retrieve_field_provenance", { entity_id: mcpDefault, field: "title" });
+    expect(mcpFp.source_observation.data_origin).toEqual(SHEET_ORIGIN);
+  });
+
   it("REST and MCP persist a byte-identical data_origin for the same logical input", async () => {
     const restMarker = randomUUID();
     const mcpMarker = randomUUID();

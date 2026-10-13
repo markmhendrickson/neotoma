@@ -44,7 +44,7 @@ Instance skills / scripts (CLI-only, no MCP tool — materialization writes to t
 CLI uses connect-only startup for interactive sessions. It does not auto-start servers on session start. On no-args startup, it discovers running local API instances from session ports, defaults (`3080`, `3180`), remembered ports, and optional configured ports. If multiple instances are healthy, it applies `--env` as a preference and then prompts for explicit selection.
 
 ```bash
-neotoma store --json='[...]'
+neotoma store --observation-source llm_summary --json='[...]'
 neotoma entities list --type contact
 neotoma schemas list
 ```
@@ -60,12 +60,14 @@ For server commands (`api start`, `api stop`, `api logs`, `watch`), pass `--env 
 When using the CLI (MCP not available):
 
 ```bash
-neotoma store --json='[{"entity_type":"person","name":"Sarah"},{"entity_type":"task","title":"Pay Sarah $20","description":"Owe Sarah $20"}]'
+neotoma store --observation-source llm_summary --json='[{"entity_type":"person","name":"Sarah"},{"entity_type":"task","title":"Pay Sarah $20","description":"Owe Sarah $20"}]'
 ```
+
+Pass **`--observation-source`** on every store: `llm_summary` for content you extracted or summarized, `import` for file or batch loads, or `unspecified` when you cannot say. Omitting it stores `unspecified` and returns an `OBSERVATION_SOURCE_OMITTED` warning.
 
 Each object in the array must be **flat** (all fields alongside `entity_type`). Do **not** wrap rows in a root **`attributes`** object — that pre-v0.5 shape is rejected with **`ERR_STORE_RESOLUTION_FAILED`**; see **`docs/developer/mcp/instructions.md`** [STORE RECIPES] (first bullets after the tool-parameter line).
 
-For long payloads, use `neotoma store --file <path>` with a JSON file containing the entities array.
+For long payloads, use `neotoma store --observation-source llm_summary --file <path>` with a JSON file containing the entities array.
 
 Data origin (transport mapping for the MCP `data_origin` rule in **`docs/developer/mcp/instructions.md`**): pass `--data-origin '<json>'` (e.g. `'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}'`) or a top-level `data_origin` key in a `--file` envelope; a `data_origin` key inside one entity overrides it for that entity.
 
@@ -153,6 +155,8 @@ Use narrow queries first, then expand only if needed.
 **Entity-id identifiers:** when the identifier is a literal `entity_id` (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
+
+**Agent-initiated file reads and dangling source-file citations:** see `docs/developer/mcp/instructions.md` [PROVENANCE] (search "Agent-initiated file reads") and [QA REFLECTION] (search "Dangling source-file citation check"). The persistence obligation for a file the agent reads itself (not just user-attached files) is identical in the CLI backup path, including its exception for secret-bearing files, whose bytes are never persisted: run `neotoma instructions print` to see the canonical behavioral rule before relying on a `source_file`-style field without a stored file asset.
 
 **Deep pagination:** use `--cursor`, not `--offset`. Offset paging re-scans every prior row, so deep pages get slower the further you go and are rejected past a bounded depth (2000). Pass the `next_cursor` from the previous response to `--cursor` to page in constant time at any depth:
 
