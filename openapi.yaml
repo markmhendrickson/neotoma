@@ -6323,6 +6323,14 @@ paths:
             or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
             idempotency_key was already used for a store call with different
             content. Use a new idempotency_key to write the updated payload.
+
+            `ERR_STORE_WRITE_INCOMPLETE`: the idempotency_key belongs to a
+            store that did not finish writing, and the request carries an
+            `interpretation`, so it cannot be resumed under that key. Read
+            back the original request's entities and store the missing ones
+            under a new idempotency_key. A replay without an `interpretation`
+            never returns this: it finishes the interrupted write, and a
+            replay of a finished write is unchanged (`replayed: true`).
           content:
             application/json:
               schema:

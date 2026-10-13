@@ -116,6 +116,40 @@ Observations table already supports:
 - `canonical_hash` column (computed from canonicalized fields)
 - Unique constraint on `(source_id, interpretation_id, entity_id, canonical_hash)`
 
+## Store write completion (`/store`, MCP `store`)
+
+The `sources` row that carries a store's `idempotency_key` is created before any
+observation exists, and the write loop after it is not one transaction: it
+interleaves reads, snapshot recompute, embedding work and event emission, which
+a transaction would hold the database's global write gate across. A recorded key
+therefore does not by itself mean the write finished (#2144).
+
+Completion is recorded on the source row in `provenance.store_write`:
+
+- `in_progress` is written by the same insert that creates the row.
+- `complete` replaces it only after every entity's observation, and the
+  request's relationships, have been written.
+
+Replay rules for a keyed store:
+
+| Recorded state | Replay behaviour |
+| --- | --- |
+| `complete` | Unchanged: `replayed: true`, `entities_created: 0`, the existing observations, no writes. |
+| `in_progress` | Not a replay. The write runs again over the same source. Observation ids are deterministic (source, entity, fields), so entities already written resolve to their existing observation and only the missing ones are added; entities left empty by the interruption get their observation and snapshot. |
+| none (row written before the marker) | HTTP `/store` counts the observations on the keyed source against the request's distinct entity payloads and resumes when it is short. MCP `store` replays as before. |
+
+A request that carries an `interpretation` cannot be resumed under the same key
+(a fresh interpretation run changes every observation id), so it fails with
+`ERR_STORE_WRITE_INCOMPLETE` (409) instead of reporting success.
+
+A committing keyed store is not cancelled by the caller's abort signal once it
+starts (`detachDbAbortSignal`), and a second call for the same
+`(user, idempotency_key)` in the same process waits for the first to settle, so
+a client retrying after its own timeout reads the finished write rather than
+racing it. Coordination across processes sharing one database file is not
+provided; the deterministic ids turn that race into a UNIQUE conflict error, not
+a duplicate.
+
 ## Benefits
 
 - **Safe for infrastructure**: Idempotent operations can be retried safely

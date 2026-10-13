@@ -297,6 +297,18 @@ export function installStdioSignalHandlers(close: () => Promise<void>): boolean 
   return true;
 }
 
+type StoreStructuredInternalOptions = {
+  expectedEntityAbsent?: boolean;
+  commit?: boolean;
+  strict?: boolean;
+  observationSource?: import("./shared/action_schemas.js").ObservationSource;
+  sourcePeerId?: string | null;
+  interpretation?: StoreInterpretationInput;
+  interpretationSourceId?: string;
+  /** Effective data origin per entity index (#2242); see provenance_data_origin.ts. */
+  dataOrigins?: Array<DataOrigin | undefined>;
+};
+
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
   private autoEnhancementCleanup?: () => void;
@@ -6327,6 +6339,12 @@ export class NeotomaServer {
   }
 
   // Internal helper for structured source storing
+  /**
+   * MCP structured store entry point. A committing, keyed store is a write:
+   * once it starts it is not cancelled by the caller's abort signal, and a
+   * second call for the same idempotency key waits for the first (#2144). See
+   * `runKeyedStoreWrite`.
+   */
   private async storeStructuredInternal(
     userId: string,
     entities: Record<string, unknown>[],
@@ -6334,17 +6352,33 @@ export class NeotomaServer {
     idempotencyKey?: string,
     originalFilename?: string,
     relationships?: StoreRelationshipRef[],
-    options: {
-      expectedEntityAbsent?: boolean;
-      commit?: boolean;
-      strict?: boolean;
-      observationSource?: import("./shared/action_schemas.js").ObservationSource;
-      sourcePeerId?: string | null;
-      interpretation?: StoreInterpretationInput;
-      interpretationSourceId?: string;
-      /** Effective data origin per entity index (#2242); see provenance_data_origin.ts. */
-      dataOrigins?: Array<DataOrigin | undefined>;
-    } = {}
+    options: StoreStructuredInternalOptions = {}
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const run = () =>
+      this.storeStructuredInternalUnguarded(
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey,
+        originalFilename,
+        relationships,
+        options
+      );
+    if (!idempotencyKey || options.commit === false || options.expectedEntityAbsent === true) {
+      return run();
+    }
+    const { runKeyedStoreWrite } = await import("./services/store_write_state.js");
+    return runKeyedStoreWrite(userId, idempotencyKey, run);
+  }
+
+  private async storeStructuredInternalUnguarded(
+    userId: string,
+    entities: Record<string, unknown>[],
+    sourcePriority: number = 100,
+    idempotencyKey?: string,
+    originalFilename?: string,
+    relationships?: StoreRelationshipRef[],
+    options: StoreStructuredInternalOptions = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     if (options.expectedEntityAbsent === true) {
       const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
@@ -6589,7 +6623,7 @@ export class NeotomaServer {
 
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
-        .select("id, content_hash")
+        .select("id, content_hash, provenance")
         .eq("user_id", userId)
         .eq("idempotency_key", idempotencyKey)
         .maybeSingle();
@@ -6598,16 +6632,43 @@ export class NeotomaServer {
         throw new Error(`Failed to check idempotency key: ${existingSourceError.message}`);
       }
 
-      if (existingSource) {
-        if (existingSource.content_hash && existingSource.content_hash !== incomingContentHash) {
-          const mismatchErr = new McpError(
-            ErrorCode.InvalidParams,
-            `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
-              `Use a unique idempotency_key for each distinct write.`
-          );
-          throw mismatchErr;
-        }
+      if (
+        existingSource &&
+        existingSource.content_hash &&
+        existingSource.content_hash !== incomingContentHash
+      ) {
+        const mismatchErr = new McpError(
+          ErrorCode.InvalidParams,
+          `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
+            `Use a unique idempotency_key for each distinct write.`
+        );
+        throw mismatchErr;
+      }
 
+      // A recorded key is not a finished write (#2144). When the earlier
+      // attempt never recorded completion, skip the replay branch and run the
+      // ordinary write again over the same source: observation ids are
+      // deterministic, so entities already written resolve to their existing
+      // observation and only the missing ones are added. Sources written
+      // before the marker existed have no recorded state and replay as before.
+      let resumeIncompleteWrite = false;
+      if (existingSource) {
+        const { readStoreWriteState } = await import("./services/store_write_state.js");
+        if (readStoreWriteState(existingSource.provenance) === "in_progress") {
+          if (interpretation) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
+                "that did not finish writing, and it cannot be resumed under the same key because " +
+                "the request carries an interpretation. Read back the entities from the original " +
+                "request and store the missing ones under a new idempotency_key."
+            );
+          }
+          resumeIncompleteWrite = true;
+        }
+      }
+
+      if (existingSource && !resumeIncompleteWrite) {
         // Combined stores with interpretation.source_ref=unstructured write
         // observations against the unstructured source, while the structured
         // JSON source still owns the idempotency key. Exact replay must look
@@ -6804,6 +6865,7 @@ export class NeotomaServer {
           upload_method: "mcp_store",
           client: "mcp",
           source_priority: sourcePriority,
+          ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
         },
       });
     } catch (rawStorageErr) {
@@ -6887,6 +6949,13 @@ export class NeotomaServer {
             );
           }
         }
+      }
+
+      // Every observation and relationship is written; record it on the source so
+      // a replay of this key knows the write finished (#2144).
+      {
+        const { markStoreWriteComplete } = await import("./services/store_write_state.js");
+        await markStoreWriteComplete(storageResult.sourceId, userId);
       }
 
       return this.buildTextResponse({
@@ -8107,6 +8176,13 @@ export class NeotomaServer {
           err instanceof Error ? err.message : String(err)
         }`
       );
+    }
+
+    // Every observation and relationship is written; record it on the source so
+    // a replay of this key knows the write finished (#2144).
+    {
+      const { markStoreWriteComplete } = await import("./services/store_write_state.js");
+      await markStoreWriteComplete(storageResult.sourceId, userId);
     }
 
     return this.buildTextResponse({

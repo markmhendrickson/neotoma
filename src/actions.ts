@@ -7750,7 +7750,26 @@ async function completeInterpretationRun(params: {
     .eq("id", params.interpretationId);
 }
 
+/**
+ * Structured store entry point.
+ *
+ * A committing store is a write: once it starts it runs to completion and is
+ * not cancelled by the caller's abort signal, and a second call for the same
+ * idempotency key waits for the first (#2144). See `runKeyedStoreWrite`.
+ * Plan mode (`commit: false`) writes nothing and the conditional path is its
+ * own atomic transaction, so both run as before.
+ */
 export async function storeStructuredForApi(params: StructuredStoreApiParams) {
+  if (params.commit === false || params.expectedEntityAbsent === true) {
+    return storeStructuredForApiUnguarded(params);
+  }
+  const { runKeyedStoreWrite } = await import("./services/store_write_state.js");
+  return runKeyedStoreWrite(params.userId, params.idempotencyKey, () =>
+    storeStructuredForApiUnguarded(params)
+  );
+}
+
+async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) {
   const {
     userId,
     entities,
@@ -7817,7 +7836,7 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
 
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
-    .select("id, content_hash")
+    .select("id, content_hash, provenance")
     .eq("user_id", userId)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
@@ -7841,7 +7860,51 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
         "To update an entity, omit the idempotency_key or use a new one.";
       throw mismatchErr;
     }
+  }
 
+  // A recorded key is not a finished write (#2144): the source row is created
+  // before any observation, so a loop that stopped part way leaves a key that
+  // looks done. `resumeIncompleteWrite` is true when the earlier attempt did
+  // not finish; the replay branch below is then skipped and the ordinary write
+  // path runs again over the same source. That is safe because observation ids
+  // are deterministic (source, entity, fields), so entities already written
+  // resolve to their existing observation and only the missing ones are added.
+  let resumeIncompleteWrite = false;
+  if (existingSource && commit) {
+    const storeWriteState = await import("./services/store_write_state.js");
+    const recordedState = storeWriteState.readStoreWriteState(existingSource.provenance);
+    const incomplete =
+      recordedState === "in_progress" ||
+      (recordedState === undefined &&
+        storeWriteState.legacyWriteLooksIncomplete({
+          entities,
+          observationCount: (
+            await (
+              await import("./services/observation_storage.js")
+            ).listObservationsForSource(existingSource.id, userId)
+          ).length,
+          observationsOnKeyedSource: !interpretation?.source_id && !interpretationSourceId,
+        }));
+    if (incomplete) {
+      if (interpretation) {
+        // A resumed write would open a fresh interpretation run, whose id is
+        // part of each observation id, so the entities already written would
+        // be written a second time. Report the incomplete write instead.
+        const incompleteErr = new Error(
+          `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
+            "that did not finish writing. It cannot be resumed under the same key because the " +
+            "request carries an interpretation."
+        ) as Error & { code: string; hint: string };
+        incompleteErr.code = "ERR_STORE_WRITE_INCOMPLETE";
+        incompleteErr.hint =
+          "Read back the entities from the original request and store the missing ones under a new idempotency_key.";
+        throw incompleteErr;
+      }
+      resumeIncompleteWrite = true;
+    }
+  }
+
+  if (existingSource && !resumeIncompleteWrite) {
     const { listObservationsForSource } = await import("./services/observation_storage.js");
     const existingObs = await listObservationsForSource(existingSource.id, userId);
 
@@ -7957,6 +8020,7 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
           upload_method: "api_store",
           client: "api",
           source_priority: sourcePriority,
+          ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
         },
       })
     : null;
@@ -8700,6 +8764,15 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
         );
       }
     }
+  }
+
+  // Every observation (and the request's relationships) is written. Record
+  // that on the keyed source so a replay of this key knows the write finished
+  // (#2144). Before this point a replay resumes the write instead of reporting
+  // whatever happened to land.
+  if (commit && storageResult) {
+    const { markStoreWriteComplete } = await import("./services/store_write_state.js");
+    await markStoreWriteComplete(storageResult.sourceId, userId);
   }
 
   // R3: aggregate non-fatal resolver warnings across the batch so callers
@@ -9539,6 +9612,18 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       logWarn("IdempotencyCollision:store", req, { message });
       return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
+    }
+    if (error && typeof error === "object" && errCode === "ERR_STORE_WRITE_INCOMPLETE") {
+      const message = error instanceof Error ? error.message : String(error);
+      const hint = (error as { hint?: string }).hint;
+      logWarn("StoreWriteIncomplete:store", req, { message });
+      return res.status(409).json({
+        error: {
+          code: "ERR_STORE_WRITE_INCOMPLETE",
+          message,
+          ...(hint ? { hint } : {}),
+        },
+      });
     }
     if (error && typeof error === "object" && errCode === "ERR_STORE_POLICY_DENIED") {
       const err = error as {

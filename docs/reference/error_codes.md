@@ -583,6 +583,7 @@ refused either way; only the explanation differs.
 | --------------------------- | ---- | ------ | --------------------------------------------------------------------------------------------------------------- |
 | `ERR_IDEMPOTENCY_MISMATCH`  | 400  | No     | `idempotency_key` reused with a different canonicalized predicate (`entity_split`, `correct`).                  |
 | `ERR_IDEMPOTENCY_COLLISION` | 409  | No     | `idempotency_key` reused on `/store` with different content (different content hash) than the original request. |
+| `ERR_STORE_WRITE_INCOMPLETE` | 409  | No     | `idempotency_key` belongs to a `/store` that did not finish writing and cannot be resumed under the same key (the request carries an `interpretation`). Store the missing entities under a new key. |
 
 `ERR_IDEMPOTENCY_MISMATCH` and `ERR_IDEMPOTENCY_COLLISION` describe the same
 semantic class — a previously-seen idempotency key reused with different
