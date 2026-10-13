@@ -40,7 +40,8 @@ export interface CreateObservationParams {
   specificity_score: number;
   source_priority: number;
   /**
-   * Kind of write (sensor | llm_summary | workflow_state | human | import).
+   * Kind of write (sensor | llm_summary | workflow_state | human | import |
+   * sync | unspecified).
    * Orthogonal to `source_priority` (numeric ranking) and to
    * `provenance`/AAuth (which agent wrote it). Omit to fall back to
    * {@link DEFAULT_OBSERVATION_SOURCE}. See openapi.yaml

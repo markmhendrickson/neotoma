@@ -42,6 +42,7 @@ import {
   emitEntitySnapshotChange,
 } from "../events/substrate_store_emit.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
+import { buildObservationSourceOmittedWarning } from "./observation_source_warning.js";
 import { refreshEntitySnapshotEmbeddingAfterCommit } from "./entity_snapshot_embedding.js";
 
 export interface ConditionalStoreOptions {
@@ -427,6 +428,14 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     .eq("entity_id", operation.entity_id)
     .eq("user_id", options.userId)
     .maybeSingle();
+  const obsSourceWarn = buildObservationSourceOmittedWarning({
+    rawObservationSource: options.observationSource,
+    firstStored: {
+      observation_index: 0,
+      entity_type: operation.entity_type,
+      entity_id: operation.entity_id,
+    },
+  });
   return {
     success: true,
     replayed: operation.status === "replayed",
@@ -452,5 +461,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
         deduplicated: operation.status === "replayed",
       },
     ],
+    // #2241: same OBSERVATION_SOURCE_OMITTED signal as the ordinary store
+    // paths, so a conditional store is not the one place omission stays silent.
+    ...(obsSourceWarn ? { store_warnings: [obsSourceWarn] } : {}),
   };
 }

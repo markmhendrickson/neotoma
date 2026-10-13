@@ -150,6 +150,36 @@ describe("ObservationReducer - observation_source tie-break", () => {
     expect(snap!.provenance.value).toBe("obs_sensor");
   });
 
+  it("ranks `unspecified` (#2241) after every classified source, like an unclassified legacy row", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue(BASE_SCHEMA);
+
+    // `unspecified` is a lineage sentinel, not a provenance class, so it is
+    // deliberately absent from the default ranking. At equal numeric
+    // priority even the lowest-ranked classified kind (`sync`) beats a newer
+    // `unspecified` write.
+    expect(DEFAULT_OBSERVATION_SOURCE_PRIORITY).not.toContain("unspecified");
+    const obs: Observation[] = [
+      makeObs({
+        id: "obs_unspecified",
+        observed_at: "2025-05-01T00:00:00Z", // newest
+        fields: { value: "from_unspecified" },
+        observation_source: "unspecified",
+      }),
+      makeObs({
+        id: "obs_sync",
+        observed_at: "2025-01-01T00:00:00Z",
+        fields: { value: "from_sync" },
+        observation_source: "sync",
+      }),
+    ];
+
+    const snap = await reducer.computeSnapshot("ent_test", obs);
+    expect(snap).not.toBeNull();
+    expect(snap!.snapshot.value).toBe("from_sync");
+    expect(snap!.provenance.value).toBe("obs_sync");
+  });
+
   it("numeric source_priority still dominates observation_source", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schemaRegistry.loadActiveSchema as any).mockResolvedValue(BASE_SCHEMA);

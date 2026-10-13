@@ -605,6 +605,10 @@ export const OBSERVATION_SOURCE_RANK_VALUES = [
   "human",
   "import",
   "sync",
+  // #2241: a schema MAY rank `unspecified` explicitly, but it is deliberately
+  // NOT in DEFAULT_OBSERVATION_SOURCE_PRIORITY below, so by default an
+  // unclassified write sorts after every classified one.
+  "unspecified",
 ] as const;
 
 export type ObservationSourceRankValue = (typeof OBSERVATION_SOURCE_RANK_VALUES)[number];
