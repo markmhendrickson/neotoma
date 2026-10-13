@@ -87,7 +87,7 @@ export function buildToolDefinitions(
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve the provenance chain for a specific field in an entity snapshot"
+        "Retrieve the provenance chain for a specific field in an entity snapshot. source is null when the winning observation has no source document (for example a correction); a merged array field lists every contributing observation in observation_ids and contributing_observations."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },
