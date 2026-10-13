@@ -624,10 +624,13 @@ export const ObservationsQueryRequestSchema = z.object({
 /**
  * Classification of the *kind* of write being performed, orthogonal to
  * numeric `source_priority`. See `Observation.observation_source` in
- * openapi.yaml for the full semantic contract. Default (`llm_summary`)
- * is applied by the write path, not at parse time, so MCP callers that
- * omit the field remain LLM-driven by construction without breaking
- * idempotency hashes or contract-test fixtures.
+ * openapi.yaml for the full semantic contract. The default
+ * (`unspecified`, see `DEFAULT_OBSERVATION_SOURCE`) is applied by the write
+ * path, not at parse time, so the store handlers can still tell "the caller
+ * omitted the field" (which earns an `OBSERVATION_SOURCE_OMITTED` store
+ * warning) apart from "the caller sent `unspecified`" (which does not).
+ * Omission is not a claim about lineage: before #2241 it was recorded as
+ * `llm_summary`, which asserted model authorship nobody had declared.
  *
  * NOTE (v0.17 → v0.18 breaking change, issue #1841): this is a CLOSED enum.
  * v0.17 accepted arbitrary `observation_source` strings; v0.18 restricts them
@@ -642,6 +645,9 @@ export const OBSERVATION_SOURCE_VALUES = [
   "human",
   "import",
   "sync",
+  // Lineage sentinel (#2241): the caller did not classify the write. Kept
+  // last so existing positional consumers of this list are undisturbed.
+  "unspecified",
 ] as const;
 
 export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);

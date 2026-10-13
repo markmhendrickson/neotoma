@@ -73,6 +73,7 @@ import {
   RegisterSchemaRequestSchema,
   IntakeHintSchema,
   IssuesSyncRepoSchema,
+  ObservationSourceSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
@@ -5721,9 +5722,8 @@ export class NeotomaServer {
           })
           .optional(),
         source_priority: z.number().default(100),
-        observation_source: z
-          .enum(["sensor", "llm_summary", "workflow_state", "human", "import", "sync"])
-          .optional(),
+        // Shared enum (#2241) so the MCP store accepts exactly what REST does.
+        observation_source: ObservationSourceSchema.optional(),
         source_peer_id: z.string().min(1).optional(),
         commit: z.boolean().optional(),
         strict: z.boolean().optional(),
@@ -7574,7 +7574,7 @@ export class NeotomaServer {
               timestamp: emitTs,
               source_id: storageResult.sourceId,
               idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? "llm_summary",
+              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
               source_peer_id: sourcePeerId ?? undefined,
             });
             const isNewEntity = createdEntity.action === "created";
@@ -7594,7 +7594,7 @@ export class NeotomaServer {
               fields_changed: fieldsChanged,
               source_id: storageResult.sourceId,
               idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? "llm_summary",
+              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
               source_peer_id: sourcePeerId ?? undefined,
             });
           }
@@ -7926,6 +7926,23 @@ export class NeotomaServer {
           }
         }
       }
+    }
+
+    // #2241: OBSERVATION_SOURCE_OMITTED — the request did not say what kind of
+    // write this was, so every observation was stored as `unspecified`. Judged
+    // on the raw request value (an explicit `unspecified` does not warn) and
+    // emitted once per request, because observation_source is request-scoped.
+    {
+      const { buildObservationSourceOmittedWarning } =
+        await import("./services/observation_source_warning.js");
+      const first = createdEntities[0];
+      const obsSourceWarn = buildObservationSourceOmittedWarning({
+        rawObservationSource: observationSource,
+        firstStored: first
+          ? { observation_index: 0, entity_type: first.entityType, entity_id: first.entityId }
+          : undefined,
+      });
+      if (obsSourceWarn) schemaStoreWarnings.push(obsSourceWarn);
     }
 
     // #1963: surface auto-link edge retractions on the MCP store response so a

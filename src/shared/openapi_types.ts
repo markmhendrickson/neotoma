@@ -1095,7 +1095,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create observation */
+    /**
+     * Create observation
+     * @description Low-level single-observation write. Accepts the same
+     *     `observation_source` enum as `/store`. When the field is omitted
+     *     the observation is stored with `unspecified`, but unlike `/store`
+     *     this endpoint returns no `OBSERVATION_SOURCE_OMITTED` warning
+     *     (its response carries no `store_warnings`). Send
+     *     `observation_source` explicitly to record lineage.
+     */
     post: operations["createObservation"];
     delete?: never;
     options?: never;
@@ -3778,10 +3786,22 @@ export interface components {
        *       Inspector edit, `entities correct`, manual annotation).
        *     - `import` — batch ingestion / ETL / scheduled imports.
        *     - `sync` — cross-instance replication from a configured Neotoma peer.
+       *     - `unspecified` — the caller did not say what kind of write this
+       *       was. Applied by the write path when a store request omits
+       *       `observation_source` (and accepted when sent explicitly). It is
+       *       a lineage sentinel, not a provenance class: it makes no claim
+       *       about origin, and it is distinct from an explicit
+       *       `llm_summary`. A store that omits the field also returns an
+       *       `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. In the
+       *       reducer tie-break it shares `llm_summary`'s rank unless the
+       *       schema's `observation_source_priority` names it, so recency
+       *       decides between the two.
        *
        *     Null / missing for legacy rows written before the field
-       *     existed; writes default to `llm_summary` when unspecified
-       *     because MCP callers are LLM-driven by construction.
+       *     existed. Rows written before `unspecified` was introduced carry
+       *     `llm_summary` when their caller omitted the field, so a legacy
+       *     `llm_summary` is not by itself evidence that a language model
+       *     produced the value; only explicit values written since are.
        * @enum {string|null}
        */
       observation_source?:
@@ -3791,6 +3811,7 @@ export interface components {
         | "human"
         | "import"
         | "sync"
+        | "unspecified"
         | null;
       fields?: {
         [key: string]: unknown;
@@ -4211,9 +4232,12 @@ export interface components {
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
        *     `source_priority`. See `Observation.observation_source` for
-       *     the full semantic contract. Defaults to `llm_summary` when
-       *     unspecified. Applies to every observation created by this
-       *     request.
+       *     the full semantic contract. When omitted, observations are
+       *     stored with `unspecified` and the response carries one
+       *     `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
+       *     field explicitly (for example `llm_summary` for model-authored
+       *     content, `import` for ETL) to record lineage. Applies to every
+       *     observation created by this request.
        * @enum {string}
        */
       observation_source?:
@@ -4222,7 +4246,8 @@ export interface components {
         | "workflow_state"
         | "human"
         | "import"
-        | "sync";
+        | "sync"
+        | "unspecified";
       /**
        * @description Optional upstream author (e.g. GitHub user for issue submission).
        *     Stamped into observation provenance; must align with
@@ -4306,9 +4331,12 @@ export interface components {
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
        *     `source_priority`. See `Observation.observation_source` for
-       *     the full semantic contract. Defaults to `llm_summary` when
-       *     unspecified. Applies to every observation created by this
-       *     request.
+       *     the full semantic contract. When omitted, observations are
+       *     stored with `unspecified` and the response carries one
+       *     `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
+       *     field explicitly (for example `llm_summary` for model-authored
+       *     content, `import` for ETL) to record lineage. Applies to every
+       *     observation created by this request.
        * @enum {string}
        */
       observation_source?:
@@ -4317,7 +4345,8 @@ export interface components {
         | "workflow_state"
         | "human"
         | "import"
-        | "sync";
+        | "sync"
+        | "unspecified";
       idempotency_key: string;
       user_id?: string;
       /**
@@ -4537,7 +4566,15 @@ export interface components {
          *     non-default `source_priority` but no field on the entity type
          *     uses a merge strategy that honours it — all fields effectively
          *     use `last_write`, so the priority value has no effect on the
-         *     stored snapshot).
+         *     stored snapshot), and `OBSERVATION_SOURCE_OMITTED` (fired
+         *     once per store request that omits `observation_source`;
+         *     every observation in the request was stored as
+         *     `unspecified`. `observation_index`/`entity_id` name the
+         *     first stored entity only as a nominal pointer: the warning
+         *     is request-scoped, not about that entity. Not fired when
+         *     the caller sends any value explicitly, including
+         *     `unspecified`, which a caller that cannot classify the
+         *     write should send to suppress it).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */

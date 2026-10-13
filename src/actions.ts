@@ -245,9 +245,11 @@ import {
   RetrieveRelatedEntitiesSchema,
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+  ObservationSourceSchema,
   StoreRequestSchema,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
+import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
@@ -7619,9 +7621,9 @@ app.post("/observations/create", async (req, res) => {
     entity_identifier: z.string(),
     fields: z.record(z.unknown()),
     source_priority: z.number().optional().default(100),
-    observation_source: z
-      .enum(["sensor", "llm_summary", "workflow_state", "human", "import", "sync"])
-      .optional(),
+    // Shared enum (#2241): an inline copy here had drifted from the store
+    // schema's once already; reuse the single source instead.
+    observation_source: ObservationSourceSchema.optional(),
     source_peer_id: z.string().min(1).optional(),
     user_id: z.string().uuid(),
   });
@@ -8492,7 +8494,7 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
       const emitTs = obsRow.observed_at ?? new Date().toISOString();
       const obsSourceLabel =
         observationSource === undefined || observationSource === null
-          ? "llm_summary"
+          ? DEFAULT_OBSERVATION_SOURCE
           : String(observationSource);
       emitObservationCreated({
         user_id: userId,
@@ -8956,6 +8958,21 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
         }
       }
     }
+  }
+
+  // #2241: OBSERVATION_SOURCE_OMITTED — the request did not say what kind of
+  // write this was, so every observation was stored as `unspecified`. Judged
+  // on the raw request value (an explicit `unspecified` does not warn) and
+  // emitted once per request, because observation_source is request-scoped.
+  {
+    const { buildObservationSourceOmittedWarning } =
+      await import("./services/observation_source_warning.js");
+    const firstStored = [...resolved].sort((a, b) => a.observation_index - b.observation_index)[0];
+    const obsSourceWarn = buildObservationSourceOmittedWarning({
+      rawObservationSource: observationSource,
+      firstStored,
+    });
+    if (obsSourceWarn) schemaStoreWarnings.push(obsSourceWarn);
   }
 
   // #1963: surface auto-link edge retractions on the store response so a

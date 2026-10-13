@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **721**
-- Backend and repo Vitest files: **685**
+- Total automated test files: **724**
+- Backend and repo Vitest files: **688**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 194 |
+| Vitest unit tests | 195 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 218 |
-| Vitest CLI tests | 85 |
+| Vitest integration tests | 219 |
+| Vitest CLI tests | 86 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (194):**
+**Files (195):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -246,6 +246,7 @@ flowchart TD
 - `tests/unit/observation_reducer_observation_source.test.ts`
 - `tests/unit/observation_reducer_projection.test.ts`
 - `tests/unit/observation_reducer_provenance.test.ts`
+- `tests/unit/observation_source_omitted_warning.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
 - `tests/unit/patch_array_item_store_policy_envelope.test.ts`
@@ -453,7 +454,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (218):**
+**Files (219):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -602,6 +603,7 @@ flowchart TD
 - `tests/integration/observation_insert_sites_characterization.test.ts`
 - `tests/integration/observation_insert_sites_routing.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`
+- `tests/integration/observation_source_unspecified_default.test.ts`
 - `tests/integration/override_policy_enforcement.test.ts`
 - `tests/integration/payload_compiler.test.ts`
 - `tests/integration/payload/payload_submission.test.ts`
@@ -678,7 +680,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (85):**
+**Files (86):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -723,6 +725,7 @@ flowchart TD
 - `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
+- `tests/cli/cli_store_observation_source.test.ts`
 - `tests/cli/cli_store_plan_mode_no_writes.test.ts`
 - `tests/cli/cli_timeline_commands.test.ts`
 - `tests/cli/cli_user_id_propagation.test.ts`

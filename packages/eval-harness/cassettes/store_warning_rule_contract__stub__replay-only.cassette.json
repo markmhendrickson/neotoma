@@ -59,7 +59,8 @@
             "content": "body"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-condition_present"
+        "idempotency_key": "store_warning_rule_contract-condition_present",
+        "observation_source": "llm_summary"
       },
       "sequence": 1
     },
@@ -110,7 +111,8 @@
             "name": "condition_absent"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-condition_absent"
+        "idempotency_key": "store_warning_rule_contract-condition_absent",
+        "observation_source": "llm_summary"
       },
       "sequence": 3
     },
@@ -160,7 +162,8 @@
             "content": "body"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-flat_present"
+        "idempotency_key": "store_warning_rule_contract-flat_present",
+        "observation_source": "llm_summary"
       },
       "sequence": 5
     },
@@ -209,7 +212,8 @@
             "name": "flat_absent"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-flat_absent"
+        "idempotency_key": "store_warning_rule_contract-flat_absent",
+        "observation_source": "llm_summary"
       },
       "sequence": 7
     },
@@ -261,7 +265,8 @@
             "content": "body"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-unknown"
+        "idempotency_key": "store_warning_rule_contract-unknown",
+        "observation_source": "llm_summary"
       },
       "sequence": 9
     },
@@ -314,7 +319,8 @@
             "content": "body"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-partial"
+        "idempotency_key": "store_warning_rule_contract-partial",
+        "observation_source": "llm_summary"
       },
       "sequence": 11
     },
@@ -364,7 +370,8 @@
             "content": "body"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-empty_list"
+        "idempotency_key": "store_warning_rule_contract-empty_list",
+        "observation_source": "llm_summary"
       },
       "sequence": 13
     },
@@ -417,7 +424,8 @@
             "content": "body"
           }
         ],
-        "idempotency_key": "store_warning_rule_contract-mixed_list"
+        "idempotency_key": "store_warning_rule_contract-mixed_list",
+        "observation_source": "llm_summary"
       },
       "sequence": 15
     }
