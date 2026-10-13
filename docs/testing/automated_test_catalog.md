@@ -97,7 +97,7 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.
+- Required baseline CI runs `type-check`, `lint`, `lint:site-copy`, `test:unit`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps` on Node 20; it then rebuilds on Node 24 and runs `NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts` in the same required job. Missing native `DatabaseSync` fails rather than skips.
 - Baseline CI also runs `python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v`: six owned native SQLite cases executing the freshly compiled schema release entry, with exact vocabulary/custom-row preservation and nonzero failure assertions. Required prerequisites fail rather than skip.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.

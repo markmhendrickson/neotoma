@@ -1376,8 +1376,14 @@ export function writeCliError(err: unknown): void {
   const outputMode = resolveOutputMode();
   if (outputMode === "json") {
     const envelope: Record<string, unknown> = { error: msg };
-    if (err instanceof CliHintError) envelope.hint = err.hint;
-    else if (recoveryHint) envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
+    if (err instanceof CliHintError) {
+      envelope.hint =
+        err.hint.code === "INTEGRITY_FAILED" && recoveryHint
+          ? { ...err.hint, message: recoveryHint }
+          : err.hint;
+    } else if (recoveryHint) {
+      envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
+    }
     process.stderr.write(JSON.stringify(envelope) + "\n");
     return;
   }
@@ -1885,6 +1891,11 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
 
   if (details.length === 1 && details[0] === "ok") {
     return { kind: "verified" };
+  }
+  // Older verification paths used this sentinel when the driver produced no
+  // rows. It is not a SQLite conclusion and must never imply corruption.
+  if (details.some((detail) => detail === "no result")) {
+    return { kind: "verify_instrument_failure" };
   }
   if (details.every((detail) => detail !== "ok")) {
     return { kind: "integrity_failed" };

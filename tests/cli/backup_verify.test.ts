@@ -167,11 +167,18 @@ describe("CLI backup verify (smoke)", () => {
       expect(json.exitCode).toBe(1);
       const envelope = JSON.parse(json.stderr) as {
         error: string;
-        hint?: { code?: string; failure_kind?: string };
+        hint?: { code?: string; failure_kind?: string; message?: string };
       };
       expect(envelope.error).toContain("snapshot integrity check failed");
       expect(envelope.error).not.toContain("SENSITIVE_PRAGMA_ROW");
-      expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
+      expect(envelope.hint).toEqual({
+        code: "INTEGRITY_FAILED",
+        failure_kind: "integrity_failed",
+        message:
+          "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
+          "`neotoma storage recover-db --recover` after stopping Neotoma.",
+      });
+      expect(json.stderr).not.toContain("SENSITIVE_PRAGMA_ROW");
     } finally {
       pragma.mockRestore();
     }
@@ -192,12 +199,18 @@ describe("CLI backup verify (smoke)", () => {
       expect(run.exitCode).toBe(1);
       const envelope = JSON.parse(run.stderr) as {
         error: string;
-        hint?: { code?: string; failure_kind?: string };
+        hint?: { code?: string; failure_kind?: string; message?: string };
       };
       expect(envelope.error).toContain("snapshot integrity check failed");
       expect(envelope.error).not.toContain("SENSITIVE_PRAGMA_ROW_ONE");
       expect(envelope.error).not.toContain("SENSITIVE_PRAGMA_ROW_TWO");
-      expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
+      expect(envelope.hint).toEqual({
+        code: "INTEGRITY_FAILED",
+        failure_kind: "integrity_failed",
+        message:
+          "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
+          "`neotoma storage recover-db --recover` after stopping Neotoma.",
+      });
     } finally {
       pragma.mockRestore();
     }
@@ -206,6 +219,7 @@ describe("CLI backup verify (smoke)", () => {
   it.each([
     ["empty", []],
     ["malformed", [{ integrity_check: "ok" }, { integrity_check: "ok" }]],
+    ["legacy no result sentinel", [{ integrity_check: "no result" }]],
   ])(
     "fails closed on a %s verification result without claiming corruption",
     async (_kind, result) => {
@@ -226,6 +240,7 @@ describe("CLI backup verify (smoke)", () => {
           code: "VERIFY_INSTRUMENT_FAILURE",
           failure_kind: "verify_instrument_failure",
         });
+        expect(run.stderr).not.toContain("recover-db");
       } finally {
         pragma.mockRestore();
       }
@@ -266,12 +281,19 @@ describe("CLI backup verify (smoke)", () => {
       expect(run.exitCode).toBe(1);
       const envelope = JSON.parse(run.stderr) as {
         error: string;
-        hint?: { code?: string; failure_kind?: string };
+        hint?: { code?: string; failure_kind?: string; message?: string };
       };
       expect(envelope.error).toContain("snapshot integrity check failed");
       expect(envelope.error).not.toContain("SQLITE_CORRUPT");
       expect(envelope.error).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
-      expect(envelope.hint).toEqual({ code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" });
+      expect(envelope.hint).toEqual({
+        code: "INTEGRITY_FAILED",
+        failure_kind: "integrity_failed",
+        message:
+          "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
+          "`neotoma storage recover-db --recover` after stopping Neotoma.",
+      });
+      expect(run.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
     } finally {
       pragma.mockRestore();
     }
