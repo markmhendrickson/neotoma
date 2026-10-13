@@ -648,6 +648,118 @@ export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
 
 export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
 
+/**
+ * Data origin (#2242): where the stored data came from — the file, sheet row,
+ * URL, message, or API endpoint — as opposed to who wrote it (attribution,
+ * `external_actor`). Caller-supplied claim, never verified or dereferenced by
+ * the server. Persisted under `observations.provenance.data_origin`.
+ *
+ * Widening this enum is additive; narrowing it is a breaking change.
+ */
+export const DATA_ORIGIN_KINDS = [
+  "file",
+  "url",
+  "email",
+  "message",
+  "api",
+  "manual",
+  "other",
+] as const;
+
+/** Per-field length caps keep provenance blobs bounded. */
+export const DATA_ORIGIN_LIMITS = {
+  locator: 2048,
+  url: 2048,
+  part: 512,
+  system: 256,
+  producer: 512,
+  notes: 2000,
+} as const;
+
+/**
+ * The reserved per-entity control key that carries an entity-level origin
+ * override inside `entities[]`, peeled off before field validation exactly
+ * like `target_id` / `intent`.
+ */
+export const DATA_ORIGIN_ENTITY_KEY = "data_origin";
+
+export const DataOriginSchema = z
+  .object({
+    kind: z.enum(DATA_ORIGIN_KINDS),
+    locator: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.locator).optional(),
+    part: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.part).optional(),
+    system: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.system).optional(),
+    url: z
+      .string()
+      .max(DATA_ORIGIN_LIMITS.url)
+      .url()
+      .refine((value) => /^https?:\/\//i.test(value), {
+        message: "data_origin.url must be an absolute http(s) URL",
+      })
+      .optional(),
+    producer: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.producer).optional(),
+    retrieved_at: z.string().datetime({ offset: true }).optional(),
+    notes: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.notes).optional(),
+  })
+  .strict()
+  .refine((value) => value.kind === "manual" || Boolean(value.locator), {
+    message: "data_origin.locator is required unless kind is 'manual'",
+    path: ["locator"],
+  });
+
+export type DataOrigin = z.infer<typeof DataOriginSchema>;
+
+/**
+ * Validate every per-entity `data_origin` override in an `entities[]` array.
+ * Entity objects are otherwise open, so this is the only place the reserved
+ * key is checked; issues carry `[index, "data_origin", ...]` paths and a
+ * message naming the reserved key so a caller whose schema happened to use a
+ * plain `data_origin` field knows to rename it.
+ */
+export function refineEntityDataOrigins(
+  entities: Array<Record<string, unknown>> | undefined,
+  ctx: z.RefinementCtx
+): void {
+  if (!Array.isArray(entities)) return;
+  entities.forEach((entity, index) => {
+    if (!entity || typeof entity !== "object") return;
+    if (!Object.prototype.hasOwnProperty.call(entity, DATA_ORIGIN_ENTITY_KEY)) return;
+    const result = DataOriginSchema.safeParse(entity[DATA_ORIGIN_ENTITY_KEY]);
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      ctx.addIssue({
+        ...issue,
+        path: [index, DATA_ORIGIN_ENTITY_KEY, ...issue.path],
+        message:
+          `${issue.message} (entities[${index}].data_origin is a reserved per-entity ` +
+          "origin override: an object with at least `kind`. If this entity type stores " +
+          "its own field named data_origin, rename it, e.g. to data_source.)",
+      } as z.IssueData);
+    }
+  });
+}
+
+/**
+ * `data_origin` describes where *entities* came from. A file-only store has no
+ * entity observations to stamp, and the stored file is already its own origin
+ * record (the `sources` row), so the claim is refused rather than dropped.
+ */
+export function dataOriginHasEntities(data: {
+  data_origin?: unknown;
+  entities?: unknown[];
+  intake?: { mode?: string };
+}): boolean {
+  if (data.data_origin === undefined || data.intake?.mode === "overflow") return true;
+  return Array.isArray(data.entities) && data.entities.length > 0;
+}
+
+export const DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE = {
+  message:
+    "data_origin applies to the entities in a store request; a file-only store already records " +
+    "its origin as the stored source. Send entities with data_origin, or omit data_origin.",
+  path: ["data_origin"],
+};
+
 export const StoreInterpretationInputSchema = z
   .object({
     source_id: z.string().min(1).optional(),
@@ -730,13 +842,18 @@ export const StoreRequestSchema = z
   .object({
     expected_entity_absent: z.boolean().optional(),
     user_id: z.string().optional(),
-    entities: z.array(z.record(z.unknown())).optional(),
+    entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),
     interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
     source_peer_id: z.string().min(1).optional(),
     external_actor: ExternalActorInputSchema.optional(),
+    /**
+     * Data origin (#2242) for every entity in this request; an entity's own
+     * `data_origin` key overrides it. Stamped into observation provenance.
+     */
+    data_origin: DataOriginSchema.optional(),
     idempotency_key: z.string().min(1).optional(),
     file_idempotency_key: z.string().min(1).optional(),
     file_content: z.string().optional(),
@@ -767,7 +884,8 @@ export const StoreRequestSchema = z
       message:
         "Must provide either entities, file_path, or file_content with mime_type (or use intake.mode='overflow')",
     }
-  );
+  )
+  .refine(dataOriginHasEntities, DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE);
 
 export const MergeEntitiesRequestSchema = z.object({
   from_entity_id: z.string(),

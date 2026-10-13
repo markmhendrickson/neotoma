@@ -1825,6 +1825,18 @@ components:
             NOT agent-identity attribution; see `AgentAttribution` and the
             `provenance` field on the contributing `Observation` rows for
             the agent that wrote each observation.
+        data_origins:
+          type: object
+          description: |
+            Caller-claimed data origins (#2242) of the observations this
+            snapshot's `provenance` cites: `observation_id → DataOrigin`.
+            Join a field through `provenance` to its observation id, then
+            here, to see where that value came from. Returned by
+            `get_entity_snapshot` / MCP `retrieve_entity_snapshot`. Omitted
+            entirely when no cited observation carries an origin; withheld
+            from guest-token reads.
+          additionalProperties:
+            $ref: "#/components/schemas/DataOrigin"
         computed_at:
           type: string
           format: date-time
@@ -1978,8 +1990,15 @@ components:
             Write-time agent attribution for this observation. Carries the
             `AgentAttribution` keys stamped by the AAuth middleware and
             MCP `initialize.clientInfo` fallback. Coexists with any
-            free-form provenance keys supplied at write time.
+            free-form provenance keys supplied at write time, including
+            `data_origin` (#2242): the caller-claimed origin of the data
+            (file, URL, message, API), present only when the store request
+            supplied one. `data_origin` is never merged into the attribution
+            keys and is withheld from guest-token reads.
           additionalProperties: true
+          properties:
+            data_origin:
+              $ref: "#/components/schemas/DataOrigin"
           allOf:
             - $ref: "#/components/schemas/AgentAttribution"
     RelationshipSnapshot:
@@ -2488,6 +2507,53 @@ components:
             metadata:
               type: object
               additionalProperties: true
+    DataOrigin:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: |
+        Where stored data came from (#2242) — the file, sheet row, URL,
+        message, or API endpoint — as opposed to who wrote it (attribution,
+        `external_actor`). A caller claim, never verified: the server does not
+        fetch, open, or validate `locator` or `url`. Persisted on each created
+        observation as `provenance.data_origin`. `locator` is required unless
+        `kind` is `manual`.
+      properties:
+        kind:
+          type: string
+          enum: [file, url, email, message, api, manual, other]
+          description: Category of origin. `manual` = typed or confirmed by a person.
+        locator:
+          type: string
+          maxLength: 2048
+          description: |
+            Primary pointer to the origin: a file path or name, URL, email or
+            chat message id, or API endpoint. Required unless `kind` is `manual`.
+        part:
+          type: string
+          maxLength: 512
+          description: Position within the locator, e.g. `sheet=Tickets;row=97`, `page=3`, `attachment=2`.
+        system:
+          type: string
+          maxLength: 256
+          description: System that holds the origin, e.g. `gmail`, `google_sheets`, `stripe`, `local_fs`.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Absolute http(s) link to the original, when `locator` is not itself a URL.
+        producer:
+          type: string
+          maxLength: 512
+          description: Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`.
+        retrieved_at:
+          type: string
+          format: date-time
+          description: When the data was read from the origin (ISO 8601).
+        notes:
+          type: string
+          maxLength: 2000
+          description: Short free-text note about the derivation.
     ExternalActorInput:
       type: object
       additionalProperties: false
@@ -2563,7 +2629,12 @@ components:
               intentionally open. Put entity fields at the top level of this
               object; nesting under `attributes` (or any other wrapper) is
               not supported and returns `ERR_STORE_RESOLUTION_FAILED` with a
-              structured `hint` guiding callers to flatten.
+              structured `hint` guiding callers to flatten. Reserved control
+              keys are peeled off before field validation: `entity_type`,
+              `target_id`, `intent`, and `data_origin` (#2242) — a per-entity
+              `DataOrigin` that overrides the request-level `data_origin` for
+              this entity only. An invalid `data_origin` is rejected with
+              `ERR_VALIDATION` at path `entities[i].data_origin`.
         relationships:
           type: array
           description: |
@@ -2597,6 +2668,18 @@ components:
             Optional upstream author (e.g. GitHub user for issue submission).
             Stamped into observation provenance; must align with
             `ExternalActorInputSchema` (strict — no extra keys).
+        data_origin:
+          $ref: "#/components/schemas/DataOrigin"
+          description: |
+            Optional (#2242). Where the entities in this request came from.
+            Applies to every entity; an entity's own `data_origin` key
+            overrides it (precedence: entity → request → none). Stamped on
+            each created observation as `provenance.data_origin` and included
+            in the request's stored payload, so reusing an `idempotency_key`
+            with a different origin is `ERR_IDEMPOTENCY_MISMATCH`. Requires
+            `entities` (a file-only store is refused: the stored file is its
+            own origin record). A claim, not proof; separate from attribution
+            and from `observation_source`.
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only path.

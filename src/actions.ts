@@ -7762,6 +7762,7 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
     interpretationSourceId,
     commit: commitInput,
     strict: strictInput,
+    dataOrigins,
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
@@ -7786,12 +7787,18 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
       idempotencyKey,
       originalFilename,
       strict,
+      dataOrigin: dataOrigins?.[0],
     });
   }
 
   // Compute hash of incoming content before querying so we can detect
-  // idempotency-key reuse with different content (issue #186).
-  const incomingJsonContent = JSON.stringify(entities, (key, value) => {
+  // idempotency-key reuse with different content (issue #186). Each entity's
+  // effective data_origin (#2242) is part of the stored payload, so a replay
+  // with a different origin is a mismatch rather than a silent drop; with no
+  // origin the stored JSON is unchanged.
+  const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
+  const storedEntities = entitiesWithStoredDataOrigins(entities, dataOrigins);
+  const incomingJsonContent = JSON.stringify(storedEntities, (key, value) => {
     if (typeof value === "bigint") {
       return Number(value);
     }
@@ -8475,6 +8482,7 @@ export async function storeStructuredForApi(params: StructuredStoreApiParams) {
         user_id: userId,
         identity_basis: r.trace.identity_basis,
         identity_rule: r.trace.identity_rule,
+        data_origin: dataOrigins?.[r.observation_index],
       });
       observation_id = obsData.id;
 
@@ -9273,6 +9281,17 @@ async function handleStorePost(
     return sendStoreValidationError(res, parsed.error.issues);
   }
 
+  let storeDataOrigins: StructuredStoreApiParams["dataOrigins"];
+  // #2242: peel the reserved per-entity `data_origin` key off every entity and
+  // resolve each entity's effective origin (entity → request → none) before
+  // anything else reads the entities, so no downstream path sees it as a field.
+  if (parsed.data.entities?.length) {
+    const { splitEntityDataOrigins } = await import("./services/provenance_data_origin.js");
+    const split = splitEntityDataOrigins(parsed.data.entities, parsed.data.data_origin);
+    parsed.data.entities = split.entities;
+    storeDataOrigins = split.origins;
+  }
+
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
@@ -9418,6 +9437,7 @@ async function handleStorePost(
               : undefined,
           commit: (parsed.data as { commit?: boolean }).commit,
           strict: (parsed.data as { strict?: boolean }).strict,
+          dataOrigins: storeDataOrigins,
         });
 
       // A request body can only claim an external actor; verified tiers are
@@ -10185,7 +10205,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
       logDebug("Success:get_entity_snapshot:at_time", req, { entity_id, at, at_ingested });
-      return res.json(result);
+      return res.json(await withSnapshotDataOrigins(result, userId));
     } catch (err) {
       logError("Error:get_entity_snapshot:at_time", req, err);
       return sendError(res, 500, "DB_QUERY_FAILED", (err as Error).message);
@@ -10226,8 +10246,25 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
-  return res.json(data);
+  return res.json(await withSnapshotDataOrigins(data, userId));
 });
+
+/**
+ * #2242: attach `data_origins` (observation_id → caller-claimed origin) for the
+ * observations a snapshot's field provenance cites. The key is omitted when no
+ * cited observation carries an origin, so pre-#2242 responses are unchanged.
+ * Mirrors MCP `retrieve_entity_snapshot`.
+ */
+async function withSnapshotDataOrigins<T extends { provenance?: unknown } | null>(
+  snapshot: T,
+  userId: string
+): Promise<T> {
+  if (!snapshot || typeof snapshot !== "object") return snapshot;
+  const { collectSnapshotDataOrigins } = await import("./services/provenance_data_origin.js");
+  const dataOrigins = await collectSnapshotDataOrigins(snapshot.provenance, userId);
+  if (Object.keys(dataOrigins).length === 0) return snapshot;
+  return { ...snapshot, data_origins: dataOrigins };
+}
 
 // List observations for entity
 app.post("/list_observations", async (req, res) => {
