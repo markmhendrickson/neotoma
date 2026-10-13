@@ -3811,53 +3811,83 @@ export class NeotomaServer {
       );
     }
 
-    // Get the observation
-    const { data: observation, error: obsError } = await db
+    // A merge_array / merge_array_by_key field records every contributing
+    // observation as a comma-joined id list (observation_reducer.ts); a scalar
+    // field records exactly one. Same split as HTTP /get_field_provenance.
+    const observationIds = observationId
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
+
+    const { data: observationRows, error: obsError } = await db
       .from("observations")
       .select("*")
-      .eq("id", observationId)
-      .eq("user_id", userId)
-      .single();
+      .in("id", observationIds)
+      .eq("user_id", userId);
 
-    if (obsError || !observation) {
+    if (obsError || !observationRows || observationRows.length === 0) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to get observation: ${obsError?.message}`
+        `Failed to get observation: ${obsError?.message ?? "Observation not found"}`
       );
     }
 
-    // Get the source from sources table
-    if (!observation.source_id) {
-      throw new McpError(ErrorCode.InternalError, `Observation does not have source_id`);
+    // The observation reported as `source_observation` is the most recent
+    // contributor (latest observed_at, then id, so the pick is deterministic).
+    // For a scalar field it is the single winning observation. A merged field
+    // has no single winner, so this is a presentation choice, not a winner.
+    const observations = [...(observationRows as Array<Record<string, any>>)].sort((a, b) => {
+      const byTime = String(b.observed_at ?? "").localeCompare(String(a.observed_at ?? ""));
+      return byTime !== 0 ? byTime : String(a.id).localeCompare(String(b.id));
+    });
+    const observation = observations[0];
+
+    // `source_id` is nullable on `observations`, and NULL is a legal state:
+    // correct() and deletion observations are written without a source
+    // document. Report that as `source: null` instead of failing (#2026). A
+    // non-NULL source_id that does not resolve is an integrity violation and
+    // still errors.
+    let source: {
+      id: string;
+      mime_type: string | null;
+      file_urls: string[];
+      created_at: string | null;
+    } | null = null;
+
+    if (observation.source_id) {
+      const { data: sourceData, error: sourceError } = await db
+        .from("sources")
+        .select("id, mime_type, file_size, original_filename, created_at")
+        .eq("id", observation.source_id)
+        .eq("user_id", userId)
+        .single();
+
+      if (sourceError || !sourceData) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to get source: ${sourceError?.message || "Source not found"}`
+        );
+      }
+
+      source = {
+        id: sourceData.id,
+        mime_type: sourceData.mime_type,
+        file_urls: [], // Sources table doesn't have file_urls directly
+        created_at: sourceData.created_at,
+      };
     }
 
-    const { data: sourceData, error: sourceError } = await db
-      .from("sources")
-      .select("id, mime_type, file_size, original_filename, created_at")
-      .eq("id", observation.source_id)
-      .eq("user_id", userId)
-      .single();
-
-    if (sourceError || !sourceData) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get source: ${sourceError?.message || "Source not found"}`
-      );
-    }
-
-    const source = {
-      id: sourceData.id,
-      mime_type: sourceData.mime_type,
-      file_urls: [], // Sources table doesn't have file_urls directly
-      created_at: sourceData.created_at,
-    };
-
+    // Response shape is unchanged from before #2026: one source_observation
+    // and its source. Aligning this with the HTTP response of the same
+    // operation (observation_ids, every contributing observation, per-
+    // contributor sources) is deliberately left to a follow-up that declares
+    // one schema for both surfaces in openapi.yaml.
     const provenanceChain = {
       field: parsed.field,
       value: (snapshot.snapshot as Record<string, unknown>)[parsed.field],
       source_observation: {
-        id: observationId,
-        source_id: observation.source_id,
+        id: observation.id,
+        source_id: observation.source_id ?? null,
         observed_at: observation.observed_at,
         specificity_score: observation.specificity_score,
         source_priority: observation.source_priority,
