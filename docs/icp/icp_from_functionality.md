@@ -44,7 +44,7 @@ Neotoma ships as an MCP server and REST API with drop-in hook packages (Claude C
 | Storage is a local SQLite file plus content-addressed files under a user-controlled directory; optional at-rest encryption; no training use | The user wants ownership, privacy, and control of their data, not a hosted black box |
 | Three export paths (bounded `MEMORY.md`, JSON snapshot with provenance, full Markdown mirror) | The user values portability and the ability to leave or inspect at any time |
 | Personal and work record types (contacts, tasks, transactions, decisions, events) plus skills for email, finances, conversations, calendar, contacts, and codebases | The user manages their own life and work data, not a single narrow vertical |
-| Agent attribution, grants, capabilities, and hardware attestation on every write | The user runs more than one agent and needs to control and audit what each may do |
+| Agent attribution, grants, capabilities, and hardware attestation on every write | **Infrastructure, not a buyer signal (O3, 2026-09-16).** This machinery is what makes attribution and provenance answerable rather than asserted, so it is load-bearing for the guarantees above. It does not imply a distinct user who adopts Neotoma *for* it. |
 | Deterministic, immutable, fully provenanced state with an Inspector audit trail | The user cares about correctness and being able to trace and trust what agents stored |
 
 ### Jobs to be done
@@ -64,9 +64,13 @@ These are strongly supported by the functionality but are narrower than, or down
 
 The architecture is explicitly a State Layer with no strategy or execution logic inside it. It offers a deterministic, queryable, auditable substrate; a stable OpenAPI contract shared by REST, MCP, and CLI; TypeScript and Python SDKs; idempotent mutating operations; typed relationships; and a subscription/event system. These are the primitives a developer needs to build an Operational Layer (assistants, pipelines, command centers) on top without reimplementing memory, versioning, conflict handling, or audit.
 
-### 2. Security-conscious operators of multi-agent fleets
+### 2. Security-conscious operators of multi-agent fleets — **withdrawn (O3, 2026-09-16)**
 
-Hardware-attested agent identity, trust tiers, attestation revocation checks, agent grants with least-privilege capabilities, per-write attribution, tenant scoping, and an immutable provenance chain are disproportionate investments unless the intended operator runs untrusted or third-party agents and must constrain and audit them. This profile cares about who wrote what, under which key, with what authority.
+**This is not a Neotoma ICP and should not be presented as one.** It was inferred from the functional audit: hardware-attested agent identity, trust tiers, attestation revocation checks, agent grants with least-privilege capabilities, per-write attribution, tenant scoping, and an immutable provenance chain look disproportionate unless someone is being built for.
+
+That inference does not hold here. The investment exists to keep the product's own promises — authority over agent-generated state requires being able to answer who wrote a thing, under what authority, and what they were permitted to do — not to serve a distinct buyer. The nearest named party is *disqualified* at [`primary_icp.md`](./primary_icp.md) D3, and the durable-ICP decision sharpens the mismatch rather than resolving it. The surface is **infrastructure, not a sold feature**: see [`icp_reconciliation.md`](./icp_reconciliation.md#o3-the-attestation-and-capability-grants-surface-is-infrastructure).
+
+The numbering below is left unchanged so existing references to profiles 3 and 4 still resolve.
 
 ### 3. Privacy-focused individuals consolidating a personal data corpus for AI
 
@@ -82,17 +86,19 @@ Functionally enabled but not the design center:
 ## Who Neotoma is not for (functionally)
 
 - **Casual note-takers and PKM/Obsidian-style users.** There is no human-first editing experience; the model is agent-written observations with corrections, not freeform documents.
-- **Users who need zero-install, hosted onboarding.** Setup requires npm, the CLI, and operator decisions.
+- **Users who need a fully hosted product with no local component.** Neotoma runs on your machine and keeps your data there; that is the architecture, not a stage. Wanting an easier installation is not the same thing and is not a mismatch — see the note below.
 - **Teams wanting a managed multi-tenant SaaS today.** Storage is local-only in preview; tenancy exists as `user_id` scoping, not a hosted product.
 - **Platform builders whose core product is the memory or state engine itself.** Neotoma is that engine; it is meant to be built upon, not rebuilt.
 - **Pure retrieval/RAG use cases.** The system optimizes for deterministic state integrity, versioning, and audit, not similarity recall (semantic search is an optional secondary capability).
+
+**A note on installation.** This list deliberately no longer excludes people who want a guided installation. Neotoma is for people who want to own their agents' state, not for people who enjoy assembling an install from a terminal — and an earlier version of this list conflated the two. **As of 2026-09-15, setup is npm plus the CLI**; a guided installation is the intended path and is not shipped. Guided is not zero-install: the software runs on your machine either way.
 
 ## Qualification signals
 
 Someone is in the primary ICP if most of these are true:
 
 - They already use two or more AI agents or assistants and feel the cost of fragmented memory.
-- They are comfortable installing an npm CLI and running a local service.
+- They are willing to run a service on their own machine and to own the data it holds. (Today that means installing an npm CLI; a guided installation is intended but not yet available. Comfort with the current install path is not itself a fit signal — it is friction we intend to remove.)
 - They want their data on their own machine and care that it is never used for training.
 - They want to correct facts once and trust the correction holds and is traceable.
 - They run agents they want to constrain and audit, or they intend to build on the API.
@@ -103,6 +109,6 @@ Someone is in the primary ICP if most of these are true:
 | --- | --- | --- |
 | **Primary: agent developer/operator** | A persistent, deterministic, shared memory layer for the agents they build and run | MCP server + REST API, hook/SDK packages, deterministic snapshots, provenance, idempotency |
 | **Secondary: app/agent developer** | A deterministic state layer to build on | State-Layer boundary, OpenAPI contract, SDKs, subscriptions, idempotency |
-| **Secondary: fleet security operator** | Constrain and audit untrusted agents | Hardware attestation, grants/capabilities, provenance, tenant scoping |
+| ~~**Secondary: fleet security operator**~~ | *Withdrawn (O3, 2026-09-16) — not an ICP.* The attestation and grants surface is infrastructure serving the product's guarantees, not a feature a segment buys. | — |
 | **Secondary: privacy-focused individual** | Own a structured personal corpus for AI | Local storage, document ingestion, encryption, no training |
 | **Tertiary: federated small group** | Shared memory across devices/instances | Peers, conflict resolution, subscriptions, mirror |

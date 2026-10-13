@@ -103,14 +103,14 @@ const correctionObservation = {
   interpretation_id: null,       // No interpretation
   observed_at: new Date(),
   specificity_score: 1.0,            // Maximum specificity
-  source_priority: 1000,             // Corrections always win
+  source_priority: 1000,             // Overrides lower-priority observations
   fields: {
     name: "Acme Corporation",        // Corrected value
   },
   user_id: "user_123",
 };
 ```
-**Key property:** Corrections persist across reinterpretation. Even if a source is reinterpreted with a new model, the correction observation remains and continues to override AI-extracted values.
+**Key property:** Corrections persist across reinterpretation. Even if a source is reinterpreted with a new model, the correction observation remains and continues to override lower-priority AI-extracted values. Higher-priority sources remain authoritative; equal-priority ties follow the schema's source-kind precedence before deterministic recency.
 ### 2.2 Observation Storage
 Observations are stored in `observations` table:
 - Immutable once created

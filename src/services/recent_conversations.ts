@@ -1,4 +1,4 @@
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 import {
   listHookSummariesByTurnKeys,
   type ConversationTurnHookSummary,
@@ -346,18 +346,18 @@ ORDER BY rs.last_observation_at DESC, rs.computed_at DESC, te.id
 `;
 }
 
-function assembleConversationItems(
+async function assembleConversationItems(
   userId: string,
   conversationRows: ConversationRow[]
-): RecentConversationItem[] {
-  const db = getSqliteDb();
+): Promise<RecentConversationItem[]> {
+  const db = await getDb();
   const conversationIds = conversationRows.map((row) => row.conversation_id);
   const messagesByConversation = new Map<string, RecentConversationMessage[]>();
   let messageIds: string[] = [];
   if (conversationIds.length > 0) {
-    const messageRows = db
+    const messageRows = (await db
       .prepare(buildMessagesSql(conversationIds.length))
-      .all(userId, userId, ...conversationIds) as MessageRow[];
+      .all(userId, userId, ...conversationIds)) as MessageRow[];
 
     const normalizedMessages = messageRows.map((row) => ({
       conversation_id: row.conversation_id,
@@ -394,9 +394,9 @@ function assembleConversationItems(
 
   const relatedByMessage = new Map<string, RecentConversationRelatedEntity[]>();
   if (messageIds.length > 0) {
-    const relatedRows = db
+    const relatedRows = (await db
       .prepare(buildRelatedEntitiesSql(messageIds.length))
-      .all(userId, userId, ...messageIds) as RelatedEntityRow[];
+      .all(userId, userId, ...messageIds)) as RelatedEntityRow[];
 
     for (const row of relatedRows) {
       const list = relatedByMessage.get(row.message_id) ?? [];
@@ -422,7 +422,7 @@ function assembleConversationItems(
   }
   const hookSummaries =
     allTurnKeys.size > 0
-      ? listHookSummariesByTurnKeys(userId, [...allTurnKeys])
+      ? await listHookSummariesByTurnKeys(userId, [...allTurnKeys])
       : new Map<string, ConversationTurnHookSummary>();
 
   return conversationRows.map((row) => {
@@ -451,13 +451,18 @@ function assembleConversationItems(
   });
 }
 
-export function listRecentConversations(
+export async function listRecentConversations(
   userId: string,
   limit: number,
   offset: number,
   filters?: RecentConversationsFilters | null
-): { items: RecentConversationItem[]; has_more: boolean; limit: number; offset: number } {
-  const db = getSqliteDb();
+): Promise<{
+  items: RecentConversationItem[];
+  has_more: boolean;
+  limit: number;
+  offset: number;
+}> {
+  const db = await getDb();
   const safeLimit = Math.min(Math.max(limit, 1), 100);
   const safeOffset = Math.max(offset, 0);
   const fetchLimit = safeLimit + 1;
@@ -466,7 +471,7 @@ export function listRecentConversations(
   const activityBefore = filters?.activity_before?.trim() ? filters.activity_before.trim() : null;
   const agentKey = filters?.agent_key?.trim() ? filters.agent_key.trim() : null;
 
-  const conversationRows = db
+  const conversationRows = (await db
     .prepare(CONVERSATIONS_SQL)
     .all(
       userId,
@@ -482,11 +487,11 @@ export function listRecentConversations(
       agentKey,
       fetchLimit,
       safeOffset
-    ) as ConversationRow[];
+    )) as ConversationRow[];
 
   const hasMore = conversationRows.length > safeLimit;
   const conversationsPage = hasMore ? conversationRows.slice(0, safeLimit) : conversationRows;
-  const items = assembleConversationItems(userId, conversationsPage);
+  const items = await assembleConversationItems(userId, conversationsPage);
 
   return {
     items,
@@ -500,17 +505,17 @@ export function listRecentConversations(
  * Full recent-conversation payload for a single `conversation` entity id.
  * Returns null when the id is missing, merged away, wrong type, or not owned by the user.
  */
-export function getRecentConversationById(
+export async function getRecentConversationById(
   userId: string,
   conversationId: string
-): RecentConversationItem | null {
-  const db = getSqliteDb();
+): Promise<RecentConversationItem | null> {
+  const db = await getDb();
   const id = conversationId.trim();
   if (!id) return null;
-  const row = db.prepare(CONVERSATION_BY_ID_SQL).get(userId, userId, userId, userId, id) as
+  const row = (await db.prepare(CONVERSATION_BY_ID_SQL).get(userId, userId, userId, userId, id)) as
     | ConversationRow
     | undefined;
   if (!row) return null;
-  const items = assembleConversationItems(userId, [row]);
+  const items = await assembleConversationItems(userId, [row]);
   return items[0] ?? null;
 }

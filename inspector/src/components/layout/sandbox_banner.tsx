@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   isSandboxUiEnabled,
   SANDBOX_HOST_LABEL,
-  SANDBOX_WEEKLY_RESET_LABEL,
+  SANDBOX_SESSION_TTL_CAP_LABEL,
 } from "@/lib/sandbox";
 import {
   clearSandboxSession,
@@ -118,7 +118,7 @@ export function SandboxBanner() {
       ) : (
         <span className="text-amber-800/90 dark:text-amber-200/90">
           Running on <span className="font-mono">{SANDBOX_HOST_LABEL}</span>. All data is public,
-          rate-limited, and wiped weekly ({SANDBOX_WEEKLY_RESET_LABEL}).
+          rate-limited, and ephemeral (sessions expire by {SANDBOX_SESSION_TTL_CAP_LABEL} at latest).
         </span>
       )}
       {tier ? (

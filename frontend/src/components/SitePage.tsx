@@ -186,11 +186,11 @@ const FOUNDER_AGENTIC_STACK_POST_HREF =
 
 /** Numeric proof strip values (stable across locales; labels in `homeBody.proof`). */
 const PROOF_STAT_VALUES = {
-  contacts: "1,100+",
-  tasks: "16,000+",
-  conversations: "900+",
-  agentMessages: "2,000+",
-  entityTypes: "380+",
+  contacts: "3,500+",
+  tasks: "20,000+",
+  conversations: "9,000+",
+  agentMessages: "4,000+",
+  entityTypes: "600+",
 } as const;
 
 const OUTCOME_SCENARIO_ICONS: LucideIcon[] = [Users, ListChecks, Receipt, CalendarClock];

@@ -7,12 +7,13 @@
  * `substrate_events` table so resume can fall back to durable storage when the
  * cursor has left the ring.
  *
- * Writes are synchronous (in the same path as the ring push) so an event is
- * durable as soon as it is emitted. The log is pruned to a rolling retention
- * window (NEOTOMA_EVENT_RETENTION_DAYS, default 7).
+ * Writes happen in the same path as the ring push (awaited before the emit
+ * completes) so an event is durable as soon as it is emitted. The log is
+ * pruned to a rolling retention window (NEOTOMA_EVENT_RETENTION_DAYS,
+ * default 7).
  */
 
-import { getSqliteDb } from "../../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../repositories/db/connection.js";
 import { getDataKey } from "../../repositories/sqlite/local_db_adapter.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { logger } from "../../utils/logger.js";
@@ -71,18 +72,18 @@ export interface DurableEventFilter {
 }
 
 /**
- * Persist a substrate event to the durable log. Synchronous: returns the
- * assigned durable `seq` (monotonic, distinct from the in-memory ring id).
+ * Persist a substrate event to the durable log. Returns the assigned durable
+ * `seq` (monotonic, distinct from the in-memory ring id).
  * `nowIso` is injectable for deterministic tests; defaults to wall clock.
  */
-export function persistSubstrateEvent(
+export async function persistSubstrateEvent(
   event: SubstrateEvent,
   ringId: string | null,
   nowIso?: string
-): number {
-  const db = getSqliteDb();
+): Promise<number> {
+  const db = await getDb();
   const createdAt = nowIso ?? new Date().toISOString();
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO substrate_events (ring_id, event_type, user_id, entity_id, payload, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`
@@ -109,13 +110,13 @@ export function persistSubstrateEvent(
  * `entity_type`) MUST still be applied by the caller — and never widens the
  * result set.
  */
-export function getEventsAfterSeq(
+export async function getEventsAfterSeq(
   userId: string,
   afterSeq: number,
   limit = 1000,
   filter?: DurableEventFilter
-): DurableEvent[] {
-  const db = getSqliteDb();
+): Promise<DurableEvent[]> {
+  const db = await getDb();
   const clauses: string[] = ["user_id = ?", "seq > ?"];
   const params: Array<string | number> = [userId, afterSeq];
 
@@ -132,14 +133,14 @@ export function getEventsAfterSeq(
   }
 
   params.push(limit);
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT seq, payload FROM substrate_events
        WHERE ${clauses.join(" AND ")}
        ORDER BY seq ASC
        LIMIT ?`
     )
-    .all(...params) as Array<{ seq: number; payload: string }>;
+    .all(...params)) as Array<{ seq: number; payload: string }>;
   const out: DurableEvent[] = [];
   for (const row of rows) {
     try {
@@ -171,13 +172,13 @@ export function getEventsAfterSeq(
  *
  * Returns false for a user with no durable events (nothing to recover from).
  */
-export function hasDurableCursor(userId: string, seq: number): boolean {
-  const db = getSqliteDb();
-  const row = db
+export async function hasDurableCursor(userId: string, seq: number): Promise<boolean> {
+  const db = await getDb();
+  const row = (await db
     .prepare(
       `SELECT MIN(seq) AS min_seq, MAX(seq) AS max_seq FROM substrate_events WHERE user_id = ?`
     )
-    .get(userId) as { min_seq: number | null; max_seq: number | null } | undefined;
+    .get(userId)) as { min_seq: number | null; max_seq: number | null } | undefined;
   if (!row || row.min_seq === null || row.max_seq === null) return false;
   // `seq` is the last delivered cursor; replay covers (seq, max]. The cursor is
   // recoverable when at least one retained event is strictly newer than it
@@ -189,10 +190,13 @@ export function hasDurableCursor(userId: string, seq: number): boolean {
  * Delete events older than the retention window. Returns the number of rows
  * pruned. `nowMs` is injectable for deterministic tests.
  */
-export function pruneEventLog(retentionDays = EVENT_RETENTION_DAYS, nowMs?: number): number {
-  const db = getSqliteDb();
+export async function pruneEventLog(
+  retentionDays = EVENT_RETENTION_DAYS,
+  nowMs?: number
+): Promise<number> {
+  const db = await getDb();
   const cutoffMs = (nowMs ?? Date.now()) - retentionDays * 24 * 60 * 60 * 1000;
   const cutoffIso = new Date(cutoffMs).toISOString();
-  const info = db.prepare(`DELETE FROM substrate_events WHERE created_at < ?`).run(cutoffIso);
+  const info = await db.prepare(`DELETE FROM substrate_events WHERE created_at < ?`).run(cutoffIso);
   return Number(info.changes ?? 0);
 }

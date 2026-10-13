@@ -1,0 +1,144 @@
+name: npm publish
+
+# Publishes the package to npm when a release tag is pushed.
+#
+# WHY THIS RUNS IN CI RATHER THAN ON THE OPERATOR'S MAC (issue #2015):
+#   1. Availability — a laptop publish requires that one machine to be awake,
+#      logged in, and holding a materialized npm token. The v0.16.0 release
+#      failed for exactly this reason (token absent from the offline snapshot,
+#      fell back to an expired `op` session).
+#   2. Provenance — publishing with `--provenance` and `id-token: write` produces
+#      a signed attestation binding the tarball to this commit and workflow. That
+#      is not obtainable from a local publish.
+#   3. Reproducibility — `prepublishOnly` builds the artifact, so the build now
+#      happens on a pinned Node 20 rather than whatever the laptop has.
+#
+# ORCHESTRATION STAYS IN phoenicurus-release/publish.py. That script still owns
+# the approval gate, the RC merge, the version-match preflight, the tag, the
+# Neotoma release_result state machine, and the Telegram reporting. It pushes the
+# tag (which fires this workflow) and then polls the registry until the version
+# appears. This workflow is one step of that pipeline, not a replacement for it.
+#
+# IDEMPOTENT: re-running against an already-published version is a no-op, not a
+# failure. publish.py may legitimately re-run a release (e.g. --resume-from), and
+# a hard failure here would break recovery.
+#
+# Required repository secret: NPM_TOKEN (granular automation token, Publish scope
+# on `neotoma` only, bypass-2FA).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.19.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # Required for npm provenance — mints the OIDC token npm uses to attest that
+  # this tarball was built by this workflow from this commit.
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the tagged commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve versions
+        id: v
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          RAW_TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          TAG_VERSION="${RAW_TAG#v}"
+          echo "pkg=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "package.json=$PKG_VERSION tag=$TAG_VERSION"
+
+      # The same class of guard as publish.py's preflight/version-match: a tag
+      # whose commit does not carry the matching version bump would publish the
+      # WRONG code under that version (the v0.18.8 incident). Fail loud.
+      - name: Verify tag matches package.json
+        env:
+          PKG: ${{ steps.v.outputs.pkg }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$PKG" != "$TAG" ]; then
+            echo "FAIL: package.json version ($PKG) does not match tag ($TAG)."
+            echo "The tagged commit is missing its version-bump commit; publishing"
+            echo "now would ship the wrong code under $TAG."
+            exit 1
+          fi
+          echo "OK: $PKG == $TAG"
+
+      # Idempotency gate: publish.py can re-run a release. If this version is
+      # already on the registry, succeed without republishing (npm would reject
+      # it with EPUBLISHCONFLICT and fail the run).
+      - name: Check whether this version is already published
+        id: published
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          NAME="$(node -p "require('./package.json').name")"
+          if npm view "$NAME@$TAG" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$TAG is already published — nothing to do."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$TAG not on the registry — will publish."
+          fi
+
+      - name: Install dependencies
+        if: steps.published.outputs.already == 'false'
+        run: npm ci
+
+      # `npm publish` runs prepublishOnly (build:server && build:inspector), so
+      # the artifact is built here from the tagged commit.
+      - name: Publish to npm with provenance
+        if: steps.published.outputs.already == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Verify the registry reflects the new version
+        if: steps.published.outputs.already == 'false'
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          NAME="$(node -p "require('./package.json').name")"
+          # Registry reads are cached briefly; retry rather than racing it.
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            LIVE="$(npm view "$NAME" version 2>/dev/null || true)"
+            if [ "$LIVE" = "$TAG" ]; then
+              echo "OK: registry shows $NAME@$LIVE"
+              exit 0
+            fi
+            echo "attempt $i: registry shows '${LIVE:-none}', expected $TAG — retrying"
+            sleep 15
+          done
+          echo "FAIL: registry did not reflect $TAG after publish."
+          exit 1

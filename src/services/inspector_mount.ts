@@ -518,6 +518,14 @@ const API_ONLY_PREFIXES: readonly string[] = [
  */
 export function isApiOnlyPath(pathname: string): boolean {
   const normalized = normalizeInspectorUrlPathname(pathname);
+  // Exception: the Inspector SPA owns `/oauth/callback` — it is a *client-side*
+  // route (see inspector/src/pages/oauth_callback.tsx) that reads the `?code`
+  // returned by the OAuth authorize flow and exchanges it for a token in the
+  // browser. It must serve the SPA shell, NOT fall through to an API handler
+  // (which would answer "Missing Bearer token"). The server's own OAuth
+  // callbacks live under `/mcp/oauth/*` (still API-only via the `/mcp/` prefix),
+  // so exempting this one bare path does not expose any server route.
+  if (normalized === "/oauth/callback") return false;
   for (const prefix of API_ONLY_PREFIXES) {
     if (prefix.endsWith("/")) {
       if (normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) return true;

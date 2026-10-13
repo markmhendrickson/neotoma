@@ -1,9 +1,44 @@
 import { z } from "zod";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
+import { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "../services/entity_query_limits.js";
 
 export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
 export const RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE = "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+
+/**
+ * #1943 tightenings on the entity-query surface. Both shapes below were accepted
+ * before #1943 and now return a 400, so each ships a structured migration `hint`
+ * alongside the tightening (docs/subsystems/errors.md § Tightening-change hint
+ * obligation) and a matching legacy-payload fixture under
+ * `tests/contract/legacy_payloads/v0.18.x/`.
+ *
+ * Hint text is surfaced to callers verbatim — it carries the upgrade path, not
+ * diagnostic jargon about why the bound exists.
+ */
+export const ERR_OFFSET_TOO_DEEP_ISSUE_CODE = "ERR_OFFSET_TOO_DEEP";
+export const OFFSET_TOO_DEEP_HINT =
+  "Deep `offset` paging is no longer accepted past 2000: it re-scans every prior row, " +
+  "so cost grows with depth. Page with `cursor` instead — read `next_cursor` from the " +
+  "previous response and pass it back as `cursor` (drop `offset` entirely). Cursor paging " +
+  "runs in constant time at any depth.";
+
+/**
+ * #1943: a `cursor` paired with a parameter whose query shape cannot honour a
+ * keyset seek (offset, a non-entity_id sort, search, published filters,
+ * snapshot_filters). Distinct from the two tightenings above: these combinations
+ * were never valid, so this is a coherence guard, not a migration. Callers get a
+ * structured `hint` naming the way out, matching the pattern this file already
+ * sets for the tightenings (ux lens, #1946).
+ */
+export const ERR_CURSOR_COMBINATION_ISSUE_CODE = "ERR_CURSOR_COMBINATION";
+
+export const ERR_SNAPSHOT_PAGE_TOO_LARGE_ISSUE_CODE = "ERR_SNAPSHOT_PAGE_TOO_LARGE";
+export const SNAPSHOT_PAGE_TOO_LARGE_HINT =
+  "`limit` above 500 is no longer accepted while `include_snapshots` is true: each snapshot " +
+  "is hydrated synchronously. Either request 500 or fewer per page (use `cursor` to walk the " +
+  "rest), or set `include_snapshots: false` if you only need identity fields, which lifts the cap.";
 
 export const EntityIdSchema = z.object({
   entity_id: z.string(),
@@ -11,6 +46,7 @@ export const EntityIdSchema = z.object({
 
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
+  include_cleared_fields: z.boolean().optional(),
   /**
    * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
    * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,
@@ -50,36 +86,38 @@ export const FieldProvenanceRequestSchema = z.object({
   field: z.string(),
 });
 
-export const RelationshipTypeSchema = z.enum([
-  "PART_OF",
-  "CORRECTS",
-  "REFERS_TO",
-  "SETTLES",
-  "DUPLICATE_OF",
-  "DEPENDS_ON",
-  "SUPERSEDES",
-  "EMBEDS",
-  "works_at",
-  "owns",
-  "manages",
-  "part_of",
-  "related_to",
-  "depends_on",
-  "references",
-  "transacted_with",
-  "member_of",
-  "reports_to",
-  "located_at",
-  "created_by",
-  "funded_by",
-  "acquired_by",
-  "subsidiary_of",
-  "partner_of",
-  "competitor_of",
-  "supplies_to",
-  "contracted_with",
-  "invested_in",
-]);
+/**
+ * Relationship-type SHAPE validation (#1972 / G25).
+ *
+ * This was a closed 28-member `z.enum`. It is now a naming rule only:
+ * MEMBERSHIP is decided against the runtime registry at the single enforcement
+ * point in `services/relationships.ts`, not here.
+ *
+ * Splitting the two is the point. A Zod enum here was one of sixteen places
+ * the vocabulary was written down and the only one of them a caller's error
+ * message came from, so a type registered at runtime would have been refused
+ * by the parser before the service that knew about it ever ran. Shape is
+ * static and belongs here; membership is dynamic and does not.
+ *
+ * The pattern is casing-agnostic by necessity: the seeded vocabulary already
+ * contains `PART_OF` and `part_of`, and `DEPENDS_ON` and `depends_on`.
+ */
+export const RELATIONSHIP_TYPE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+export const RELATIONSHIP_TYPE_SHAPE_HINT =
+  "Relationship type must be identifier-shaped: a letter, then letters, digits or " +
+  "underscores, 1-64 characters. Call list_relationship_types to see the vocabulary " +
+  "this instance accepts, or register_relationship_type to add to it.";
+
+export const RelationshipTypeSchema = z.string().superRefine((value, ctx) => {
+  if (!RELATIONSHIP_TYPE_NAME_PATTERN.test(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${RELATIONSHIP_TYPE_SHAPE_HINT} Received: ${JSON.stringify(value)}`,
+      params: { code: "invalid_relationship_type_name", hint: RELATIONSHIP_TYPE_SHAPE_HINT },
+    });
+  }
+});
 
 export const CreateRelationshipRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema,
@@ -114,7 +152,11 @@ const StoreRelationshipTargetEndpointSchema = z.union([
 
 export const StoreRelationshipInputSchema = z
   .object({
-    relationship_type: z.string(),
+    // Same shape rule as CreateRelationshipRequestSchema — previously a bare
+    // z.string() here while create_relationship carried a 28-member enum, so
+    // the two doors advertised different vocabularies. Membership is still the
+    // service's job against the registry.
+    relationship_type: RelationshipTypeSchema,
     source_index: z.number().int().min(0).optional(),
     source_entity_id: z.string().min(1).optional(),
     target_index: z.number().int().min(0).optional(),
@@ -174,6 +216,24 @@ export const ListRelationshipsRequestSchema = z
     }
   );
 
+/**
+ * "Who do we have connected at company X" — read-only leads-graph lookup.
+ * Resolves `company_name` (exact-normalized, then fuzzy) and returns the
+ * contacts linked via a live `works_at` edge. See src/services/company_query.ts.
+ */
+export const QueryContactsAtCompanyRequestSchema = z.object({
+  company_name: z.string().min(1, "company_name must not be empty"),
+  /**
+   * Which partner's network to search, matching the `user_id` override
+   * pattern on ListRelationshipsRequestSchema. Must equal the authenticated
+   * user's id today (no cross-tenant admission yet) — see
+   * getAuthenticatedUserId in server.ts. Omit to search the authenticated
+   * user's own graph.
+   */
+  owner_user_id: z.string().optional(),
+  limit: z.number().int().positive().optional().default(100),
+});
+
 export const TimelineEventsRequestSchema = z.object({
   event_type: z.string().optional(),
   after_date: z.string().optional(),
@@ -208,6 +268,11 @@ function validateEntityQueryCombinations(
     published?: boolean;
     published_after?: string;
     published_before?: string;
+    cursor?: string;
+    offset?: number;
+    limit?: number;
+    include_snapshots?: boolean;
+    snapshot_filters?: Record<string, unknown>;
   },
   ctx: z.RefinementCtx
 ): void {
@@ -220,6 +285,113 @@ function validateEntityQueryCombinations(
   const hasNonDefaultSort =
     (value.sort_by && value.sort_by !== "entity_id") ||
     (value.sort_order && value.sort_order !== "asc");
+
+  // #1943: cursor pagination.
+  const hasCursor = typeof value.cursor === "string" && value.cursor.length > 0;
+
+  // Cursor and a non-zero offset are two mutually exclusive ways to say "where to
+  // start"; accepting both silently would hide a caller mistake. Offset defaults
+  // to 0, so a bare cursor (offset omitted / 0) is fine.
+  if (hasCursor && typeof value.offset === "number" && value.offset > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cursor and offset cannot be combined; use one or the other",
+      path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "Pass `cursor` alone. It already encodes where the walk resumes, so `offset` is redundant — drop `offset` entirely.",
+      },
+    });
+  }
+
+  // Keyset cursors are only sound for the default `entity_id` sort (unique,
+  // index-backed key). Reject a cursor paired with any other sort rather than
+  // silently falling back to offset (which would return results the caller
+  // didn't ask to page this way). `undefined` is the entity_id default.
+  if (hasCursor && value.sort_by !== undefined && value.sort_by !== "entity_id") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cursor is only supported with the default sort_by=entity_id",
+      path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "Keyset paging is only sound on the unique `entity_id` key. Either drop `sort_by` (the default is `entity_id`), or page this sort with `offset` instead of `cursor`.",
+      },
+    });
+  }
+
+  // Search reorders results by relevance (semantic/lexical), not by entity_id,
+  // so a keyset cursor cannot page a search result set. Reject the combination
+  // rather than return a page that ignores one of the two.
+  if (hasCursor && hasSearch) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cursor cannot be combined with search",
+      path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "Search orders by relevance, not by `entity_id`, so a keyset cursor cannot resume it. Page search results with `offset`.",
+      },
+    });
+  }
+
+  // Published filters and snapshot_filters route the query into the
+  // snapshot-driven scan (see `shouldUseSnapshotDrivenScan` in
+  // entity_queries.ts), which paginates its own `snapshotQuery` by offset and
+  // never applies the keyset seek. Accepting a cursor there would silently
+  // ignore it and re-return the first page — the exact "returns a wrong page
+  // instead of a structured error" failure the search/sort guards above exist
+  // to prevent. Reject the combination for the same reason (#1943, qa lens).
+  const hasSnapshotFilters =
+    value.snapshot_filters != null && Object.keys(value.snapshot_filters).length > 0;
+  if (hasCursor && (hasPublishedFilters || hasSnapshotFilters)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "cursor cannot be combined with published filters or snapshot_filters (they use a non-keyset scan); page those with offset, or remove the filters to use cursor",
+      path: ["cursor"],
+      params: {
+        code: ERR_CURSOR_COMBINATION_ISSUE_CODE,
+        hint: "These filters route the query into a snapshot-driven scan that cannot honour a keyset seek. Either drop the filters to use `cursor`, or page the filtered listing with `offset`.",
+      },
+    });
+  }
+
+  // Bound the legacy offset path: deep offset is O(offset) and blocks the event
+  // loop (#1943). Point callers at cursor for deep pagination.
+  //
+  // This is a tightening — `offset: 3000` was accepted before #1943 — so it ships
+  // a structured `hint` carrying the migration path, per docs/subsystems/errors.md
+  // § Tightening-change hint obligation. The hint text is surfaced to callers
+  // verbatim, so it states what to do, not why the bound exists.
+  if (typeof value.offset === "number" && value.offset > MAX_QUERY_OFFSET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `offset must not exceed ${MAX_QUERY_OFFSET}; use cursor for deep pagination`,
+      path: ["offset"],
+      params: {
+        code: ERR_OFFSET_TOO_DEEP_ISSUE_CODE,
+        hint: OFFSET_TOO_DEEP_HINT,
+      },
+    });
+  }
+
+  // Bound synchronous snapshot hydration: a large include_snapshots page
+  // materializes an unbounded number of full snapshots on the event loop.
+  // Also a tightening (`limit: 1000` with snapshots was accepted pre-#1943) —
+  // same hint obligation applies.
+  const includeSnapshots = value.include_snapshots !== false; // defaults true
+  if (includeSnapshots && typeof value.limit === "number" && value.limit > MAX_SNAPSHOT_PAGE_SIZE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `limit must not exceed ${MAX_SNAPSHOT_PAGE_SIZE} when include_snapshots is true; request fewer per page (optionally with cursor) or set include_snapshots=false`,
+      path: ["limit"],
+      params: {
+        code: ERR_SNAPSHOT_PAGE_TOO_LARGE_ISSUE_CODE,
+        hint: SNAPSHOT_PAGE_TOO_LARGE_HINT,
+      },
+    });
+  }
 
   if (hasSearch && hasPublishedFilters) {
     ctx.addIssue({
@@ -252,7 +424,7 @@ function validateEntityQueryCombinations(
 }
 
 const SnapshotFilterSchema = z.object({
-  op: z.enum(["eq", "in", "gt", "lt", "gte", "lte", "contains"]),
+  op: z.enum(["eq", "in", "gt", "lt", "gte", "lte", "contains", "contains_word"]),
   value: z.any(),
 });
 
@@ -285,6 +457,14 @@ const EntitiesQueryRequestBaseSchema = z
     search: z.string().optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
+    /**
+     * #1943: Opaque keyset pagination cursor. Pass the `next_cursor` from a
+     * prior response to fetch the next page in O(page size) time regardless of
+     * depth (offset pagination is O(offset) and blocks the event loop on deep
+     * pages). Treat it as opaque and pass it back verbatim. Only valid with the
+     * default `sort_by=entity_id`; cannot be combined with a non-zero `offset`.
+     */
+    cursor: z.string().optional(),
     sort_by: EntityQuerySortBySchema,
     sort_order: EntityQuerySortOrderSchema,
     published: z.boolean().optional(),
@@ -363,6 +543,15 @@ const RetrieveEntitiesRequestBaseSchema = z
     similarity_threshold: z.number().min(0).max(2).optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
+    /**
+     * #1943: Opaque keyset pagination cursor. Pass the `next_cursor` from a
+     * prior response to fetch the next page in O(page size) time regardless of
+     * depth (offset pagination is O(offset) and blocks the event loop on deep
+     * pages). Treat it as opaque and pass it back verbatim. Only valid with the
+     * default `sort_by=entity_id`; cannot be combined with a non-zero `offset`
+     * or with `search`.
+     */
+    cursor: z.string().optional(),
     sort_by: EntityQuerySortBySchema,
     sort_order: EntityQuerySortOrderSchema,
     published: z.boolean().optional(),
@@ -481,6 +670,9 @@ export const CreateInterpretationRequestSchema = z.object({
 });
 
 export const StoreStructuredRequestSchema = z.object({
+  expected_entity_absent: z.boolean().optional(),
+  commit: z.boolean().optional().default(true),
+  strict: z.boolean().optional().default(false),
   entities: z.array(z.record(z.unknown())),
   relationships: z.array(StoreRelationshipInputSchema).optional(),
   interpretation: StoreInterpretationInputSchema.optional(),
@@ -495,6 +687,7 @@ export const StoreStructuredRequestSchema = z.object({
 
 /** REST store/unstructured: file_content (base64) + mime_type, raw storage only. */
 export const StoreUnstructuredRequestSchema = z.object({
+  expected_entity_absent: z.boolean().optional(),
   file_content: z.string(),
   mime_type: z.string().min(1),
   idempotency_key: z.string().min(1).optional(),
@@ -535,6 +728,7 @@ export const ExternalActorInputSchema = z
 
 export const StoreRequestSchema = z
   .object({
+    expected_entity_absent: z.boolean().optional(),
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),
@@ -664,6 +858,41 @@ export const CorrectEntityRequestSchema = z.object({
   value: z.unknown(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
+  /**
+   * Optional entity-level optimistic-concurrency precondition (Waxwing ADR,
+   * ent_4b41bb83a4faf4428a73bfc8). When supplied, the correction is refused
+   * with `ERR_FIELD_VERSION_CONFLICT` if the entity's current
+   * collision-safe `entity_version` no longer matches — unless `overwrite` is also
+   * true. Omitted (the default): zero behavior change from the legacy
+   * unconditional-insert path.
+   */
+  expected_version: z.string().optional(),
+  /**
+   * When true, proceed even if `expected_version` is stale. Mirrors
+   * `batch_correction.ts`'s `overwrite` flag. Ignored when
+   * `expected_version` is not supplied.
+   */
+  overwrite: z.boolean().optional(),
+});
+
+export const PatchArrayItemRequestSchema = z.object({
+  entity_id: z.string().min(1),
+  entity_type: z.string().min(1),
+  field: z.string().min(1),
+  key_field: z.string().min(1),
+  // Keyed reduction treats null/missing as an unkeyed legacy item, so the
+  // write surface accepts only non-null JSON scalars as stable identities.
+  key_value: z.union([
+    z.string(),
+    z.number().finite().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    z.boolean(),
+  ]),
+  item: z.record(z.unknown()),
+  expected_item_version: z.string().optional(),
+  /** Refuse if the keyed item already exists; used for race-safe creation. */
+  expected_item_absent: z.boolean().optional(),
+  idempotency_key: z.string().min(1),
+  user_id: z.string().optional(),
 });
 
 export const ListEntityTypesRequestSchema = z.object({
@@ -767,14 +996,35 @@ export const UpdateSchemaIncrementalRequestSchema = z
           field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
           required: z.boolean().default(false),
           reducer_strategy: z
-            .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
+            .enum([
+              "last_write",
+              "highest_priority",
+              "most_specific",
+              "merge_array",
+              "merge_array_by_key",
+            ])
             .optional(),
+          reducer_key_field: z.string().min(1).optional(),
         })
       )
       .optional(),
     fields_to_remove: z.array(z.string()).optional(),
+    // #2018 — replace the entity's identity rule (canonical_name_fields).
+    // Each rule is either a single field name (string) or an all-required
+    // composite ({composite: [...]}). Omit to preserve the current rule.
+    canonical_name_fields: z
+      .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
+      .optional(),
     schema_version: z.string().optional(),
-    user_specific: z.boolean().default(false),
+    // #2374: stays OPTIONAL with no `.default()`. Whether the caller stated
+    // an explicit scope intent is itself meaningful — `updateSchemaIncremental`
+    // now defers to whatever scope its OWN read resolved when this is
+    // omitted, and only treats it as a hard override when present. A
+    // `.default(false)` here would erase that distinction before the
+    // service ever saw it, which is exactly how the write-scope bug
+    // shipped: every caller that didn't think about scope got `false`
+    // indistinguishable from a caller who explicitly wanted global.
+    user_specific: z.boolean().optional(),
     user_id: z.string().optional(),
     activate: z.boolean().default(true),
     migrate_existing: z.boolean().default(false),
@@ -783,9 +1033,24 @@ export const UpdateSchemaIncrementalRequestSchema = z
   .refine(
     (data) =>
       (data.fields_to_add && data.fields_to_add.length > 0) ||
-      (data.fields_to_remove && data.fields_to_remove.length > 0),
-    { message: "At least one of fields_to_add or fields_to_remove must be provided and non-empty" }
-  );
+      (data.fields_to_remove && data.fields_to_remove.length > 0) ||
+      data.canonical_name_fields !== undefined,
+    {
+      message:
+        "At least one of fields_to_add, fields_to_remove, or canonical_name_fields must be provided",
+    }
+  )
+  .superRefine((data, ctx) => {
+    for (const [index, field] of (data.fields_to_add ?? []).entries()) {
+      if (field.reducer_strategy === "merge_array_by_key" && !field.reducer_key_field) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["fields_to_add", index, "reducer_key_field"],
+          message: "reducer_key_field is required for merge_array_by_key",
+        });
+      }
+    }
+  });
 
 export const RegisterSchemaRequestSchema = z.object({
   entity_type: z.string(),
@@ -874,15 +1139,35 @@ export const IssuesGetStatusRequestSchema = z
     { message: "Provide entity_id or issue_number" }
   );
 
+/**
+ * Validated `owner/name` GitHub repository slug for `sync_issues` (HTTP + CLI + MCP).
+ * Strict on purpose: see `src/shared/repo_slug.ts`.
+ */
+export const IssuesSyncRepoSchema = z
+  .string()
+  .refine((v) => isValidRepoSlug(v), { message: REPO_SLUG_FORMAT_MESSAGE });
+
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),
   state: z.enum(["open", "closed", "all"]).optional(),
   labels: z.array(z.string()).optional(),
   /**
-   * When true (default), local public issues with no github_number are pushed to GitHub
-   * before the pull leg runs. Pass false to disable the push leg.
+   * GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo
+   * (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Validated before any GitHub call or write.
+   */
+  repo: IssuesSyncRepoSchema.optional(),
+  /**
+   * Push leg (local public issues with no github_number -> GitHub). When omitted it
+   * defaults to true for the configured default repo and to false for any other `repo`.
+   * Pass true to opt in explicitly.
    */
   push: z.boolean().optional(),
+  /**
+   * When false, run as a dry run: read GitHub and local state, report what would be
+   * created, updated and pushed, and write nothing (no local store/correct, no GitHub
+   * create). Default true.
+   */
+  commit: z.boolean().optional(),
   user_id: z.string().optional(),
 });

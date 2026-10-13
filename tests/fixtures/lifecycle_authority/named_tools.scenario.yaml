@@ -1,0 +1,21 @@
+meta:
+  id: entity_lifecycle_authenticated_cycles
+  description: Native post-cutover lifecycle named-tool replay. The committed integration fixture explicitly creates a disposable synthetic cutover before the existing Tier 2 stub driver runs. No runtime migration, provider, or LLM is exercised.
+  tags: [tier2, lifecycle, authority, native-effect]
+seed_strategy: generated
+privacy_transform: Synthetic title, type and generated fixture identity only.
+system_prompt: Use natural delete and restore tools; check real default retrieval after each action. Repeated calls are separate actions rather than exactly-once retries.
+user_prompt: Delete, restore, delete and restore the synthetic entity, preserving its factual title and checking visible counts.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: delete_entity
+    op: eq
+    value: 2
+  - type: mcp_tool.invocations
+    tool_name: restore_entity
+    op: eq
+    value: 2

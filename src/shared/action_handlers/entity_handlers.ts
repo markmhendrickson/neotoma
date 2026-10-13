@@ -1,11 +1,31 @@
 import { db } from "../../db.js";
-import { queryEntities, normalizeEntityTypeFilter } from "../../services/entity_queries.js";
+import { getDb } from "../../repositories/db/connection.js";
+import {
+  queryEntities,
+  normalizeEntityTypeFilter,
+  computeNextCursor,
+  filterCurrentLifecycleRecords,
+} from "../../services/entity_queries.js";
 import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
-import { loadConceptTypeSynonyms } from "../../services/schema_registry.js";
+import {
+  loadConceptTypeSynonyms,
+  schemaRegistry,
+  isHigherPrecedenceSchemaRow,
+  type SchemaRegistryEntry,
+} from "../../services/schema_registry.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
+import {
+  createEntityReadContract,
+  serviceEntityReadRequest,
+  predicateValue,
+  type EntityReadRequest,
+  type EntityReadTrace,
+  type EntityReadContract,
+  type EntityFallbackReason,
+} from "../entity_read_contract.js";
 
 // Shared, dependency-free normalizer (#1572). Imported (and re-exported below
 // for back-compat) so the schema registry can use the same function without an
@@ -13,11 +33,12 @@ import type { EntityWithProvenance } from "../../services/entity_queries.js";
 import { normalizeSearchText } from "../search_normalization.js";
 
 export interface SnapshotFilter {
-  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
   value?: unknown;
 }
 
 interface QueryEntitiesParams {
+  readRequest?: EntityReadRequest;
   userId: string;
   entityType?: string;
   /**
@@ -38,6 +59,8 @@ interface QueryEntitiesParams {
   similarityThreshold?: number;
   limit?: number;
   offset?: number;
+  /** #1943: opaque keyset cursor; see EntityQueryOptions.cursor. */
+  cursor?: string;
   updatedSince?: string;
   createdSince?: string;
   /** R3: filter entities by the identity_basis carried on their observations. */
@@ -123,6 +146,7 @@ export function conceptEntityTypeHints(
 }
 
 interface LexicalSearchEntityIdsParams {
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   /** Multi-type filter, OR-combined with `entityType` (#1562). */
@@ -255,7 +279,8 @@ export function textTokensForEntityMatch(
 
 async function loadKnownEntityTypes(
   userId: string,
-  candidateEntityTypes: Iterable<string>
+  candidateEntityTypes: Iterable<string>,
+  readTrace?: EntityReadTrace
 ): Promise<Set<string>> {
   const known = new Set<string>();
   for (const entityType of candidateEntityTypes) {
@@ -267,6 +292,7 @@ async function loadKnownEntityTypes(
 
   const { data, error } = await db.from("schema_registry").select("entity_type").eq("active", true);
   if (error) {
+    readTrace?.reasons.add("schema_registry_unavailable");
     logger.warn(`[lexicalSearch] Failed to load schema entity types: ${error.message}`);
     return known;
   }
@@ -282,13 +308,17 @@ async function loadKnownEntityTypes(
 }
 
 /** Map type-filter tokens to schema `entity_type` strings for a narrow candidate query. */
-async function resolveEntityTypesForTypeFilters(typeFilterTokens: Set<string>): Promise<string[]> {
+async function resolveEntityTypesForTypeFilters(
+  typeFilterTokens: Set<string>,
+  readTrace?: EntityReadTrace
+): Promise<string[]> {
   if (typeFilterTokens.size === 0) {
     return [];
   }
 
   const { data, error } = await db.from("schema_registry").select("entity_type").eq("active", true);
   if (error) {
+    readTrace?.reasons.add("schema_registry_unavailable");
     // Degrade gracefully: a transient schema_registry hiccup should not 500
     // the entire search request. Returning an empty set falls back to the
     // unfiltered candidate query (capped at MAX_LEXICAL_CANDIDATES), matching
@@ -418,13 +448,14 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   } = params;
   const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
   const strategies = new Set<SearchStrategy>();
+  if (params.readTrace) params.readTrace.effective_types = typeFilter;
   const normalizedSearch = normalizeSearchText(search);
   const searchTokens = normalizedSearch.split(" ").filter(Boolean);
   if (searchTokens.length === 0) {
     return { entityIds: [], total: 0, strategies };
   }
 
-  const registryTypes = await loadKnownEntityTypes(userId, []);
+  const registryTypes = await loadKnownEntityTypes(userId, [], params.readTrace);
   const typeFilterTokens = refineTypeFilterTokens(
     searchTokens,
     buildEntityTypeFilterTokens(searchTokens, registryTypes)
@@ -437,6 +468,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   const conceptSynonyms = await loadConceptTypeSynonyms(userId);
   const conceptTypeHints = conceptEntityTypeHints(searchTokens, conceptSynonyms);
 
+  let candidateLimitApplied = false;
   let entityQuery = db
     .from("entities")
     .select("id, canonical_name, entity_type")
@@ -448,13 +480,19 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   } else if (typeFilter.length > 1) {
     entityQuery = entityQuery.in("entity_type", typeFilter);
   } else if (typeFilterTokens.size > 0) {
-    const matchingTypes = await resolveEntityTypesForTypeFilters(typeFilterTokens);
+    const matchingTypes = await resolveEntityTypesForTypeFilters(
+      typeFilterTokens,
+      params.readTrace
+    );
     if (matchingTypes.length > 0) {
       entityQuery = entityQuery.in("entity_type", matchingTypes);
+      if (params.readTrace) params.readTrace.effective_types = matchingTypes;
     } else {
+      candidateLimitApplied = true;
       entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
     }
   } else {
+    candidateLimitApplied = true;
     entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
   }
 
@@ -466,6 +504,12 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   if (entitiesError) {
     throw new Error(`Failed lexical candidate query: ${entitiesError.message}`);
   }
+  if (
+    candidateLimitApplied &&
+    (entities?.length ?? 0) >= MAX_LEXICAL_CANDIDATES &&
+    params.readTrace
+  )
+    params.readTrace.candidate_capped = true;
   if (!entities || entities.length === 0) {
     return { entityIds: [], total: 0, strategies };
   }
@@ -494,7 +538,8 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 
   const knownEntityTypes = await loadKnownEntityTypes(
     userId,
-    (entities as Array<{ entity_type: string }>).map((entity) => entity.entity_type)
+    (entities as Array<{ entity_type: string }>).map((entity) => entity.entity_type),
+    params.readTrace
   );
   for (const token of typeFilterTokens) {
     knownEntityTypes.add(token);
@@ -641,6 +686,7 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
 }
 
 async function countVisibleEntities(params: {
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   entityTypes?: string[];
@@ -679,7 +725,143 @@ async function countVisibleEntities(params: {
     return query;
   };
 
-  let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
+  // ateles#576: count with an indexed aggregate over entity_snapshots instead
+  // of re-deriving deletion state from the observation log on every request.
+  //
+  // The previous implementation loaded every matching entity id, then walked
+  // them in chunks of 500, and for each chunk selected `entity_id,
+  // source_priority, observed_at, fields` for EVERY observation of those
+  // entities — sorting each chunk in a temp b-tree — only to keep the top row
+  // per entity and discard the rest. At ~166k entities that is ~334 sequential
+  // statements reading (and JSON-parsing) essentially the whole observations
+  // table, on every request, no matter how small the requested `limit`. That is
+  // the per-request overhead behind the reported 25-81s `limit: 1` queries, and
+  // it explains why the event loop stayed free while requests hung: the process
+  // was waiting on DB I/O, not computing.
+  //
+  // Two invariants make the snapshot table sufficient on its own:
+  //   - Deleted: a soft-deleted entity has NO entity_snapshots row (the reducer
+  //     returns null for it and the writers drop the row; see
+  //     getDeletedEntityIds in services/entity_queries.ts).
+  //   - Merged:  `mergeEntities` deletes the merged-away entity's snapshot row
+  //     in the SAME transaction that sets `merged_to_entity_id`
+  //     (services/entity_merge.ts steps 7 and 9).
+  // So counting snapshot rows already excludes both, and the default listing —
+  // what agents and apps actually issue — is a single COUNT(*).
+  //
+  // Known asymmetry with the PAGE path: getDeletedEntityIds
+  // (services/entity_queries.ts) separates "never-observed" (no snapshot row,
+  // but also no observation row — live) from "genuinely deleted" (no snapshot
+  // row AND a deletion observation) via a bounded existence probe against
+  // `observations`. This count does not do that probe, so a never-observed
+  // entity is excluded from the DEFAULT count while still appearing on the
+  // PAGE. Accepted per the same rationale documented on the filtered path
+  // below (#2267 review): both writers that create a bare `entities` row do so
+  // as a precursor to writing its first observation in the same flow, so the
+  // never-observed state is transient in production. Closing this gap would
+  // require the same bounded probe here, reintroducing per-request
+  // observation-log cost proportional to the unresolved-candidate count — the
+  // exact overhead this fix removes. Revisit if a write path is ever added
+  // that leaves entities in the never-observed state for longer than a single
+  // transaction.
+  const countLiveSnapshots = () => {
+    let q = db.from("entity_snapshots").select("entity_id", { count: "exact", head: true });
+    q = q.eq("user_id", userId);
+    q = applyTypeFilter(q, "entity_type");
+    return q;
+  };
+
+  // #2267 review: `includeMerged: true` asks for merged entities to be counted
+  // back IN. That is an ADDITIVE term, not a filter — merged-away entities have
+  // no snapshot row (`mergeEntities` step 9 deletes it), so counting snapshot
+  // rows can never produce them no matter which path runs. Routing it to the
+  // filtered path, whose final step also counts snapshot rows, made
+  // `include_merged: true` return exactly the same total as `false`.
+  // It is now satisfied by adding an indexed count of merged-away `entities`
+  // rows on top of the live-snapshot count. `updated_at` / `created_at` live on
+  // `entities` and remain genuine filters.
+  const needsEntityTableFilters = Boolean(updatedSince) || Boolean(createdSince);
+  const needsSnapshotJsonFilters =
+    published !== undefined || Boolean(publishedAfter) || Boolean(publishedBefore);
+
+  // Counts merged-away entities via an indexed lookup on `entities`. Used as an
+  // additive term whenever `include_merged` is set, on both count paths.
+  const countMergedAway = () => {
+    let q = db
+      .from("entities")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("merged_to_entity_id", "is", null);
+    q = applyTypeFilter(q, "entity_type");
+    return q;
+  };
+
+  if (!needsEntityTableFilters && !needsSnapshotJsonFilters) {
+    const { hasRecordedEntityLifecycleCutover } =
+      await import("../../services/entity_lifecycle_storage.js");
+    const cutover = await hasRecordedEntityLifecycleCutover(await getDb());
+    let count: number | null;
+    let error: { message: string } | null;
+    if (cutover) {
+      // Recorded authority replaces snapshot presence as visibility proof.
+      // Preserve the existing snapshot population/count convention, while
+      // validating those candidates through the same full selector as pages.
+      let query = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
+      query = applyTypeFilter(query, "entity_type");
+      const result = await query;
+      error = result.error;
+      count = error
+        ? null
+        : (await filterCurrentLifecycleRecords(result.data ?? [], userId)).length;
+    } else {
+      const result = await countLiveSnapshots();
+      count = result.count ?? null;
+      error = result.error;
+    }
+    if (error) {
+      throw new Error(`Failed to count visible entities: ${error.message}`);
+    }
+    let total = count ?? 0;
+    if (includeMerged) {
+      const { count: mergedCount, error: mergedError } = await countMergedAway();
+      if (mergedError) {
+        throw new Error(`Failed to count merged entities: ${mergedError.message}`);
+      }
+      total += mergedCount ?? 0;
+    }
+    if (params.readTrace) {
+      // The legacy snapshot count intentionally omits never-observed rows.
+      // Certify actual membership, not equal aggregate numbers. A
+      // deleted or otherwise unresolved row conservatively leaves the count
+      // unknown; do not reintroduce an observation-log scan or change total.
+      const typeClause = (alias: string) =>
+        typeFilter.length
+          ? ` AND ${alias}.entity_type IN (${typeFilter.map(() => "?").join(",")})`
+          : "";
+      try {
+        const connection = await getDb();
+        const mismatch = await connection
+          .prepare(
+            `SELECT 1 AS mismatch FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL${typeClause("e")} AND s.entity_id IS NULL
+           UNION ALL
+           SELECT 1 AS mismatch FROM entity_snapshots s LEFT JOIN entities e ON e.id=s.entity_id AND e.user_id=s.user_id AND e.entity_type=s.entity_type AND e.merged_to_entity_id IS NULL WHERE s.user_id=?${typeClause("s")} AND e.id IS NULL LIMIT 1`
+          )
+          .get(userId, ...typeFilter, userId, ...typeFilter);
+        params.readTrace.count_exact = mismatch == null;
+      } catch {
+        params.readTrace.count_exact = false;
+      }
+      if (!params.readTrace.count_exact)
+        params.readTrace.reasons.add("count_population_unverified");
+    }
+    return total;
+  }
+
+  // Filtered path: resolve candidate ids from `entities` (indexed, no
+  // observation reads), then keep those that still have a snapshot row.
+  // Merged-away candidates are counted directly instead — they never have a
+  // snapshot row, so the presence check below cannot see them.
+  let entityIdQuery = db.from("entities").select("id, merged_to_entity_id").eq("user_id", userId);
   entityIdQuery = applyTypeFilter(entityIdQuery, "entity_type");
   if (!includeMerged) {
     entityIdQuery = entityIdQuery.is("merged_to_entity_id", null);
@@ -690,7 +872,7 @@ async function countVisibleEntities(params: {
   if (createdSince) {
     entityIdQuery = entityIdQuery.gte("created_at", createdSince);
   }
-  if (published !== undefined || publishedAfter || publishedBefore) {
+  if (needsSnapshotJsonFilters) {
     let snapshotQuery = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
     snapshotQuery = applyTypeFilter(snapshotQuery, "entity_type");
     if (published !== undefined) {
@@ -723,43 +905,137 @@ async function countVisibleEntities(params: {
     return 0;
   }
 
-  const entityIds = entityRows.map((row: { id: string }) => row.id);
-  const deletedEntityIds = new Set<string>();
+  // Partition on merge state: merged-away rows are counted as-is when
+  // `include_merged` is set (they have no snapshot row to find), and were
+  // already excluded by the query above when it is not.
+  const mergedCandidateCount = entityRows.filter((row: { merged_to_entity_id?: string | null }) =>
+    Boolean(row.merged_to_entity_id)
+  ).length;
+  const candidateIds = entityRows
+    .filter((row: { merged_to_entity_id?: string | null }) => !row.merged_to_entity_id)
+    .map((row: { id: string }) => row.id);
+
+  // Keep the candidates that still have a snapshot row (i.e. are not deleted),
+  // in bounded chunks — a bound parameter list, not a scan. Starts from the
+  // merged tally so a page of only merged-away candidates still counts.
+  let liveCount = mergedCandidateCount;
   const chunkSize = 500;
-
-  for (let i = 0; i < entityIds.length; i += chunkSize) {
-    const chunk = entityIds.slice(i, i + chunkSize);
-    const { data: deletionObservations, error: observationsError } = await db
-      .from("observations")
-      .select("entity_id, source_priority, observed_at, fields")
-      .in("entity_id", chunk)
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false });
-
-    if (observationsError) {
-      throw new Error(
-        `Failed to query deletion observations for count: ${observationsError.message}`
-      );
+  const { hasRecordedEntityLifecycleCutover } =
+    await import("../../services/entity_lifecycle_storage.js");
+  const cutover = await hasRecordedEntityLifecycleCutover(await getDb());
+  for (let i = 0; i < candidateIds.length; i += chunkSize) {
+    const chunk = candidateIds.slice(i, i + chunkSize);
+    if (!cutover) {
+      const { count, error } = await db
+        .from("entity_snapshots")
+        .select("entity_id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .in("entity_id", chunk);
+      if (error) throw new Error(`Failed to count live entities: ${error.message}`);
+      liveCount += count ?? 0;
+      continue;
     }
-
-    const highestByEntity = new Map<string, any>();
-    for (const obs of deletionObservations || []) {
-      if (!highestByEntity.has(obs.entity_id)) {
-        highestByEntity.set(obs.entity_id, obs);
-      }
+    const { data, error } = await db
+      .from("entity_snapshots")
+      .select("entity_id")
+      .eq("user_id", userId)
+      .in("entity_id", chunk);
+    if (error) {
+      throw new Error(`Failed to count live entities: ${error.message}`);
     }
-
-    for (const [entityId, obs] of highestByEntity.entries()) {
-      if (obs.fields?._deleted === true) {
-        deletedEntityIds.add(entityId);
-      }
-    }
+    liveCount += (await filterCurrentLifecycleRecords(data ?? [], userId)).length;
   }
 
-  return entityIds.length - deletedEntityIds.size;
+  if (params.readTrace) {
+    params.readTrace.count_exact = liveCount === entityRows.length;
+    if (!params.readTrace.count_exact) params.readTrace.reasons.add("count_population_unverified");
+  }
+
+  return liveCount;
+}
+
+/** Advisory domain diagnostics use the canonical scoped catalog, never the
+ * legacy search type-hint query (which has broader historical visibility). */
+async function entityReadDiagnostics(
+  userId: string,
+  types: string[],
+  fields: string[],
+  readTrace?: EntityReadTrace
+): Promise<EntityReadContract["diagnostics"]> {
+  if (types.length === 0)
+    return fields.length
+      ? [{ code: "diagnostics_unavailable", reason: "untyped_field_scope" }]
+      : [];
+  let rows: SchemaRegistryEntry[];
+  try {
+    rows = await schemaRegistry.listActiveSchemas(userId);
+  } catch {
+    readTrace?.reasons.add("schema_registry_unavailable");
+    return [{ code: "diagnostics_unavailable", reason: "schema_registry_unavailable" }];
+  }
+  const grouped = new Map<string, SchemaRegistryEntry[]>();
+  for (const row of rows) {
+    // Existing loadGlobalSchema authority is scope-based, irrespective of
+    // legacy owner metadata. Foreign user-scoped rows are never admitted.
+    if (row.scope !== "global" && !(row.scope === "user" && row.user_id === userId)) continue;
+    const group = grouped.get(row.entity_type) ?? [];
+    group.push(row);
+    grouped.set(row.entity_type, group);
+  }
+  const diagnostics: EntityReadContract["diagnostics"] = [];
+  for (const type of types) {
+    const group = grouped.get(type) ?? [];
+    if (!group.length) {
+      diagnostics.push({
+        code: "missing_entity_type",
+        reason: "not_in_visible_active_catalog",
+        entity_type: type,
+      });
+      continue;
+    }
+    let selected = group[0];
+    for (const row of group.slice(1))
+      if (isHigherPrecedenceSchemaRow(row, selected, userId)) selected = row;
+    const sameScope = group.filter(
+      (row) =>
+        row.scope === selected.scope &&
+        (selected.scope === "global" || row.user_id === selected.user_id)
+    );
+    if (
+      sameScope.length !== 1 ||
+      !selected.schema_definition?.fields ||
+      typeof selected.schema_definition.fields !== "object" ||
+      Array.isArray(selected.schema_definition.fields)
+    ) {
+      readTrace?.reasons.add("schema_registry_ambiguous");
+      diagnostics.push({
+        code: "diagnostics_unavailable",
+        reason: "ambiguous_or_invalid_active_schema",
+        entity_type: type,
+      });
+      continue;
+    }
+    for (const field of fields)
+      if (!Object.hasOwn(selected.schema_definition.fields, field))
+        diagnostics.push({
+          code: "missing_field",
+          reason: "not_in_visible_active_schema",
+          entity_type: type,
+          field,
+        });
+  }
+  if (
+    diagnostics.some((item) => item.code === "missing_entity_type" || item.code === "missing_field")
+  )
+    diagnostics.push({
+      code: "diagnostics_unavailable",
+      reason: "bounded_near_miss_suggestions_unavailable",
+    });
+  return diagnostics;
 }
 
 async function queryEntitiesFromLexicalSearch(params: {
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   entityTypes?: string[];
@@ -793,6 +1069,7 @@ async function queryEntitiesFromLexicalSearch(params: {
     includeMerged: params.includeMerged,
     search: params.search,
     excludeBookkeeping: params.excludeBookkeeping,
+    readTrace: params.readTrace,
   });
 
   if (lexicalIds.length === 0) {
@@ -817,7 +1094,10 @@ async function queryEntitiesFromLexicalSearch(params: {
     offset: 0,
     entityIds: paginatedIds,
     identityBasis: params.identityBasis,
+    readTrace: params.readTrace,
   });
+  if (entities.length < paginatedIds.length)
+    params.readTrace?.reasons.add("candidate_materialization_partial");
 
   const orderMap = new Map(paginatedIds.map((id, i) => [id, i]));
   entities.sort((a, b) => {
@@ -852,7 +1132,17 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
    */
   applied_search_strategies?: SearchStrategy[];
   search_mode: EntitySearchMode;
+  /**
+   * #1943: opaque keyset cursor to fetch the next page, present only on the
+   * plain-listing path (default `entity_id` sort, no `search`) when a full page
+   * was returned. `undefined` when there is no next page or the query is not
+   * cursor-eligible.
+   */
+  next_cursor?: string;
+  read_contract: EntityReadContract;
 }> {
+  const startedAt = new Date().toISOString();
+  const readTrace: EntityReadTrace = { reasons: new Set() };
   const {
     userId,
     entityType,
@@ -868,6 +1158,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     similarityThreshold,
     limit = 100,
     offset = 0,
+    cursor,
     updatedSince,
     createdSince,
     identityBasis,
@@ -885,12 +1176,16 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   // the response omits `applied_search_strategies` entirely.
   let appliedStrategies: Set<SearchStrategy> | undefined;
   let searchMode: EntitySearchMode = "none";
+  let fallbackReason: EntityFallbackReason | undefined;
+  let effectiveExcludeBookkeeping = false;
+  const bookkeepingOverride =
+    excludeBookkeeping && typeFilter.some((t) => BOOKKEEPING_ENTITY_TYPES.has(t));
 
   if (search && search.trim()) {
     appliedStrategies = new Set<SearchStrategy>();
     const trimmedSearch = search.trim();
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
-    const registryTypes = await loadKnownEntityTypes(userId, []);
+    const registryTypes = await loadKnownEntityTypes(userId, [], readTrace);
     const typeFilterTokens = refineTypeFilterTokens(
       searchTokens,
       buildEntityTypeFilterTokens(searchTokens, registryTypes)
@@ -898,11 +1193,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     // Bookkeeping exclusion is caller-controlled (per docs/foundation/product_principles.md
     // §10.2 Explicit Over Implicit). If the caller explicitly filters to a bookkeeping
     // entity_type, the explicit type filter wins and excludeBookkeeping is ignored.
-    const effectiveExcludeBookkeeping =
-      excludeBookkeeping &&
-      !(typeFilter.length > 0 && typeFilter.some((t) => BOOKKEEPING_ENTITY_TYPES.has(t)));
+    effectiveExcludeBookkeeping = excludeBookkeeping && !bookkeepingOverride;
 
     const lexicalParams = {
+      readTrace,
       userId,
       entityType,
       entityTypes,
@@ -935,7 +1229,12 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       logger.info(
         `[queryEntitiesWithCount] semantic search path: userId=${userId} search=${trimmedSearch.slice(0, 50)} entityType=${entityType ?? "(any)"}`
       );
-      const { entityIds, total: semanticTotal } = await semanticSearchEntities({
+      const {
+        entityIds,
+        total: semanticTotal,
+        fallbackReason: semanticFallbackReason,
+      } = await semanticSearchEntities({
+        readTrace,
         searchText: trimmedSearch,
         userId,
         entityType,
@@ -964,7 +1263,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           updatedSince,
           createdSince,
           identityBasis,
+          readTrace,
         });
+        if (entities.length < entityIds.length)
+          readTrace.reasons.add("candidate_materialization_partial");
         if (effectiveExcludeBookkeeping) {
           entities = entities.filter((entity) => !BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type));
         }
@@ -990,6 +1292,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           total = lexicalResult.total;
           for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
           searchMode = "lexical_fallback";
+          fallbackReason = "filtered_candidates_exhausted";
         }
       } else {
         const lexicalResult = await queryEntitiesFromLexicalSearch(lexicalParams);
@@ -997,6 +1300,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         total = lexicalResult.total;
         for (const strategy of lexicalResult.strategies) appliedStrategies.add(strategy);
         searchMode = "lexical_fallback";
+        fallbackReason = semanticFallbackReason ?? "no_usable_candidates";
       }
     }
   } else {
@@ -1013,10 +1317,12 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       publishedBefore,
       limit,
       offset,
+      cursor,
       updatedSince,
       createdSince,
       identityBasis,
       snapshotFilters,
+      readTrace,
     });
 
     // R3: when filtering by identity_basis, the visible count must reflect
@@ -1040,10 +1346,13 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         createdSince,
         identityBasis,
         snapshotFilters,
+        readTrace,
       });
       total = allMatches.length;
+      if (allMatches.length >= 10000) readTrace.count_capped = true;
     } else {
       total = await countVisibleEntities({
+        readTrace,
         userId,
         entityType,
         entityTypes,
@@ -1057,12 +1366,130 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     }
   }
 
+  if (searchMode !== "none") {
+    readTrace.ordering = { field: "search_rank", direction: "desc", tie_breaker: "entity_id" };
+    readTrace.continuation_supported = false;
+  }
+
+  // #1943: only the plain-listing path (no search) supports keyset cursors;
+  // search reorders by relevance so an entity_id cursor is meaningless there.
+  const nextCursor =
+    searchMode === "none"
+      ? (computeNextCursor(entities, { sortBy, sortOrder, limit }) ?? undefined)
+      : undefined;
+
+  // Legacy search type-hint lookup is intentionally unchanged. Its derived
+  // filter can name a foreign private schema; the new envelope may describe
+  // that executed predicate by digest, never disclose a private catalog name.
+  const acquiredTypes = readTrace.effective_types ?? typeFilter;
+  let disclosedTypes = acquiredTypes;
+  if (readTrace.effective_types && typeFilter.length === 0 && acquiredTypes.length) {
+    try {
+      const visible = new Set(
+        (await schemaRegistry.listActiveSchemas(userId)).map((row) => row.entity_type)
+      );
+      disclosedTypes = acquiredTypes.filter((type) => visible.has(type));
+    } catch {
+      disclosedTypes = [];
+      readTrace.reasons.add("schema_registry_unavailable");
+    }
+    if (disclosedTypes.length !== acquiredTypes.length)
+      readTrace.reasons.add("applied_type_scope_redacted");
+  }
+
   return {
     entities,
     total,
     excluded_merged: !includeMerged,
     applied_search_strategies: appliedStrategies ? [...appliedStrategies].sort() : undefined,
     search_mode: searchMode,
+    next_cursor: nextCursor,
+    read_contract: createEntityReadContract({
+      request:
+        params.readRequest ??
+        serviceEntityReadRequest(params as unknown as Record<string, unknown>),
+      mode: searchMode,
+      fallbackReason,
+      types: disclosedTypes,
+      bookkeepingOverride: searchMode !== "none" && bookkeepingOverride,
+      includeMerged,
+      includeSnapshots,
+      sortBy: searchMode === "none" ? sortBy : "search_rank",
+      sortOrder: searchMode === "none" ? sortOrder : "desc",
+      limit,
+      offset,
+      cursor,
+      nextCursor,
+      total,
+      returned: entities.length,
+      startedAt,
+      trace: readTrace,
+      diagnostics: await entityReadDiagnostics(
+        userId,
+        disclosedTypes,
+        searchMode === "none" ? Object.keys(snapshotFilters ?? {}) : [],
+        readTrace
+      ),
+      predicates: [
+        ...(readTrace.effective_types?.length && typeFilter.length === 0
+          ? [{ field: "entity_type", op: "in", value: predicateValue(readTrace.effective_types) }]
+          : []),
+        ...(searchMode !== "none"
+          ? [
+              {
+                field: "search",
+                op: "ranked_query",
+                value: predicateValue(
+                  searchMode === "semantic" ? search!.trim() : normalizeSearchText(search!.trim())
+                ),
+              },
+            ]
+          : []),
+        ...(searchMode !== "none" && excludeBookkeeping
+          ? [
+              {
+                field: "exclude_bookkeeping",
+                op: "eq",
+                value: predicateValue(effectiveExcludeBookkeeping),
+              },
+            ]
+          : []),
+        ...(searchMode === "semantic" && readTrace.distance_threshold_applied
+          ? [
+              {
+                field: "similarity_threshold",
+                op: "lt",
+                value: predicateValue(similarityThreshold),
+              },
+            ]
+          : []),
+        ...(published !== undefined
+          ? [{ field: "published", op: "eq", value: predicateValue(published) }]
+          : []),
+        ...(publishedAfter
+          ? [{ field: "published_date", op: "gte", value: predicateValue(publishedAfter) }]
+          : []),
+        ...(publishedBefore
+          ? [{ field: "published_date", op: "lte", value: predicateValue(publishedBefore) }]
+          : []),
+        ...(updatedSince
+          ? [{ field: "updated_at", op: "gte", value: predicateValue(updatedSince) }]
+          : []),
+        ...(createdSince
+          ? [{ field: "created_at", op: "gte", value: predicateValue(createdSince) }]
+          : []),
+        ...(identityBasis
+          ? [{ field: "identity_basis", op: "eq", value: predicateValue(identityBasis) }]
+          : []),
+        ...(searchMode === "none"
+          ? Object.entries(snapshotFilters ?? {}).map(([field, filter]) => ({
+              field,
+              op: filter.op,
+              value: predicateValue(filter.value),
+            }))
+          : []),
+      ],
+    }),
   };
 }
 

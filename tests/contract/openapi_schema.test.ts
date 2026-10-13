@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { load } from "js-yaml";
 import {
   getOpenApiInputSchemaForTool,
   listOpenApiMappedMcpTools,
 } from "../../src/shared/openapi_schema.js";
 import { resolveOpenApiPath } from "../../src/shared/openapi_file.js";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -40,26 +41,26 @@ describe("OpenAPI tool schemas", () => {
       expect(schema?.type).toBe("object");
       const props = schema?.properties ?? {};
       expect(Object.keys(props)).toEqual(
-        expect.arrayContaining([
-          "relationship_type",
-          "source_entity_id",
-          "target_entity_id",
-        ])
+        expect.arrayContaining(["relationship_type", "source_entity_id", "target_entity_id"])
       );
     });
 
-    it("enumerates canonical relationship_type values including EMBEDS", () => {
+    it("declares relationship_type as an open string pointing at the registry", () => {
+      // REWRITTEN for #1972 / G25, same reason as the list_relationships case
+      // below: the vocabulary is a runtime registry, so an enum in the
+      // contract is a second copy that goes stale on the next registration —
+      // and a spec-driven client would then refuse locally a call the server
+      // accepts, which is exactly the one-way door #1972 was opened about.
       const rel = schema?.properties?.relationship_type;
       expect(rel?.type).toBe("string");
-      expect(rel?.enum).toEqual(
-        expect.arrayContaining([
-          "PART_OF",
-          "CORRECTS",
-          "REFERS_TO",
-          "DEPENDS_ON",
-          "EMBEDS",
-        ])
-      );
+      expect(
+        rel?.enum,
+        "create_relationship must not enumerate relationship types in the contract"
+      ).toBeUndefined();
+      expect(
+        rel?.description ?? "",
+        "the contract must tell a client how to discover the vocabulary"
+      ).toContain("list_relationship_types");
     });
 
     it("declares optional metadata, source_id, user_id alongside required fields", () => {
@@ -80,9 +81,7 @@ describe("OpenAPI tool schemas", () => {
       expect(schema).toBeTruthy();
       expect(schema?.type).toBe("object");
       const props = schema?.properties ?? {};
-      expect(Object.keys(props)).toEqual(
-        expect.arrayContaining(["user_id", "keyword", "summary"])
-      );
+      expect(Object.keys(props)).toEqual(expect.arrayContaining(["user_id", "keyword", "summary"]));
       expect(props.keyword?.type).toBe("string");
       expect(props.summary?.type).toBe("boolean");
     });
@@ -116,22 +115,22 @@ describe("OpenAPI tool schemas", () => {
       );
     });
 
-    it("constrains relationship_type to the closed enum matching the handler", () => {
+    it("declares relationship_type as an open string pointing at the registry", () => {
+      // REWRITTEN for #1972 / G25. This used to assert a CLOSED enum containing
+      // a sample of the 28 built-ins. That assertion pinned the bug rather than
+      // the fix: the vocabulary is a runtime registry, so an enum in the
+      // contract goes stale the moment a type is registered, and a
+      // spec-driven client would refuse locally a call the server accepts.
       const rel = schema?.properties?.relationship_type;
       expect(rel?.type).toBe("string");
-      // Sample of canonical + lowercase relationship types; full list must
-      // match RelationshipTypeSchema in src/shared/action_schemas.ts.
-      expect(rel?.enum).toEqual(
-        expect.arrayContaining([
-          "PART_OF",
-          "CORRECTS",
-          "REFERS_TO",
-          "DEPENDS_ON",
-          "EMBEDS",
-          "works_at",
-          "invested_in",
-        ])
-      );
+      expect(
+        rel?.enum,
+        "openapi.yaml must not enumerate relationship types — the vocabulary is a registry"
+      ).toBeUndefined();
+      expect(
+        rel?.description ?? "",
+        "the contract must tell a client how to discover the vocabulary"
+      ).toContain("list_relationship_types");
     });
 
     // Note: the openapi.yaml schema declares an `anyOf` constraint requiring
@@ -140,5 +139,217 @@ describe("OpenAPI tool schemas", () => {
     // tool-schema extractor (which flattens to {type, properties, required}
     // for MCP consumption), so it is verified by the openapi:bc-diff output
     // and by ListRelationshipsRequestSchema's .refine() in action_schemas.ts.
+  });
+
+  describe("policy-unavailable 503 is declared where it is emitted (#1974/#1975)", () => {
+    // The handlers emit 503 + ERR_STORE_POLICY_UNAVAILABLE for both /store and
+    // /correct (one shared error branch in src/actions.ts). The envelope schema
+    // and the docs landed with it. The OPERATIONS did not — for one review
+    // cycle the runtime returned a status the spec never declared.
+    //
+    // That divergence is worse here than in most places. A generated client
+    // sees only the declared responses, so an undeclared 503 lands in whatever
+    // the client does with an unrecognised status — typically the generic-error
+    // path, next to the 400 DENIED. Those two demand OPPOSITE responses:
+    // DENIED means fix the payload, UNAVAILABLE means retry it unchanged. An
+    // agent that conflates them narrows what it stores because the server could
+    // not read its own policy.
+    //
+    // Reads openapi.yaml directly rather than the generated types: the
+    // generator is what could silently drop this, so asserting against its
+    // output would only prove the generator agrees with itself.
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      paths?: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+      components?: { schemas?: Record<string, unknown> };
+    };
+
+    it.each(["/store", "/correct"])(
+      "%s declares 503 -> StorePolicyUnavailableErrorEnvelope",
+      (route) => {
+        const responses = spec.paths?.[route]?.post?.responses;
+        expect(responses, `${route} POST has no responses block`).toBeTruthy();
+
+        const declared = responses?.["503"];
+        expect(
+          declared,
+          `${route} emits 503 ERR_STORE_POLICY_UNAVAILABLE at runtime but does not declare it`
+        ).toBeTruthy();
+
+        expect(JSON.stringify(declared)).toContain(
+          "#/components/schemas/StorePolicyUnavailableErrorEnvelope"
+        );
+      }
+    );
+
+    it("keeps the referenced envelope defined", () => {
+      // A $ref to a deleted schema is a spec that parses and lies.
+      expect(spec.components?.schemas?.StorePolicyUnavailableErrorEnvelope).toBeTruthy();
+    });
+
+    it("keeps DENIED on 400 and UNAVAILABLE on 503, never merged", () => {
+      // Collapsing these onto one status erases the retry/rewrite distinction
+      // the split exists to carry.
+      for (const route of ["/store", "/correct"]) {
+        const responses = spec.paths?.[route]?.post?.responses ?? {};
+        const four = JSON.stringify(responses["400"] ?? {});
+        const five = JSON.stringify(responses["503"] ?? {});
+
+        expect(four, `${route} 400 must still carry DENIED`).toContain(
+          "StorePolicyDeniedErrorEnvelope"
+        );
+        expect(four, `${route} 400 must not carry UNAVAILABLE`).not.toContain(
+          "StorePolicyUnavailableErrorEnvelope"
+        );
+        expect(five, `${route} 503 must not carry DENIED`).not.toContain(
+          "StorePolicyDeniedErrorEnvelope"
+        );
+      }
+    });
+  });
+
+  describe("StoreUnstructuredResponse — plan-mode fields (#2471)", () => {
+    // storeUnstructuredForApi (src/actions.ts) returns `commit`,
+    // `storage_mode`, `reference_path`, `mime_type`, `entities_created`, and
+    // `observations_created` on every response, but the OpenAPI schema
+    // declared none of them — a schema-conformant client had no declared way
+    // to detect plan mode on this path. Guards against the fields silently
+    // dropping out of the spec again.
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: { schemas?: Record<string, { properties?: Record<string, unknown> }> };
+    };
+    const properties = spec.components?.schemas?.StoreUnstructuredResponse?.properties ?? {};
+
+    it.each([
+      "commit",
+      "storage_mode",
+      "reference_path",
+      "mime_type",
+      "entities_created",
+      "observations_created",
+    ])("declares %s", (field) => {
+      expect(properties[field], `StoreUnstructuredResponse.${field} is undeclared`).toBeTruthy();
+    });
+  });
+
+  describe("relationship capability-denial 403 responses are declared", () => {
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      paths?: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+    };
+
+    it.each(["/create_relationship", "/delete_relationship", "/restore_relationship"])(
+      "%s declares 403 capability_denied as ErrorEnvelope",
+      (route) => {
+        const declared = spec.paths?.[route]?.post?.responses?.["403"];
+        expect(
+          declared,
+          `${route} emits 403 capability_denied at runtime but does not declare it`
+        ).toBeTruthy();
+        expect(JSON.stringify(declared)).toContain("capability_denied");
+        expect(JSON.stringify(declared)).toContain("#/components/schemas/ErrorEnvelope");
+      }
+    );
+
+    it("declares structured per-item capability denials on create_relationships", () => {
+      const response = spec.paths?.["/create_relationships"]?.post?.responses?.["200"];
+      const encoded = JSON.stringify(response ?? {});
+      expect(encoded).toContain("#/components/schemas/RelationshipBatchErrorItem");
+    });
+  });
+
+  describe("relationship batch errors preserve the structured repair contract", () => {
+    const spec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: {
+        schemas?: Record<
+          string,
+          {
+            required?: string[];
+            properties?: Record<string, unknown>;
+            additionalProperties?: boolean;
+          }
+        >;
+      };
+    };
+
+    it("declares the denial code, operation, hint, index, and relationship context", () => {
+      const item = spec.components?.schemas?.RelationshipBatchErrorItem;
+      expect(item).toBeTruthy();
+      expect(item?.additionalProperties).toBe(false);
+      expect(item?.required).toEqual(expect.arrayContaining(["index", "relationship", "error"]));
+      expect(Object.keys(item?.properties ?? {})).toEqual(
+        expect.arrayContaining(["index", "relationship", "error", "code", "op", "hint"])
+      );
+    });
+  });
+
+  describe("relationships_created / relationships_refused declared on every schema that returns them", () => {
+    // HTTP POST /interpretations/create and MCP create_interpretation return
+    // relationships_refused (src/actions.ts, src/server.ts createInterpretation)
+    // whenever a relationship in the request could not be created, and
+    // relationships_created always. Both response paths (store's structured
+    // response and create_interpretation's) share one implementation
+    // (src/services/store_relationships.ts), so the contract must declare the
+    // same typed shape on both response schemas rather than leaving one as an
+    // untyped additionalProperties bag. Reads openapi.yaml directly, not the
+    // generated types, for the same reason as the policy-unavailable block
+    // above: the generator could silently drop this, so asserting against its
+    // output would only prove the generator agrees with itself.
+    const rawSpec = load(readFileSync(resolveOpenApiPath(), "utf-8")) as {
+      components?: {
+        schemas?: Record<
+          string,
+          {
+            properties?: Record<string, { items?: Record<string, unknown> }>;
+          }
+        >;
+      };
+    };
+    const schemas = rawSpec.components?.schemas ?? {};
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s declares relationships_created and relationships_refused",
+      (schemaName) => {
+        const props = schemas[schemaName]?.properties ?? {};
+        expect(props.relationships_created, `${schemaName}.relationships_created`).toBeTruthy();
+        expect(props.relationships_refused, `${schemaName}.relationships_refused`).toBeTruthy();
+      }
+    );
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s.relationships_created items are the shared typed RelationshipCreated component, not an untyped bag",
+      (schemaName) => {
+        const items = schemas[schemaName]?.properties?.relationships_created?.items as
+          | { $ref?: string; additionalProperties?: boolean }
+          | undefined;
+        expect(items, `${schemaName}.relationships_created.items`).toBeTruthy();
+        expect(
+          items?.additionalProperties,
+          `${schemaName}.relationships_created.items must not be an untyped additionalProperties bag`
+        ).not.toBe(true);
+        expect(
+          items?.$ref,
+          `${schemaName}.relationships_created.items must $ref a shared component`
+        ).toBe("#/components/schemas/RelationshipCreated");
+      }
+    );
+
+    it.each(["StoreStructuredResponse", "CreateInterpretationResponse"])(
+      "%s.relationships_refused items are the shared typed RelationshipRefusal component",
+      (schemaName) => {
+        const items = schemas[schemaName]?.properties?.relationships_refused?.items as
+          | { $ref?: string; additionalProperties?: boolean }
+          | undefined;
+        expect(items, `${schemaName}.relationships_refused.items`).toBeTruthy();
+        expect(
+          items?.$ref,
+          `${schemaName}.relationships_refused.items must $ref a shared component`
+        ).toBe("#/components/schemas/RelationshipRefusal");
+      }
+    );
+
+    it("keeps the shared RelationshipCreated and RelationshipRefusal components defined", () => {
+      // A $ref to a deleted schema is a spec that parses and lies.
+      expect(schemas.RelationshipCreated).toBeTruthy();
+      expect(schemas.RelationshipRefusal).toBeTruthy();
+    });
   });
 });

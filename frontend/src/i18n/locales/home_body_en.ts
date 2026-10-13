@@ -299,7 +299,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
   proof: {
     kicker: "How it's used",
     blockquote:
-      "Running daily for 5+ months across Claude Code, Cursor, ChatGPT, and CLI. Same state graph from day one: every version preserved, every correction traceable. Contacts evolve, contracts get amended, tasks close and reopen. I ask my agents what changed on a deal since October or what I originally told an investor three months ago. The memory compounds; nothing silently drifts.",
+      "Running daily for over a year across Claude Code, Cursor, ChatGPT, and CLI. Same state graph from day one: every version preserved, every correction traceable. Contacts evolve, contracts get amended, tasks close and reopen. I ask my agents what changed on a deal since October or what I originally told an investor three months ago. The memory compounds; nothing silently drifts.",
     founderPhotoAlt: "Mark Hendrickson",
     founderName: "Mark Hendrickson",
     founderRole: "Neotoma creator",

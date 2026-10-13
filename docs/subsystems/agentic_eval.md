@@ -224,7 +224,7 @@ Supported predicates (see `packages/eval-harness/src/assertions.ts`):
 `reply_text.contains`, `turn_compliance.backfilled`,
 `instruction_profile.served`, `host_tool.invocations`,
 `mcp_tool.invocations`, `tool_result.matches`, `snapshot.field_present`,
-`snapshot.field_absent`. Each predicate
+`snapshot.field_absent`, `stats.counter`, `raw_storage.file_count`. Each predicate
 returns a structured `{ pass, expected, actual, message }` and the
 failure message is what the TTY/JUnit reporter surfaces.
 
@@ -288,6 +288,7 @@ Scenarios carry optional metadata describing how they were derived:
 | `source_pattern` | Human-readable description of the failure pattern |
 | `privacy_transform` | How PII was transformed for the committed scenario |
 | `seed_entities[]` | Entities pre-seeded into the isolated DB before the driver runs |
+| `real_storage` | When `true`, the isolated server writes raw bytes to disk (sets `NEOTOMA_TEST_REAL_STORAGE=1`), so `raw_storage.file_count` can observe stored files |
 
 Scenarios that need pre-existing DB state (retrieval, dedup) use
 `seed_entities[]` — the runner POSTs these to the isolated server's
@@ -342,6 +343,8 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 | `tool_result.matches` | Inspect the JSON result the agent received from a named tool: `result_subset` (deep subset), or `result_key` + `present` (dotted-path key present/absent, incl. `error.code` envelopes); `which` picks first/last/index (#1703) |
 | `snapshot.field_present` | A `field` is present on a retrieved entity snapshot (resolved by `entity_id` or `entity_type`+`where`) (#1703) |
 | `snapshot.field_absent` | A `field` is absent from a retrieved entity snapshot — e.g. an unknown field landed in raw_fragments, stored-but-invisible (#1703) |
+| `stats.counter` | A numeric key (dotted path allowed, e.g. `sources_count`, `total_observations`) of the post-turn `/stats` payload compares as `op`/`value`. Fails closed: a missing or non-numeric key is a failure, never read as zero (#2493) |
+| `raw_storage.file_count` | Number of files the isolated server wrote under its raw-storage directory compares as `op`/`value`. Pair with the scenario flag `real_storage: true`, because an isolated server (NODE_ENV=test) otherwise skips the byte upload and writes only the `sources` row (#2493) |
 
 These four `#1703` primitives close the audit gap where wrong-tool / silent-no-op
 behavior was invisible: the older predicates could only observe store-side entity
@@ -349,6 +352,14 @@ state, so an agent that never called the intended tool passed as long as the
 state happened to be right. `mcp_tool.invocations` + `tool_result.matches` assert
 the tool was actually called and returned the expected shape (including error
 envelopes); `snapshot.field_present/absent` assert schema-projection effects.
+
+`stats.counter` and `raw_storage.file_count` assert state deltas rather than
+tool replies: they read the server's own counters and disk after the turn, which
+is how a "writes nothing" contract (for example `store` with `commit: false`) is
+checked against what was actually persisted instead of against what the response
+claims. Such a scenario needs a paired positive control that does persist, so a
+zero cannot come from an unreadable counter: see
+`store_plan_mode_persists_nothing` and `store_commit_persists_control`.
 
 ### Combined runner (WRIT + Tier 2)
 

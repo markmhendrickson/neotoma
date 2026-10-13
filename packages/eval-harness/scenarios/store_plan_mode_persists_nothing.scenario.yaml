@@ -1,0 +1,109 @@
+meta:
+  id: store_plan_mode_persists_nothing
+  description: >
+    Plan mode (store with commit false, the shape behind the CLI --plan and
+    --dry-run flags) must persist nothing. The agent previews all four store
+    shapes: entities only, inline file only, entities plus inline file in one
+    call, and a file stored by reference. After the turn the isolated server
+    must hold zero sources, observations, entities, relationships and stored
+    files, and every response must say commit false with a null source_id.
+    Its positive control is store_commit_persists_control, which replays the
+    same four shapes without commit false and must leave rows and files
+    behind, so the zero here cannot be an artifact of an unreadable counter.
+  tags:
+    - tier2
+    - store
+    - plan_mode
+    - writ:no_side_effects
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When the
+  user asks for a preview, call store with commit false for every shape
+  (entities, file, entities plus file, file by reference) and never persist.
+  Then reply briefly.
+
+user_prompt: |
+  Preview what storing a contact and a note file would do, without saving anything.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+# Write raw bytes to disk (the isolated server otherwise skips the upload under
+# NODE_ENV=test), so raw_storage.file_count can see stored files.
+real_storage: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  # The agent really issued four plan-mode calls (guards against a vacuous
+  # pass where nothing was sent).
+  - type: mcp_tool.invocations
+    tool_name: store
+    arg_subset:
+      commit: false
+    op: eq
+    value: 4
+
+  # Per-shape response contract: committed nothing, no source id.
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      commit: false
+      source_id: null
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_subset:
+      commit: false
+      source_id: null
+  - type: tool_result.matches
+    tool_name: store
+    which: 2
+    result_subset:
+      structured:
+        commit: false
+        source_id: null
+      unstructured:
+        commit: false
+        source_id: null
+  - type: tool_result.matches
+    tool_name: store
+    which: 3
+    result_subset:
+      commit: false
+      source_id: null
+      storage_mode: reference
+
+  # Zero persistence, read from the server rather than from the responses.
+  - type: stats.counter
+    field: sources_count
+    op: eq
+    value: 0
+  - type: stats.counter
+    field: total_observations
+    op: eq
+    value: 0
+  - type: stats.counter
+    field: total_entities
+    op: eq
+    value: 0
+  - type: stats.counter
+    field: total_relationships
+    op: eq
+    value: 0
+  - type: entity.count
+    entity_type: contact
+    op: eq
+    value: 0
+  - type: raw_storage.file_count
+    op: eq
+    value: 0

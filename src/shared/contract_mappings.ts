@@ -12,6 +12,14 @@ export interface OpenApiOperationMapping {
 
 export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   {
+    operationId: "correctTransaction",
+    method: "post",
+    path: "/corrections/transaction",
+    adapter: "both",
+    mcpTool: "correct_transaction",
+    cliCommand: "request --operation correctTransaction",
+  },
+  {
     operationId: "getFileUrl",
     method: "get",
     path: "/get_file_url",
@@ -24,7 +32,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     method: "get",
     path: "/health",
     adapter: "infra",
-    notes: "Health endpoint is infrastructure only.",
+    notes: "Liveness only — does not touch the database. Infrastructure only.",
+  },
+  {
+    operationId: "readinessCheck",
+    method: "get",
+    path: "/ready",
+    adapter: "infra",
+    notes: "Readiness probe (bounded real DB read) for Fly checks. Infrastructure only.",
   },
   {
     operationId: "getOpenApiSpec",
@@ -52,7 +67,40 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     method: "get",
     path: "/.well-known/oauth-protected-resource",
     adapter: "infra",
-    notes: "OAuth protected resource metadata endpoint is infrastructure only.",
+    notes:
+      "OAuth protected resource metadata endpoint is infrastructure only. " +
+      "Public per RFC 9728 §3 — the unauthenticated bootstrap document (#2049).",
+  },
+  {
+    operationId: "oauthProtectedResourceForMcp",
+    method: "get",
+    path: "/.well-known/oauth-protected-resource/mcp",
+    adapter: "infra",
+    notes:
+      "RFC 9728 §3.1 resource-suffixed form of the above, probed by clients whose " +
+      "resource is /mcp. Same handler and contract; registered separately because " +
+      "Express does not match it against the bare route (#2049).",
+  },
+  {
+    operationId: "openidConfigurationNotOffered",
+    method: "get",
+    path: "/.well-known/openid-configuration",
+    adapter: "infra",
+    notes:
+      "Explicit 404: OIDC discovery is not offered. Declared so the route is not an " +
+      "undeclared auth-guard fallthrough answering 401, which would send OIDC-first " +
+      "clients into the #2049 dead end.",
+  },
+  {
+    operationId: "mcpStreamableHttpPost",
+    method: "post",
+    path: "/mcp",
+    adapter: "infra",
+    notes:
+      "The MCP Streamable HTTP transport itself, dual-era (#2070). Carries the " +
+      "`server/discover` JSON-RPC method (2026-07-28) on the stateless path; legacy " +
+      "`initialize` + `Mcp-Session-Id` clients use the session path on the same route. " +
+      "HTTP-only by design: stdio never carried sessions and needs no discover probe here.",
   },
   {
     operationId: "mcpOAuthInitiate",
@@ -351,6 +399,16 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas get",
   },
   {
+    operationId: "describeInstancePolicy",
+    method: "get",
+    path: "/instance-policy",
+    adapter: "both",
+    mcpTool: "describe_instance_policy",
+    cliCommand: "instance-policy show",
+    notes:
+      "Reads the instance-wide data policy (#1974/#1975). Instance-scoped, not user-scoped: returns the same policy for every authenticated caller.",
+  },
+  {
     operationId: "listInterpretations",
     method: "get",
     path: "/interpretations",
@@ -504,6 +562,15 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "relationships list",
   },
   {
+    operationId: "queryContactsAtCompany",
+    method: "post",
+    path: "/query_contacts_at_company",
+    adapter: "mcp",
+    mcpTool: "query_contacts_at_company",
+    notes:
+      "Read-only leads-graph lookup: resolve a company name (exact/fuzzy) and return contacts linked via works_at. Never creates a company.",
+  },
+  {
     operationId: "recordComparison",
     method: "post",
     path: "/record_comparison",
@@ -629,12 +696,43 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas register",
   },
   {
+    operationId: "registerRelationshipType",
+    method: "post",
+    path: "/register_relationship_type",
+    adapter: "both",
+    mcpTool: "register_relationship_type",
+    cliCommand: "relationship-types register",
+  },
+  {
+    operationId: "listRelationshipTypes",
+    method: "post",
+    path: "/list_relationship_types",
+    adapter: "both",
+    mcpTool: "list_relationship_types",
+    cliCommand: "relationship-types list",
+  },
+  {
     operationId: "correct",
     method: "post",
     path: "/correct",
     adapter: "both",
     mcpTool: "correct",
     cliCommand: "corrections create",
+  },
+  {
+    operationId: "patchArrayItem",
+    method: "post",
+    path: "/patch_array_item",
+    adapter: "both",
+    mcpTool: "patch_array_item",
+    cliCommand: "array-item patch",
+  },
+  {
+    operationId: "batchCorrectEntity",
+    method: "post",
+    path: "/entities/{id}/batch_correct",
+    adapter: "cli",
+    cliCommand: "edit",
   },
   {
     operationId: "getAuthenticatedUser",
@@ -821,8 +919,9 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     operationId: "eventsStream",
     method: "get",
     path: "/events/stream",
-    adapter: "infra",
-    notes: "SSE stream for subscription_id; long-lived HTTP clients only.",
+    adapter: "cli",
+    cliCommand: "request --operation eventsStream",
+    notes: "Raw SSE stream for subscription_id; the CLI preserves frames until closure.",
   },
 ];
 
@@ -834,10 +933,12 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   create_relationship: "createRelationship",
   create_relationships: "createRelationships",
   list_relationships: "listRelationshipsForEntity",
+  query_contacts_at_company: "queryContactsAtCompany",
   retrieve_entities: "queryEntities",
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",
   describe_entity_type: "getSchemaByEntityType",
+  describe_instance_policy: "describeInstancePolicy",
   merge_entities: "mergeEntities",
   split_entity: "splitEntity",
   list_potential_duplicates: "listPotentialDuplicates",
@@ -860,7 +961,11 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   get_schema_recommendations: "getSchemaRecommendations",
   update_schema_incremental: "updateSchemaIncremental",
   register_schema: "registerSchema",
+  register_relationship_type: "registerRelationshipType",
+  list_relationship_types: "listRelationshipTypes",
+  correct_transaction: "correctTransaction",
   correct: "correct",
+  patch_array_item: "patchArrayItem",
   get_authenticated_user: "getAuthenticatedUser",
   get_session_identity: "getSessionInfo",
   health_check_snapshots: "healthCheckSnapshots",
@@ -900,7 +1005,9 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
   register_schema: "schemas register <entityType>",
+  correct_transaction: "request --operation correctTransaction",
   correct: "corrections create <entityId> <entityType> <field> <value>",
+  patch_array_item: "array-item patch <entityId> <entityType> <field> <keyField> <keyValue>",
   create_interpretation: "interpretations create",
   list_interpretations: "interpretations list",
 };

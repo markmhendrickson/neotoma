@@ -41,7 +41,12 @@ import {
   type AttestationOutcome,
 } from "../services/aauth_attestation_verifier.js";
 import { loadAttestationTrustConfig } from "../services/aauth_attestation_trust_config.js";
-import { isOperatorAttested } from "../services/aauth_operator_allowlist.js";
+import {
+  isOperatorAttested,
+  operatorAllowlistUsesGrants,
+  type OperatorAllowlistSource,
+} from "../services/aauth_operator_allowlist.js";
+import { lookupGrantForIdentity, type AgentGrant } from "../services/agent_grants.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -117,11 +122,12 @@ function hasAAuthHeaders(req: Request): boolean {
  * claims that identity via the `x-agent-label` header.
  *
  * Rationale: the Netlify forwarder self-reports its identity as
- * `agent-site@neotoma.io` via `x-agent-label` today. Once AAuth signing is
- * live we want that label to be a commitment: if a request claims to be
- * that sub but is unsigned (or signed with the wrong key), reject it
- * rather than falling through to tier-based "unverified_client" — which
- * would let an attacker with the bearer token impersonate the forwarder.
+ * `agent-site@neotoma.io` via `x-agent-label` today. The label is a
+ * commitment: a request carrying it must be signed by a key pinned
+ * (`match_thumbprint`) by an active `agent_grant` whose `match_sub` is the
+ * label. An unsigned request, or one signed by a key no grant binds to
+ * that sub, is rejected rather than falling through to tier-based
+ * "unverified_client". The `sub` inside the agent token is not consulted.
  *
  * Env is parsed per-request for test-friendliness; the set is tiny so the
  * cost is a string split. Case-insensitive match.
@@ -144,6 +150,49 @@ function getAgentLabelHeader(req: Request): string | undefined {
     return String(header[0]).trim().toLowerCase() || undefined;
   }
   return undefined;
+}
+
+/**
+ * Resolve the active grant that pins the verified signing key, or `null`
+ * when none does (including when active grants under more than one owner
+ * pin it). Identity-bearing decisions in this middleware — the strict-sub
+ * check and operator-attested promotion — read the identity recorded on
+ * this grant, never the agent token's own `sub` / `iss`. A lookup failure
+ * is treated as "no grant", which is the restrictive outcome for both.
+ */
+async function resolvePinnedGrant(
+  thumbprint: string | undefined,
+  sub: string | undefined,
+  iss: string | undefined
+): Promise<AgentGrant | null> {
+  if (!thumbprint) return null;
+  try {
+    const lookup = await lookupGrantForIdentity({ thumbprint, sub, iss });
+    return lookup.grant;
+  } catch (error) {
+    logger.warn(
+      `[aauth] Grant lookup for signing key failed (treating as unbound): ${(error as Error).message}`
+    );
+    return null;
+  }
+}
+
+/**
+ * The pinned grant's recorded identity, for operator-attested promotion.
+ * `null` when the agent token's own `iss` / `sub` contradict the grant, so
+ * the tier never describes an identity other than the one the request
+ * carries.
+ */
+function grantIdentityForPromotion(
+  grant: AgentGrant | null,
+  claimed: { iss?: string; sub?: string }
+): { iss: string | null; sub: string | null } | null {
+  if (!grant) return null;
+  const grantIss = grant.match_iss ?? null;
+  const grantSub = grant.match_sub ?? null;
+  if (grantIss && claimed.iss && claimed.iss !== grantIss) return null;
+  if (grantSub && claimed.sub && claimed.sub !== grantSub) return null;
+  return { iss: grantIss, sub: grantSub };
 }
 
 /**
@@ -471,23 +520,34 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         ...(externalActorClaims?.length ? { externalActorClaims } : {}),
       };
 
+      // The grant pinning this key (if any) carries the identity the
+      // operator recorded for it. Looked up only when a decision below
+      // depends on it; the admission middleware repeats the same lookup
+      // and is served from the grant cache.
+      const pinnedGrant =
+        labelClaimsStrictSub || operatorAllowlistUsesGrants()
+          ? await resolvePinnedGrant(result.thumbprint, sub, iss)
+          : null;
+
       if (labelClaimsStrictSub) {
-        const verifiedSub = (sub ?? "").toLowerCase();
-        if (!verifiedSub || verifiedSub !== claimedLabel) {
+        const boundSub = (pinnedGrant?.match_sub ?? "").toLowerCase();
+        if (!boundSub || boundSub !== claimedLabel) {
+          const reason = pinnedGrant ? "sub_mismatch" : "key_not_bound";
           logger.warn(
             JSON.stringify({
               event: "aauth_strict_sub_rejected",
-              reason: "sub_mismatch",
+              reason,
               agent_label: claimedLabel,
-              verified_sub: verifiedSub || null,
+              thumbprint_prefix: result.thumbprint?.slice(0, 12) ?? null,
             })
           );
           res.status(401).json({
             error_code: "AAUTH_REQUIRED",
             message:
-              `Agent "${claimedLabel}" requires an AAuth signature with ` +
-              "a matching `sub` (NEOTOMA_STRICT_AAUTH_SUBS).",
-            details: { reason: "sub_mismatch" },
+              `Agent "${claimedLabel}" requires an AAuth signature from a key ` +
+              "pinned by an active agent_grant whose match_sub is that label " +
+              "(NEOTOMA_STRICT_AAUTH_SUBS).",
+            details: { reason },
             timestamp: new Date().toISOString(),
           });
           return;
@@ -499,6 +559,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       // Tier resolution cascade (docs/subsystems/aauth_attestation.md):
       //   1. verified attestation envelope -> hardware
       //   2. operator allowlist hit        -> operator_attested
+      //      (key thumbprint, or the pinned grant's recorded identity)
       //   3. plain verified signature      -> software
       // The attestation verifier always runs (even when no envelope is
       // present) because operators want a structured `not_present`
@@ -513,11 +574,19 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       });
 
       let resolvedTier: AttributionTier;
-      let allowlistSource: "issuer" | "issuer_subject" | undefined;
+      let allowlistSource: OperatorAllowlistSource | undefined;
       if (attestationOutcome.verified) {
         resolvedTier = "hardware";
       } else {
-        const allow = isOperatorAttested({ iss, sub });
+        // Promotion keys on the verified key: its thumbprint, or the
+        // identity recorded on the active grant that pins it. The token's
+        // own iss/sub are never matched against the allowlists.
+        const bound = grantIdentityForPromotion(pinnedGrant, { iss, sub });
+        const allow = isOperatorAttested({
+          thumbprint: result.thumbprint,
+          grantIss: bound?.iss ?? null,
+          grantSub: bound?.sub ?? null,
+        });
         if (allow.matched && allow.source) {
           resolvedTier = "operator_attested";
           allowlistSource = allow.source;

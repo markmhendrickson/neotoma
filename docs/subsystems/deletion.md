@@ -31,6 +31,20 @@ This document does NOT cover:
 
 ---
 
+## Entity lifecycle authority phase
+
+Entity visibility has an explicit compatibility boundary. Before the owned local lifecycle migration, the legacy priority-based entity behavior below remains in use. Deploying software does not migrate a database or activate the new selector.
+
+After the explicit migration, three internal observation columns identify a server-authored decision: `entity_lifecycle_kind`, `entity_lifecycle_sequence`, and `entity_lifecycle_target_id`. A serialized native transaction appends the next sequence, recomputes current factual state and commits derived effects together. Current visibility uses the greatest validated sequence for the canonical owner, type and immutable target. Ordinary `_deleted` fields and priorities cannot delete or restore an entity. Relationship lifecycle behavior remains separate.
+
+The migration records a sequence-zero compatibility baseline, an immutable cutover identity and a count/digest-bound relation of captured legacy observation IDs. It preserves original observations and records their observed legacy visibility without claiming they were authenticated actions. A baseline alone cannot create a factual snapshot. Old prepared observation counts may become stale and must fail their existing preconditions. Migration failure rolls back baseline, membership and materialization together.
+
+Historical reads keep the existing independent `at` event-time and `at_ingested` recorded-ingestion bounds; both use AND. The latest eligible authority sequence decides visibility. When no authority is eligible, only time-filtered captured legacy members supply the legacy fallback. A backdated ordinary row can supply facts but cannot invent captured lifecycle history. Incomplete acquisition or corrupted metadata refuses the read.
+
+The existing HTTP, MCP and CLI arguments are preserved. Public entity actions do not acquire a timestamp, idempotency key or conditional rollback parameter from this implementation. The native service's existing timestamp remains an internal argument. Each accepted absent-key action is a separate request; restoration exposes current facts rather than reconstructing a past beforeimage. Raw-row ingestion refuses caller authority, while field lookalikes remain ordinary data.
+
+This is software and owned synthetic migration preparation. Runtime migration, complete backup adoption, prepared hidden rollback, writer exclusion, grants and physical legal erasure require their separate established controls. Hiding current data is not physical erasure.
+
 ## Architecture Overview
 
 ### Two-Tier Deletion Approach
@@ -71,7 +85,7 @@ GDPR Article 17 requires data to be "erased" and "irretrievable" when:
 
 ## Data Models
 
-### Deletion Observation Schema
+### Legacy pre-cutover deletion observation schema
 
 Deletion observations use the existing `observations` table:
 
@@ -106,7 +120,7 @@ Deletion requests are tracked in the `deletion_requests` table:
   relationship_id?: string; // If deleting specific relationship
   deletion_type: "entity" | "relationship" | "user_data_complete";
   status: "pending" | "in_progress" | "completed" | "rejected" | "extended";
-  
+
   // Timestamps
   requested_at: string;
   soft_deleted_at?: string;
@@ -114,21 +128,21 @@ Deletion requests are tracked in the `deletion_requests` table:
   completed_at?: string;
   deadline: string; // GDPR deadline (30 days default)
   backup_deletion_deadline?: string;
-  
+
   // Request details
   reason?: string;
   legal_basis?: "user_request" | "consent_withdrawal" | "unlawful_processing" | "legal_obligation" | "user_objection";
   requester_email?: string;
   requester_verified: boolean;
-  
+
   // Deletion method
   deletion_method?: "soft_only" | "cryptographic_erasure" | "physical_deletion";
   encryption_key_deleted_at?: string;
-  
+
   // Retention period (for legal obligations)
   retention_period_days?: number;
   retention_reason?: string;
-  
+
   // Extension tracking
   extension_granted: boolean;
   extension_reason?: string;
@@ -197,6 +211,7 @@ graph TD
 ```
 
 **MCP actions:**
+
 - `restore_entity({ entity_id, entity_type, reason?, user_id? })`
 - `restore_relationship({ relationship_type, source_entity_id, target_entity_id, reason?, user_id? })`
 
@@ -204,7 +219,7 @@ graph TD
 
 Relationship deletion differs from entity deletion in its addressing: `delete_relationship` is keyed by the `(relationship_type, source_entity_id, target_entity_id)` triple, not an opaque ID. A caller that knows only the two entities cannot supply the type directly.
 
-- **Discovery-before-delete is required.** `delete_relationship` verifies a live (non-deleted) edge matches the supplied triple via `relationshipsService.getRelationshipSnapshot` before writing the deletion observation. A triple that matches no live edge returns `404 RESOURCE_NOT_FOUND` with a structured `details.hint` steering the caller to `list_relationships` (passing `source_entity_id` + `target_entity_id`) for `relationship_type` discovery. This replaces the prior silent no-op, which wrote a deletion observation for an edge that never existed and returned `200` — a violation of *Explicit Over Implicit* (`product_principles.md` § 10.2).
+- **Discovery-before-delete is required.** `delete_relationship` verifies a live (non-deleted) edge matches the supplied triple via `relationshipsService.getRelationshipSnapshot` before writing the deletion observation. A triple that matches no live edge returns `404 RESOURCE_NOT_FOUND` with a structured `details.hint` steering the caller to `list_relationships` (passing `source_entity_id` + `target_entity_id`) for `relationship_type` discovery. This replaces the prior silent no-op, which wrote a deletion observation for an edge that never existed and returned `200` — a violation of _Explicit Over Implicit_ (`product_principles.md` § 10.2).
 - **`list_relationships` excludes soft-deleted edges by default.** Because the snapshot row persists after deletion (deletion is an observation, never an in-place mutation), `list_relationships` filters rows whose highest-priority observation is a deletion. Without this, a caller following the documented discovery-then-delete flow would re-encounter a just-deleted edge and re-delete it into the new `404`. Pass `include_deleted: true` to surface soft-deleted edges for audit. The filter is implemented once (`relationshipsService.filterDeletedRelationships`) and shared by every relationship read path. See `relationships.md` § 6.6.
 
 ### Flow 2: GDPR Hard Deletion Workflow
@@ -461,7 +476,7 @@ Load this document when:
 ### Constraints Agents Must Enforce
 
 1. **Soft deletion MUST use deletion observations** (no database deletions)
-2. **Deletion observations MUST have source_priority: 1000** (highest priority)
+2. **Entity visibility MUST use the recorded phase**: pre-cutover legacy priority behavior; post-cutover validated server authority sequence. Relationship behavior is separate.
 3. **Reducers MUST return null for deleted entities** (not empty snapshot)
 4. **Queries MUST filter deleted items by default** (require explicit includeDeleted flag)
 5. **GDPR deadlines MUST be tracked** (30 days standard, 90 days extended)
@@ -480,7 +495,7 @@ Load this document when:
 ### Validation Checklist
 
 - [ ] Soft deletion creates deletion observation with `_deleted: true`
-- [ ] Deletion observation has `source_priority: 1000`
+- [ ] Entity action uses the phase-appropriate visibility selector and preserves the original public arguments
 - [ ] Reducer returns null for deleted entities
 - [ ] Queries filter deleted items by default
 - [ ] Deletion requests tracked with GDPR deadlines

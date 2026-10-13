@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CorrectEntityRequestSchema,
   IssuesSubmitRequestSchema,
+  IssuesSyncRequestSchema,
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
   StoreRequestSchema,
@@ -170,5 +171,42 @@ describe("IssuesSubmitRequestSchema target_repo validation", () => {
     // reach submitIssue's defensive fallback (the service-layer fallback test in
     // issue_operations.test.ts is for direct, non-transport callers only).
     expect(IssuesSubmitRequestSchema.safeParse({ ...base, target_repo: "" }).success).toBe(false);
+  });
+});
+
+describe("IssuesSyncRequestSchema repo / push / commit (#2536)", () => {
+  it("accepts an empty body (all fields optional; server config is the default)", () => {
+    expect(IssuesSyncRequestSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("accepts a well-formed owner/name repo with push and commit", () => {
+    const parsed = IssuesSyncRequestSchema.parse({
+      repo: "acme/widgets",
+      push: true,
+      commit: false,
+    });
+    expect(parsed).toMatchObject({ repo: "acme/widgets", push: true, commit: false });
+  });
+
+  it.each([
+    "widgets",
+    "acme/widgets/extra",
+    "acme/",
+    "/widgets",
+    "acme/..",
+    "acme /widgets",
+    "acme/wid?gets",
+    "https://github.com/acme/widgets",
+    "",
+  ])("rejects malformed repo %j with an owner/name message", (bad) => {
+    const result = IssuesSyncRequestSchema.safeParse({ repo: bad });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toContain("owner/name");
+    }
+  });
+
+  it("rejects non-boolean commit", () => {
+    expect(IssuesSyncRequestSchema.safeParse({ commit: "false" }).success).toBe(false);
   });
 });

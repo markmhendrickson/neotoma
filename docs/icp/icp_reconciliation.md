@@ -16,7 +16,15 @@ This document reconciles two independently-derived views of who Neotoma is for:
 - **[ICP from functionality](icp_from_functionality.md)** (functional view): derived only from a first-principles audit of what the code does.
 - **The existing ICP materials** (market view): `primary_icp.md`, `secondary_icps.md`, `future_icps.md`, `profiles.md`, `developer_release_targeting.md`, `general_release_criteria.md`, `prioritized_pain_points_and_failure_modes.md`, `qualification_survey.md`. These are derived from market research, topology analysis, and go-to-market strategy (TAM, channels, business model). Most are now marked `visibility: internal` (see "Visibility decision" below).
 
+> **Update, 2026-09-15 — the O1 durable-ICP decision, reconciled against this document rather than re-deciding it.** The canonical roles assigned below still stand and are not reopened: `icp_from_functionality.md` remains the public statement, the market docs remain internal, and this document remains the bridge. What the O1 decision changed is a claim *inside* the agreement table, not the role assignment.
+>
+> The table's "Disposition" row recorded both views as agreeing on *"comfortable with infrastructure-level abstractions."* The operator has ruled that the durable ICP is the person who feels the pain of ad-hoc agent state and **will not build their own state infrastructure**; the infrastructure builder is an early-adopter cohort. That row is corrected below, and it is the only row affected.
+>
+> **This does not weaken the reconciliation's central finding.** The two views were derived from different inputs and still name the same buyer. The disposition row was the one place where both views had inherited the same wrong inference — that because the install path was infrastructural, the user must be too. That is an inference about the delivery mechanism, not about the person, and the functional audit could not have distinguished the two: code can show that install is CLI-driven, but it cannot show whether that is the intended audience or an unfixed defect. Correcting it in both views simultaneously is a reconciliation, not a new divergence.
+
 The two views were produced from different inputs and they agree on the core. That agreement is a useful signal: the audience the market research targets is the same audience the code actually serves.
+
+> **This document reconciles the functional and market views. It does not reconcile the market documents against each other** — which is where the remaining contradictions live, and which [`README.md`](README.md), the internal ICP index, does. Start there for the per-surface noun table, the retired and mapped informal buyer synonyms, and the open disagreements that need an operator decision. The conclusions below stand unchanged.
 
 ## Agreement on the primary ICP
 
@@ -28,7 +36,7 @@ Both views name the same primary archetype, the person who builds and operates a
 | Modes | Operator, builder, and debugger are modes of one person | "Three modes, not separate personas": infrastructure engineering, building agent systems, operating across tools |
 | Tools | Claude Code, Cursor, ChatGPT, Codex, and others, wired together | Same multi-agent stack |
 | Core pain | Memory does not carry over; facts conflict; corrections do not stick; no audit trail | Chronic "sync tax" plus acute "agent acted on bad state" |
-| Disposition | CLI-comfortable, infrastructure-level | "Comfortable with infrastructure-level abstractions" |
+| Disposition | Technically fluent about state; wants to own the data, not the plumbing | Same — "technically fluent without being infrastructure-oriented" (revised 2026-09-15 per O1; previously "comfortable with infrastructure-level abstractions" in both columns) |
 
 The functional audit independently confirms the market archetype. No contradiction exists on the primary ICP.
 
@@ -36,14 +44,46 @@ The functional audit independently confirms the market archetype. No contradicti
 
 - **Developers building on a state layer** (functional secondary) maps to **Toolchain Integrators** and the **Internal-Tools Engineer at a model lab** (market secondaries): both are downstream of primary-ICP validation and build on Neotoma's API surface and guarantees.
 - **Exclusions match.** The functional view's "not for casual note-taking / PKM / hosted-chat users" matches the market view's explicitly "Not Pursued" AI-for-Management-Work cohort and the "Not for" list in the README.
+- **One exclusion was wrong in every view and has been corrected in all of them (2026-09-15).** All three surfaces — `icp_from_functionality.md`, `primary_icp.md` (D4), and the README — excluded people who "need zero-install onboarding." Under O1 that line disqualified the actual buyer. Each now excludes only the durable boundary: a prospect who requires that nothing run on their own machine. The agreement between the views is preserved because the correction was applied to all of them in one pass; a partial fix would have created a real contradiction where none existed.
 
 ## Net-new from the functional audit
 
 The functional audit surfaces two audiences the market materials under-name. Both are recommendations to fold back into the market view.
 
-1. **Security-conscious operator of a multi-agent fleet.** The code invests heavily in attested agent identity (Apple Secure Enclave, TPM 2.0, WebAuthn, YubiKey, Windows TBS), agent grants and capabilities, trust tiers, attestation revocation, and a per-write provenance chain. This is disproportionate unless an intended user runs untrusted or third-party agents and must constrain and audit them. The market materials treat this only obliquely (the "Identity-Vendor Person-Server Builders" partnership target, and "enterprise buyers demanding audit trails" as an expansion signal). Recommendation: name the security-operator as a first-class secondary ICP in `secondary_icps.md`, since the product already builds for it.
+1. **Security-conscious operator of a multi-agent fleet — RECOMMENDATION WITHDRAWN (O3, 2026-09-16).** The code invests heavily in attested agent identity (Apple Secure Enclave, TPM 2.0, WebAuthn, YubiKey, Windows TBS), agent grants and capabilities, trust tiers, attestation revocation, and a per-write provenance chain. The original recommendation here was to name the security-operator as a first-class secondary ICP in `secondary_icps.md`, on the reasoning that the product already builds for it. **That recommendation is withdrawn and must not be executed.**
+
+   The reasoning was a functional inference, and this is the case where it fails. A functional audit reads investment and infers an intended buyer — but investment can also be infrastructure the product needs in order to keep its own promises, with no buyer behind it at all. The evidence says it is the latter here: the nearest named party is *disqualified* at [`primary_icp.md`](./primary_icp.md) D3 ("building their own state layer as a product"), and the durable-ICP decision sharpens the mismatch rather than resolving it — the buyer who will not build their own state infrastructure is a *less* natural fit for a hardware-attestation surface than the infrastructure builder was. Naming a secondary ICP whose only evidence is a code investment would have manufactured a segment from a build decision.
+
+   **Correct disposition:** the attestation and capability-grants surface is **infrastructure, not a sold feature** — see [O3 — the attestation and capability-grants surface](#o3-the-attestation-and-capability-grants-surface-is-infrastructure) below.
 
 2. **Federated multi-device / small-group sharing.** Peers, conflict resolution, subscriptions, and the canonical mirror support sharing memory across instances and devices. The market materials do not name this. Recommendation: track as an emergent tertiary ICP.
+
+## O3 — the attestation and capability-grants surface is infrastructure
+
+**Resolved 2026-09-16.** The shipped attestation and capability-grants surface — hardware-attested agent identity (Apple Secure Enclave, TPM 2.0, WebAuthn/FIDO2, YubiKey, Windows TBS), trust tiers, attestation revocation, per-agent least-privilege grants, and per-write attribution — **serves the product's own guarantees. It is not a feature to market or sell.**
+
+### What was open
+
+The surface is built and shipped, and no ICP wanted it. The nearest named buyer is *disqualified*: [`primary_icp.md`](./primary_icp.md) D3 rules out those "building their own state layer as a product", which is where identity vendors and auth-protocol authors land — they are partnership and integration targets, not conversion targets. The durable-ICP decision (2026-09-15) **sharpened** this rather than resolving it: a buyer defined by not wanting to own state infrastructure is a less natural fit for a hardware-attestation surface than the infrastructure builder it replaced.
+
+### The resolution
+
+The surface exists because Neotoma's core claims require it, not because a segment asked for it. Authority over agent-generated state means being able to say *who wrote this, under what authority, and what were they permitted to do* — and the attestation and grants machinery is what makes that answerable rather than asserted. It is load-bearing for provenance and attribution, which are guarantees, and guarantees are not features.
+
+**Consequences:**
+
+- **It stops being marketed.** No positioning document, tagline, feature list, or value proposition leads with attestation, hardware keys, or capability grants.
+- **It stops being sold.** No pricing tier, plan, or packaging line item is built around it, and no segment is named whose stated reason to adopt is this surface.
+- **It stays fully documented.** Developer reference, operator guides, the Inspector surface, and the `/aauth` reference pages are unaffected and should stay thorough. Demoting a feature is not hiding it — an architecture-revealing product documents its machinery.
+- **It may be cited as evidence for a guarantee.** Saying "every write is attributed, and here is the mechanism" is a guarantee claim supported by infrastructure. Saying "buy Neotoma for hardware-attested agent identity" is a feature claim with no buyer.
+
+### Why this costs something if left unresolved
+
+Marketing a feature with no buyer is not free. Every surface it appears on spends positioning clarity — the scarce thing — on a claim that converts nobody, and it dilutes the claim that does convert. It also invites the wrong comparison set: a product that leads with attestation is read against identity and auth vendors rather than against the alternatives its actual buyer is weighing. The cost is paid on every surface, every time, which is why the demotion is stated as a rule rather than handled case by case.
+
+### Note on the method
+
+This is the case that marks the limit of inferring an ICP from functionality. A functional audit reads what the code invests in and infers an intended user. That inference is sound when the investment exists *for* someone, and unsound when the investment exists to keep a promise. Where the two are indistinguishable from the code alone, the market evidence decides — and here it decided against a buyer. See the withdrawn recommendation under [Net-new from the functional audit](#net-new-from-the-functional-audit).
 
 ## Differences in kind (not conflicts)
 
@@ -66,6 +106,8 @@ The existing ICP strategy docs previously carried no `visibility` frontmatter, s
 
 ## Recommended follow-ups for the market materials
 
-1. Add the security-operator secondary ICP to `secondary_icps.md`, grounded in the attestation/grants/provenance functionality.
+0. **(New, 2026-09-15)** `profiles.md` (~2,500 lines) has not been audited against the O1 decision. Its persona narratives, pricing tiers, and buyer nominations were written when the archetype was infrastructure-oriented, and some of them almost certainly still describe that person as the buyer. It was left unmodified in this pass deliberately: rewriting persona narratives is a market-research judgement, not a mechanical propagation of a ruling. **Updated 2026-09-16:** the document now carries a staleness notice at its head naming what is stale (persona narratives, pricing tiers, buyer nominations) and what is not, and deferring the rewrite until the onboarding scope settles. The heading is not the reconciliation — treat it as still the largest known unreconciled surface.
+
+1. ~~Add the security-operator secondary ICP to `secondary_icps.md`, grounded in the attestation/grants/provenance functionality.~~ **Withdrawn (O3, 2026-09-16)** — see above. Do not add this profile; the surface is infrastructure, not a segment to sell to.
 2. Note the federated multi-device/small-group tertiary in `future_icps.md`.
 3. Keep `icp_from_functionality.md` in sync when major capabilities ship that shift who the product serves.

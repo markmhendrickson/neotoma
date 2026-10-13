@@ -68,9 +68,7 @@ const columns: ColumnDef<PolicyRow>[] = [
     accessorKey: "mode",
     header: "Guest Access Policy",
     cell: ({ row }) => (
-      <Badge variant={modeBadgeVariant(row.original.mode)}>
-        {row.original.mode}
-      </Badge>
+      <Badge variant={modeBadgeVariant(row.original.mode)}>{row.original.mode}</Badge>
     ),
   },
 ];
@@ -105,7 +103,9 @@ const submissionColumns: ColumnDef<SubmissionConfigRow, unknown>[] = [
     accessorKey: "access_policy",
     header: "Access policy",
     cell: ({ row }) => (
-      <Badge variant={modeBadgeVariant(row.original.access_policy)}>{row.original.access_policy}</Badge>
+      <Badge variant={modeBadgeVariant(row.original.access_policy)}>
+        {row.original.access_policy}
+      </Badge>
     ),
   },
   {
@@ -140,9 +140,7 @@ export default function AccessPoliciesPage() {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter(
-      (r) =>
-        r.entity_type.toLowerCase().includes(q) ||
-        r.mode.toLowerCase().includes(q),
+      (r) => r.entity_type.toLowerCase().includes(q) || r.mode.toLowerCase().includes(q)
     );
   }, [rows, query]);
 
@@ -184,8 +182,11 @@ export default function AccessPoliciesPage() {
         </QueryErrorAlert>
         <p className="mt-3 text-sm text-muted-foreground">
           <code className="text-xs">GET /access_policies</code> requires an authenticated session.
-          Open <Link className="underline" to="/settings">Settings</Link> and sign in, or use a
-          sandbox handoff so the app stores a bearer token.
+          Open{" "}
+          <Link className="underline" to="/settings">
+            Settings
+          </Link>{" "}
+          and sign in, or use a sandbox handoff.
         </p>
       </PageShell>
     );
@@ -209,8 +210,7 @@ export default function AccessPoliciesPage() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Entity types not listed below default to{" "}
-            <Badge variant="secondary">{defaultMode}</Badge>. Manage policies
-            via the CLI:{" "}
+            <Badge variant="secondary">{defaultMode}</Badge>. Manage policies via the CLI:{" "}
             <code className="text-xs">neotoma access set &lt;type&gt; &lt;mode&gt;</code>
           </p>
         </CardContent>
@@ -223,8 +223,8 @@ export default function AccessPoliciesPage() {
           description={
             <>
               <span className="block">
-                Every entity type behaves as <Badge variant="secondary">{defaultMode}</Badge>{" "}
-                unless overridden by env or schema metadata.
+                Every entity type behaves as <Badge variant="secondary">{defaultMode}</Badge> unless
+                overridden by env or schema metadata.
               </span>
               <span className="mt-2 block">
                 Override per-type via the CLI:{" "}
@@ -254,9 +254,10 @@ export default function AccessPoliciesPage() {
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Operator-defined <code className="text-xs">submission_config</code> rows control generic{" "}
-            <code className="text-xs">submit_entity</code> / <code className="text-xs">POST /submit/:entity_type</code>{" "}
-            pipelines and their guest <code className="text-xs">access_policy</code> (orthogonal to the per-type
-            guest access table above).
+            <code className="text-xs">submit_entity</code> /{" "}
+            <code className="text-xs">POST /submit/:entity_type</code> pipelines and their guest{" "}
+            <code className="text-xs">access_policy</code> (orthogonal to the per-type guest access
+            table above).
           </p>
           {showInitialQuerySkeleton(submissionConfigsQ) ? (
             <DataTableSkeleton />

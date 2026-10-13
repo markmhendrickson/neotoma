@@ -110,13 +110,13 @@ function makeSandboxWriteApp(): express.Application {
     });
   };
 
-  app.post("/sandbox/aauth-only/store", aauthRequired, (req, res) => {
+  app.post("/sandbox/aauth-only/store", aauthRequired, async (req, res) => {
     const aauthCtx = (
       req as express.Request & {
         aauth?: { verified?: boolean; thumbprint?: string };
       }
     ).aauth;
-    const user = ensureSandboxAauthUser(aauthCtx!.thumbprint!);
+    const user = await ensureSandboxAauthUser(aauthCtx!.thumbprint!);
     res.status(200).json({
       ok: true,
       user_id: user.id,
@@ -230,7 +230,7 @@ describe("γ-write: POST /sandbox/aauth-only/store (sandbox-only AAuth admission
     expect(body.user_id).not.toBe(SANDBOX_PUBLIC_USER_ID);
     expect(body.entity_id.length).toBeGreaterThan(0);
 
-    const expected = ensureSandboxAauthUser("tp-gamma-write-1");
+    const expected = await ensureSandboxAauthUser("tp-gamma-write-1");
     expect(body.user_id).toBe(expected.id);
   });
 });

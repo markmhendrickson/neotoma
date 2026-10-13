@@ -42,6 +42,11 @@ function makeGrant(partial: Partial<AgentGrant>): AgentGrant {
 }
 
 vi.mock("../../src/services/agent_grants.js", () => ({
+  // Stub mirrors the real helper's contract (covered for real in
+  // aauth_grant_key_binding.test.ts): one warning when no key is pinned.
+  grantAdmissionWarnings: vi.fn((g: { match_thumbprint?: string | null; status?: string }) =>
+    g.status !== "revoked" && !g.match_thumbprint ? ["pins no match_thumbprint"] : [],
+  ),
   createGrant: vi.fn(async (userId: string, draft) => {
     const g = makeGrant({
       user_id: userId,
@@ -218,6 +223,66 @@ describe("runAgentsGrantsImport", () => {
     expect(grants[0].grant_id).toBe(grantId);
   });
 
+  it("carries create_relationship relationship_types into the created grant (neotoma#2524)", async () => {
+    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
+      agents: {
+        "agent-site@neotoma.io": {
+          match: { sub: "agent-site@neotoma.io" },
+          capabilities: [
+            {
+              op: "create_relationship",
+              entity_types: ["checkpoint_brief", "task"],
+              relationship_types: [" REFERS_TO ", "REFERS_TO"],
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await runAgentsGrantsImport({ ownerUserId: "user-test" });
+
+    expect(result.created).toBe(1);
+    expect(grants[0].capabilities).toEqual([
+      {
+        op: "create_relationship",
+        entity_types: ["checkpoint_brief", "task"],
+        relationship_types: ["REFERS_TO"],
+      },
+    ]);
+  });
+
+  it("updates a grant when only relationship_types diverges, instead of skipping it", async () => {
+    const registry = (relationshipTypes?: string[]) =>
+      JSON.stringify({
+        agents: {
+          "agent-site@neotoma.io": {
+            match: { sub: "agent-site@neotoma.io" },
+            capabilities: [
+              {
+                op: "create_relationship",
+                entity_types: ["checkpoint_brief", "task"],
+                ...(relationshipTypes ? { relationship_types: relationshipTypes } : {}),
+              },
+            ],
+          },
+        },
+      });
+
+    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = registry();
+    expect((await runAgentsGrantsImport({ ownerUserId: "user-test" })).created).toBe(1);
+
+    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = registry(["REFERS_TO"]);
+    const second = await runAgentsGrantsImport({ ownerUserId: "user-test" });
+
+    expect(second.updated).toBe(1);
+    expect(second.skipped).toBe(0);
+    expect(grants[0].capabilities[0].relationship_types).toEqual(["REFERS_TO"]);
+
+    // And a rerun with the same scope is idempotent again.
+    const third = await runAgentsGrantsImport({ ownerUserId: "user-test" });
+    expect(third.skipped).toBe(1);
+  });
+
   it("skips entries whose match has neither sub nor thumbprint", async () => {
     process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
       agents: {
@@ -287,5 +352,26 @@ describe("formatImportResult", () => {
     expect(text).toContain("+ created  alpha");
     expect(text).toContain("~ updated  beta  (capabilities)");
     expect(text).toContain("- skipped  gamma  (no fields differ)");
+  });
+
+  it("prints a warning under a created or updated grant that pins no key", () => {
+    const unpinned = makeGrant({ grant_id: "ent_grant_unpinned", match_thumbprint: null });
+    const pinned = makeGrant({ grant_id: "ent_grant_pinned", match_thumbprint: "tp-pinned" });
+    const text = formatImportResult({
+      source: "json",
+      total: 2,
+      created: 2,
+      updated: 0,
+      skipped: 0,
+      outcomes: [
+        { kind: "created", grant: unpinned, label: "unpinned" },
+        { kind: "created", grant: pinned, label: "pinned" },
+      ],
+    });
+    const lines = text.split("\n");
+    const unpinnedIdx = lines.findIndex((l) => l.includes("+ created  unpinned"));
+    const pinnedIdx = lines.findIndex((l) => l.includes("+ created  pinned"));
+    expect(lines[unpinnedIdx + 1]).toContain("! pins no match_thumbprint");
+    expect(lines[pinnedIdx + 1] ?? "").not.toContain("!");
   });
 });

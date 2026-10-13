@@ -11,6 +11,7 @@ import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { claimRawStoreKey } from "./store_mutation_authority.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -61,6 +62,8 @@ export async function storeRawContent(options: RawStorageOptions): Promise<RawSt
   // Compute content hash
   const contentHash = computeContentHash(fileBuffer);
   const fileSize = fileBuffer.length;
+
+  await claimRawStoreKey(userId, idempotencyKey);
 
   if (idempotencyKey) {
     const { data: existingByKey, error: existingByKeyError } = await db
@@ -131,10 +134,24 @@ export async function storeRawContent(options: RawStorageOptions): Promise<RawSt
   const storagePath = `${userId}/${contentHash}`;
   const bucketName = "sources";
 
-  // Check if we're in test environment
+  // Whether to actually put the bytes in the bucket.
+  //
+  // Tests skip the upload by default and write only the `sources` row: the
+  // suite has no bucket to talk to, and most tests care about the row, not the
+  // bytes. The cost is that a byte round-trip test written naively passes
+  // vacuously — the upload it means to verify never ran, so it cannot fail on
+  // the thing it watches (#2325).
+  //
+  // So the skip is now opt-out rather than automatic. A test that asserts on
+  // stored bytes sets NEOTOMA_TEST_REAL_STORAGE=1 and gets the real path,
+  // bucket and all. Non-test processes are unaffected: they always upload.
   const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  const forceRealStorage = /^(1|true|yes|on)$/i.test(
+    (process.env.NEOTOMA_TEST_REAL_STORAGE ?? "").trim()
+  );
+  const shouldUpload = !isTestEnv || forceRealStorage;
 
-  if (!isTestEnv) {
+  if (shouldUpload) {
     const { error: uploadError } = await db.storage
       .from(bucketName)
       .upload(storagePath, fileBuffer, {
@@ -319,6 +336,38 @@ export interface ReferenceStorageResult {
 }
 
 /**
+ * Minimal extension → MIME map (common document types, plus script
+ * extensions for instance-script attachments, #1951 — `.ts` deliberately maps
+ * to `text/typescript` rather than the IANA "MPEG transport stream" trap for
+ * `video/mp2t`). Extracted as a standalone pure function so it is unit-
+ * testable without touching the database `storeRawReference` otherwise
+ * requires.
+ */
+export function resolveMimeTypeFromExtension(ext: string): string {
+  const extMap: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
+    ".zip": "application/zip",
+    ".py": "text/x-python",
+    ".sh": "application/x-sh",
+    ".js": "text/javascript",
+    ".ts": "text/typescript",
+    ".rb": "application/x-ruby",
+    ".sql": "application/sql",
+  };
+  return extMap[ext.toLowerCase()] ?? "application/octet-stream";
+}
+
+/**
  * Store a file by reference — read it once to compute content_hash + metadata,
  * persist the `sources` row with storage_mode='reference' (no blob bytes).
  *
@@ -346,28 +395,11 @@ export async function storeRawReference(
   const mtime = stat.mtime.toISOString();
   const hostId = os.hostname();
 
+  await claimRawStoreKey(userId, idempotencyKey);
+
   // Auto-detect MIME type from extension when not provided
   const ext = path.extname(absolutePath).toLowerCase();
-  const resolvedMime =
-    options.mimeType ||
-    (() => {
-      // Minimal extension → MIME map (common document types)
-      const extMap: Record<string, string> = {
-        ".pdf": "application/pdf",
-        ".txt": "text/plain",
-        ".md": "text/markdown",
-        ".csv": "text/csv",
-        ".json": "application/json",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".mp3": "audio/mpeg",
-        ".mp4": "video/mp4",
-        ".zip": "application/zip",
-      };
-      return extMap[ext] ?? "application/octet-stream";
-    })();
+  const resolvedMime = options.mimeType || resolveMimeTypeFromExtension(ext);
 
   // Check idempotency key first
   if (idempotencyKey) {

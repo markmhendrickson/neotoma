@@ -7,13 +7,13 @@
 
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
-const API_PORT = 18120;
-const API_BASE = `http://127.0.0.1:${API_PORT}`;
+let API_BASE: string;
 
 /** Build a stable fake Neotoma entity id from a short tag. */
 function makeEntityId(tag: string): string {
@@ -34,9 +34,11 @@ describe("retrieve_graph_neighborhood pagination", () => {
   beforeAll(async () => {
     httpServer = createServer(app);
     await new Promise<void>((resolve, reject) => {
-      httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+      httpServer.listen(0, "127.0.0.1", () => resolve());
       httpServer.once("error", reject);
     });
+    const addr = httpServer.address() as AddressInfo;
+    API_BASE = `http://127.0.0.1:${addr.port}`;
 
     // Insert center entity
     await db.from("entities").insert({

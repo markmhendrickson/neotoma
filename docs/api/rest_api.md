@@ -49,6 +49,30 @@ Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
 
 OAuth endpoints for MCP client authentication (no bearer token required for public endpoints).
 
+### Discovery bootstrap (unauthenticated)
+
+A client with no credentials reaches an authenticated session in four requests. **Step 2 returns 200 with no credential — that is required by RFC 9728 §3, not a bug.** The discovery documents exist to tell a caller holding nothing where to authenticate, so gating them would deadlock the handshake: the `WWW-Authenticate` challenge in step 1 points at the step-2 document.
+
+1. `POST /mcp` with no credential → 401 carrying `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource"`.
+2. `GET` that URL, no `Authorization` and no `X-Connection-Id` → **200** with `resource` and a non-empty `authorization_servers`.
+3. `GET /.well-known/oauth-authorization-server` → **200** with the authorization and token endpoints.
+4. Complete the OAuth flow against those endpoints, then retry `/mcp` with `Authorization: Bearer <token>`.
+
+Verify the public documents:
+
+```bash
+curl -sI https://<instance>/.well-known/oauth-protected-resource        # expect 200
+curl -sI https://<instance>/.well-known/oauth-protected-resource/mcp    # expect 200
+curl -sI https://<instance>/.well-known/oauth-authorization-server      # expect 200
+curl -sI https://<instance>/.well-known/openid-configuration            # expect 404
+```
+
+`/.well-known/oauth-protected-resource/mcp` is the RFC 9728 §3.1 resource-suffixed form, served identically — a client whose resource is `/mcp` probes that path rather than the bare one, and either probe order works.
+
+`/.well-known/openid-configuration` returns **404**: this server does not implement OIDC discovery, and a 404 correctly makes an OIDC-first client fall back to the RFC 8414 document. It is deliberately not a 401 (which would claim the endpoint exists and send the client into a dead end) and not a synthetic 200 alias (which would advertise a discovery contract the server does not implement).
+
+One legitimate 401 remains on the protected-resource paths: a request carrying a stale or unrecognized `X-Connection-Id` gets `401 invalid_token`, because that caller *asserted* a credential. Any `resource_metadata` URL named in that response still resolves 200 unauthenticated.
+
 ### Initiate OAuth Flow
 
 Start OAuth authorization flow for MCP client.
@@ -350,6 +374,87 @@ GET /health
 ```
 
 **No authentication required.**
+
+### Usage Statistics
+
+Get aggregate usage statistics for the authenticated user. Powers the Neotoma Inspector dashboard summary tiles. Figures are computed on each request from live data — no server-side cache.
+
+**Endpoint:** `GET /usage`
+
+**Authentication:** Required — Bearer token, AAuth grant, or MCP OAuth token. Guest principals are rejected with `401`.
+
+**Query parameters:**
+
+| Parameter | Type        | Required | Description                                                                            |
+| --------- | ----------- | -------- | -------------------------------------------------------------------------------------- |
+| `user_id` | UUID string | No       | Must match authenticated user if supplied. AAuth-admitted agents cannot override this. |
+
+**Request:**
+
+```http
+GET /usage HTTP/1.1
+Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
+```
+
+**curl example:**
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  http://localhost:3080/usage | jq .
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "entities_by_type": {
+    "conversation": 214,
+    "task": 156,
+    "contact": 88
+  },
+  "total_entities": 500,
+  "observations_by_source": {
+    "human": 310,
+    "llm_summary": 140,
+    "sensor": 50
+  },
+  "total_observations": 500,
+  "entities_created_last_7_days": 34,
+  "entities_created_last_30_days": 112,
+  "entity_types_with_schema": 6,
+  "entity_types_total": 10,
+  "last_updated": "2026-06-19T09:00:00.000Z"
+}
+```
+
+**Response fields:**
+
+| Field                           | Type                     | Description                                                                                   |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| `entities_by_type`              | `Record<string, number>` | Active entity counts per type, sorted by count descending.                                    |
+| `total_entities`                | `number`                 | Total active (non-merged) entities.                                                           |
+| `observations_by_source`        | `Record<string, number>` | Observation counts per `observation_source`; unsourced rows appear as `"unclassified"`.       |
+| `total_observations`            | `number`                 | Total observations.                                                                           |
+| `entities_created_last_7_days`  | `number`                 | Entities created within the last 7 days.                                                      |
+| `entities_created_last_30_days` | `number`                 | Entities created within the last 30 days.                                                     |
+| `entity_types_with_schema`      | `number`                 | Distinct entity types present in the data that also have an active registered schema.         |
+| `entity_types_total`            | `number`                 | Total distinct entity types present across all active entities.                               |
+| `last_updated`                  | `string` (ISO-8601)      | Timestamp when these aggregates were computed (reflects request time, not a cache watermark). |
+
+**Error responses:**
+
+| Status | `error_code`      | Cause                                                    |
+| ------ | ----------------- | -------------------------------------------------------- |
+| `401`  | `AUTH_REQUIRED`   | Missing or invalid token; guest principal.               |
+| `403`  | `FORBIDDEN`       | `user_id` query param does not match authenticated user. |
+| `500`  | `DB_QUERY_FAILED` | Database query failure.                                  |
+
+**OpenAPI:** `operationId: getUsage` — see `openapi.yaml` and `src/shared/openapi_types.ts` (`UsageStats` schema).
+
+**CLI equivalent:** `neotoma request --operation getUsage`
+
+**See also:** [`docs/subsystems/usage_digest.md`](../subsystems/usage_digest.md#usage-http-api-endpoint) for the full endpoint reference including the distinction between `/usage` HTTP aggregates and `usage_digest` telemetry entities.
 
 ### OpenAPI Specification
 

@@ -9,7 +9,7 @@ anything. It documents:
 
 - The architecture and sandbox-only runtime behaviors (`NEOTOMA_SANDBOX_MODE`).
 - Ephemeral per-visitor sessions and hard-ephemerality contract.
-- Seed data policy, fixture packs, and the weekly reset schedule.
+- Seed data policy, fixture packs, and per-session data lifecycle.
 - Terms of use, abuse reporting pipeline, and moderation posture.
 - Operator runbook for trust-and-safety (T&S) triage.
 
@@ -41,7 +41,7 @@ This document does NOT cover:
 │  └────────────────────────────┘  │
 │                                  │
 │  /data volume (sqlite +          │
-│  sources/) — wiped weekly        │
+│  sources/) — per-session purge   │
 └───────────────┬──────────────────┘
                 │ POST /sandbox/report/submit
                 ▼
@@ -53,7 +53,7 @@ This document does NOT cover:
 │  ──► Netlify Blobs               │
 │     (sandbox_reports store)      │
 │                                  │
-│  Survives weekly resets;         │
+│  Survives session expiry;        │
 │  triaged via same tooling        │
 │  as product feedback.            │
 └──────────────────────────────────┘
@@ -108,7 +108,6 @@ Each sandbox visitor gets an isolated, ephemeral workspace:
   - The session expires (default TTL: 7 days, capped to next Sunday 00:00 UTC).
   - The visitor explicitly ends the session (`DELETE /sandbox/session`).
   - The visitor resets the session (`POST /sandbox/session/reset`).
-  - The weekly reset runs (`scripts/reset_sandbox.ts`).
 - Deletion is hard: the ephemeral user, all their entities, observations,
   sources, relationships, and the `sandbox_sessions` row are removed.
 - A background sweep runs every 15 minutes to clean up expired sessions.
@@ -176,9 +175,12 @@ When `NEOTOMA_SANDBOX_MODE=1`, the server applies the following rules:
 
 ## Seed data policy
 
-The sandbox is reseeded weekly from a deterministic manifest at
-`tests/fixtures/sandbox/manifest.json`. Per-use-case manifests live under
-`tests/fixtures/sandbox/use_cases/<slug>/manifest.json`.
+Fixture packs seed each new session from manifests under
+`tests/fixtures/sandbox/` (generic manifest at `manifest.json`; per-use-case
+manifests under `use_cases/<slug>/manifest.json`). Operators may still run
+`scripts/reset_sandbox.ts` manually to wipe the entire Fly volume and
+re-seed the shared anonymous baseline — that path is **not** scheduled;
+per-session lifecycle handles normal visitor data.
 
 ### Allowed content in `tests/fixtures/sandbox/`
 
@@ -188,19 +190,23 @@ The sandbox is reseeded weekly from a deterministic manifest at
   per file).
 - No API keys, no secrets, no internal URLs.
 
-## Weekly reset
+## Operator volume reset (manual)
 
-**Sunday 00:00 UTC** (documented policy). The reset script
-(`scripts/reset_sandbox.ts`):
+The reset script (`scripts/reset_sandbox.ts`) wipes the **entire** sandbox
+volume (all sessions and the shared anonymous user). Use only for operator
+recovery — abuse cleanup, disk pressure, or post-incident reset:
 
 1. Asserts `NEOTOMA_SANDBOX_MODE=1`.
 2. Sweeps all expired ephemeral sessions.
 3. Removes `neotoma.db*` files and `sources/` contents under `NEOTOMA_DATA_DIR`.
 4. Waits `NEOTOMA_SANDBOX_POST_WIPE_DELAY_MS` milliseconds.
-5. Calls `seedSandbox()` to repopulate from the manifest.
+5. Calls `seedSandbox()` to repopulate the shared baseline from the manifest.
 
-**Automation:** `.github/workflows/sandbox-weekly-reset.yml` (Sunday 00:05
-UTC) runs `scripts/schedule_sandbox_reset.sh` via `fly ssh console`.
+**Automation:** `.github/workflows/sandbox-weekly-reset.yml` is
+**workflow_dispatch only** (operator manual reset via `fly ssh console`).
+**Weekly security probes** (manifest drift + live auth-negative checks) run
+from `.github/workflows/sandbox-weekly-security-probes.yml` (Sunday 00:05 UTC)
+and do not require SSH or a running VM beyond HTTP reachability for probes.
 
 ## Terms of use
 
@@ -208,8 +214,8 @@ UTC) runs `scripts/schedule_sandbox_reset.sh` via `fly ssh console`.
 
 - The sandbox is a **public demo** — assume anyone can read anything you write.
 - **No PII, secrets, or confidential data.**
-- Data is wiped **weekly, Sunday 00:00 UTC**.
-- Ephemeral sessions are hard-deleted on expiry or explicit termination.
+- Session data is **ephemeral** — hard-deleted on expiry (max 7 days, capped at
+  Sunday 00:00 UTC), explicit end/reset, or background sweep.
 - Destructive admin endpoints and body-level `user_id` overrides are disabled.
 
 ## Abuse reporting pipeline
@@ -218,7 +224,7 @@ The sandbox reuses the existing feedback pipeline pattern (see
 `docs/subsystems/agent_feedback_pipeline.md`). Reports submitted via the
 Inspector (`/inspector/sandbox`) or directly via `POST /sandbox/report` are
 forwarded to the Netlify functions on `agent.neotoma.io` for durable storage
-across weekly resets.
+independent of sandbox session lifecycle.
 
 ### Operator triage
 

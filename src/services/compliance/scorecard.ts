@@ -3,7 +3,7 @@
  * the Inspector scorecard JSON. Single source for GET /admin/compliance/scorecard.
  */
 
-import { getSqliteDb } from "../../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../repositories/db/connection.js";
 
 const TS_EPOCH = "1970-01-01T00:00:00.000Z";
 
@@ -225,10 +225,10 @@ function topMissed(m: Map<string, number>, n: number): Array<{ step: string; cou
   return arr.slice(0, Math.max(0, n));
 }
 
-export function buildComplianceScorecard(
+export async function buildComplianceScorecard(
   userId: string,
   params: ComplianceScorecardParams = {}
-): ComplianceScorecard {
+): Promise<ComplianceScorecard> {
   const refMs = params.ref_ms ?? Date.now();
   const { sinceIso, untilIso, sinceLabel, untilLabel } = resolveScorecardWindow(
     params.since,
@@ -243,8 +243,8 @@ export function buildComplianceScorecard(
   const topN = Math.min(50, Math.max(1, params.top_missed_steps ?? 5));
   const includeSynthetic = params.include_synthetic === true;
 
-  const db = getSqliteDb();
-  const rows = db.prepare(TURNS_IN_WINDOW_SQL).all(userId, sinceIso, untilIso) as TurnRow[];
+  const db = await getDb();
+  const rows = (await db.prepare(TURNS_IN_WINDOW_SQL).all(userId, sinceIso, untilIso)) as TurnRow[];
 
   const cells = new Map<string, MutableCell>();
 

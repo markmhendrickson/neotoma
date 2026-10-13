@@ -446,8 +446,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Remember Contacts", href: "/skills/remember-contacts", icon: "BookUser" },
       { label: "Remember Calendar", href: "/skills/remember-calendar", icon: "CalendarClock" },
       { label: "Remember Codebase", href: "/skills/remember-codebase", icon: "Code" },
-      { label: "Store Data", href: "/skills/store-data", icon: "Database" },
-      { label: "Query Memory", href: "/skills/query-memory", icon: "Search" },
     ],
   },
   {

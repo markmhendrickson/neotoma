@@ -62,6 +62,7 @@ interface FieldDefinition {
   required?: boolean;
   validator?: string; // Validator function name
   preserveCase?: boolean; // Preserve case for this field during canonicalization
+  preserveWhitespace?: boolean; // Preserve exact whitespace, including line endings
   description?: string; // Field description
   converters?: ConverterDefinition[]; // Field type converters
 }
@@ -113,8 +114,11 @@ interface ReducerConfig {
   merge_policies: Record<string, MergePolicy>;
 }
 interface MergePolicy {
-  strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+  strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array" | "merge_array_by_key";
   tie_breaker?: "observed_at" | "source_priority";
+  /** Required when strategy is "merge_array_by_key". Field on each array item
+   * that identifies it across observations. See docs/subsystems/reducer.md §3.5. */
+  key_field?: string;
 }
 ```
 **Example:**
@@ -298,7 +302,7 @@ Schema versions use semantic versioning (major.minor.patch):
 - Snapshots are computed using the active schema, which can read observations from any version
 - Reducers handle missing fields gracefully (optional fields may be absent in old observations)
 ### 3.2 Active Schema
-Only one active schema version per entity_type at a time:
+Only one active schema version per entity_type per scope at a time (one global row, plus at most one user-scoped row per user; see §4.4 for how a reader resolves between them):
 ```sql
 SELECT * FROM schema_registry
 WHERE entity_type = 'invoice'
@@ -454,13 +458,41 @@ class SchemaRegistry {
     }>;
     fields_to_remove?: string[]; // Field names to remove from schema
     schema_version?: string; // Auto-increments if not provided
-    user_specific?: boolean; // Create user-specific schema variant
-    user_id?: string; // Required if user_specific=true
+    user_specific?: boolean; // Explicit scope override; omit to write to the resolved scope
+    user_id?: string; // The caller; scopes the read and any user-scoped write
     activate?: boolean; // Default: true - activate immediately
     migrate_existing?: boolean; // Default: false - only for historical data backfill
-  }): Promise<SchemaRegistryEntry>;
+    force?: boolean; // Bypass the entity-type naming guards for this call only
+  }): Promise<SchemaRegistryEntry & {
+    migration_result?: { migrated_count: number; skipped: SkippedMigrationGroup[] };
+  }>;
 }
 ```
+
+**Write scope agrees with read scope (#2374):** the update reads the current
+schema with the §4.4 resolution order and writes the new version to the scope
+of the row it read, so a call can never leave a second active row in the
+other scope unless the caller explicitly asks for that scope (`user_specific:
+true` creating an override on purpose).
+
+- `user_specific` omitted: read user-first with global fallback; write to the
+  scope of the row read (the caller's override if one exists, else global).
+- `user_specific: true`: read user-first with global fallback; write a
+  user-scoped version for the caller (creating the override from global if
+  none exists).
+- `user_specific: false`: read the global row only; write a global version.
+  The new global version extends the current global schema, never the
+  caller's override. Promoting user fields to global is schema
+  reconciliation (§4.4), not a side effect of an update. If the type has no
+  global registry row and no code-defined baseline, but does have a
+  user-scoped schema, the call returns `ERR_SCHEMA_SCOPE_MISMATCH`. (With a
+  code-defined baseline, the update extends that baseline as the first global
+  row.)
+
+The response reports the scope actually written (`scope`, plus `user_id` when
+user-scoped). With `migrate_existing`, `migrated_existing` is true only when at
+least one fragment was promoted, and `migration_result.skipped` names every
+fragment group that did not promote and why.
 
 **Key Features:**
 - **Add fields without full replacement**: Merge new fields with existing schema
@@ -612,19 +644,19 @@ Load `docs/subsystems/schema_registry.md` when:
 - Performing schema migrations
 ### Constraints Agents Must Enforce
 1. **Schemas MUST be versioned** (no unversioned schemas)
-2. **Only one active schema per entity_type** (version switching required)
+2. **Only one active schema per entity_type per scope** (version switching required within a scope)
 3. **Schema changes MUST be versioned** (additive changes = minor bump, field removal = major bump)
 4. **Merge policies MUST be configured** (no ad-hoc merge logic)
 5. **At least one field MUST remain** after removal (cannot remove all fields)
 ### Forbidden Patterns
 - ❌ Unversioned schemas
-- ❌ Multiple active schemas per entity_type
+- ❌ Multiple active schemas per entity_type within the same scope
 - ❌ Unversioned schema changes (all changes must go through `updateSchemaIncremental` or `register`)
 - ❌ Ad-hoc merge policies (must use schema registry)
 - ❌ Removing all fields from a schema
 ### Validation Checklist
 - [ ] Schemas are versioned (semantic versioning)
-- [ ] Only one active schema per entity_type
+- [ ] Only one active schema per entity_type per scope
 - [ ] Schema changes are versioned (minor for additions, major for removals)
 - [ ] Merge policies configured for all fields
 - [ ] Schema registry integrated with observation creation
@@ -632,3 +664,13 @@ Load `docs/subsystems/schema_registry.md` when:
 - [ ] Reducer uses schema-projection filtering (only schema-defined fields appear in snapshots)
 - [ ] Tests verify schema versioning, migration, and field removal
 - [ ] Documentation updated for new schema versions
+
+## Audio transcription contract
+
+The built-in `transcription` 2.0.0 declaration retains historical field names and optionality, corrects `file_size_bytes` to a number, and declares capture and transcription provenance. `audio_content_sha256` identifies the input bytes; it is not the transcription entity identity. A recording can have multiple derivations. Source storage remains authoritative for bytes and content hash; observation `source_id` links derived fields to that source. Do not add an ingestion-success field to the transcription.
+
+New ingestion clients must verify `audio_content_sha256`, `original_source_file`, `capture_method`, `transcription_engine`, `consent_basis`, `transcription_text`, and `file_size_bytes` after storage, plus the requested source linkage. `consent_basis: "unknown"` records absent attestation and grants no capture authorization. Historical records may omit these fields.
+
+String fields can declare `preserveCase: true` and `preserveWhitespace: true` to retain exact transcript text and source names. Without `preserveWhitespace`, existing normalization remains unchanged. This metadata governs new observations only; activating a schema never rewrites historical observations. Lost historical text cannot be recovered from a normalized snapshot alone.
+
+The declaration is available from `ENTITY_SCHEMAS.transcription` in `src/services/schema_definitions.ts`. Existing installations must inspect the effective global and user-specific registrations before registering a new version through the existing registry API. Preserve custom fields, reducers and identity declarations when merging an instance's schema. Code deployment alone does not establish that an active custom schema is compatible. Production registration, activation and any historical recovery are separate reviewed operations; this change performs none.

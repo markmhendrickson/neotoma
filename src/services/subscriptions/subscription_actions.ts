@@ -10,7 +10,7 @@ import {
 } from "./subscription_index.js";
 import type { SubscriptionRecord } from "./subscription_types.js";
 import { parseSubscriptionSnapshot } from "./subscription_types.js";
-import { isWebhookUrlAllowed } from "./webhook_delivery.js";
+import { checkWebhookUrlAllowed } from "./webhook_delivery.js";
 import { createCorrection } from "../correction.js";
 import { db } from "../../db.js";
 
@@ -47,7 +47,13 @@ export async function subscribeUser(params: {
     if (!input.webhook_url) {
       throw new Error("webhook_url is required for webhook delivery_method");
     }
-    if (!isWebhookUrlAllowed(input.webhook_url)) {
+    const webhookCheck = checkWebhookUrlAllowed(input.webhook_url);
+    if (!webhookCheck.allowed) {
+      if (webhookCheck.reason === "private_host") {
+        throw new Error(
+          "webhook_url must be a public host: private, loopback, link-local, and platform-internal targets are rejected"
+        );
+      }
       throw new Error(
         "webhook_url must be HTTPS in production, or http://localhost / 127.0.0.1 for dev"
       );

@@ -18,14 +18,42 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
+      # This job deletes a preview deploy in the external markmhendrickson/neotoma-dev-site
+      # repo using DEV_PAGES_DEPLOY_TOKEN. When that token is missing or expired the
+      # checkout cannot succeed — but cleaning up a docs preview is a convenience, not a
+      # gate, so a bad/absent token must NOT paint every closed docs PR's checks red.
+      # Mirror the same non-blocking pattern used in docs_pr_preview.yml.
+      - name: Check deploy token presence
+        id: deploy_token
+        env:
+          DEV_PAGES_DEPLOY_TOKEN: ${{ secrets.DEV_PAGES_DEPLOY_TOKEN }}
+        run: |
+          if [ -n "$DEV_PAGES_DEPLOY_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Preview cleanup skipped::DEV_PAGES_DEPLOY_TOKEN is not set; skipping preview cleanup. See the preview-deploy rotation runbook to restore deploys."
+          fi
+
       - name: Checkout neotoma-dev-site gh-pages branch
+        id: checkout
+        if: steps.deploy_token.outputs.present == 'true'
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.DEV_PAGES_DEPLOY_TOKEN }}
           repository: markmhendrickson/neotoma-dev-site
           ref: gh-pages
 
+      - name: Warn if checkout failed
+        if: steps.checkout.outcome == 'failure'
+        run: |
+          echo "::warning title=Preview cleanup failed::Checking out neotoma-dev-site failed (likely an expired or invalid DEV_PAGES_DEPLOY_TOKEN). This does not block the PR. See the preview-deploy rotation runbook to restore deploys."
+
       - name: Remove PR preview directory
+        id: remove
+        if: steps.checkout.outcome == 'success'
+        continue-on-error: true
         run: |
           PR=${{ github.event.pull_request.number }}
           if [ -d "pr-${PR}" ]; then
@@ -37,3 +65,8 @@ jobs:
           else
             echo "No preview directory found for PR #${PR}, nothing to clean up."
           fi
+
+      - name: Warn if preview removal failed
+        if: steps.remove.outcome == 'failure'
+        run: |
+          echo "::warning title=Preview cleanup failed::Removing the preview directory from neotoma-dev-site failed (e.g. a concurrent cleanup run or push conflict). This does not block the PR."

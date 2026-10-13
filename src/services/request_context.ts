@@ -25,6 +25,7 @@ import type {
   AgentIdentity,
   AttributionDecisionDiagnostics,
   AttributionProvenance,
+  AuthenticatedPrincipal,
   ExternalActor,
 } from "../crypto/agent_identity.js";
 import { toAttributionProvenance } from "../crypto/agent_identity.js";
@@ -61,6 +62,26 @@ export interface RequestContext {
    * guest to have direct generic `/store` access to every bookkeeping type.
    */
   bypassGuestStoreAccessPolicy?: boolean;
+  /**
+   * Connection id resolved by the `/mcp` HTTP gate for this request: a
+   * development identity the gate assigned or admitted, a connection id it
+   * validated, or `null` when the gate resolved none. The MCP server reads
+   * this, never the request's own `X-Connection-Id` header, so a
+   * connection-id-derived identity always matches the gate's decision.
+   * Absent outside the `/mcp` HTTP route (stdio, REST).
+   */
+  mcpConnectionId?: string | null;
+  /**
+   * The signed-in member whose session this request runs under (#2240),
+   * resolved by the auth layer from a verified sign-in recorded on the OAuth
+   * connection row, as their per-instance attribution id. Stamped into write
+   * provenance as `authenticated_actor_id`.
+   * Provenance only — never an input to data scoping. Null or absent whenever
+   * no verified sign-in stands behind the request (static tokens, local
+   * no-auth, AAuth grants, pre-identity connection rows): the write is then
+   * left unattributed rather than attributed to a default person.
+   */
+  authenticatedPrincipal?: AuthenticatedPrincipal | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -97,7 +118,37 @@ export function getCurrentAgentIdentity(): AgentIdentity | null {
  */
 export function getCurrentAttribution(): AttributionProvenance {
   const store = storage.getStore();
-  return toAttributionProvenance(store?.agentIdentity ?? null, store?.externalActor ?? null);
+  return toAttributionProvenance(
+    store?.agentIdentity ?? null,
+    store?.externalActor ?? null,
+    store?.authenticatedPrincipal ?? null
+  );
+}
+
+/**
+ * Return the signed-in person for the active request (#2240), or `null` when
+ * no verified sign-in stands behind it.
+ */
+export function getCurrentAuthenticatedPrincipal(): AuthenticatedPrincipal | null {
+  return storage.getStore()?.authenticatedPrincipal ?? null;
+}
+
+/**
+ * Run `fn` with the signed-in person attached to the current request context.
+ * Clones the active context so every other slot is preserved, the same way
+ * {@link runWithExternalActor} composes. Passing `null` clears the slot, which
+ * is how a caller asserts "no verified person" for a nested scope.
+ */
+export function runWithAuthenticatedPrincipal<T>(
+  principal: AuthenticatedPrincipal | null,
+  fn: () => Promise<T> | T
+): Promise<T> | T {
+  const existing = storage.getStore();
+  const merged: RequestContext = {
+    ...(existing ?? { agentIdentity: null }),
+    authenticatedPrincipal: principal,
+  };
+  return storage.run(merged, fn);
 }
 
 /**
@@ -122,6 +173,14 @@ export function getCurrentAAuthAdmission(): AAuthAdmissionContext | null {
 }
 
 /**
+ * Read the connection id the `/mcp` HTTP gate resolved for this request, or
+ * `null` when it resolved none (or no gate ran, e.g. stdio).
+ */
+export function getCurrentMcpConnectionId(): string | null {
+  return storage.getStore()?.mcpConnectionId ?? null;
+}
+
+/**
  * Run `fn` with an {@link ExternalActor} attached to the current request
  * context. If a context already exists it is cloned with the actor slot
  * set; if no context is active a minimal one is created. Existing
@@ -139,6 +198,8 @@ export function runWithExternalActor<T>(
     aauthAdmission: existing?.aauthAdmission ?? null,
     externalActor: actor,
     bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
+    mcpConnectionId: existing?.mcpConnectionId ?? null,
+    authenticatedPrincipal: existing?.authenticatedPrincipal ?? null,
   };
   return storage.run(merged, fn);
 }

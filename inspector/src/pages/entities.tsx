@@ -11,10 +11,17 @@ import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_st
 import { DataTable } from "@/components/ui/data-table";
 import { TypeBadge } from "@/components/shared/type_badge";
 import { OffsetPagination as Pagination } from "@/components/ui/pagination";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { formatDate, truncateId } from "@/lib/utils";
+import { entityDisplayName } from "@/lib/entity_display_name";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import type { EntitySnapshot, SnapshotFilter } from "@/types/api";
@@ -63,7 +70,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [identityBasis, setIdentityBasis] = useState<string>("");
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
-    DEFAULT_ENTITIES_LIST_COLUMN_VISIBILITY,
+    DEFAULT_ENTITIES_LIST_COLUMN_VISIBILITY
   );
   const [snapshotFilters, setSnapshotFilters] = useState<Record<string, SnapshotFilter>>({});
   const [showFilters, setShowFilters] = useState(false);
@@ -80,7 +87,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
 
   const listColumnConfig = useMemo(
     () => buildEntitiesListColumnConfig(entityType ? schemaQ.data : null),
-    [entityType, schemaQ.data],
+    [entityType, schemaQ.data]
   );
 
   const visibleSortOptions = useMemo(
@@ -88,9 +95,9 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
       buildVisibleEntitySortOptions(
         listColumnConfig.columnIds,
         columnVisibility,
-        listColumnConfig.columnLabels,
+        listColumnConfig.columnLabels
       ),
-    [listColumnConfig.columnIds, listColumnConfig.columnLabels, columnVisibility],
+    [listColumnConfig.columnIds, listColumnConfig.columnLabels, columnVisibility]
   );
 
   const schemaFields = useMemo(() => schemaFieldKeys(schemaQ.data), [schemaQ.data]);
@@ -109,7 +116,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
   // Saved views
   const savedViews = useMemo(
     () => (entityType ? getSavedViews(entityType) : []),
-    [entityType, viewMode, sortBy, sortOrder],
+    [entityType, viewMode, sortBy, sortOrder]
   );
 
   useEffect(() => {
@@ -148,7 +155,9 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
   }, [initialType]);
 
   useEffect(() => {
-    setColumnVisibility(buildEntitiesListColumnConfig(entityType ? schemaQ.data : null).defaultVisibility);
+    setColumnVisibility(
+      buildEntitiesListColumnConfig(entityType ? schemaQ.data : null).defaultVisibility
+    );
   }, [entityType, schemaQ.data]);
 
   const pluralTypeTitle = useMemo(() => {
@@ -217,9 +226,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
       contextLabel: pluralTypeTitle ? `Top ${pluralTypeTitle.toLowerCase()}` : "Top entity matches",
       suggestions: (query.data?.entities ?? []).slice(0, 4).map((entity) => {
         const eid = entityRowId(entity);
-        const label = String(
-          entity.canonical_name || entity.snapshot?.name || entity.snapshot?.title || truncateId(eid),
-        );
+        const label = entityDisplayName(entity, truncateId(eid));
 
         return {
           id: eid,
@@ -237,7 +244,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
       }),
       isLoading: query.isFetching,
     }),
-    [entityType, pluralTypeTitle, query.data?.entities, query.isFetching, search],
+    [entityType, pluralTypeTitle, query.data?.entities, query.isFetching, search]
   );
 
   const columns: ColumnDef<EntitySnapshot, unknown>[] = useMemo(() => {
@@ -264,19 +271,16 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
       {
         id: "name",
         header: "Name",
-        accessorFn: (row) =>
-          row.canonical_name || row.snapshot?.name || row.snapshot?.title || entityRowId(row),
+        accessorFn: (row) => entityDisplayName(row, entityRowId(row)),
         cell: ({ row }) => {
           const eid = entityRowId(row.original);
           return (
             <span className="inline-flex min-w-0 items-center">
-              <Link to={`/entities/${encodeURIComponent(eid)}`} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
-                {String(
-                  row.original.canonical_name ||
-                    row.original.snapshot?.name ||
-                    row.original.snapshot?.title ||
-                    truncateId(eid),
-                )}
+              <Link
+                to={`/entities/${encodeURIComponent(eid)}`}
+                className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+              >
+                {entityDisplayName(row.original, truncateId(eid))}
               </Link>
               {duplicateIds.has(eid) ? <DuplicateBadge entityId={eid} /> : null}
             </span>
@@ -311,7 +315,9 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
         header: "ID",
         accessorFn: (row) => entityRowId(row),
         cell: ({ getValue }) => (
-          <span className="font-mono text-xs text-muted-foreground">{truncateId(getValue() as string, 12)}</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            {truncateId(getValue() as string, 12)}
+          </span>
         ),
       },
     ];
@@ -319,7 +325,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
     const schema = entityType ? schemaQ.data : null;
     const fieldKeys = schemaFieldKeys(schema);
     const snapshotColumns = fieldKeys.map((fieldKey) =>
-      schemaFieldColumnDef(fieldKey, schema, entityType),
+      schemaFieldColumnDef(fieldKey, schema, entityType)
     );
 
     return [...fixed, ...snapshotColumns];
@@ -421,7 +427,11 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
                   ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            >
               {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
             </Button>
           </>
@@ -599,7 +609,12 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
             getRowId={(row) => entityRowId(row)}
           />
           {query.data && query.data.total > PAGE_SIZE && (
-            <Pagination offset={offset} limit={PAGE_SIZE} total={query.data.total} onPageChange={setOffset} />
+            <Pagination
+              offset={offset}
+              limit={PAGE_SIZE}
+              total={query.data.total}
+              onPageChange={setOffset}
+            />
           )}
         </>
       )}
@@ -622,7 +637,7 @@ export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
 function schemaFieldColumnDef(
   fieldKey: string,
   schema: EntitySchema | null | undefined,
-  _entityType: string,
+  _entityType: string
 ): ColumnDef<EntitySnapshot, unknown> {
   const typeHint =
     (schema?.schema_definition?.fields?.[fieldKey] as { type?: string } | undefined)?.type ??

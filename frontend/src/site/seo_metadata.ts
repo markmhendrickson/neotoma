@@ -254,7 +254,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/sandbox/terms-of-use": {
     title: "Public sandbox terms of use | Neotoma",
     description:
-      "Terms of use for sandbox.neotoma.io: public data, weekly reset, abuse reporting, and no production warranty. Same text as GET /sandbox/terms on the sandbox host, in readable HTML.",
+      "Terms of use for sandbox.neotoma.io: public data, ephemeral per-session workspaces, abuse reporting, and no production warranty. Same text as GET /sandbox/terms on the sandbox host, in readable HTML.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1791,28 +1791,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Skills", path: "/skills" },
       { name: "Remember Codebase", path: "/skills/remember-codebase" },
-    ],
-  },
-  "/skills/store-data": {
-    title: "Store Data Skill | Neotoma",
-    description: "Structured store workflow for agent-created data.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Skills", path: "/skills" },
-      { name: "Store Data", path: "/skills/store-data" },
-    ],
-  },
-  "/skills/query-memory": {
-    title: "Query Memory Skill | Neotoma",
-    description: "Retrieval and provenance workflow for Neotoma memory.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Skills", path: "/skills" },
-      { name: "Query Memory", path: "/skills/query-memory" },
     ],
   },
   "/use-cases": {

@@ -7,9 +7,12 @@
  * changes should bump version and effective date together.
  */
 
-export const SANDBOX_TERMS_VERSION = "1.0.0";
-export const SANDBOX_TERMS_EFFECTIVE_DATE = "2026-04-23";
-export const SANDBOX_WEEKLY_RESET_UTC = "Sunday 00:00 UTC";
+export const SANDBOX_TERMS_VERSION = "1.1.0";
+export const SANDBOX_TERMS_EFFECTIVE_DATE = "2026-06-29";
+/** Max session lifetime cap (also the sweep alignment boundary). */
+export const SANDBOX_SESSION_TTL_CAP_UTC = "Sunday 00:00 UTC";
+/** @deprecated Renamed to SANDBOX_SESSION_TTL_CAP_UTC; kept for weekly_reset_utc API field. */
+export const SANDBOX_WEEKLY_RESET_UTC = SANDBOX_SESSION_TTL_CAP_UTC;
 export const SANDBOX_ABUSE_REPORT_EMAIL = "abuse@neotoma.io";
 
 export const SANDBOX_TERMS_MARKDOWN = `# Neotoma Public Sandbox — Terms of Use
@@ -23,8 +26,10 @@ it locally.
 - **All data is public.** Anything you store is visible to every other
   sandbox user. Do not submit personal information, credentials, internal
   business data, or anything you would not be comfortable publishing.
-- **Data is wiped weekly** at ${SANDBOX_WEEKLY_RESET_UTC}. The dataset is
-  re-seeded from a fixed set of synthetic fixtures and public-domain text.
+- **Data is ephemeral per session.** Your workspace is hard-deleted when the
+  session expires (up to 7 days, capped at ${SANDBOX_SESSION_TTL_CAP_UTC}),
+  when you end or reset the session, or when the background sweep removes
+  expired sessions. Do not treat the sandbox as durable storage.
 - **No abuse.** Do not submit illegal content, harassment, spam, or content
   that violates third-party rights. Violations may be purged out-of-cycle
   and the submitting IP rate-limited or blocked.

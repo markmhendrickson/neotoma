@@ -1,0 +1,79 @@
+meta:
+  id: store_commit_persists_control
+  description: >
+    Positive control for store_plan_mode_persists_nothing. The same four store
+    shapes (entities, inline file, entities plus inline file, file by
+    reference) are replayed WITHOUT commit false, so they commit. The server
+    must then hold sources, observations, entities and stored files, and the
+    responses must carry real source ids. If this scenario fails, the zero
+    counters asserted by the plan-mode scenario cannot be trusted.
+  tags:
+    - tier2
+    - store
+    - plan_mode
+    - writ:no_side_effects
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Persist the
+  requested data with the store tool for every shape (entities, file,
+  entities plus file, file by reference). Then reply briefly.
+
+user_prompt: |
+  Save a contact and a note file.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+# Write raw bytes to disk (the isolated server otherwise skips the upload under
+# NODE_ENV=test), so raw_storage.file_count can see stored files.
+real_storage: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: eq
+    value: 4
+
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: source_id
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_key: source_id
+  - type: tool_result.matches
+    tool_name: store
+    which: 3
+    result_subset:
+      storage_mode: reference
+
+  - type: stats.counter
+    field: sources_count
+    op: gte
+    value: 3
+  - type: stats.counter
+    field: total_observations
+    op: gte
+    value: 1
+  - type: stats.counter
+    field: total_entities
+    op: gte
+    value: 2
+  - type: entity.count
+    entity_type: contact
+    op: gte
+    value: 2
+  - type: raw_storage.file_count
+    op: gte
+    value: 2

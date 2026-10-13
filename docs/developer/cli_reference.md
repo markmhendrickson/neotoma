@@ -41,6 +41,8 @@ The global `neotoma` runs the built files in `dist/`, not the TypeScript source.
 
 Run `npm run setup:launchd-issues-sync` once to install `com.neotoma.issues-sync`: it runs `neotoma issues sync` every 5 minutes (and once at login). Logs: `data/logs/launchd-issues-sync.log`. Optional env for launchd (not in your shell profile): copy `scripts/launchd-issues-sync.env.example` to `data/local/launchd-issues-sync.env`. Unload with `launchctl unload ~/Library/LaunchAgents/com.neotoma.issues-sync.plist`.
 
+One-off runs: `neotoma issues sync --repo <owner/name>` mirrors a different GitHub repo for that call only (server config is unchanged) and does **not** push local issues to it unless you add `--push`; `--dry-run` reports what would be created, updated and pushed and writes nothing; `--no-push` forces pull-only. The push leg stays on by default for the configured repo. A `--repo` other than the configured repo must be listed in `NEOTOMA_ISSUES_ALLOWED_REPOS` (comma-separated `owner/name`, or `issues.allowed_repos` in the config file) in the server's environment; otherwise the call is rejected. Allowlisting a repo enables more than reading it: the server's GitHub token is also used to comment on and close issues there. The GitHub token is the `NEOTOMA_ISSUES_GITHUB_TOKEN` setting in the environment of the process running the Neotoma server (or `gh auth login` as that user).
+
 ### Environment: `neotoma dev` / `neotoma prod`
 
 To target a specific API environment, pass `dev` or `prod` as the first argument or use `--env`.
@@ -255,6 +257,15 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `neotoma access enable-issues`: Set `issue`, `conversation`, and `conversation_message` to `submitter_scoped`.
 - `neotoma access disable-issues`: Reset `issue`, `conversation`, and `conversation_message` to effective `closed` policy, subject to any env override.
 
+### Instance Policy
+
+Inspect and configure this instance's data policy (#1974/#1975) — what the instance is _for_, which entity types are in or out of scope, and which person-data gates it enforces on `store`/`correct`.
+
+- `neotoma instance-policy show`: Show the instance data policy, or report that none is configured (`{"policy": null}` — unrestricted, not deny-all).
+- `neotoma instance-policy set --file <path> [--enforce | --advisory] [--dry-run]`: Create or update the instance policy from a JSON file (fields: `purpose`, `out_of_scope_entity_types`, `require_lawful_basis`, `require_provenance`, `max_sensitivity_class`). `--enforce` sets `enforcement: "enforced"` (reject violating writes); `--advisory` sets `enforcement: "advisory"` (declare only, do not reject — the default when unset on a new policy). `--enforce` and `--advisory` are mutually exclusive. `--dry-run` prints what would be written without persisting it.
+
+`enforcement: "enforced"` covers structured `store`/`correct` calls (an `entities` array) on all three write paths — REST, CLI, and MCP. It does **not** cover raw/reference file uploads (`neotoma store --file <path>` with no `entities` array) — see `docs/releases/in_progress/v0.22.0/security_review.md` for the known scope boundary.
+
 ### Runtime overrides (precedence: flag > env > default)
 
 CLI behavior can be pinned per invocation via flags or across invocations via environment variables. Every runtime override follows the same precedence: explicit flag > environment variable > default.
@@ -289,11 +300,11 @@ These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for out
 
 Read by the Neotoma HTTP server when running the public-sandbox profile; no paired CLI flag. Full runbook: [`docs/subsystems/sandbox_deployment.md`](../subsystems/sandbox_deployment.md).
 
-| Environment variable               | Default                       | Purpose                                                                                                                                                                                                                                                                                |
-| ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NEOTOMA_SANDBOX_MODE`             | unset                         | Truthy (`1`/`true`/`yes`) enables all sandbox-only behaviors (ephemeral sessions, anon writes, tighter limits). Also auto-enables tenant-scoped entity ids.                                                                                                                              |
-| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | follows `NEOTOMA_SANDBOX_MODE` | Truthy forces tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Without it (and outside sandbox mode) entity ids are global `hash(entity_type, canonical_name)`, so per-tenant same-named entities collide on one row.        |
-| `NEOTOMA_SANDBOX_BASE_URL`         | `http://127.0.0.1:$HTTP_PORT` | Base URL the per-session pack seeder calls back into (`/sandbox/session/new` seeds over HTTP as the new bearer). Defaults to loopback on the server's own port.                                                                                                                          |
+| Environment variable               | Default                        | Purpose                                                                                                                                                                                                                                                                           |
+| ---------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEOTOMA_SANDBOX_MODE`             | unset                          | Truthy (`1`/`true`/`yes`) enables all sandbox-only behaviors (ephemeral sessions, anon writes, tighter limits). Also auto-enables tenant-scoped entity ids.                                                                                                                       |
+| `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` | follows `NEOTOMA_SANDBOX_MODE` | Truthy forces tenant-scoped deterministic entity ids (salt `generateEntityId` with `user_id`) independent of sandbox mode. Without it (and outside sandbox mode) entity ids are global `hash(entity_type, canonical_name)`, so per-tenant same-named entities collide on one row. |
+| `NEOTOMA_SANDBOX_BASE_URL`         | `http://127.0.0.1:$HTTP_PORT`  | Base URL the per-session pack seeder calls back into (`/sandbox/session/new` seeds over HTTP as the new bearer). Defaults to loopback on the server's own port.                                                                                                                   |
 
 ### MCP / SSE transport tuning (server process)
 
@@ -367,6 +378,33 @@ neotoma session --servers
   - `--project-local`: Store the Neotoma config in `.neotoma/config.json` in the current directory (project-scoped) instead of the user-level `~/.config/neotoma/config.json`. The CLI reads this project-local config automatically for all subsequent commands run from that directory via `readEffectiveConfig`, which checks for `.neotoma/config.json` before falling back to the user-level config. Trust boundary: project-local config is only loaded when the containing directory is owned by the current user (prevents untrusted directories from silently overriding user settings). Use this when you want per-project Neotoma configuration independent of the user-level setup.
   - `--safe`: Dry-run mode. Reports what `init` would do (create directories, write config, run migrations) without writing any files or making any changes. Output lists each planned action with a check mark or blocker reason. Exit code is 0 if all planned actions would succeed; exit code 1 if any blocker is detected (e.g. config already exists without `--force`, parent directory not writable). Combine with `--json` to get machine-readable output. Note: `--safe` checks the filesystem layout planned by `init`; it does not simulate authentication or preflight steps.
 
+- `neotoma init --import-transcripts`: After init, discover and import harness transcripts. Each imported file stores the raw transcript **plus** an `agent_session` and `session_transcript` row carrying the session's `cwd`, native id, and `content_hash` — the metadata needed to locate or resume it later. See [`docs/developer/cli/transcript_ingestion.md`](cli/transcript_ingestion.md).
+  - `--transcript-harness <claude-code|codex|cursor>`: Limit to one harness.
+  - `--transcript-limit <n>`: Cap files per harness (most recently modified first).
+
+  Scanned locations:
+
+  | Harness     | Scanned                                                                                                     |
+  | ----------- | ----------------------------------------------------------------------------------------------------------- |
+  | claude-code | `~/.claude/projects/**/*.jsonl`                                                                             |
+  | codex       | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (live) **and** `~/.codex/archived_sessions/*.jsonl` (legacy) |
+  | cursor      | `~/.cursor/chats/<md5(cwd)>/<chatId>/store.db`                                                              |
+
+  Codex writes _live_ sessions to the date-partitioned `sessions/` tree; `archived_sessions/` holds older ones. Both are scanned, and the scan line reports them separately:
+
+  ```
+  $ neotoma init --import-transcripts --transcript-harness codex
+  [onboarding] scan: codex — 88 transcript(s) (58 live, 30 archived)
+  ```
+
+  Verify what was stored:
+
+  ```
+  neotoma entities list --type agent_session --limit 5
+  ```
+
+  Each row should carry a non-empty `cwd`. Files stored without session identity are reported on `session_identity_degraded` and summarised on stdout — those transcripts are stored but not resumable.
+
 **Examples:**
 
 ```bash
@@ -399,11 +437,11 @@ neotoma init --safe --project-local
 
 **Runtime overrides** for `neotoma init`:
 
-| Precedence | Source | Description |
-|------------|--------|-------------|
-| 1 (highest) | `--data-dir` flag | Explicit data directory path |
-| 2 | `NEOTOMA_DATA_DIR` env var | Environment variable override |
-| 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup |
+| Precedence  | Source                            | Description                   |
+| ----------- | --------------------------------- | ----------------------------- |
+| 1 (highest) | `--data-dir` flag                 | Explicit data directory path  |
+| 2           | `NEOTOMA_DATA_DIR` env var        | Environment variable override |
+| 3 (default) | Auto-detected or `~/neotoma/data` | Resolved at startup           |
 
 Config scope for `neotoma init` is a binary switch: `--project-local` writes to `.neotoma/config.json` in cwd; without the flag, init writes to `~/.config/neotoma/config.json`. All subsequent commands that call `readEffectiveConfig` will read the project-local file when present (and owned by the current user).
 
@@ -620,6 +658,8 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--mime-type <mimeType>`
   - `--limit <n>`
   - `--offset <n>`
+- `neotoma sources get <id>` (or `--source-id <id>`): Get a source's **metadata** — `content_hash`, `original_filename`/`mime_type`, `file_size`, etc. Does NOT return the source's byte content; use `sources content` for that.
+- `neotoma sources content <id>` (or `--source-id <id>`): Print a source's **raw byte content** to stdout, via the authenticated `GET /sources/:id/content` endpoint — the same download path `neotoma skills sync --include-instance-scripts` uses internally to fetch script attachments. This is the CLI-native way to review a script's actual bytes (e.g. an instance-script attachment blocked pending `--approve-scripts`) before deciding to trust it; see the worked example under [Skills](#skills) below. Pipe to a pager or file (`neotoma sources content <id> | less`, `neotoma sources content <id> > script.sh`). Content is treated as untrusted: if the bytes are not valid UTF-8, a warning is printed to stderr (not to stdout) before the raw bytes are still written, so redirection/piping is never corrupted by the warning text. `--json` emits `{ id, size, is_utf8, content_base64 }` instead of raw bytes on stdout.
 
 ### Observations
 
@@ -629,14 +669,31 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--limit <n>`
   - `--offset <n>`
 
+### Relationship Types
+
+The relationship-type vocabulary is a runtime registry, not a fixed enum. Discover what an instance accepts before using an unfamiliar edge type, and register new types through this command family rather than assuming a type exists.
+
+- `neotoma relationship-types list`:
+  - `--keyword <text>`: filter names and descriptions.
+  - `--scope <scope>`: filter to `user` or `global` scope.
+  - `--include-edge-count`: include counts of written edge rows per type.
+  - An empty result does not mean no vocabulary exists — the response's `empty_reason` distinguishes `registry_unseeded` (the built-in types failed to seed for this process and self-repair on the next read; retry) from `filtered_to_empty` (your `--keyword` matched nothing; retry without it).
+- `neotoma relationship-types register --relationship-type <type>`:
+  - `--description <text>`: meaning of the edge.
+  - `--scope <scope>`: `user` (default) or `global` — `global` requires an explicit global permission in the caller's registration grant; an absent grant is refused.
+  - `--acyclic`: refuse writes that would create a cycle among edges of this type, scoped to the registering tenant and depth-bounded (see [`docs/subsystems/relationships.md`](../subsystems/relationships.md) § 8 Cycle Detection).
+  - `--inverse <type>`: advisory inverse type name (not enforced).
+  - `--symmetric`: advisory symmetry flag (not enforced).
+  - `--source-entity-types <types>` / `--target-entity-types <types>`: comma-separated advisory entity-type hints for each endpoint (not enforced).
+
 ### Relationships
 
-- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship.
+- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship. Both `--source-entity-id` and `--target-entity-id` must be entities you own; an endpoint that does not exist and one owned by another user are refused identically.
   - `--metadata <json>`: attach relationship metadata.
   - `--file <path>`: create a batch from a JSON array, or an object with `relationships: [...]`. Each entry uses `relationship_type`, `source_entity_id`, `target_entity_id`, and optional `metadata`.
 - `neotoma relationships list <entityId>`:
   - `--direction <direction>`: inbound, outbound, or both
-- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is one of: PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS.
+- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is any type registered on the instance — the vocabulary is a runtime registry — call `list_relationship_types` to read what an instance accepts, and `register_relationship_type` to add to it.
 - `neotoma relationships restore <relationshipType> <sourceEntityId> <targetEntityId>`: Restore a deleted relationship (creates restoration observation). Optional: `--reason <reason>`.
 
 ### Timeline
@@ -693,7 +750,7 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
     - Use `--json=` (equals, no space) so the payload is parsed as entities input.
     - Bare `--json` (without `=`) remains the global output-format flag.
   - `--file <path>`: Path to JSON file containing entity array. Use for long payloads.
-  - `--observation-source <kind>`: Classify the *kind* of write. Closed enum — `sensor | llm_summary | workflow_state | human | import | sync` (default `llm_summary`). **Breaking change in v0.18.x (was open in v0.17):** arbitrary strings are rejected. Put custom v0.17 labels (e.g. `cboe_live`, `stale_cache`) in the free-form `data_source` field and map the closest enum value here. See [Migrating from v0.17 to v0.18](fleet_onboarding.md#migrating-observation_source-from-v017-to-v018).
+  - `--observation-source <kind>`: Classify the _kind_ of write. Closed enum — `sensor | llm_summary | workflow_state | human | import | sync` (default `llm_summary`). **Breaking change in v0.18.x (was open in v0.17):** arbitrary strings are rejected. Put custom v0.17 labels (e.g. `cboe_live`, `stale_cache`) in the free-form `data_source` field and map the closest enum value here. See [Migrating from v0.17 to v0.18](fleet_onboarding.md#migrating-observation_source-from-v017-to-v018).
   - `--interpretation-source-id <id>` / `--interpretation-source-ref <structured|unstructured>` plus `--interpretation-config <json>`: Opt into Source -> Interpretation -> Observation provenance for source-derived extraction. Omit for ordinary already-structured/chat-native facts.
   - Silent-failure guard (v0.5.1+): when a commit-mode store returns `entities_created=0`, no resolved entities, and is not an idempotency replay (`replayed: true`), the CLI emits a non-fatal stderr warning so agents/humans don't mistake an empty result for success. Typical root cause: fields nested under `attributes` (see v0.5.0 breaking change) or mismatched `user_id` scope.
   - Idempotency replays: `POST /store` returns `replayed: true` when a request is a deterministic re-commit of a previously committed `(user_id, idempotency_key)` tuple. Use this to distinguish "same call, no new work" from "call produced zero entities."
@@ -704,7 +761,7 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
   - `--entities <path>` (required): JSON file containing the entity array extracted by the caller.
   - `--source-file <path>` (required): Raw source artifact (PDF, transcript, CSV, etc.) attached as provenance.
   - `--user-id <id>` / `--idempotency-key <key>` / `--file-idempotency-key <key>`: same semantics as `neotoma store`.
-  - `--plan` / `--dry-run`: Preview planned actions without committing.
+  - `--plan` / `--dry-run`: Preview planned actions without committing. Nothing is persisted: no source row, no stored file, no observations and no entities are written, and `source_id` is `null` in the response.
   - `--strict`: Refuse silent merges (schema `canonical_name_fields` must match, or `--target-id` must be supplied).
   - `--source-upload` (v0.5.1+): Force base64 upload of the source file via `file_content`. Use this when the CLI and API run on different machines so the server can't read the CLI's local filesystem.
   - `--source-content` (v0.5.1+): Alias for `--source-upload`.
@@ -781,6 +838,46 @@ The mirror is a derived artifact: SQLite is the only source of truth. Mirror fil
   - Targets a harness only when its **base** directory exists (e.g. `~/.cursor`), and creates the `skills` subdirectory if missing — so a harness installed later is picked up on the next sync. Cursor uses `.cursor/skills` (not Cursor's separate built-in `.cursor/skills-cursor` root).
   - Reconciliation: a single whole-directory symlink when the target is absent or already ours; a per-skill symlink fallback that preserves any foreign content when the target holds non-Neotoma skills. Foreign content is never overwritten or deleted.
   - Exit code `1` when the source is missing or any per-skill link fails (errors are surfaced per harness in both pretty and `--json` output); otherwise `0`.
+  - `--include-instance-skills`: Opt-in, **CLI-only** capability with no MCP equivalent (materialization writes to the invoking machine's local filesystem, which has no server-side analog). Also fetch every `enabled: true` `skill` entity visible to the authenticated user on the connected instance and materialize them as real `SKILL.md` files under `~/.neotoma/instance-skills/<instance-host>/`, then link them into harnesses via the same per-skill-symlink mechanism as package skills. Package-shipped skills always win on a name collision — an instance skill whose slug collides is skipped with a warning, never overwritten. Idempotent: re-running updates changed rows and prunes materialized dirs whose row is gone or disabled, but only dirs carrying Neotoma's own provenance marker, so a user-authored directory that happens to share a slug is never touched. See [`docs/skills/skill_strategy.md`](../skills/skill_strategy.md) for the full design.
+  - `--include-instance-scripts` (implies `--include-instance-skills`): Additionally fetch script attachments (`file_asset` entities a skill row `EMBEDS`), verify each download's SHA-256 against the recorded `content_hash`, and write approved ones to `<skill>/scripts/<filename>`. Gated by a hash-pin consent manifest at `~/.neotoma/instance-skills/approvals.json` (`<instance>/<skill>/<filename>` → approved sha256): a script whose hash is not yet approved, or whose hash changed since a prior approval, is refused (not written) and reported, not silently skipped. `original_filename` is treated as hostile input at this boundary — it is rejected outright (never rewritten) if it is empty, absolute, contains a path separator, is `.`/`..`, or contains a null byte, and the write additionally asserts the resolved path stays inside the skill's `scripts/` directory before writing.
+  - `--approve-scripts`: Trust these specific instance-script hashes to be written to disk and pin them as approved for future `--include-instance-scripts` runs. This is the one flag in `skills sync` that changes a security posture — it is not a generic "confirm the sync" switch, it is an execution-trust decision scoped to the exact script bytes hashed on this run. Without this flag, unapproved or changed-hash scripts are reported as blocked and not written. This module only downloads, verifies, and writes files — it never executes, spawns, or evaluates anything. (`--approve` is a deprecated, hidden alias kept for backward compatibility; prefer `--approve-scripts`.)
+
+**Worked example: the two-step consent flow**
+
+A collaborator on a shared instance runs `skills sync` with instance scripts enabled for the first time. The script is blocked pending review; after reading it, they re-run with `--approve-scripts` to pin the hash and write the file.
+
+```bash
+# Step 1: fetch instance skills and their script attachments. First run: nothing is
+# approved yet, so any script attachment is reported as blocked, not written to
+# <skill>/scripts/ — the bytes are downloaded only in-memory to compute the hash below.
+neotoma skills sync --include-instance-scripts
+
+# Skills source: /usr/local/lib/node_modules/neotoma/skills (scope=user)
+#   claude-code: up-to-date (whole-dir-symlink, dir-symlink) → ~/.claude/skills
+# All harnesses already up-to-date.
+# Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
+#   updated: deploy-helper
+#   claude-code: 3 instance skill link(s) → ~/.claude/skills
+#   ⚠ script not written (unapproved): deploy-helper/scripts/rollout.sh (sha256:9f86d081884c) — review with `neotoma sources content src_a1b2c3d4`, then re-run with --approve-scripts
+
+# Step 2: review the script's content before trusting it. The blocked message names the
+# sources.id (`src_a1b2c3d4` above) needed to print the script's actual bytes —
+# `neotoma sources get <id>` only returns metadata (hash, filename); `sources content`
+# downloads and prints the real content to stdout for review:
+neotoma sources content src_a1b2c3d4
+# #!/bin/sh
+# echo "rolling out release..."
+# ...
+
+# Step 3: satisfied it's safe, re-run with --approve-scripts to pin the hash and write the file.
+neotoma skills sync --include-instance-scripts --approve-scripts
+
+# Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
+#   claude-code: 3 instance skill link(s) → ~/.claude/skills
+#   script written: deploy-helper/scripts/rollout.sh (hash approved and recorded)
+```
+
+On every later sync, as long as the script's content hasn't changed, it is written silently (no re-approval needed — the `(hash approved and recorded)` suffix only appears the run a hash is newly pinned). If the script's content ever changes, the new hash is blocked again with the same two-step flow: review, then re-run with `--approve-scripts`.
 
 For continuous mirroring, install the `com.neotoma.skills-sync` LaunchAgent with `npm run setup:launchd-skills-sync` (macOS; watches `skills/` and re-runs `neotoma skills sync` on change). See [`npm_scripts.md`](npm_scripts.md#macos-launchagents).
 
@@ -794,6 +891,18 @@ For continuous mirroring, install the `com.neotoma.skills-sync` LaunchAgent with
   - On validation failure, the draft file is preserved under `~/.config/neotoma/edit-drafts/<entity_id>-<ts>.yaml` and the path is printed so the user can rerun `neotoma edit <id>`.
 
 The CLI and the Inspector share one `applyBatchCorrection` backend (`src/services/batch_correction.ts`), so both surfaces have identical semantics.
+
+### Array item patch
+
+- `neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue>`: Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write.
+  - `keyValue` must parse as a portable non-null JSON scalar (string, boolean, or finite number within the inclusive safe-integer range); objects, arrays, null, and unsafe numbers are rejected.
+  - `--item-json <json>`: JSON object of fields to set on the item (merged onto the existing item, or used to create it if the key is not yet present).
+  - `--expected-item-version <version>`: Content-hash version of the item as last observed (from a prior patch's `item_version`). A stale value refuses with a structured conflict (`status: "conflict"`, `current_item` / `current_item_version` in the output, non-zero exit code) instead of overwriting; nothing is written.
+  - `--expected-item-absent`: Create only if the keyed item is absent. Two concurrent creators produce exactly one success and one structured conflict.
+  - Two patches against DIFFERENT keys on the same field both succeed regardless of ordering. This is the fix for the lost-update pattern where a caller reads the whole array, edits one row locally, and writes the full array back — which can silently discard a concurrent writer's disjoint row.
+  - Only applies to array fields whose active schema declares `merge_policies.<field>.strategy: "merge_array_by_key"` with the same `key_field` (see `docs/subsystems/reducer.md` §3.5); missing or mismatched policy fails closed before any write.
+
+For non-array fields, `neotoma corrections create <entityId> --field-name <field> --corrected-value <value> --expected-version <entity_version>` provides entity-level CAS. The CLI resolves the stored entity type when `--entity-type` is omitted. A stale token exits non-zero with `ERR_FIELD_VERSION_CONFLICT`, the stored token, and retry guidance; an identical idempotency replay returns the original observation and value before evaluating the now-stale CAS token.
 
 ### Memory export
 
@@ -1035,7 +1144,10 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
   - `--body <json>`: JSON body override.
   - `--query <json>`: JSON query override.
   - `--path <json>`: JSON path override.
+  - `--guest-access-token <token>`: Use an entity-scoped guest bearer token instead of the configured owner token. It cannot be combined with `--skip-auth` or `--aauth`.
   - `--skip-auth`: Skip auth token for public endpoints.
+  - `--aauth`: Sign the request with the configured AAuth key instead of a bearer token.
+  - `eventsStream` writes raw SSE frames to stdout until the server closes the stream. Example: `neotoma request --operation eventsStream --guest-access-token <token> --query '{"subscription_id":"<id>"}'`.
 
 ## Configuration and storage paths
 

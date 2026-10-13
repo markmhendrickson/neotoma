@@ -43,6 +43,46 @@ describe("contract mappings", () => {
     }
   });
 
+  it("declares the MCP Streamable HTTP operation and server/discover contract (#2070)", async () => {
+    const openApiPath = path.resolve(process.cwd(), "openapi.yaml");
+    const raw = await fs.readFile(openApiPath, "utf-8");
+    const spec = yaml.load(raw) as {
+      paths?: Record<
+        string,
+        Record<string, { operationId?: string; parameters?: Array<{ in?: string; name?: string }> }>
+      >;
+      components?: { schemas?: Record<string, { required?: string[]; properties?: object }> };
+    };
+
+    const operation = spec.paths?.["/mcp"]?.post;
+    expect(operation?.operationId).toBe("mcpStreamableHttpPost");
+    const headerNames = (operation?.parameters ?? [])
+      .filter((p) => p.in === "header")
+      .map((p) => p.name);
+    expect(headerNames).toEqual(
+      expect.arrayContaining(["MCP-Protocol-Version", "Mcp-Method", "Mcp-Name", "Mcp-Session-Id"])
+    );
+
+    const discover = spec.components?.schemas?.McpServerDiscoverResult;
+    expect(discover?.required).toEqual(
+      expect.arrayContaining(["resultType", "supportedVersions", "capabilities"])
+    );
+    expect(Object.keys(discover?.properties ?? {})).toContain("instructions");
+    const meta = spec.components?.schemas?.McpRequestMeta;
+    expect(Object.keys(meta?.properties ?? {})).toEqual(
+      expect.arrayContaining([
+        "io.modelcontextprotocol/protocolVersion",
+        "io.modelcontextprotocol/clientCapabilities",
+      ])
+    );
+
+    const mapping = OPENAPI_OPERATION_MAPPINGS.find(
+      (m) => m.operationId === "mcpStreamableHttpPost"
+    );
+    expect(mapping).toMatchObject({ method: "post", path: "/mcp", adapter: "infra" });
+    expect(mapping?.notes).toContain("server/discover");
+  });
+
   it("requires adapters for all mapped operations", () => {
     for (const mapping of OPENAPI_OPERATION_MAPPINGS) {
       if (mapping.adapter === "infra") {
@@ -50,6 +90,17 @@ describe("contract mappings", () => {
       }
       expect(mapping.mcpTool || mapping.cliCommand).toBeTruthy();
     }
+  });
+
+  it("exposes the SSE subscription stream through the natural CLI request surface", () => {
+    expect(
+      OPENAPI_OPERATION_MAPPINGS.find((entry) => entry.operationId === "eventsStream")
+    ).toMatchObject({
+      method: "get",
+      path: "/events/stream",
+      adapter: "cli",
+      cliCommand: "request --operation eventsStream",
+    });
   });
 
   it("ensures MCP tool mappings resolve to OpenAPI operationIds", () => {

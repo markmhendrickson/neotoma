@@ -44,10 +44,7 @@ describe("fleet-general agent_* schemas v0.1", () => {
   it("registers all six entity types", () => {
     const registered = getRegisteredEntityTypes();
     for (const entityType of AGENT_RUNTIME_TYPES) {
-      expect(
-        registered,
-        `expected ${entityType} to be registered`,
-      ).toContain(entityType);
+      expect(registered, `expected ${entityType} to be registered`).toContain(entityType);
     }
   });
 
@@ -65,15 +62,15 @@ describe("fleet-general agent_* schemas v0.1", () => {
       const fieldDef = schema!.schema_definition.fields[identityField];
       expect(
         fieldDef,
-        `${entityType} is missing required identity field ${identityField}`,
+        `${entityType} is missing required identity field ${identityField}`
       ).toBeDefined();
       expect(fieldDef!.required).toBe(true);
 
       expect(
         schema!.schema_definition.canonical_name_fields,
-        `${entityType} must declare canonical_name_fields`,
+        `${entityType} must declare canonical_name_fields`
       ).toBeDefined();
-    },
+    }
   );
 
   it("agent_attempt.task_id and agent_outcome.attempt_id are declared as required link fields", () => {
@@ -105,5 +102,67 @@ describe("fleet-general agent_* schemas v0.1", () => {
       expect(Object.keys(fields)).not.toContain("agent_id");
       expect(Object.keys(fields)).not.toContain("agent_sub");
     }
+  });
+});
+
+describe("agent_session + session_transcript schemas v0.1", () => {
+  it("registers agent_session and session_transcript", () => {
+    const registered = getRegisteredEntityTypes();
+    expect(registered).toContain("agent_session");
+    expect(registered).toContain("session_transcript");
+  });
+
+  it("agent_session uses joint identity on harness + native_session_id with reject collision policy", () => {
+    const s = getSchemaDefinition("agent_session");
+    expect(s, "agent_session schema missing").not.toBeNull();
+    expect(s!.entity_type).toBe("agent_session");
+    expect(s!.schema_version).toBe("0.1.0");
+    expect(s!.metadata?.category).toBe("agent_runtime");
+    expect(s!.schema_definition.fields.harness?.required).toBe(true);
+    expect(s!.schema_definition.fields.native_session_id?.required).toBe(true);
+    expect(s!.schema_definition.canonical_name_fields).toEqual(["harness", "native_session_id"]);
+    expect(s!.schema_definition.name_collision_policy).toBe("reject");
+  });
+
+  it("session_transcript is content-addressed (identity on content_hash)", () => {
+    const s = getSchemaDefinition("session_transcript");
+    expect(s, "session_transcript schema missing").not.toBeNull();
+    expect(s!.entity_type).toBe("session_transcript");
+    expect(s!.schema_version).toBe("0.1.0");
+    expect(s!.metadata?.category).toBe("agent_runtime");
+    expect(s!.schema_definition.fields.content_hash?.required).toBe(true);
+    expect(s!.schema_definition.canonical_name_fields).toEqual(["content_hash"]);
+  });
+
+  it("agent_session DOES carry denormalized aauth_sub + trigger provenance, unlike the fleet LCD types", () => {
+    // The fleet types (agent_task/attempt/outcome) keep agent identity in
+    // provenance via AAuth and forbid an agent_sub field. agent_session is a
+    // session-level record where aauth_sub is a denormalized *content* field
+    // (which agent produced the session) used for discovery/filtering; the
+    // authoritative provenance still lives in the linked harness_event /
+    // participation_record / agent_attempt entities.
+    const fields = getSchemaDefinition("agent_session")!.schema_definition.fields;
+    expect(Object.keys(fields)).toContain("aauth_sub");
+    expect(Object.keys(fields)).toContain("trigger_kind");
+    expect(Object.keys(fields)).toContain("kind");
+  });
+
+  it("declares reference_fields for parent_session_id and session_transcript.agent_session_id", () => {
+    const session = getSchemaDefinition("agent_session")!;
+    const transcript = getSchemaDefinition("session_transcript")!;
+    expect(session.schema_definition.reference_fields).toEqual([
+      {
+        field: "parent_session_id",
+        target_entity_type: "agent_session",
+        relationship_type: "PART_OF",
+      },
+    ]);
+    expect(transcript.schema_definition.reference_fields).toEqual([
+      {
+        field: "agent_session_id",
+        target_entity_type: "agent_session",
+        relationship_type: "PART_OF",
+      },
+    ]);
   });
 });

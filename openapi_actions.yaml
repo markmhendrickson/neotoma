@@ -299,35 +299,11 @@ components:
             properties:
               relationship_type:
                 type: string
-                enum:
-                - PART_OF
-                - CORRECTS
-                - REFERS_TO
-                - SETTLES
-                - DUPLICATE_OF
-                - DEPENDS_ON
-                - SUPERSEDES
-                - EMBEDS
-                - works_at
-                - owns
-                - manages
-                - part_of
-                - related_to
-                - depends_on
-                - references
-                - transacted_with
-                - member_of
-                - reports_to
-                - located_at
-                - created_by
-                - funded_by
-                - acquired_by
-                - subsidiary_of
-                - partner_of
-                - competitor_of
-                - supplies_to
-                - contracted_with
-                - invested_in
+                description: >-
+                  Relationship type. The vocabulary is a runtime registry, not a closed en
+                  um: call list_relationship_types to read what this instance accepts, and
+                   register_relationship_type to add to it. Names are identifier-shaped an
+                  d casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
               source_index:
                 type: integer
                 minimum: 0
@@ -414,35 +390,11 @@ components:
             properties:
               relationship_type:
                 type: string
-                enum:
-                - PART_OF
-                - CORRECTS
-                - REFERS_TO
-                - SETTLES
-                - DUPLICATE_OF
-                - DEPENDS_ON
-                - SUPERSEDES
-                - EMBEDS
-                - works_at
-                - owns
-                - manages
-                - part_of
-                - related_to
-                - depends_on
-                - references
-                - transacted_with
-                - member_of
-                - reports_to
-                - located_at
-                - created_by
-                - funded_by
-                - acquired_by
-                - subsidiary_of
-                - partner_of
-                - competitor_of
-                - supplies_to
-                - contracted_with
-                - invested_in
+                description: >-
+                  Relationship type. The vocabulary is a runtime registry, not a closed en
+                  um: call list_relationship_types to read what this instance accepts, and
+                   register_relationship_type to add to it. Names are identifier-shaped an
+                  d casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
               source_index:
                 type: integer
                 minimum: 0
@@ -543,35 +495,11 @@ components:
       properties:
         relationship_type:
           type: string
-          enum:
-          - PART_OF
-          - CORRECTS
-          - REFERS_TO
-          - SETTLES
-          - DUPLICATE_OF
-          - DEPENDS_ON
-          - SUPERSEDES
-          - EMBEDS
-          - works_at
-          - owns
-          - manages
-          - part_of
-          - related_to
-          - depends_on
-          - references
-          - transacted_with
-          - member_of
-          - reports_to
-          - located_at
-          - created_by
-          - funded_by
-          - acquired_by
-          - subsidiary_of
-          - partner_of
-          - competitor_of
-          - supplies_to
-          - contracted_with
-          - invested_in
+          description: >-
+            Relationship type. The vocabulary is a runtime registry, not a closed en
+            um: call list_relationship_types to read what this instance accepts, and
+             register_relationship_type to add to it. Names are identifier-shaped an
+            d casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
         source_entity_id:
           type: string
         target_entity_id:

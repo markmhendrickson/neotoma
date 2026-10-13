@@ -66,23 +66,32 @@ describe("MCP store target_id identity conflicts", () => {
     createdEntityIds.push(canonicalIssueId);
     createdSourceIds.push(canonicalPayload.source_id as string);
 
-    const titleResult = await store({
+    // A second, SEPARATE issue that carries no GitHub identity of its own — the
+    // entity whose target_id the conflict assertion below tries to repoint onto
+    // the canonical issue's (github_number, repo). It keys on local_issue_id:
+    // #1778 made `title` deliberately non-identifying for issues, so a write
+    // with neither the (github_number, repo) composite nor local_issue_id now
+    // fails loudly (CanonicalNameUnresolvedError) rather than minting a
+    // title-keyed duplicate. Local identity keeps this fixture a distinct
+    // entity, which is all the conflict assertion needs from it.
+    const localResult = await store({
       user_id: userId,
       entities: [
         {
           entity_type: "issue",
-          title: `Title-keyed issue ${testRun}`,
+          title: `Local-keyed issue ${testRun}`,
+          local_issue_id: `local-${testRun}`,
           status: "open",
           data_source: testRun,
         },
       ],
-      idempotency_key: `${testRun}-title`,
+      idempotency_key: `${testRun}-local`,
     });
-    const titlePayload = JSON.parse(titleResult.content[0].text);
-    const titleIssueId = titlePayload.entities[0].entity_id as string;
-    createdEntityIds.push(titleIssueId);
-    createdSourceIds.push(titlePayload.source_id as string);
-    expect(titleIssueId).not.toBe(canonicalIssueId);
+    const localPayload = JSON.parse(localResult.content[0].text);
+    const localIssueId = localPayload.entities[0].entity_id as string;
+    createdEntityIds.push(localIssueId);
+    createdSourceIds.push(localPayload.source_id as string);
+    expect(localIssueId).not.toBe(canonicalIssueId);
 
     await expect(
       store({
@@ -91,7 +100,7 @@ describe("MCP store target_id identity conflicts", () => {
         entities: [
           {
             entity_type: "issue",
-            target_id: titleIssueId,
+            target_id: localIssueId,
             title: "Canonical GitHub issue",
             status: "open",
             github_number: githubNumber,
@@ -100,7 +109,7 @@ describe("MCP store target_id identity conflicts", () => {
           },
         ],
         idempotency_key: `${testRun}-conflict`,
-      }),
+      })
     ).rejects.toThrow(/Identity conflict: target_id/);
   });
 });

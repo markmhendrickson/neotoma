@@ -45,9 +45,14 @@ Server-side tier resolution after the AAuth signature is verified:
 
 1. If the JWT carries `cnf.attestation` AND the verifier returns
    `{ verified: true }`, resolve to `hardware`.
-2. Else, if the verified `iss` (or `iss:sub` composite) is present in the
-   operator allowlist (`NEOTOMA_OPERATOR_ATTESTED_ISSUERS` /
-   `NEOTOMA_OPERATOR_ATTESTED_SUBS`), resolve to `operator_attested`.
+2. Else, if the operator vouches for the verified signing key, resolve
+   to `operator_attested`. The key qualifies when its thumbprint is in
+   `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`, or when it is pinned
+   (`match_thumbprint`) by an active `agent_grant` whose recorded
+   `match_iss` (or `match_iss:match_sub` composite) is in
+   `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`
+   and the agent token's own `iss` / `sub` agree with that grant. The
+   token's `iss` / `sub` are never matched against the lists directly.
 3. Else, resolve to `software`.
 
 Verifier failures (chain invalid, key not bound, format unsupported) MUST
@@ -379,8 +384,9 @@ additive.
 | `NEOTOMA_AAUTH_ATTESTATION_CA_PATH` | Absolute path to a PEM file or a directory of PEM files. | Adds operator-managed CAs to the merged trust set used for chain validation. |
 | `config/aauth/tpm_attestation_roots/` | In-repo directory of bundled TPM 2.0 AIK root CAs (`.pem` / `.crt`, recursive). | Always merged into the trust set for the `tpm2` verifier. Vendor sub-directories (Infineon, STMicro, Intel, AMD, Microsoft) document provenance per `README.md`. Operators can supplement via `NEOTOMA_AAUTH_ATTESTATION_CA_PATH`. |
 | `NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH` | Absolute path to a JSON file containing an array of WebAuthn AAGUIDs (RFC 4122 lower-case hyphenated). | Restricts which authenticator AAGUIDs the `webauthn-packed` verifier admits. Empty/missing file = no AAGUID gating (logging-only ramp). |
-| `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` | CSV of `iss` values. | Promotes verified AAuth signatures whose `iss` matches to `operator_attested`. |
-| `NEOTOMA_OPERATOR_ATTESTED_SUBS` | CSV of `iss:sub` composite values. | Same as above but pinned to a specific `(iss, sub)` pair. |
+| `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS` | CSV of RFC 7638 key thumbprints. | Promotes verified AAuth signatures made by a listed key to `operator_attested`. |
+| `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` | CSV of `iss` values. | Promotes a verified signature to `operator_attested` when its key is pinned by an active grant whose `match_iss` is listed. |
+| `NEOTOMA_OPERATOR_ATTESTED_SUBS` | CSV of `iss:sub` composite values. | Same as above, matched against the pinned grant's `match_iss:match_sub`. |
 
 The trust loader is fail-open: missing or unreadable operator inputs log
 a single warning and continue with the bundled root. This matches the
