@@ -97,13 +97,13 @@ Applies to `neotoma@0.29.1`. Every entry has a tracking issue.
 
 ## Reads and export
 
-### As-of reads are per entity
+### As-of reads are per entity and use write clocks
 
-**What you will observe.** `retrieve_entity_snapshot` reads one entity as of a past time, with `at` (event time) and `at_ingested` (ingestion time). It is the only MCP tool that takes an as-of time, so there is no as-of query across the whole record: `retrieve_entities` and the other list and search tools return current state only.
+**What you will observe.** `retrieve_entity_snapshot` reads one entity as of a past write. `at` filters `observed_at`, which public `store` and `correct` stamp from the server clock when they write the observation; `at_ingested` filters the row-insertion clock in `created_at`. Neither cutoff is valid time: domain dates such as `measured_at` and `date` are ordinary fields, and Neotoma does not yet represent valid-time intervals. This is also the only MCP tool that takes an as-of cutoff, so there is no as-of query across the whole record: `retrieve_entities` and the other list and search tools return current state only.
 
-**Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at`.
+**Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at`. For domain-time questions, store the relevant dates as fields and apply the date or interval logic in the consuming application.
 
-**Tracking.** [#2700](https://github.com/markmhendrickson/neotoma/issues/2700)
+**Tracking.** Record-wide as-of reads: [#2700](https://github.com/markmhendrickson/neotoma/issues/2700). Valid-time intervals: [#2034](https://github.com/markmhendrickson/neotoma/issues/2034).
 
 ### Export carries current state only
 

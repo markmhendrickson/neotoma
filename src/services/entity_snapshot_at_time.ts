@@ -8,8 +8,10 @@
  *
  * Semantics
  * ---------
- * - `at`          — upper bound on `observed_at` (event time).  "What had happened by T?"
- * - `at_ingested` — upper bound on `created_at` (ingestion time). "What did we KNOW by T?"
+ * - `at`          — upper bound on `observed_at` (assertion time for public writes).
+ * - `at_ingested` — upper bound on `created_at` (row-insertion time).
+ * - Public store/correct stamp these clocks during the write; they need not match.
+ *   Domain date fields are ordinary data, not a valid-time axis.
  * - When both are supplied, both bounds are applied (AND), giving the most
  *   conservative "knowledge-as-of" view and preventing look-ahead leaks from
  *   backfilled / late-arriving observations.
@@ -56,7 +58,7 @@ export interface EntitySnapshotAtTimeResult {
  *
  * @param entityId   - The entity to retrieve.
  * @param userId     - Scope reads to this user (required; prevents cross-user reads).
- * @param at         - Optional event-time upper bound (ISO 8601).
+ * @param at         - Optional `observed_at` upper bound (ISO 8601); assertion time, not valid time.
  * @param atIngested - Optional ingestion-time upper bound (ISO 8601).
  *
  * @returns
