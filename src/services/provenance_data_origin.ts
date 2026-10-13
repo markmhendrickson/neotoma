@@ -66,7 +66,7 @@ export function splitEntityDataOrigins(
   requestOrigin?: DataOrigin | null
 ): SplitEntityDataOrigins {
   const defaultOrigin = requestOrigin ? normalizeDataOrigin(requestOrigin) : undefined;
-  let any = Boolean(defaultOrigin);
+  let hasAnyOrigin = Boolean(defaultOrigin);
   const origins: Array<DataOrigin | undefined> = [];
   const cleaned = entities.map((entity) => {
     if (
@@ -79,11 +79,11 @@ export function splitEntityDataOrigins(
     }
     const { [DATA_ORIGIN_ENTITY_KEY]: own, ...rest } = entity;
     const effective = normalizeDataOrigin(own);
-    any = true;
+    hasAnyOrigin = true;
     origins.push(effective);
     return rest;
   });
-  return { entities: cleaned, origins: any ? origins : undefined };
+  return { entities: cleaned, origins: hasAnyOrigin ? origins : undefined };
 }
 
 /**

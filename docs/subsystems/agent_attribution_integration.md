@@ -523,6 +523,63 @@ The `ExternalActorBadge` component shows login, verification pill,
 and detailed tooltip. The `IssueAuthorLine` extracts and displays
 `external_actor` from provenance alongside existing AAuth attribution.
 
+## 8a. Data origin provenance (#2242)
+
+A third facet, `data_origin`, answers a different question from both of the
+above: not *who wrote to Neotoma* (attribution) or *who authored the upstream
+artifact* (`external_actor`), but **where the stored data came from** — the
+file, sheet row, URL, email or chat message, or API endpoint.
+
+| Facet | Question | Written by | Trust |
+|---|---|---|---|
+| Attribution keys (`agent_*`, `client_name`, `attribution_tier`, …) | Which agent wrote this row? | Server (AAuth middleware, MCP `initialize`) | Verified for AAuth tiers; `client_name` is self-reported |
+| `external_actor` | Who authored the upstream artifact? | Server from verified paths, or a caller claim (`verified_via: claim`) | Per `verified_via` |
+| `data_origin` | Where did the data come from? | Caller, on `store` | Always a claim |
+
+### Write path
+
+- `store` (MCP), `POST /store`, and `neotoma store --data-origin '<json>'`
+  accept a request-level `data_origin`. Shape (`DataOrigin` in
+  `openapi.yaml`): `kind` (`file | url | email | message | api | manual | other`),
+  `locator` (required unless `manual`), and optional `part`, `system`, `url`
+  (absolute http(s)), `producer` (script/agent@revision), `retrieved_at`,
+  `notes`. The object is strict: unknown keys are rejected, so attribution
+  keys cannot be smuggled in through it.
+- An entity's own `data_origin` key inside `entities[]` overrides the request
+  value for that entity (precedence: entity → request → none). It is a
+  reserved control key like `target_id` / `intent` and never becomes an
+  entity field.
+- Each created observation gets `provenance.data_origin` next to — never
+  merged into — the attribution keys and `external_actor`. The effective
+  origin is also inlined into the request's stored structured payload (the
+  `sources` row bytes), so the idempotency content hash covers it: an exact
+  replay replays; reusing a key with a different origin is
+  `ERR_IDEMPOTENCY_MISMATCH`. Without an origin the stored bytes are unchanged.
+- A file-only store with `data_origin` is refused: the stored file is already
+  its own origin record. Implementation: `src/services/provenance_data_origin.ts`.
+
+### Read path
+
+- `list_observations` (MCP + HTTP): `provenance.data_origin` on each row.
+- `retrieve_field_provenance` (MCP): `source_observation.data_origin`; HTTP
+  `get_field_provenance` returns the full observation rows.
+- `retrieve_entity_snapshot` (MCP, JSON and compact text) and HTTP
+  `get_entity_snapshot`: `data_origins`, mapping each observation id the
+  snapshot's field provenance cites to its origin.
+- Absent means absent on every surface — no key when no origin was supplied.
+- Guest-token reads have `data_origin` / `data_origins` stripped, by the same
+  send-time redaction that withholds `authenticated_actor_id`
+  (`src/services/attribution_redaction.ts`): locators routinely carry local
+  paths, mailbox ids, and URL tokens.
+
+### What it is not
+
+- Not proof. Neotoma never fetches, opens, or validates a locator or URL.
+- Not a replacement for storing the source itself: when the original bytes are
+  available, store the file (and an `interpretation` link); `data_origin`
+  points at origins whose bytes are not stored.
+- Orthogonal to `observation_source`, which classifies the *kind* of write.
+
 ## 9. Where to go from here
 
 - Model / tier derivation: [`src/crypto/agent_identity.ts`](../../src/crypto/agent_identity.ts)

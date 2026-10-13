@@ -2634,7 +2634,7 @@ components:
               `target_id`, `intent`, and `data_origin` (#2242) — a per-entity
               `DataOrigin` that overrides the request-level `data_origin` for
               this entity only. An invalid `data_origin` is rejected with
-              `ERR_VALIDATION` at path `entities[i].data_origin`.
+              `VALIDATION_INVALID_FORMAT` at path `entities[i].data_origin`, with a structured `details.hint` naming the reserved key.
         relationships:
           type: array
           description: |

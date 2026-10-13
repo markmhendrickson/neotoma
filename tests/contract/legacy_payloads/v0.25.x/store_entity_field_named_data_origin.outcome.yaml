@@ -1,0 +1,17 @@
+endpoint: "POST /store"
+outcome: rejected
+error_code: VALIDATION_INVALID_FORMAT
+hint_match: "/reserved per-entity origin override.*rename that field/i"
+notes: |
+  Through v0.25.x, `entities[]` items were fully open, so an entity could carry
+  its own free-form field named `data_origin` (here a string), stored like any
+  other field.
+
+  #2242 reserves `data_origin` inside each entity as the per-entity data-origin
+  override (an object with at least `kind`), peeled off before field
+  validation exactly like `target_id` / `intent`, and stamped on the
+  observation as `provenance.data_origin`. A value that is not a valid origin
+  object is now refused with `400 VALIDATION_INVALID_FORMAT` at path
+  `entities[0].data_origin`, and the structured `details.hint` tells the
+  caller to rename their own field (e.g. to `data_source`). No built-in schema
+  declares a `data_origin` field.

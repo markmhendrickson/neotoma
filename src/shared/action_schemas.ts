@@ -710,11 +710,21 @@ export const DataOriginSchema = z
 export type DataOrigin = z.infer<typeof DataOriginSchema>;
 
 /**
+ * Structured hint for the one tightening #2242 introduces: an entity that
+ * already carried its own field named `data_origin` now has it read as the
+ * reserved origin override. Surfaced as `details.hint` (via issue
+ * `params.hint`) per docs/subsystems/errors.md § Tightening-change hint
+ * obligation.
+ */
+export const DATA_ORIGIN_ENTITY_KEY_HINT =
+  "entities[i].data_origin is a reserved per-entity origin override: an object with at least " +
+  '`kind` (e.g. {"kind":"file","locator":"report.xlsx"}). If this entity type stores its own ' +
+  "field named data_origin, rename that field (e.g. to data_source).";
+
+/**
  * Validate every per-entity `data_origin` override in an `entities[]` array.
  * Entity objects are otherwise open, so this is the only place the reserved
- * key is checked; issues carry `[index, "data_origin", ...]` paths and a
- * message naming the reserved key so a caller whose schema happened to use a
- * plain `data_origin` field knows to rename it.
+ * key is checked; issues carry `[index, "data_origin", ...]` paths.
  */
 export function refineEntityDataOrigins(
   entities: Array<Record<string, unknown>> | undefined,
@@ -728,13 +738,11 @@ export function refineEntityDataOrigins(
     if (result.success) return;
     for (const issue of result.error.issues) {
       ctx.addIssue({
-        ...issue,
+        code: z.ZodIssueCode.custom,
         path: [index, DATA_ORIGIN_ENTITY_KEY, ...issue.path],
-        message:
-          `${issue.message} (entities[${index}].data_origin is a reserved per-entity ` +
-          "origin override: an object with at least `kind`. If this entity type stores " +
-          "its own field named data_origin, rename it, e.g. to data_source.)",
-      } as z.IssueData);
+        message: `Invalid reserved data_origin override: ${issue.message}`,
+        params: { hint: DATA_ORIGIN_ENTITY_KEY_HINT, cause: issue.code },
+      });
     }
   });
 }

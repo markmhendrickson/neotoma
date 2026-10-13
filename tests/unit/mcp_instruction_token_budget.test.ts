@@ -62,8 +62,15 @@ import {
  * Measured 145,194 chars (31,376 tokens). Ceiling set at 150,000 chars
  * (~32,400 tokens), roughly 3% of headroom: enough that an ordinary
  * documentation edit does not trip it, tight enough that a new section does.
+ *
+ * Raised to 150,500 for #2242 (the `data_origin` store field): the block sat
+ * at 149,979 chars, 21 below the old ceiling, and the store contract change
+ * needs one instruction line (~455 chars) telling agents to use the field —
+ * an interface agents are never told about is effectively invisible to them.
+ * The full field contract lives in the `store` tool description and input
+ * schema rather than here, to keep this addition to one line.
  */
-const FULL_BLOCK_MAX_CHARS = 150_000;
+const FULL_BLOCK_MAX_CHARS = 150_500;
 
 /**
  * Ceiling for the compact payload served when NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1.

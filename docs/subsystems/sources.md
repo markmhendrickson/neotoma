@@ -552,6 +552,16 @@ policy breach. See
 [`docs/developer/cli_agent_instructions.md`](../developer/cli_agent_instructions.md)
 `[ATTRIBUTION & AGENT IDENTITY]` for the full contract.
 
+### 10.6 Data Origin (#2242)
+
+Attribution says which agent wrote a record; it does not say where the data
+came from. For a stored file the `sources` row is that origin. For entities
+read from somewhere whose bytes are not stored (a sheet row, a web page, a
+message id, an API response), callers declare it with `data_origin` on
+`store`, stamped as `provenance.data_origin` on each observation and inlined
+into the structured source's stored JSON. See
+[`agent_attribution_integration.md` § 8a](./agent_attribution_integration.md#8a-data-origin-provenance-2242).
+
 ## 11. Security Model
 
 - **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access
