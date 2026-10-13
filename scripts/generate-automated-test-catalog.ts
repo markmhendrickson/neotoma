@@ -128,6 +128,13 @@ const suiteMeta: Record<string, SuiteMeta> = {
     command: "`npx vitest run tests/shared`",
     requirements: "Basic `.env`.",
   },
+  "tests/owned_reapproval": {
+    title: "Owned native reapproval fixture",
+    directory: "`tests/owned_reapproval/`",
+    runner: "`node --test` for wrapper checks; wrapper-mediated `vitest` for the opt-in native proof",
+    command: "`node --test tests/owned_reapproval/fixture_wrapper.test.mjs`; opt-in: `node scripts/run_owned_reapproval_fixture.mjs --baseline-suite context --baseline-case DraftInputValues.test_dev_and_approval_refuse_same_value_foreign_winner`",
+    requirements: "Set `OWNED_APP_CHECKOUT`, `OWNED_APP_EXPECTED_SHA`, and `OWNED_APP_PYTHON` from a clean exact application checkout and installed local toolchain. Ordinary `npx vitest run tests/owned_reapproval` intentionally skips the native case; a direct selected Vitest run refuses absent wrapper custody. Global setup exclusively creates the fresh private SQLite file before HTTP boot and removes its file and sidecars after success or failure; the wrapper removes its own run directory.",
+  },
   "frontend/src": {
     title: "Frontend Vitest tests",
     directory: "`frontend/src/`",
@@ -170,7 +177,7 @@ function isAutomatedTestFile(relativePath: string): boolean {
   if (relativePath.startsWith("playwright/tests/")) return relativePath.endsWith(".spec.ts");
   if (relativePath.startsWith("frontend/src/")) return /\.(test|spec)\.tsx?$/.test(relativePath);
   if (relativePath.startsWith("tests/") || relativePath.startsWith("src/")) {
-    return /\.(test|spec)\.tsx?$/.test(relativePath);
+    return /\.(test|spec)\.(tsx?|mjs)$/.test(relativePath);
   }
   return false;
 }

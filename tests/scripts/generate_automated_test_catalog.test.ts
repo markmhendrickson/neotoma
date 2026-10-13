@@ -87,6 +87,16 @@ afterEach(() => {
 });
 
 describe("generate-automated-test-catalog render path", () => {
+  it("advertises the opt-in owned native proof rather than a skipped inventory run", () => {
+    expect(freshCatalog).toContain("tests/owned_reapproval/fixture_wrapper.test.mjs");
+    expect(freshCatalog).toContain("node scripts/run_owned_reapproval_fixture.mjs --baseline-suite context --baseline-case DraftInputValues.test_dev_and_approval_refuse_same_value_foreign_winner");
+    expect(freshCatalog).toContain("OWNED_APP_CHECKOUT");
+    expect(freshCatalog).toContain("OWNED_APP_EXPECTED_SHA");
+    expect(freshCatalog).toContain("OWNED_APP_PYTHON");
+    expect(freshCatalog).toContain("intentionally skips");
+    expect(freshCatalog).toContain("Global setup exclusively creates the fresh private SQLite file before HTTP boot and removes its file and sidecars after success or failure");
+  });
+
   it("regenerates a stale catalog back to the correct content", () => {
     const stale = freshCatalog.replace("# Automated test catalog", "# Automated test catalog (STALE)");
     expect(stale).not.toBe(freshCatalog);

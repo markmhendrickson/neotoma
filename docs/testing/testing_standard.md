@@ -117,6 +117,25 @@ See `docs/testing/fixtures_standard.md`.
 ## Automated test catalog
 See `docs/testing/automated_test_catalog.md` for the canonical repo-wide inventory of automated tests and primary suite commands.
 
+The owned native reapproval proof is opt-in. Run the wrapper checks with
+`node --test tests/owned_reapproval/fixture_wrapper.test.mjs`. For one selected
+native case, supply `OWNED_APP_CHECKOUT` (a clean application checkout),
+`OWNED_APP_EXPECTED_SHA` (its exact commit), and `OWNED_APP_PYTHON` (a local
+interpreter with the application's test dependencies), then invoke
+`node scripts/run_owned_reapproval_fixture.mjs --baseline-suite context --baseline-case DraftInputValues.test_dev_and_approval_refuse_same_value_foreign_winner`.
+Ordinary Vitest discovery intentionally skips this native case. A selected
+direct Vitest invocation without wrapper custody fails before starting the
+case. The wrapper creates the private run directory and evidence; native
+Vitest global setup checks that the `.vitest` parent is owner-held and not
+writable by other accounts, then exclusively creates an empty owner-only SQLite
+file before the HTTP server imports database code. It rejects an existing file
+even when a caller fabricates custody metadata, and removes only the SQLite
+file and sidecars it created during normal teardown (including test refusal)
+or setup failure. A direct caller's pre-existing custody file remains theirs to
+remove. The wrapper removes its run directory and retains private evidence.
+Loopback binding is a test constraint, not an
+operating-system egress fence or proof of delivery behavior.
+
 The required baseline CI lane also runs
 `python3 -m unittest discover -s tests/scripts -p test_docker_context.py -v`.
 This uses Docker's actual matcher with a synthetic-only `FROM scratch` context,
