@@ -162,6 +162,28 @@ export function normalizeObservationSourceFlag(raw: string): ObservationSourceFl
   return normalized as ObservationSourceFlag;
 }
 
+/**
+ * Parse `store --data-origin <json>` (#2242). Only checks that the value is a
+ * JSON object; the server validates the shape (kind enum, locator rules) with
+ * the same schema on every transport, so the CLI does not fork that contract.
+ */
+export function parseDataOriginFlag(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"file","locator":"report.xlsx"}\'.'
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"url","locator":"https://example.com/page"}\'.'
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
   return placeholderText.length > 0 && buffer.length === 0 ? placeholderText : "";
 }
@@ -15072,6 +15094,11 @@ program
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .option(
+    "--data-origin <json>",
+    'Where the entities came from (#2242), e.g. \'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}\'. ' +
+      "Applies to every entity; an entity's own data_origin key overrides it. A claim, not proof."
+  )
+  .option(
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
   )
@@ -15105,6 +15132,7 @@ program
     let entities: unknown;
     let fileRelationships: unknown[] | undefined;
     let fileIdempotencyKey: string | undefined;
+    let fileDataOrigin: unknown;
     if (opts.entities) {
       entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
@@ -15117,6 +15145,9 @@ program
         }
         if (typeof envelope.idempotency_key === "string") {
           fileIdempotencyKey = envelope.idempotency_key;
+        }
+        if (envelope.data_origin !== undefined) {
+          fileDataOrigin = envelope.data_origin;
         }
         if (Array.isArray(envelope.entities)) {
           entities = envelope.entities;
@@ -15198,6 +15229,13 @@ program
         structuredBody.observation_source = normalizeObservationSourceFlag(
           opts.observationSource as string
         );
+      }
+      const dataOrigin =
+        opts.dataOrigin !== undefined
+          ? parseDataOriginFlag(opts.dataOrigin as string)
+          : fileDataOrigin;
+      if (dataOrigin !== undefined) {
+        structuredBody.data_origin = dataOrigin;
       }
       if (opts.file && !hasUnstructured) {
         const resolvedFile = path.isAbsolute(opts.file)

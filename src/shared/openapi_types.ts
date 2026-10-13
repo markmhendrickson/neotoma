@@ -3704,6 +3704,18 @@ export interface components {
       provenance?: {
         [key: string]: unknown;
       };
+      /**
+       * @description Caller-claimed data origins (#2242) of the observations this
+       *     snapshot's `provenance` cites: `observation_id → DataOrigin`.
+       *     Join a field through `provenance` to its observation id, then
+       *     here, to see where that value came from. Returned by
+       *     `get_entity_snapshot` / MCP `retrieve_entity_snapshot`. Omitted
+       *     entirely when no cited observation carries an origin; withheld
+       *     from guest-token reads.
+       */
+      data_origins?: {
+        [key: string]: components["schemas"]["DataOrigin"];
+      };
       /** Format: date-time */
       computed_at?: string;
       observation_count?: number;
@@ -3823,11 +3835,18 @@ export interface components {
        * @description Write-time agent attribution for this observation. Carries the
        *     `AgentAttribution` keys stamped by the AAuth middleware and
        *     MCP `initialize.clientInfo` fallback. Coexists with any
-       *     free-form provenance keys supplied at write time.
+       *     free-form provenance keys supplied at write time, including
+       *     `data_origin` (#2242): the caller-claimed origin of the data
+       *     (file, URL, message, API), present only when the store request
+       *     supplied one. `data_origin` is never merged into the attribution
+       *     keys and is withheld from guest-token reads.
        */
-      provenance?: {
+      provenance?: ({
+        data_origin?: components["schemas"]["DataOrigin"];
+      } & {
         [key: string]: unknown;
-      } & components["schemas"]["AgentAttribution"];
+      }) &
+        components["schemas"]["AgentAttribution"];
     };
     RelationshipSnapshot: {
       relationship_key?: string;
@@ -4166,6 +4185,47 @@ export interface components {
           };
         };
     /**
+     * @description Where stored data came from (#2242) — the file, sheet row, URL,
+     *     message, or API endpoint — as opposed to who wrote it (attribution,
+     *     `external_actor`). A caller claim, never verified: the server does not
+     *     fetch, open, or validate `locator` or `url`. Persisted on each created
+     *     observation as `provenance.data_origin`. `locator` is required unless
+     *     `kind` is `manual`. Every text field is single-line: control
+     *     characters, including newlines, are refused. Strip credentials,
+     *     signatures, and auth query parameters from `locator` and `url` before
+     *     sending; a `url` with embedded `user:pass@` is refused.
+     */
+    DataOrigin: {
+      /**
+       * @description Category of origin. `manual` = typed or confirmed by a person.
+       * @enum {string}
+       */
+      kind: "file" | "url" | "email" | "message" | "api" | "manual" | "other";
+      /**
+       * @description Primary pointer to the origin: a file path or name, URL, email or
+       *     chat message id, or API endpoint. Required unless `kind` is `manual`.
+       */
+      locator?: string;
+      /** @description Position within the locator, e.g. `sheet=Tickets;row=97`, `page=3`, `attachment=2`. */
+      part?: string;
+      /** @description System that holds the origin, e.g. `gmail`, `google_sheets`, `stripe`, `local_fs`. */
+      system?: string;
+      /**
+       * Format: uri
+       * @description Absolute http(s) link to the original, when `locator` is not itself a URL. Must not embed credentials (`user:pass@`).
+       */
+      url?: string;
+      /** @description Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`. */
+      producer?: string;
+      /**
+       * Format: date-time
+       * @description When the data was read from the origin (ISO 8601).
+       */
+      retrieved_at?: string;
+      /** @description Short free-text note about the derivation. */
+      notes?: string;
+    };
+    /**
      * @description Upstream artifact author (e.g. GitHub user) stamped into observation
      *     provenance alongside AAuth agent attribution. Matches
      *     `ExternalActorInputSchema` in `action_schemas.ts`.
@@ -4254,6 +4314,18 @@ export interface components {
        *     `ExternalActorInputSchema` (strict — no extra keys).
        */
       external_actor?: components["schemas"]["ExternalActorInput"];
+      /**
+       * @description Optional (#2242). Where the entities in this request came from.
+       *     Applies to every entity; an entity's own `data_origin` key
+       *     overrides it (precedence: entity → request → none). Stamped on
+       *     each created observation as `provenance.data_origin` and included
+       *     in the request's stored payload, so reusing an `idempotency_key`
+       *     with a different origin is `ERR_IDEMPOTENCY_MISMATCH`. Requires
+       *     `entities` (a file-only store is refused: the stored file is its
+       *     own origin record). A claim, not proof; separate from attribution
+       *     and from `observation_source`.
+       */
+      data_origin?: components["schemas"]["DataOrigin"];
       /** @description Required for structured path, optional for unstructured-only path. */
       idempotency_key?: string;
       /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */

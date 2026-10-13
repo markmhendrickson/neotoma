@@ -77,6 +77,14 @@ import {
  * the ceiling again. Headroom this thin means the next instruction edit of any
  * size trips the test: further growth should be weighed under #1885 (and offset
  * by condensing elsewhere) rather than raised piecemeal.
+ *
+ * #2242 (`data_origin` on store, PR #2636) adds one instruction line and did
+ * NOT raise the ceiling: the line was condensed to its required rules (pass
+ * `data_origin` for read-from content, entity value overrides, never replaces
+ * the per-entity `data_source`, strip credentials from `url`/`locator`) and
+ * two rationale sentences in the same section were shortened to pay for it.
+ * Baseline after that merge: measured 151,984 chars (~32,840 tokens),
+ * leaving 16 chars of headroom.
  */
 const FULL_BLOCK_MAX_CHARS = 152_000;
 

@@ -69,6 +69,8 @@ Each object in the array must be **flat** (all fields alongside `entity_type`). 
 
 For long payloads, use `neotoma store --observation-source llm_summary --file <path>` with a JSON file containing the entities array.
 
+Data origin (transport mapping for the MCP `data_origin` rule in **`docs/developer/mcp/instructions.md`**): pass `--data-origin '<json>'` (e.g. `'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}'`) or a top-level `data_origin` key in a `--file` envelope; a `data_origin` key inside one entity overrides it for that entity.
+
 ## Relationship creation (CLI backup)
 
 After storing entities, create relationships with:

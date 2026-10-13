@@ -41,7 +41,11 @@ import {
   emitObservationCreated,
   emitEntitySnapshotChange,
 } from "../events/substrate_store_emit.js";
-import type { ObservationSource } from "../shared/action_schemas.js";
+import type { DataOrigin, ObservationSource } from "../shared/action_schemas.js";
+import {
+  DATA_ORIGIN_PROVENANCE_KEY,
+  entitiesWithStoredDataOrigins,
+} from "./provenance_data_origin.js";
 import { buildObservationSourceOmittedWarning } from "./observation_source_warning.js";
 import { refreshEntitySnapshotEmbeddingAfterCommit } from "./entity_snapshot_embedding.js";
 
@@ -53,6 +57,8 @@ export interface ConditionalStoreOptions {
   observationSource?: ObservationSource;
   originalFilename?: string;
   strict?: boolean;
+  /** Effective data origin (#2242) for the single entity, already peeled off it. */
+  dataOrigin?: DataOrigin;
 }
 
 export async function storeConditionalStructured(options: ConditionalStoreOptions) {
@@ -69,9 +75,16 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
   delete actor.attributed_at;
   const observationSource = options.observationSource ?? DEFAULT_OBSERVATION_SOURCE;
   const filename = options.originalFilename?.trim() || null;
+  // #2242: the stored/fingerprinted entity carries its effective origin, so an
+  // exact retry replays and a changed origin is a different request. Without
+  // an origin this is `options.entities` unchanged (pre-#2242 fingerprints).
+  const storedEntities = entitiesWithStoredDataOrigins(
+    options.entities,
+    options.dataOrigin ? [options.dataOrigin] : undefined
+  );
   const request = {
     owner: options.userId,
-    entity,
+    entity: storedEntities[0],
     expected_entity_absent: true,
     actor,
     source_priority: options.sourcePriority,
@@ -99,8 +112,10 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
       await storeConditionKeyIdentity(tx, options.idempotencyKey)
     );
     const originalActor = { ...(row?.provenance ?? {}) } as Record<string, unknown>;
+    const originalDataOrigin = originalActor[DATA_ORIGIN_PROVENANCE_KEY] ?? null;
     delete originalActor.attributed_at;
     delete originalActor.store_operation_receipt;
+    delete originalActor[DATA_ORIGIN_PROVENANCE_KEY];
     if (
       error ||
       !row ||
@@ -120,6 +135,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
       row.source_priority !== options.sourcePriority ||
       row.observation_source !== observationSource ||
       canonicalStoreRequest(originalActor) !== canonicalStoreRequest(actor) ||
+      canonicalStoreRequest(originalDataOrigin) !==
+        canonicalStoreRequest(options.dataOrigin ?? null) ||
       row.canonical_hash !== original.request_fingerprint ||
       canonicalStoreRequest(marker ?? null) !== canonicalStoreRequest(original) ||
       storeConditionRequestHash(row.fields) !== original.diagnostics.fields_sha256
@@ -226,7 +243,7 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
             uploadAttempted = true;
             const source = await storeRawContent({
               userId: options.userId,
-              fileBuffer: Buffer.from(JSON.stringify(options.entities)),
+              fileBuffer: Buffer.from(JSON.stringify(storedEntities)),
               mimeType: "application/json",
               originalFilename: filename ?? undefined,
               idempotencyKey: options.idempotencyKey,
@@ -290,6 +307,7 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
               identity_basis: "schema_rule",
               identity_rule: prepared.identityRule,
               operation_receipt: { fingerprint, receipt: original },
+              data_origin: options.dataOrigin,
             });
             for (const [key, value] of Object.entries(prepared.unknownFields))
               await storeFragment({

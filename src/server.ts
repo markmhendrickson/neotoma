@@ -73,6 +73,11 @@ import {
   RegisterSchemaRequestSchema,
   IntakeHintSchema,
   IssuesSyncRepoSchema,
+  DataOriginSchema,
+  DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE,
+  dataOriginHasEntities,
+  refineEntityDataOrigins,
+  type DataOrigin,
   ObservationSourceSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
@@ -3622,9 +3627,16 @@ export class NeotomaServer {
           ? payload.snapshot.agent_instructions
           : null;
 
+      // #2242: caller-claimed data origins of the observations this snapshot's
+      // field provenance cites. Omitted entirely when none carry one.
+      const { collectSnapshotDataOrigins } = await import("./services/provenance_data_origin.js");
+      const dataOrigins = await collectSnapshotDataOrigins(payload.provenance, userId);
+      const hasDataOrigins = Object.keys(dataOrigins).length > 0;
+
       if (responseFormat === "json") {
         return this.buildTextResponse({
           ...payload,
+          ...(hasDataOrigins ? { data_origins: dataOrigins } : {}),
           ...(schemaInstructions !== null ? { schema_instructions: schemaInstructions } : {}),
           ...(entityInstructions !== null ? { entity_instructions: entityInstructions } : {}),
         });
@@ -3639,6 +3651,7 @@ export class NeotomaServer {
           observation_count: payload.observation_count,
           last_observation_at: payload.last_observation_at ?? null,
           provenance: payload.provenance,
+          ...(hasDataOrigins ? { data_origins: dataOrigins } : {}),
         },
         schemaFieldOrder,
         { includeProvenance: true }
@@ -3878,6 +3891,11 @@ export class NeotomaServer {
       };
     }
 
+    // #2242: the caller-claimed data origin of the reported observation, when
+    // one was supplied. Absent (not null) when the observation carries none.
+    const { readDataOriginFromProvenance } = await import("./services/provenance_data_origin.js");
+    const winningDataOrigin = readDataOriginFromProvenance(observation.provenance);
+
     // Response shape is unchanged from before #2026: one source_observation
     // and its source. Aligning this with the HTTP response of the same
     // operation (observation_ids, every contributing observation, per-
@@ -3892,6 +3910,7 @@ export class NeotomaServer {
         observed_at: observation.observed_at,
         specificity_score: observation.specificity_score,
         source_priority: observation.source_priority,
+        ...(winningDataOrigin ? { data_origin: winningDataOrigin } : {}),
       },
       source: source,
       observed_at: observation.observed_at,
@@ -5709,8 +5728,10 @@ export class NeotomaServer {
         file_path: z.string().optional(),
         mime_type: z.string().optional(),
         original_filename: z.string().optional(),
-        entities: z.array(z.record(z.unknown())).optional(),
+        entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
         relationships: z.array(StoreRelationshipInputSchema).optional(),
+        // #2242: request-level data origin; entities[i].data_origin overrides it.
+        data_origin: DataOriginSchema.optional(),
         interpretation: z
           .object({
             source_id: z.string().min(1).optional(),
@@ -5746,6 +5767,7 @@ export class NeotomaServer {
       .refine((data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key), {
         message: "idempotency_key is required when intake.mode is not 'overflow'",
       })
+      .refine(dataOriginHasEntities, DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE)
       .refine(
         (data) => {
           // reference mode requires an absolute file_path (no base64 inline content)
@@ -5760,6 +5782,17 @@ export class NeotomaServer {
       );
 
     const parsed = schema.parse(args);
+
+    // #2242: peel the reserved per-entity `data_origin` key off every entity and
+    // resolve each entity's effective origin (entity → request → none) before
+    // anything else reads the entities. Mirrors the REST boundary in actions.ts.
+    let storeDataOrigins: Array<DataOrigin | undefined> | undefined;
+    if (parsed.entities?.length) {
+      const { splitEntityDataOrigins } = await import("./services/provenance_data_origin.js");
+      const split = splitEntityDataOrigins(parsed.entities, parsed.data_origin);
+      parsed.entities = split.entities;
+      storeDataOrigins = split.origins;
+    }
 
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
     assertConditionalStoreRequest(parsed);
@@ -5852,6 +5885,7 @@ export class NeotomaServer {
             typeof preloadedUnstructuredPayload?.source_id === "string"
               ? preloadedUnstructuredPayload.source_id
               : undefined,
+          dataOrigins: storeDataOrigins,
         }
       );
       try {
@@ -6308,6 +6342,8 @@ export class NeotomaServer {
       sourcePeerId?: string | null;
       interpretation?: StoreInterpretationInput;
       interpretationSourceId?: string;
+      /** Effective data origin per entity index (#2242); see provenance_data_origin.ts. */
+      dataOrigins?: Array<DataOrigin | undefined>;
     } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     if (options.expectedEntityAbsent === true) {
@@ -6330,6 +6366,7 @@ export class NeotomaServer {
         originalFilename,
         strict: options.strict,
         observationSource: options.observationSource,
+        dataOrigin: options.dataOrigins?.[0],
       });
       return this.buildTextResponse(result);
     }
@@ -6737,8 +6774,12 @@ export class NeotomaServer {
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
+    // #2242: each entity's effective data_origin is part of the stored payload
+    // (and so of the idempotency content hash); unchanged when there is none.
+    const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
+    const dataOrigins = options.dataOrigins;
     const jsonContent = JSON.stringify(
-      entities,
+      entitiesWithStoredDataOrigins(entities, dataOrigins),
       (key, value) => {
         if (typeof value === "bigint") {
           return Number(value);
@@ -6785,6 +6826,7 @@ export class NeotomaServer {
         userId,
         sourceId: resolvedInterpretationSourceId,
         extractedData: entities,
+        dataOrigins,
         idempotencyKey,
         config: {
           provider: "agent",
@@ -6949,7 +6991,7 @@ export class NeotomaServer {
     let unknownFieldsCount = 0;
     const unknownFieldNamesSet = new Set<string>();
 
-    for (const entityData of entities) {
+    for (const [entityIndex, entityData] of entities.entries()) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
       let entityType =
         (entityData.entity_type as string) || (entityData.type as string) || "generic";
@@ -7337,7 +7379,11 @@ export class NeotomaServer {
         // writing agent for structured-store observations too.
         const { getCurrentAttribution: _structuredAttrib } =
           await import("./services/request_context.js");
-        const structuredAttribution = _structuredAttrib();
+        const { withDataOriginProvenance } = await import("./services/provenance_data_origin.js");
+        const structuredAttribution = withDataOriginProvenance(
+          _structuredAttrib(),
+          dataOrigins?.[entityIndex]
+        );
         const observedAt = new Date().toISOString();
         const { error: obsError } = await insertObservationRow(
           buildObservationRow({

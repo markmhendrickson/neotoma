@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **724**
-- Backend and repo Vitest files: **688**
+- Total automated test files: **727**
+- Backend and repo Vitest files: **691**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 195 |
+| Vitest unit tests | 196 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 219 |
-| Vitest CLI tests | 86 |
+| Vitest integration tests | 220 |
+| Vitest CLI tests | 87 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (195):**
+**Files (196):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -291,6 +291,7 @@ flowchart TD
 - `tests/unit/sqlite_schema_init_concurrency.test.ts`
 - `tests/unit/standing_rules.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
+- `tests/unit/store_data_origin.test.ts`
 - `tests/unit/store_strict_and_consistency.test.ts`
 - `tests/unit/store_warning_rule.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
@@ -454,7 +455,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (219):**
+**Files (220):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -642,6 +643,7 @@ flowchart TD
 - `tests/integration/store_canonical_name_recompute.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
+- `tests/integration/store_data_origin.test.ts`
 - `tests/integration/store_dedup_snapshot_after.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
@@ -680,7 +682,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (86):**
+**Files (87):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -724,6 +726,7 @@ flowchart TD
 - `tests/cli/cli_stats_commands.test.ts`
 - `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
+- `tests/cli/cli_store_data_origin.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
 - `tests/cli/cli_store_observation_source.test.ts`
 - `tests/cli/cli_store_plan_mode_no_writes.test.ts`
