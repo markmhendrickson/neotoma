@@ -69,6 +69,14 @@ import {
  * was never stored). Both clauses were condensed before raising; their net
  * growth is ~1,740 chars (~375 tokens). main sat at 149,964 chars when this was
  * raised, so the increase covers that growth and nothing else of substance.
+ *
+ * Baseline after the security-lens round on PR #1934 (secret-bearing files
+ * exempted from byte persistence and from the self-audit repair): measured
+ * 151,906 chars (~32,820 tokens), leaving 94 chars (~0.06%) of headroom. The
+ * exemption was paid for by tightening the two #1933 clauses, not by raising
+ * the ceiling again. Headroom this thin means the next instruction edit of any
+ * size trips the test: further growth should be weighed under #1885 (and offset
+ * by condensing elsewhere) rather than raised piecemeal.
  */
 const FULL_BLOCK_MAX_CHARS = 152_000;
 

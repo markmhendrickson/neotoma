@@ -152,7 +152,7 @@ Use narrow queries first, then expand only if needed.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
 
-**Agent-initiated file reads and dangling source-file citations:** see `docs/developer/mcp/instructions.md` [PROVENANCE] (search "Agent-initiated file reads") and [QA REFLECTION] (search "Dangling source-file citation check"). The persistence obligation for a file the agent reads itself (not just user-attached files) is identical in the CLI backup path: run `neotoma instructions print` to see the canonical behavioral rule before relying on a `source_file`-style field without a stored file asset.
+**Agent-initiated file reads and dangling source-file citations:** see `docs/developer/mcp/instructions.md` [PROVENANCE] (search "Agent-initiated file reads") and [QA REFLECTION] (search "Dangling source-file citation check"). The persistence obligation for a file the agent reads itself (not just user-attached files) is identical in the CLI backup path, including its exception for secret-bearing files, whose bytes are never persisted: run `neotoma instructions print` to see the canonical behavioral rule before relying on a `source_file`-style field without a stored file asset.
 
 **Deep pagination:** use `--cursor`, not `--offset`. Offset paging re-scans every prior row, so deep pages get slower the further you go and are rejected past a bounded depth (2000). Pass the `next_cursor` from the previous response to `--cursor` to page in constant time at any depth:
 
