@@ -530,6 +530,13 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "correct_transaction",
+      description:
+        "Atomically compare and correct declared fields on multiple entities. Supply each loaded observation count and expected fields. Any conflict, denied write or snapshot mismatch rolls back every change. Retry the identical request and key after uncertainty. This primitive does not authorize application-level approval.",
+      inputSchema: getOpenApiInputSchemaOrThrow("correct_transaction"),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    {
       name: "correct",
       description:
         "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
@@ -559,9 +566,26 @@ export function buildToolDefinitions(
             type: "string",
             description: "Required. Client-provided idempotency key for replay-safe corrections.",
           },
+          expected_version: {
+            type: "string",
+            description:
+              "Optional opaque entity_version from a current entity read. A stale token returns ERR_FIELD_VERSION_CONFLICT and writes nothing.",
+          },
+          overwrite: {
+            type: "boolean",
+            description: "Apply even when expected_version is stale. Ignored when it is omitted.",
+          },
         },
         required: ["entity_id", "entity_type", "field", "value", "idempotency_key"],
       },
+    },
+    {
+      name: "patch_array_item",
+      description: desc(
+        "patch_array_item",
+        "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write. Loads the current array fresh, finds/replaces the item matching key_field/key_value, and writes the reconciled array as one new observation. Concurrent patches to DIFFERENT keys both survive. Pass expected_item_version (from a prior patch's response) to detect a same-key race, or expected_item_absent for race-safe creation; a conflict returns the current item instead of overwriting."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("patch_array_item"),
     },
     {
       name: "merge_entities",
@@ -617,7 +641,7 @@ export function buildToolDefinitions(
       name: "delete_entity",
       description: desc(
         "delete_entity",
-        "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use."
+        "Hide an entity from current snapshots and queries through an immutable lifecycle observation. After the explicit authority cutover, serialized action sequence controls visibility; before cutover, existing legacy behavior applies. Each accepted request is a separate action, without an idempotency key or conditional rollback baseline. Physical legal erasure is a separate operation."
       ),
       inputSchema: {
         type: "object",
@@ -682,7 +706,7 @@ export function buildToolDefinitions(
       name: "restore_entity",
       description: desc(
         "restore_entity",
-        "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."
+        "Restore visibility of an entity through an immutable lifecycle observation and expose its current factual reduction, including ordinary facts accepted while hidden. After the explicit authority cutover, serialized action sequence controls visibility; before cutover, existing legacy behavior applies. Each accepted request is a separate action, without an idempotency key or historical beforeimage restoration."
       ),
       inputSchema: {
         type: "object",
@@ -1627,6 +1651,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "store",
   "parse_file",
   "correct",
+  "correct_transaction",
+  "patch_array_item",
   "merge_entities",
   "split_entity",
   "list_potential_duplicates",

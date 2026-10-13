@@ -12,7 +12,13 @@ const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey })
  *
  * Returns null if no provider is configured.
  */
-export async function generateEmbedding(text: string): Promise<number[] | null> {
+export interface EmbeddingAcquisitionTrace {
+  reason?: "embedding_not_configured" | "embedding_unavailable" | "invalid_embedding";
+}
+export async function generateEmbedding(
+  text: string,
+  trace?: EmbeddingAcquisitionTrace
+): Promise<number[] | null> {
   // OpenAI provider
   if (openai) {
     try {
@@ -25,14 +31,17 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
       if (embedding && embedding.length === 1536) {
         return embedding;
       }
+      if (trace) trace.reason = "invalid_embedding";
       console.error("Invalid embedding dimensions from OpenAI:", embedding?.length);
       return null;
     } catch (error) {
+      if (trace) trace.reason = "embedding_unavailable";
       console.error("Error generating embedding with OpenAI:", error);
       return null;
     }
   }
 
+  if (trace) trace.reason = "embedding_not_configured";
   // Future: Add other providers here
   // - Cohere: cohere.createClient({ apiKey: config.cohereApiKey })
   // - Hugging Face: fetch('https://api-inference.huggingface.co/...')

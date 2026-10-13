@@ -1,5 +1,6 @@
 # Neotoma Error Handling — Error Codes and Propagation
-*(Structured Error Envelope and Canonical Error Codes)*
+
+_(Structured Error Envelope and Canonical Error Codes)_
 
 ## Envelope Taxonomy
 
@@ -11,11 +12,11 @@ Emitted by `buildErrorEnvelope(code, message, details?)` in `src/actions.ts`. Us
 
 ```typescript
 interface ErrorEnvelope {
-  error_code: string;              // e.g., 'INGESTION_INVALID_FILE'
-  message: string;                 // Human-readable description
-  details?: Record<string, any>;   // Additional context (no PII)
-  trace_id?: string;               // Distributed tracing ID
-  timestamp: string;               // ISO 8601
+  error_code: string; // e.g., 'INGESTION_INVALID_FILE'
+  message: string; // Human-readable description
+  details?: Record<string, any>; // Additional context (no PII)
+  trace_id?: string; // Distributed tracing ID
+  timestamp: string; // ISO 8601
 }
 ```
 
@@ -31,21 +32,23 @@ interface StoreResolutionErrorEnvelope {
     code: "ERR_STORE_RESOLUTION_FAILED";
     message: string;
     issues: Array<{
-      code: string;                // e.g., 'ERR_CANONICAL_NAME_UNRESOLVED', 'ERR_MERGE_REFUSED', 'ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT'
+      code: string; // e.g., 'ERR_CANONICAL_NAME_UNRESOLVED', 'ERR_MERGE_REFUSED', 'ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT'
       message: string;
       details?: Record<string, any>;
       // R4 (conversation_entity_collision_fix): `hint` may be a free-form
       // string (legacy shape) OR a structured object carrying both the
       // caller-facing text AND a schema-derived list of identity fields.
-      hint?: string | {
-        text: string;
-        required_identity_fields?: {
-          entity_type: string;
-          required: boolean;           // true iff name_collision_policy === "reject"
-          any_of_fields: string[];     // single-field canonical rules
-          composite_fields: string[][];// every field in at least one group
-        };
-      };
+      hint?:
+        | string
+        | {
+            text: string;
+            required_identity_fields?: {
+              entity_type: string;
+              required: boolean; // true iff name_collision_policy === "reject"
+              any_of_fields: string[]; // single-field canonical rules
+              composite_fields: string[][]; // every field in at least one group
+            };
+          };
     }>;
   };
 }
@@ -53,7 +56,7 @@ interface StoreResolutionErrorEnvelope {
 
 The `hint` field carries upgrade guidance that the client can surface verbatim (e.g., "Payload looks like the pre-0.5 `attributes`-nested shape; flatten fields to top level."). Do not concatenate upgrade text into `message`; use `hint`.
 
-When a schema declares `name_collision_policy: "reject"` (R1/R2), a refused resolution emits `issues[].hint` as an object: `text` carries the short, verbatim-surfaceable instruction (e.g. `"Declare \`conversation_id\` on entity_type \"conversation\" to match deterministically."`) and `required_identity_fields` carries the schema-derived field contract the caller can program against without parsing prose. See `RequiredIdentityFields` in `openapi.yaml` and the implementation in `src/services/schema_registry.ts#deriveRequiredIdentityFields`.
+When a schema declares `name_collision_policy: "reject"` (R1/R2), a refused resolution emits `issues[].hint` as an object: `text` carries the short, verbatim-surfaceable instruction (e.g. `"Declare \`conversation_id\` on entity_type \"conversation\" to match deterministically."`) and `required_identity_fields`carries the schema-derived field contract the caller can program against without parsing prose. See`RequiredIdentityFields`in`openapi.yaml`and the implementation in`src/services/schema_registry.ts#deriveRequiredIdentityFields`.
 
 ### Tightening-change hint obligation
 
@@ -79,42 +82,66 @@ Process wiring: the pre-PR checklist in `docs/architecture/change_guardrails_rul
 
 Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new field (including `hint`, `details` sub-keys, new issue codes) follows the OpenAPI contract flow: spec first, regenerate types, populate from server, test at contract level. See `docs/architecture/openapi_contract_flow.md`.
 
-
 ## Canonical Error Codes
+
 ### Ingestion Errors
-| Code | Meaning | HTTP | Retry? |
-|------|---------|------|--------|
-| `INGESTION_FILE_TOO_LARGE` | File exceeds size limit | 400 | No |
-| `INGESTION_UNSUPPORTED_TYPE` | File type not supported | 400 | No |
-| `INGESTION_OCR_FAILED` | OCR processing failed | 500 | Yes |
-| `INGESTION_EXTRACTION_FAILED` | Field extraction failed | 500 | No |
+
+| Code                          | Meaning                 | HTTP | Retry? |
+| ----------------------------- | ----------------------- | ---- | ------ |
+| `INGESTION_FILE_TOO_LARGE`    | File exceeds size limit | 400  | No     |
+| `INGESTION_UNSUPPORTED_TYPE`  | File type not supported | 400  | No     |
+| `INGESTION_OCR_FAILED`        | OCR processing failed   | 500  | Yes    |
+| `INGESTION_EXTRACTION_FAILED` | Field extraction failed | 500  | No     |
+
 ### Auth Errors
-| Code | Meaning | HTTP | Retry? |
-|------|---------|------|--------|
-| `AUTH_REQUIRED` | No token provided | 401 | No |
-| `AUTH_INVALID` | Invalid token | 401 | No |
-| `AUTH_EXPIRED` | Token expired | 401 | No |
-| `FORBIDDEN` | Insufficient permissions | 403 | No |
+
+| Code            | Meaning                  | HTTP | Retry? |
+| --------------- | ------------------------ | ---- | ------ |
+| `AUTH_REQUIRED` | No token provided        | 401  | No     |
+| `AUTH_INVALID`  | Invalid token            | 401  | No     |
+| `AUTH_EXPIRED`  | Token expired            | 401  | No     |
+| `FORBIDDEN`     | Insufficient permissions | 403  | No     |
+
 ### Database Errors
-| Code | Meaning | HTTP | Retry? |
-|------|---------|------|--------|
-| `DB_CONNECTION_FAILED` | Cannot connect to DB | 503 | Yes |
-| `DB_QUERY_FAILED` | Query execution failed | 500 | Yes |
-| `DB_CONSTRAINT_VIOLATION` | Unique constraint violated | 409 | No |
+
+| Code                      | Meaning                    | HTTP | Retry? |
+| ------------------------- | -------------------------- | ---- | ------ |
+| `DB_CONNECTION_FAILED`    | Cannot connect to DB       | 503  | Yes    |
+| `DB_QUERY_FAILED`         | Query execution failed     | 500  | Yes    |
+| `DB_CONSTRAINT_VIOLATION` | Unique constraint violated | 409  | No     |
+
 ### Validation Errors
-| Code | Meaning | HTTP | Retry? |
-|------|---------|------|--------|
-| `VALIDATION_MISSING_FIELD` | Required field missing | 400 | No |
-| `VALIDATION_INVALID_FORMAT` | Invalid field format | 400 | No |
-| `ERR_UNKNOWN_FIELD` | Request body contained a top-level field not declared by the operation's closed schema (`additionalProperties: false`). `details` carries `unknown_fields`, `json_paths`, `allowed_fields`, and `operation`. | 400 | No |
-| `CURSOR_OFFSET_CONFLICT` | CLI-only (`neotoma entities list`): `--cursor` and `--offset` were both supplied explicitly. They are mutually exclusive ways to state where a page starts, so the CLI rejects the pair rather than silently dropping one. Surfaced as `hint.code` in `--json` output. The equivalent server-side rejection is `VALIDATION_INVALID_FORMAT`. | n/a (CLI) | No |
-| `INVALID_CURSOR` | Pagination `cursor` is malformed, carries an unsupported version, or was minted under a different `sort_order` than the current request (#1943). `details` carries `code`, `message`, and a flat `hint`. Not retryable with the same token: drop the cursor and restart the walk from the first page. | 400 | No |
-| `ERR_CURSOR_COMBINATION` | A `cursor` was paired with a parameter whose query shape cannot honour a keyset seek: a non-zero `offset`, a non-default `sort_by`, `search`, or `published`/`snapshot_filters` (#1943). Distinct from the tightenings below — these combinations were never valid, so this is a coherence guard, not a migration. Surfaced as the issue's `params.code` (REST: lifted to `details.hint`; MCP: on the error `data`). The `hint` names the way out — drop the conflicting parameter, or page that query shape with `offset` instead. | 400 | No |
+
+| Code                        | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | HTTP      | Retry? |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------ |
+| `VALIDATION_MISSING_FIELD`  | Required field missing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 400       | No     |
+| `VALIDATION_INVALID_FORMAT` | Invalid field format                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 400       | No     |
+| `ERR_UNKNOWN_FIELD`         | Request body contained a top-level field not declared by the operation's closed schema (`additionalProperties: false`). `details` carries `unknown_fields`, `json_paths`, `allowed_fields`, and `operation`.                                                                                                                                                                                                                                                                                                                        | 400       | No     |
+| `CURSOR_OFFSET_CONFLICT`    | CLI-only (`neotoma entities list`): `--cursor` and `--offset` were both supplied explicitly. They are mutually exclusive ways to state where a page starts, so the CLI rejects the pair rather than silently dropping one. Surfaced as `hint.code` in `--json` output. The equivalent server-side rejection is `VALIDATION_INVALID_FORMAT`.                                                                                                                                                                                         | n/a (CLI) | No     |
+| `INVALID_CURSOR`            | Pagination `cursor` is malformed, carries an unsupported version, or was minted under a different `sort_order` than the current request (#1943). `details` carries `code`, `message`, and a flat `hint`. Not retryable with the same token: drop the cursor and restart the walk from the first page.                                                                                                                                                                                                                               | 400       | No     |
+| `ERR_CURSOR_COMBINATION`    | A `cursor` was paired with a parameter whose query shape cannot honour a keyset seek: a non-zero `offset`, a non-default `sort_by`, `search`, or `published`/`snapshot_filters` (#1943). Distinct from the tightenings below — these combinations were never valid, so this is a coherence guard, not a migration. Surfaced as the issue's `params.code` (REST: lifted to `details.hint`; MCP: on the error `data`). The `hint` names the way out — drop the conflicting parameter, or page that query shape with `offset` instead. | 400       | No     |
+
 ### Resource Errors
+
+| Code                 | Meaning            | HTTP | Retry? |
+| -------------------- | ------------------ | ---- | ------ |
+| `RESOURCE_NOT_FOUND` | Resource not found | 404  | No     |
+
+### Correction / Concurrency Errors
+
+Waxwing ADR (`ent_4b41bb83a4faf4428a73bfc8`, "Prevent lost updates when concurrent sessions refresh session_digest workboards"). The conflict codes are additive, optional preconditions — a caller that never supplies the version field never sees them. The validation codes fail closed before any observation is written.
 | Code | Meaning | HTTP | Retry? |
 |------|---------|------|--------|
-| `RESOURCE_NOT_FOUND` | Resource not found | 404 | No |
+| `ERR_FIELD_VERSION_CONFLICT` | `/correct` was called with an `expected_version` that no longer matches the entity's current opaque `entity_version` (and `overwrite` was not set). The token includes the append-only observation count, so it changes for every committed observation even when two writes share a millisecond timestamp. No observation was written. `details` carries `entity_id`, `field`, `stored_version`, `expected_version`. Entity-scoped: any field changing trips it, not just the one being corrected. | 409 | Yes, with a fresh `entity_version` as `expected_version` |
+| `ERR_IDEMPOTENCY_MISMATCH` | A correction or keyed-item patch reused an already committed `idempotency_key` with a different canonical request payload. The original committed result remains authoritative and no new observation is written. | 400 | No; use a new key for a distinct payload |
+| `ERR_ENTITY_TYPE_MISMATCH` | `/correct` was called with an `entity_type` that differs from the target entity's authoritative stored type. The shared correction service refuses before writing, so a decoy unprotected type cannot weaken capability or protected-type enforcement. | 400 | No; correct the request type |
+| `ERR_ARRAY_ITEM_CONFLICT` | `patch_array_item` was called with an `expected_item_version` that no longer matches the stored item's content-hash version (or the item does not exist yet, when the caller expected it to). No observation was written. `details` carries `entity_id`, `field`, `key_field`, `key_value`, `current_item`, `current_item_version`, `expected_item_version` — enough to retry without a second read. | 409 | Yes, with the fresh `current_item_version` |
+| `ERR_ARRAY_ITEM_POLICY_REQUIRED` | `patch_array_item` targeted a field that is not an array with an active `merge_array_by_key` policy and declared `key_field`. The operation refuses rather than silently falling back to whole-field last-write semantics. | 400 | No; register or update the keyed reducer policy first |
+| `ERR_ARRAY_ITEM_KEY_FIELD_MISMATCH` | The request's `key_field` differs from the active schema's declared key for the field. No observation was written. | 400 | No; use the declared key field |
+| `ERR_ARRAY_ITEM_ENTITY_TYPE_MISMATCH` | The request's `entity_type` differs from the target entity's stored type. The stored type, not caller input, is used for authorization checks. No observation was written. | 400 | No; correct the request type |
+
 ### MCP Transport Errors (`POST /mcp`)
+
 These ride in a JSON-RPC error's `error.data` (`{ error_code, message, hint, details? }`), not the standard envelope, because `/mcp` answers in JSON-RPC. The JSON-RPC `error.code` is listed alongside. None of them repeats a header value or a credential.
 | Code | Meaning | HTTP | Retry? |
 |------|---------|------|--------|
@@ -124,16 +151,20 @@ These ride in a JSON-RPC error's `error.data` (`{ error_code, message, hint, det
 | `MCP_UNSUPPORTED_PROTOCOL_VERSION` | 2026-07-28 request names a protocol version this server does not serve statelessly. JSON-RPC `-32022`. `data` also carries `supported` and, for a plain revision date, `requested`. | 400 | No |
 | `MCP_AUTH_CONNECTION_INVALID` | 2026-07-28 request: the connection id is unknown, expired or revoked. Returned before any method runs, with `WWW-Authenticate: Bearer ... error="invalid_token"`. JSON-RPC `-32001`. `hint`: remove `X-Connection-Id` and connect again. | 401 | No |
 | `MCP_AUTH_UNRESOLVED` | 2026-07-28 request: the credential passed the `/mcp` gate but could not be resolved to a user (for example an OAuth lookup failure). JSON-RPC `-32001`. | 401 | Yes |
+
 ## Error Propagation
+
 Errors propagate **up** the layer stack:
+
 ```
 Domain throws → Application catches → Application returns ErrorEnvelope → UI displays
 ```
+
 ```typescript
 // Domain layer
 async function extractFields(text: string): Promise<Fields> {
   if (!text) {
-    throw new ExtractionError('EXTRACTION_FAILED', 'Empty text');
+    throw new ExtractionError("EXTRACTION_FAILED", "Empty text");
   }
   // ...
 }
@@ -156,10 +187,13 @@ async function ingestFile(file: File): Promise<Result<Record, ErrorEnvelope>> {
   }
 }
 ```
+
 ## Agent Instructions
+
 Load when implementing error handling, defining new error types, or debugging failures.
 Required co-loaded: `docs/architecture/architecture.md`, `docs/subsystems/privacy.md`
 Constraints:
+
 - MUST use ErrorEnvelope structure
 - MUST NOT include PII in error messages
 - MUST distinguish transient vs permanent errors

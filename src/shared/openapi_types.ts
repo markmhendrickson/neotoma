@@ -2033,6 +2033,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/corrections/transaction": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Atomically compare and correct multiple entities
+     * @description Append declared-field corrections in one scoped database transaction.
+     *     Every entity's type, observation count and expected snapshot fields must
+     *     match inside the write transaction. Any validation, policy, write or
+     *     read-back failure rolls back all changes. Reuse the identical request
+     *     and idempotency key after uncertainty; changed payload reuse conflicts.
+     *     This primitive does not decide or authorize application-level approval.
+     */
+    post: operations["correctTransaction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/correct": {
     parameters: {
       query?: never;
@@ -2056,6 +2081,74 @@ export interface paths {
      *     snapshot until the field is added to the schema.
      */
     post: operations["correct"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/patch_array_item": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Atomically patch one item of a structured array field by key
+     * @description Sibling of `/correct` for structured collection fields whose items
+     *     carry a stable identity (e.g. a `session_digest.tasks_claimed` row
+     *     keyed by `claim_id`). Loads the current array fresh, finds the item
+     *     matching `key_field`/`key_value`, merges `item` onto it (or appends a
+     *     new item when the key is not yet present), and writes the whole
+     *     reconciled array as one new priority-1000 observation.
+     *
+     *     This exists to prevent the lost-update failure mode of full-array
+     *     read-modify-write: two callers patching DIFFERENT keys both succeed,
+     *     because each patch reads fresh state immediately before writing —
+     *     neither has to guess whether the other's row is still there. A caller
+     *     that instead reads the whole array, edits one row locally, and writes
+     *     the full array back can silently discard a concurrent writer's
+     *     disjoint row; `patch_array_item` is the replacement for that pattern.
+     *
+     *     Same-key races are resolved by the field's `merge_array_by_key`
+     *     reducer policy (latest `observed_at` wins per key) unless the caller
+     *     supplies `expected_item_version`, in which case a stale version is
+     *     refused with `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+     */
+    post: operations["patchArrayItem"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/{id}/batch_correct": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Apply an atomic multi-field correction with optimistic concurrency
+     * @description Atomic batch of single-field corrections against one entity, gated by
+     *     a whole-entity optimistic-concurrency check. Backs both the Inspector
+     *     Edit tab and the `neotoma edit` CLI one-shot editor; both surfaces
+     *     compute a field diff against a loaded snapshot and apply it through
+     *     this endpoint so the concurrency check and schema validation are
+     *     atomic across every field in the diff (unlike issuing one `/correct`
+     *     call per changed field).
+     *
+     *     Pre-existing endpoint being documented here for the first time
+     *     (contract gap identified alongside the Waxwing lost-update ADR,
+     *     ent_4b41bb83a4faf4428a73bfc8) — no behavior change.
+     */
+    post: operations["batchCorrectEntity"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2424,6 +2517,114 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Additive acquisition evidence from the executing entity collection path. Ranked candidate zero, ignored scope, acquisition caps or degradation cannot establish predicate-population absence. Existing legacy fields retain their meaning. The read interval is not a write fence, revision lease or common database view. See query_convergence and issue #2597. */
+    EntityReadContract: {
+      /** @enum {string} */
+      version: "1";
+      /** @enum {string} */
+      surface: "entity_collection";
+      mode: {
+        /** @enum {string} */
+        actual: "structured" | "semantic" | "lexical_typed" | "lexical_fallback";
+        /** @enum {string|null} */
+        fallback_reason:
+          | "not_configured"
+          | "embedding_unavailable"
+          | "no_usable_candidates"
+          | "filtered_candidates_exhausted"
+          | "unknown"
+          | null;
+      };
+      applied_scope: {
+        /** @enum {string} */
+        owner: "authenticated";
+        entity_types: string[];
+        include_merged: boolean;
+        /** @enum {boolean} */
+        include_deleted: false;
+        include_snapshots: boolean;
+        predicates: {
+          field: string;
+          op: string;
+          value: {
+            /** @enum {string} */
+            kind: "sha256";
+            value: string;
+          };
+        }[];
+        ordering: {
+          field: string;
+          /** @enum {string} */
+          direction: "asc" | "desc";
+          tie_breaker: string | null;
+        };
+        pagination: {
+          /** @enum {string} */
+          kind: "keyset" | "offset";
+          limit: number;
+          offset: number;
+        };
+      };
+      request_options: {
+        applied: string[];
+        normalized: {
+          name: string;
+          canonical_name: string;
+          reason: string;
+        }[];
+        ignored: {
+          name: string;
+          reason: string;
+        }[];
+      };
+      coverage: {
+        /** @enum {string} */
+        kind:
+          | "predicate_population"
+          | "semantic_candidates"
+          | "lexical_candidates"
+          | "synthesized_groups";
+        /** @enum {string} */
+        state: "complete" | "paginated" | "truncated" | "partial" | "unknown";
+        /** @description Safe executing-path cause codes only. Includes semantic_backend_unavailable for an unusable vector backend and semantic_global_candidate_cap for a bounded global KNN pool; never includes provider exceptions, query text or credential values. */
+        reasons: string[];
+        returned_count: number;
+        total: {
+          value: number;
+          /** @enum {string} */
+          relation: "exact" | "lower_bound" | "candidate_count" | "unknown";
+          /** @enum {string} */
+          unit: "entities" | "candidates" | "groups";
+        };
+        page_exhausted: boolean;
+        scope_exhausted: boolean | null;
+        continuation: {
+          /** @enum {string} */
+          kind: "cursor" | "none" | "unsupported";
+          next_cursor: string | null;
+          next_offset: number | null;
+        };
+      };
+      coherence: {
+        /** @enum {string} */
+        kind: "read_interval";
+        /** Format: date-time */
+        started_at: string;
+        /** Format: date-time */
+        completed_at: string;
+        /** @enum {boolean} */
+        common_view: false;
+        /** @enum {string} */
+        collection_and_total: "separate_acquisitions" | "candidate_derived";
+      };
+      diagnostics: {
+        code: string;
+        reason: string;
+        field?: string;
+        entity_type?: string;
+        suggestions?: string[];
+      }[];
+    };
     /** @description A GitHub issue a `/issues/sync` dry run would create or update locally. */
     IssuesSyncPlanIssue: {
       github_number: number;
@@ -3471,6 +3672,11 @@ export interface components {
       scoped_entity_types?: string[];
     };
     EntitySnapshot: {
+      /**
+       * @description Present only for an accepted nullable winning projection.
+       * @enum {boolean}
+       */
+      cleared_fields_included?: true;
       entity_id?: string;
       entity_type?: string;
       schema_version?: string;
@@ -3495,6 +3701,8 @@ export interface components {
       observation_count?: number;
       /** Format: date-time */
       last_observation_at?: string;
+      /** @description Opaque CAS token that changes for every committed observation. */
+      entity_version?: string;
       canonical_name?: string | null;
       merged_to_entity_id?: string | null;
       /** Format: date-time */
@@ -3978,6 +4186,15 @@ export interface components {
      *     remain intentionally open so schema-driven fields flow through.
      */
     StoreRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities?: {
         [key: string]: unknown;
       }[];
@@ -4063,6 +4280,15 @@ export interface components {
      *     schema-driven fields flow through (see description on `entities[]`).
      */
     StoreStructuredRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities: {
         [key: string]: unknown;
       }[];
@@ -4118,7 +4344,67 @@ export interface components {
       /** @description Optional peer id stamped on observations for sync loop prevention. */
       source_peer_id?: string;
     };
+    /**
+     * @description Original committed operation facts, verified against the immutable native
+     *     observation and owner/source linkage. Current snapshots are separate.
+     */
+    ConditionalStoreReceipt: {
+      /** @enum {integer} */
+      version: 1;
+      /** @enum {string} */
+      status: "applied" | "replayed";
+      request_fingerprint: string;
+      source_id: string;
+      entity_id: string;
+      entity_type: string;
+      observation_id: string;
+      schema_identity_digest: string;
+      unknown_fields_count: number;
+      /** @description Original declared observation fields, never a current snapshot substitute. */
+      original_observation_fields: {
+        [key: string]: unknown;
+      };
+      diagnostics: {
+        fields_sha256: string;
+        schema_version: string;
+        unknown_fields: string[];
+        constraint_warnings: {
+          field: string;
+          constraint: string;
+        }[];
+      };
+    };
+    ConditionalStoreError: {
+      /** @enum {string} */
+      code:
+        | "VALIDATION_ERROR"
+        | "CONFLICT"
+        | "IDEMPOTENCY_CONFLICT"
+        | "STORE_KEY_MODE_CONFLICT"
+        | "STORE_RECEIPT_UNCERTAIN"
+        | "STORE_CONDITIONAL_FAILED";
+      message: string;
+      hint: string;
+      committed?: false | "unknown";
+      private_storage_residue_possible?: boolean;
+    };
     StoreStructuredResponse: {
+      operation_receipt?: components["schemas"]["ConditionalStoreReceipt"];
+      /**
+       * @description Current snapshot availability, separate from the retained original receipt.
+       * @enum {string}
+       */
+      current_snapshot_status?: "available" | "absent" | "unavailable";
+      /**
+       * @description Notification attempts run after commit. An uncertain notification
+       *     outcome does not mean the applied transaction was rolled back.
+       */
+      postcommit_notifications?: {
+        attempted: number;
+        failed: number;
+        /** @enum {string} */
+        status: "completed" | "uncertain" | "not_repeated";
+      };
       success?: boolean;
       /**
        * @description Echoes the request's `commit` flag. `false` means this response
@@ -5491,6 +5777,7 @@ export interface operations {
         content: {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
+            read_contract?: components["schemas"]["EntityReadContract"];
             total?: number;
             limit?: number;
             offset?: number;
@@ -5680,6 +5967,7 @@ export interface operations {
         content: {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
+            read_contract?: components["schemas"]["EntityReadContract"];
             total?: number;
             limit?: number;
             offset?: number;
@@ -6997,7 +7285,10 @@ export interface operations {
             | components["schemas"]["StoreResolutionErrorEnvelope"]
             | components["schemas"]["ConstraintViolationErrorEnvelope"]
             | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
-            | components["schemas"]["ErrorEnvelope"];
+            | components["schemas"]["ErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
       /**
@@ -7015,7 +7306,8 @@ export interface operations {
         };
       };
       /**
-       * @description Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+       * @description Conditional physical presence, changed payload or mode conflict,
+       *     or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
        *     idempotency_key was already used for a store call with different
        *     content. Use a new idempotency_key to write the updated payload.
        */
@@ -7024,11 +7316,18 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
       /**
-       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+       * @description Conditional failure/uncertain acknowledgment carries explicit database
+       *     commit and possible private storage residue details when applicable.
+       *     Exact request replay reconciles the original receipt. This is separate from
+       *     `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
        *     read, so the write could not be checked against it. Nothing was
        *     persisted. Retry the request UNCHANGED; the envelope carries
        *     `retryable: true`.
@@ -7044,7 +7343,11 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["StorePolicyUnavailableErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
     };
@@ -7060,6 +7363,11 @@ export interface operations {
       content: {
         "application/json": {
           entity_id?: string;
+          /**
+           * @description Include only selected explicit-null fields with winning provenance; requires complete owned acquisition and an active schema.
+           * @default false
+           */
+          include_cleared_fields?: boolean;
           /** @description Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Reflects what *happened* by time T, regardless of when the observation was ingested into Neotoma. Use `at_ingested` instead when you need "what did we actually know at time T" semantics. */
           at?: string;
           /** @description Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `created_at` (row-insertion time) ≤ this timestamp. Excludes backfilled or late-arriving observations that have a past `observed_at` but arrived after this cutoff, preventing look-ahead leaks. When both `at` and `at_ingested` are supplied, both bounds are applied (AND logic): an observation must satisfy `observed_at ≤ at` AND `created_at ≤ at_ingested`. */
@@ -8381,7 +8689,14 @@ export interface operations {
             /** @default false */
             required?: boolean;
             /** @enum {string} */
-            reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+            reducer_strategy?:
+              | "last_write"
+              | "highest_priority"
+              | "most_specific"
+              | "merge_array"
+              | "merge_array_by_key";
+            /** @description Required when reducer_strategy is merge_array_by_key; stable identity field on each array item. */
+            reducer_key_field?: string;
           }[];
           fields_to_remove?: string[];
           /** @description Replace the entity type's identity rule (how canonical_name / identity is derived). Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ordered precedence with fallback — the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule. Passing [] clears the rule but only succeeds if the schema also declares identity_opt_out. Applies to new writes only — does not retroactively re-key existing entities. */
@@ -8636,6 +8951,115 @@ export interface operations {
       };
     };
   };
+  correctTransaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          user_id?: string;
+          idempotency_key: string;
+          entities: {
+            entity_id: string;
+            entity_type: string;
+            expected_observation_count: number;
+            /** @description Declared expected values; missing differs from null. Observation count guards the whole entity. */
+            expected_snapshot: {
+              [key: string]: unknown;
+            };
+            changes: {
+              field: string;
+              value: unknown;
+            }[];
+          }[];
+        };
+      };
+    };
+    responses: {
+      /** @description Committed atomically, or identical request already committed. Snapshots reflect current stored state on replay. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            status: "applied" | "replayed";
+            entities: ({
+              entity_id: string;
+              entity_type: string;
+              snapshot: {
+                [key: string]: unknown;
+              };
+              observation_count: number;
+            } & {
+              [key: string]: unknown;
+            })[];
+          };
+        };
+      };
+      /** @description Invalid transaction, undeclared fields or instance policy denial; nothing committed. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"];
+        };
+      };
+      /** @description Authentication required. */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Calling agent capability, attribution or protected-type policy disallows a correction. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description A transaction target is unavailable in the authenticated graph. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Stale precondition, changed idempotency payload or snapshot mismatch; no new changes committed. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Transaction failed and was rolled back. */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
   correct: {
     parameters: {
       query?: never;
@@ -8652,6 +9076,22 @@ export interface operations {
           value: unknown;
           idempotency_key: string;
           user_id?: string;
+          /**
+           * @description Optional entity-level optimistic-concurrency precondition.
+           *     When supplied, the correction is refused with
+           *     `409 ERR_FIELD_VERSION_CONFLICT` if the entity's current
+           *     collision-safe `entity_version` no longer matches this value (unless
+           *     `overwrite` is also true). Omitted: zero behavior change
+           *     from the legacy unconditional-insert path. Entity-scoped
+           *     (any field changing trips it) — use `/patch_array_item`
+           *     for per-row concurrency on structured array fields.
+           */
+          expected_version?: string;
+          /**
+           * @description When true, proceed even if `expected_version` is stale.
+           *     Ignored when `expected_version` is not supplied.
+           */
+          overwrite?: boolean;
         };
       };
     };
@@ -8668,6 +9108,10 @@ export interface operations {
             field?: string;
             value?: unknown;
             message?: string;
+            /** @description True when this is the exact result of an earlier committed request with the same idempotency key. */
+            replayed?: boolean;
+            /** @description Fresh entity-level CAS token after the committed correction. */
+            entity_version?: string;
             /**
              * @description HTTP-only. Always `true` on a 2xx correction. Absent on the
              *     MCP transport.
@@ -8716,8 +9160,13 @@ export interface operations {
        *     data policy — for example correcting a field whose schema-declared
        *     `sensitivity_class` exceeds the instance's configured maximum. No
        *     observation is written. Call `describe_instance_policy` to read the
-       *     policy before retrying. Other validation errors use the generic
-       *     `ErrorEnvelope`.
+       *     policy before retrying. `ERR_ENTITY_TYPE_MISMATCH` is returned when
+       *     the caller-supplied `entity_type` differs from the target entity's
+       *     authoritative stored type; no observation is written. Other
+       *     validation errors use the generic `ErrorEnvelope`.
+       *     `ERR_IDEMPOTENCY_MISMATCH` means the key already committed a
+       *     different canonical correction payload; the original result is
+       *     unchanged and no new observation is written.
        */
       400: {
         headers: {
@@ -8744,7 +9193,9 @@ export interface operations {
         };
       };
       /**
-       * @description `entity_owner_conflict` — `entity_id` resolves to an existing
+       * @description Two distinct conflict causes share this status:
+       *
+       *     `entity_owner_conflict` — `entity_id` resolves to an existing
        *     entity owned by a different, non-null user than the writer. No
        *     observation is written. `correct()` is the raw entity-store
        *     surface: a caller names `entity_id` directly with no resolution
@@ -8752,6 +9203,15 @@ export interface operations {
        *     correction that would otherwise land on another user's entity.
        *     The envelope details carry `entity_id` and `entity_type`; never
        *     the other owner's identity or fields.
+       *
+       *     `ERR_FIELD_VERSION_CONFLICT` — the caller supplied
+       *     `expected_version` and it no longer matches the entity's current
+       *     collision-safe `entity_version`. No observation is written. The envelope
+       *     details carry `entity_id`, `field`, `stored_version`, and
+       *     `expected_version` so the caller can re-read and retry. Entity-
+       *     scoped (any field changing trips it); use `/patch_array_item` for
+       *     per-row concurrency on structured array fields instead of
+       *     widening `expected_version` retries.
        */
       409: {
         headers: {
@@ -8779,6 +9239,258 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+        };
+      };
+    };
+  };
+  patchArrayItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          entity_type: string;
+          /** @description Name of the array field to patch. */
+          field: string;
+          /**
+           * @description Name of the field on each array item that identifies it.
+           *     Must match the field's declared `merge_array_by_key`
+           *     `key_field` for the write to be reflected in the
+           *     snapshot's reducer output.
+           */
+          key_field: string;
+          /**
+           * @description Portable non-null JSON scalar identifying the row. Numbers
+           *     must be finite safe integers. The reducer preserves older
+           *     rows with non-scalar or unsafe-number keys as unkeyed legacy
+           *     rows, but new patches cannot create them.
+           */
+          key_value: string | number | boolean;
+          /**
+           * @description Fields to set on the item identified by `key_value`.
+           *     Merged onto the existing item (shallow) when the key
+           *     already exists; `key_field` is always set to `key_value`
+           *     on the written item regardless of what `item` contains.
+           */
+          item: {
+            [key: string]: unknown;
+          };
+          /**
+           * @description Content-hash version of the item as last observed by the
+           *     caller (returned as `item_version` by a prior patch, or
+           *     computable client-side as SHA-256 over UTF-8 stable
+           *     serialization: object keys sort lexicographically, arrays
+           *     preserve order, and scalar values use JSON spellings).
+           *     When supplied and stale, the patch is refused with
+           *     `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+           *     Omit to always last-write-win on this one row (still
+           *     scoped — never touches other keys).
+           */
+          expected_item_version?: string;
+          /**
+           * @description When true, create only if no item with `key_value` exists.
+           *     Concurrent creators for the same key produce one success
+           *     and one `409 ERR_ARRAY_ITEM_CONFLICT` with the committed item.
+           */
+          expected_item_absent?: boolean;
+          idempotency_key: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Patch applied. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            success?: boolean;
+            entity_id?: string;
+            entity_type?: string;
+            field?: string;
+            key_field?: string;
+            key_value?: string | number | boolean;
+            observation_id?: string;
+            item?: {
+              [key: string]: unknown;
+            };
+            /** @description Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races. */
+            item_version?: string;
+            array_length?: number;
+            /** @description Entity snapshot computed from the committed patch. */
+            snapshot?: {
+              [key: string]: unknown;
+            };
+            /** @description True when this response replays the exact prior committed result for the idempotency key. */
+            replayed?: boolean;
+          };
+        };
+      };
+      /**
+       * @description Validation failed, the supplied entity type or key field does not
+       *     match the stored/schema-declared value, the field is not an array
+       *     with an active `merge_array_by_key` policy, or the instance store
+       *     policy denied the write. `ERR_IDEMPOTENCY_MISMATCH` means the key
+       *     already committed a different canonical request payload. No
+       *     observation is written.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Entity not found (or not owned by the authenticated user). */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `ERR_ARRAY_ITEM_CONFLICT` — the caller supplied
+       *     `expected_item_version` and the stored item's current content
+       *     hash no longer matches (or the item does not exist yet, when the
+       *     caller expected it to). No observation is written. The envelope
+       *     details carry `current_item`, `current_item_version`, and
+       *     `expected_item_version` so the caller can re-apply its change
+       *     against the current item and retry with a fresh version — no
+       *     second round-trip needed.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description Shared authenticated write-rate limit exceeded. Keyed-item patches
+       *     use the same bounded write bucket as `/store` so
+       *     repeated full-array observations cannot grow without a time bound.
+       */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /**
+       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance could not read its
+       *     write policy and failed closed. No observation is written; retry
+       *     the unchanged request after the service recovers.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+        };
+      };
+    };
+  };
+  batchCorrectEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          changes: {
+            field: string;
+            value: unknown;
+          }[];
+          /**
+           * @description `last_observation_at` the caller saw when it loaded the
+           *     snapshot. When supplied and stale (and `overwrite` is not
+           *     true), the batch is refused as a conflict and nothing is
+           *     written.
+           */
+          expected_last_observation_at?: string | null;
+          /** @description Proceed even if the snapshot has moved since `expected_last_observation_at` was read. */
+          overwrite?: boolean;
+          /** @description Base key used to build a deterministic per-field idempotency key for each applied change. */
+          idempotency_prefix?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /**
+       * @description Batch applied. Body shape matches `BatchCorrectionResult` with
+       *     `status: "applied"` (see `src/services/batch_correction.ts`).
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /**
+       * @description `status: "validation_error"` — one or more changes failed
+       *     schema validation. Nothing was written; `validation_errors[]`
+       *     carries `{ field, message }` per failing change.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Entity not found (or not owned by the authenticated user). */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `status: "conflict"` — `expected_last_observation_at` no longer
+       *     matches the stored value and `overwrite` was not set. Nothing was
+       *     written; the body carries `conflict.stored_last_observation_at`,
+       *     `conflict.expected_last_observation_at`, and
+       *     `conflict.conflicting_fields`.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
     };

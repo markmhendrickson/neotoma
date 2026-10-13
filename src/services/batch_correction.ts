@@ -28,9 +28,15 @@
  *   - Bidirectional mirror-file sync. The mirror stays a derived artifact.
  */
 import { db } from "../db.js";
-import { createCorrection } from "./correction.js";
+import { getDb } from "../repositories/db/connection.js";
+import {
+  createCorrection,
+  emitCommittedCorrection,
+  type DeferredCorrectionEvent,
+} from "./correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
+import { stableSerialize } from "./stable_serialize.js";
 
 export interface BatchCorrectionFieldChange {
   field: string;
@@ -63,6 +69,8 @@ export interface BatchCorrectionOptions {
   changes: BatchCorrectionFieldChange[];
   /** Optional base key used to build deterministic idempotency keys. */
   idempotency_prefix?: string;
+  /** @internal rollback fault injection for transaction publication tests. */
+  before_commit?: () => void | Promise<void>;
 }
 
 export type BatchCorrectionStatus = "applied" | "conflict" | "validation_error";
@@ -114,17 +122,6 @@ export function diffSnapshotFields(
     }
   }
   return changes;
-}
-
-function stableSerialize(v: unknown): string {
-  if (v === undefined) return "__undefined__";
-  if (v === null) return "null";
-  if (typeof v !== "object") return JSON.stringify(v);
-  if (Array.isArray(v)) return JSON.stringify(v.map(stableSerialize));
-  const obj = v as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  const parts = keys.map((k) => `${JSON.stringify(k)}:${stableSerialize(obj[k])}`);
-  return `{${parts.join(",")}}`;
 }
 
 /**
@@ -191,6 +188,21 @@ function typeOf(v: unknown): string {
  */
 export async function applyBatchCorrection(
   options: BatchCorrectionOptions
+): Promise<BatchCorrectionResult> {
+  const database = await getDb();
+  const deferredEvents: DeferredCorrectionEvent[] = [];
+  const result = await database.transaction(async () => {
+    const applied = await applyBatchCorrectionInTransaction(options, deferredEvents);
+    await options.before_commit?.();
+    return applied;
+  });
+  for (const event of deferredEvents) emitCommittedCorrection(event);
+  return result;
+}
+
+async function applyBatchCorrectionInTransaction(
+  options: BatchCorrectionOptions,
+  deferredEvents: DeferredCorrectionEvent[]
 ): Promise<BatchCorrectionResult> {
   const {
     entity_id,
@@ -289,7 +301,10 @@ export async function applyBatchCorrection(
       schema_version: schema?.schema_version ?? "1.0",
       user_id,
       idempotency_key,
+      defer_substrate_events: true,
+      in_transaction: true,
     });
+    if (res.deferred_substrate_event) deferredEvents.push(res.deferred_substrate_event);
     applied.push({
       observation_id: res.observation_id,
       field: res.field,

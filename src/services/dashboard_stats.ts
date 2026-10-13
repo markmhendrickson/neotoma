@@ -5,6 +5,7 @@
  */
 
 import { db } from "../db.js";
+import { filterCurrentLifecycleRecords } from "./entity_queries.js";
 
 export interface DashboardStats {
   sources_count: number;
@@ -72,7 +73,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   // Get entities by type
   let entitiesQuery = db
     .from("entities")
-    .select("entity_type", { count: "exact" })
+    .select("id, entity_type", { count: "exact" })
     .is("merged_to_entity_id", null); // Exclude merged entities
 
   if (userId) {
@@ -84,13 +85,20 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   if (!entitiesError && entities) {
     // Count entities by type
     const typeCounts = new Map<string, number>();
-    for (const entity of entities) {
+    const visible = await filterCurrentLifecycleRecords(
+      (entities as Array<{ id: string; entity_type: string }>).map((entity) => ({
+        ...entity,
+        entity_id: entity.id,
+      })),
+      userId
+    );
+    for (const entity of visible) {
       const type = entity.entity_type;
       typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
     }
 
     stats.entities_by_type = Object.fromEntries(typeCounts);
-    stats.total_entities = entities.length;
+    stats.total_entities = visible.length;
   }
 
   // Get total events count. timeline_events DOES carry a user_id column, so

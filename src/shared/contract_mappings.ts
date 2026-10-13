@@ -12,6 +12,14 @@ export interface OpenApiOperationMapping {
 
 export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   {
+    operationId: "correctTransaction",
+    method: "post",
+    path: "/corrections/transaction",
+    adapter: "both",
+    mcpTool: "correct_transaction",
+    cliCommand: "request --operation correctTransaction",
+  },
+  {
     operationId: "getFileUrl",
     method: "get",
     path: "/get_file_url",
@@ -712,6 +720,21 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "corrections create",
   },
   {
+    operationId: "patchArrayItem",
+    method: "post",
+    path: "/patch_array_item",
+    adapter: "both",
+    mcpTool: "patch_array_item",
+    cliCommand: "array-item patch",
+  },
+  {
+    operationId: "batchCorrectEntity",
+    method: "post",
+    path: "/entities/{id}/batch_correct",
+    adapter: "cli",
+    cliCommand: "edit",
+  },
+  {
     operationId: "getAuthenticatedUser",
     method: "post",
     path: "/get_authenticated_user",
@@ -940,7 +963,9 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   register_schema: "registerSchema",
   register_relationship_type: "registerRelationshipType",
   list_relationship_types: "listRelationshipTypes",
+  correct_transaction: "correctTransaction",
   correct: "correct",
+  patch_array_item: "patchArrayItem",
   get_authenticated_user: "getAuthenticatedUser",
   get_session_identity: "getSessionInfo",
   health_check_snapshots: "healthCheckSnapshots",
@@ -980,7 +1005,9 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
   register_schema: "schemas register <entityType>",
+  correct_transaction: "request --operation correctTransaction",
   correct: "corrections create <entityId> <entityType> <field> <value>",
+  patch_array_item: "array-item patch <entityId> <entityType> <field> <keyField> <keyValue>",
   create_interpretation: "interpretations create",
   list_interpretations: "interpretations list",
 };

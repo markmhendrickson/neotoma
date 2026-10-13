@@ -2,9 +2,14 @@
 // Embeds structured output (entity_type + canonical_name + snapshot) at upsert time
 
 import { config } from "../config.js";
-import { generateEmbedding, getEntitySearchableText } from "../embeddings.js";
+import {
+  generateEmbedding,
+  getEntitySearchableText,
+  type EmbeddingAcquisitionTrace,
+} from "../embeddings.js";
 import { db } from "../db.js";
 import { storeLocalEntityEmbedding } from "./local_entity_embedding.js";
+import { getDb } from "../repositories/db/connection.js";
 
 export interface EntitySnapshotRowForEmbedding {
   entity_id: string;
@@ -45,7 +50,8 @@ async function fetchCanonicalName(entityId: string): Promise<string | null> {
  */
 export async function prepareEntitySnapshotWithEmbedding(
   snapshotRow: EntitySnapshotRowForEmbedding,
-  canonicalName?: string | null
+  canonicalName?: string | null,
+  trace?: EmbeddingAcquisitionTrace
 ): Promise<EntitySnapshotRowWithEmbedding> {
   // Generate embedding for both pgvector and local (sqlite-vec)
   // Skip only when OPENAI_API_KEY is not configured
@@ -58,7 +64,7 @@ export async function prepareEntitySnapshotWithEmbedding(
     snapshotRow.snapshot
   );
 
-  const embedding = await generateEmbedding(searchableText);
+  const embedding = await generateEmbedding(searchableText, trace);
 
   return {
     ...snapshotRow,
@@ -86,6 +92,66 @@ export async function upsertEntitySnapshotWithEmbedding(
       merged: false,
     });
   }
+}
+
+/**
+ * Conditional writes defer provider work until their business commit. Refresh
+ * only the embedding; never upsert an old business snapshot after a concurrent
+ * correction. The native recheck and vector update share one write boundary.
+ */
+export async function refreshEntitySnapshotEmbeddingAfterCommit(
+  entityId: string,
+  userId: string
+): Promise<void> {
+  const before = await db
+    .from("entity_snapshots")
+    .select("*")
+    .eq("entity_id", entityId)
+    .eq("user_id", userId)
+    .single();
+  if (before.error || !before.data) throw new Error("Committed embedding basis is unavailable.");
+  const original = before.data as EntitySnapshotRowForEmbedding;
+  const trace: EmbeddingAcquisitionTrace = {};
+  const prepared = await prepareEntitySnapshotWithEmbedding(original, undefined, trace);
+  if (trace.reason === "embedding_unavailable" || trace.reason === "invalid_embedding")
+    throw new Error("Committed embedding acquisition is unavailable.");
+  if (!prepared.embedding) return;
+  const { canonicalStoreRequest } = await import("./store_condition_keys.js");
+  await (
+    await getDb()
+  ).transaction(async () => {
+    const current = await db
+      .from("entity_snapshots")
+      .select("*")
+      .eq("entity_id", entityId)
+      .eq("user_id", userId)
+      .single();
+    if (
+      current.error ||
+      !current.data ||
+      canonicalStoreRequest(current.data.snapshot) !== canonicalStoreRequest(original.snapshot) ||
+      canonicalStoreRequest(current.data.provenance) !==
+        canonicalStoreRequest(original.provenance) ||
+      current.data.observation_count !== original.observation_count
+    )
+      throw new Error("Committed embedding basis changed before its derived update.");
+    if (config.storageBackend === "local") {
+      await storeLocalEntityEmbedding({
+        entity_id: entityId,
+        user_id: userId,
+        entity_type: original.entity_type,
+        embedding: prepared.embedding,
+        merged: false,
+      });
+    } else {
+      const saved = await db
+        .from("entity_snapshots")
+        .update({ embedding: prepared.embedding })
+        .eq("entity_id", entityId)
+        .eq("user_id", userId);
+      if (saved.error) throw new Error("Committed embedding update failed.");
+    }
+  });
 }
 
 /**

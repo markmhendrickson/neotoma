@@ -12,6 +12,8 @@ dist/
 .DS_Store
 # .claude/ is committed (project settings); local overrides are ignored
 .claude/settings.local.json
+# Generated per-session harness state, not project configuration
+.claude/.session_state/
 # .cursor/hooks.json is user/machine-specific (absolute paths to hook scripts)
 .cursor/hooks.json
 packages/claude-code-plugin/.cursor/hooks.json

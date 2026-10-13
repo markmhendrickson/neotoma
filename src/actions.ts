@@ -1,3 +1,8 @@
+import {
+  preflightStructuredStoreAdmission,
+  type StructuredStoreApiParams,
+  type StoreRelationshipRef,
+} from "./services/store_admission.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -50,18 +55,13 @@ import {
 } from "./services/store_relationships.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
-import { StorePolicyUnavailableError } from "./services/instance_policy.js";
+import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
-import { enforceRelationshipWriteCapabilities } from "./services/relationship_write_capability.js";
-import {
-  assertGuestWriteAllowed,
-  AccessPolicyError,
-  type GuestIdentity,
-} from "./services/access_policy.js";
+import { AccessPolicyError, type GuestIdentity } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
 import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
@@ -71,7 +71,6 @@ import {
   getCurrentAgentIdentity,
   getCurrentAttribution,
   getCurrentExternalActor,
-  getRequestContext,
   runWithAuthenticatedPrincipal,
   runWithExternalActor,
   runWithRequestContext,
@@ -217,6 +216,7 @@ import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
+  PatchArrayItemRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
@@ -246,7 +246,6 @@ import {
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
   StoreRequestSchema,
-  type StoreInterpretationInput,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
@@ -699,23 +698,28 @@ const WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
   Number.parseInt(process.env.NEOTOMA_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 120
 );
-const writeRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: WRITE_RATE_LIMIT_PER_MIN,
-  keyGenerator: (req) => {
-    const userId =
-      ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
-        | string
-        | undefined) || "";
-    if (userId) return `u:${userId}`;
-    // Use the library-provided IPv6-safe key helper; keying directly on
-    // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
-    return `ip:${ipKeyGenerator(req.ip || "")}`;
-  },
-  skip: isInternalSeedRequest,
-  message: "Write rate limit exceeded, please slow down",
-  ...rateLimitOptions,
-});
+/** Build the shared write limiter; exported so its limiting effect is testable without a listener. */
+export function createWriteRateLimit(max: number = WRITE_RATE_LIMIT_PER_MIN) {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    max,
+    keyGenerator: (req) => {
+      const userId =
+        ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
+          | string
+          | undefined) || "";
+      if (userId) return `u:${userId}`;
+      // Use the library-provided IPv6-safe key helper; keying directly on
+      // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
+      return `ip:${ipKeyGenerator(req.ip || "")}`;
+    },
+    skip: isInternalSeedRequest,
+    message: "Write rate limit exceeded, please slow down",
+    ...rateLimitOptions,
+  });
+}
+
+const writeRateLimit = createWriteRateLimit();
 
 // SECURITY: guest-capable write routes (issue submission / thread append,
 // subscribe / unsubscribe) should not share the broader `/store` bucket.
@@ -4975,6 +4979,13 @@ function handleApiError(
       .status(error.statusCode)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof StorePolicyDeniedError) {
+    logWarn(logContext || "StorePolicyDenied", req, {
+      denied_count: error.denied.length,
+      reason_codes: [...new Set(error.denied.map((denial) => denial.reason_code))].sort(),
+    });
+    return res.status(400).json({ error: error.toErrorEnvelope() });
+  }
   if (error instanceof StorePolicyUnavailableError) {
     // 503, not 400: the write was refused because the instance could not read
     // its own policy, which is a service-side fault the caller can retry — not
@@ -5114,8 +5125,13 @@ async function runEntitiesQuery(
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies, search_mode, next_cursor } =
+    const { entities, total, applied_search_strategies, search_mode, next_cursor, read_contract } =
       await queryEntitiesWithCount({
+        readRequest: {
+          raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
+          surface: req.method === "GET" ? "http_get" : "http_post",
+          consumed: [...Object.keys(parsed.data), "query", "search_query"],
+        },
         userId,
         entityType: entity_type,
         entityTypes: entity_types,
@@ -5142,6 +5158,7 @@ async function runEntitiesQuery(
       total,
       limit,
       offset,
+      read_contract,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
@@ -7678,15 +7695,6 @@ app.post("/observations/create", async (req, res) => {
   }
 });
 
-type StoreRelationshipRef = {
-  relationship_type: string;
-  source_index?: number;
-  target_index?: number;
-  source_entity_id?: string;
-  target_entity_id?: string;
-  metadata?: Record<string, unknown>;
-};
-
 function normalizeInterpretationConfig(
   configInput?: Record<string, unknown>
 ): Record<string, unknown> {
@@ -7740,21 +7748,7 @@ async function completeInterpretationRun(params: {
     .eq("id", params.interpretationId);
 }
 
-export async function storeStructuredForApi(params: {
-  userId: string;
-  entities: Record<string, unknown>[];
-  sourcePriority: number;
-  observationSource?: import("./shared/action_schemas.js").ObservationSource;
-  /** When set, written observations carry this peer id for sync loop prevention. */
-  sourcePeerId?: string | null;
-  idempotencyKey: string;
-  originalFilename?: string;
-  relationships?: StoreRelationshipRef[];
-  interpretation?: StoreInterpretationInput;
-  interpretationSourceId?: string;
-  commit?: boolean;
-  strict?: boolean;
-}) {
+export async function storeStructuredForApi(params: StructuredStoreApiParams) {
   const {
     userId,
     entities,
@@ -7771,140 +7765,9 @@ export async function storeStructuredForApi(params: {
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
-
-  // Access policy: when the caller is a guest (AAuth-verified but not admitted
-  // via a grant), check per-entity-type access policies. If the policy allows
-  // guest writes, the request proceeds without requiring an agent_grant.
-  const requestContext = getRequestContext();
-  const agentIdentity = getCurrentAgentIdentity();
-  const admission = getCurrentAAuthAdmission();
-  const isAAuthVerified = agentIdentity?.thumbprint != null;
-  const isGuest = isAAuthVerified && (!admission || !admission.admitted);
-
-  if (isGuest && !requestContext?.bypassGuestStoreAccessPolicy) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    const guestId: GuestIdentity = {
-      thumbprint: agentIdentity.thumbprint,
-      sub: agentIdentity.sub,
-      iss: agentIdentity.iss,
-    };
-    await assertGuestWriteAllowed(entityTypes, guestId);
-  }
-
-  // usage_digest store-seam redaction guard (server-side backstop).
-  // Scope: strictly usage_digest entities only — no impact on any other entity type.
-  // For each incoming usage_digest entity, scan free-text fields `notes` and
-  // `friction_notes` via the pure redactUsageDigestEntity helper, and write the
-  // redacted copies back onto the entity object so the raw input is never persisted.
-  // This is a redact-and-store (scan) approach, not hard-reject, so a digest is
-  // never silently dropped on a client-side redaction miss.
-  //
-  // NOTE: Single telemetry sink today — entity_type === "usage_digest" is the only
-  // branch. If a second redacted-free-text entity_type appears, lift these field
-  // names into schema metadata (redact_free_text_fields) rather than adding another
-  // branch here.
-  {
-    const hasUsageDigest = entities.some(
-      (e) => (e as Record<string, unknown>)?.entity_type === "usage_digest"
-    );
-    if (hasUsageDigest) {
-      const { redactUsageDigestEntity } =
-        await import("./services/feedback/usage_digest_redaction.js");
-      for (const entityData of entities) {
-        const ed = entityData as Record<string, unknown>;
-        if (ed.entity_type !== "usage_digest") continue;
-        const result = redactUsageDigestEntity(ed as Parameters<typeof redactUsageDigestEntity>[0]);
-        if (result.applied) {
-          logger.warn(
-            `[STORE] usage_digest server-side redaction applied: ${result.hits} hit(s) in free-text fields.`
-          );
-        }
-      }
-    }
-  }
-
-  // Capability scoping: when the caller is an AAuth-verified agent covered
-  // by the capability registry, gate store_structured by entity_type here
-  // before any writes touch the DB. Guests who passed access policy above
-  // skip grant-based capability enforcement. Unknown / anonymous callers
-  // fall through (attribution_policy still gates their writes downstream).
-  const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
-  if (capabilityCtx && !isGuest) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    enforceAgentCapability("store", entityTypes, capabilityCtx);
-    if (Array.isArray(relationships) && relationships.length > 0) {
-      // Same shared check the MCP store and every standalone relationship
-      // entrance run (services/relationship_write_capability.ts).
-      await enforceRelationshipWriteCapabilities({
-        userId,
-        entities,
-        relationships,
-        capabilityCtx,
-      });
-    }
-  }
-
-  // Relationship-type validation, UP FRONT and BEFORE any entity is persisted
-  // (#1972 / G25).
-  //
-  // This closes the more damaging half of the closed-vocabulary defect. The
-  // relationships leg further down catches per edge and downgrades to
-  // logger.warn, so a store carrying an edge the substrate would not accept
-  // returned SUCCESS with the edge silently absent — a caller believed it had
-  // written a graph it had not written, and nothing in the response said
-  // otherwise. Validating here means an unacceptable type is a refusal the
-  // caller sees, and no entities are written that would have been orphaned by
-  // the edge that was going to fail anyway.
-  if (commit && Array.isArray(relationships) && relationships.length > 0) {
-    const { relationshipsService } = await import("./services/relationships.js");
-    const seen = new Set<string>();
-    for (const rel of relationships) {
-      const type = rel?.relationship_type;
-      if (typeof type !== "string" || seen.has(type)) continue;
-      seen.add(type);
-      await relationshipsService.assertRegisteredType(type, userId);
-    }
-  }
-
-  // Protected-entity-types guard: governance state (`agent_grant`, etc.)
-  // is gated by an explicit capability on the admitted grant. Mirrors
-  // the same check made deep in `createObservation` so callers see a
-  // structured `capability_denied` envelope before any writes.
-  {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    assertCanWriteProtectedBatch({
-      entity_types: entityTypes,
-      op: "store",
-      identity: getCurrentAgentIdentity(),
-      admission: getCurrentAAuthAdmission(),
-    });
-  }
-
-  // A key thumbprint may be pinned by agent_grants under one owner only.
-  // Checked before any write so a refused pin persists nothing; the same
-  // check runs again at the observation insert.
-  if (entities.some((entity) => entity?.entity_type === "agent_grant")) {
-    const { assertGrantWriteKeepsPinUnique } = await import("./services/agent_grants.js");
-    for (const entity of entities) {
-      if (entity?.entity_type !== "agent_grant") continue;
-      await assertGrantWriteKeepsPinUnique({
-        userId,
-        entityType: "agent_grant",
-        fields: entity,
-      });
-    }
-  }
-
+  await preflightStructuredStoreAdmission(params);
   const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
     await import("./services/entity_resolution.js");
-  const { detectFlatPackedRows, FlatPackedRowsError } =
-    await import("./services/flat_packed_detection.js");
   // R4: lazy import so the structured-store handler can attach required
   // identity-field hints when resolving fails under a reject policy.
   const registryModule = await import("./services/schema_registry.js");
@@ -7913,15 +7776,17 @@ export async function storeStructuredForApi(params: {
     Awaited<ReturnType<typeof deriveRequiredIdentityFields>>
   >;
 
-  // Reject flat-packed rows (whole tables smuggled into a single entity as
-  // `<prefix>_<index>_<suffix>` keys). These cannot produce per-row snapshots
-  // and are almost always a caller bug. The caller should split into one
-  // entity per row and retry.
-  for (const entityData of entities) {
-    const detection = detectFlatPackedRows(entityData as Record<string, unknown>);
-    if (detection.detected) {
-      throw new FlatPackedRowsError(detection);
-    }
+  if (params.expectedEntityAbsent === true) {
+    const { storeConditionalStructured } = await import("./services/store_conditional.js");
+    return storeConditionalStructured({
+      userId,
+      entities,
+      sourcePriority,
+      observationSource,
+      idempotencyKey,
+      originalFilename,
+      strict,
+    });
   }
 
   // Compute hash of incoming content before querying so we can detect
@@ -7934,6 +7799,12 @@ export async function storeStructuredForApi(params: {
   });
   const { computeContentHash: _computeContentHash } = await import("./services/raw_storage.js");
   const incomingContentHash = _computeContentHash(Buffer.from(incomingJsonContent, "utf-8"));
+
+  if (commit) {
+    const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+    const { getDb } = await import("./repositories/db/connection.js");
+    await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+  }
 
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
@@ -8047,6 +7918,10 @@ export async function storeStructuredForApi(params: {
       return entry?.schema_definition ?? null;
     });
   }
+
+  const { preflightStructuredStoreOwnership } =
+    await import("./services/store_ownership_admission.js");
+  if (commit) await preflightStructuredStoreOwnership(params);
 
   const { createObservation } = await import("./services/observation_storage.js");
 
@@ -9400,10 +9275,33 @@ async function handleStorePost(
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed.data);
     const hasEntities = Boolean(parsed.data.entities?.length);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
     const hasUnstructured = hasFileContent || hasFilePath;
+
+    if (hasEntities && hasUnstructured && parsed.data.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.data.entities!,
+          sourcePriority: parsed.data.source_priority,
+          idempotencyKey: parsed.data.idempotency_key!,
+          relationships: parsed.data.relationships,
+          interpretation: parsed.data.interpretation,
+          sourcePeerId: parsed.data.source_peer_id,
+          strict: parsed.data.strict,
+        },
+        {
+          key: parsed.data.file_idempotency_key,
+          content: parsed.data.file_content,
+          filePath: parsed.data.file_path,
+        }
+      );
+    }
 
     let structuredResult: Record<string, unknown> | undefined;
     let unstructuredResult: Record<string, unknown> | undefined;
@@ -9504,6 +9402,7 @@ async function handleStorePost(
         storeStructuredForApi({
           userId,
           entities: parsed.data.entities as Record<string, unknown>[],
+          expectedEntityAbsent: parsed.data.expected_entity_absent,
           sourcePriority: parsed.data.source_priority ?? 100,
           observationSource: parsed.data.observation_source,
           sourcePeerId: parsed.data.source_peer_id,
@@ -9568,6 +9467,16 @@ async function handleStorePost(
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+    const { StoreConditionError } = await import("./services/store_condition_keys.js");
+    if (error instanceof StoreConditionError) {
+      const status =
+        error.code === "VALIDATION_ERROR"
+          ? 400
+          : error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
+            ? 503
+            : 409;
+      return res.status(status).json({ error: error.toErrorEnvelope() });
+    }
     if (isGrantPinConflict(error)) {
       logWarn("AgentGrantPinConflict:store", req, { code: error.code });
       return sendError(res, 409, error.code, error.message, { field: error.field });
@@ -10249,7 +10158,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, at, at_ingested } = parsed.data;
+  const { entity_id, at, at_ingested, include_cleared_fields } = parsed.data;
 
   let userId: string;
   try {
@@ -10262,9 +10171,16 @@ app.post("/get_entity_snapshot", async (req, res) => {
   // helper so the offline path honours them with the same semantics as the MCP
   // path in server.ts. Without cutoffs, fall through to the fast materialized
   // entity_snapshots table read.
-  if (at || at_ingested) {
+  if (at || at_ingested || include_cleared_fields) {
     try {
-      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested);
+      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested, {
+        includeClearedFields: include_cleared_fields,
+      });
+      if (include_cleared_fields && !at && !at_ingested) {
+        const { isEntityDeleted } = await import("./services/deletion.js");
+        if (result && (await isEntityDeleted(result.entity_id, userId)))
+          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
       if (result === null) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
@@ -10276,8 +10192,24 @@ app.post("/get_entity_snapshot", async (req, res) => {
     }
   }
 
-  // Fast path: no cutoffs — read the materialized snapshot directly, scoped to
-  // the authenticated user.
+  // Materialization is derived state. Validate owned current authority before
+  // serving its row, including restrictive corruption acquisition failures.
+  try {
+    const { isEntityDeleted } = await import("./services/deletion.js");
+    const { hasRecordedEntityLifecycleCutover } =
+      await import("./services/entity_lifecycle_storage.js");
+    const { getDb } = await import("./repositories/db/connection.js");
+    if (
+      (await hasRecordedEntityLifecycleCutover(await getDb())) &&
+      (await isEntityDeleted(entity_id, userId))
+    )
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+  } catch (err) {
+    logError("Error:get_entity_snapshot:authority", req, err);
+    return sendError(res, 500, "DB_QUERY_FAILED", "Entity lifecycle authority acquisition failed");
+  }
+
+  // No cutoffs: return the existing owned materialized factual snapshot.
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")
@@ -12281,6 +12213,28 @@ app.post("/register_schema", async (req, res) => {
 });
 
 // POST /correct - Create correction observation to override field value
+app.post("/corrections/transaction", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.body?.user_id as string | undefined);
+    const { applyCorrectionTransaction, CorrectionTransactionError } =
+      await import("./services/correction_transaction.js");
+    try {
+      return res.json(await applyCorrectionTransaction({ ...req.body, user_id: userId }));
+    } catch (error) {
+      if (error instanceof CorrectionTransactionError) {
+        const status =
+          error.code === "VALIDATION_ERROR" ? 400 : error.code === "RESOURCE_NOT_FOUND" ? 404 : 409;
+        return sendError(res, status, error.code, error.message, {
+          hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Correction transaction failed and was rolled back.");
+  }
+});
+
 app.post("/correct", async (req, res) => {
   const parsed = CorrectEntityRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -12292,7 +12246,8 @@ app.post("/correct", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
+    const { entity_id, entity_type, field, value, idempotency_key, expected_version, overwrite } =
+      parsed.data;
 
     const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
     if (correctCtx) {
@@ -12311,13 +12266,17 @@ app.post("/correct", async (req, res) => {
     // propagates (it is NOT coerced to "declared field" — product principle
     // 10.2); a missing schema throws CorrectionSchemaNotFoundError, surfaced as
     // ERR_NO_SCHEMA_FOR_ENTITY_TYPE. Both reach the catch below.
-    const { createCorrection, resolveCorrectionSchema, buildCorrectionResponse } =
-      await import("./services/correction.js");
+    const {
+      createCorrection,
+      createCorrectionWithVersionPrecondition,
+      resolveCorrectionSchema,
+      buildCorrectionResponse,
+    } = await import("./services/correction.js");
 
     const { schemaVersion: correctionSchemaVersion, isUnknownField } =
       await resolveCorrectionSchema(entity_type, field, userId);
 
-    const result = await createCorrection({
+    const correctionParams = {
       entity_id,
       entity_type,
       field,
@@ -12325,7 +12284,15 @@ app.post("/correct", async (req, res) => {
       schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
-    });
+    };
+    const result =
+      typeof expected_version === "string"
+        ? await createCorrectionWithVersionPrecondition({
+            ...correctionParams,
+            expected_version,
+            overwrite,
+          })
+        : await createCorrection(correctionParams);
 
     if (isUnknownField) {
       try {
@@ -12361,8 +12328,10 @@ app.post("/correct", async (req, res) => {
         entity_id,
         entity_type,
         field,
-        value,
+        value: result.value,
         isUnknownField,
+        replayed: result.replayed,
+        entity_version: result.entity_version,
       }),
     });
   } catch (error) {
@@ -12370,12 +12339,53 @@ app.post("/correct", async (req, res) => {
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500
     // handler below instead of being coerced into a "declared field" outcome.
-    const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
+    const {
+      CorrectionSchemaNotFoundError,
+      CorrectionEntityTypeMismatchError,
+      CorrectionIdempotencyMismatchError,
+      FieldVersionConflictError,
+    } = await import("./services/correction.js");
     if (error instanceof CorrectionSchemaNotFoundError) {
       logWarn("ValidationError:correct", req, { code: error.code });
       return res
         .status(400)
         .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
+    if (error instanceof CorrectionEntityTypeMismatchError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          entity_id: error.entityId,
+          supplied_entity_type: error.suppliedEntityType,
+          stored_entity_type: error.storedEntityType,
+        })
+      );
+    }
+    if (error instanceof CorrectionIdempotencyMismatchError) {
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          idempotency_key: error.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct correction payload.",
+        })
+      );
+    }
+    // Waxwing ADR: stale expected_version on /correct. Nothing was written —
+    // the precondition check runs before createCorrection. Flat standard
+    // envelope (error_code/message/details), matching the OpenAPI contract
+    // and the sibling ERR_ARRAY_ITEM_CONFLICT 409 on /patch_array_item — NOT
+    // wrapped under an `error` key (that shape is reserved for envelopes
+    // like entity_owner_conflict that predate the standard envelope).
+    if (error instanceof FieldVersionConflictError) {
+      logWarn("VersionConflict:correct", req, { code: error.code, field: error.field });
+      return res.status(409).json(
+        buildErrorEnvelope(error.code, error.message, {
+          entity_id: error.entityId,
+          field: error.field,
+          stored_version: error.storedVersion,
+          expected_version: error.expectedVersion,
+          hint: "Re-read the entity snapshot and retry with its current entity_version as expected_version.",
+        })
+      );
     }
     // Instance store-policy denial (#1975) — same envelope as /store, so a
     // caller handling one handles both.
@@ -12394,6 +12404,167 @@ app.post("/correct", async (req, res) => {
       "Failed to create correction",
       "DB_QUERY_FAILED",
       "APIError:correct"
+    );
+  }
+});
+
+// POST /patch_array_item - Atomically patch one item of a structured array
+// field by key (Waxwing ADR, ent_4b41bb83a4faf4428a73bfc8). Sibling of
+// /correct; see openapi.yaml for the full contract.
+app.post("/patch_array_item", writeRateLimit, async (req, res) => {
+  const parsed = PatchArrayItemRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:patch_array_item", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const {
+      entity_id,
+      entity_type,
+      field,
+      key_field,
+      key_value,
+      item,
+      expected_item_version,
+      expected_item_absent,
+    } = parsed.data;
+
+    // Resolve the authoritative entity type under the authenticated user
+    // before capability/protected-type checks. The request's entity_type is a
+    // consistency assertion, never an authorization input.
+    const { loadArrayItemPatchTarget } = await import("./services/array_item_patch.js");
+    const target = await loadArrayItemPatchTarget({
+      entityId: entity_id,
+      userId,
+      suppliedEntityType: entity_type,
+    });
+
+    const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+    if (correctCtx) {
+      enforceAgentCapability("correct", [target.entity_type], correctCtx);
+    }
+    assertCanWriteProtectedBatch({
+      entity_types: [target.entity_type],
+      op: "correct",
+      identity: getCurrentAgentIdentity(),
+      admission: getCurrentAAuthAdmission(),
+    });
+
+    const { patchArrayItem } = await import("./services/array_item_patch.js");
+    const result = await patchArrayItem({
+      entity_id,
+      entity_type,
+      user_id: userId,
+      field,
+      key_field,
+      key_value,
+      item,
+      expected_item_version,
+      expected_item_absent,
+      idempotency_key: parsed.data.idempotency_key,
+    });
+
+    if (result.status === "conflict") {
+      logWarn("VersionConflict:patch_array_item", req, { entity_id, field, key_field });
+      return res.status(409).json(
+        buildErrorEnvelope(
+          "ERR_ARRAY_ITEM_CONFLICT",
+          `Stale expected_item_version for ${entity_type}.${field}[${key_field}=${JSON.stringify(key_value)}]`,
+          {
+            entity_id,
+            entity_type,
+            field,
+            key_field,
+            key_value,
+            current_item: result.conflict?.current_item ?? null,
+            current_item_version: result.conflict?.current_item_version ?? null,
+            expected_item_version: result.conflict?.expected_item_version ?? null,
+            expected_item_absent: expected_item_absent ?? false,
+            hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
+          }
+        )
+      );
+    }
+
+    return res.json({
+      success: true,
+      entity_id: result.entity_id,
+      entity_type: result.entity_type,
+      field: result.field,
+      key_field: result.key_field,
+      key_value: result.key_value,
+      observation_id: result.observation_id,
+      item: result.item,
+      item_version: result.item_version,
+      array_length: result.array_length,
+      snapshot: result.snapshot,
+      replayed: result.replayed ?? false,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Entity not found")) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
+    }
+    const { CorrectionIdempotencyMismatchError } = await import("./services/correction.js");
+    if (error instanceof CorrectionIdempotencyMismatchError) {
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          idempotency_key: error.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct patch payload.",
+        })
+      );
+    }
+    if (error instanceof EntityOwnerConflictError) {
+      return res.status(409).json({ error: error.toErrorEnvelope() });
+    }
+    {
+      const {
+        ArrayItemKeyFieldMismatchError,
+        ArrayItemPolicyRequiredError,
+        ArrayItemEntityTypeMismatchError,
+      } = await import("./services/array_item_patch.js");
+      if (
+        error instanceof ArrayItemKeyFieldMismatchError ||
+        error instanceof ArrayItemPolicyRequiredError ||
+        error instanceof ArrayItemEntityTypeMismatchError
+      ) {
+        logWarn("KeyFieldMismatch:patch_array_item", req, {
+          code: error.code,
+        });
+        return res
+          .status(error.statusCode)
+          .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+      }
+    }
+    // Instance store-policy denial (#1975) — patchArrayItem() writes through
+    // createCorrection exactly like /correct, so it can be refused by the
+    // same instance-level write policy. Same envelope shape as /correct and
+    // /store, so a caller handling one handles all three.
+    const { StorePolicyDeniedError } = await import("./services/instance_policy.js");
+    if (error instanceof StorePolicyDeniedError) {
+      logWarn("StorePolicyDenied:patch_array_item", req, {
+        denied_count: error.denied.length,
+        reason_codes: [...new Set(error.denied.map((d) => d.reason_code))].sort(),
+      });
+      return res.status(400).json({ error: error.toErrorEnvelope() });
+    }
+    if (error instanceof StorePolicyUnavailableError) {
+      logError("StorePolicyUnavailable:patch_array_item", req, error, {
+        code: error.code,
+        cause: error.cause_message,
+      });
+      return res
+        .status(503)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to patch array item",
+      "DB_QUERY_FAILED",
+      "APIError:patch_array_item"
     );
   }
 });

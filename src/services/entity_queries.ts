@@ -1,3 +1,4 @@
+import type { EntityReadTrace } from "../shared/entity_read_contract.js";
 // FU-134: Query Updates
 // Provenance chain, merged entity exclusion
 
@@ -8,6 +9,7 @@ import {
   isCursorEligibleSort,
   type CursorPayload,
 } from "./entity_cursor.js";
+import { computeEntityVersion } from "./entity_version.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -62,6 +64,7 @@ export class InvalidSnapshotFieldError extends Error {
 }
 
 export interface EntityQueryOptions {
+  readTrace?: EntityReadTrace;
   userId?: string;
   entityType?: string;
   /**
@@ -120,6 +123,7 @@ export interface EntityQueryOptions {
 }
 
 export interface EntityWithProvenance {
+  cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
   canonical_name: string;
@@ -128,6 +132,8 @@ export interface EntityWithProvenance {
   raw_fragments?: Record<string, unknown>; // Unvalidated fields not yet in schema
   observation_count: number;
   last_observation_at: string;
+  /** Opaque CAS token that advances for every committed observation. */
+  entity_version: string;
   provenance: Record<string, unknown>;
   computed_at?: string;
   merged_to_entity_id?: string | null;
@@ -193,49 +199,12 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
 }
 
 /**
- * Resolve which of the given entities are soft-deleted.
- *
- * ateles#576: resolve deletion from the PRESENCE of an entity_snapshots row
- * rather than by re-deriving it from the observation log.
- *
- * A soft-deleted entity has no snapshot row. `ObservationReducer.computeSnapshot`
- * returns null once the highest-priority observation carries `_deleted: true`,
- * and the snapshot writers delete the row when the reducer returns null — the
- * SQLite adapter does this automatically on every observation insert
- * (`recomputeEntitySnapshot`), so a deletion or restoration observation
- * re-materializes liveness as a side effect of being written. That makes
- * "has a snapshot row" the system's existing, self-maintaining record of
- * liveness; this function now simply reads it.
- *
- * The previous implementation instead selected `entity_id, source_priority,
- * observed_at, fields` for EVERY observation of every id in the chunk, sorted
- * the whole result in a temp b-tree (the ORDER BY spans entities, so the
- * per-entity index cannot serve it), then kept only the top row per entity
- * and discarded the rest. The paginated scan calls this once per chunk, so a
- * single request re-read large parts of the observations table — including
- * its `fields` JSON blobs — to recompute something already materialized.
- *
- * #2267 review: snapshot-row ABSENCE is not by itself deletion. Two other
- * states also lack a snapshot row, and conflating them with deletion silently
- * removed live entities from results:
- *
- *   - MERGED-AWAY. `mergeEntities` rewrites the merged-away entity's
- *     observations onto the survivor (step 1) and deletes its snapshot row
- *     (step 9), so it has neither. It is not deleted, and `include_merged: true`
- *     must still return it. Callers pass `merged_to_entity_id` — already on
- *     every candidate row via ENTITY_BASE_SELECT — so this costs no extra query.
- *   - NEVER-OBSERVED. An `entities` row written without any observation never
- *     gets a snapshot (nothing ran the reducer). Treating it as deleted made
- *     live entities vanish from default queries — the IT-008 regression. Such a
- *     row has no deletion observation, so it is live by the prior rule and
- *     stays live here.
- *
- * Both are distinguished WITHOUT reading the observation log, so the
- * performance win is preserved in full: still one indexed snapshot lookup per
- * chunk, plus (only when never-observed rows are actually present) one bounded
- * indexed existence probe against `observations`.
+ * Snapshot presence is derived state. Validate each canonical candidate through
+ * the shared owned lifecycle selector, retaining empty/merged compatibility.
+ * This reads the attached observation log; it is not the old snapshot-only
+ * indexed shortcut and must not certify visibility from stale materialization.
  */
-async function getDeletedEntityIds(
+async function getLegacyDeletedEntityIds(
   candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
   userId?: string
 ): Promise<Set<string>> {
@@ -298,12 +267,65 @@ async function getDeletedEntityIds(
   return deletedEntityIds;
 }
 
+async function getDeletedEntityIds(
+  candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
+  userId?: string
+): Promise<Set<string>> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb())))
+    return getLegacyDeletedEntityIds(candidates, userId);
+  const deletedEntityIds = new Set<string>();
+  if (candidates.length === 0) {
+    return deletedEntityIds;
+  }
+
+  // Snapshot presence is derived state, not lifecycle authority. In particular
+  // an empty entity may own only its compatibility baseline and no fact snapshot.
+  const { isEntityDeleted } = await import("./deletion.js");
+  for (const candidate of candidates) {
+    if (candidate.merged_to_entity_id) continue;
+    let owner = userId;
+    if (!owner) {
+      const { data, error } = await db
+        .from("entities")
+        .select("user_id")
+        .eq("id", candidate.id)
+        .single();
+      if (error || typeof data?.user_id !== "string")
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      owner = data.user_id;
+    }
+    if (await isEntityDeleted(candidate.id, owner!)) deletedEntityIds.add(candidate.id);
+  }
+
+  return deletedEntityIds;
+}
+
+/** Reuse the current visibility acquisition for derived snapshot consumers.
+ * Before explicit cutover their existing materialized-read behavior is retained.
+ */
+export async function filterCurrentLifecycleRecords<T extends { entity_id: string }>(
+  records: readonly T[],
+  userId?: string
+): Promise<T[]> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) return [...records];
+  const deleted = await getDeletedEntityIds(
+    records.map((r) => ({ id: r.entity_id })),
+    userId
+  );
+  return records.filter((r) => !deleted.has(r.entity_id));
+}
+
 /**
  * Query entities with merged entity exclusion
  */
 export async function queryEntities(
   options: EntityQueryOptions = {}
 ): Promise<EntityWithProvenance[]> {
+  const readTrace = options.readTrace;
   const {
     userId,
     entityType,
@@ -452,6 +474,29 @@ export async function queryEntities(
     published !== undefined ||
     Boolean(publishedAfter) ||
     Boolean(publishedBefore);
+  if (readTrace) {
+    const snapshotOrdering =
+      sortBy === "observation_count" ||
+      sortBy === "last_observation_at" ||
+      sortBy === "submitted_at" ||
+      isSnapshotFieldSort;
+    const field =
+      shouldUseSnapshotDrivenScan && !snapshotOrdering
+        ? "entity_id"
+        : sortBy === "canonical_name" || sortBy === "entity_id" || snapshotOrdering
+          ? sortBy
+          : "entity_id";
+    const direction =
+      shouldUseSnapshotDrivenScan && !snapshotOrdering
+        ? "asc"
+        : field === sortBy
+          ? sortOrder
+          : "asc";
+    readTrace.ordering = { field, direction, tie_breaker: "entity_id" };
+    readTrace.continuation_supported = !shouldUseSnapshotDrivenScan && sortBy === "entity_id";
+    if (field !== sortBy || direction !== sortOrder)
+      readTrace.reasons.add("requested_ordering_unapplied");
+  }
 
   const fetchEntitiesByIds = async (ids: string[]) => {
     if (ids.length === 0) return [];
@@ -705,12 +750,14 @@ export async function queryEntities(
     user_id: string | null;
   }> = [];
   if (includeSnapshots) {
-    const { data } = await db
+    const { data, error: observationError } = await db
       .from("observations")
       .select("entity_id, source_id, user_id")
       .in("entity_id", filteredEntityIds)
       .not("source_id", "is", null)
       .limit(1000); // Reasonable limit for batch
+    if (observationError) readTrace?.reasons.add("raw_fragment_sources_unavailable");
+    if ((data?.length ?? 0) >= 1000) readTrace?.reasons.add("raw_fragment_source_cap");
     allObservations =
       (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) ||
       [];
@@ -783,11 +830,12 @@ export async function queryEntities(
           fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
-        const { data: observationsForSources } = await db
+        const { data: observationsForSources, error: sourceLinkError } = await db
           .from("observations")
           .select("entity_id, source_id")
           .eq("entity_type", entityType)
           .in("source_id", Array.from(sourceIdsForType));
+        if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
         const legacyEntityCountsBySource = new Map<string, Set<string>>();
         for (const obs of observationsForSources || []) {
           if (!obs.source_id || !obs.entity_id) continue;
@@ -797,7 +845,8 @@ export async function queryEntities(
           legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
         }
 
-        const { data: fragments } = await fragmentQuery;
+        const { data: fragments, error: fragmentError } = await fragmentQuery;
+        if (fragmentError) readTrace?.reasons.add("raw_fragments_unavailable");
 
         if (fragments && fragments.length > 0) {
           // Group fragments by entity (via source_id -> entity_id mapping)
@@ -859,9 +908,16 @@ export async function queryEntities(
 
   return entities.map((entity: any) => {
     const snapshot = snapshotMap.get(entity.id);
+    if (
+      snapshot?.snapshot != null &&
+      (typeof snapshot.snapshot !== "object" || Array.isArray(snapshot.snapshot))
+    )
+      readTrace?.reasons.add("snapshot_decode_partial");
     const rawFragments = rawFragmentsByEntity.get(entity.id);
     const snapshotData = (snapshot?.snapshot ?? {}) as Record<string, unknown>;
     const lightweightStatus = snapshotData["status"];
+    const observationCount = snapshot?.observation_count || 0;
+    const lastObservationAt = snapshot?.last_observation_at || entity.created_at;
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
@@ -876,8 +932,13 @@ export async function queryEntities(
         includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
           ? rawFragments
           : undefined,
-      observation_count: snapshot?.observation_count || 0,
-      last_observation_at: snapshot?.last_observation_at || entity.created_at,
+      observation_count: observationCount,
+      last_observation_at: lastObservationAt,
+      entity_version: computeEntityVersion({
+        entity_id: entity.id,
+        observation_count: observationCount,
+        last_observation_at: lastObservationAt,
+      }),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,
@@ -925,8 +986,12 @@ export function computeNextCursor(
 export async function getEntityWithProvenance(
   entityId: string,
   includeDeleted: boolean = false,
-  userId?: string
+  userId?: string,
+  projection: { includeClearedFields?: boolean } = {}
 ): Promise<EntityWithProvenance | null> {
+  if (projection.includeClearedFields && !userId) {
+    throw new Error("Nullable winning projection requires an explicit owner");
+  }
   // Get entity. When a userId is supplied, scope by it so a cross-user
   // entity_id cannot be read by id alone (the HTTP callers precheck ownership;
   // the MCP retrieve_entity_snapshot path historically did not).
@@ -942,30 +1007,12 @@ export async function getEntityWithProvenance(
 
   // Check if entity is merged - redirect to target
   if (entity.merged_to_entity_id) {
-    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId);
+    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId, projection);
   }
 
-  // Check if entity is deleted (unless explicitly requested)
   if (!includeDeleted) {
-    let deletedCheckQuery = db
-      .from("observations")
-      .select("source_priority, observed_at, fields")
-      .eq("entity_id", entityId);
-    if (userId) {
-      deletedCheckQuery = deletedCheckQuery.eq("user_id", userId);
-    }
-    const { data: observations } = await deletedCheckQuery
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false })
-      .limit(1);
-
-    if (observations && observations.length > 0) {
-      const highestPriorityObs = observations[0];
-      if (highestPriorityObs.fields?._deleted === true) {
-        // Entity is deleted - return null
-        return null;
-      }
-    }
+    const { isEntityDeleted } = await import("./deletion.js");
+    if (await isEntityDeleted(entityId, entity.user_id as string)) return null;
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
@@ -981,6 +1028,19 @@ export async function getEntityWithProvenance(
       `Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`
     );
     effectiveSnapshot = null;
+  }
+
+  if (projection.includeClearedFields) {
+    const { computeEntitySnapshotAtTime } = await import("./entity_snapshot_at_time.js");
+    const selected = await computeEntitySnapshotAtTime(
+      entityId,
+      userId!,
+      undefined,
+      undefined,
+      projection
+    );
+    if (!selected) return null;
+    effectiveSnapshot = { ...selected, user_id: userId! } as EntitySnapshotRow;
   }
 
   // Get raw_fragments for this entity
@@ -1113,15 +1173,23 @@ export async function getEntityWithProvenance(
     );
   }
 
+  const observationCount = effectiveSnapshot?.observation_count || 0;
+  const lastObservationAt = effectiveSnapshot?.last_observation_at || entity.created_at;
   return {
+    ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
     entity_id: entity.id,
     entity_type: entity.entity_type,
     canonical_name: entity.canonical_name,
     schema_version: effectiveSnapshot?.schema_version || "1.0",
     snapshot: effectiveSnapshot?.snapshot || {},
     raw_fragments: Object.keys(rawFragments).length > 0 ? rawFragments : undefined,
-    observation_count: effectiveSnapshot?.observation_count || 0,
-    last_observation_at: effectiveSnapshot?.last_observation_at || entity.created_at,
+    observation_count: observationCount,
+    last_observation_at: lastObservationAt,
+    entity_version: computeEntityVersion({
+      entity_id: entity.id,
+      observation_count: observationCount,
+      last_observation_at: lastObservationAt,
+    }),
     provenance: effectiveSnapshot?.provenance || {},
     computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,

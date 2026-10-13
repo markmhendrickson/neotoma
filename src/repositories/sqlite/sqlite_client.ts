@@ -1,4 +1,5 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
+import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -61,6 +62,7 @@ export async function applyConnectionPragmas(db: DbDatabase): Promise<void> {
 }
 
 const SCHEMA_STATEMENTS = [
+  STORE_CONDITION_KEYS_SCHEMA,
   `CREATE TABLE IF NOT EXISTS sources (
     id TEXT PRIMARY KEY,
     user_id TEXT,

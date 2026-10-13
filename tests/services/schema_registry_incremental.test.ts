@@ -383,6 +383,52 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       expect(result).toBeDefined();
     });
 
+    it("persists merge_array_by_key and its key_field for an added array field", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "session_digest",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: { title: { type: "string" } },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: { merge_policies: { title: { strategy: "last_write" } } },
+        active: true,
+      };
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "1.1" },
+        }),
+      });
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      await service.updateSchemaIncremental({
+        entity_type: "session_digest",
+        fields_to_add: [
+          {
+            field_name: "tasks_claimed",
+            field_type: "array",
+            reducer_strategy: "merge_array_by_key",
+            reducer_key_field: "claim_id",
+          },
+        ],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.reducer_config.merge_policies.tasks_claimed).toEqual({
+        strategy: "merge_array_by_key",
+        tie_breaker: "observed_at",
+        key_field: "claim_id",
+      });
+    });
+
     it("uses code-defined baseline when loadActiveSchema returns null", async () => {
       vi.spyOn(service, "loadActiveSchema").mockResolvedValue(null);
 

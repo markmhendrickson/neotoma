@@ -314,7 +314,9 @@ describe("observation insertion sites (characterization)", () => {
       const before = (await rowsForEntity(entityId, MCP_USER_ID)).length;
       const replay = await createCorrection(params);
       expect(replay.observation_id).toBe(first.observation_id);
-      expect(replay.snapshot).toBeNull();
+      // Keyed/CAS correction replay reads committed current state before CAS.
+      expect(replay.replayed).toBe(true);
+      expect(replay.snapshot).toEqual(first.snapshot);
       expect((await rowsForEntity(entityId, MCP_USER_ID)).length).toBe(before);
     });
   });

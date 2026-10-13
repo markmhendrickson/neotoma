@@ -63,6 +63,8 @@ export interface CreateObservationParams {
    * `composite:full_name+employer`, `first_string_field:name`).
    */
   identity_rule?: string | null;
+  /** Server-owned conditional operation proof; never a public store field. */
+  operation_receipt?: { fingerprint: string; receipt: object };
 }
 
 export interface ObservationRecord {
@@ -176,8 +178,11 @@ export async function createObservation(
     identity_basis: params.identity_basis || undefined,
     identity_rule: params.identity_rule || undefined,
     source_peer_id: params.source_peer_id || undefined,
-    provenance: attribution,
+    provenance: params.operation_receipt
+      ? { ...attribution, store_operation_receipt: params.operation_receipt.receipt }
+      : attribution,
   });
+  if (params.operation_receipt) row.canonical_hash = params.operation_receipt.fingerprint;
 
   // Content-addressed idempotency: the observation id is a deterministic hash
   // of (source_id, interpretation_id, entity_id, fields, idempotency_key), so a

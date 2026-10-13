@@ -15,6 +15,7 @@ import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
+import { collapsedEntityReadContract } from "./shared/entity_read_contract.js";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -42,6 +43,7 @@ import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
+  PatchArrayItemRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
@@ -2519,11 +2521,26 @@ export class NeotomaServer {
         if (error instanceof McpError) {
           throw error;
         }
+        const { StoreConditionError } = await import("./services/store_condition_keys.js");
+        if (error instanceof StoreConditionError) {
+          throw new McpError(
+            error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
+              ? ErrorCode.InternalError
+              : ErrorCode.InvalidRequest,
+            error.message,
+            error.toErrorEnvelope()
+          );
+        }
         if (error instanceof AttributionPolicyError) {
           // Surface policy rejections as structured MCP errors so clients can
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
           // envelope carries `min_tier` / `current_tier` / `hint` in the MCP
           // `data` field (see src/services/attribution_policy.ts).
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof AgentCapabilityError) {
+          // Capability and protected-type denials are client policy failures,
+          // with the same actionable envelope as authenticated REST writes.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         if (error instanceof OverridePolicyViolationError) {
@@ -2720,8 +2737,12 @@ export class NeotomaServer {
         return await this.store(args);
       case "parse_file":
         return await this.parseFile(args);
+      case "correct_transaction":
+        return await this.correctTransaction(args);
       case "correct":
         return await this.correct(args);
+      case "patch_array_item":
+        return await this.patchArrayItem(args);
       case "merge_entities":
         return await this.mergeEntities(args);
       case "split_entity":
@@ -3556,6 +3577,12 @@ export class NeotomaServer {
     // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
     // ownership; this MCP path historically did not.
     const userId = this.getAuthenticatedUserId();
+    if (parsed.include_cleared_fields && parsed.format !== "json") {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "include_cleared_fields requires explicit format=json"
+      );
+    }
     const responseFormat = parsed.format ?? "markdown";
 
     const renderEntitySnapshotResponse = async (payload: {
@@ -3565,6 +3592,7 @@ export class NeotomaServer {
       snapshot: Record<string, unknown>;
       raw_fragments?: unknown;
       provenance: Record<string, string>;
+      cleared_fields_included?: true;
       computed_at: string | null | undefined;
       observation_count: number;
       last_observation_at: string | null | undefined;
@@ -3628,7 +3656,14 @@ export class NeotomaServer {
     };
 
     // Get entity first to check if it exists and handle merged entity redirection
-    const entity = await getEntityWithProvenance(parsed.entity_id, false, userId);
+    // Historical reads resolve ownership/redirects without applying CURRENT hiding.
+    // The shared temporal selector alone decides the requested past visibility.
+    const entity = await getEntityWithProvenance(
+      parsed.entity_id,
+      Boolean(parsed.at || parsed.at_ingested),
+      userId,
+      { includeClearedFields: !parsed.at && !parsed.at_ingested && parsed.include_cleared_fields }
+    );
 
     if (!entity) {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
@@ -3651,7 +3686,8 @@ export class NeotomaServer {
           entity.entity_id,
           userId,
           parsed.at,
-          parsed.at_ingested
+          parsed.at_ingested,
+          { includeClearedFields: parsed.include_cleared_fields }
         );
 
         if (!historicalResult) {
@@ -3683,6 +3719,7 @@ export class NeotomaServer {
 
     // Return current snapshot (from stored entity_snapshots table)
     return renderEntitySnapshotResponse({
+      ...(entity.cleared_fields_included ? { cleared_fields_included: true as const } : {}),
       entity_id: entity.entity_id,
       entity_type: entity.entity_type,
       schema_version: (entity as { schema_version?: string }).schema_version ?? entity.entity_type,
@@ -4224,7 +4261,13 @@ export class NeotomaServer {
       applied_search_strategies,
       search_mode,
       next_cursor,
+      read_contract,
     } = await queryEntitiesWithCount({
+      readRequest: {
+        raw: rawArgs,
+        surface: "mcp",
+        consumed: [...Object.keys(parsed), "query", "search_query"],
+      },
       userId,
       entityType: parsed.entity_type,
       entityTypes: parsed.entity_types,
@@ -4303,6 +4346,7 @@ export class NeotomaServer {
       return this.buildTextResponse({
         entities: [...collapsed, ...noKey],
         total,
+        read_contract: collapsedEntityReadContract(read_contract, collapsed.length + noKey.length),
         excluded_merged,
         collapsed_by: "canonical_key",
         collapse_groups: collapsed.length,
@@ -4316,6 +4360,7 @@ export class NeotomaServer {
       entities,
       total,
       excluded_merged,
+      read_contract,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
@@ -5625,6 +5670,7 @@ export class NeotomaServer {
 
     const schema = z
       .object({
+        expected_entity_absent: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
@@ -5685,6 +5731,9 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed);
+
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
       if (parsed.commit === false) {
@@ -5705,6 +5754,28 @@ export class NeotomaServer {
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+
+    if (hasEntities && hasUnstructured && parsed.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.entities!,
+          sourcePriority: parsed.source_priority,
+          idempotencyKey,
+          relationships: parsed.relationships,
+          interpretation: parsed.interpretation,
+          sourcePeerId: parsed.source_peer_id,
+          strict: parsed.strict,
+        },
+        {
+          key: parsed.file_idempotency_key ?? `${idempotencyKey}-file`,
+          content: parsed.file_content,
+          filePath: parsed.file_path,
+        },
+        "mcp"
+      );
+    }
 
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
@@ -5742,6 +5813,7 @@ export class NeotomaServer {
         {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
+          expectedEntityAbsent: parsed.expected_entity_absent,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -6199,6 +6271,7 @@ export class NeotomaServer {
     originalFilename?: string,
     relationships?: StoreRelationshipRef[],
     options: {
+      expectedEntityAbsent?: boolean;
       commit?: boolean;
       strict?: boolean;
       observationSource?: import("./shared/action_schemas.js").ObservationSource;
@@ -6207,6 +6280,29 @@ export class NeotomaServer {
       interpretationSourceId?: string;
     } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (options.expectedEntityAbsent === true) {
+      const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
+      const { storeConditionalStructured } = await import("./services/store_conditional.js");
+      await preflightStructuredStoreAdmission({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        relationships,
+        ...options,
+      });
+      const result = await storeConditionalStructured({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        strict: options.strict,
+        observationSource: options.observationSource,
+      });
+      return this.buildTextResponse(result);
+    }
     const commit = options.commit !== false;
     const strict = options.strict === true;
     const observationSource = options.observationSource;
@@ -6420,6 +6516,10 @@ export class NeotomaServer {
       const incomingContentHash = createHash("sha256")
         .update(JSON.stringify(entities, null, 2))
         .digest("hex");
+      const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+      const { getDb } = await import("./repositories/db/connection.js");
+      await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
         .select("id, content_hash")
@@ -6591,6 +6691,19 @@ export class NeotomaServer {
         });
       }
     }
+
+    const { preflightStructuredStoreOwnership } =
+      await import("./services/store_ownership_admission.js");
+    await preflightStructuredStoreOwnership(
+      {
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        strict,
+      },
+      "mcp"
+    );
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
@@ -7326,6 +7439,9 @@ export class NeotomaServer {
             fields: obs.fields,
             created_at: obs.created_at,
             user_id: obs.user_id,
+            entity_lifecycle_kind: obs.entity_lifecycle_kind,
+            entity_lifecycle_sequence: obs.entity_lifecycle_sequence,
+            entity_lifecycle_target_id: obs.entity_lifecycle_target_id,
           }));
 
           // Compute snapshot
@@ -7944,6 +8060,26 @@ export class NeotomaServer {
   }
 
   // FU-125: MCP correct() Tool
+  private async correctTransaction(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { applyCorrectionTransaction, CorrectionTransactionError } =
+      await import("./services/correction_transaction.js");
+    const body =
+      args as import("./services/correction_transaction.js").CorrectionTransactionOptions;
+    const userId = this.getAuthenticatedUserId(body?.user_id);
+    try {
+      return this.buildTextResponse(await applyCorrectionTransaction({ ...body, user_id: userId }));
+    } catch (error) {
+      if (error instanceof CorrectionTransactionError)
+        throw new McpError(ErrorCode.InvalidParams, error.message, {
+          code: error.code,
+          hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+        });
+      throw error;
+    }
+  }
+
   private async correct(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -7975,46 +8111,6 @@ export class NeotomaServer {
       });
     }
 
-    const { data: existingObservation, error: existingObservationError } = await db
-      .from("observations")
-      .select("id, entity_id, entity_type, fields")
-      .eq("user_id", userId)
-      .eq("idempotency_key", parsed.idempotency_key)
-      .maybeSingle();
-
-    if (existingObservationError) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to check idempotency key: ${existingObservationError.message}`
-      );
-    }
-
-    if (existingObservation) {
-      const existingFields = existingObservation.fields as Record<string, unknown> | null;
-      const existingValue = existingFields ? existingFields[parsed.field] : undefined;
-      const existingValueJson = JSON.stringify(existingValue);
-      const incomingValueJson = JSON.stringify(parsed.value);
-
-      if (
-        existingObservation.entity_id !== parsed.entity_id ||
-        existingObservation.entity_type !== parsed.entity_type ||
-        existingValueJson !== incomingValueJson
-      ) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Idempotency key reuse detected with different correction payload."
-        );
-      }
-
-      return this.buildTextResponse({
-        observation_id: existingObservation.id,
-        entity_id: parsed.entity_id,
-        field: parsed.field,
-        value: parsed.value,
-        message: "Correction already applied for this idempotency key",
-      });
-    }
-
     // Validate entity ownership
     const { data: entity, error: entityError } = await db
       .from("entities")
@@ -8035,6 +8131,10 @@ export class NeotomaServer {
       resolveCorrectionSchema,
       buildCorrectionResponse,
       CorrectionSchemaNotFoundError,
+      CorrectionEntityTypeMismatchError,
+      CorrectionIdempotencyMismatchError,
+      FieldVersionConflictError,
+      createCorrectionWithVersionPrecondition,
     } = await import("./services/correction.js");
 
     // Issue #1540: resolve the schema and determine whether `field` is declared
@@ -8067,7 +8167,7 @@ export class NeotomaServer {
     }
 
     try {
-      const result = await createCorrection({
+      const correctionParams = {
         entity_id: parsed.entity_id,
         entity_type: parsed.entity_type,
         field: parsed.field,
@@ -8075,7 +8175,15 @@ export class NeotomaServer {
         schema_version: schemaVersion,
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
-      });
+      };
+      const result =
+        typeof parsed.expected_version === "string"
+          ? await createCorrectionWithVersionPrecondition({
+              ...correctionParams,
+              expected_version: parsed.expected_version,
+              overwrite: parsed.overwrite,
+            })
+          : await createCorrection(correctionParams);
 
       if (isUnknownField) {
         // Best-effort raw_fragments mirror (parity with the store interpretation
@@ -8108,11 +8216,34 @@ export class NeotomaServer {
           entity_id: parsed.entity_id,
           entity_type: parsed.entity_type,
           field: parsed.field,
-          value: parsed.value,
+          value: result.value,
           isUnknownField,
+          replayed: result.replayed,
+          entity_version: result.entity_version,
         })
       );
     } catch (corrErr) {
+      if (corrErr instanceof FieldVersionConflictError) {
+        throw new McpError(ErrorCode.InvalidRequest, corrErr.message, {
+          ...corrErr.toErrorEnvelope(),
+          hint: "Re-read the entity snapshot and retry with its current entity_version as expected_version.",
+        });
+      }
+      if (corrErr instanceof CorrectionIdempotencyMismatchError) {
+        throw new McpError(ErrorCode.InvalidParams, corrErr.message, {
+          code: corrErr.code,
+          idempotency_key: corrErr.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct correction payload.",
+        });
+      }
+      if (corrErr instanceof CorrectionEntityTypeMismatchError) {
+        throw new McpError(ErrorCode.InvalidParams, corrErr.message, {
+          code: corrErr.code,
+          entity_id: corrErr.entityId,
+          supplied_entity_type: corrErr.suppliedEntityType,
+          stored_entity_type: corrErr.storedEntityType,
+        });
+      }
       if (corrErr instanceof EntityOwnerConflictError) {
         // Re-throw as-is (not wrapped in McpError) so the outer MCP
         // dispatcher's EntityOwnerConflictError branch runs
@@ -8125,6 +8256,132 @@ export class NeotomaServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
+      );
+    }
+  }
+
+  // Waxwing ADR (ent_4b41bb83a4faf4428a73bfc8): patch_array_item — atomic
+  // keyed-item patch for structured array fields. Sibling of correct(); see
+  // src/services/array_item_patch.ts for the mechanism and openapi.yaml for
+  // the contract shared with the HTTP /patch_array_item handler.
+  private async patchArrayItem(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = PatchArrayItemRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    try {
+      const { loadArrayItemPatchTarget, patchArrayItem } =
+        await import("./services/array_item_patch.js");
+      const target = await loadArrayItemPatchTarget({
+        entityId: parsed.entity_id,
+        userId,
+        suppliedEntityType: parsed.entity_type,
+      });
+
+      const { enforceAgentCapability, contextFromAgentIdentity } =
+        await import("./services/agent_capabilities.js");
+      const { assertCanWriteProtectedBatch } = await import("./services/protected_entity_types.js");
+      const { getCurrentAgentIdentity, getCurrentAAuthAdmission } =
+        await import("./services/request_context.js");
+      const patchCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+      if (patchCtx) {
+        enforceAgentCapability("correct", [target.entity_type], patchCtx);
+      }
+      assertCanWriteProtectedBatch({
+        entity_types: [target.entity_type],
+        op: "correct",
+        identity: getCurrentAgentIdentity(),
+        admission: getCurrentAAuthAdmission(),
+      });
+
+      const result = await patchArrayItem({
+        entity_id: parsed.entity_id,
+        entity_type: parsed.entity_type,
+        user_id: userId,
+        field: parsed.field,
+        key_field: parsed.key_field,
+        key_value: parsed.key_value,
+        item: parsed.item as Record<string, unknown>,
+        expected_item_version: parsed.expected_item_version,
+        expected_item_absent: parsed.expected_item_absent,
+        idempotency_key: parsed.idempotency_key,
+      });
+
+      if (result.status === "conflict") {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Stale expected_item_version for ${parsed.entity_type}.${parsed.field}[${parsed.key_field}=${JSON.stringify(parsed.key_value)}]`,
+          {
+            code: "ERR_ARRAY_ITEM_CONFLICT",
+            entity_id: result.entity_id,
+            entity_type: result.entity_type,
+            field: result.field,
+            key_field: result.key_field,
+            key_value: result.key_value,
+            current_item: result.conflict?.current_item ?? null,
+            current_item_version: result.conflict?.current_item_version ?? null,
+            expected_item_version: result.conflict?.expected_item_version ?? null,
+            expected_item_absent: parsed.expected_item_absent ?? false,
+            hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
+          }
+        );
+      }
+
+      return this.buildTextResponse({
+        entity_id: result.entity_id,
+        entity_type: result.entity_type,
+        field: result.field,
+        key_field: result.key_field,
+        key_value: result.key_value,
+        observation_id: result.observation_id,
+        item: result.item,
+        item_version: result.item_version,
+        array_length: result.array_length,
+        snapshot: result.snapshot,
+        replayed: result.replayed ?? false,
+      });
+    } catch (patchErr) {
+      if (patchErr instanceof McpError) throw patchErr;
+      if (patchErr instanceof EntityOwnerConflictError) throw patchErr;
+      // Instance store-policy denials/unavailability: re-throw as-is (not
+      // wrapped in McpError) so the outer executeTool dispatcher's dedicated
+      // branches run `error.toErrorEnvelope()` and report the structured
+      // denial/unavailable envelope instead of a generic InternalError.
+      // patchArrayItem() writes through createCorrection exactly like
+      // correct(), so it can be refused by the same instance-level policy.
+      if (patchErr instanceof StorePolicyDeniedError) throw patchErr;
+      if (patchErr instanceof StorePolicyUnavailableError) throw patchErr;
+      {
+        const { CorrectionIdempotencyMismatchError } = await import("./services/correction.js");
+        if (patchErr instanceof CorrectionIdempotencyMismatchError) {
+          throw new McpError(ErrorCode.InvalidParams, patchErr.message, {
+            code: patchErr.code,
+            idempotency_key: patchErr.idempotencyKey,
+            hint: "Use a new idempotency_key for a distinct patch payload.",
+          });
+        }
+      }
+      {
+        const {
+          ArrayItemKeyFieldMismatchError,
+          ArrayItemPolicyRequiredError,
+          ArrayItemEntityTypeMismatchError,
+        } = await import("./services/array_item_patch.js");
+        if (
+          patchErr instanceof ArrayItemKeyFieldMismatchError ||
+          patchErr instanceof ArrayItemPolicyRequiredError ||
+          patchErr instanceof ArrayItemEntityTypeMismatchError
+        ) {
+          throw new McpError(ErrorCode.InvalidParams, patchErr.message, patchErr.toErrorEnvelope());
+        }
+      }
+      if (patchErr instanceof Error && patchErr.message.startsWith("Entity not found")) {
+        throw new McpError(ErrorCode.InvalidParams, patchErr.message);
+      }
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to patch array item: ${patchErr instanceof Error ? patchErr.message : String(patchErr)}`
       );
     }
   }
