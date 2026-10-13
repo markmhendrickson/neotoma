@@ -3834,7 +3834,8 @@ export class NeotomaServer {
 
     // The observation reported as `source_observation` is the most recent
     // contributor (latest observed_at, then id, so the pick is deterministic).
-    // For a scalar field it is the single winning observation.
+    // For a scalar field it is the single winning observation. A merged field
+    // has no single winner, so this is a presentation choice, not a winner.
     const observations = [...(observationRows as Array<Record<string, any>>)].sort((a, b) => {
       const byTime = String(b.observed_at ?? "").localeCompare(String(a.observed_at ?? ""));
       return byTime !== 0 ? byTime : String(a.id).localeCompare(String(b.id));
@@ -3876,29 +3877,24 @@ export class NeotomaServer {
       };
     }
 
-    const projectObservation = (row: Record<string, any>) => ({
-      id: row.id,
-      source_id: row.source_id ?? null,
-      observed_at: row.observed_at,
-      specificity_score: row.specificity_score,
-      source_priority: row.source_priority,
-      // Present on corrections and other keyed writes; lets a caller tie a
-      // source-less observation back to the write that produced it.
-      idempotency_key: row.idempotency_key ?? null,
-      observation_source: row.observation_source ?? null,
-    });
-
-    const provenanceChain: Record<string, unknown> = {
+    // Response shape is unchanged from before #2026: one source_observation
+    // and its source. Aligning this with the HTTP response of the same
+    // operation (observation_ids, every contributing observation, per-
+    // contributor sources) is deliberately left to a follow-up that declares
+    // one schema for both surfaces in openapi.yaml.
+    const provenanceChain = {
       field: parsed.field,
       value: (snapshot.snapshot as Record<string, unknown>)[parsed.field],
-      observation_ids: observationIds,
-      source_observation: projectObservation(observation),
+      source_observation: {
+        id: observation.id,
+        source_id: observation.source_id ?? null,
+        observed_at: observation.observed_at,
+        specificity_score: observation.specificity_score,
+        source_priority: observation.source_priority,
+      },
       source: source,
       observed_at: observation.observed_at,
     };
-    if (observations.length > 1) {
-      provenanceChain.contributing_observations = observations.map(projectObservation);
-    }
 
     return this.buildTextResponse(provenanceChain);
   }
