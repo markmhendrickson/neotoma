@@ -46,6 +46,7 @@ export const EntityIdSchema = z.object({
 
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
+  include_cleared_fields: z.boolean().optional(),
   /**
    * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
    * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,
@@ -669,6 +670,9 @@ export const CreateInterpretationRequestSchema = z.object({
 });
 
 export const StoreStructuredRequestSchema = z.object({
+  expected_entity_absent: z.boolean().optional(),
+  commit: z.boolean().optional().default(true),
+  strict: z.boolean().optional().default(false),
   entities: z.array(z.record(z.unknown())),
   relationships: z.array(StoreRelationshipInputSchema).optional(),
   interpretation: StoreInterpretationInputSchema.optional(),
@@ -683,6 +687,7 @@ export const StoreStructuredRequestSchema = z.object({
 
 /** REST store/unstructured: file_content (base64) + mime_type, raw storage only. */
 export const StoreUnstructuredRequestSchema = z.object({
+  expected_entity_absent: z.boolean().optional(),
   file_content: z.string(),
   mime_type: z.string().min(1),
   idempotency_key: z.string().min(1).optional(),
@@ -723,6 +728,7 @@ export const ExternalActorInputSchema = z
 
 export const StoreRequestSchema = z
   .object({
+    expected_entity_absent: z.boolean().optional(),
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),

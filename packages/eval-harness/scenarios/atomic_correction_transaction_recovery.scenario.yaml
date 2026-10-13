@@ -30,7 +30,7 @@ expected:
   - type: mcp_tool.invocations
     tool_name: correct_transaction
     op: eq
-    value: 5
+    value: 6
   - type: tool_result.matches
     tool_name: correct_transaction
     which: 0
@@ -114,3 +114,22 @@ expected:
       observation_count: 1
       snapshot:
         status: ready
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 5
+    result_subset:
+      status: applied
+      entities:
+        - entity_id: ent_721001bcfee64e561dd21c6a
+          cleared_fields_included: true
+          observation_count: 3
+          snapshot:
+            status: null
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 5
+    result_subset:
+      cleared_fields_included: true
+      observation_count: 3
+      snapshot:
+        status: null

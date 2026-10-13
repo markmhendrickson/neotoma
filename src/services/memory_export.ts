@@ -32,6 +32,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 import { db } from "../db.js";
+import { filterCurrentLifecycleRecords } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { renderEntityCompactText, type RenderEntityInput } from "./canonical_markdown.js";
 
@@ -265,7 +266,10 @@ export async function exportMemory(options: MemoryExportOptions): Promise<Memory
     throw new Error(`Failed to load entities for memory-export: ${String(error)}`);
   }
 
-  const rawRows = (data ?? []) as Array<Record<string, unknown>>;
+  const rawRows = await filterCurrentLifecycleRecords(
+    (data ?? []) as Array<Record<string, unknown> & { entity_id: string }>,
+    options.user_id
+  );
   const rows =
     effectiveExcludes.size > 0
       ? rawRows.filter((r) => !effectiveExcludes.has((r.entity_type as string) ?? ""))

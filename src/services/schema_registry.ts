@@ -5,6 +5,7 @@
  */
 
 import { db } from "../db.js";
+import type { DbConnection } from "../repositories/db/driver.js";
 import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
   checkPluralEntityType,
@@ -1142,6 +1143,56 @@ export class SchemaRegistryService {
    * Load active entity schema for entity type
    * Supports user-specific schemas: tries user-specific first, then falls back to global
    */
+  /**
+   * Authoritative registry read for a caller that owns a native write transaction.
+   * Preserve user-over-global precedence, without cache, automatic registration,
+   * equivalent-type lookup or code-injected identity defaults. Ambiguity/errors
+   * must throw rather than selecting a different identity under contention.
+   */
+  async loadActiveSchemaInTransaction(
+    tx: DbConnection,
+    entityType: string,
+    userId: string
+  ): Promise<SchemaRegistryEntry> {
+    let rows = (await tx
+      .prepare(
+        "SELECT * FROM schema_registry WHERE entity_type = ? AND scope = 'user' AND user_id = ? AND active = 1"
+      )
+      .all(entityType, userId)) as Record<string, unknown>[];
+    if (!rows.length)
+      rows = (await tx
+        .prepare(
+          "SELECT * FROM schema_registry WHERE entity_type = ? AND scope = 'global' AND active = 1"
+        )
+        .all(entityType)) as Record<string, unknown>[];
+    if (rows.length !== 1)
+      throw new Error("The authoritative active schema is unavailable or ambiguous.");
+    const row = rows[0];
+    function object(value: unknown): Record<string, unknown> {
+      const parsed = typeof value === "string" ? JSON.parse(value) : value;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        throw new Error("The authoritative schema representation is invalid.");
+      return parsed as Record<string, unknown>;
+    }
+    if (
+      typeof row.id !== "string" ||
+      !row.id ||
+      typeof row.schema_version !== "string" ||
+      !row.schema_version
+    )
+      throw new Error("The authoritative schema identity is invalid.");
+    const definition = object(row.schema_definition) as unknown as SchemaDefinition;
+    const reducer = object(row.reducer_config) as unknown as ReducerConfig;
+    this.validateSchemaDefinition(definition);
+    this.validateReducerConfig(reducer, definition);
+    return {
+      ...row,
+      schema_definition: definition,
+      reducer_config: reducer,
+      metadata: row.metadata == null ? {} : object(row.metadata),
+    } as unknown as SchemaRegistryEntry;
+  }
+
   async loadActiveSchema(entityType: string, userId?: string): Promise<SchemaRegistryEntry | null> {
     // 1. Try user-specific schema first if userId provided
     if (userId) {

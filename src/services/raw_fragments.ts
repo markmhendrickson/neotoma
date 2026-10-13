@@ -22,13 +22,16 @@ export interface StoreFragmentParams {
   reason: "unknown_field" | "converted_value_original";
   convertedTo?: unknown;
   interpretationId?: string | null;
+  /** Conditional caller owns the DB transaction and postcommit callbacks. */
+  transactionEffects?: Array<() => Promise<void>>;
 }
 
 async function queueAutoEnhancement(
   entityType: string,
   fragmentKey: string,
   userId: string,
-  frequencyCount: number
+  frequencyCount: number,
+  strict = false
 ): Promise<void> {
   try {
     const { schemaRecommendationService } = await import("./schema_recommendation.js");
@@ -39,6 +42,7 @@ async function queueAutoEnhancement(
       frequency_count: frequencyCount,
     });
   } catch (queueError: any) {
+    if (strict) throw new Error("Conditional enhancement notification failed.");
     logger.warn(
       `[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${fragmentKey}:`,
       queueError.message
@@ -81,7 +85,17 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
   if (entityId) {
     existingQuery = existingQuery.eq("entity_id", entityId);
   }
-  const { data: existing } = await existingQuery.maybeSingle();
+  const { data: existing, error: readError } = await existingQuery.maybeSingle();
+  if (readError && params.transactionEffects) throw new Error("Conditional fragment read failed.");
+  const enhance = (count: number) => {
+    const callback = () =>
+      queueAutoEnhancement(entityType, key, userId, count, Boolean(params.transactionEffects));
+    if (params.transactionEffects) {
+      params.transactionEffects.push(callback);
+      return Promise.resolve();
+    }
+    return callback();
+  };
 
   if (existing) {
     const newCount = (existing.frequency_count || 1) + 1;
@@ -96,6 +110,7 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
       .eq("id", existing.id);
 
     if (updateError) {
+      if (params.transactionEffects) throw new Error("Conditional fragment update failed.");
       logger.error(`[raw_fragments] FAILED to update fragment for ${entityType}.${key}:`, {
         error: updateError,
         code: updateError.code,
@@ -104,7 +119,7 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
       return false;
     }
 
-    await queueAutoEnhancement(entityType, key, userId, newCount);
+    await enhance(newCount);
     return true;
   }
 
@@ -124,6 +139,7 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
   const { error: insertError } = await db.from("raw_fragments").insert(insertData).select();
 
   if (insertError) {
+    if (params.transactionEffects) throw new Error("Conditional fragment insert failed.");
     if (insertError.code === "23505") {
       logger.warn(`[raw_fragments] Race condition for ${entityType}.${key}, retrying as update...`);
       let retryQuery = db
@@ -163,7 +179,7 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     return false;
   }
 
-  await queueAutoEnhancement(entityType, key, userId, 1);
+  await enhance(1);
   return true;
 }
 

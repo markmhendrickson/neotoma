@@ -21,16 +21,22 @@
  */
 
 import { db } from "../db.js";
-import { logger } from "../utils/logger.js";
+import {
+  acquireEntityLifecycleContext,
+  hasRecordedEntityLifecycleCutover,
+} from "./entity_lifecycle_storage.js";
+import { getDb } from "../repositories/db/connection.js";
 import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
-import type { Observation } from "../reducers/observation_reducer.js";
+import { schemaRegistry } from "./schema_registry.js";
+import type { SnapshotProjectionOptions, Observation } from "../reducers/observation_reducer.js";
 
 // ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
 
 export interface EntitySnapshotAtTimeResult {
+  cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
   schema_version: string;
@@ -64,7 +70,8 @@ export async function computeEntitySnapshotAtTime(
   entityId: string,
   userId: string,
   at?: string,
-  atIngested?: string
+  atIngested?: string,
+  projection: SnapshotProjectionOptions = {}
 ): Promise<EntitySnapshotAtTimeResult | null> {
   // ------------------------------------------------------------------
   // 1. Validate timestamps before touching the DB.
@@ -117,36 +124,65 @@ export async function computeEntitySnapshotAtTime(
   const attachmentTarget = await resolveAttachmentTarget(entityId, userId);
   const resolvedEntityId = attachmentTarget.resolvedEntityId;
   if (attachmentTarget.truncated) {
-    logger.warn(
-      `[SNAPSHOT_AT_TIME] Attachment resolution for ${entityId} was truncated ` +
-        `(${attachmentTarget.truncationReason}); the point-in-time snapshot is ` +
-        `computed from a partially resolved id (${resolvedEntityId}).`
-    );
+    throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
   }
   const entityType: string = entityRow.entity_type as string;
 
   // ------------------------------------------------------------------
   // 3. Build and execute the observations query with optional cutoffs.
   // ------------------------------------------------------------------
-  let obsQuery = db
+  const obsQuery = db
     .from("observations")
     .select("*")
     .eq("entity_id", resolvedEntityId)
     .eq("user_id", userId);
 
-  if (at) {
-    obsQuery = obsQuery.lte("observed_at", at);
+  // Opt-in acquisition reads the complete physical owner-scoped set, rather
+  // than inferring explicit clears from the cached/default snapshot or a cap.
+  let observations: any[] | null;
+  if (projection.includeClearedFields) {
+    const rows = await (await getDb())
+      .prepare("SELECT * FROM observations WHERE entity_id = ? AND user_id = ?")
+      .all(resolvedEntityId, userId);
+    const count = (await (await getDb())
+      .prepare("SELECT COUNT(*) AS count FROM observations WHERE entity_id = ? AND user_id = ?")
+      .get(resolvedEntityId, userId)) as { count: number } | undefined;
+    if (
+      !count ||
+      !Number.isSafeInteger(count.count) ||
+      count.count !== rows.length ||
+      new Set(rows.map((r) => (r as Record<string, unknown>).id)).size !== rows.length
+    ) {
+      throw new Error("Nullable winning projection acquisition is incomplete");
+    }
+    observations = rows.map((raw) => {
+      const row = raw as Record<string, any>;
+      const fields = typeof row.fields === "string" ? JSON.parse(row.fields) : row.fields;
+      if (
+        row.entity_id !== resolvedEntityId ||
+        row.user_id !== userId ||
+        row.entity_type !== entityType ||
+        !fields ||
+        typeof fields !== "object" ||
+        Array.isArray(fields) ||
+        typeof row.id !== "string" ||
+        !Number.isFinite(Date.parse(row.observed_at)) ||
+        !Number.isFinite(Date.parse(row.created_at))
+      ) {
+        throw new Error("Nullable winning projection acquisition is inconsistent");
+      }
+      return { ...row, fields };
+    });
+  } else {
+    const acquired = await obsQuery.order("observed_at", { ascending: false });
+    if (acquired.error) throw new Error(`Failed to get observations: ${acquired.error.message}`);
+    observations = acquired.data;
   }
-  if (atIngested) {
-    obsQuery = obsQuery.lte("created_at", atIngested);
-  }
-
-  const { data: observations, error: obsError } = await obsQuery.order("observed_at", {
-    ascending: false,
-  });
-
-  if (obsError) {
-    throw new Error(`Failed to get observations: ${obsError.message}`);
+  const pinnedSchema = projection.includeClearedFields
+    ? await schemaRegistry.loadActiveSchemaInTransaction(await getDb(), entityType, userId)
+    : undefined;
+  if (projection.includeClearedFields && !pinnedSchema) {
+    throw new Error("Nullable winning projection requires an active schema");
   }
 
   // ------------------------------------------------------------------
@@ -154,7 +190,22 @@ export async function computeEntitySnapshotAtTime(
   //    at the requested cutoff).
   // ------------------------------------------------------------------
   if (!observations || observations.length === 0) {
+    if (await hasRecordedEntityLifecycleCutover(await getDb())) {
+      // No rows is not proof of an empty historical population when recorded
+      // capture metadata still references unavailable evidence.
+      await acquireEntityLifecycleContext(
+        await getDb(),
+        {
+          id: resolvedEntityId,
+          user_id: userId,
+          entity_type: entityType,
+        },
+        [],
+        { at, at_ingested: atIngested }
+      );
+    }
     return {
+      ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
       entity_id: resolvedEntityId,
       entity_type: entityType,
       schema_version: entityType, // fallback when no observations
@@ -183,16 +234,39 @@ export async function computeEntitySnapshotAtTime(
     fields: obs.fields,
     created_at: obs.created_at,
     user_id: obs.user_id,
+    entity_lifecycle_kind: obs.entity_lifecycle_kind,
+    entity_lifecycle_sequence: obs.entity_lifecycle_sequence,
+    entity_lifecycle_target_id: obs.entity_lifecycle_target_id,
   }));
 
-  const historicalSnapshot = await observationReducer.computeSnapshot(
-    resolvedEntityId,
-    mappedObservations
+  const lifecycleContext = await acquireEntityLifecycleContext(
+    await getDb(),
+    { id: resolvedEntityId, user_id: userId, entity_type: entityType },
+    mappedObservations,
+    { at, at_ingested: atIngested }
   );
+  const replayRows =
+    lifecycleContext.mode === "pre_migration"
+      ? mappedObservations.filter(
+          (o) =>
+            (!at || Date.parse(o.observed_at) <= Date.parse(at)) &&
+            (!atIngested || Date.parse(o.created_at) <= Date.parse(atIngested))
+        )
+      : mappedObservations;
+  const historicalSnapshot = replayRows.length
+    ? await observationReducer.computeSnapshot(
+        resolvedEntityId,
+        replayRows,
+        pinnedSchema ?? undefined,
+        lifecycleContext,
+        projection
+      )
+    : null;
 
   if (!historicalSnapshot) {
     // Reducer returned null → entity is deleted at this point in time.
     return {
+      ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
       entity_id: resolvedEntityId,
       entity_type: entityType,
       schema_version: entityType,
@@ -205,6 +279,7 @@ export async function computeEntitySnapshotAtTime(
   }
 
   return {
+    ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
     entity_id: historicalSnapshot.entity_id,
     entity_type: historicalSnapshot.entity_type,
     schema_version: historicalSnapshot.schema_version,

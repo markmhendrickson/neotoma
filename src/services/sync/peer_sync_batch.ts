@@ -1,4 +1,5 @@
 import { db } from "../../db.js";
+import { filterCurrentLifecycleRecords } from "../entity_queries.js";
 
 export interface PeerSyncObservationRow {
   id: string;
@@ -89,7 +90,7 @@ export async function listEntitySnapshotsForPeerSyncOutbound(params: {
   if (error) throw new Error(error.message);
 
   const snapshotByEntity = new Map<string, Record<string, unknown>>();
-  for (const row of snaps ?? []) {
+  for (const row of await filterCurrentLifecycleRecords(snaps ?? [], params.userId)) {
     const typed = row as { entity_id: string; snapshot?: Record<string, unknown> };
     if (typed.snapshot && typeof typed.snapshot === "object") {
       snapshotByEntity.set(typed.entity_id, typed.snapshot);

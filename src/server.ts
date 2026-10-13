@@ -2521,6 +2521,16 @@ export class NeotomaServer {
         if (error instanceof McpError) {
           throw error;
         }
+        const { StoreConditionError } = await import("./services/store_condition_keys.js");
+        if (error instanceof StoreConditionError) {
+          throw new McpError(
+            error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
+              ? ErrorCode.InternalError
+              : ErrorCode.InvalidRequest,
+            error.message,
+            error.toErrorEnvelope()
+          );
+        }
         if (error instanceof AttributionPolicyError) {
           // Surface policy rejections as structured MCP errors so clients can
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
@@ -3567,6 +3577,12 @@ export class NeotomaServer {
     // fetched by id alone. The HTTP callers of getEntityWithProvenance precheck
     // ownership; this MCP path historically did not.
     const userId = this.getAuthenticatedUserId();
+    if (parsed.include_cleared_fields && parsed.format !== "json") {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "include_cleared_fields requires explicit format=json"
+      );
+    }
     const responseFormat = parsed.format ?? "markdown";
 
     const renderEntitySnapshotResponse = async (payload: {
@@ -3576,6 +3592,7 @@ export class NeotomaServer {
       snapshot: Record<string, unknown>;
       raw_fragments?: unknown;
       provenance: Record<string, string>;
+      cleared_fields_included?: true;
       computed_at: string | null | undefined;
       observation_count: number;
       last_observation_at: string | null | undefined;
@@ -3639,7 +3656,14 @@ export class NeotomaServer {
     };
 
     // Get entity first to check if it exists and handle merged entity redirection
-    const entity = await getEntityWithProvenance(parsed.entity_id, false, userId);
+    // Historical reads resolve ownership/redirects without applying CURRENT hiding.
+    // The shared temporal selector alone decides the requested past visibility.
+    const entity = await getEntityWithProvenance(
+      parsed.entity_id,
+      Boolean(parsed.at || parsed.at_ingested),
+      userId,
+      { includeClearedFields: !parsed.at && !parsed.at_ingested && parsed.include_cleared_fields }
+    );
 
     if (!entity) {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
@@ -3662,7 +3686,8 @@ export class NeotomaServer {
           entity.entity_id,
           userId,
           parsed.at,
-          parsed.at_ingested
+          parsed.at_ingested,
+          { includeClearedFields: parsed.include_cleared_fields }
         );
 
         if (!historicalResult) {
@@ -3694,6 +3719,7 @@ export class NeotomaServer {
 
     // Return current snapshot (from stored entity_snapshots table)
     return renderEntitySnapshotResponse({
+      ...(entity.cleared_fields_included ? { cleared_fields_included: true as const } : {}),
       entity_id: entity.entity_id,
       entity_type: entity.entity_type,
       schema_version: (entity as { schema_version?: string }).schema_version ?? entity.entity_type,
@@ -5644,6 +5670,7 @@ export class NeotomaServer {
 
     const schema = z
       .object({
+        expected_entity_absent: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
@@ -5704,6 +5731,9 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed);
+
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
       if (parsed.commit === false) {
@@ -5724,6 +5754,28 @@ export class NeotomaServer {
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+
+    if (hasEntities && hasUnstructured && parsed.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.entities!,
+          sourcePriority: parsed.source_priority,
+          idempotencyKey,
+          relationships: parsed.relationships,
+          interpretation: parsed.interpretation,
+          sourcePeerId: parsed.source_peer_id,
+          strict: parsed.strict,
+        },
+        {
+          key: parsed.file_idempotency_key ?? `${idempotencyKey}-file`,
+          content: parsed.file_content,
+          filePath: parsed.file_path,
+        },
+        "mcp"
+      );
+    }
 
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
@@ -5761,6 +5813,7 @@ export class NeotomaServer {
         {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
+          expectedEntityAbsent: parsed.expected_entity_absent,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -6218,6 +6271,7 @@ export class NeotomaServer {
     originalFilename?: string,
     relationships?: StoreRelationshipRef[],
     options: {
+      expectedEntityAbsent?: boolean;
       commit?: boolean;
       strict?: boolean;
       observationSource?: import("./shared/action_schemas.js").ObservationSource;
@@ -6226,6 +6280,29 @@ export class NeotomaServer {
       interpretationSourceId?: string;
     } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (options.expectedEntityAbsent === true) {
+      const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
+      const { storeConditionalStructured } = await import("./services/store_conditional.js");
+      await preflightStructuredStoreAdmission({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        relationships,
+        ...options,
+      });
+      const result = await storeConditionalStructured({
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        originalFilename,
+        strict: options.strict,
+        observationSource: options.observationSource,
+      });
+      return this.buildTextResponse(result);
+    }
     const commit = options.commit !== false;
     const strict = options.strict === true;
     const observationSource = options.observationSource;
@@ -6439,6 +6516,10 @@ export class NeotomaServer {
       const incomingContentHash = createHash("sha256")
         .update(JSON.stringify(entities, null, 2))
         .digest("hex");
+      const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+      const { getDb } = await import("./repositories/db/connection.js");
+      await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
         .select("id, content_hash")
@@ -6610,6 +6691,19 @@ export class NeotomaServer {
         });
       }
     }
+
+    const { preflightStructuredStoreOwnership } =
+      await import("./services/store_ownership_admission.js");
+    await preflightStructuredStoreOwnership(
+      {
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey: idempotencyKey!,
+        strict,
+      },
+      "mcp"
+    );
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
@@ -7345,6 +7439,9 @@ export class NeotomaServer {
             fields: obs.fields,
             created_at: obs.created_at,
             user_id: obs.user_id,
+            entity_lifecycle_kind: obs.entity_lifecycle_kind,
+            entity_lifecycle_sequence: obs.entity_lifecycle_sequence,
+            entity_lifecycle_target_id: obs.entity_lifecycle_target_id,
           }));
 
           // Compute snapshot

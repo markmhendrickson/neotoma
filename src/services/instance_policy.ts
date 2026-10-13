@@ -318,7 +318,9 @@ export interface InstancePolicyResult {
  * all. `entity_snapshots` already carries `entity_type`, so the join is
  * unnecessary; merged-away rows are excluded by a second bounded lookup.
  */
-export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
+export async function getInstancePolicyResult(
+  options: { requireUnambiguous?: boolean } = {}
+): Promise<InstancePolicyResult> {
   try {
     const { data, error } = await db
       .from("entity_snapshots")
@@ -369,6 +371,13 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
     // second is somehow present we must not let row order decide which one
     // enforces. Sort by id and take the first, and say so loudly.
     if (live.length > 1) {
+      if (options.requireUnambiguous)
+        return {
+          policy: null,
+          lookup_failed: true,
+          error: "The authoritative instance policy is ambiguous.",
+          entity_id: null,
+        };
       logger.warn(
         `[instance_policy] ${live.length} instance_policy entities found; ` +
           `using the lowest entity_id deterministically. An instance should have exactly one.`
@@ -390,7 +399,14 @@ export async function getInstancePolicyResult(): Promise<InstancePolicyResult> {
         return { policy: null, lookup_failed: true, error: msg, entity_id: chosen.entity_id };
       }
     }
-    if (!snapshotRaw || typeof snapshotRaw !== "object") {
+    if (!snapshotRaw || typeof snapshotRaw !== "object" || Array.isArray(snapshotRaw)) {
+      if (options.requireUnambiguous)
+        return {
+          policy: null,
+          lookup_failed: true,
+          error: "The authoritative instance policy is malformed.",
+          entity_id: chosen.entity_id,
+        };
       return { policy: null, lookup_failed: false, entity_id: chosen.entity_id };
     }
 

@@ -4,6 +4,7 @@ import {
   queryEntities,
   normalizeEntityTypeFilter,
   computeNextCursor,
+  filterCurrentLifecycleRecords,
 } from "../../services/entity_queries.js";
 import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
@@ -796,7 +797,27 @@ async function countVisibleEntities(params: {
   };
 
   if (!needsEntityTableFilters && !needsSnapshotJsonFilters) {
-    const { count, error } = await countLiveSnapshots();
+    const { hasRecordedEntityLifecycleCutover } =
+      await import("../../services/entity_lifecycle_storage.js");
+    const cutover = await hasRecordedEntityLifecycleCutover(await getDb());
+    let count: number | null;
+    let error: { message: string } | null;
+    if (cutover) {
+      // Recorded authority replaces snapshot presence as visibility proof.
+      // Preserve the existing snapshot population/count convention, while
+      // validating those candidates through the same full selector as pages.
+      let query = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
+      query = applyTypeFilter(query, "entity_type");
+      const result = await query;
+      error = result.error;
+      count = error
+        ? null
+        : (await filterCurrentLifecycleRecords(result.data ?? [], userId)).length;
+    } else {
+      const result = await countLiveSnapshots();
+      count = result.count ?? null;
+      error = result.error;
+    }
     if (error) {
       throw new Error(`Failed to count visible entities: ${error.message}`);
     }
@@ -899,17 +920,30 @@ async function countVisibleEntities(params: {
   // merged tally so a page of only merged-away candidates still counts.
   let liveCount = mergedCandidateCount;
   const chunkSize = 500;
+  const { hasRecordedEntityLifecycleCutover } =
+    await import("../../services/entity_lifecycle_storage.js");
+  const cutover = await hasRecordedEntityLifecycleCutover(await getDb());
   for (let i = 0; i < candidateIds.length; i += chunkSize) {
     const chunk = candidateIds.slice(i, i + chunkSize);
-    const { count, error } = await db
+    if (!cutover) {
+      const { count, error } = await db
+        .from("entity_snapshots")
+        .select("entity_id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .in("entity_id", chunk);
+      if (error) throw new Error(`Failed to count live entities: ${error.message}`);
+      liveCount += count ?? 0;
+      continue;
+    }
+    const { data, error } = await db
       .from("entity_snapshots")
-      .select("entity_id", { count: "exact", head: true })
+      .select("entity_id")
       .eq("user_id", userId)
       .in("entity_id", chunk);
     if (error) {
       throw new Error(`Failed to count live entities: ${error.message}`);
     }
-    liveCount += count ?? 0;
+    liveCount += (await filterCurrentLifecycleRecords(data ?? [], userId)).length;
   }
 
   if (params.readTrace) {

@@ -79,6 +79,11 @@ jobs:
       - name: Build server (required by CLI tests)
         run: npm run build:server
 
+      - name: Execute native compiled schema release gate
+        run: |
+          test -f tests/scripts/test_schema_release_gate.py
+          python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v
+
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
 
@@ -255,6 +260,14 @@ jobs:
       # integration suites, so the unit directory lane does not execute them.
       # The assertions fail when actual caps, scope, membership or query
       # authority are omitted; unknown/ranked reads cannot certify absence.
+      # Offline synthetic cutover only; contains real native HTTP/modern MCP,
+      # compiled CLI and the existing Tier 2 named-tool replay driver.
+      - name: Run explicit-null atomic and snapshot surface effects (#2619)
+        run: npx vitest run --no-file-parallelism tests/integration/atomic_null_projection.test.ts tests/unit/nullable_winning_projection.test.ts src/services/correction_transaction.test.ts
+
+      - name: Run authenticated lifecycle/cutover effects (#2588)
+        run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_executor_boundary.test.ts tests/integration/entity_lifecycle_executor_program.test.ts tests/integration/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts
+
       - name: "Run retrieval acquisition contract (#2597, #2611)"
         run: npx vitest run --no-file-parallelism tests/integration/entity_read_contract.test.ts tests/integration/entity_read_contract_semantic.test.ts tests/integration/entity_read_contract_backend.test.ts tests/integration/entity_search_mode.test.ts tests/integration/entity_queries_cursor.test.ts
 
