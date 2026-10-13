@@ -58,12 +58,16 @@ export function wasObservationSourceOmitted(rawObservationSource: unknown): bool
 }
 
 export const OBSERVATION_SOURCE_OMITTED_MESSAGE =
-  `observation_source was omitted, so every observation in this request was stored ` +
-  `with observation_source "${DEFAULT_OBSERVATION_SOURCE}" (the caller did not say what ` +
-  `kind of write this was). Set observation_source explicitly to record lineage: ` +
+  `This request omitted observation_source, so every observation in the request ` +
+  `(not just the entity named here) was stored with observation_source ` +
+  `"${DEFAULT_OBSERVATION_SOURCE}" (the caller did not say what kind of write this was). ` +
+  `Set observation_source on the request to record lineage: ` +
   `"llm_summary" for content a language model authored, "import" for batch or ETL ` +
   `loads, "sensor" for tool or telemetry emissions, "workflow_state" for state-machine ` +
-  `transitions, "human" for direct human edits, "sync" for peer replication.`;
+  `transitions, "human" for direct human edits, "sync" for peer replication. ` +
+  `If you cannot say which applies, send "${DEFAULT_OBSERVATION_SOURCE}": it is a valid ` +
+  `value that records the omission deliberately and suppresses this warning. ` +
+  `Do not pick a classified value just to clear the warning.`;
 
 /**
  * Returns the single store_warnings[] entry for a request that omitted

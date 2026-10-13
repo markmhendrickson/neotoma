@@ -150,34 +150,99 @@ describe("ObservationReducer - observation_source tie-break", () => {
     expect(snap!.provenance.value).toBe("obs_sensor");
   });
 
-  it("ranks `unspecified` (#2241) after every classified source, like an unclassified legacy row", async () => {
+  it("ranks an unlisted `unspecified` (#2241) level with `llm_summary`, so a newer omitted-source write beats an older `llm_summary` one", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schemaRegistry.loadActiveSchema as any).mockResolvedValue(BASE_SCHEMA);
 
-    // `unspecified` is a lineage sentinel, not a provenance class, so it is
-    // deliberately absent from the default ranking. At equal numeric
-    // priority even the lowest-ranked classified kind (`sync`) beats a newer
-    // `unspecified` write.
+    // Before #2241 an omitted observation_source was stored as `llm_summary`;
+    // the same caller's later writes now store `unspecified`. The rank is
+    // applied before recency on highest_priority fields, so if `unspecified`
+    // ranked below `llm_summary` the caller's newer write would silently lose
+    // to its own older one. Sharing the tier lets recency decide.
     expect(DEFAULT_OBSERVATION_SOURCE_PRIORITY).not.toContain("unspecified");
-    const obs: Observation[] = [
+    const newerUnspecifiedWins = await reducer.computeSnapshot("ent_test", [
+      makeObs({
+        id: "obs_llm_old",
+        observed_at: "2026-01-01T00:00:00Z",
+        fields: { value: "from_old_llm_summary" },
+        observation_source: "llm_summary",
+      }),
+      makeObs({
+        id: "obs_unspecified_new",
+        observed_at: "2026-10-13T00:00:00Z", // newest
+        fields: { value: "from_new_unspecified" },
+        observation_source: "unspecified",
+      }),
+    ]);
+    expect(newerUnspecifiedWins!.snapshot.value).toBe("from_new_unspecified");
+    expect(newerUnspecifiedWins!.provenance.value).toBe("obs_unspecified_new");
+
+    // Same tier, so the converse holds too: a newer `llm_summary` beats an
+    // older `unspecified`.
+    const newerLlmWins = await reducer.computeSnapshot("ent_test", [
+      makeObs({
+        id: "obs_unspecified_old",
+        observed_at: "2026-01-01T00:00:00Z",
+        fields: { value: "from_old_unspecified" },
+        observation_source: "unspecified",
+      }),
+      makeObs({
+        id: "obs_llm_new",
+        observed_at: "2026-10-13T00:00:00Z",
+        fields: { value: "from_new_llm_summary" },
+        observation_source: "llm_summary",
+      }),
+    ]);
+    expect(newerLlmWins!.snapshot.value).toBe("from_new_llm_summary");
+  });
+
+  it("still ranks `sensor` above a newer `unspecified` write (#2241)", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue(BASE_SCHEMA);
+
+    const snap = await reducer.computeSnapshot("ent_test", [
       makeObs({
         id: "obs_unspecified",
-        observed_at: "2025-05-01T00:00:00Z", // newest
+        observed_at: "2026-10-13T00:00:00Z", // newest
         fields: { value: "from_unspecified" },
         observation_source: "unspecified",
       }),
       makeObs({
-        id: "obs_sync",
-        observed_at: "2025-01-01T00:00:00Z",
-        fields: { value: "from_sync" },
-        observation_source: "sync",
+        id: "obs_sensor",
+        observed_at: "2026-01-01T00:00:00Z",
+        fields: { value: "from_sensor" },
+        observation_source: "sensor",
       }),
-    ];
+    ]);
+    expect(snap!.snapshot.value).toBe("from_sensor");
+    expect(snap!.provenance.value).toBe("obs_sensor");
+  });
 
-    const snap = await reducer.computeSnapshot("ent_test", obs);
-    expect(snap).not.toBeNull();
-    expect(snap!.snapshot.value).toBe("from_sync");
-    expect(snap!.provenance.value).toBe("obs_sync");
+  it("honours a schema that ranks `unspecified` explicitly (#2241)", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue({
+      ...BASE_SCHEMA,
+      reducer_config: {
+        ...BASE_SCHEMA.reducer_config,
+        observation_source_priority: ["llm_summary", "unspecified"],
+      },
+    });
+
+    const snap = await reducer.computeSnapshot("ent_test", [
+      makeObs({
+        id: "obs_llm_old",
+        observed_at: "2026-01-01T00:00:00Z",
+        fields: { value: "from_old_llm_summary" },
+        observation_source: "llm_summary",
+      }),
+      makeObs({
+        id: "obs_unspecified_new",
+        observed_at: "2026-10-13T00:00:00Z",
+        fields: { value: "from_new_unspecified" },
+        observation_source: "unspecified",
+      }),
+    ]);
+    expect(snap!.snapshot.value).toBe("from_old_llm_summary");
   });
 
   it("numeric source_priority still dominates observation_source", async () => {

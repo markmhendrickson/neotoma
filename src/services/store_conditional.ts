@@ -428,14 +428,20 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     .eq("entity_id", operation.entity_id)
     .eq("user_id", options.userId)
     .maybeSingle();
-  const obsSourceWarn = buildObservationSourceOmittedWarning({
-    rawObservationSource: options.observationSource,
-    firstStored: {
-      observation_index: 0,
-      entity_type: operation.entity_type,
-      entity_id: operation.entity_id,
-    },
-  });
+  // A replay repeats no write, so it repeats no warning: the warning
+  // describes what the original write did. Same rule as the plain store
+  // paths, which return before building it on replay.
+  const obsSourceWarn =
+    operation.status === "replayed"
+      ? null
+      : buildObservationSourceOmittedWarning({
+          rawObservationSource: options.observationSource,
+          firstStored: {
+            observation_index: 0,
+            entity_type: operation.entity_type,
+            entity_id: operation.entity_id,
+          },
+        });
   return {
     success: true,
     replayed: operation.status === "replayed",

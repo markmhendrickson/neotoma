@@ -54,7 +54,8 @@ export function AgentInstructionsStoreRecipesPage() {
           <code>llm_summary</code> (LLM-authored content, set it for ordinary chat),{" "}
           <code>human</code> (direct edit/acceptance), <code>import</code> (batch/ETL), or{" "}
           <code>sync</code> (peer replication). Omitting it stores <code>unspecified</code> and
-          returns an <code>OBSERVATION_SOURCE_OMITTED</code> store warning. Used as a tie-break
+          returns an <code>OBSERVATION_SOURCE_OMITTED</code> store warning; send{" "}
+          <code>unspecified</code> explicitly when you cannot say. Used as a tie-break
           after <code>source_priority</code>; one value applies to every observation produced
           by the request.
         </li>

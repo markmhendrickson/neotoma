@@ -1965,7 +1965,10 @@ components:
               a lineage sentinel, not a provenance class: it makes no claim
               about origin, and it is distinct from an explicit
               `llm_summary`. A store that omits the field also returns an
-              `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`.
+              `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. In the
+              reducer tie-break it shares `llm_summary`'s rank unless the
+              schema's `observation_source_priority` names it, so recency
+              decides between the two.
 
             Null / missing for legacy rows written before the field
             existed. Rows written before `unspecified` was introduced carry
@@ -3023,8 +3026,11 @@ components:
                   once per store request that omits `observation_source`;
                   every observation in the request was stored as
                   `unspecified`. `observation_index`/`entity_id` name the
-                  first stored entity. Not fired when the caller sends any
-                  value explicitly, including `unspecified`).
+                  first stored entity only as a nominal pointer: the warning
+                  is request-scoped, not about that entity. Not fired when
+                  the caller sends any value explicitly, including
+                  `unspecified`, which a caller that cannot classify the
+                  write should send to suppress it).
               message:
                 type: string
                 description: Human-readable description from the schema rule.
@@ -5794,6 +5800,13 @@ paths:
   /observations/create:
     post:
       summary: Create observation
+      description: |
+        Low-level single-observation write. Accepts the same
+        `observation_source` enum as `/store`. When the field is omitted
+        the observation is stored with `unspecified`, but unlike `/store`
+        this endpoint returns no `OBSERVATION_SOURCE_OMITTED` warning
+        (its response carries no `store_warnings`). Send
+        `observation_source` explicitly to record lineage.
       operationId: createObservation
       requestBody:
         required: true

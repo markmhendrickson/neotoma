@@ -44,7 +44,7 @@ Instance skills / scripts (CLI-only, no MCP tool — materialization writes to t
 CLI uses connect-only startup for interactive sessions. It does not auto-start servers on session start. On no-args startup, it discovers running local API instances from session ports, defaults (`3080`, `3180`), remembered ports, and optional configured ports. If multiple instances are healthy, it applies `--env` as a preference and then prompts for explicit selection.
 
 ```bash
-neotoma store --json='[...]'
+neotoma store --observation-source llm_summary --json='[...]'
 neotoma entities list --type contact
 neotoma schemas list
 ```
@@ -60,12 +60,14 @@ For server commands (`api start`, `api stop`, `api logs`, `watch`), pass `--env 
 When using the CLI (MCP not available):
 
 ```bash
-neotoma store --json='[{"entity_type":"person","name":"Sarah"},{"entity_type":"task","title":"Pay Sarah $20","description":"Owe Sarah $20"}]'
+neotoma store --observation-source llm_summary --json='[{"entity_type":"person","name":"Sarah"},{"entity_type":"task","title":"Pay Sarah $20","description":"Owe Sarah $20"}]'
 ```
+
+Pass **`--observation-source`** on every store: `llm_summary` for content you extracted or summarized, `import` for file or batch loads, or `unspecified` when you cannot say. Omitting it stores `unspecified` and returns an `OBSERVATION_SOURCE_OMITTED` warning.
 
 Each object in the array must be **flat** (all fields alongside `entity_type`). Do **not** wrap rows in a root **`attributes`** object — that pre-v0.5 shape is rejected with **`ERR_STORE_RESOLUTION_FAILED`**; see **`docs/developer/mcp/instructions.md`** [STORE RECIPES] (first bullets after the tool-parameter line).
 
-For long payloads, use `neotoma store --file <path>` with a JSON file containing the entities array.
+For long payloads, use `neotoma store --observation-source llm_summary --file <path>` with a JSON file containing the entities array.
 
 ## Relationship creation (CLI backup)
 

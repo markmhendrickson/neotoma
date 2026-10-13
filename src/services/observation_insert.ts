@@ -51,9 +51,10 @@ type ObservationsQuery = ReturnType<LocalDbClient["from"]>;
  * model produced the value, which mislabelled imports, file assets and
  * deterministic pipelines. Every writer should set the field explicitly —
  * `llm_summary` for model-authored content, `sensor`, `workflow_state`,
- * `human`, `import` or `sync` otherwise. `unspecified` is deliberately absent
- * from the reducer's default source ranking, so unclassified writes sort
- * after every classified one.
+ * `human`, `import` or `sync` otherwise. `unspecified` is absent from the
+ * reducer's default source ranking but shares `llm_summary`'s rank there (see
+ * buildObservationSourceRankMap in observation_source_rank.ts), so an omitted-source
+ * write ranks exactly as it did before #2241 and recency decides.
  */
 export const DEFAULT_OBSERVATION_SOURCE: ObservationSource = "unspecified";
 

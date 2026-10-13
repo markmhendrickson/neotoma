@@ -53,6 +53,7 @@ type StoreWarning = {
 type StoreBody = {
   entities?: Array<{ entity_id: string; entity_type: string }>;
   store_warnings?: StoreWarning[];
+  replayed?: boolean;
   error?: unknown;
 };
 
@@ -254,6 +255,17 @@ describe("observation_source omission is recorded as unspecified (#2241)", () =>
       expect(warnings[0].entity_id).toBe(entityId);
       const observations = await restObservations(entityId);
       expect(observations.map((o) => o.observation_source)).toEqual(["unspecified"]);
+
+      // A replay of the same request writes nothing new, so it does not
+      // repeat the warning (same rule as plain-store replays).
+      const replay = await restStore({
+        idempotency_key: `${RUN}-rest-conditional`,
+        expected_entity_absent: true,
+        entities: [conditionalEntity("rest-conditional")],
+      });
+      expect(replay.error).toBeUndefined();
+      expect(replay.replayed).toBe(true);
+      expect(omittedWarnings(replay)).toHaveLength(0);
     });
   });
 

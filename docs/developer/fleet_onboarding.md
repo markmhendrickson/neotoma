@@ -42,7 +42,7 @@ Set `observation_source` on every structured write. The value is orthogonal to A
 | `human`          | Direct human edits, acceptances, corrections.                                                     |
 | `import`         | Batch / ETL ingestion. Ranked last by default because provenance is typically second-hand.        |
 | `sync`           | Writes replayed from a peer during fleet sync (Phase 5 loop prevention). Set automatically by the sync path; rarely supplied by hand. |
-| `unspecified`    | No claim about the kind of write. **Default** when `observation_source` is omitted; such a store also returns an `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Ranked after every classified kind. |
+| `unspecified`    | No claim about the kind of write. **Default** when `observation_source` is omitted; such a store also returns an `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Ranked level with `llm_summary` unless a schema ranks it explicitly, so recency decides between them. Send it explicitly when you cannot classify a write; that suppresses the warning. |
 
 `sensor`, `llm_summary`, `workflow_state`, `human`, `import`, `sync`, and `unspecified` are the **only** accepted values — this is a closed enum (see the v0.17→v0.18 migration note below). Before #2241 an omitted value was stored as `llm_summary`; rows written that way are unchanged, so a legacy `llm_summary` does not by itself prove model authorship.
 
@@ -78,7 +78,7 @@ See the applied rules in [`.cursor/rules/neotoma_cli.mdc`](../../.cursor/rules/n
 **Breaking change (v0.18.x, [#1841](https://github.com/markmhendrickson/neotoma/issues/1841)).** In v0.17, `observation_source` (and the `--observation-source` CLI flag) accepted arbitrary strings — e.g. `cboe_live`, `stale_cache`, `computed_greeks`. v0.18 restricts it to the closed enum above. Stores and `--observation-source` flags carrying a custom string now fail with:
 
 ```
-Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, workflow_state, human, import, sync. Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.
+Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, workflow_state, human, import, sync, unspecified. Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.
 ```
 
 `observation_source` is a *fixed classification* of the kind of write (it drives reducer tie-breaking); the descriptive label of *where* a value came from belongs in the free-form `data_source` field, which remains unconstrained. To migrate, map each custom string to the closest enum value and move the original label into `data_source`:

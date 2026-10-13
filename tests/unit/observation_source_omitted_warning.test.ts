@@ -86,6 +86,18 @@ describe("buildObservationSourceOmittedWarning", () => {
     expect(OBSERVATION_SOURCE_OMITTED_MESSAGE).toContain('"import"');
   });
 
+  it("message offers \"unspecified\" as the honest way to silence it, request-wide (#2241 ux)", () => {
+    // A caller that cannot classify the write must learn it may send
+    // "unspecified" rather than reaching for llm_summary to clear the warning.
+    expect(OBSERVATION_SOURCE_OMITTED_MESSAGE).toMatch(
+      /send "unspecified": it is a valid value .* suppresses this warning/
+    );
+    expect(OBSERVATION_SOURCE_OMITTED_MESSAGE).toContain("Do not pick a classified value");
+    // The pointer names one entity, but the omission is request-scoped.
+    expect(OBSERVATION_SOURCE_OMITTED_MESSAGE).toContain("every observation in the request");
+    expect(OBSERVATION_SOURCE_OMITTED_MESSAGE).toContain("not just the entity named here");
+  });
+
   it("message is static: it carries nothing from the request", () => {
     const a = buildObservationSourceOmittedWarning({
       rawObservationSource: undefined,
