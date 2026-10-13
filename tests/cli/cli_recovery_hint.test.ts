@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getSqliteRecoveryHint } from "../../src/cli/index.ts";
+import { classifyBackupIntegrityCheck, getSqliteRecoveryHint } from "../../src/cli/index.ts";
 
 describe("getSqliteRecoveryHint", () => {
   it("returns a dev recovery hint for malformed database errors", () => {
@@ -26,5 +26,59 @@ describe("getSqliteRecoveryHint", () => {
   it("does not return a hint for non-corruption errors", () => {
     const hint = getSqliteRecoveryHint(new Error("Request timed out"), "dev");
     expect(hint).toBeNull();
+  });
+
+  it("does not mistake a verification readback failure for database corruption", () => {
+    const hint = getSqliteRecoveryHint(
+      new Error("Backup verification could not obtain an integrity result (no result)."),
+      "dev"
+    );
+    expect(hint).toBeNull();
+  });
+
+  it("classifies missing or malformed readback as an instrument failure", () => {
+    expect(classifyBackupIntegrityCheck([])).toEqual({
+      kind: "verify_instrument_failure",
+    });
+    expect(classifyBackupIntegrityCheck([{}])).toEqual({
+      kind: "verify_instrument_failure",
+    });
+    expect(classifyBackupIntegrityCheck([{ integrity_check: null }])).toEqual({
+      kind: "verify_instrument_failure",
+    });
+    expect(
+      classifyBackupIntegrityCheck([
+        { integrity_check: "ok" },
+        { integrity_check: "row 3 missing" },
+      ])
+    ).toEqual({
+      kind: "verify_instrument_failure",
+    });
+    expect(classifyBackupIntegrityCheck([{ result: "ok" }])).toEqual({
+      kind: "verify_instrument_failure",
+    });
+    expect(classifyBackupIntegrityCheck([{ integrity_check: "ok", extra: "unexpected" }])).toEqual({
+      kind: "verify_instrument_failure",
+    });
+    expect(classifyBackupIntegrityCheck([{ integrity_check: " ok " }])).toEqual({
+      kind: "verify_instrument_failure",
+    });
+  });
+
+  it("classifies a real non-ok result as an integrity failure", () => {
+    expect(classifyBackupIntegrityCheck([{ integrity_check: "ok" }])).toEqual({
+      kind: "verified",
+    });
+    expect(classifyBackupIntegrityCheck([{ integrity_check: "row 3 missing" }])).toEqual({
+      kind: "integrity_failed",
+    });
+    expect(
+      classifyBackupIntegrityCheck([
+        { integrity_check: "row 3 missing" },
+        { integrity_check: "row 7 missing" },
+      ])
+    ).toEqual({
+      kind: "integrity_failed",
+    });
   });
 });

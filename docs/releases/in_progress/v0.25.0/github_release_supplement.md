@@ -4,6 +4,8 @@ This minor release makes `update_schema_incremental` write to the schema scope i
 
 ## Highlights
 
+- **Healthy Node 24 backups verify again.** `neotoma backup create` now reads PRAGMA rows through the native `node:sqlite` driver instead of treating every integrity check as `"no result"`. A real non-`ok` result still fails closed with the corruption guidance, while an unreadable verification result is reported as a tooling/instrument failure without the false corruption tip.
+
 - **Incremental schema updates stop dropping fields.** `update_schema_incremental` (MCP, REST, `neotoma schemas update`) now writes to the scope its own read resolved, so a second call no longer merges onto a stale row and loses the first call's field. It also reports the outcome truthfully: `migrated_existing` is true only when fragments were actually promoted, and the response carries `scope` and `migration_result`.
 - **The `force` override works over MCP.** `force: true` is now declared on the `update_schema_incremental` and `register_schema` tool schemas and forwarded to the registry, and `neotoma schemas update` and `neotoma schemas register` gain `--force`. It bypasses only the entity-type naming guards.
 - **Issue sync can target another repo, safely.** `sync_issues`, `POST /issues/sync` and `neotoma issues sync` accept `repo` (`owner/name`), checked against a new operator allowlist (`NEOTOMA_ISSUES_ALLOWED_REPOS`). `commit: false` (CLI `--dry-run`) returns a `plan` and writes nothing, and pushing is opt-in outside the configured repo.
