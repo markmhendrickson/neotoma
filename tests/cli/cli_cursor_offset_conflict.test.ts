@@ -23,7 +23,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 
-import { runCli, writeCliError } from "../../src/cli/index.ts";
+import { getSqliteRecoveryHint, runCli, writeCliError } from "../../src/cli/index.ts";
 
 /** A well-formed opaque cursor for the default entity_id/asc ordering. */
 const CURSOR = Buffer.from(
@@ -68,10 +68,16 @@ async function runNeotomaCli(
 describe("#1943 CLI rejects --cursor + --offset", () => {
   it("emits a structured CURSOR_OFFSET_CONFLICT when both are supplied explicitly", async () => {
     const { error } = await runNeotomaCli([
-      "--env", "dev", "entities", "list",
-      "--type", "cursor_conflict_probe",
-      "--cursor", CURSOR,
-      "--offset", "10",
+      "--env",
+      "dev",
+      "entities",
+      "list",
+      "--type",
+      "cursor_conflict_probe",
+      "--cursor",
+      CURSOR,
+      "--offset",
+      "10",
       "--json",
     ]);
 
@@ -80,6 +86,11 @@ describe("#1943 CLI rejects --cursor + --offset", () => {
     expect(hint?.code).toBe("CURSOR_OFFSET_CONFLICT");
     expect(String((error as Error).message)).toMatch(/cannot be combined/i);
     expect(hint?.hint).toMatch(/--cursor/);
+
+    // A typed non-corruption error remains authoritative even if its message
+    // contains a user-provided path that resembles a SQLite error code.
+    (error as Error).message += " at /tmp/sqlite_corrupt/input";
+    expect(getSqliteRecoveryHint(error, "dev")).toBeNull();
 
     // ...and it renders into the --json envelope an agent actually parses.
     const rendered: string[] = [];
@@ -95,6 +106,7 @@ describe("#1943 CLI rejects --cursor + --offset", () => {
 
     const body = JSON.parse(rendered.join("").trim()) as { hint?: { code?: string } };
     expect(body.hint?.code).toBe("CURSOR_OFFSET_CONFLICT");
+    expect(rendered.join("")).not.toContain("recover-db");
   });
 
   it("does NOT reject a bare --cursor (the `--offset` default must not count as supplied)", async () => {
@@ -102,9 +114,14 @@ describe("#1943 CLI rejects --cursor + --offset", () => {
     // `if (opts.cursor && opts.offset)` would reject every cursor call. The guard
     // must read Commander's option source, not the value.
     const { error } = await runNeotomaCli([
-      "--env", "dev", "entities", "list",
-      "--type", "cursor_conflict_probe",
-      "--cursor", CURSOR,
+      "--env",
+      "dev",
+      "entities",
+      "list",
+      "--type",
+      "cursor_conflict_probe",
+      "--cursor",
+      CURSOR,
       "--json",
     ]);
 
@@ -114,9 +131,14 @@ describe("#1943 CLI rejects --cursor + --offset", () => {
 
   it("does NOT reject a bare --offset", async () => {
     const { error } = await runNeotomaCli([
-      "--env", "dev", "entities", "list",
-      "--type", "cursor_conflict_probe",
-      "--offset", "10",
+      "--env",
+      "dev",
+      "entities",
+      "list",
+      "--type",
+      "cursor_conflict_probe",
+      "--offset",
+      "10",
       "--json",
     ]);
 

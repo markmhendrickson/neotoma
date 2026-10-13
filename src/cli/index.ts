@@ -1334,7 +1334,7 @@ export function getSqliteRecoveryHint(
   // The classified result is authoritative. Its message may contain a user-
   // selected path with words like sqlite_corrupt, which is not evidence that
   // the database itself failed an integrity check.
-  if (err instanceof CliHintError && err.hint.code === "VERIFY_INSTRUMENT_FAILURE") {
+  if (err instanceof CliHintError && err.hint.code !== "INTEGRITY_FAILED") {
     return null;
   }
   if (err instanceof CliHintError && err.hint.code === "INTEGRITY_FAILED") {
@@ -1376,9 +1376,12 @@ export function getSqliteRecoveryHint(
   );
 }
 
-export function writeCliError(err: unknown): void {
+export function writeCliError(
+  err: unknown,
+  options: { suppressRecoveryHint?: boolean } = {}
+): void {
   const msg = formatCliError(err);
-  const recoveryHint = getSqliteRecoveryHint(err);
+  const recoveryHint = options.suppressRecoveryHint ? null : getSqliteRecoveryHint(err);
   const outputMode = resolveOutputMode();
   if (outputMode === "json") {
     const envelope: Record<string, unknown> = { error: msg };
@@ -1867,6 +1870,26 @@ class CliHintError extends Error {
 export type BackupIntegrityVerification = {
   kind: "verified" | "verify_instrument_failure" | "integrity_failed";
 };
+
+/** Only driver metadata, never a message or user path, can classify a thrown verification error. */
+function isStructuredSqliteCorruptionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const sqliteError = err as Error & { code?: unknown; errcode?: unknown };
+  if (typeof sqliteError.code !== "string") return false;
+  if (
+    sqliteError.code === "SQLITE_CORRUPT" ||
+    /^SQLITE_CORRUPT_[A-Z0-9_]+$/.test(sqliteError.code)
+  ) {
+    return true;
+  }
+  // node:sqlite reports the generic JS code plus SQLite's numeric primary or
+  // extended result code; 11 is SQLITE_CORRUPT.
+  return (
+    sqliteError.code === "ERR_SQLITE_ERROR" &&
+    Number.isInteger(sqliteError.errcode) &&
+    ((sqliteError.errcode as number) & 0xff) === 11
+  );
+}
 
 /**
  * Preserve the distinction between a negative SQLite conclusion and a check
@@ -11276,7 +11299,9 @@ backupCommand
         integrity = classifyBackupIntegrityCheck(await verifyDb.pragma("integrity_check"));
       } catch (err) {
         integrity = {
-          kind: getSqliteRecoveryHint(err) ? "integrity_failed" : "verify_instrument_failure",
+          kind: isStructuredSqliteCorruptionError(err)
+            ? "integrity_failed"
+            : "verify_instrument_failure",
         };
       } finally {
         await verifyDb?.close().catch(() => {});
@@ -11310,13 +11335,11 @@ backupCommand
       const dbBuf = await fs.readFile(destDb);
       checksums[path.basename(sqlitePath)] =
         "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-    } catch (err) {
+    } catch {
       if (!dbCopied) {
-        const detail = err instanceof Error ? `: ${err.message}` : "";
         writeCliError(
-          "SQLite database not found, not readable, or could not be snapshotted at " +
-            sqlitePath +
-            detail
+          "SQLite database not found, not readable, or could not be snapshotted at " + sqlitePath,
+          { suppressRecoveryHint: true }
         );
         process.exitCode = 1;
         return;
@@ -11569,7 +11592,9 @@ backupCommand
     try {
       manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
     } catch {
-      writeCliError("No manifest.json found in backup directory: " + opts.from);
+      writeCliError("No manifest.json found in backup directory: " + opts.from, {
+        suppressRecoveryHint: true,
+      });
       return;
     }
 
@@ -11641,7 +11666,9 @@ backupCommand
     try {
       manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
     } catch {
-      writeCliError("No manifest.json found in backup directory: " + dir);
+      writeCliError("No manifest.json found in backup directory: " + dir, {
+        suppressRecoveryHint: true,
+      });
       process.exitCode = 1;
       return;
     }

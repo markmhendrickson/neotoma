@@ -313,40 +313,201 @@ describe("CLI backup verify (smoke)", () => {
       expect(run.stderr).toContain(`sqlite3 '${parent}`);
       expect(run.stderr).toContain("$()-");
       expect(run.stderr).toContain('neotoma.db\' \\"PRAGMA integrity_check;\\"');
-      expect(run.stderr).not.toContain(`sqlite3 \"${parent}`);
+      expect(run.stderr).not.toContain(`sqlite3 "${parent}`);
     } finally {
       pragma.mockRestore();
     }
   });
 
-  it("classifies a corruption-signalling verification throw as an integrity failure", async () => {
-    const { parent, dataDir } = await createBackupInput("neotoma-backup-corrupt-throw-");
-    const pragma = vi
-      .spyOn(AsyncSqliteDatabase.prototype, "pragma")
-      .mockRejectedValue(new Error("SQLITE_CORRUPT: SENSITIVE_DRIVER_EXCEPTION"));
-    try {
-      const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
-        NEOTOMA_DATA_DIR: dataDir,
-      });
-      expect(run.exitCode).toBe(1);
-      const envelope = JSON.parse(run.stderr) as {
-        error: string;
-        hint?: { code?: string; failure_kind?: string; message?: string };
-      };
-      expect(envelope.error).toContain("snapshot integrity check failed");
-      expect(envelope.error).not.toContain("SQLITE_CORRUPT");
-      expect(envelope.error).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
-      expect(envelope.hint).toEqual({
-        code: "INTEGRITY_FAILED",
-        failure_kind: "integrity_failed",
-        message:
-          "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
-          "`neotoma storage recover-db --recover` after stopping Neotoma.",
-      });
-      expect(run.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
-    } finally {
-      pragma.mockRestore();
+  it.each([
+    [
+      "better-sqlite3",
+      Object.assign(new Error("SENSITIVE_DRIVER_EXCEPTION"), { code: "SQLITE_CORRUPT" }),
+    ],
+    [
+      "node:sqlite",
+      Object.assign(new Error("SENSITIVE_DRIVER_EXCEPTION"), {
+        code: "ERR_SQLITE_ERROR",
+        errcode: 11,
+      }),
+    ],
+  ])(
+    "classifies a structured %s corruption verification throw as an integrity failure",
+    async (_driver, driverError) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-corrupt-throw-");
+      const pragma = vi
+        .spyOn(AsyncSqliteDatabase.prototype, "pragma")
+        .mockRejectedValue(driverError);
+      try {
+        const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+          NEOTOMA_DATA_DIR: dataDir,
+        });
+        expect(run.exitCode).toBe(1);
+        const envelope = JSON.parse(run.stderr) as {
+          error: string;
+          hint?: { code?: string; failure_kind?: string; message?: string };
+        };
+        expect(envelope.error).toContain("snapshot integrity check failed");
+        expect(envelope.error).not.toContain("SQLITE_CORRUPT");
+        expect(envelope.error).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
+        expect(envelope.hint).toEqual({
+          code: "INTEGRITY_FAILED",
+          failure_kind: "integrity_failed",
+          message:
+            "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
+            "`neotoma storage recover-db --recover` after stopping Neotoma.",
+        });
+        expect(run.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
+      } finally {
+        pragma.mockRestore();
+      }
     }
+  );
+
+  it.each([
+    ["untyped message", new Error("SQLITE_CORRUPT: SENSITIVE_DRIVER_EXCEPTION")],
+    [
+      "non-corruption code",
+      Object.assign(new Error("SQLITE_CANTOPEN: SENSITIVE_DRIVER_EXCEPTION"), {
+        code: "SQLITE_CANTOPEN",
+      }),
+    ],
+    [
+      "non-corruption native code",
+      Object.assign(new Error("SENSITIVE_DRIVER_EXCEPTION"), {
+        code: "ERR_SQLITE_ERROR",
+        errcode: 14,
+      }),
+    ],
+  ])(
+    "treats a %s throw as an instrument failure despite sqlite_corrupt in the output path",
+    async (_kind, driverError) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-sqlite_corrupt-throw-");
+      await vi.resetModules();
+      const { AsyncSqliteDatabase: isolatedDriver } =
+        await import("../../src/repositories/sqlite/sqlite_driver.ts");
+      const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
+      const pragma = vi.spyOn(isolatedDriver.prototype, "pragma").mockRejectedValue(driverError);
+      try {
+        const human = await runNeotomaCli(
+          ["backup", "create", "--output", parent],
+          { NEOTOMA_DATA_DIR: dataDir },
+          isolatedRunCli
+        );
+        const json = await runNeotomaCli(
+          ["--json", "backup", "create", "--output", parent],
+          { NEOTOMA_DATA_DIR: dataDir },
+          isolatedRunCli
+        );
+        const envelope = JSON.parse(json.stderr) as {
+          error: string;
+          hint?: { code?: string; failure_kind?: string };
+        };
+
+        expect(human.exitCode).toBe(1);
+        expect(human.stderr).toContain("could not obtain an integrity result");
+        expect(human.stderr).not.toContain("SQLite may be corrupted");
+        expect(human.stderr).not.toContain("recover-db");
+        expect(human.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
+        expect(json.exitCode).toBe(1);
+        expect(envelope.error).toContain("could not obtain an integrity result");
+        expect(envelope.hint).toEqual({
+          code: "VERIFY_INSTRUMENT_FAILURE",
+          failure_kind: "verify_instrument_failure",
+        });
+        expect(json.stderr).not.toContain("SQLite may be corrupted");
+        expect(json.stderr).not.toContain("recover-db");
+        expect(json.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
+      } finally {
+        pragma.mockRestore();
+      }
+    }
+  );
+
+  it("does not infer corruption from an unreadable source path", async () => {
+    const parent = await fs.mkdtemp(
+      path.join(os.tmpdir(), "neotoma-backup-sqlite_corrupt-source-")
+    );
+    backupRoots.push(parent);
+    const dataDir = path.join(parent, "missing-data");
+    await vi.resetModules();
+    const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
+    const human = await runNeotomaCli(
+      ["backup", "create", "--output", parent],
+      { NEOTOMA_DATA_DIR: dataDir },
+      isolatedRunCli
+    );
+    const json = await runNeotomaCli(
+      ["--json", "backup", "create", "--output", parent],
+      { NEOTOMA_DATA_DIR: dataDir },
+      isolatedRunCli
+    );
+    const envelope = JSON.parse(json.stderr) as { error: string; hint?: unknown };
+    expect(human.exitCode).toBe(1);
+    expect(human.stderr).toContain("not found, not readable, or could not be snapshotted");
+    expect(human.stderr).not.toContain("recover-db");
+    expect(json.exitCode).toBe(1);
+    expect(envelope.error).toContain("not found, not readable, or could not be snapshotted");
+    expect(envelope.hint).toBeUndefined();
+    expect(json.stderr).not.toContain("recover-db");
+  });
+
+  it("keeps a non-corruption snapshot driver error private despite a sqlite_corrupt path", async () => {
+    const { parent, dataDir } = await createBackupInput(
+      "neotoma-backup-sqlite_corrupt-source-open-"
+    );
+    await vi.resetModules();
+    const { AsyncSqliteDatabase: isolatedDriver } =
+      await import("../../src/repositories/sqlite/sqlite_driver.ts");
+    const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
+    const exec = vi
+      .spyOn(isolatedDriver.prototype, "exec")
+      .mockRejectedValue(
+        Object.assign(new Error("SENSITIVE_DRIVER_EXCEPTION"), { code: "SQLITE_CANTOPEN" })
+      );
+    try {
+      const human = await runNeotomaCli(
+        ["backup", "create", "--output", parent],
+        { NEOTOMA_DATA_DIR: dataDir },
+        isolatedRunCli
+      );
+      const json = await runNeotomaCli(
+        ["--json", "backup", "create", "--output", parent],
+        { NEOTOMA_DATA_DIR: dataDir },
+        isolatedRunCli
+      );
+      const envelope = JSON.parse(json.stderr) as { error: string; hint?: unknown };
+      expect(human.exitCode).toBe(1);
+      expect(human.stderr).toContain("not found, not readable, or could not be snapshotted");
+      expect(human.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
+      expect(human.stderr).not.toContain("recover-db");
+      expect(json.exitCode).toBe(1);
+      expect(envelope.error).toContain("not found, not readable, or could not be snapshotted");
+      expect(json.stderr).not.toContain("SENSITIVE_DRIVER_EXCEPTION");
+      expect(envelope.hint).toBeUndefined();
+      expect(json.stderr).not.toContain("recover-db");
+    } finally {
+      exec.mockRestore();
+    }
+  });
+
+  it("does not infer corruption from a missing manifest path in backup verify", async () => {
+    const parent = await fs.mkdtemp(
+      path.join(os.tmpdir(), "neotoma-backup-sqlite_corrupt-manifest-")
+    );
+    backupRoots.push(parent);
+    await vi.resetModules();
+    const { runCli: isolatedRunCli } = await import("../../src/cli/index.ts");
+    const human = await runNeotomaCli(["backup", "verify", parent], {}, isolatedRunCli);
+    const json = await runNeotomaCli(["--json", "backup", "verify", parent], {}, isolatedRunCli);
+    const envelope = JSON.parse(json.stderr) as { error: string; hint?: unknown };
+    expect(human.exitCode).toBe(1);
+    expect(human.stderr).toContain("No manifest.json found");
+    expect(human.stderr).not.toContain("recover-db");
+    expect(json.exitCode).toBe(1);
+    expect(envelope.error).toContain("No manifest.json found");
+    expect(envelope.hint).toBeUndefined();
+    expect(json.stderr).not.toContain("recover-db");
   });
 
   // Regression for #2075. The old implementation copied the DB and its -wal as two
