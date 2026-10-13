@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -19,7 +20,7 @@ const SCRIPT = process.env.WORKTREE_MODE_SCRIPT || join(ROOT, "scripts", "copy-e
 const roots: string[] = [];
 const SENTINEL = "synthetic-live-sentinel-only";
 
-function fixture() {
+function fixture({ committedTemplate = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), "worktree-env-modes-"));
   roots.push(root);
   const main = join(root, "main");
@@ -34,9 +35,26 @@ function fixture() {
       stdio: "pipe",
     });
   git(["init", "-q", "-b", "main"]);
-  writeFileSync(join(main, "package.json"), JSON.stringify({ name: "neotoma" }));
-  writeFileSync(join(main, ".env.example"), "API_TOKEN=illustrative-only\nPORT=3000\n");
-  git(["add", "package.json", ".env.example"]);
+  const packageScript = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts[
+    "copy:env"
+  ];
+  writeFileSync(
+    join(main, "package.json"),
+    JSON.stringify({ name: "neotoma", type: "module", scripts: { "copy:env": packageScript } })
+  );
+  mkdirSync(join(main, "scripts", "lib"), { recursive: true });
+  copyFileSync(
+    join(ROOT, "scripts", "copy-env-to-worktree.js"),
+    join(main, "scripts", "copy-env-to-worktree.js")
+  );
+  copyFileSync(
+    join(ROOT, "scripts", "lib", "worktree_dev_env.js"),
+    join(main, "scripts", "lib", "worktree_dev_env.js")
+  );
+  if (committedTemplate) {
+    writeFileSync(join(main, ".env.example"), "API_TOKEN=illustrative-only\nPORT=3000\n");
+  }
+  git(["add", "-A"]);
   git([
     "-c",
     "user.name=test",
@@ -56,7 +74,13 @@ function fixture() {
       encoding: "utf8",
       env: { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home },
     });
-  return { main, worktree, destination, run };
+  const runNpm = (args: string[]) =>
+    spawnSync("npm", ["run", "copy:env", "--", ...args], {
+      cwd: worktree,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home },
+    });
+  return { main, worktree, destination, run, runNpm };
 }
 
 afterEach(() => {
@@ -91,13 +115,33 @@ describe("worktree env mode effects", () => {
     expect(readFileSync(fx.destination, "utf8")).not.toContain(SENTINEL);
   });
 
-  it("never falls back to live source when tracked template is missing", () => {
-    const fx = fixture();
-    unlinkSync(join(fx.worktree, ".env.example"));
+  it("never falls back to live source when the committed template is missing", () => {
+    const fx = fixture({ committedTemplate: false });
     const result = fx.run(["--mode=template"]);
     expect(result.status).not.toBe(0);
     expect(existsSync(fx.destination)).toBe(false);
     expect(`${result.stdout}${result.stderr}`).not.toContain(SENTINEL);
+  });
+
+  it("uses only committed template keys when the tracked working file is dirty", () => {
+    const fx = fixture();
+    writeFileSync(
+      join(fx.worktree, ".env.example"),
+      "API_TOKEN=changed\nDIRTY_MARKER_KEY=synthetic-only\n"
+    );
+    const result = fx.run(["--template"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(fx.destination, "utf8")).toContain("API_TOKEN=\nPORT=\n");
+    expect(readFileSync(fx.destination, "utf8")).not.toContain("DIRTY_MARKER_KEY");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("DIRTY_MARKER_KEY");
+  });
+
+  it("uses the committed template when the working file is absent", () => {
+    const fx = fixture();
+    unlinkSync(join(fx.worktree, ".env.example"));
+    const result = fx.run(["--template"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(fx.destination, "utf8")).toContain("API_TOKEN=\nPORT=\n");
   });
 
   it("copies a synthetic live source only on explicit --live and writes mode 0600", () => {
@@ -107,6 +151,25 @@ describe("worktree env mode effects", () => {
     expect(readFileSync(fx.destination, "utf8")).toContain(SENTINEL);
     expect(statSync(fx.destination).mode & 0o777).toBe(0o600);
     expect(`${result.stdout}${result.stderr}`).not.toContain(SENTINEL);
+  });
+
+  it("forwards the documented npm --live flag to a fresh destination", () => {
+    const fx = fixture();
+    const result = fx.runNpm(["--live"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(fx.destination, "utf8")).toContain(SENTINEL);
+    expect(statSync(fx.destination).mode & 0o777).toBe(0o600);
+    expect(`${result.stdout}${result.stderr}`).not.toContain(SENTINEL);
+  });
+
+  it("refuses explicit live with no eligible source and no destination", () => {
+    const fx = fixture();
+    unlinkSync(join(fx.main, ".env.dev"));
+    const result = fx.runNpm(["--live"]);
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toMatch(/no local env source.*explicit live/i);
+    expect(`${result.stdout}${result.stderr}`).toContain("--template");
+    expect(existsSync(fx.destination)).toBe(false);
   });
 
   it("preserves an existing destination without reading the live source", () => {

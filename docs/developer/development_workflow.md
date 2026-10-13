@@ -74,7 +74,7 @@ git push -u origin feature/FU-XXX-short-description
 - **Isolation:** Each Feature Unit has its own `node_modules`, `.env`, and build artifacts
 - **Parallel Development:** Work on multiple Feature Units simultaneously without conflicts
 - **Clean Context Switching:** Each worktree is independent
-- **Environment Management:** Automatic setup writes no env file. `npm run setup:worktree-env` deliberately writes non-secret development defaults. `npm run copy:env -- --template` writes blank keys from tracked `.env.example`; `npm run copy:env -- --live` explicitly copies local credentials with mode 0600. Use the live option only when this worktree needs it.
+- **Environment Management:** Automatic setup writes no env file. `npm run setup:worktree-env` deliberately writes non-secret development defaults. `npm run copy:env -- --template` writes blank keys from committed `.env.example`; `npm run copy:env -- --live` explicitly copies local credentials with mode 0600. Use the live option only when this worktree needs it.
 - **Existing worktrees:** `npm run worktree:list-env` lists paths containing `.env`, `.env.dev`, or `.env.development` for manual review. It reads no values and removes nothing. The pre-commit hook refuses those exact basenames even when `.gitignore` is bypassed.
 **Alternative: Traditional Branching (if not using worktrees)**
 ```bash

@@ -4,7 +4,7 @@
  *  - the Husky `post-checkout` hook, in a real linked worktree created with
  *    `git worktree add` and on a later checkout inside that worktree
  *  - `scripts/cursor-worktree-init.sh` (npm run setup:worktree)
- *  - the development config loaders, which must pick up the generated file
+ *  - the existing runtime config boundary against synthetic stale copies
  *
  * Every fixture is a throwaway repository under the OS temp directory. Hooks are
  * left ENABLED for the git commands under test; they are only disabled for the
@@ -22,13 +22,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path, { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-
-import { buildWorktreeDevEnv } from "../../scripts/lib/worktree_dev_env.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HUSKY_BIN = join(REPO_ROOT, "node_modules", ".bin", "husky");
@@ -93,7 +90,6 @@ function buildMainCheckout(): Fixture {
     "scripts/copy-env-to-worktree.js",
     "scripts/write-worktree-dev-env.js",
     "scripts/lib/worktree_dev_env.js",
-    "scripts/lib/dev_env_files.js",
     "scripts/cursor-worktree-init.sh",
     ".husky/post-checkout",
   ]) {
@@ -229,152 +225,58 @@ describe("scripts/cursor-worktree-init.sh", () => {
   });
 });
 
-describe("generated dev settings take effect in the development loaders", () => {
-  /** A Neotoma-shaped checkout holding a freshly generated .env.development. */
-  function generatedCheckout(extraFiles: Record<string, string> = {}) {
-    const dir = realpathSync(mkdtempSync(join(fx.root, "cfg-")));
+describe("synthetic stale worktree env stays outside the runtime loaders", () => {
+  function staleCheckout(extraFiles: Record<string, string> = {}) {
+    const dir = realpathSync(mkdtempSync(join(fx.root, "stale-")));
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "neotoma", type: "module" }));
-    mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
-    copyFileSync(
-      join(REPO_ROOT, "scripts", "write-worktree-dev-env.js"),
-      join(dir, "scripts", "write-worktree-dev-env.js")
+    writeFileSync(
+      join(dir, ".env.development"),
+      "NEOTOMA_BEARER_TOKEN=synthetic-stale-only\nNEOTOMA_DATA_DIR=/stale/copied-data\n"
     );
-    copyFileSync(
-      join(REPO_ROOT, "scripts", "lib", "worktree_dev_env.js"),
-      join(dir, "scripts", "lib", "worktree_dev_env.js")
-    );
-    const gen = spawnSync(process.execPath, [join(dir, "scripts", "write-worktree-dev-env.js")], {
-      cwd: dir,
-      encoding: "utf-8",
-      env: cleanEnv(fx.home),
-    });
-    expect(gen.status, gen.stderr).toBe(0);
     for (const [name, body] of Object.entries(extraFiles)) writeFileSync(join(dir, name), body);
     return dir;
   }
 
-  function loadConfig(projectRoot: string, extraEnv: Record<string, string> = {}) {
-    // The user-level config (HOME) names a different data directory, as a developer's real one would.
+  function readConfig(projectRoot: string, extraEnv: Record<string, string> = {}) {
+    const emptyHome = join(fx.root, "isolated-home");
+    mkdirSync(emptyHome, { recursive: true });
     const script = `import { config } from ${JSON.stringify(
       pathToFileURL(join(REPO_ROOT, "src", "config.ts")).href
-    )};\nconsole.log("RESULT:" + JSON.stringify({ dataDir: config.dataDir }));\n`;
+    )};\nconsole.log("RESULT:" + JSON.stringify({ dataDir: config.dataDir, staleToken: process.env.NEOTOMA_BEARER_TOKEN }));\n`;
     const result = spawnSync(TSX_BIN, ["--eval", script], {
       cwd: REPO_ROOT,
       encoding: "utf-8",
-      env: cleanEnv(fx.home, { NEOTOMA_PROJECT_ROOT: projectRoot, ...extraEnv }),
+      env: cleanEnv(emptyHome, { NEOTOMA_PROJECT_ROOT: projectRoot, ...extraEnv }),
     });
     const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
     expect(line, `config did not load: ${result.stderr.slice(0, 500)}`).toBeDefined();
-    return JSON.parse((line as string).slice("RESULT:".length)) as { dataDir: string };
+    return JSON.parse((line as string).slice("RESULT:".length)) as {
+      dataDir: string;
+      staleToken?: string;
+    };
   }
 
-  it("src/config.ts applies the generated NEOTOMA_DATA_DIR over the user-level fallback", () => {
-    const dir = generatedCheckout();
-    expect(loadConfig(dir).dataDir).toBe(join(dir, "data"));
+  it("ignores a stale credential-bearing .env.development when no explicit source is provided", () => {
+    const result = readConfig(staleCheckout());
+    expect(result.dataDir).not.toBe("/stale/copied-data");
+    expect(result.staleToken).toBeUndefined();
   });
 
-  it("a developer's own .env still takes precedence over the generated file", () => {
-    const dir = generatedCheckout({ ".env": "NEOTOMA_DATA_DIR=/own/choice\n" });
-    expect(loadConfig(dir).dataDir).toBe("/own/choice");
+  it("preserves the existing project .env and shell source behavior", () => {
+    const own = staleCheckout({ ".env": "NEOTOMA_DATA_DIR=/own/choice\n" });
+    const ownResult = readConfig(own);
+    expect(ownResult.dataDir).toBe("/own/choice");
+    expect(ownResult.staleToken).toBeUndefined();
+    const shell = staleCheckout();
+    const shellResult = readConfig(shell, { NEOTOMA_DATA_DIR: "/from/shell" });
+    expect(shellResult.dataDir).toBe("/from/shell");
+    expect(shellResult.staleToken).toBeUndefined();
   });
 
-  it("an explicit shell setting still takes precedence over the generated file", () => {
-    const dir = generatedCheckout();
-    expect(loadConfig(dir, { NEOTOMA_DATA_DIR: "/from/shell" }).dataDir).toBe("/from/shell");
-  });
-
-  it("scripts/dev-serve.js loads the generated file through the shared env-file list", () => {
-    const dir = generatedCheckout({ ".env": "HTTP_PORT=4555\n" });
-    const helper = pathToFileURL(join(REPO_ROOT, "scripts", "lib", "dev_env_files.js")).href;
-    const dotenvPath = createRequire(join(REPO_ROOT, "package.json")).resolve("dotenv");
-    const script = `
-      import { createRequire } from "node:module";
-      const dotenv = createRequire(${JSON.stringify(pathToFileURL(REPO_ROOT + "/").href)})(${JSON.stringify(dotenvPath)});
-      const { loadDevEnvFiles } = await import(${JSON.stringify(helper)});
-      loadDevEnvFiles(dotenv, process.cwd(), "development");
-      console.log("RESULT:" + JSON.stringify({
-        port: process.env.PORT,
-        dataDir: process.env.NEOTOMA_DATA_DIR,
-        httpPort: process.env.HTTP_PORT,
-      }));
-    `;
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-      cwd: dir,
-      encoding: "utf-8",
-      env: cleanEnv(fx.home),
-    });
-    const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
-    expect(line, `loader failed: ${result.stderr.slice(0, 500)}`).toBeDefined();
-    const parsed = JSON.parse((line as string).slice("RESULT:".length));
-    expect(parsed.dataDir).toBe(join(dir, "data"));
-    expect(parsed.port).toBe("3000");
-    // The developer's own .env wins where both set a key.
-    expect(parsed.httpPort).toBe("4555");
-
-    const devServe = readFileSync(join(REPO_ROOT, "scripts", "dev-serve.js"), "utf-8");
-    expect(devServe).toContain("loadDevEnvFiles");
-  });
-});
-
-/**
- * Native Windows cannot be run in CI (the repository has no Windows lane), so a
- * Windows checkout is simulated: the env file is rendered with the `path.win32`
- * flavour for real Windows-style roots, written into a throwaway checkout, and
- * loaded through the real development loaders. What the loaders then see is the
- * portable (forward-slash) form that Node also accepts on Windows.
- */
-describe("Windows-style data directories load in the development loaders", () => {
-  const WINDOWS_ROOTS = [
-    "C:\\repos\\neotoma-wt",
-    "C:\\repos\\my worktree",
-    "\\\\fileserver\\share\\neotoma-wt",
-  ];
-  const expectedDataDir = (root: string) => path.win32.join(root, "data").replace(/\\/g, "/");
-
-  function checkoutWithEnvText(text: string) {
-    const dir = realpathSync(mkdtempSync(join(fx.root, "win-")));
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "neotoma", type: "module" }));
-    writeFileSync(join(dir, ".env.development"), text);
-    return dir;
-  }
-
-  it.each(WINDOWS_ROOTS)("src/config.ts applies the generated data directory for %s", (root) => {
-    const dir = checkoutWithEnvText(buildWorktreeDevEnv(root, { pathApi: path.win32 }));
-    const script = `import { config } from ${JSON.stringify(
-      pathToFileURL(join(REPO_ROOT, "src", "config.ts")).href
-    )};\nconsole.log("RESULT:" + JSON.stringify({ dataDir: config.dataDir }));\n`;
-    const result = spawnSync(TSX_BIN, ["--eval", script], {
-      cwd: REPO_ROOT,
-      encoding: "utf-8",
-      env: cleanEnv(fx.home, { NEOTOMA_PROJECT_ROOT: dir }),
-    });
-    const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
-    expect(line, `config did not load: ${result.stderr.slice(0, 500)}`).toBeDefined();
-    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(
-      expectedDataDir(root)
-    );
-  });
-
-  it.each(WINDOWS_ROOTS)("scripts/dev-serve.js env loading applies it for %s", (root) => {
-    const dir = checkoutWithEnvText(buildWorktreeDevEnv(root, { pathApi: path.win32 }));
-    const helper = pathToFileURL(join(REPO_ROOT, "scripts", "lib", "dev_env_files.js")).href;
-    const dotenvPath = createRequire(join(REPO_ROOT, "package.json")).resolve("dotenv");
-    const script = `
-      import { createRequire } from "node:module";
-      const dotenv = createRequire(${JSON.stringify(pathToFileURL(REPO_ROOT + "/").href)})(${JSON.stringify(dotenvPath)});
-      const { loadDevEnvFiles } = await import(${JSON.stringify(helper)});
-      loadDevEnvFiles(dotenv, process.cwd(), "development");
-      console.log("RESULT:" + JSON.stringify({ dataDir: process.env.NEOTOMA_DATA_DIR }));
-    `;
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-      cwd: dir,
-      encoding: "utf-8",
-      env: cleanEnv(fx.home),
-    });
-    const line = result.stdout.split("\n").find((l) => l.startsWith("RESULT:"));
-    expect(line, `loader failed: ${result.stderr.slice(0, 500)}`).toBeDefined();
-    expect(JSON.parse((line as string).slice("RESULT:".length)).dataDir).toBe(
-      expectedDataDir(root)
-    );
+  it("keeps dev-serve on its existing .env-only non-production file list", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts", "dev-serve.js"), "utf-8");
+    expect(source).toContain("[path.join(projectRoot, '.env')]");
+    expect(source).not.toContain("loadDevEnvFiles");
+    expect(source).not.toContain(".env.development");
   });
 });

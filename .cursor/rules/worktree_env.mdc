@@ -11,7 +11,7 @@ When working in a git worktree (especially Cursor worktrees):
    - `npm run setup:worktree-env`
    - or `node scripts/write-worktree-dev-env.js` (`--force` overwrites an existing file; `--help` explains)
 3. The `post-checkout` hook, Cursor setup, and `cursor-worktree-init.sh` call `scripts/copy-env-to-worktree.js` at its no-write default.
-4. `npm run copy:env -- --template` writes blank keys from tracked `.env.example` only. `npm run copy:env -- --live` explicitly copies a local env source with mode 0600. Neither mode runs automatically; use `--force` only to replace an existing destination.
+4. `npm run copy:env -- --template` writes blank keys from committed `.env.example` only. `npm run copy:env -- --live` explicitly copies a local env source with mode 0600. Neither mode runs automatically; use `--force` only to replace an existing destination.
 5. Credentials are never copied automatically. A developer can instead provide them deliberately in the shell or use the explicit `--live` command when authorized.
 6. Env files are gitignored and MUST NOT be committed.
 7. The pre-commit hook also rejects staged files named `.env`, `.env.dev`, or `.env.development`, even if ignore rules are bypassed. Run `npm run worktree:list-env` to list possible existing env copies by path; it does not read values or delete files.

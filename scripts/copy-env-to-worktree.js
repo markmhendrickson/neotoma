@@ -13,7 +13,7 @@ Usage: node scripts/copy-env-to-worktree.js [--mode=none|template|live] [--force
 
 Modes
   none      Automatic default. Never reads or writes an env file.
-  template  Explicitly write keys with empty values from tracked .env.example.
+  template  Explicitly write keys with empty values from committed .env.example.
   live      Explicitly copy a local env source into this worktree (mode 0600).
 
 An existing .env.development is preserved unless --force is given.
@@ -50,23 +50,24 @@ function parseArgs(args) {
 }
 
 function trackedTemplate(root) {
+  let committed;
   try {
-    execFileSync("git", ["ls-files", "--error-unmatch", "--", ".env.example"], {
+    committed = execFileSync("git", ["show", "HEAD:.env.example"], {
       cwd: root,
-      stdio: "ignore",
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 1024 * 1024,
     });
   } catch {
-    throw new Error("tracked .env.example is required for template mode");
+    throw new Error("committed .env.example is required for template mode");
   }
-  const file = join(root, ".env.example");
-  if (!lstatSync(file).isFile()) throw new Error("tracked .env.example must be a regular file");
   const keys = new Set();
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/u)) {
+  for (const line of committed.split(/\r?\n/u)) {
     const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/u.exec(line);
     if (match) keys.add(match[1]);
   }
-  if (!keys.size) throw new Error("tracked .env.example contains no keys");
-  return `# Keys from tracked .env.example; values intentionally blank.\n${[...keys].map((key) => `${key}=`).join("\n")}\n`;
+  if (!keys.size) throw new Error("committed .env.example contains no keys");
+  return `# Keys from committed .env.example; values intentionally blank.\n${[...keys].map((key) => `${key}=`).join("\n")}\n`;
 }
 
 function mainCheckout(root) {
@@ -96,7 +97,9 @@ function liveSource(root) {
       if (error?.code !== "ENOENT") throw error;
     }
   }
-  throw new Error("no local env source found for explicit live mode");
+  throw new Error(
+    "no local env source found for explicit live mode; provide a local source or use --template"
+  );
 }
 
 function main(args) {
