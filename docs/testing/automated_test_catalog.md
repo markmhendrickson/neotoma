@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **720**
-- Backend and repo Vitest files: **684**
+- Total automated test files: **725**
+- Backend and repo Vitest files: **689**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 194 |
+| Vitest unit tests | 195 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 217 |
@@ -85,7 +85,7 @@ flowchart TD
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
-| Tests Scripts | 4 |
+| Tests Scripts | 8 |
 
 ## Primary validation commands
 - `npm test`
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (194):**
+**Files (195):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -164,6 +164,7 @@ flowchart TD
 - `tests/unit/content_field_store_warning.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/conversation_session_uuid_bridge.test.ts`
+- `tests/unit/copy_env_to_worktree.test.ts`
 - `tests/unit/correction_transaction_error_parity.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
@@ -938,11 +939,15 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/scripts`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (4):**
+**Files (8):**
 - `tests/scripts/bundles_scaffold.test.ts`
 - `tests/scripts/generate_automated_test_catalog.test.ts`
 - `tests/scripts/launchd_cli_sync_tooling.test.ts`
 - `tests/scripts/validate_libsql_migration.test.ts`
+- `tests/scripts/worktree_dev_env.test.ts`
+- `tests/scripts/worktree_env_safety.test.ts`
+- `tests/scripts/worktree_setup_agent_scenario.test.ts`
+- `tests/scripts/worktree_setup_lifecycle.test.ts`
 
 ### Python unit tests
 **Directory:** `packages/client-python/tests/`

@@ -52,4 +52,4 @@ Agents MUST check `.env` when:
 ## Related Documents
 
 - Repository environment documentation — Environment variable management
-- Foundation rule `worktree_env.mdc` — Where env files live and worktree copy behavior
+- Rule `worktree_env.mdc` — Worktree dev env is a minimal non-secret file; credentials are never copied into a worktree

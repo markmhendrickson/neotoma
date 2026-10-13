@@ -1,56 +1,24 @@
 ---
-description: "Rules for managing environment files when working in git worktrees, especially Cursor worktrees. Load when in a worktree or configuring .env across branches."
+description: "Rules for the dev environment file in git worktrees, especially Cursor worktrees. Load when in a worktree or configuring .env across branches."
 alwaysApply: false
 ---
-
-<!-- Source: foundation/.cursor/rules/worktree_env.mdc -->
 
 # Worktree Environment Rules
 
 When working in a git worktree (especially Cursor worktrees):
 
-1. Environment files (`.env`, `.env.dev`, `.env.development`) live in the **main repo root**, not in each worktree.
-2. Worktrees do **not** automatically get env files.
-3. To copy env into the current worktree, run:
-   - `npm run copy:env`
-   - or `node scripts/copy-env-to-worktree.js`
-4. To install the auto-copy hook (runs on `git checkout`):
-   - `npm run setup:env-hook`
-5. The copy script:
-   - Detects if you are in a worktree and finds the main repo
-   - Looks for env files in this order: `.env.dev`, `.env`, `.env.development`
-   - Copies the first one found to `.env.development` in the worktree
-   - Only overwrites if the source is newer or destination is missing
+1. Automatic worktree setup uses `none`: it leaves `.env.development` absent and does not read live env sources. Existing files remain untouched for manual review.
+2. To generate minimal, **non-secret** development defaults deliberately, run:
+   - `npm run setup:worktree-env`
+   - or `node scripts/write-worktree-dev-env.js` (`--force` overwrites an existing file; `--help` explains)
+3. The `post-checkout` hook, Cursor setup, and `cursor-worktree-init.sh` call `scripts/copy-env-to-worktree.js` at its no-write default.
+4. `npm run copy:env -- --template` writes blank keys from committed `.env.example` only. `npm run copy:env -- --live` explicitly copies a local env source with mode 0600. Neither mode runs automatically; use `--force` only to replace an existing destination.
+5. Credentials are never copied automatically. A developer can instead provide them deliberately in the shell or use the explicit `--live` command when authorized.
 6. Env files are gitignored and MUST NOT be committed.
+7. The pre-commit hook also rejects staged files named `.env`, `.env.dev`, or `.env.development`, even if ignore rules are bypassed. Run `npm run worktree:list-env` to list possible existing env copies by path; it does not read values or delete files.
 
 Agents should:
-- Suggest `npm run copy:env` when encountering missing env variables in a worktree
-- Never try to commit `.env*` files
-- Prefer the hook (`npm run setup:env-hook`) for developer machines
 
-## Configuration
-
-Environment file priority and worktree detection can be configured in `foundation-config.yaml`:
-
-```yaml
-tooling:
-  env_management:
-    enabled: true
-    env_file_priority:
-      - ".env.dev"
-      - ".env"
-      - ".env.development"
-    worktree_detection:
-      cursor_worktrees: true
-      custom_patterns: []
-```
-
-
-
-
-
-
-
-
-
-
+- Suggest `npm run setup:worktree-env` when a worktree is missing its dev env file
+- Never copy credentials automatically, print env values, or commit `.env*` files
+- Use explicit `--live` only when the worktree needs it; run `npm run worktree:list-env` to review stale copies
