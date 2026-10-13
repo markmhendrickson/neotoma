@@ -683,12 +683,44 @@ export const DATA_ORIGIN_LIMITS = {
  */
 export const DATA_ORIGIN_ENTITY_KEY = "data_origin";
 
+/**
+ * Origin fields are single-line identifiers. Control characters (C0, DEL, C1)
+ * and the Unicode line/paragraph separators are refused so a stored value can
+ * never read as extra lines or fields on a text surface.
+ */
+// eslint-disable-next-line no-control-regex
+const DATA_ORIGIN_CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/;
+
+export const DATA_ORIGIN_CONTROL_CHAR_MESSAGE =
+  "data_origin fields must be single-line text without control characters";
+
+function dataOriginText(max: number) {
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine((value) => !DATA_ORIGIN_CONTROL_CHARS.test(value), {
+      message: DATA_ORIGIN_CONTROL_CHAR_MESSAGE,
+    });
+}
+
+/** True when an absolute URL embeds userinfo (`user[:pass]@host`). */
+function urlHasUserinfo(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.username !== "" || parsed.password !== "";
+  } catch {
+    return false;
+  }
+}
+
 export const DataOriginSchema = z
   .object({
     kind: z.enum(DATA_ORIGIN_KINDS),
-    locator: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.locator).optional(),
-    part: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.part).optional(),
-    system: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.system).optional(),
+    locator: dataOriginText(DATA_ORIGIN_LIMITS.locator).optional(),
+    part: dataOriginText(DATA_ORIGIN_LIMITS.part).optional(),
+    system: dataOriginText(DATA_ORIGIN_LIMITS.system).optional(),
     url: z
       .string()
       .max(DATA_ORIGIN_LIMITS.url)
@@ -696,10 +728,17 @@ export const DataOriginSchema = z
       .refine((value) => /^https?:\/\//i.test(value), {
         message: "data_origin.url must be an absolute http(s) URL",
       })
+      .refine((value) => !DATA_ORIGIN_CONTROL_CHARS.test(value), {
+        message: DATA_ORIGIN_CONTROL_CHAR_MESSAGE,
+      })
+      .refine((value) => !urlHasUserinfo(value), {
+        message:
+          "data_origin.url must not embed credentials (user:pass@); remove them before storing",
+      })
       .optional(),
-    producer: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.producer).optional(),
+    producer: dataOriginText(DATA_ORIGIN_LIMITS.producer).optional(),
     retrieved_at: z.string().datetime({ offset: true }).optional(),
-    notes: z.string().trim().min(1).max(DATA_ORIGIN_LIMITS.notes).optional(),
+    notes: dataOriginText(DATA_ORIGIN_LIMITS.notes).optional(),
   })
   .strict()
   .refine((value) => value.kind === "manual" || Boolean(value.locator), {
@@ -719,7 +758,7 @@ export type DataOrigin = z.infer<typeof DataOriginSchema>;
 export const DATA_ORIGIN_ENTITY_KEY_HINT =
   "entities[i].data_origin is a reserved per-entity origin override: an object with at least " +
   '`kind` (e.g. {"kind":"file","locator":"report.xlsx"}). If this entity type stores its own ' +
-  "field named data_origin, rename that field (e.g. to data_source).";
+  "field named data_origin, rename that field (e.g. to origin_label).";
 
 /**
  * Validate every per-entity `data_origin` override in an `entities[]` array.
@@ -780,9 +819,37 @@ export const StoreInterpretationInputSchema = z
 
 export type StoreInterpretationInput = z.infer<typeof StoreInterpretationInputSchema>;
 
+/**
+ * `create_interpretation` does not apply a per-entity `data_origin` yet
+ * (#2242 follow-up). Refuse the reserved key there rather than letting it land
+ * as an unknown field in raw_fragments, where its `unknown_fields` hint could
+ * lead an agent to declare a schema field that `store` can never write.
+ */
+export const CREATE_INTERPRETATION_DATA_ORIGIN_HINT =
+  "create_interpretation does not accept a per-entity data_origin override yet: send these " +
+  "entities through store with data_origin (request-level or per entity), or omit the key. If " +
+  "this entity type stores its own field named data_origin, rename that field (e.g. to origin_label).";
+
+export function refuseEntityDataOriginKey(
+  entities: Array<Record<string, unknown>> | undefined,
+  ctx: z.RefinementCtx
+): void {
+  if (!Array.isArray(entities)) return;
+  entities.forEach((entity, index) => {
+    if (!entity || typeof entity !== "object") return;
+    if (!Object.prototype.hasOwnProperty.call(entity, DATA_ORIGIN_ENTITY_KEY)) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [index, DATA_ORIGIN_ENTITY_KEY],
+      message: "data_origin is a reserved key that create_interpretation does not accept",
+      params: { hint: CREATE_INTERPRETATION_DATA_ORIGIN_HINT },
+    });
+  });
+}
+
 export const CreateInterpretationRequestSchema = z.object({
   source_id: z.string().min(1),
-  entities: z.array(z.record(z.unknown())).min(1),
+  entities: z.array(z.record(z.unknown())).min(1).superRefine(refuseEntityDataOriginKey),
   interpretation_config: z.record(z.unknown()).optional(),
   relationships: z.array(StoreRelationshipInputSchema).optional(),
   idempotency_key: z.string().min(1).optional(),

@@ -10,8 +10,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CreateInterpretationRequestSchema,
   DataOriginSchema,
   StoreRequestSchema,
+  DATA_ORIGIN_CONTROL_CHAR_MESSAGE,
+  DATA_ORIGIN_ENTITY_KEY_HINT,
   DATA_ORIGIN_KINDS,
 } from "../../src/shared/action_schemas.js";
 import {
@@ -65,6 +68,83 @@ describe("DataOriginSchema", () => {
     expect(
       DataOriginSchema.safeParse({ kind: "manual", notes: longNotes, producer: "a.py@4a5409c" })
         .success
+    ).toBe(true);
+  });
+});
+
+describe("DataOriginSchema single-line and credential rules", () => {
+  const TEXT_FIELDS = ["locator", "part", "system", "producer", "notes"] as const;
+  const CONTROL_SAMPLES = ["a\nb", "a\rb", "a\u0000b", "a\u001b[31mb", "a\u0085b", "a\u2028b"];
+
+  it("rejects control characters, including newlines, in every text field", () => {
+    for (const field of TEXT_FIELDS) {
+      for (const sample of CONTROL_SAMPLES) {
+        const result = DataOriginSchema.safeParse({ kind: "file", locator: "x", [field]: sample });
+        expect(result.success, `${field} ${JSON.stringify(sample)}`).toBe(false);
+        expect(result.error!.issues.map((i) => i.message)).toContain(
+          DATA_ORIGIN_CONTROL_CHAR_MESSAGE
+        );
+      }
+    }
+  });
+
+  it("still accepts ordinary single-line text with spaces, tabs excluded", () => {
+    expect(
+      DataOriginSchema.safeParse({
+        kind: "file",
+        locator: "Atencion al cliente.xlsx",
+        part: "sheet=Tickets;row=97",
+        notes: "identity columns aliased; other columns verbatim",
+      }).success
+    ).toBe(true);
+    expect(DataOriginSchema.safeParse({ kind: "file", locator: "a\tb" }).success).toBe(false);
+  });
+
+  it("refuses a url that embeds credentials", () => {
+    for (const url of ["https://user:pass@example.com/x", "https://user@example.com/x"]) {
+      const result = DataOriginSchema.safeParse({ kind: "url", locator: "p", url });
+      expect(result.success, url).toBe(false);
+      expect(result.error!.issues[0]!.message).toMatch(/must not embed credentials/);
+    }
+    expect(
+      DataOriginSchema.safeParse({ kind: "url", locator: "p", url: "https://example.com/x?id=1" })
+        .success
+    ).toBe(true);
+  });
+});
+
+describe("rename hint", () => {
+  it("does not suggest data_source, which carries identity semantics", () => {
+    expect(DATA_ORIGIN_ENTITY_KEY_HINT).not.toMatch(/data_source/);
+    expect(DATA_ORIGIN_ENTITY_KEY_HINT).toMatch(/rename that field/);
+  });
+});
+
+describe("CreateInterpretationRequestSchema data_origin", () => {
+  it("refuses a per-entity data_origin key instead of storing it as an unknown field", () => {
+    for (const value of [{ kind: "file", locator: "a.xlsx" }, "crm export"]) {
+      const result = CreateInterpretationRequestSchema.safeParse({
+        source_id: "src_1",
+        entities: [
+          { entity_type: "t", title: "a" },
+          { entity_type: "t", data_origin: value },
+        ],
+      });
+      expect(result.success).toBe(false);
+      const issue = result.error!.issues[0]!;
+      expect(issue.path).toEqual(["entities", 1, "data_origin"]);
+      expect((issue as { params?: { hint?: string } }).params?.hint).toMatch(
+        /does not accept a per-entity data_origin.*rename that field/
+      );
+    }
+  });
+
+  it("still accepts entities without the key", () => {
+    expect(
+      CreateInterpretationRequestSchema.safeParse({
+        source_id: "src_1",
+        entities: [{ entity_type: "t", title: "a" }],
+      }).success
     ).toBe(true);
   });
 });
@@ -216,11 +296,32 @@ describe("compact snapshot rendering", () => {
     expect(withOrigins).toContain("data_origins:");
     expect(withOrigins).toContain(`obs_1: ${formatDataOriginCompact(FILE_ORIGIN)}`);
     expect(formatDataOriginCompact(FILE_ORIGIN)).toBe(
-      "kind=file locator=book.xlsx part=sheet=A;row=2"
+      'kind="file" locator="book.xlsx" part="sheet=A;row=2"'
     );
 
     const without = renderEntityCompactText(entity, ["title"], { includeProvenance: true });
     expect(without).not.toContain("data_origins");
+  });
+});
+
+describe("formatDataOriginCompact quoting", () => {
+  it("JSON-encodes every value so text inside a value cannot read as extra fields", () => {
+    const line = formatDataOriginCompact({
+      kind: "file",
+      locator: 'a b url=https://elsewhere.example "q"',
+      notes: "x=y",
+    });
+    expect(line).toBe(
+      'kind="file" locator="a b url=https://elsewhere.example \\"q\\"" notes="x=y"'
+    );
+    // Exactly the fields that were supplied, each as one quoted value.
+    expect(line.match(/(^| )[a-z_]+="/g)).toHaveLength(3);
+  });
+
+  it("escapes control characters even if one reached storage before validation tightened", () => {
+    const line = formatDataOriginCompact({ kind: "file", locator: "a\nkind=url" } as never);
+    expect(line).not.toContain("\n");
+    expect(line).toBe('kind="file" locator="a\\nkind=url"');
   });
 });
 

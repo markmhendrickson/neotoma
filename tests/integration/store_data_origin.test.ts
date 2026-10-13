@@ -15,7 +15,7 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
@@ -195,7 +195,7 @@ describe("store data_origin (#2242)", () => {
 
     const snapText = (await tool("retrieve_entity_snapshot", { entity_id: overrideId })) as string;
     expect(snapText).toContain("data_origins:");
-    expect(snapText).toContain("locator=msg-18c2f0a9d1");
+    expect(snapText).toContain('locator="msg-18c2f0a9d1"');
   });
 
   it("REST and MCP persist a byte-identical data_origin for the same logical input", async () => {
@@ -352,6 +352,18 @@ describe("store data_origin (#2242)", () => {
         body: { data_origin: { kind: "url", locator: "x", url: "javascript:alert(1)" } },
         path: "data_origin",
       },
+      {
+        label: "newline in a single-line field",
+        body: { data_origin: { kind: "file", locator: "a.xlsx", part: "row=1\nkind=url" } },
+        path: "data_origin",
+      },
+      {
+        label: "credentials embedded in url",
+        body: {
+          data_origin: { kind: "url", locator: "x", url: "https://user:pass@example.com/x" },
+        },
+        path: "data_origin",
+      },
     ];
     for (const c of cases) {
       const res = await rest("/store", {
@@ -394,6 +406,86 @@ describe("store data_origin (#2242)", () => {
       .eq("user_id", USER_ID)
       .ilike("canonical_name", `%${marker}%`);
     expect(written ?? []).toHaveLength(0);
+  });
+
+  it("a failed store never writes data_origin content to the WARN log (#2242 security review)", async () => {
+    const marker = randomUUID();
+    const locator = `/private/finance/${marker}/ledger.xlsx`;
+    const url = `https://files.example.com/${marker}?sig=tok${marker}`;
+    const notes = `exported by hand ${marker}`;
+    const entityLocator = `msg-${marker}`;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // (a) the origin itself is malformed (missing locator is fine to carry
+      // url/notes); (b) a valid origin rides along with an unrelated failure
+      // (no entities, no file); (c) a per-entity origin in a failing request.
+      const bodies: Array<Record<string, unknown>> = [
+        {
+          idempotency_key: `origin-log-a-${marker}`,
+          entities: [{ entity_type: ENTITY_TYPE, title: `log ${marker}` }],
+          data_origin: { kind: "spreadsheet", locator, url, notes },
+        },
+        {
+          idempotency_key: `origin-log-b-${marker}`,
+          data_origin: { kind: "file", locator, url, notes },
+        },
+        {
+          idempotency_key: `origin-log-c-${marker}`,
+          entities: [
+            {
+              entity_type: ENTITY_TYPE,
+              title: `log ${marker}`,
+              data_origin: { kind: "email", locator: entityLocator, notes: 7 },
+            },
+          ],
+        },
+      ];
+      for (const body of bodies) {
+        const res = await rest("/store", { user_id: USER_ID, ...body });
+        expect(res.status).toBe(400);
+      }
+      const lines = warn.mock.calls.map((args) => args.map(String).join(" "));
+      const storeLines = lines.filter((line) => line.includes("ValidationError:store"));
+      expect(storeLines.length).toBeGreaterThanOrEqual(3);
+      for (const line of storeLines) {
+        for (const secret of [
+          locator,
+          url,
+          `sig=tok${marker}`,
+          notes,
+          entityLocator,
+          "spreadsheet",
+        ]) {
+          expect(line).not.toContain(secret);
+        }
+      }
+      // The shape stays visible for debugging: kind (when valid) and lengths.
+      expect(storeLines.join("\n")).toContain(`locator_len: ${locator.length}`);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("create_interpretation refuses a per-entity data_origin key on REST and MCP", async () => {
+    const marker = randomUUID();
+    const entities = [
+      {
+        entity_type: ENTITY_TYPE,
+        title: `interp refuse ${marker}`,
+        data_origin: { kind: "file", locator: "a.xlsx" },
+      },
+    ];
+    const res = await rest("/interpretations/create", {
+      user_id: USER_ID,
+      source_id: `src_missing_${marker}`,
+      entities,
+    });
+    expect(res.status).toBe(400);
+    expect(res.json.error_code).toBe("VALIDATION_INVALID_FORMAT");
+    expect(res.json.details?.hint).toMatch(/does not accept a per-entity data_origin/);
+    await expect(
+      tool("create_interpretation", { source_id: `src_missing_${marker}`, entities })
+    ).rejects.toThrow(/data_origin/);
   });
 
   it("refuses data_origin on a file-only store instead of silently dropping it", async () => {

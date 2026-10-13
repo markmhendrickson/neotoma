@@ -562,6 +562,11 @@ message id, an API response), callers declare it with `data_origin` on
 into the structured source's stored JSON. See
 [`agent_attribution_integration.md` § 8a](./agent_attribution_integration.md#8a-data-origin-provenance-2242).
 
+Known limit: peer sync does not replicate provenance facets, so `data_origin`
+does not travel to peers, just as `external_actor` and the attribution keys do
+not. `create_interpretation` refuses a per-entity `data_origin` key for now;
+store such entities through `store` instead.
+
 ## 11. Security Model
 
 - **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access

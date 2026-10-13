@@ -330,7 +330,8 @@ components:
           description: 'Optional. Where the entities came from (file, URL, message,
             API). Applies to every entity; an entity''s own data_origin key overrides
             it. Stored as provenance.data_origin on each observation. A claim, not
-            proof. locator is required unless kind is manual.'
+            proof. locator is required unless kind is manual. Fields are single-line;
+            strip credentials and auth query parameters from locator and url.'
           properties:
             kind:
               type: string

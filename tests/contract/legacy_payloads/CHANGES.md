@@ -6,7 +6,8 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 ## Unreleased (next minor after v0.25.x)
 
-- `v0.25.x/store_entity_field_named_data_origin` seeded as `rejected` (#2242). `data_origin` inside an `entities[]` item is now a reserved per-entity origin override (an object with at least `kind`), peeled off before field validation like `target_id` / `intent`. An entity whose own free-form field was named `data_origin` now gets `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, with a structured `details.hint` to rename the field (e.g. to `data_source`). The release supplement's "Breaking changes" section must name this. Request-level `data_origin` is additive.
+- `v0.25.x/store_entity_field_named_data_origin` seeded as `rejected` (#2242). `data_origin` inside an `entities[]` item is now a reserved per-entity origin override (an object with at least `kind`), peeled off before field validation like `target_id` / `intent`. An entity whose own free-form field was named `data_origin` now gets `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, with a structured `details.hint` to rename the field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this. Request-level `data_origin` is additive.
+- `v0.25.x/create_interpretation_entity_field_named_data_origin` seeded as `rejected` (#2242). `create_interpretation` does not apply a per-entity origin yet, so it now refuses a `data_origin` key inside an `entities[]` item with `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, instead of storing it as an unknown field. The structured `details.hint` points the caller at `store` with `data_origin`, or at renaming its own field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this too.
 
 ## v0.25.0
 

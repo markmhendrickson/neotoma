@@ -80,7 +80,7 @@ See the applied rules in [`.cursor/rules/neotoma_cli.mdc`](../../.cursor/rules/n
 Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, workflow_state, human, import, sync. Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.
 ```
 
-`observation_source` is a *fixed classification* of the kind of write (it drives reducer tie-breaking); the descriptive label of *where* a value came from belongs in the free-form `data_source` field, which remains unconstrained. To migrate, map each custom string to the closest enum value and move the original label into `data_source`:
+`observation_source` is a *fixed classification* of the kind of write (it drives reducer tie-breaking); the descriptive label of *where* a value came from belongs in the free-form `data_source` field, which remains unconstrained. For a typed, machine-readable record of the origin (file, sheet row, URL, message, or API call), also pass `data_origin` on `store`; it complements `data_source` and does not replace it (see [`agent_attribution_integration.md` § 8a](../subsystems/agent_attribution_integration.md#8a-data-origin-provenance-2242)). To migrate, map each custom string to the closest enum value and move the original label into `data_source`:
 
 | v0.17 custom string (examples) | v0.18 `observation_source` | `data_source` (free-form) |
 | ------------------------------ | -------------------------- | ------------------------- |

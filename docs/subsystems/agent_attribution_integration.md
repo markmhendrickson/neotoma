@@ -557,6 +557,105 @@ file, sheet row, URL, email or chat message, or API endpoint.
   `ERR_IDEMPOTENCY_MISMATCH`. Without an origin the stored bytes are unchanged.
 - A file-only store with `data_origin` is refused: the stored file is already
   its own origin record. Implementation: `src/services/provenance_data_origin.ts`.
+- Every text field is single-line: control characters (including newlines)
+  are refused. `url` must not embed credentials (`user:pass@`). Callers should
+  also strip signatures and auth query parameters from `url` and `locator`
+  before sending them, since whatever is sent is stored on every observation.
+
+### Relationship to `data_source`
+
+`data_origin` does not replace the per-entity `data_source` label that the MCP
+instructions require under "Source provenance" and "Multi-row `data_source`
+identity". Keep sending both:
+
+- `data_source` is a free-form, per-entity string. It stays required for API-
+  and tool-sourced entities, and because each row embeds its own upstream id,
+  it also keeps distinct rows in one batch from resolving to the same entity.
+- `data_origin` is the typed origin record. It lives in observation
+  provenance, never in the snapshot, so it plays no part in identity
+  resolution.
+
+### Which field holds what
+
+| `kind` | `locator` (required) | `system` | `part` | `url` |
+|---|---|---|---|---|
+| `file` | Path or file name read | Where the file lives (`local_fs`, `gdrive`) | Sheet, row, page, or range inside it | Web link to the file, if any |
+| `email` | Message id | Mail provider (`gmail`, `outlook`) | Attachment or quoted section | Web link to the message, if any |
+| `message` | Message or thread id | Chat platform (`slack`, `telegram`) | Thread position | Permalink, if any |
+| `api` | Method and endpoint called | API provider (`wise`, `github`) | JSON path inside the response | Not usually needed |
+| `url` | The page address | Site or crawler name | Section or anchor | Same address when it is http(s) |
+| `manual` | Optional | Optional | Optional | Optional |
+
+### Example payloads
+
+An email, with a per-row `data_source` kept alongside:
+
+```json
+{
+  "data_origin": {
+    "kind": "email",
+    "system": "gmail",
+    "locator": "18c2f0a9d1",
+    "url": "https://mail.google.com/mail/u/0/#all/18c2f0a9d1",
+    "retrieved_at": "2026-10-13T09:00:00Z"
+  },
+  "entities": [
+    {
+      "entity_type": "transaction",
+      "amount": 120,
+      "currency": "EUR",
+      "data_source": "Gmail messages.get id=18c2f0a9d1 2026-10-13"
+    }
+  ]
+}
+```
+
+A sheet row:
+
+```json
+{
+  "data_origin": {
+    "kind": "file",
+    "system": "local_fs",
+    "locator": "support_tickets.xlsx",
+    "part": "sheet=Tickets;row=97",
+    "producer": "tools/import_tickets.py@4a5409c"
+  },
+  "entities": [
+    {
+      "entity_type": "support_ticket",
+      "ticket_id": "T-97",
+      "data_source": "support_tickets.xlsx Tickets row=97"
+    }
+  ]
+}
+```
+
+An API call, with one entity overriding the request-level origin:
+
+```json
+{
+  "data_origin": {
+    "kind": "api",
+    "system": "wise",
+    "locator": "GET /v1/transfers/12345",
+    "retrieved_at": "2026-10-13T09:05:00Z"
+  },
+  "entities": [
+    {
+      "entity_type": "transaction",
+      "transfer_id": "12345",
+      "data_source": "Wise API GET /v1/transfers/12345 2026-10-13"
+    },
+    {
+      "entity_type": "contact",
+      "name": "Recipient Example",
+      "data_source": "Wise API GET /v1/accounts/678 2026-10-13",
+      "data_origin": { "kind": "api", "system": "wise", "locator": "GET /v1/accounts/678" }
+    }
+  ]
+}
+```
 
 ### Read path
 
@@ -566,6 +665,9 @@ file, sheet row, URL, email or chat message, or API endpoint.
 - `retrieve_entity_snapshot` (MCP, JSON and compact text) and HTTP
   `get_entity_snapshot`: `data_origins`, mapping each observation id the
   snapshot's field provenance cites to its origin.
+- To find the origin of one field from a snapshot: the snapshot's
+  `provenance[field]` gives the observation id, and `data_origins[that id]`
+  gives its origin.
 - Absent means absent on every surface — no key when no origin was supplied.
 - Guest-token reads have `data_origin` / `data_origins` stripped, by the same
   send-time redaction that withholds `authenticated_actor_id`

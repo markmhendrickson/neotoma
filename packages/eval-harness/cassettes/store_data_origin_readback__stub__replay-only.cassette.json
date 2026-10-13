@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_data_origin_readback",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-13T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Store one sheet row and one email-derived record with their data origins, confirm each origin on read, and try one malformed origin.",
+  "system_prompt": "Store each synthetic record with the data origin it was read from, then read the origins back.",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store_data_origin_readback-batch",
+        "data_origin": {
+          "kind": "file",
+          "system": "local_fs",
+          "locator": "eval_tickets.xlsx",
+          "part": "sheet=Tickets;row=97"
+        },
+        "entities": [
+          {
+            "entity_type": "eval_origin_record",
+            "title": "origin sheet row 97",
+            "data_source": "eval_tickets.xlsx Tickets row=97"
+          },
+          {
+            "entity_type": "eval_origin_record",
+            "title": "origin email 18c2f0a9d1",
+            "data_source": "Gmail messages.get id=msg-18c2f0a9d1 2026-10-13",
+            "data_origin": {
+              "kind": "email",
+              "system": "gmail",
+              "locator": "msg-18c2f0a9d1"
+            }
+          }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "list_observations",
+      "input": {
+        "entity_id": "ent_ee6ccaa2afffcc58627a3850"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "list_observations",
+      "input": {
+        "entity_id": "ent_270a941b4b771b9ba7a4dc07"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_field_provenance",
+      "input": {
+        "entity_id": "ent_270a941b4b771b9ba7a4dc07",
+        "field": "title"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store_data_origin_readback-malformed",
+        "data_origin": {
+          "kind": "file"
+        },
+        "entities": [
+          {
+            "entity_type": "eval_origin_record",
+            "title": "origin malformed no locator",
+            "data_source": "eval malformed"
+          }
+        ]
+      },
+      "sequence": 4
+    }
+  ],
+  "assistant_text": "Stored both records with their data origins; the malformed origin was refused."
+}

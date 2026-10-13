@@ -177,15 +177,27 @@ export async function collectSnapshotDataOrigins(
   return out;
 }
 
-/** One-line compact rendering for text snapshot output. */
+/**
+ * One-line compact rendering for text snapshot output. Every value is
+ * JSON-encoded (quoted and escaped) so a caller-supplied value can only ever
+ * read as one value, never as extra `key=` pairs or extra lines.
+ */
 export function formatDataOriginCompact(origin: DataOrigin): string {
-  const parts: string[] = [`kind=${origin.kind}`];
-  if (origin.system) parts.push(`system=${origin.system}`);
-  if (origin.locator) parts.push(`locator=${origin.locator}`);
-  if (origin.part) parts.push(`part=${origin.part}`);
-  if (origin.url) parts.push(`url=${origin.url}`);
-  if (origin.producer) parts.push(`producer=${origin.producer}`);
-  if (origin.retrieved_at) parts.push(`retrieved_at=${origin.retrieved_at}`);
-  if (origin.notes) parts.push(`notes=${origin.notes}`);
+  const order: Array<keyof DataOrigin> = [
+    "kind",
+    "system",
+    "locator",
+    "part",
+    "url",
+    "producer",
+    "retrieved_at",
+    "notes",
+  ];
+  const parts: string[] = [];
+  for (const key of order) {
+    const value = origin[key];
+    if (value === undefined || value === null || value === "") continue;
+    parts.push(`${key}=${JSON.stringify(String(value))}`);
+  }
   return parts.join(" ");
 }

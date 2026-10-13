@@ -4169,7 +4169,10 @@ export interface components {
      *     `external_actor`). A caller claim, never verified: the server does not
      *     fetch, open, or validate `locator` or `url`. Persisted on each created
      *     observation as `provenance.data_origin`. `locator` is required unless
-     *     `kind` is `manual`.
+     *     `kind` is `manual`. Every text field is single-line: control
+     *     characters, including newlines, are refused. Strip credentials,
+     *     signatures, and auth query parameters from `locator` and `url` before
+     *     sending; a `url` with embedded `user:pass@` is refused.
      */
     DataOrigin: {
       /**
@@ -4188,7 +4191,7 @@ export interface components {
       system?: string;
       /**
        * Format: uri
-       * @description Absolute http(s) link to the original, when `locator` is not itself a URL.
+       * @description Absolute http(s) link to the original, when `locator` is not itself a URL. Must not embed credentials (`user:pass@`).
        */
       url?: string;
       /** @description Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`. */
