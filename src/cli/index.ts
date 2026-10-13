@@ -11200,6 +11200,17 @@ async function directorySizeAndFileCount(
   return { bytes, files };
 }
 
+/** A backup filesystem failure is not evidence of SQLite corruption. */
+async function backupFileOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    // Do not forward driver or path-bearing OS error text to the generic CLI
+    // recovery-hint scanner (or into a JSON error envelope).
+    throw new Error("Backup operation failed while accessing files. Check paths and permissions.");
+  }
+}
+
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -11239,7 +11250,7 @@ backupCommand
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const backupDir = path.join(opts.output, `neotoma-backup-${timestamp}`);
 
-    await fs.mkdir(backupDir, { recursive: true });
+    await backupFileOperation(() => fs.mkdir(backupDir, { recursive: true }));
 
     const manifest: Record<string, unknown> = {
       version: "1.0",
@@ -11367,7 +11378,9 @@ backupCommand
     }
 
     // Write manifest
-    await fs.writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+    await backupFileOperation(() =>
+      fs.writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(manifest, null, 2))
+    );
 
     // Final verification: ensure the DB file is present in the backup directory
     const finalDbPath = path.join(backupDir, contents.neotoma_db || "");
@@ -11388,7 +11401,7 @@ backupCommand
       return;
     }
 
-    const finalStat = await fs.stat(finalDbPath);
+    const finalStat = await backupFileOperation(() => fs.stat(finalDbPath));
     const walBytes =
       contents.wal !== undefined
         ? ((await fs.stat(path.join(backupDir, contents.wal)).catch(() => null))?.size ?? null)
@@ -11415,11 +11428,11 @@ backupCommand
     for (const [key, val] of Object.entries(contents)) {
       if (typeof val !== "string" || !val.endsWith("/")) continue;
       const sub = path.join(backupDir, val);
-      const { bytes, files } = await directorySizeAndFileCount(sub);
+      const { bytes, files } = await backupFileOperation(() => directorySizeAndFileCount(sub));
       componentSizes[key] = { path: sub, bytes, files, kind: "directory" };
     }
 
-    const totalWalk = await directorySizeAndFileCount(backupDir);
+    const totalWalk = await backupFileOperation(() => directorySizeAndFileCount(backupDir));
     const manifestPath = path.join(backupDir, "manifest.json");
     let manifestBytes = 0;
     try {
@@ -11463,9 +11476,10 @@ backupCommand
         result.archive_path = archive_path;
         result.archive_bytes = archive_bytes;
         (result.sizes as Record<string, unknown>).archive_bytes = archive_bytes;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        writeCliError(msg);
+      } catch {
+        writeCliError("Could not create a tar.gz archive for this backup.", {
+          suppressRecoveryHint: true,
+        });
         process.exitCode = 1;
         return;
       }
@@ -11599,17 +11613,21 @@ backupCommand
     }
 
     const contents = (manifest.contents || {}) as Record<string, string>;
-    await fs.mkdir(targetDir, { recursive: true });
+    await backupFileOperation(() => fs.mkdir(targetDir, { recursive: true }));
 
     // Restore DB
     if (contents.neotoma_db) {
-      await fs.copyFile(
-        path.join(opts.from, contents.neotoma_db),
-        path.join(targetDir, contents.neotoma_db)
+      await backupFileOperation(() =>
+        fs.copyFile(
+          path.join(opts.from, contents.neotoma_db),
+          path.join(targetDir, contents.neotoma_db)
+        )
       );
     }
     if (contents.wal) {
-      await fs.copyFile(path.join(opts.from, contents.wal), path.join(targetDir, contents.wal));
+      await backupFileOperation(() =>
+        fs.copyFile(path.join(opts.from, contents.wal), path.join(targetDir, contents.wal))
+      );
     }
 
     // Restore directories
@@ -11714,7 +11732,7 @@ backupCommand
     }
 
     const valid = issues.length === 0;
-    const walk = await directorySizeAndFileCount(dir);
+    const walk = await backupFileOperation(() => directorySizeAndFileCount(dir));
     const backup_size = {
       bytes: walk.bytes,
       files: walk.files,

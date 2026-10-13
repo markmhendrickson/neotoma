@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -98,6 +99,63 @@ describe("CLI backup verify (smoke)", () => {
         })
       )
     );
+  });
+
+  it("fails a pre-snapshot filesystem error without path-borne corruption advice in human and JSON output", async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-backup-fs-entrance-"));
+    backupRoots.push(parent);
+    const outputFile = path.join(parent, "sqlite_corrupt-output");
+    await fs.writeFile(outputFile, "not a directory");
+
+    for (const mode of ["human", "json"] as const) {
+      const argv = ["--import", "tsx", "src/cli/bootstrap.ts"];
+      if (mode === "json") argv.push("--json");
+      argv.push("backup", "create", "--output", outputFile);
+      const run = spawnSync(process.execPath, argv, {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, NEOTOMA_DATA_DIR: path.join(parent, "data") },
+      });
+      expect(run.status, run.stderr).toBe(1);
+      expect(run.stderr).toContain("Backup operation failed");
+      expect(run.stderr).not.toContain("recover-db");
+      expect(run.stderr).not.toContain("SQLite may be corrupted");
+      expect(run.stderr).not.toContain("ENOTDIR");
+      if (mode === "json") {
+        const envelope = JSON.parse(run.stderr) as { error: string; hint?: unknown };
+        expect(envelope.hint).toBeUndefined();
+      }
+    }
+  });
+
+  it("does not infer corruption when backup restore cannot create its target directory", async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-backup-fs-restore-"));
+    backupRoots.push(parent);
+    const source = path.join(parent, "source");
+    await fs.mkdir(source);
+    await fs.writeFile(path.join(source, "manifest.json"), JSON.stringify({ contents: {} }));
+    const targetFile = path.join(parent, "sqlite_corrupt-target");
+    await fs.writeFile(targetFile, "not a directory");
+
+    for (const mode of ["human", "json"] as const) {
+      const argv = ["--import", "tsx", "src/cli/bootstrap.ts"];
+      if (mode === "json") argv.push("--json");
+      argv.push("backup", "restore", "--from", source, "--target", targetFile);
+      const run = spawnSync(process.execPath, argv, {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, NEOTOMA_DATA_DIR: path.join(parent, "data") },
+      });
+      expect(run.status, run.stderr).toBe(1);
+      expect(run.stderr).toContain("Backup operation failed");
+      expect(run.stderr).not.toContain("recover-db");
+      expect(run.stderr).not.toContain("SQLite may be corrupted");
+      expect(run.stderr).not.toContain("ENOTDIR");
+      if (mode === "json") {
+        const envelope = JSON.parse(run.stderr) as { error: string; hint?: unknown };
+        expect(envelope.hint).toBeUndefined();
+      }
+    }
   });
 
   it("backup verify <dir> --json after backup create", async () => {
