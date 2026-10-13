@@ -220,6 +220,13 @@ jobs:
       - name: Run schema-lookup scope-mismatch regression (#2454)
         run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
 
+      # #2026 field provenance on corrected and merge_array fields. Lives under
+      # tests/integration, which test:unit excludes, so without this step the
+      # regression would gate nothing. Drives store -> correct -> provenance
+      # read over both MCP and HTTP.
+      - name: Run field-provenance regression for corrected and merged fields (#2026)
+        run: npx vitest run --no-file-parallelism tests/integration/field_provenance_corrected_and_merged.test.ts
+
       # #2356 schema-scope parity. Surface parity alone stays green when
       # last-arrival wins, because that file inserts the user row second.
       # Resolution parity seeds the global row last and is what fails if
