@@ -193,7 +193,9 @@ the full payload under a new key writes a second set of observations to the
 entities already written. Relationships are written only after every entity, so
 the original request's relationships were not written: recreate them
 separately, referencing the entities by entity id (their positions in the
-original request no longer apply after a partial resend). When
+original request no longer apply after a partial resend). The error does not
+return the ids; look each one up by the entity's identifying fields with entity
+retrieval by identifier. When
 `missing_entity_indexes` is empty, every entity is stored and only the
 relationships may be missing.
 

@@ -934,6 +934,41 @@ describe("store: the resume exemption is decided per write, not per entity row (
     }) as typeof db.from);
   }
 
+  /**
+   * Make the keyed-source timestamp read behind the ownership check return an
+   * error, for as long as the returned spy is installed. Only that one query is
+   * touched: the `sources` select of `created_at` alone, which nothing else in
+   * the store path issues.
+   */
+  function failKeyedSourceRowRead() {
+    const realFrom = db.from.bind(db);
+    return vi.spyOn(db, "from").mockImplementation(((table: string) => {
+      const builder = realFrom(table as never) as unknown as {
+        select: (...a: unknown[]) => unknown;
+      };
+      if (table !== "sources") return builder;
+      return new Proxy(builder, {
+        get(t, prop, receiver) {
+          if (prop === "select") {
+            return (...args: unknown[]) => {
+              if (args.length === 1 && args[0] === "created_at") {
+                return {
+                  eq: () => ({
+                    maybeSingle: () =>
+                      Promise.resolve({ data: null, error: { message: "injected read error" } }),
+                  }),
+                };
+              }
+              return t.select(...args);
+            };
+          }
+          const value = Reflect.get(t, prop, receiver);
+          return typeof value === "function" ? value.bind(t) : value;
+        },
+      });
+    }) as typeof db.from);
+  }
+
   // -- 1. Two payloads of one request that collide on identity ---------------
 
   it("HTTP core: strict batch with two payloads on one title is refused, and refused again on a same-key replay", async () => {
@@ -1133,6 +1168,52 @@ describe("store: the resume exemption is decided per write, not per entity row (
 
     expect(await observationCount()).toBe(before);
   });
+
+  it("HTTP core: strict resume is refused when the keyed source row cannot be read", async () => {
+    const key = `source-read-error-http-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+    const before = await observationCount();
+
+    const spy = failKeyedSourceRowRead();
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+
+    expect(await observationCount()).toBe(before);
+    // Control: with the read healthy again the very same replay completes.
+    const replay = await storeAll(key, makeEntities(), { strict: true });
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+  });
+
+  it("HTTP core: strict resume is refused when an entity row's created_at does not parse", async () => {
+    const key = `bad-created-at-http-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+    const shellId = await entityIdByTitleSuffix(` ${CUT_OFF + 2}`);
+    await db.from("entities").update({ created_at: "not-a-timestamp" }).eq("id", shellId);
+    const before = await observationCount();
+
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(await observationCount()).toBe(before);
+
+    // Control: with a parsable timestamp restored the same replay completes.
+    await db.from("entities").update({ created_at: new Date().toISOString() }).eq("id", shellId);
+    const replay = await storeAll(key, makeEntities(), { strict: true });
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+  });
 });
 
 describe("incompleteStoreHint: recovery advice (#2144)", () => {
@@ -1148,6 +1229,8 @@ describe("incompleteStoreHint: recovery advice (#2144)", () => {
     expect(hint).toContain("[3, 4]");
     expect(hint).toContain("relationships were not written");
     expect(hint).toContain("entity id");
+    expect(hint).toContain("does not return the ids");
+    expect(hint).toContain("identifying fields");
     expect(hint).toContain("second set of observations");
     expect(hint).not.toContain("duplicates the");
   });
@@ -1156,6 +1239,7 @@ describe("incompleteStoreHint: recovery advice (#2144)", () => {
     const hint = incompleteStoreHint(summary(5, []));
     expect(hint).toContain("All of the request's entities are stored");
     expect(hint).toContain("only its relationships may be missing");
+    expect(hint).toContain("identifying fields");
     expect(hint).not.toContain("Resend ONLY");
     expect(hint).not.toContain("no observation");
   });

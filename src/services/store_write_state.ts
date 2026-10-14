@@ -200,7 +200,8 @@ export async function summarizeUnfinishedStore(params: {
 export function incompleteStoreHint(summary: UnfinishedStoreSummary): string {
   const relationships =
     "The original request's relationships were not written; recreate them separately, " +
-    "referencing the entities by entity id.";
+    "referencing the entities by entity id. This error does not return the ids: look each " +
+    "one up by the entity's identifying fields (entity retrieval by identifier).";
   if (summary.missing_entity_indexes.length === 0) {
     return (
       "All of the request's entities are stored; only its relationships may be missing. " +

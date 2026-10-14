@@ -7433,7 +7433,9 @@ export interface operations {
        *     under a new key writes a second set of observations to the
        *     entities already written. The original request's relationships
        *     were not written: recreate them separately, referencing the
-       *     entities by entity id. Not retryable under the same key. A
+       *     entities by entity id (the error does not return the ids; look
+       *     each one up by the entity's identifying fields). Not retryable
+       *     under the same key. A
        *     replay without an `interpretation` never returns this: it
        *     finishes the interrupted write, and a replay of a finished write
        *     is unchanged (`replayed: true`).
