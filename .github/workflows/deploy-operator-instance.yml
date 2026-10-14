@@ -66,6 +66,13 @@ on:
 permissions:
   contents: read
   actions: read # read CI conclusions for the commit being deployed
+  # The "Escalate on failure" step lists, labels and opens issues. Without this
+  # the workflow's token cannot create the `autodeploy-failure` label (the
+  # `gh label create` there is `|| true`, so the refusal was invisible) nor the
+  # issue, and the step then dies with "could not add label ... not found".
+  # Two consecutive failed deploys (2026-10-13, 2026-10-14) escalated to nobody
+  # because of exactly this.
+  issues: write
 
 # NOT cancel-in-progress. `flyctl deploy` on a single-machine app with an
 # attached volume is not atomic: cancelling mid-deploy can leave the machine
@@ -311,10 +318,11 @@ jobs:
 
           # (e) AUTHENTICATED READ PROBE — exercises the database, not just the
           #     HTTP listener. This is the check /health cannot make.
-          #     Budget 90s: a cold read against the operator's ~20GB graph
-          #     legitimately takes 14-18s after a restart, so a short timeout
-          #     would report a false failure on every deploy. Anything beyond
-          #     90s is the wedged-DB signature, not slowness.
+          #     Each attempt gets 90s: a cold read legitimately takes 14-18s
+          #     after a restart and has been seen exceeding 90s while clients
+          #     reconnect. A read that never answers inside the retry window
+          #     below is the wedged-DB signature; one that answers late is a
+          #     slow warm-up and is reported as a warning.
           if [ -z "${READ_PROBE_TOKEN:-}" ]; then
             echo "FAIL: OPERATOR_INSTANCE_TOKEN is not set — cannot verify the"
             echo "instance actually serves reads. /health alone has passed"
@@ -322,13 +330,43 @@ jobs:
             echo "deploy verified."
             exit 1
           fi
-          CODE=$(curl -s -o /tmp/entities.json -w '%{http_code}' --max-time 90 \
-                   -H "Authorization: Bearer $READ_PROBE_TOKEN" \
-                   "https://$HOST/entities?limit=1" || echo "000")
+          # The machine is replaced by the deploy, so this probe starts roughly
+          # 30s after boot with a cold page cache while every client of the
+          # instance reconnects at once. Two consecutive deploys showed a first
+          # read that did not answer inside 90s, then a warm instance that
+          # answers the same read in about half a second. A single 90s shot
+          # therefore reports "wedged" for a warm-up it would have survived.
+          #
+          # Retry inside a bounded window instead: pass on the first 200, fail
+          # if there is none by the deadline. A genuinely wedged database never
+          # answers, so it still fails this step; only a slow warm-up passes.
+          # The time to the first answer is printed so a slowly worsening
+          # warm-up stays visible rather than being absorbed by the retry.
+          PROBE_BUDGET_SECONDS=420
+          PROBE_START=$SECONDS
+          ATTEMPT=0
+          CODE=000
+          while :; do
+            ATTEMPT=$((ATTEMPT + 1))
+            CODE=$(curl -s -o /tmp/entities.json -w '%{http_code}' --max-time 90 \
+                     -H "Authorization: Bearer $READ_PROBE_TOKEN" \
+                     "https://$HOST/entities?limit=1" || true)
+            [ -n "$CODE" ] || CODE=000
+            [ "$CODE" = "200" ] && break
+            echo "read probe attempt $ATTEMPT: HTTP $CODE after $((SECONDS - PROBE_START))s (000 = timeout/no response)"
+            if [ $((SECONDS - PROBE_START)) -ge "$PROBE_BUDGET_SECONDS" ]; then
+              break
+            fi
+            sleep 15
+          done
           if [ "$CODE" != "200" ]; then
-            echo "FAIL: authenticated read returned HTTP $CODE (000 = timeout/no response)."
+            echo "FAIL: authenticated read returned HTTP $CODE after $ATTEMPT attempts over $((SECONDS - PROBE_START))s (000 = timeout/no response)."
             echo "The instance is not serving reads even if /health is green."
             exit 1
+          fi
+          echo "authenticated read answered on attempt $ATTEMPT, $((SECONDS - PROBE_START))s after the probe started"
+          if [ "$ATTEMPT" -gt 1 ]; then
+            echo "::warning::first authenticated read did not answer inside 90s after deploy (answered on attempt $ATTEMPT). Slow warm-up, not a wedged database; see the instance's search/query load."
           fi
           node -e '
             const j = require("/tmp/entities.json");
