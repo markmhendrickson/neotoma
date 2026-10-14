@@ -1,5 +1,6 @@
 import { db } from "../../db.js";
 import { getDb } from "../../repositories/db/connection.js";
+import { fromDbRow } from "../../repositories/sqlite/local_db_adapter.js";
 import {
   queryEntities,
   normalizeEntityTypeFilter,
@@ -387,12 +388,61 @@ export function buildEntityLexicalSearchText(
   return `${normalizedCanonical} ${normalizedSnapshot} ${normalizedFragments}`.trim();
 }
 
-async function loadRawFragmentTextByEntityId(entityIds: string[]): Promise<Map<string, string>> {
-  const fragmentTextByEntityId = new Map<string, string>();
-  if (entityIds.length === 0) {
-    return fragmentTextByEntityId;
-  }
+type RawFragmentRow = {
+  entity_id: string | null;
+  fragment_key: string;
+  fragment_value: string | null;
+};
 
+function appendRawFragmentRow(fragmentTextByEntityId: Map<string, string>, row: RawFragmentRow) {
+  if (!row.entity_id) {
+    return;
+  }
+  const piece = `${row.fragment_key} ${row.fragment_value ?? ""}`.trim();
+  if (!piece) {
+    return;
+  }
+  const existing = fragmentTextByEntityId.get(row.entity_id);
+  fragmentTextByEntityId.set(row.entity_id, existing ? `${existing} ${piece}` : piece);
+}
+
+/**
+ * One statement for every candidate id (#2659).
+ *
+ * `raw_fragments` has no index on `entity_id`, so each `entity_id IN (...)`
+ * statement is a full scan of the table. The chunked loader below issues one
+ * per 500 candidates, which made a typed search cost (candidates / 500) full
+ * scans of a multi-million-row table for one large entity type. Binding the ids
+ * once as a JSON array lets SQLite scan the table a single time and probe a
+ * membership set per row.
+ *
+ * Rows come back in the same table-scan order the chunked loader saw them, and
+ * go through the same column normalization (JSON parse, decryption) as every
+ * other adapter read, so the resulting text is identical.
+ */
+async function loadRawFragmentTextSingleScan(entityIds: string[]): Promise<Map<string, string>> {
+  const fragmentTextByEntityId = new Map<string, string>();
+  const connection = await getDb();
+  const rows = (await connection
+    .prepare(
+      "SELECT entity_id, fragment_key, fragment_value FROM raw_fragments " +
+        "WHERE entity_id IN (SELECT value FROM json_each(?))"
+    )
+    .all(JSON.stringify(entityIds))) as Array<Record<string, unknown>>;
+  for (const row of rows) {
+    appendRawFragmentRow(
+      fragmentTextByEntityId,
+      fromDbRow("raw_fragments", row) as unknown as RawFragmentRow
+    );
+  }
+  return fragmentTextByEntityId;
+}
+
+/** Original loader: one `IN (...)` statement per 500 ids. Kept as the fallback. */
+export async function loadRawFragmentTextChunked(
+  entityIds: string[]
+): Promise<Map<string, string>> {
+  const fragmentTextByEntityId = new Map<string, string>();
   const chunkSize = 500;
   for (let i = 0; i < entityIds.length; i += chunkSize) {
     const chunk = entityIds.slice(i, i + chunkSize);
@@ -405,24 +455,32 @@ async function loadRawFragmentTextByEntityId(entityIds: string[]): Promise<Map<s
       throw new Error(`Failed lexical raw_fragments query: ${error.message}`);
     }
 
-    for (const row of (data ?? []) as Array<{
-      entity_id: string | null;
-      fragment_key: string;
-      fragment_value: string | null;
-    }>) {
-      if (!row.entity_id) {
-        continue;
-      }
-      const piece = `${row.fragment_key} ${row.fragment_value ?? ""}`.trim();
-      if (!piece) {
-        continue;
-      }
-      const existing = fragmentTextByEntityId.get(row.entity_id);
-      fragmentTextByEntityId.set(row.entity_id, existing ? `${existing} ${piece}` : piece);
+    for (const row of (data ?? []) as RawFragmentRow[]) {
+      appendRawFragmentRow(fragmentTextByEntityId, row);
     }
   }
 
   return fragmentTextByEntityId;
+}
+
+export async function loadRawFragmentTextByEntityId(
+  entityIds: string[]
+): Promise<Map<string, string>> {
+  if (entityIds.length === 0) {
+    return new Map<string, string>();
+  }
+  try {
+    return await loadRawFragmentTextSingleScan(entityIds);
+  } catch (error) {
+    // A backend without json_each, or a statement-level failure, must not break
+    // search: fall back to the chunked loader, which behaves as before.
+    logger.warn(
+      `[lexicalSearch] Single-scan raw_fragments load failed, using chunked loader: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return loadRawFragmentTextChunked(entityIds);
+  }
 }
 
 /**
