@@ -244,7 +244,7 @@ jobs:
         run: npx vitest run --no-file-parallelism tests/integration/atomic_null_projection.test.ts tests/unit/nullable_winning_projection.test.ts src/services/correction_transaction.test.ts
 
       - name: Run authenticated lifecycle/cutover effects (#2588)
-        run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_executor_boundary.test.ts tests/integration/entity_lifecycle_executor_program.test.ts tests/integration/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts
+        run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_executor_boundary.test.ts tests/integration/entity_lifecycle_executor_program.test.ts tests/integration/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts tests/integration/cross_type_merge_snapshot.test.ts
 
       # #2144 keyed store completion. The unit lane runs tests/unit, not
       # tests/integration, so without this step the effect tests for resuming an
