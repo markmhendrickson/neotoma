@@ -56,6 +56,65 @@ afterEach(async () => {
   if (entityIds.length > 0) await db.from("entities").delete().in("id", entityIds);
 });
 
+describe("runKeyedStoreWrite: the in-flight key is a (user, key) pair, not a string join (#2144)", () => {
+  // Each pair concatenates to the same text under the usual joins, so a key
+  // built by joining the two strings would make them serialise against each
+  // other. They are different writes and must not.
+  const ambiguous: Array<[[string, string], [string, string]]> = [
+    [
+      ["ab", "c"],
+      ["a", "bc"],
+    ],
+    [
+      ["a:b", "c"],
+      ["a", "b:c"],
+    ],
+    [
+      ["a|b", "c"],
+      ["a", "b|c"],
+    ],
+    [
+      ["a", ""],
+      ["", "a"],
+    ],
+  ];
+
+  it.each(ambiguous)("does not serialise %j against %j", async (first, second) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const held = runKeyedStoreWrite(first[0], first[1], () => gate.then(() => "held"));
+
+    // If the two pairs shared a flight key this would wait for `held` and the
+    // race below would be lost to the timeout.
+    const outcome = await Promise.race([
+      runKeyedStoreWrite(second[0], second[1], async () => "ran"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("blocked"), 200)),
+    ]);
+
+    release();
+    await held;
+    expect(outcome).toBe("ran");
+  });
+
+  it("still serialises two calls for the same pair", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const a = runKeyedStoreWrite("u", "k", async () => {
+      await gate;
+      order.push("a");
+    });
+    const b = runKeyedStoreWrite("u", "k", async () => {
+      order.push("b");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(order).toEqual([]);
+    release();
+    await Promise.all([a, b]);
+    expect(order).toEqual(["a", "b"]);
+  });
+});
+
 describe("store: the write phase is not cancellable by the request's abort signal (#2144)", () => {
   it("runs every observation write outside the ambient abort signal", async () => {
     const controller = new AbortController();
@@ -170,6 +229,37 @@ describe("store: the write phase is not cancellable by the request's abort signa
       expect(await firstSettled).toBe("rejected");
       expect(await waiterSettled).toBe("rejected");
       expect(waiterWrites).toBe(0);
+    });
+
+    it("does not start a write for a waiter whose hang-up landed after its wait ended", async () => {
+      // The hang-up arrives in the window where the wait has already been
+      // satisfied, so the wait's own abort listener can no longer reject it.
+      // Suppressing the listener models exactly that window with a real signal.
+      const key = `waiter-race-${randomUUID()}`;
+      const gate = deferred();
+      const first = runKeyedStoreWrite(userId, key, () => gate.promise.then(() => "first"));
+
+      const controller = new AbortController();
+      vi.spyOn(controller.signal, "addEventListener").mockImplementation(() => undefined);
+      let waiterWrites = 0;
+      const waiter = withDbAbortSignal(controller.signal, () =>
+        runKeyedStoreWrite(userId, key, async () => {
+          waiterWrites += 1;
+          return "waiter";
+        })
+      );
+      const waiterSettled = waiter.then(
+        () => "resolved",
+        () => "rejected"
+      );
+
+      controller.abort();
+      gate.resolve();
+      expect(await first).toBe("first");
+      expect(await waiterSettled).toBe("rejected");
+      expect(waiterWrites).toBe(0);
+      // Nothing is left queued behind it.
+      expect(await runKeyedStoreWrite(userId, key, async () => "later")).toBe("later");
     });
 
     it("still runs a waiter whose request is alive", async () => {

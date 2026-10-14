@@ -8128,6 +8128,11 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
 
   const resolved: ResolvedEntity[] = [];
   const issues: ResolutionIssue[] = [];
+  // One fresh set per resolution pass when resuming (#2144): an entity an
+  // earlier payload of this request already resolved to is a collision between
+  // two payloads, not this write's own row, so a later payload landing on it is
+  // judged by the ordinary strict / collision rules.
+  const resumeClaimedEntityIds = resumeIncompleteWrite ? new Set<string>() : undefined;
 
   for (let observation_index = 0; observation_index < entities.length; observation_index++) {
     const entityData = entities[observation_index];
@@ -8194,7 +8199,9 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         // Resuming this key's own interrupted write: entity rows it created
         // are not merge targets (#2144).
         resumeSourceId: resumeIncompleteWrite ? existingSource?.id : undefined,
+        resumeClaimedEntityIds,
       });
+      resumeClaimedEntityIds?.add(result.entityId);
       resolved.push({
         observation_index,
         entity_type,

@@ -189,15 +189,30 @@ export async function summarizeUnfinishedStore(params: {
   };
 }
 
-/** Recovery text for `ERR_STORE_WRITE_INCOMPLETE`, shared by HTTP and MCP. */
+/**
+ * Recovery text for `ERR_STORE_WRITE_INCOMPLETE`, shared by HTTP and MCP.
+ *
+ * Relationships are written only after every entity, so an interrupted request
+ * never wrote any of its relationships, and they address entities by position
+ * in the original request. They cannot be resent by position after a partial
+ * resend, so the advice is to recreate them by entity id.
+ */
 export function incompleteStoreHint(summary: UnfinishedStoreSummary): string {
-  const missing =
-    summary.missing_entity_indexes.length > 0
-      ? `entities at request positions [${summary.missing_entity_indexes.join(", ")}]`
-      : "the entities with no observation";
+  const relationships =
+    "The original request's relationships were not written; recreate them separately, " +
+    "referencing the entities by entity id.";
+  if (summary.missing_entity_indexes.length === 0) {
+    return (
+      "All of the request's entities are stored; only its relationships may be missing. " +
+      "Do not resend the entities. " +
+      relationships
+    );
+  }
   return (
-    `Resend ONLY ${missing} under a new idempotency_key. Resending the full payload ` +
-    `duplicates the ${summary.entities_written} entities already written.`
+    `Resend ONLY the entities at request positions [${summary.missing_entity_indexes.join(", ")}] ` +
+    "under a new idempotency_key. Resending the full payload writes a second set of " +
+    `observations to the ${summary.entities_written} entities already written. ` +
+    relationships
   );
 }
 
@@ -256,13 +271,19 @@ export async function runKeyedStoreWrite<T>(
   // JSON-encoded pair: no (user, key) pair of strings can collide with another.
   const flightKey = JSON.stringify([userId, idempotencyKey]);
   const callerSignal = currentDbAbortSignal();
+  let waited = false;
   for (;;) {
     const prior = inFlightWrites.get(flightKey);
     if (!prior) break;
+    waited = true;
     // Rejects as soon as this caller's own request is cancelled, so a queued
     // call never reaches the write below for a client that has gone.
     await waitForPrior(prior, callerSignal);
   }
+  // A hang-up that lands at the instant the predecessor settles resolves the
+  // wait before the abort listener can reject it. Check once more, before
+  // detaching, so a queued call for a client that has gone never starts a write.
+  if (waited && callerSignal?.aborted) throw abortReason(callerSignal);
   const running = detachDbAbortSignal(write);
   inFlightWrites.set(flightKey, running);
   try {

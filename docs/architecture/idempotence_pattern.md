@@ -135,8 +135,10 @@ Completion is recorded on the source row in `provenance.store_write`:
 
 The marker lives in the existing `sources.provenance` JSON, so it needs no
 migration and no flag. Reverting the change leaves it as inert data and
-restores the previous replay behaviour. It is the only permitted change to a
-source row after its insert; see `docs/subsystems/sources.md` § 10.7.
+restores the previous replay behaviour. It is the only change to `provenance`
+after a source row is inserted (a dedup hit can separately stamp an
+`idempotency_key` onto an existing row that has none); see
+`docs/subsystems/sources.md` § 10.7.
 
 Replay rules for a keyed store:
 
@@ -155,10 +157,26 @@ their first observation on this call. Read `observation_id` and
 A resume is the same request finishing, so it is not treated as a merge into a
 pre-existing entity. Entities the interrupted attempt created are accepted even
 under `strict: true`, `intent: "create_new"`, or a `name_collision_policy` of
-`reject` or `warn`. This holds only while every observation on the entity
-belongs to the keyed source: an entity that also carries an observation from
-another source is a real merge target and is refused exactly as before. If that
-check cannot be made, the refusal stands.
+`reject` or `warn`. That exemption is judged per write, not per entity row, and
+holds only when all of these are true for the row:
+
+- it is not merged away;
+- it was created at or after the keyed source row (the source is stored before
+  any entity row of its write), so a pre-existing entity is never exempt
+  however few observations it carries;
+- every observation on it belongs to the keyed source, or it has none;
+- no earlier payload in the same request already resolved to it. Two payloads
+  of one request that land on one identity are a collision the first attempt
+  refuses, so a same-key replay refuses them again rather than merging them.
+
+An entity that fails any of these is a real merge target and is refused exactly
+as before. If a check cannot be made, the refusal stands.
+
+An entity row with no observation at all can be left behind when a strict or
+`reject` batch is refused part way (the first payload's row is created before
+the second payload is refused). That row is tracked in #2655; a replay of the
+same key treats it as the interrupted write's own only when it passes the
+checks above.
 
 A resume writes the missing observations with the new request's
 `source_priority`, `observation_source` and `relationships`; only the entity
@@ -171,7 +189,19 @@ A request that carries an `interpretation` cannot be resumed under the same key
 names what is missing: `details.source_id`, `entities_requested`,
 `entities_written` and `missing_entity_indexes` (zero-based positions in the
 request). Resend ONLY those entities under a new `idempotency_key`; resending
-the full payload under a new key duplicates what was written.
+the full payload under a new key writes a second set of observations to the
+entities already written. Relationships are written only after every entity, so
+the original request's relationships were not written: recreate them
+separately, referencing the entities by entity id (their positions in the
+original request no longer apply after a partial resend). When
+`missing_entity_indexes` is empty, every entity is stored and only the
+relationships may be missing.
+
+A resumed write re-emits events for observations the interrupted attempt had
+already written (`observation.created` and snapshot-change events), and
+`observations_created` counts every observation on the keyed source, not only
+those added by this call. A consumer must not read a resume as a clean first
+commit (tracked as #2653).
 
 A committing keyed store is not cancelled by the caller's abort signal once it
 starts (`detachDbAbortSignal`), and a second call for the same

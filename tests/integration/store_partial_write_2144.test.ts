@@ -18,7 +18,7 @@
  * default test backend ignores abort contexts entirely.
  */
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -28,6 +28,7 @@ import { getDb } from "../../src/repositories/db/connection.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { incompleteStoreHint } from "../../src/services/store_write_state.js";
 
 const ENTITY_TYPE = "store_partial_write_2144_note";
 const TOTAL = 24;
@@ -848,5 +849,314 @@ describe("POST /store: unfinished keyed writes over HTTP (#2144)", () => {
 
     expect(resumed.status).toBe(200);
     expect(await routeObservationCount()).toBe(TOTAL);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The resume exemption is judged per WRITE, not per entity row (#2144).
+//
+// A same-key replay may skip the strict / create_new / reject refusals only for
+// an entity row this very write's interrupted attempt created. Everything else
+// that resolves to an existing row is a real merge target: a second payload of
+// the same request, a row that pre-dates the keyed source, a merged-away row,
+// and a row whose evidence cannot be read.
+// ---------------------------------------------------------------------------
+
+describe("store: the resume exemption is decided per write, not per entity row (#2144)", () => {
+  beforeEach(() => {
+    userId = randomUUID();
+    batch = randomUUID().replace(/-/g, "").slice(0, 12);
+    triggerName = `interrupt_2144_${batch}`;
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanup();
+  });
+
+  /** Two payloads of ONE request that resolve to ONE heuristic (title) identity. */
+  function collidingPair(entityType: string = ENTITY_TYPE) {
+    return [
+      { entity_type: entityType, title: `same title ${batch}`, seq: 0 },
+      { entity_type: entityType, title: `same title ${batch}`, seq: 1 },
+    ];
+  }
+
+  async function entityIdByTitleSuffix(suffix: string): Promise<string> {
+    const { data } = await db
+      .from("entities")
+      .select("id, canonical_name")
+      .eq("user_id", userId)
+      .eq("entity_type", ENTITY_TYPE);
+    const row = (data ?? []).find((e: { canonical_name: string }) =>
+      e.canonical_name.endsWith(suffix)
+    );
+    if (!row) throw new Error(`no entity with canonical name ending ${suffix}`);
+    return (row as { id: string }).id;
+  }
+
+  /**
+   * Make the evidence read that backs the resume exemption return an error,
+   * for as long as the returned spy is installed. Only that one query is
+   * touched (observations filtered on "a source other than X").
+   */
+  function failOtherSourceEvidenceRead() {
+    const realFrom = db.from.bind(db);
+    function wrap<T extends object>(target: T): T {
+      return new Proxy(target, {
+        get(t, prop, receiver) {
+          const value = Reflect.get(t, prop, receiver);
+          if (prop === "or") {
+            return (clause: string, ...rest: unknown[]) => {
+              if (typeof clause === "string" && clause.includes("source_id.neq.")) {
+                return {
+                  limit: () =>
+                    Promise.resolve({ data: null, error: { message: "injected read error" } }),
+                };
+              }
+              return wrap((value as (...a: unknown[]) => object).call(t, clause, ...rest));
+            };
+          }
+          if (typeof value === "function") {
+            return (...args: unknown[]) => {
+              const out = (value as (...a: unknown[]) => unknown).apply(t, args);
+              return out && typeof out === "object" && !(out instanceof Promise)
+                ? wrap(out as object)
+                : out;
+            };
+          }
+          return value;
+        },
+      });
+    }
+    return vi.spyOn(db, "from").mockImplementation(((table: string) => {
+      const builder = realFrom(table as never);
+      return table === "observations" ? wrap(builder as object) : builder;
+    }) as typeof db.from);
+  }
+
+  // -- 1. Two payloads of one request that collide on identity ---------------
+
+  it("HTTP core: strict batch with two payloads on one title is refused, and refused again on a same-key replay", async () => {
+    const key = `collide-http-strict-${randomUUID()}`;
+    const entities = collidingPair();
+
+    await expect(storeAll(key, entities, { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    const afterFirst = await observationCount();
+
+    await expect(storeAll(key, entities, { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(await observationCount()).toBe(afterFirst);
+    expect(afterFirst).toBe(0);
+  });
+
+  it("HTTP core: a name_collision_policy: reject batch with two payloads on one title is refused again on replay", async () => {
+    const rejectType = `store_partial_write_2144_collide_${batch}`;
+    await registerNoteType(
+      rejectType,
+      { name_collision_policy: "reject" },
+      { canonical_name_fields: ["external_id"] }
+    );
+    const key = `collide-http-reject-${randomUUID()}`;
+    const entities = collidingPair(rejectType);
+
+    await expect(storeAll(key, entities)).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    const afterFirst = await observationCount();
+
+    await expect(storeAll(key, entities)).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(await observationCount()).toBe(afterFirst);
+    expect(afterFirst).toBe(0);
+  });
+
+  it("MCP: strict batch with two payloads on one title is refused, and refused again on a same-key replay", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `collide-mcp-strict-${randomUUID()}`;
+    const entities = collidingPair();
+
+    await expect(mcpStore(key, { strict: true }, entities)).rejects.toThrow(/merge|strict/i);
+    // The commit loop wrote the first payload before refusing the second.
+    const afterFirst = await observationCount();
+    expect(afterFirst).toBe(1);
+
+    await expect(mcpStore(key, { strict: true }, entities)).rejects.toThrow(/merge|strict/i);
+    expect(await observationCount()).toBe(afterFirst);
+  });
+
+  it("MCP: a name_collision_policy: reject batch with two payloads on one title is refused again on replay", async () => {
+    const rejectType = `store_partial_write_2144_collide_mcp_${batch}`;
+    await registerNoteType(
+      rejectType,
+      { name_collision_policy: "reject" },
+      { canonical_name_fields: ["external_id"] }
+    );
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `collide-mcp-reject-${randomUUID()}`;
+    const entities = collidingPair(rejectType);
+
+    await expect(mcpStore(key, {}, entities)).rejects.toThrow(/merge|reject/i);
+    const afterFirst = await observationCount();
+
+    await expect(mcpStore(key, {}, entities)).rejects.toThrow(/merge|reject/i);
+    expect(await observationCount()).toBe(afterFirst);
+  });
+
+  // -- 2. Observation-less rows that are not this write's own ---------------
+
+  /** Leave an observation-less entity row for `title`, created long before any keyed source. */
+  async function preExistingShell(title: string): Promise<string> {
+    await storeAll(`shell-seed-${randomUUID()}`, [{ entity_type: ENTITY_TYPE, title }]);
+    // The seed store is the only write for this user so far: one entity.
+    const { data: ents } = await db
+      .from("entities")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("entity_type", ENTITY_TYPE);
+    expect(ents).toHaveLength(1);
+    const id = (ents as Array<{ id: string }>)[0].id;
+    expect(id).toBeTruthy();
+    await db.from("observations").delete().eq("entity_id", id);
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    await db.from("entities").update({ created_at: "2000-01-01T00:00:00.000Z" }).eq("id", id);
+    expect(await observationCount()).toBe(0);
+    return id;
+  }
+
+  // HTTP refuses a pre-existing row before it stores the keyed source at all, so
+  // a replay there never reaches the resume. What the resume must still refuse
+  // is a row that pre-dates the keyed source: the interrupted attempt's own
+  // empty row, rewound to before the source was stored.
+  it("HTTP core: an observation-less row that pre-dates the keyed source is refused on replay", async () => {
+    const key = `predates-http-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+    const shellId = await entityIdByTitleSuffix(` ${CUT_OFF + 2}`);
+    await db.from("entities").update({ created_at: "2000-01-01T00:00:00.000Z" }).eq("id", shellId);
+    const before = await observationCount();
+
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(await observationCount()).toBe(before);
+  });
+
+  it("MCP: a pre-existing observation-less row is refused, also on a same-key replay", async () => {
+    const title = `pre-existing shell mcp ${batch}`;
+    await preExistingShell(title);
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `shell-mcp-${randomUUID()}`;
+    const entities = [{ entity_type: ENTITY_TYPE, title }];
+
+    await expect(mcpStore(key, { strict: true }, entities)).rejects.toThrow(/merge|strict/i);
+    await expect(mcpStore(key, { strict: true }, entities)).rejects.toThrow(/merge|strict/i);
+    expect(await observationCount()).toBe(0);
+  });
+
+  it("HTTP core: a row the interrupted attempt created that was merged away since is refused", async () => {
+    const key = `merged-away-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+    const shellId = await entityIdByTitleSuffix(` ${CUT_OFF + 2}`.toLowerCase());
+    await db
+      .from("entities")
+      .update({ merged_to_entity_id: await entityIdByTitleSuffix(" 0") })
+      .eq("id", shellId);
+    const before = await observationCount();
+
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(await observationCount()).toBe(before);
+  });
+
+  it("HTTP core: a row the interrupted attempt created is still resumed (the exemption is not dead)", async () => {
+    const key = `own-rows-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+
+    const replay = await storeAll(key, makeEntities(), { strict: true });
+
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+  });
+
+  // -- 3. The evidence read errors -------------------------------------------
+
+  it("HTTP core: strict resume is refused when the other-source evidence read errors", async () => {
+    const key = `read-error-http-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+    const before = await observationCount();
+
+    const spy = failOtherSourceEvidenceRead();
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+
+    expect(await observationCount()).toBe(before);
+    // Control: with the read healthy again the very same replay completes.
+    const replay = await storeAll(key, makeEntities(), { strict: true });
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+  });
+
+  it("MCP: strict resume is refused when the other-source evidence read errors", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `read-error-mcp-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(mcpStore(key, { strict: true })).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+    const before = await observationCount();
+
+    const spy = failOtherSourceEvidenceRead();
+    await expect(mcpStore(key, { strict: true })).rejects.toThrow(/merge|strict/i);
+    spy.mockRestore();
+
+    expect(await observationCount()).toBe(before);
+  });
+});
+
+describe("incompleteStoreHint: recovery advice (#2144)", () => {
+  const summary = (written: number, missing: number[]) => ({
+    source_id: "src",
+    entities_requested: written + missing.length,
+    entities_written: written,
+    missing_entity_indexes: missing,
+  });
+
+  it("says the original request's relationships were not written and must be recreated by entity id", () => {
+    const hint = incompleteStoreHint(summary(3, [3, 4]));
+    expect(hint).toContain("[3, 4]");
+    expect(hint).toContain("relationships were not written");
+    expect(hint).toContain("entity id");
+    expect(hint).toContain("second set of observations");
+    expect(hint).not.toContain("duplicates the");
+  });
+
+  it("says all entities are stored when none are missing, rather than naming an empty set", () => {
+    const hint = incompleteStoreHint(summary(5, []));
+    expect(hint).toContain("All of the request's entities are stored");
+    expect(hint).toContain("only its relationships may be missing");
+    expect(hint).not.toContain("Resend ONLY");
+    expect(hint).not.toContain("no observation");
   });
 });

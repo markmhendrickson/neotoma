@@ -7007,6 +7007,8 @@ export class NeotomaServer {
     // pre-pass uses commit=false so it only tests derivation without touching
     // the DB. The commit pass below runs only when all entities pass.
     const preResolutionIssues: Array<{ index: number; entityType: string; message: string }> = [];
+    // One fresh set per pass when resuming (#2144): see `resumeClaimedEntityIds`.
+    const preClaimedEntityIds = resumeSourceId !== undefined ? new Set<string>() : undefined;
     for (let preIdx = 0; preIdx < entities.length; preIdx++) {
       const preEntityData = entities[preIdx];
       const preEntityType =
@@ -7021,7 +7023,7 @@ export class NeotomaServer {
           ? (preEntityData.target_id as string)
           : undefined;
       try {
-        await resolveEntityWithTrace({
+        const preResult = await resolveEntityWithTrace({
           entityType: preEntityType,
           fields: preFields,
           userId,
@@ -7029,7 +7031,9 @@ export class NeotomaServer {
           strict,
           targetId: preTargetId,
           resumeSourceId,
+          resumeClaimedEntityIds: preClaimedEntityIds,
         });
+        preClaimedEntityIds?.add(preResult.entityId);
       } catch (err) {
         if (
           err instanceof CanonicalNameUnresolvedError ||
@@ -7078,6 +7082,9 @@ export class NeotomaServer {
     const insertedObservationIds = new Set<string>();
     let unknownFieldsCount = 0;
     const unknownFieldNamesSet = new Set<string>();
+    // A second fresh set for the commit pass (#2144): the pre-pass above is a
+    // separate pass and must not mark rows as claimed for this one.
+    const commitClaimedEntityIds = resumeSourceId !== undefined ? new Set<string>() : undefined;
 
     for (const [entityIndex, entityData] of entities.entries()) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
@@ -7368,7 +7375,9 @@ export class NeotomaServer {
           strict,
           targetId: targetIdForResolve,
           resumeSourceId,
+          resumeClaimedEntityIds: commitClaimedEntityIds,
         });
+        commitClaimedEntityIds?.add(result.entityId);
         entityId = result.entityId;
         resolverTrace = {
           canonicalName: result.trace.canonicalName,

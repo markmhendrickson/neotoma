@@ -6331,9 +6331,13 @@ paths:
             key. `details` carries `hint`, `source_id`, `entities_requested`,
             `entities_written` and `missing_entity_indexes` (zero-based
             positions in the request's `entities` array that have no
-            observation yet). Resend ONLY those entities under a new
-            idempotency_key; resending the full payload under a new key
-            duplicates what was written. Not retryable under the same key. A
+            observation yet; when the list is empty every entity is stored
+            and only relationships may be missing). Resend ONLY those
+            entities under a new idempotency_key; resending the full payload
+            under a new key writes a second set of observations to the
+            entities already written. The original request's relationships
+            were not written: recreate them separately, referencing the
+            entities by entity id. Not retryable under the same key. A
             replay without an `interpretation` never returns this: it
             finishes the interrupted write, and a replay of a finished write
             is unchanged (`replayed: true`).
