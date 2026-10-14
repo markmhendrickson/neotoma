@@ -567,6 +567,16 @@ does not travel to peers, just as `external_actor` and the attribution keys do
 not. `create_interpretation` refuses a per-entity `data_origin` key for now;
 store such entities through `store` instead.
 
+### 10.7 Store Completion Marker (#2144)
+
+A structured `/store` or MCP `store` that carries an `idempotency_key` stamps
+`provenance.store_write` (`in_progress`, then `complete`) on the keyed source
+row. It is the only permitted change to a source row after its insert, and it
+is bookkeeping about the ingest, not a fact about the world: the stored bytes
+and every observation stay immutable. Clients cannot send the marker; it is set
+server-side only. See `docs/architecture/idempotence_pattern.md` § Store write
+completion.
+
 ## 11. Security Model
 
 - **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access

@@ -7890,14 +7890,20 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         // A resumed write would open a fresh interpretation run, whose id is
         // part of each observation id, so the entities already written would
         // be written a second time. Report the incomplete write instead.
+        const summary = await storeWriteState.summarizeUnfinishedStore({
+          userId,
+          sourceId: existingSource.id,
+          entities: entities as Array<Record<string, unknown>>,
+        });
         const incompleteErr = new Error(
           `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
-            "that did not finish writing. It cannot be resumed under the same key because the " +
-            "request carries an interpretation."
-        ) as Error & { code: string; hint: string };
+            `that did not finish writing (${summary.entities_written} of ` +
+            `${summary.entities_requested} entities have an observation). It cannot be resumed ` +
+            "under the same key because the request carries an interpretation."
+        ) as Error & { code: string; hint: string; details: Record<string, unknown> };
         incompleteErr.code = "ERR_STORE_WRITE_INCOMPLETE";
-        incompleteErr.hint =
-          "Read back the entities from the original request and store the missing ones under a new idempotency_key.";
+        incompleteErr.hint = storeWriteState.incompleteStoreHint(summary);
+        incompleteErr.details = { ...summary };
         throw incompleteErr;
       }
       resumeIncompleteWrite = true;
@@ -8185,6 +8191,9 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         commit,
         strict: effectiveStrict,
         targetId,
+        // Resuming this key's own interrupted write: entity rows it created
+        // are not merge targets (#2144).
+        resumeSourceId: resumeIncompleteWrite ? existingSource?.id : undefined,
       });
       resolved.push({
         observation_index,
@@ -9617,12 +9626,10 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       const hint = (error as { hint?: string }).hint;
       logWarn("StoreWriteIncomplete:store", req, { message });
-      return res.status(409).json({
-        error: {
-          code: "ERR_STORE_WRITE_INCOMPLETE",
-          message,
-          ...(hint ? { hint } : {}),
-        },
+      const incompleteDetails = (error as { details?: Record<string, unknown> }).details;
+      return sendError(res, 409, "ERR_STORE_WRITE_INCOMPLETE", message, {
+        ...(hint ? { hint } : {}),
+        ...(incompleteDetails ?? {}),
       });
     }
     if (error && typeof error === "object" && errCode === "ERR_STORE_POLICY_DENIED") {

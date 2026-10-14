@@ -7420,13 +7420,19 @@ export interface operations {
        *     idempotency_key was already used for a store call with different
        *     content. Use a new idempotency_key to write the updated payload.
        *
-       *     `ERR_STORE_WRITE_INCOMPLETE`: the idempotency_key belongs to a
-       *     store that did not finish writing, and the request carries an
-       *     `interpretation`, so it cannot be resumed under that key. Read
-       *     back the original request's entities and store the missing ones
-       *     under a new idempotency_key. A replay without an `interpretation`
-       *     never returns this: it finishes the interrupted write, and a
-       *     replay of a finished write is unchanged (`replayed: true`).
+       *     `ERR_STORE_WRITE_INCOMPLETE` (an `ErrorEnvelope` with
+       *     `error_code: ERR_STORE_WRITE_INCOMPLETE`): the idempotency_key
+       *     belongs to a store that did not finish writing, and the request
+       *     carries an `interpretation`, so it cannot be resumed under that
+       *     key. `details` carries `hint`, `source_id`, `entities_requested`,
+       *     `entities_written` and `missing_entity_indexes` (zero-based
+       *     positions in the request's `entities` array that have no
+       *     observation yet). Resend ONLY those entities under a new
+       *     idempotency_key; resending the full payload under a new key
+       *     duplicates what was written. Not retryable under the same key. A
+       *     replay without an `interpretation` never returns this: it
+       *     finishes the interrupted write, and a replay of a finished write
+       *     is unchanged (`replayed: true`).
        */
       409: {
         headers: {

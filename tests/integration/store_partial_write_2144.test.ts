@@ -18,12 +18,16 @@
  * default test backend ignores abort contexts entirely.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { db } from "../../src/db.js";
-import { storeStructuredForApi } from "../../src/actions.js";
+import { app, storeStructuredForApi } from "../../src/actions.js";
 import { getDb } from "../../src/repositories/db/connection.js";
 import { NeotomaServer } from "../../src/server.js";
+import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
+import { schemaRegistry } from "../../src/services/schema_registry.js";
 
 const ENTITY_TYPE = "store_partial_write_2144_note";
 const TOTAL = 24;
@@ -33,9 +37,9 @@ let userId: string;
 let batch: string;
 let triggerName: string;
 
-function makeEntities(count: number = TOTAL) {
+function makeEntities(count: number = TOTAL, entityType: string = ENTITY_TYPE) {
   return Array.from({ length: count }, (_, seq) => ({
-    entity_type: ENTITY_TYPE,
+    entity_type: entityType,
     title: `partial write ${batch} ${seq}`,
     batch,
     seq,
@@ -325,5 +329,524 @@ describe("store: an interrupted write is never reported as a plain success (#214
       true
     );
     expect(await observationCount()).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Resume of requests the resolver would otherwise refuse (strict, create_new,
+// name_collision_policy: reject), and the guards a resume must keep.
+// ---------------------------------------------------------------------------
+
+type StoreHttpBody = {
+  replayed?: boolean;
+  error_code?: string;
+  message?: string;
+  details?: {
+    hint?: string;
+    source_id?: string;
+    entities_requested?: number;
+    entities_written?: number;
+    missing_entity_indexes?: number[];
+  };
+};
+
+type McpStoreResult = {
+  entities: Array<{ observation_id: string | null }>;
+};
+
+function mcpStoreFor(server: NeotomaServer, uid: string) {
+  return async (
+    key: string,
+    extra: Record<string, unknown> = {},
+    entities: unknown[] = makeEntities()
+  ): Promise<McpStoreResult> => {
+    const response = await (
+      server as unknown as {
+        store: (args: Record<string, unknown>) => Promise<{ content: Array<{ text: string }> }>;
+      }
+    ).store({
+      user_id: uid,
+      idempotency_key: key,
+      entities,
+      source_priority: 100,
+      ...extra,
+    });
+    return JSON.parse(response.content[0].text) as McpStoreResult;
+  };
+}
+
+function newMcpServer(uid: string): NeotomaServer {
+  const server = new NeotomaServer();
+  (server as unknown as { authenticatedUserId: string }).authenticatedUserId = uid;
+  return server;
+}
+
+/**
+ * Register a user-scoped note type. By default its identity is the heuristic
+ * title; pass `identity` to declare `canonical_name_fields` instead (a payload
+ * that lacks those fields then falls back to the title heuristic).
+ */
+async function registerNoteType(
+  entityType: string,
+  extra: Record<string, unknown> = {},
+  identity: Record<string, unknown> = { identity_opt_out: "heuristic_canonical_name" }
+) {
+  await schemaRegistry.register({
+    entity_type: entityType,
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        title: { type: "string", required: false },
+        external_id: { type: "string", required: false },
+        batch: { type: "string", required: false },
+        seq: { type: "number", required: false },
+      },
+      ...identity,
+      ...extra,
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        batch: { strategy: "last_write" },
+        seq: { strategy: "last_write" },
+      },
+    },
+    user_id: userId,
+    user_specific: true,
+    activate: true,
+  });
+}
+
+describe("store: resuming an interrupted write under identity-refusing requests (#2144)", () => {
+  beforeEach(() => {
+    userId = randomUUID();
+    batch = randomUUID().replace(/-/g, "").slice(0, 12);
+    triggerName = `interrupt_2144_${batch}`;
+  });
+  afterEach(cleanup);
+
+  it("HTTP core: strict: true resumes to all observations (it used to refuse every entity)", async () => {
+    const key = `strict-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+    expect(await observationCount()).toBe(CUT_OFF);
+
+    const replay = await storeAll(key, makeEntities(), { strict: true });
+
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+    expect(await emptyShellCount()).toBe(0);
+    expect(replay.entities).toHaveLength(TOTAL);
+  });
+
+  it('HTTP core: intent: "create_new" resumes to all observations', async () => {
+    const key = `create-new-${randomUUID()}`;
+    const entities = makeEntities().map((e) => ({ ...e, intent: "create_new" }));
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, entities)).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+    expect(await observationCount()).toBe(CUT_OFF);
+
+    const replay = await storeAll(key, entities);
+
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+    expect(await emptyShellCount()).toBe(0);
+  });
+
+  it("HTTP core: a name_collision_policy: reject type resumes to all observations", async () => {
+    const rejectType = `store_partial_write_2144_reject_${batch}`;
+    // Identity is declared on a field the payload does not carry, so resolution
+    // falls back to the title heuristic, which this policy refuses to merge into.
+    await registerNoteType(
+      rejectType,
+      { name_collision_policy: "reject" },
+      { canonical_name_fields: ["external_id"] }
+    );
+    const key = `reject-${randomUUID()}`;
+    const entities = makeEntities(TOTAL, rejectType);
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, entities)).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+    expect(await observationCount()).toBe(CUT_OFF);
+
+    const replay = await storeAll(key, entities);
+
+    expect(replay.success).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+  });
+
+  it("MCP: strict: true resumes to all observations (it used to fail 'no entities were written')", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `mcp-strict-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(mcpStore(key, { strict: true })).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+    expect(await observationCount()).toBe(CUT_OFF);
+
+    const replay = await mcpStore(key, { strict: true });
+
+    expect(replay.entities).toHaveLength(TOTAL);
+    expect(replay.entities.every((entry) => entry.observation_id)).toBe(true);
+    expect(await observationCount()).toBe(TOTAL);
+    expect(await emptyShellCount()).toBe(0);
+  });
+
+  // The skip is for the write's OWN entities only. If an entity also carries an
+  // observation from another source it is a real merge target, and strict must
+  // still refuse it.
+  it("HTTP core: strict still refuses an entity that carries another source's observation", async () => {
+    const key = `strict-neg-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+
+    // Another write (different key, no batch tag) lands an observation on the
+    // identity of entity 20, which the interrupted attempt left as a shell.
+    await storeAll(`other-${randomUUID()}`, [
+      { entity_type: ENTITY_TYPE, title: `partial write ${batch} 20` },
+    ]);
+    const before = await observationCount();
+
+    await expect(storeAll(key, makeEntities(), { strict: true })).rejects.toMatchObject({
+      code: "ERR_STORE_RESOLUTION_FAILED",
+    });
+    expect(await observationCount()).toBe(before);
+  });
+
+  it("MCP: strict still refuses an entity that carries another source's observation", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `mcp-strict-neg-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(mcpStore(key, { strict: true })).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+
+    await mcpStore(`mcp-other-${randomUUID()}`, {}, [
+      { entity_type: ENTITY_TYPE, title: `partial write ${batch} 20` },
+    ]);
+    const before = await observationCount();
+
+    await expect(mcpStore(key, { strict: true })).rejects.toThrow(
+      /Strict mode|MERGE_REFUSED|merge/i
+    );
+    expect(await observationCount()).toBe(before);
+  });
+
+  it("two simultaneous replays of an interrupted key both succeed with one set of observations", async () => {
+    const key = `concurrent-resume-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key)).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+
+    const [a, b] = await Promise.allSettled([storeAll(key), storeAll(key)]);
+
+    expect(a.status).toBe("fulfilled");
+    expect(b.status).toBe("fulfilled");
+    expect(await observationCount()).toBe(TOTAL);
+    expect(await storeWriteStateOf(key)).toBe("complete");
+  });
+
+  it("records `complete` on the source after a normal HTTP-core store and after a resume", async () => {
+    const plain = `state-plain-${randomUUID()}`;
+    await storeAll(plain, makeEntities(3));
+    expect(await storeWriteStateOf(plain)).toBe("complete");
+
+    const resumed = `state-resumed-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(resumed)).rejects.toThrow(/injected interruption/);
+    expect(await storeWriteStateOf(resumed)).toBe("in_progress");
+    await removeInterruption();
+    await storeAll(resumed);
+    expect(await storeWriteStateOf(resumed)).toBe("complete");
+  });
+
+  it("MCP: records `complete` after a normal store, a resume, and an interpretation store", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const mcpType = `store_partial_write_2144_mcp_${batch}`;
+    await registerNoteType(mcpType);
+
+    const plain = `mcp-state-plain-${randomUUID()}`;
+    await mcpStore(plain, {}, makeEntities(3));
+    expect(await storeWriteStateOf(plain)).toBe("complete");
+
+    const resumed = `mcp-state-resumed-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(mcpStore(resumed)).rejects.toThrow(/injected interruption/);
+    expect(await storeWriteStateOf(resumed)).toBe("in_progress");
+    await removeInterruption();
+    await mcpStore(resumed);
+    expect(await storeWriteStateOf(resumed)).toBe("complete");
+
+    // The interpretation branch returns from a different place than the plain
+    // one; it must record completion too.
+    const withInterpretation = `mcp-state-interp-${randomUUID()}`;
+    // A payload that differs from the plain store above: an identical payload
+    // under a new key would dedupe onto that first source.
+    await mcpStore(
+      withInterpretation,
+      { interpretation: { source_ref: "structured" } },
+      makeEntities(4, mcpType)
+    );
+    expect(await storeWriteStateOf(withInterpretation)).toBe("complete");
+  });
+
+  it("MCP: an interrupted write replayed with an interpretation is refused and names what is missing", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const mcpType = `store_partial_write_2144_mcpi_${batch}`;
+    await registerNoteType(mcpType);
+    const entities = makeEntities(TOTAL, mcpType);
+    const key = `mcp-interp-${randomUUID()}`;
+    const interpretation = { source_ref: "structured" as const };
+    await installInterruption(CUT_OFF);
+    await expect(mcpStore(key, { interpretation }, entities)).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+
+    const outcome = await mcpStore(key, { interpretation }, entities).then(
+      () => undefined,
+      (error: unknown) => error as Error & { data?: Record<string, unknown> }
+    );
+
+    expect(outcome?.message).toMatch(/^MCP error -32602: ERR_STORE_WRITE_INCOMPLETE/);
+    expect(outcome?.message).toContain("Resend ONLY");
+    expect(outcome?.data).toMatchObject({
+      code: "ERR_STORE_WRITE_INCOMPLETE",
+      entities_requested: TOTAL,
+      entities_written: CUT_OFF,
+      missing_entity_indexes: Array.from({ length: TOTAL - CUT_OFF }, (_, i) => CUT_OFF + i),
+    });
+    expect(await observationCount()).toBe(CUT_OFF);
+  });
+
+  it("HTTP core: ERR_STORE_WRITE_INCOMPLETE lists the entities still missing", async () => {
+    const key = `incomplete-detail-${randomUUID()}`;
+    const interpretation = { source_ref: "structured" as const };
+    await installInterruption(CUT_OFF);
+    await expect(storeAll(key, makeEntities(), { interpretation })).rejects.toThrow(
+      /injected interruption/
+    );
+    await removeInterruption();
+
+    const error = await storeAll(key, makeEntities(), { interpretation }).then(
+      () => undefined,
+      (e: unknown) =>
+        e as Error & { code?: string; hint?: string; details?: Record<string, unknown> }
+    );
+
+    expect(error?.code).toBe("ERR_STORE_WRITE_INCOMPLETE");
+    expect(error?.details).toMatchObject({
+      entities_requested: TOTAL,
+      entities_written: CUT_OFF,
+      missing_entity_indexes: Array.from({ length: TOTAL - CUT_OFF }, (_, i) => CUT_OFF + i),
+    });
+    expect(error?.hint).toContain("Resend ONLY");
+    expect(error?.hint).toContain("new idempotency_key");
+  });
+
+  it("MCP: a changed payload under an unfinished key is still ERR_IDEMPOTENCY_MISMATCH", async () => {
+    const mcpStore = mcpStoreFor(newMcpServer(userId), userId);
+    const key = `mcp-mismatch-${randomUUID()}`;
+    await installInterruption(CUT_OFF);
+    await expect(mcpStore(key)).rejects.toThrow(/injected interruption/);
+    await removeInterruption();
+
+    await expect(mcpStore(key, {}, makeEntities(3))).rejects.toThrow(/ERR_IDEMPOTENCY_MISMATCH/);
+    expect(await observationCount()).toBe(CUT_OFF);
+  });
+
+  // A legacy key (no marker) whose write finished, but whose observations live
+  // on a different source than the keyed one, cannot be counted from the keyed
+  // source. It must replay as it always did, not be read as incomplete (which,
+  // with an interpretation, would turn into a permanent 409).
+  it("HTTP core: a legacy key whose observations live on another source replays as complete", async () => {
+    const hostKey = `host-${randomUUID()}`;
+    await storeAll(hostKey, makeEntities(3));
+    const { data: host } = await db
+      .from("sources")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("idempotency_key", hostKey)
+      .single();
+
+    const key = `legacy-other-source-${randomUUID()}`;
+    const entities = [
+      { entity_type: ENTITY_TYPE, title: `other-source ${batch} a` },
+      { entity_type: ENTITY_TYPE, title: `other-source ${batch} b` },
+    ];
+    const interpretation = { source_id: host!.id as string };
+    await storeAll(key, entities, { interpretation });
+
+    const { data: keyed } = await db
+      .from("sources")
+      .select("id, provenance")
+      .eq("user_id", userId)
+      .eq("idempotency_key", key)
+      .single();
+    const provenance = { ...((keyed?.provenance as Record<string, unknown>) ?? {}) };
+    delete provenance.store_write;
+    await db.from("sources").update({ provenance }).eq("id", keyed!.id);
+
+    const replay = await storeAll(key, entities, { interpretation });
+
+    expect(replay.success).toBe(true);
+    expect(replay.replayed).toBe(true);
+  });
+});
+
+async function storeWriteStateOf(key: string): Promise<string | undefined> {
+  const { data } = await db
+    .from("sources")
+    .select("provenance")
+    .eq("user_id", userId)
+    .eq("idempotency_key", key)
+    .single();
+  return (data?.provenance as { store_write?: { state?: string } } | undefined)?.store_write?.state;
+}
+
+// ---------------------------------------------------------------------------
+// The Express route: status, error envelope, and the full resume over HTTP.
+// ---------------------------------------------------------------------------
+
+describe("POST /store: unfinished keyed writes over HTTP (#2144)", () => {
+  let httpServer: Server;
+  let base: string;
+  const routeUser = LOCAL_DEV_USER_ID;
+  let routeBatch: string;
+  let routeType: string;
+  let routeTrigger: string;
+
+  const routeEntities = (count: number = TOTAL) =>
+    Array.from({ length: count }, (_, seq) => ({
+      entity_type: routeType,
+      title: `route write ${routeBatch} ${seq}`,
+      batch: routeBatch,
+      seq,
+    }));
+
+  async function post(body: unknown) {
+    const res = await fetch(`${base}/store`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, json: (await res.json()) as StoreHttpBody };
+  }
+
+  async function routeObservationCount(): Promise<number> {
+    const { data: ents } = await db
+      .from("entities")
+      .select("id")
+      .eq("user_id", routeUser)
+      .eq("entity_type", routeType);
+    const ids = (ents ?? []).map((e: { id: string }) => e.id);
+    if (ids.length === 0) return 0;
+    const { data } = await db.from("observations").select("id").in("entity_id", ids);
+    return (data ?? []).length;
+  }
+
+  beforeAll(async () => {
+    httpServer = createServer(app);
+    await new Promise<void>((resolve, reject) => {
+      httpServer.once("error", reject);
+      httpServer.listen(0, "127.0.0.1", () => resolve());
+    });
+    base = `http://127.0.0.1:${(httpServer.address() as AddressInfo).port}`;
+  });
+  afterAll(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+  beforeEach(() => {
+    routeBatch = randomUUID().replace(/-/g, "").slice(0, 12);
+    routeType = `store_partial_write_2144_route_${routeBatch}`;
+    routeTrigger = `interrupt_2144_route_${routeBatch}`;
+  });
+  afterEach(async () => {
+    const conn = await getDb();
+    await conn.exec(`DROP TRIGGER IF EXISTS ${routeTrigger}`);
+    const { data: ents } = await db
+      .from("entities")
+      .select("id")
+      .eq("user_id", routeUser)
+      .eq("entity_type", routeType);
+    const ids = (ents ?? []).map((e: { id: string }) => e.id);
+    if (ids.length > 0) {
+      await db.from("observations").delete().in("entity_id", ids);
+      await db.from("entity_snapshots").delete().in("entity_id", ids);
+      await db.from("entities").delete().in("id", ids);
+    }
+  });
+
+  async function interrupt() {
+    const conn = await getDb();
+    await conn.exec(
+      `CREATE TRIGGER ${routeTrigger} BEFORE INSERT ON observations ` +
+        `WHEN json_extract(NEW.fields, '$.batch') = '${routeBatch}' ` +
+        `AND json_extract(NEW.fields, '$.seq') >= ${CUT_OFF} ` +
+        `BEGIN SELECT RAISE(ABORT, 'injected interruption'); END`
+    );
+  }
+  async function uninterrupt() {
+    const conn = await getDb();
+    await conn.exec(`DROP TRIGGER IF EXISTS ${routeTrigger}`);
+  }
+
+  it("answers 409 ERR_STORE_WRITE_INCOMPLETE in the standard error envelope, naming the missing entities", async () => {
+    const key = `route-incomplete-${randomUUID()}`;
+    const interpretation = { source_ref: "structured" };
+    await interrupt();
+    const first = await post({ idempotency_key: key, entities: routeEntities(), interpretation });
+    expect(first.status).toBeGreaterThanOrEqual(400);
+    await uninterrupt();
+
+    const replay = await post({ idempotency_key: key, entities: routeEntities(), interpretation });
+
+    expect(replay.status).toBe(409);
+    expect(replay.json.error_code).toBe("ERR_STORE_WRITE_INCOMPLETE");
+    expect(typeof replay.json.message).toBe("string");
+    expect(replay.json.details).toMatchObject({
+      entities_requested: TOTAL,
+      entities_written: CUT_OFF,
+      missing_entity_indexes: Array.from({ length: TOTAL - CUT_OFF }, (_, i) => CUT_OFF + i),
+    });
+    expect(replay.json.details?.hint).toContain("Resend ONLY");
+    expect(typeof replay.json.details?.source_id).toBe("string");
+    expect(await routeObservationCount()).toBe(CUT_OFF);
+  });
+
+  it("finishes an interrupted write on a same-key replay and then replays it as complete", async () => {
+    const key = `route-resume-${randomUUID()}`;
+    await interrupt();
+    const first = await post({ idempotency_key: key, entities: routeEntities() });
+    expect(first.status).toBeGreaterThanOrEqual(400);
+    await uninterrupt();
+    expect(await routeObservationCount()).toBe(CUT_OFF);
+
+    const resumed = await post({ idempotency_key: key, entities: routeEntities() });
+    expect(resumed.status).toBe(200);
+    expect(resumed.json.replayed).not.toBe(true);
+    expect(await routeObservationCount()).toBe(TOTAL);
+
+    const again = await post({ idempotency_key: key, entities: routeEntities() });
+    expect(again.status).toBe(200);
+    expect(again.json.replayed).toBe(true);
+    expect(await routeObservationCount()).toBe(TOTAL);
+  });
+
+  it("finishes an interrupted strict write over HTTP", async () => {
+    const key = `route-strict-${randomUUID()}`;
+    await interrupt();
+    await post({ idempotency_key: key, entities: routeEntities(), strict: true });
+    await uninterrupt();
+
+    const resumed = await post({ idempotency_key: key, entities: routeEntities(), strict: true });
+
+    expect(resumed.status).toBe(200);
+    expect(await routeObservationCount()).toBe(TOTAL);
   });
 });

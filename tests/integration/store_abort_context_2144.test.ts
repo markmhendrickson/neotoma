@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "../../src/db.js";
 import { storeStructuredForApi } from "../../src/actions.js";
+import { runKeyedStoreWrite } from "../../src/services/store_write_state.js";
 import {
   currentDbAbortSignal,
   withDbAbortSignal,
@@ -99,5 +100,90 @@ describe("store: the write phase is not cancellable by the request's abort signa
     expect(result.observations_created ?? result.entities.length).toBeGreaterThanOrEqual(5);
     const { data: obs } = await db.from("observations").select("id").eq("user_id", userId);
     expect(obs).toHaveLength(5);
+  });
+
+  describe("a queued same-key call honours its own cancellation", () => {
+    function deferred() {
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => (resolve = r));
+      return { promise, resolve };
+    }
+
+    it("stops waiting when its request is cancelled and never starts its write", async () => {
+      const key = `waiter-cancel-${randomUUID()}`;
+      const gate = deferred();
+      const first = runKeyedStoreWrite(userId, key, () => gate.promise.then(() => "first"));
+
+      const controller = new AbortController();
+      let waiterWrites = 0;
+      const waiter = withDbAbortSignal(controller.signal, () =>
+        runKeyedStoreWrite(userId, key, async () => {
+          waiterWrites += 1;
+          return "waiter";
+        })
+      );
+      const settled = waiter.then(
+        () => "resolved",
+        () => "rejected"
+      );
+
+      controller.abort();
+      // The waiter gives up while the first write is still running.
+      expect(await settled).toBe("rejected");
+      expect(waiterWrites).toBe(0);
+
+      gate.resolve();
+      expect(await first).toBe("first");
+      // Nothing is left queued behind it: a later call runs immediately.
+      expect(await runKeyedStoreWrite(userId, key, async () => "later")).toBe("later");
+      expect(waiterWrites).toBe(0);
+    });
+
+    it("does not start a write for a waiter that was cancelled while the first write failed", async () => {
+      const key = `waiter-cancel-fail-${randomUUID()}`;
+      const gate = deferred();
+      const first = runKeyedStoreWrite(userId, key, () =>
+        gate.promise.then(() => {
+          throw new Error("first write failed");
+        })
+      );
+      const firstSettled = first.then(
+        () => "resolved",
+        () => "rejected"
+      );
+
+      const controller = new AbortController();
+      let waiterWrites = 0;
+      const waiter = withDbAbortSignal(controller.signal, () =>
+        runKeyedStoreWrite(userId, key, async () => {
+          waiterWrites += 1;
+          return "waiter";
+        })
+      );
+      const waiterSettled = waiter.then(
+        () => "resolved",
+        () => "rejected"
+      );
+
+      controller.abort();
+      gate.resolve();
+      expect(await firstSettled).toBe("rejected");
+      expect(await waiterSettled).toBe("rejected");
+      expect(waiterWrites).toBe(0);
+    });
+
+    it("still runs a waiter whose request is alive", async () => {
+      const key = `waiter-alive-${randomUUID()}`;
+      const gate = deferred();
+      const first = runKeyedStoreWrite(userId, key, () => gate.promise.then(() => "first"));
+      const controller = new AbortController();
+      const waiter = withDbAbortSignal(controller.signal, () =>
+        runKeyedStoreWrite(userId, key, async () => "waiter")
+      );
+
+      gate.resolve();
+      expect(await first).toBe("first");
+      expect(await waiter).toBe("waiter");
+    });
   });
 });

@@ -6613,6 +6613,10 @@ export class NeotomaServer {
       });
     }
 
+    // Set when a keyed store is resuming its own unfinished write (#2144):
+    // entity rows that write already created are not merge targets, so the
+    // resolver skips its strict / collision refusals for them.
+    let resumeSourceId: string | undefined;
     if (idempotencyKey) {
       const incomingContentHash = createHash("sha256")
         .update(JSON.stringify(entities, null, 2))
@@ -6656,15 +6660,29 @@ export class NeotomaServer {
         const { readStoreWriteState } = await import("./services/store_write_state.js");
         if (readStoreWriteState(existingSource.provenance) === "in_progress") {
           if (interpretation) {
+            const storeWriteState = await import("./services/store_write_state.js");
+            const summary = await storeWriteState.summarizeUnfinishedStore({
+              userId,
+              sourceId:
+                options.interpretationSourceId ??
+                (typeof interpretation.source_id === "string"
+                  ? interpretation.source_id
+                  : undefined) ??
+                existingSource.id,
+              entities,
+            });
             throw new McpError(
               ErrorCode.InvalidParams,
               `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
-                "that did not finish writing, and it cannot be resumed under the same key because " +
-                "the request carries an interpretation. Read back the entities from the original " +
-                "request and store the missing ones under a new idempotency_key."
+                `that did not finish writing (${summary.entities_written} of ` +
+                `${summary.entities_requested} entities have an observation), and it cannot be ` +
+                "resumed under the same key because the request carries an interpretation. " +
+                storeWriteState.incompleteStoreHint(summary),
+              { code: "ERR_STORE_WRITE_INCOMPLETE", ...summary }
             );
           }
           resumeIncompleteWrite = true;
+          resumeSourceId = existingSource.id;
         }
       }
 
@@ -7010,6 +7028,7 @@ export class NeotomaServer {
           commit: false,
           strict,
           targetId: preTargetId,
+          resumeSourceId,
         });
       } catch (err) {
         if (
@@ -7348,6 +7367,7 @@ export class NeotomaServer {
           commit: true,
           strict,
           targetId: targetIdForResolve,
+          resumeSourceId,
         });
         entityId = result.entityId;
         resolverTrace = {

@@ -127,8 +127,16 @@ therefore does not by itself mean the write finished (#2144).
 Completion is recorded on the source row in `provenance.store_write`:
 
 - `in_progress` is written by the same insert that creates the row.
-- `complete` replaces it only after every entity's observation, and the
-  request's relationships, have been written.
+- `complete` replaces it only after every entity's observation has been
+  written and every relationship in the request has been attempted. A
+  relationship the write refuses (for example an endpoint or cycle rule) is
+  reported in `relationships_refused` and is not retried on replay; the write
+  is still marked complete.
+
+The marker lives in the existing `sources.provenance` JSON, so it needs no
+migration and no flag. Reverting the change leaves it as inert data and
+restores the previous replay behaviour. It is the only permitted change to a
+source row after its insert; see `docs/subsystems/sources.md` § 10.7.
 
 Replay rules for a keyed store:
 
@@ -138,15 +146,42 @@ Replay rules for a keyed store:
 | `in_progress` | Not a replay. The write runs again over the same source. Observation ids are deterministic (source, entity, fields), so entities already written resolve to their existing observation and only the missing ones are added; entities left empty by the interruption get their observation and snapshot. |
 | none (row written before the marker) | HTTP `/store` counts the observations on the keyed source against the request's distinct entity payloads and resumes when it is short. MCP `store` replays as before. |
 
+A resumed write answers like a first write, not like a replay: `replayed` is
+`false`, and entities the interrupted attempt created report `action:
+matched_existing` and count as `entities_created: 0` even though they received
+their first observation on this call. Read `observation_id` and
+`entity_snapshot_after` on each entity, not the created count.
+
+A resume is the same request finishing, so it is not treated as a merge into a
+pre-existing entity. Entities the interrupted attempt created are accepted even
+under `strict: true`, `intent: "create_new"`, or a `name_collision_policy` of
+`reject` or `warn`. This holds only while every observation on the entity
+belongs to the keyed source: an entity that also carries an observation from
+another source is a real merge target and is refused exactly as before. If that
+check cannot be made, the refusal stands.
+
+A resume writes the missing observations with the new request's
+`source_priority`, `observation_source` and `relationships`; only the entity
+payload is compared with the original (`ERR_IDEMPOTENCY_MISMATCH` otherwise).
+Resend the same request when retrying.
+
 A request that carries an `interpretation` cannot be resumed under the same key
 (a fresh interpretation run changes every observation id), so it fails with
-`ERR_STORE_WRITE_INCOMPLETE` (409) instead of reporting success.
+`ERR_STORE_WRITE_INCOMPLETE` (409) instead of reporting success. The error
+names what is missing: `details.source_id`, `entities_requested`,
+`entities_written` and `missing_entity_indexes` (zero-based positions in the
+request). Resend ONLY those entities under a new `idempotency_key`; resending
+the full payload under a new key duplicates what was written.
 
 A committing keyed store is not cancelled by the caller's abort signal once it
 starts (`detachDbAbortSignal`), and a second call for the same
 `(user, idempotency_key)` in the same process waits for the first to settle, so
 a client retrying after its own timeout reads the finished write rather than
-racing it. Coordination across processes sharing one database file is not
+racing it. A replay therefore blocks until an in-flight first attempt settles,
+which on a slow host can exceed the client's own timeout again; a retry that
+times out the same way is safe to repeat with the same key. A waiting call
+honours its own cancellation: if its request is cancelled while it is queued, it
+stops waiting and does not start a write. Coordination across processes sharing one database file is not
 provided; the deterministic ids turn that race into a UNIQUE conflict error, not
 a duplicate.
 

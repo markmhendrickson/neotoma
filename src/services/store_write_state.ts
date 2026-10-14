@@ -29,7 +29,10 @@
  */
 
 import { db } from "../db.js";
-import { detachDbAbortSignal } from "../repositories/worker/worker_file_database.js";
+import {
+  currentDbAbortSignal,
+  detachDbAbortSignal,
+} from "../repositories/worker/worker_file_database.js";
 
 export const STORE_WRITE_PROVENANCE_KEY = "store_write";
 
@@ -129,7 +132,98 @@ export async function markStoreWriteComplete(sourceId: string, userId: string): 
   }
 }
 
+/** What an unfinished keyed store left behind, for the caller's recovery. */
+export interface UnfinishedStoreSummary {
+  source_id: string;
+  entities_requested: number;
+  entities_written: number;
+  /** Zero-based positions in the request's `entities` array that have no observation yet. */
+  missing_entity_indexes: number[];
+}
+
+/**
+ * Work out which of a request's entities already have an observation on the
+ * keyed source, so `ERR_STORE_WRITE_INCOMPLETE` can tell the caller exactly
+ * what to resend. Best effort and conservative: an entity whose identity
+ * cannot be resolved is reported as missing, never as written.
+ */
+export async function summarizeUnfinishedStore(params: {
+  userId: string;
+  sourceId: string;
+  entities: Array<Record<string, unknown>>;
+}): Promise<UnfinishedStoreSummary> {
+  const { listObservationsForSource } = await import("./observation_storage.js");
+  const { resolveEntityWithTrace } = await import("./entity_resolution.js");
+  const observations = await listObservationsForSource(params.sourceId, params.userId);
+  const written = new Set(observations.map((o: { entity_id: string }) => o.entity_id));
+  const missing: number[] = [];
+  for (let index = 0; index < params.entities.length; index++) {
+    const raw = params.entities[index] ?? {};
+    const entityType =
+      (typeof raw.entity_type === "string" && raw.entity_type) ||
+      (typeof raw.type === "string" && raw.type) ||
+      "generic";
+    const targetId = typeof raw.target_id === "string" ? raw.target_id : undefined;
+    const fields: Record<string, unknown> = { ...raw };
+    for (const key of ["entity_type", "type", "intent", "schema_version", "target_id"]) {
+      delete fields[key];
+    }
+    try {
+      const { entityId } = await resolveEntityWithTrace({
+        entityType,
+        fields,
+        userId: params.userId,
+        commit: false,
+        targetId,
+      });
+      if (!written.has(entityId)) missing.push(index);
+    } catch {
+      missing.push(index);
+    }
+  }
+  return {
+    source_id: params.sourceId,
+    entities_requested: params.entities.length,
+    entities_written: params.entities.length - missing.length,
+    missing_entity_indexes: missing,
+  };
+}
+
+/** Recovery text for `ERR_STORE_WRITE_INCOMPLETE`, shared by HTTP and MCP. */
+export function incompleteStoreHint(summary: UnfinishedStoreSummary): string {
+  const missing =
+    summary.missing_entity_indexes.length > 0
+      ? `entities at request positions [${summary.missing_entity_indexes.join(", ")}]`
+      : "the entities with no observation";
+  return (
+    `Resend ONLY ${missing} under a new idempotency_key. Resending the full payload ` +
+    `duplicates the ${summary.entities_written} entities already written.`
+  );
+}
+
 const inFlightWrites = new Map<string, Promise<unknown>>();
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException("The operation was aborted", "AbortError");
+}
+
+/** Resolve when `prior` settles; reject as soon as `signal` aborts. */
+function waitForPrior(prior: Promise<unknown>, signal: AbortSignal | undefined): Promise<void> {
+  const settled = prior.then(
+    () => undefined,
+    () => undefined
+  );
+  if (!signal) return settled;
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(abortReason(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    void settled.then(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    });
+  });
+}
 
 /**
  * Run a keyed store write so that
@@ -143,6 +237,12 @@ const inFlightWrites = new Map<string, Promise<unknown>>();
  * starts a second writer beside the first. Waiting means the replay then reads
  * the finished (or, if the first attempt failed, the still-`in_progress`) state.
  *
+ * A call that has to wait still honours ITS OWN hang-up: if its request is
+ * cancelled while it is queued, it stops waiting and never starts a write.
+ * Only a write that has started is detached from the signal. Without this,
+ * several impatient retries queued behind one failing write would each re-run
+ * it for a client that is no longer there.
+ *
  * In-process only. A second process writing the same database file with the
  * same key at the same moment is not coordinated here; observation ids are
  * deterministic, so the worst case there is a UNIQUE conflict surfaced as an
@@ -153,11 +253,15 @@ export async function runKeyedStoreWrite<T>(
   idempotencyKey: string,
   write: () => Promise<T>
 ): Promise<T> {
-  const flightKey = `${userId}\u0000${idempotencyKey}`;
+  // JSON-encoded pair: no (user, key) pair of strings can collide with another.
+  const flightKey = JSON.stringify([userId, idempotencyKey]);
+  const callerSignal = currentDbAbortSignal();
   for (;;) {
     const prior = inFlightWrites.get(flightKey);
     if (!prior) break;
-    await prior.catch(() => undefined);
+    // Rejects as soon as this caller's own request is cancelled, so a queued
+    // call never reaches the write below for a client that has gone.
+    await waitForPrior(prior, callerSignal);
   }
   const running = detachDbAbortSignal(write);
   inFlightWrites.set(flightKey, running);
