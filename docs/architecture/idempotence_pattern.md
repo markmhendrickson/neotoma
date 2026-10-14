@@ -116,6 +116,107 @@ Observations table already supports:
 - `canonical_hash` column (computed from canonicalized fields)
 - Unique constraint on `(source_id, interpretation_id, entity_id, canonical_hash)`
 
+## Store write completion (`/store`, MCP `store`)
+
+The `sources` row that carries a store's `idempotency_key` is created before any
+observation exists, and the write loop after it is not one transaction: it
+interleaves reads, snapshot recompute, embedding work and event emission, which
+a transaction would hold the database's global write gate across. A recorded key
+therefore does not by itself mean the write finished (#2144).
+
+Completion is recorded on the source row in `provenance.store_write`:
+
+- `in_progress` is written by the same insert that creates the row.
+- `complete` replaces it only after every entity's observation has been
+  written and every relationship in the request has been attempted. A
+  relationship the write refuses (for example an endpoint or cycle rule) is
+  reported in `relationships_refused` and is not retried on replay; the write
+  is still marked complete.
+
+The marker lives in the existing `sources.provenance` JSON, so it needs no
+migration and no flag. Reverting the change leaves it as inert data and
+restores the previous replay behaviour. It is the only change to `provenance`
+after a source row is inserted (a dedup hit can separately stamp an
+`idempotency_key` onto an existing row that has none); see
+`docs/subsystems/sources.md` § 10.7.
+
+Replay rules for a keyed store:
+
+| Recorded state | Replay behaviour |
+| --- | --- |
+| `complete` | Unchanged: `replayed: true`, `entities_created: 0`, the existing observations, no writes. |
+| `in_progress` | Not a replay. The write runs again over the same source. Observation ids are deterministic (source, entity, fields), so entities already written resolve to their existing observation and only the missing ones are added; entities left empty by the interruption get their observation and snapshot. |
+| none (row written before the marker) | HTTP `/store` counts the observations on the keyed source against the request's distinct entity payloads and resumes when it is short. MCP `store` replays as before. |
+
+A resumed write answers like a first write, not like a replay: `replayed` is
+`false`, and entities the interrupted attempt created report `action:
+matched_existing` and count as `entities_created: 0` even though they received
+their first observation on this call. Read `observation_id` and
+`entity_snapshot_after` on each entity, not the created count.
+
+A resume is the same request finishing, so it is not treated as a merge into a
+pre-existing entity. Entities the interrupted attempt created are accepted even
+under `strict: true`, `intent: "create_new"`, or a `name_collision_policy` of
+`reject` or `warn`. That exemption is judged per write, not per entity row, and
+holds only when all of these are true for the row:
+
+- it is not merged away;
+- it was created at or after the keyed source row (the source is stored before
+  any entity row of its write), so a pre-existing entity is never exempt
+  however few observations it carries;
+- every observation on it belongs to the keyed source, or it has none;
+- no earlier payload in the same request already resolved to it. Two payloads
+  of one request that land on one identity are a collision the first attempt
+  refuses, so a same-key replay refuses them again rather than merging them.
+
+An entity that fails any of these is a real merge target and is refused exactly
+as before. If a check cannot be made, the refusal stands.
+
+An entity row with no observation at all can be left behind when a strict or
+`reject` batch is refused part way (the first payload's row is created before
+the second payload is refused). That row is tracked in #2655; a replay of the
+same key treats it as the interrupted write's own only when it passes the
+checks above.
+
+A resume writes the missing observations with the new request's
+`source_priority`, `observation_source` and `relationships`; only the entity
+payload is compared with the original (`ERR_IDEMPOTENCY_MISMATCH` otherwise).
+Resend the same request when retrying.
+
+A request that carries an `interpretation` cannot be resumed under the same key
+(a fresh interpretation run changes every observation id), so it fails with
+`ERR_STORE_WRITE_INCOMPLETE` (409) instead of reporting success. The error
+names what is missing: `details.source_id`, `entities_requested`,
+`entities_written` and `missing_entity_indexes` (zero-based positions in the
+request). Resend ONLY those entities under a new `idempotency_key`; resending
+the full payload under a new key writes a second set of observations to the
+entities already written. Relationships are written only after every entity, so
+the original request's relationships were not written: recreate them
+separately, referencing the entities by entity id (their positions in the
+original request no longer apply after a partial resend). The error does not
+return the ids; look each one up by the entity's identifying fields with entity
+retrieval by identifier. When
+`missing_entity_indexes` is empty, every entity is stored and only the
+relationships may be missing.
+
+A resumed write re-emits events for observations the interrupted attempt had
+already written (`observation.created` and snapshot-change events), and
+`observations_created` counts every observation on the keyed source, not only
+those added by this call. A consumer must not read a resume as a clean first
+commit (tracked as #2653).
+
+A committing keyed store is not cancelled by the caller's abort signal once it
+starts (`detachDbAbortSignal`), and a second call for the same
+`(user, idempotency_key)` in the same process waits for the first to settle, so
+a client retrying after its own timeout reads the finished write rather than
+racing it. A replay therefore blocks until an in-flight first attempt settles,
+which on a slow host can exceed the client's own timeout again; a retry that
+times out the same way is safe to repeat with the same key. A waiting call
+honours its own cancellation: if its request is cancelled while it is queued, it
+stops waiting and does not start a write. Coordination across processes sharing one database file is not
+provided; the deterministic ids turn that race into a UNIQUE conflict error, not
+a duplicate.
+
 ## Benefits
 
 - **Safe for infrastructure**: Idempotent operations can be retried safely

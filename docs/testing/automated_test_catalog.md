@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **727**
-- Backend and repo Vitest files: **691**
+- Total automated test files: **729**
+- Backend and repo Vitest files: **693**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 196 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 220 |
+| Vitest integration tests | 222 |
 | Vitest CLI tests | 87 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -455,7 +455,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (220):**
+**Files (222):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -639,6 +639,7 @@ flowchart TD
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
+- `tests/integration/store_abort_context_2144.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
@@ -649,6 +650,7 @@ flowchart TD
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
 - `tests/integration/store_null_cleared_field_warning.test.ts`
+- `tests/integration/store_partial_write_2144.test.ts`
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_reference_source_parity.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`

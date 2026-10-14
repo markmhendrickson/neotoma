@@ -69,6 +69,8 @@ Each object in the array must be **flat** (all fields alongside `entity_type`). 
 
 For long payloads, use `neotoma store --observation-source llm_summary --file <path>` with a JSON file containing the entities array.
 
+If a keyed store times out or fails transiently, retry it with the same `idempotency_key` and the same payload: the retry finishes an interrupted write or replays a finished one; do not change either. **`ERR_STORE_WRITE_INCOMPLETE`** is the exception: the request carried an `interpretation`, so the same key cannot finish it and a same-key retry returns this error again. Resend only the entities at `missing_entity_indexes` under a new key (an empty list means every entity is stored; resend none). None of the request's relationships were written: recreate them by entity id, looking up each id by the entity's identifying fields with `neotoma entities search`. A request without an `interpretation` never returns this code.
+
 Data origin (transport mapping for the MCP `data_origin` rule in **`docs/developer/mcp/instructions.md`**): pass `--data-origin '<json>'` (e.g. `'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}'`) or a top-level `data_origin` key in a `--file` envelope; a `data_origin` key inside one entity overrides it for that entity.
 
 ## Relationship creation (CLI backup)

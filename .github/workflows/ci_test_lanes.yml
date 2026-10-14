@@ -246,6 +246,14 @@ jobs:
       - name: Run authenticated lifecycle/cutover effects (#2588)
         run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_executor_boundary.test.ts tests/integration/entity_lifecycle_executor_program.test.ts tests/integration/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts
 
+      # #2144 keyed store completion. The unit lane runs tests/unit, not
+      # tests/integration, so without this step the effect tests for resuming an
+      # interrupted keyed store (HTTP route, store core and MCP store) and for
+      # the abort-signal detach gate nothing. They inject a real mid-write
+      # failure and assert observations, completion state and the 409 envelope.
+      - name: Run keyed store partial-write and abort-context effects (#2144)
+        run: npx vitest run --no-file-parallelism tests/integration/store_partial_write_2144.test.ts tests/integration/store_abort_context_2144.test.ts
+
       - name: "Run retrieval acquisition contract (#2597, #2611)"
         run: npx vitest run --no-file-parallelism tests/integration/entity_read_contract.test.ts tests/integration/entity_read_contract_semantic.test.ts tests/integration/entity_read_contract_backend.test.ts tests/integration/entity_search_mode.test.ts tests/integration/entity_queries_cursor.test.ts
 
