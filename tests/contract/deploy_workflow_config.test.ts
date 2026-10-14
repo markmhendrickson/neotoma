@@ -99,4 +99,32 @@ describe("deploy_workflow_config", () => {
     // 'data' in region '<region>'". `--regions` does NOT substitute.
     expect(deployCommand(readWorkflow())).toMatch(/--primary-region\s/);
   });
+
+  it("lets the escalation step open its issue: the token needs issues: write", () => {
+    // 2026-10-13 and 2026-10-14: two failed deploys escalated to nobody. The
+    // Escalate step creates the `autodeploy-failure` label with `|| true` and
+    // then files the issue, and the workflow's read-only token refused both, so
+    // the step died with "could not add label ... not found".
+    const source = readWorkflow();
+    const block = source.split(/^permissions:\s*$/m)[1]?.split(/^\S/m)[0] ?? "";
+    expect(block).toMatch(/^\s+issues:\s*write\b/m);
+  });
+
+  it("retries the authenticated read probe in a bounded window and still fails without a 200", () => {
+    // A single 90s read right after the machine is replaced reported "wedged"
+    // for a warm-up (cold cache, every client reconnecting). The probe must
+    // retry, must be bounded (an unanswering database still fails), and must
+    // keep requiring a 200 from an authenticated entity read.
+    const source = readWorkflow();
+    const probe = source.slice(source.indexOf("PROBE_BUDGET_SECONDS="));
+    expect(probe).toMatch(/PROBE_BUDGET_SECONDS=\d+/);
+    expect(probe).toMatch(/while :; do/);
+    expect(probe).toMatch(/\/entities\?limit=1/);
+    expect(probe).toMatch(/Authorization: Bearer \$READ_PROBE_TOKEN/);
+    expect(probe).toMatch(/\[ "\$CODE" != "200" \]/);
+    expect(probe.slice(probe.indexOf('[ "$CODE" != "200" ]'))).toMatch(/exit 1/);
+    const budget = Number(probe.match(/PROBE_BUDGET_SECONDS=(\d+)/)?.[1]);
+    expect(budget).toBeGreaterThanOrEqual(180);
+    expect(budget).toBeLessThanOrEqual(900);
+  });
 });
