@@ -120,6 +120,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.resolve.outputs.ref }}
+          # Nothing after this step runs git against the remote (the CI wait
+          # authenticates `gh` through GH_TOKEN), so do not leave the workflow
+          # token in .git/config, which `flyctl deploy --remote-only` uploads
+          # along with the tree.
+          persist-credentials: false
 
       # ── SAFETY GATE ───────────────────────────────────────────────────────
       # Only deploy a commit whose CI is GREEN.
@@ -340,20 +345,27 @@ jobs:
           # Retry inside a bounded window instead: pass on the first 200, fail
           # if there is none by the deadline. A genuinely wedged database never
           # answers, so it still fails this step; only a slow warm-up passes.
-          # The time to the first answer is printed so a slowly worsening
-          # warm-up stays visible rather than being absorbed by the retry.
+          # The window stops starting new attempts after 420 s; an attempt begun
+          # just before that can run 90 s more, so the worst case is about 510 s.
+          # A 401 or 403 cannot recover by waiting (revoked or rotated token), so
+          # it ends the loop at once rather than after the whole window.
+          # The first code and the time to the first 200 are printed so a slowly
+          # worsening warm-up stays visible rather than being absorbed by the retry.
           PROBE_BUDGET_SECONDS=420
           PROBE_START=$SECONDS
           ATTEMPT=0
           CODE=000
+          FIRST_CODE=""
           while :; do
             ATTEMPT=$((ATTEMPT + 1))
             CODE=$(curl -s -o /tmp/entities.json -w '%{http_code}' --max-time 90 \
                      -H "Authorization: Bearer $READ_PROBE_TOKEN" \
                      "https://$HOST/entities?limit=1" || true)
             [ -n "$CODE" ] || CODE=000
+            if [ "$ATTEMPT" -eq 1 ]; then FIRST_CODE=$CODE; fi
             [ "$CODE" = "200" ] && break
             echo "read probe attempt $ATTEMPT: HTTP $CODE after $((SECONDS - PROBE_START))s (000 = timeout/no response)"
+            case "$CODE" in 401|403) break;; esac
             if [ $((SECONDS - PROBE_START)) -ge "$PROBE_BUDGET_SECONDS" ]; then
               break
             fi
@@ -366,7 +378,7 @@ jobs:
           fi
           echo "authenticated read answered on attempt $ATTEMPT, $((SECONDS - PROBE_START))s after the probe started"
           if [ "$ATTEMPT" -gt 1 ]; then
-            echo "::warning::first authenticated read did not answer inside 90s after deploy (answered on attempt $ATTEMPT). Slow warm-up, not a wedged database; see the instance's search/query load."
+            echo "::warning::first authenticated read was not a 200 (HTTP $FIRST_CODE); passed on attempt $ATTEMPT after $((SECONDS - PROBE_START))s. Slow warm-up, not a wedged database; see the instance's search/query load (000 = timeout/no response)."
           fi
           node -e '
             const j = require("/tmp/entities.json");

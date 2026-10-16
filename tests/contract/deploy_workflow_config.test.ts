@@ -1,7 +1,10 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -110,17 +113,37 @@ describe("deploy_workflow_config", () => {
     expect(block).toMatch(/^\s+issues:\s*write\b/m);
   });
 
+  it("does not leave the workflow token in .git/config after checkout", () => {
+    // Nothing after checkout runs git against the remote, and `flyctl deploy
+    // --remote-only` uploads the tree, so a persisted credential would travel
+    // with it for no benefit.
+    // Read from the parsed YAML, not the text, so a commented-out line cannot
+    // satisfy it.
+    const doc = yaml.load(readWorkflow()) as {
+      jobs: { deploy: { steps: Array<{ uses?: string; with?: Record<string, unknown> }> } };
+    };
+    const checkout = doc.jobs.deploy.steps.find((st) => st.uses?.startsWith("actions/checkout@"));
+    expect(checkout).toBeDefined();
+    expect(checkout?.with?.["persist-credentials"]).toBe(false);
+  });
+
   it("retries the authenticated read probe in a bounded window and still fails without a 200", () => {
     // A single 90s read right after the machine is replaced reported "wedged"
     // for a warm-up (cold cache, every client reconnecting). The probe must
     // retry, must be bounded (an unanswering database still fails), and must
     // keep requiring a 200 from an authenticated entity read.
     const source = readWorkflow();
+    expect(source.indexOf("PROBE_BUDGET_SECONDS=")).toBeGreaterThan(-1);
     const probe = source.slice(source.indexOf("PROBE_BUDGET_SECONDS="));
     expect(probe).toMatch(/PROBE_BUDGET_SECONDS=\d+/);
     expect(probe).toMatch(/while :; do/);
     expect(probe).toMatch(/\/entities\?limit=1/);
     expect(probe).toMatch(/Authorization: Bearer \$READ_PROBE_TOKEN/);
+    expect(probe).toMatch(/\[ "\$CODE" = "200" \] && break/);
+    expect(probe).toMatch(/-ge "\$PROBE_BUDGET_SECONDS"/);
+    expect(probe).toMatch(/--max-time 90\b/);
+    expect(probe).toMatch(/\bsleep \d+/);
+    expect(probe).toMatch(/case "\$CODE" in 401\|403\) break;; esac/);
     expect(probe).toMatch(/\[ "\$CODE" != "200" \]/);
     expect(probe.slice(probe.indexOf('[ "$CODE" != "200" ]'))).toMatch(/exit 1/);
     const budget = Number(probe.match(/PROBE_BUDGET_SECONDS=(\d+)/)?.[1]);
@@ -128,3 +151,181 @@ describe("deploy_workflow_config", () => {
     expect(budget).toBeLessThanOrEqual(900);
   });
 });
+
+/**
+ * The text assertions above prove the retry loop is spelled a certain way; they
+ * cannot prove it behaves. These tests extract the real "Verify deploy" probe
+ * (section (e)) from the workflow and run it under bash against a stub `curl`
+ * and `sleep`, so a mutation of the loop (unconditional break, budget
+ * comparison dropped, no pacing, auth errors retried) turns them red.
+ *
+ * Only the budget NUMBER is rewritten, to a few seconds, so the budget exit is
+ * reachable in a unit test; the comparison and the loop are the workflow's own.
+ */
+describe(
+  "deploy_workflow_config: read probe behaviour against a stub curl",
+  { timeout: 60_000 },
+  () => {
+    // Only the exhaustion tests need the budget to elapse, so only they use the
+    // short one. The rest get a wide one so process-spawn slowness on a loaded
+    // host cannot consume it and flake a test that is not about the budget.
+    const SHORT_BUDGET = 3;
+    const WIDE_BUDGET = 30;
+
+    function probeScript(budget: number): string {
+      const doc = yaml.load(readWorkflow()) as {
+        jobs: { deploy: { steps: Array<{ name?: string; run?: string }> } };
+      };
+      const step = doc.jobs.deploy.steps.find((st) => st.name === "Verify deploy");
+      if (!step?.run) throw new Error("no 'Verify deploy' step with a run block");
+      const at = step.run.indexOf('if [ -z "${READ_PROBE_TOKEN:-}" ]');
+      expect(at).toBeGreaterThan(-1);
+      const section = step.run.slice(at);
+      expect(section).toMatch(/PROBE_BUDGET_SECONDS=\d+/);
+      return section.replace(/PROBE_BUDGET_SECONDS=\d+/, `PROBE_BUDGET_SECONDS=${budget}`);
+    }
+
+    interface Run {
+      status: number | null;
+      out: string;
+      curlCalls: string[];
+      sleepCalls: number;
+    }
+
+    interface ProbeOptions {
+      body?: string;
+      budget?: number;
+      /** `null` runs the probe with READ_PROBE_TOKEN unset. */
+      token?: string | null;
+    }
+
+    function runProbe(codes: string[], opts: ProbeOptions = {}): Run {
+      const body = opts.body ?? '{"entities":[]}';
+      const budget = opts.budget ?? WIDE_BUDGET;
+      const token = opts.token === undefined ? "stub-token" : opts.token;
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "probe-"));
+      try {
+        const bin = path.join(dir, "bin");
+        fs.mkdirSync(bin);
+        // Replays `codes` one per call and repeats the last forever. "000" mimics
+        // curl's timeout: prints 000 on stdout and exits non-zero.
+        fs.writeFileSync(
+          path.join(bin, "curl"),
+          `#!/bin/bash
+n=$(cat "${dir}/n" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "${dir}/n"
+echo "$*" >> "${dir}/curl.log"
+codes=(${codes.join(" ")}); i=$((n-1)); [ $i -ge \${#codes[@]} ] && i=$((\${#codes[@]}-1))
+code=\${codes[$i]}
+out=""; while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done
+if [ "$code" = "200" ]; then printf '%s' '${body}' > "$out"; else : > "$out"; fi
+printf '%s' "$code"
+[ "$code" = "000" ] && exit 28
+exit 0
+`,
+          { mode: 0o755 }
+        );
+        // One real second per sleep so the (shortened) budget elapses; the
+        // workflow's own sleep length is ignored.
+        fs.writeFileSync(
+          path.join(bin, "sleep"),
+          `#!/bin/bash
+echo x >> "${dir}/sleep.log"
+exec /bin/sleep 1
+`,
+          { mode: 0o755 }
+        );
+        const script = probeScript(budget).replaceAll("/tmp/", () => `${dir}/`);
+        const r = spawnSync("bash", ["-eo", "pipefail", "-c", `set -euo pipefail\n${script}`], {
+          env: {
+            PATH: `${bin}:${process.env.PATH}`,
+            HOST: "instance.example.test",
+            ...(token === null ? {} : { READ_PROBE_TOKEN: token }),
+          },
+          encoding: "utf8",
+          timeout: 25_000,
+        });
+        const read = (f: string) =>
+          fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), "utf8") : "";
+        return {
+          status: r.status,
+          out: `${r.stdout}${r.stderr}`,
+          curlCalls: read("curl.log").split("\n").filter(Boolean),
+          sleepCalls: read("sleep.log").split("\n").filter(Boolean).length,
+        };
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it("passes on the first 200 with one request and no warning", () => {
+      const r = runProbe(["200"]);
+      expect(r.status).toBe(0);
+      expect(r.curlCalls).toHaveLength(1);
+      expect(r.out).not.toContain("::warning::");
+    });
+
+    it("sends the bearer token to /entities?limit=1 with a 90s per-attempt cap", () => {
+      const r = runProbe(["200"]);
+      expect(r.curlCalls[0]).toContain("Authorization: Bearer stub-token");
+      expect(r.curlCalls[0]).toContain("https://instance.example.test/entities?limit=1");
+      expect(r.curlCalls[0]).toMatch(/--max-time 90\b/);
+    });
+
+    it("recovers from a slow warm-up and reports the FIRST code, attempt and elapsed time", () => {
+      const r = runProbe(["503", "000", "200"]);
+      expect(r.status).toBe(0);
+      expect(r.curlCalls).toHaveLength(3);
+      expect(r.out).toMatch(
+        /::warning::first authenticated read was not a 200 \(HTTP 503\); passed on attempt 3 after \d+s/
+      );
+      expect(r.out).not.toContain("did not answer inside 90s");
+    });
+
+    it("retries a 5xx or a timeout instead of failing on the first one", () => {
+      expect(runProbe(["000", "200"]).status).toBe(0);
+      expect(runProbe(["500", "200"]).status).toBe(0);
+    });
+
+    it("fails fast on 401 and 403: one request, no waiting out the window", () => {
+      for (const code of ["401", "403"]) {
+        const r = runProbe([code]);
+        expect(r.status).toBe(1);
+        expect(r.curlCalls).toHaveLength(1);
+        expect(r.sleepCalls).toBe(0);
+        expect(r.out).toContain(`HTTP ${code}`);
+      }
+    });
+
+    it("stops after the budget when the instance never answers, pacing its attempts", () => {
+      const r = runProbe(["000"], { budget: SHORT_BUDGET });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("FAIL: authenticated read returned HTTP 000");
+      // Bounded: more than one attempt (it did retry), but nowhere near unbounded.
+      expect(r.curlCalls.length).toBeGreaterThan(1);
+      expect(r.curlCalls.length).toBeLessThanOrEqual(SHORT_BUDGET + 3);
+      // Paced: exactly one sleep between consecutive attempts, never a hot loop.
+      expect(r.sleepCalls).toBe(r.curlCalls.length - 1);
+    });
+
+    it("still fails when a persistent 5xx exhausts the window", () => {
+      const r = runProbe(["502"], { budget: SHORT_BUDGET });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("HTTP 502");
+    });
+
+    it("refuses to call the deploy verified when the probe token is missing", () => {
+      // A dropped OPERATOR_INSTANCE_TOKEN secret must fail the step, not skip the
+      // read probe: /health alone has passed through a total read outage.
+      const r = runProbe(["200"], { token: null });
+      expect(r.status).toBe(1);
+      expect(r.curlCalls).toHaveLength(0);
+      expect(r.out).toContain("OPERATOR_INSTANCE_TOKEN is not set");
+    });
+
+    it("requires an entity array in a 200, not just the status", () => {
+      const r = runProbe(["200"], { body: '{"error":"x"}' });
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("returned no entity array");
+    });
+  }
+);
