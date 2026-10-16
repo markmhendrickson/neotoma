@@ -418,6 +418,102 @@ describe("ObservationReducer: a correction wins on every field until a later cor
 
       expect(snapshot!.snapshot.ms).toBe("B");
     });
+
+    it("lets the later of two corrections win, in either arrival order", async () => {
+      const first = correction({
+        id: "obs_zzz_first",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        fields: { ms: "first" },
+      });
+      const second = correction({
+        id: "obs_aaa_second",
+        observed_at: "2026-01-03T00:00:00.000Z",
+        fields: { ms: "second" },
+      });
+
+      for (const order of [
+        [first, second],
+        [second, first],
+      ]) {
+        expect((await reducer.computeSnapshot(entityId, order))!.snapshot.ms).toBe("second");
+      }
+    });
+
+    it("resolves two same-millisecond corrections deterministically, by id, in either order", async () => {
+      // most_specific ends at observed_at and keeps the reducer's input order
+      // (observed_at, id), so created_at does not decide here (see reducer.md 3.6).
+      const a = correction({
+        id: "obs_aaa",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        created_at: "2026-01-02T00:00:00.002Z",
+        fields: { ms: "aaa" },
+      });
+      const z = correction({
+        id: "obs_zzz",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        created_at: "2026-01-02T00:00:00.001Z",
+        fields: { ms: "zzz" },
+      });
+
+      const outcomes = new Set<unknown>();
+      for (const order of [
+        [a, z],
+        [z, a],
+      ]) {
+        outcomes.add((await reducer.computeSnapshot(entityId, order))!.snapshot.ms);
+      }
+      expect(outcomes.size).toBe(1);
+    });
+  });
+
+  describe("a correction to null", () => {
+    it.each([
+      ["highest_priority", "hp"],
+      ["most_specific", "ms"],
+    ])("clears a %s field against any later write, at any priority", async (_strategy, field) => {
+      const clear = correction({
+        id: "obs_clear",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        fields: { [field]: null },
+      });
+      const later = ordinary({
+        id: "obs_later_5000",
+        observed_at: "2026-01-03T00:00:00.000Z",
+        source_priority: 5000,
+        fields: { [field]: "revived?" },
+      });
+
+      for (const order of [
+        [clear, later],
+        [later, clear],
+      ]) {
+        const snapshot = await reducer.computeSnapshot(entityId, order);
+        expect(snapshot!.snapshot).not.toHaveProperty(field);
+      }
+    });
+
+    it("leaves an empty array on merge_array and merge_array_by_key fields, not a later write's array", async () => {
+      const clear = correction({
+        id: "obs_clear",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        fields: { ma: null, mk: null },
+      });
+      const later = ordinary({
+        id: "obs_later_5000",
+        observed_at: "2026-01-03T00:00:00.000Z",
+        source_priority: 5000,
+        fields: { ma: ["revived"], mk: [{ k: "row", v: "revived" }] },
+      });
+
+      for (const order of [
+        [clear, later],
+        [later, clear],
+      ]) {
+        const snapshot = await reducer.computeSnapshot(entityId, order);
+        expect(snapshot!.snapshot.ma ?? []).toEqual([]);
+        expect(snapshot!.snapshot.mk ?? []).toEqual([]);
+      }
+    });
   });
 
   describe("merge_array and merge_array_by_key", () => {

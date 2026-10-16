@@ -15,6 +15,7 @@ const fields = {
   title: { type: "string" },
   status: { type: "string" },
   remaining: { type: "number" },
+  tags: { type: "array" },
 };
 const schema = {
   id: "test-schema",
@@ -24,12 +25,16 @@ const schema = {
   created_at: "2026-01-01T00:00:00.000Z",
   schema_definition: { fields, canonical_name_fields: ["title"] },
   reducer_config: {
-    merge_policies: Object.fromEntries(
-      Object.keys(fields).map((field) => [
-        field,
-        { strategy: "highest_priority", tie_breaker: "observed_at" },
-      ])
-    ),
+    merge_policies: {
+      ...Object.fromEntries(
+        Object.keys(fields).map((field) => [
+          field,
+          { strategy: "highest_priority", tie_breaker: "observed_at" },
+        ])
+      ),
+      // Corrections still combine on array fields (#2341); the rollback test below relies on it.
+      tags: { strategy: "merge_array" },
+    },
   },
 };
 const events: unknown[] = [];
@@ -168,8 +173,8 @@ describe("scoped atomic correction transaction", () => {
   // snapshot did not take the requested value and the SNAPSHOT_MISMATCH guard
   // fired. That was the undecided by-product of the priority comparator; a
   // correction now wins on every merge strategy until a later correction
-  // replaces it (#2033), so the transaction applies. The guard stays as a
-  // safety net but has no known trigger through priority any more.
+  // replaces it (#2033), so the transaction applies. The guard's rollback is
+  // covered by the merge_array case below, which still has a real trigger.
   it("applies even when higher-priority stored data exists, because a correction wins", async () => {
     await db.from("observations").insert({
       id: "test-atomic-priority",
@@ -189,6 +194,48 @@ describe("scoped atomic correction transaction", () => {
     expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
     expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 0 });
     expect((await db.from("observations").select("id").eq("user_id", user)).data).toHaveLength(5);
+  });
+  // Corrections still combine with each other on merge_array fields (#2341), so
+  // correcting an array that already holds a correction yields a union, not the
+  // requested value. The post-write verification must catch that and roll the
+  // whole transaction back, including the other entity's change.
+  it("rolls back with SNAPSHOT_MISMATCH when a merge_array correction unions instead of replacing", async () => {
+    const tagsOnly = (
+      key: string,
+      count: number,
+      value: string[]
+    ): CorrectionTransactionOptions => ({
+      user_id: user,
+      idempotency_key: key,
+      entities: [
+        {
+          entity_id: "ent_atomic_draft",
+          entity_type: "atomic_test",
+          expected_observation_count: count,
+          expected_snapshot: { status: "ready" },
+          changes: [{ field: "tags", value }],
+        },
+      ],
+    });
+    expect((await applyCorrectionTransaction(tagsOnly("tags-1", 1, ["a"]))).status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ tags: ["a"] });
+    events.length = 0;
+    const countBefore = (await db.from("observations").select("id").eq("user_id", user)).data
+      ?.length;
+
+    const second = request("tags-2");
+    second.entities[0].expected_observation_count = 2;
+    second.entities[0].changes = [{ field: "tags", value: ["b"] }];
+    await expect(applyCorrectionTransaction(second)).rejects.toMatchObject({
+      code: "SNAPSHOT_MISMATCH",
+    });
+
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ tags: ["a"] });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 1 });
+    expect(events).toHaveLength(0);
+    expect((await db.from("observations").select("id").eq("user_id", user)).data).toHaveLength(
+      countBefore as number
+    );
   });
   it("rejects malformed, duplicate or undeclared fields before mutation", async () => {
     for (const mutate of [

@@ -1,12 +1,20 @@
 /**
- * Minimal sync conflict resolution. prefer_remote re-fetches a remote guest snapshot;
+ * Minimal sync conflict resolution. prefer_remote re-fetches a remote guest snapshot
+ * and applies each field that differs from the local snapshot as a correction;
  * prefer_local is a no-op with guidance to use correct for field-level overrides.
+ *
+ * Why corrections (#2033): a correction wins on every field until a later correction
+ * replaces it, so an ordinary write, even at priority 1000 with a "human" source kind,
+ * can no longer override a locally corrected field. prefer_remote expresses an explicit
+ * operator decision that the remote value is right, so it is recorded as one.
  */
 
 import { guardedFetch, isPublicFetchUrlAllowed } from "../net/private_host_guard.js";
 import { createHash } from "node:crypto";
 import { db } from "../../db.js";
 import { createCorrection } from "../correction.js";
+import { getEntityWithProvenance } from "../entity_queries.js";
+import { stableSerialize } from "../stable_serialize.js";
 
 type SyncConflictStrategy =
   | "prefer_local"
@@ -21,7 +29,7 @@ export async function resolveSyncConflict(params: {
   strategy: SyncConflictStrategy;
   sender_peer_url?: string;
   guest_access_token?: string;
-}): Promise<{ ok: boolean; message: string }> {
+}): Promise<{ ok: boolean; message: string; fields_applied?: string[] }> {
   if (params.strategy === "manual") {
     // Ownership precheck (neotoma#2229): a by-id write must confirm the
     // caller owns entity_id BEFORE writing under the caller's own user_id —
@@ -71,7 +79,7 @@ export async function resolveSyncConflict(params: {
     return {
       ok: true,
       message:
-        "source_priority: immutable observations already preserve both sides; configure peer source priorities before replaying sync rows to change reducer precedence.",
+        "source_priority: immutable observations already preserve both sides, and replayed sync rows rank by their source priority, but a field held by a correction is never displaced by priority; use prefer_remote or correct to replace it.",
     };
   }
 
@@ -140,21 +148,78 @@ export async function resolveSyncConflict(params: {
   const fields = { ...remote.snapshot };
   delete (fields as Record<string, unknown>).entity_id;
 
-  const { storeStructuredForApi } = await import("../../actions.js");
-  const idempotencyKey = createHash("sha256")
-    .update(`resolve-remote:${params.userId}:${params.entity_id}:${base}`)
-    .digest("hex");
+  // The caller's own entity, scoped by id AND user_id (see the manual branch).
+  const { data: local, error: localError } = await db
+    .from("entities")
+    .select("entity_type")
+    .eq("id", params.entity_id)
+    .eq("user_id", params.userId)
+    .maybeSingle();
+  if (localError) throw new Error(localError.message);
+  const localType = (local as { entity_type?: string } | null)?.entity_type;
 
-  await storeStructuredForApi({
-    userId: params.userId,
-    entities: [{ entity_type, ...fields }],
-    sourcePriority: 1000,
-    observationSource: "human",
-    idempotencyKey,
-  });
+  if (!localType) {
+    // Nothing exists locally, so no correction can be in the way: ingest the
+    // remote snapshot as before.
+    const { storeStructuredForApi } = await import("../../actions.js");
+    await storeStructuredForApi({
+      userId: params.userId,
+      entities: [{ entity_type, ...fields }],
+      sourcePriority: 1000,
+      observationSource: "human",
+      idempotencyKey: createHash("sha256")
+        .update(`resolve-remote:${params.userId}:${params.entity_id}:${base}`)
+        .digest("hex"),
+    });
+    return {
+      ok: true,
+      message: "prefer_remote: no local entity; ingested the remote guest snapshot.",
+    };
+  }
+
+  if (localType !== entity_type) {
+    return {
+      ok: false,
+      message: `prefer_remote: local entity is type "${localType}" but the remote snapshot is "${entity_type}".`,
+    };
+  }
+
+  // Apply each field that differs as a correction. A correction wins on every
+  // merge strategy (#2033), so this holds even where a local correction already
+  // stands: the explicit remote preference is the later correction and replaces
+  // it. Ordinary writes at any priority could not.
+  const local_snapshot =
+    (await getEntityWithProvenance(params.entity_id, false, params.userId))?.snapshot ?? {};
+  const { schemaRegistry } = await import("../schema_registry.js");
+  const schema_version =
+    (await schemaRegistry.loadActiveSchema(entity_type, params.userId))?.schema_version ?? "1.0";
+
+  const applied: string[] = [];
+  for (const [field, value] of Object.entries(fields)) {
+    const current = (local_snapshot as Record<string, unknown>)[field];
+    if (stableSerialize(current) === stableSerialize(value)) continue;
+    await createCorrection({
+      entity_id: params.entity_id,
+      entity_type,
+      field,
+      value,
+      schema_version,
+      user_id: params.userId,
+      idempotency_key: createHash("sha256")
+        .update(
+          `resolve-remote:${params.userId}:${params.entity_id}:${base}:${field}:${stableSerialize(value)}`
+        )
+        .digest("hex"),
+    });
+    applied.push(field);
+  }
 
   return {
     ok: true,
-    message: "prefer_remote: applied remote guest snapshot with human-classified priority.",
+    fields_applied: applied,
+    message:
+      applied.length === 0
+        ? "prefer_remote: the local snapshot already matches the remote snapshot; nothing to apply."
+        : `prefer_remote: applied ${applied.length} differing field(s) from the remote snapshot as corrections: ${applied.join(", ")}.`,
   };
 }

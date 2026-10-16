@@ -383,8 +383,17 @@ at a higher priority: a store at `source_priority: 5000`, or at exactly 1000 wit
 kind that outranks a correction, loses to a correction. A correction to `null` holds too: a
 later ordinary write does not revive the cleared field.
 
-A deliberate authoritative override, if one is ever needed, is a feature of its own (the
-authority work tracked under #2081), not a side effect of `source_priority` ordering.
+A deliberate authoritative override, if one is ever needed, is a feature of its own
+(#2666, a child of the authority work in #2081), not a side effect of `source_priority`
+ordering.
+
+**`correct` is now a stronger capability.** A correction can no longer be displaced by any
+later non-correction write, at any priority. That is the point, and it also means a field
+that has been corrected changes only through a later `correct`: importers and sync
+pipelines that `store` into it are not projected, and the store response does not say so
+(a `store_warnings` signal for a held field belongs with the contested-fields work, #951).
+Corrections also cover system bookkeeping fields written through `createCorrection` (for
+example peer sync watermarks and `sync_conflict`), not only human intent.
 
 **What counts as a correction.** The observation `createCorrection` writes (`correct`,
 `correct_transaction`, `patch_array_item`, `/correct`, `batch_correct`): no source document,
@@ -410,23 +419,41 @@ ordinary write. An integration test pins both halves against real rows.
 **Determinism.** Whether an observation is a correction depends only on its own stored
 columns, never on its position in the input, its arrival order, or the clock. Narrowing a
 field's candidates to its corrections is therefore the same for every ordering of the same
-observation set, and what is left is ordered by a total order (`observed_at`, `created_at`,
-`id`; ids are unique), so the same observations reduce to the same snapshot and the same
-provenance in any order. `created_at` is stored data, written once when the row is accepted,
-not read from a clock during reduction. The unit suite reduces every permutation of a mixed
+observation set, and what is left is ordered by a deterministic total order, so the same
+observations reduce to the same snapshot and the same provenance in any order. For
+`last_write` and `highest_priority` that order is `observed_at`, then `created_at`, then
+`id` (ids are unique). `most_specific` ends at `observed_at` and then keeps the
+reducer's input order (`observed_at`, `id`), so two same-millisecond corrections on a
+`most_specific` field resolve by `id`, not `created_at`; still deterministic. `created_at`
+is stored data, written once when the row is accepted, not read from a clock during
+reduction. The unit suite reduces every permutation of a mixed
 set of corrections and ordinary writes and requires one identical result.
 
 **Compatibility and recompute.** Observations are not rewritten and no column is added. A
 stored snapshot changes only where another write had displaced a correction: an ordinary
 write that landed after it on a `last_write` or `most_specific` field, or a write above
 priority 1000 (or at 1000 with an outranking source kind) on a `highest_priority` or array
-field. No in-tree writer stores field data above 1000, so the second kind is expected to
-flip nothing. Those snapshots keep their old value until recomputed; the next store, correction or other write to the entity
-recomputes it, and an explicit recompute does the rest. For a deliberate rollout, call
+field. The only in-tree writer that stored field data in the second group was
+`resolve_sync_conflict` with `prefer_remote`, which stored at priority 1000 with source kind
+`human` and now applies each differing field as a correction instead (so an explicit remote
+preference still wins, by recency). Other in-tree writers store field data below 1000, so
+the second group is expected to flip little; external callers can store at any priority
+and are covered by the recompute check below. Snapshots that did flip keep their old value
+until recomputed; the next store, correction or other write to the entity recomputes it,
+and an explicit recompute does the rest. For a deliberate rollout, call
 `POST /recompute_snapshots_by_type` with `dry_run: true` per entity type, then without it,
 and verify the returned counts and errors plus representative values and provenance. To roll
 back, revert the reducer before further bulk recomputation, then recompute the affected
 types again.
+
+One historical case to check before recomputing. Before v0.6.0 the store path did not
+default `observation_source`, so a row written then through `/observations/create` at
+exactly `source_priority: 1000` with no source and no interpretation has the same shape as
+a correction and is now read as one. Such rows are expected to be rare. To find them, list
+observations with `source_priority = 1000`, `specificity_score = 1`, null `source_id`,
+null `interpretation_id` and null `observation_source` that predate v0.6.0, and review
+any field they would now pin. The `dry_run` recompute lists the entities whose snapshots
+would be rewritten, which is the set to compare.
 
 ## 4. Merge Policy Configuration
 

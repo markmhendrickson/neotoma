@@ -7,6 +7,7 @@ Peer sync lets two explicit Neotoma instances exchange selected entity state wit
 - `peer_config` is the durable configuration entity for a peer.
 - `source_peer_id` on observations records which peer produced a replayed observation.
 - `observation_source: "sync"` marks replayed rows and ranks below local sources in default reducer tie-breaking.
+- Replication does not carry correction identity. A replayed row is an ordinary `sync` write, so it never displaces a local correction, and a correction made on the sender lands on the receiver as an ordinary row. A field corrected on one peer and changed (or corrected) on the other therefore stays divergent until an operator resolves it with `resolve_sync_conflict` (`prefer_remote` applies the remote value as a local correction).
 - `sync_peer_id` on subscriptions prevents loops by skipping events whose `source_peer_id` matches the destination peer.
 
 Peers are operator configured. There is no automatic discovery.
@@ -93,7 +94,7 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 
 ## Conflict resolution
 
-- **`prefer_remote`**: Supply `sender_peer_url` and optional `guest_access_token`; server fetches `GET {sender_peer_url}/entities/{entity_id}` and applies the snapshot with elevated priority.
+- **`prefer_remote`**: Supply `sender_peer_url` and optional `guest_access_token`; server fetches `GET {sender_peer_url}/entities/{entity_id}` and applies each field that differs from the local snapshot as a correction, so the remote value wins even on a field that already holds a local correction (a correction wins on every merge rule and is replaced only by a later correction; see [reducer §3.6](reducer.md)). The response lists `fields_applied`. If no local entity exists, the remote snapshot is ingested as a normal write.
 - **`prefer_local`**: No data change; use `correct` for targeted field overrides.
 
 ## Components — `src/services/sync/`
@@ -163,7 +164,7 @@ The default batch is 200; the cap is 500. The function is safe to re-run; observ
 
 `resolveSyncConflict({ userId, entity_id, strategy, sender_peer_url?, guest_access_token? })` covers the three explicit operator strategies:
 
-- `prefer_remote` — fetches `GET {sender_peer_url}/entities/{entity_id}` (with the supplied guest token) and applies the snapshot at elevated priority.
+- `prefer_remote` — fetches `GET {sender_peer_url}/entities/{entity_id}` (with the supplied guest token) and applies each differing field as a correction (see above); the response lists `fields_applied`.
 - `prefer_local` — no-op with guidance to use `correct` for targeted field overrides.
 - `manual` — flags the entity with `sync_conflict = true` via a `correct` write so operators can see it in the Inspector and resolve field by field.
 
