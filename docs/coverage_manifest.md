@@ -1,5 +1,33 @@
 # Documentation coverage manifest
 
+## Release-bound export pilot
+
+The [public page allowlist](site/release_docs_manifest.json) projects a bounded
+subset of this inventory into a deterministic bundle. Run `npm run docs:generate
+-- --release vX.Y.Z --commit <full-release-commit> --output <new-file>` and verify
+with the same arguments plus `--check <file>` instead of `--output`. The command
+fails on missing source files, an invalid route, shallow history, a tag/commit
+mismatch, an empty MCP registry, or altered bundle bytes. Output refuses to
+overwrite existing files. Source text is read from Git objects, never the dirty
+checkout. Fetch and independently verify the public release/tag before running.
+
+This pilot labels coverage `reference_only`: a registry entry linked to a general
+reference does not prove individual-tool prose, examples, deployment availability,
+or semantic completeness. MCP names reuse the registry consumed by
+`generate-capability-manifest.ts`; run its existing `--check` separately when
+auditing current repository compatibility history. That check is not a proof
+that current main describes the selected release.
+
+The bundle retains implementation/documentation commits, per-page hashes, stable
+routes, immutable source links and a payload hash. The recipient must render
+version labels and validate the exact imported bytes before advancing its current
+alias. Existing dependency validation and `validate:site-export` remain separate
+checks; exporting source markdown does not prove rendered links or served HTML.
+Relative source links must resolve through each page's immutable source URL or
+be rewritten and checked by the recipient. No release trigger or publication is
+activated by this manual command. Later documentation-only corrections and
+experimental/planned capabilities are deliberately unsupported and fail closed.
+
 A reviewable map of every code surface in the repo to its primary `docs/` source-of-truth. Generated as the spine of the docs full-coverage audit (see [.cursor/plans/docs_full-coverage_audit_760791a8.plan.md](../.cursor/plans/docs_full-coverage_audit_760791a8.plan.md)).
 
 Status legend:
