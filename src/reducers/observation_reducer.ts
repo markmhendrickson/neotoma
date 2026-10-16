@@ -385,20 +385,14 @@ export class ObservationReducer {
     }
 
     // A correction is authoritative on its field until a later correction
-    // replaces it (#2033). Two strategies would let an ordinary write displace
-    // one, because neither ranks by source_priority: last_write (recency alone,
-    // the default for every auto-discovered field) and most_specific. For
-    // those, when any observation of this field is a correction only
-    // corrections take part, so a later ordinary write cannot revert it and a
-    // later correction replaces an earlier one by the strategy's own order.
-    // highest_priority, merge_array and merge_array_by_key already rank by
-    // source_priority, where a correction (1000) beats everything below it;
-    // they keep that rule, including the documented and tested one that an
-    // explicit write above 1000 stays authoritative (#2394).
-    const candidates =
-      strategy === "last_write" || strategy === "most_specific"
-        ? narrowToCorrections(relevantObservations)
-        : relevantObservations;
+    // replaces it (#2033), whatever merge strategy the field declares and
+    // whatever source_priority or observation_source another write carries.
+    // When any observation of this field is a correction, only corrections
+    // take part in the strategy below, so no ordinary write can displace one
+    // and a later correction replaces an earlier one by the strategy's own
+    // order. merge_array and merge_array_by_key still combine corrections with
+    // each other (see #2341).
+    const candidates = narrowToCorrections(relevantObservations);
 
     // Get merged value using strategy
     let mergedResult: { value: unknown; source_observation_id: string };

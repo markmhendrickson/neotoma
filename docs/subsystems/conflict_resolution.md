@@ -54,6 +54,9 @@ obs_b: { status: "complete", observed_at: "2026-01-02T09:00:00Z" }
 
 **Winner:** The observation with the highest numeric `source_priority`.
 
+- Exception: when the field has a correction, only corrections compete, so no write at any
+  `source_priority` (or ranked `observation_source`) displaces a correction
+  ([reducer.md §3.6](reducer.md)).
 - Primary sort: `source_priority DESC`.
 - Secondary sort (within the same priority tier): `observation_source` rank ASC (schema-configurable; sensors and workflow outputs rank above LLM summaries by default).
 - Same-priority ordering: after numeric priority and source-kind rank tie, the reducer chooses `observed_at DESC`, then `created_at DESC`, then `id ASC` as the final stable fallback. This applies even when the field declares `tie_breaker: "source_priority"`; source priority is already the primary trust axis, and same-tier scalar corrections still express replacement intent.
@@ -104,8 +107,9 @@ obs_b: { location: "Calle Mayor 1, Madrid", specificity_score: 85 }
 - Only observations at the maximum `source_priority` contribute to the union (priority
   gating — see [reducer.md §3.4](reducer.md)).
 - `null` entries inside contributed arrays are dropped; they are not meaningful elements.
-- A correction (`source_priority: 1000`) fully **replaces** lower-priority array
-  contributions rather than merging into them.
+- A correction fully **replaces** every other array contribution, whatever its
+  `source_priority`, rather than merging into it (corrections still combine with each
+  other until #2341).
 
 Use `merge_array` for accumulative sets where every same-priority value is valid — tags,
 aliases, category labels, related IDs.

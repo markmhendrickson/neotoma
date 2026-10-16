@@ -155,7 +155,9 @@ function highestPriority(
 }
 ```
 
-Same-priority scalar corrections use that same order. A correction does not need
+A correction is the one exception to this ranking: it beats every other write to the field
+whatever its `source_priority` or `observation_source` (§3.6). Same-priority scalar
+corrections use that same order. A correction does not need
 to invent priority `1001` to replace an earlier normal correction: two correction
 observations at priority `1000` keep higher `observation_source` precedence, then
 the later `observed_at`/`created_at` wins, with `id ASC` used only when both
@@ -260,9 +262,11 @@ function mergeArrays(
 at the **maximum present `source_priority`** participate in the union. Corrections are
 created with `source_priority: 1000` (the highest tier), so a correction fully **replaces**
 any lower-priority array contributions rather than unioning with them — consistent with the
-rule that corrections "always win" (§4.2). The gate is `source_priority`-based and applies
-to any higher-priority write (e.g. a sensor), with corrections being the motivating case.
-Two writes at the **same** top priority still union with each other. Consequence:
+rule that corrections "always win" (§3.6). Among non-correction writes the gate is
+`source_priority`-based and applies to any higher-priority write (e.g. a sensor). A
+correction is outside that comparison: it replaces every other array contribution
+whatever its priority (§3.6). Two writes at the **same** top priority still union with
+each other, and so do two corrections until #2341 lets a later correction replace an array. Consequence:
 `source_observation_id` / `provenance[field]` lists only the top-priority contributing
 observation IDs, not every observation that ever contributed an element.
 
@@ -370,11 +374,17 @@ contract. Originating ADR: `ent_4b41bb83a4faf4428a73bfc8` (Neotoma task entity) 
 ### 3.6 Corrections Win Until a Later Correction Replaces Them
 
 **Rule.** A correction is authoritative on its field until a later correction for the same
-field replaces it. An ordinary write that arrives afterwards, however recent its
-`observed_at` and whatever its `source_priority`, does not displace it. This holds on a
-`last_write` field exactly as on any other, including every field of an auto-discovered
-schema, where `last_write` is the default. A correction to `null` holds too: a later
-ordinary write does not revive the cleared field.
+field replaces it. No other write displaces it, however recent its `observed_at` and
+whatever its `source_priority` or `observation_source`, and whatever merge rule the field
+declares. This holds on a `last_write` field (including every field of an auto-discovered
+schema, where `last_write` is the default) exactly as on `highest_priority`,
+`most_specific`, `merge_array` and `merge_array_by_key`. There is no exception for a write
+at a higher priority: a store at `source_priority: 5000`, or at exactly 1000 with a source
+kind that outranks a correction, loses to a correction. A correction to `null` holds too: a
+later ordinary write does not revive the cleared field.
+
+A deliberate authoritative override, if one is ever needed, is a feature of its own (the
+authority work tracked under #2081), not a side effect of `source_priority` ordering.
 
 **What counts as a correction.** The observation `createCorrection` writes (`correct`,
 `correct_transaction`, `patch_array_item`, `/correct`, `batch_correct`): no source document,
@@ -390,12 +400,12 @@ ordinary write. An integration test pins both halves against real rows.
 
 **How each strategy applies it.**
 
-| Strategy                            | Effect                                                                                                                                                                                                                                                          |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `last_write`                        | Only corrections compete. The latest wins by `observed_at`, then `created_at`, then `id`.                                                                                                                                                                       |
-| `most_specific`                     | Only corrections compete; the strategy's own ordering then picks among them.                                                                                                                                                                                    |
-| `highest_priority`                  | Unchanged. Priority is already this rule's ordering axis, so a correction (1000) beats everything below it, and the later of two corrections wins (§3.2). A write an operator deliberately sends above 1000 stays authoritative, as documented and tested.      |
-| `merge_array`, `merge_array_by_key` | Unchanged. The priority gate (§3.4) already lets a correction replace lower-priority arrays. Corrections at the same top tier still merge among themselves, which `patch_array_item` relies on; replacing an array by a later correction is tracked separately. |
+| Strategy                            | Effect                                                                                                                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `last_write`                        | Only corrections compete. The latest wins by `observed_at`, then `created_at`, then `id`.                                                                                                 |
+| `most_specific`                     | Only corrections compete; the strategy's own ordering then picks among them.                                                                                                              |
+| `highest_priority`                  | Only corrections compete; the strategy's own ordering (§3.2) then picks the later of two corrections. A write at any priority loses to a correction.                                      |
+| `merge_array`, `merge_array_by_key` | Only corrections contribute. Corrections still combine with each other, which `patch_array_item` relies on; a later correction replacing an array outright is tracked separately (#2341). |
 
 **Determinism.** Whether an observation is a correction depends only on its own stored
 columns, never on its position in the input, its arrival order, or the clock. Narrowing a
@@ -407,9 +417,11 @@ not read from a clock during reduction. The unit suite reduces every permutation
 set of corrections and ordinary writes and requires one identical result.
 
 **Compatibility and recompute.** Observations are not rewritten and no column is added. A
-stored snapshot changes only where an ordinary write had landed after a correction on a
-`last_write` or `most_specific` field and thereby displaced it. Those snapshots keep their
-old value until recomputed; the next store, correction or other write to the entity
+stored snapshot changes only where another write had displaced a correction: an ordinary
+write that landed after it on a `last_write` or `most_specific` field, or a write above
+priority 1000 (or at 1000 with an outranking source kind) on a `highest_priority` or array
+field. No in-tree writer stores field data above 1000, so the second kind is expected to
+flip nothing. Those snapshots keep their old value until recomputed; the next store, correction or other write to the entity
 recomputes it, and an explicit recompute does the rest. For a deliberate rollout, call
 `POST /recompute_snapshots_by_type` with `dry_run: true` per entity type, then without it,
 and verify the returned counts and errors plus representative values and provenance. To roll

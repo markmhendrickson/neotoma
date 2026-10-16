@@ -163,7 +163,14 @@ describe("scoped atomic correction transaction", () => {
     expect(results.map((result) => result.status).sort()).toEqual(["applied", "replayed"]);
     expect(events).toHaveLength(4);
   });
-  it("rolls back if higher-priority stored data prevents requested snapshots", async () => {
+  // This case used to assert a rollback: a stored write at priority 2000 outranked
+  // the transaction's priority-1000 correction under highest_priority, so the
+  // snapshot did not take the requested value and the SNAPSHOT_MISMATCH guard
+  // fired. That was the undecided by-product of the priority comparator; a
+  // correction now wins on every merge strategy until a later correction
+  // replaces it (#2033), so the transaction applies. The guard stays as a
+  // safety net but has no known trigger through priority any more.
+  it("applies even when higher-priority stored data exists, because a correction wins", async () => {
     await db.from("observations").insert({
       id: "test-atomic-priority",
       entity_id: "ent_atomic_source",
@@ -177,10 +184,11 @@ describe("scoped atomic correction transaction", () => {
     await recomputeSnapshot("ent_atomic_source", user);
     const input = request();
     input.entities[1].expected_observation_count = 2;
-    await expect(applyCorrectionTransaction(input)).rejects.toThrow(/snapshots/);
-    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
-    expect(events).toHaveLength(0);
-    expect((await db.from("observations").select("id").eq("user_id", user)).data).toHaveLength(3);
+    const result = await applyCorrectionTransaction(input);
+    expect(result.status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 0 });
+    expect((await db.from("observations").select("id").eq("user_id", user)).data).toHaveLength(5);
   });
   it("rejects malformed, duplicate or undeclared fields before mutation", async () => {
     for (const mutate of [

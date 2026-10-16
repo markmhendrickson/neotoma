@@ -7,11 +7,11 @@
  * authoritative until a LATER CORRECTION for the same field replaces it. An
  * ordinary write that arrives afterwards, with a newer `observed_at` or a
  * higher `source_priority` or both, must not displace it, under
- * `last_write` (the default for every auto-discovered field) and
- * `most_specific`. `highest_priority`, `merge_array` and `merge_array_by_key`
- * already rank by `source_priority`, where a correction beats everything below
- * 1000, and keep their rule unchanged, including the tested one that an explicit
- * write above 1000 stays authoritative (#2394).
+ * `last_write` (the default for every auto-discovered field), `most_specific`,
+ * `highest_priority`, `merge_array` and `merge_array_by_key` alike, and
+ * whatever `source_priority` (including 5000) or ranked `observation_source`
+ * the other write carries. Arrays still combine among corrections themselves
+ * until #2341.
  *
  * Determinism: the reduction is a pure function of the stored observation
  * set. The permutation tests below feed every ordering of the same set and
@@ -122,6 +122,7 @@ describe("ObservationReducer: a correction wins on every field until a later cor
           hp: { type: "string", required: false },
           ms: { type: "string", required: false },
           ma: { type: "array", required: false },
+          mk: { type: "array", required: false },
           undeclared_policy: { type: "string", required: false },
         },
         identity_opt_out: "heuristic_canonical_name",
@@ -132,6 +133,7 @@ describe("ObservationReducer: a correction wins on every field until a later cor
           hp: { strategy: "highest_priority", tie_breaker: "source_priority" },
           ms: { strategy: "most_specific", tie_breaker: "observed_at" },
           ma: { strategy: "merge_array" },
+          mk: { strategy: "merge_array_by_key", key_field: "k" },
           // `undeclared_policy` has no policy: the reducer defaults it to last_write.
         },
       },
@@ -338,22 +340,63 @@ describe("ObservationReducer: a correction wins on every field until a later cor
       expect(snapshot!.snapshot.hp).toBe("B");
     });
 
-    it("keeps its declared rule above 1000: an explicit higher-priority write stays authoritative (#2394)", async () => {
+    // This replaces a case that pinned the opposite for a write at 1500
+    // (tests/integration/correction_scalar_tiebreak_surfaces.test.ts, #2394).
+    // That ordering was an undecided by-product of the priority comparator,
+    // not a ruling; the rule is now that a correction wins on every strategy.
+    it.each([
+      ["a write at priority 1500", { source_priority: 1500 }],
+      ["a write at priority 5000", { source_priority: 5000 }],
+      [
+        "a write at exactly 1000 whose declared source kind outranks a correction",
+        { source_priority: 1000, observation_source: "human" as const },
+      ],
+    ])("loses %s to a correction, however recent", async (_label, overrides) => {
       const fix = correction({
         id: "obs_correction",
-        observed_at: "2026-01-03T00:00:00.000Z",
+        observed_at: "2026-01-02T00:00:00.000Z",
         fields: { hp: "B" },
       });
       const explicit = ordinary({
-        id: "obs_explicit_1500",
-        observed_at: "2026-01-02T00:00:00.000Z",
-        source_priority: 1500,
+        id: "obs_explicit",
+        observed_at: "2026-01-03T00:00:00.000Z",
+        ...overrides,
         fields: { hp: "A" },
       });
 
-      const snapshot = await reducer.computeSnapshot(entityId, [fix, explicit]);
+      for (const order of [
+        [fix, explicit],
+        [explicit, fix],
+      ]) {
+        const snapshot = await reducer.computeSnapshot(entityId, order);
+        expect(snapshot!.snapshot.hp).toBe("B");
+        expect(snapshot!.provenance.hp).toBe("obs_correction");
+      }
+    });
 
-      expect(snapshot!.snapshot.hp).toBe("A");
+    it("still lets a later correction replace an earlier one when a high-priority write sits between", async () => {
+      const first = correction({
+        id: "obs_first",
+        observed_at: "2026-01-01T00:00:00.000Z",
+        created_at: "2026-01-01T00:00:00.000Z",
+        fields: { hp: "first" },
+      });
+      const between = ordinary({
+        id: "obs_between_5000",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        source_priority: 5000,
+        fields: { hp: "assertive" },
+      });
+      const second = correction({
+        id: "obs_second",
+        observed_at: "2026-01-03T00:00:00.000Z",
+        created_at: "2026-01-03T00:00:00.000Z",
+        fields: { hp: "second" },
+      });
+
+      const snapshot = await reducer.computeSnapshot(entityId, [between, first, second]);
+
+      expect(snapshot!.snapshot.hp).toBe("second");
     });
   });
 
@@ -377,8 +420,60 @@ describe("ObservationReducer: a correction wins on every field until a later cor
     });
   });
 
-  describe("merge_array", () => {
-    it("is unchanged: a correction replaces the array and a later lower-priority array does not union into it", async () => {
+  describe("merge_array and merge_array_by_key", () => {
+    it.each([
+      ["a write at priority 5000", { source_priority: 5000 }],
+      [
+        "a write at exactly 1000 whose declared source kind outranks a correction",
+        { source_priority: 1000, observation_source: "human" as const },
+      ],
+    ])("%s neither replaces nor unions into a correction's array", async (_label, overrides) => {
+      const fix = correction({
+        id: "obs_correction",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        fields: { ma: ["z"], mk: [{ k: "row", v: "corrected" }] },
+      });
+      const explicit = ordinary({
+        id: "obs_explicit",
+        observed_at: "2026-01-03T00:00:00.000Z",
+        ...overrides,
+        fields: {
+          ma: ["w"],
+          mk: [
+            { k: "row", v: "other" },
+            { k: "extra", v: "x" },
+          ],
+        },
+      });
+
+      for (const order of [
+        [fix, explicit],
+        [explicit, fix],
+      ]) {
+        const snapshot = await reducer.computeSnapshot(entityId, order);
+        expect(snapshot!.snapshot.ma).toEqual(["z"]);
+        expect(snapshot!.snapshot.mk).toEqual([{ k: "row", v: "corrected" }]);
+      }
+    });
+
+    it("still combines two corrections at the same tier (until #2341 changes array replacement)", async () => {
+      const first = correction({
+        id: "obs_first",
+        observed_at: "2026-01-01T00:00:00.000Z",
+        fields: { ma: ["a"] },
+      });
+      const second = correction({
+        id: "obs_second",
+        observed_at: "2026-01-02T00:00:00.000Z",
+        fields: { ma: ["b"] },
+      });
+
+      const snapshot = await reducer.computeSnapshot(entityId, [first, second]);
+
+      expect([...(snapshot!.snapshot.ma as string[])].sort()).toEqual(["a", "b"]);
+    });
+
+    it("keeps a correction's array replacing a lower-priority array, as it always did", async () => {
       const original = ordinary({ id: "obs_1", fields: { ma: ["x", "y"] } });
       const fix = correction({
         id: "obs_2_correction",
@@ -480,12 +575,25 @@ describe("ObservationReducer: a correction wins on every field until a later cor
           id: "obs_d_correction_two",
           observed_at: "2026-01-04T00:00:00.000Z",
           created_at: "2026-01-04T00:00:00.000Z",
-          fields: { lw: "D", hp: "D", ms: "D", ma: ["d"] },
+          fields: { lw: "D", hp: "D", ms: "D", ma: ["d"], mk: [{ k: "row", v: "D" }] },
         }),
         ordinary({
           id: "obs_e_latest_ordinary",
           observed_at: "2026-01-05T00:00:00.000Z",
-          fields: { lw: "E", hp: "E", ms: "E", ma: ["e"] },
+          fields: { lw: "E", hp: "E", ms: "E", ma: ["e"], mk: [{ k: "row", v: "E" }] },
+        }),
+        ordinary({
+          id: "obs_f_priority_5000",
+          observed_at: "2026-01-06T00:00:00.000Z",
+          source_priority: 5000,
+          fields: { lw: "F", hp: "F", ms: "F", ma: ["f"], mk: [{ k: "row", v: "F" }] },
+        }),
+        ordinary({
+          id: "obs_g_ranked_source_at_1000",
+          observed_at: "2026-01-07T00:00:00.000Z",
+          source_priority: 1000,
+          observation_source: "human",
+          fields: { lw: "G", hp: "G", ms: "G", ma: ["g"], mk: [{ k: "row", v: "G" }] },
         }),
       ];
 
@@ -497,7 +605,14 @@ describe("ObservationReducer: a correction wins on every field until a later cor
 
       expect(outcomes.size).toBe(1);
       const only = JSON.parse([...outcomes][0]);
-      expect(only.s).toMatchObject({ lw: "D", hp: "D", ms: "D", ma: ["d"] });
+      expect(permutations(set)).toHaveLength(5040);
+      expect(only.s).toMatchObject({
+        lw: "D",
+        hp: "D",
+        ms: "D",
+        ma: ["d"],
+        mk: [{ k: "row", v: "D" }],
+      });
     });
   });
 });

@@ -194,22 +194,34 @@ describe("a correction wins on every field until a later correction replaces it 
     expect(snap.snapshot.specific_field).toBe("corrected");
   });
 
-  it("keeps a correction against a later store at a higher source_priority on a last_write field", async () => {
+  it("keeps a correction against a later store at a higher source_priority, on last_write, highest_priority and most_specific fields", async () => {
     const label = `higher-${randomUUID()}`;
-    const entityId = await store(server, label, { last_write_field: "original" });
-    await tick();
-    await correct(server, entityId, "last_write_field", "corrected");
+    const entityId = await store(server, label, {
+      last_write_field: "original",
+      priority_field: "original",
+      specific_field: "original",
+    });
+    for (const field of ["last_write_field", "priority_field", "specific_field"]) {
+      await tick();
+      await correct(server, entityId, field, "corrected");
+    }
 
     await tick();
     await store(
       server,
       label,
-      { last_write_field: "assertive re-ingest" },
+      {
+        last_write_field: "assertive re-ingest",
+        priority_field: "assertive re-ingest",
+        specific_field: "assertive re-ingest",
+      },
       { source_priority: 5000 }
     );
 
     const snap = await snapshot(server, entityId);
     expect(snap.snapshot.last_write_field).toBe("corrected");
+    expect(snap.snapshot.priority_field).toBe("corrected");
+    expect(snap.snapshot.specific_field).toBe("corrected");
   });
 
   it("lets a later correction replace an earlier one even after an ordinary write between them", async () => {
