@@ -14200,6 +14200,18 @@ export async function startHTTPServer() {
         await import("./services/subscriptions/install_subscription_bridge.js");
       subscriptionBridge.installSubscriptionBridge();
       logger.info("[Subscriptions] substrate event bridge installed");
+      // #2659: keep the lexical search index current (dirty re-index + online
+      // backfill). Idempotent and unref'd; a failure only leaves search on
+      // its full scan.
+      import("./services/entity_search_index.js")
+        .then((searchIndex) => searchIndex.startEntitySearchIndexMaintainer())
+        .catch((error: unknown) => {
+          logger.warn(
+            `[entitySearchIndex] maintainer not started: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
       return { server, port: boundPort };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;

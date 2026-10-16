@@ -3090,6 +3090,11 @@ async function mergeSqliteDatabase(
     for (const table of targetTables) {
       const tableName = table.name;
       if (!sourceTableSet.has(tableName)) continue;
+      // #2659: the lexical search index (FTS5 table, its shadow tables, doc map,
+      // dirty set, state) is derived data keyed to this database's own rowids.
+      // Copying it row by row would corrupt it; the merged entities, snapshots
+      // and fragments fire the index triggers and are re-indexed instead.
+      if (tableName.startsWith("entity_search_")) continue;
 
       const targetCols = (await targetDb
         .prepare(`PRAGMA table_info(${quoteSqlIdent(tableName)})`)

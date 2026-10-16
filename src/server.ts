@@ -10048,6 +10048,18 @@ export class NeotomaServer {
     await this.mcpServer.server.connect(transport);
     installStdioSignalHandlers(() => this.mcpServer.server.close());
     logger.info("[Neotoma MCP] Server running on stdio");
+    // #2659: stdio processes serve search too; keep their index current.
+    try {
+      const { startEntitySearchIndexMaintainer } =
+        await import("./services/entity_search_index.js");
+      startEntitySearchIndexMaintainer();
+    } catch (error: unknown) {
+      logger.warn(
+        `[entitySearchIndex] maintainer not started: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
 
     await this.startAutoEnhancement();
   }

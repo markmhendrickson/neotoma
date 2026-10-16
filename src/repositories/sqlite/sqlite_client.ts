@@ -1,5 +1,6 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
+import { ensureEntitySearchIndexSchema } from "./entity_search_index_schema.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -728,6 +729,21 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
       )
       .run();
+
+    // #2659: search reads every candidate's raw_fragments by entity_id, and the
+    // search-index maintainer reads them per batch. Without this index each such
+    // statement is a full scan of the table (millions of rows on a large
+    // instance). Building it is a one-time scan + sort of raw_fragments on the
+    // first open after upgrade; every later open is a no-op.
+    await db
+      .prepare("CREATE INDEX IF NOT EXISTS idx_raw_fragments_entity ON raw_fragments(entity_id)")
+      .run();
+
+    // #2659: lexical prefilter index for entity search (FTS5 trigram table,
+    // doc map, dirty set, invalidation triggers). DDL only; the backfill runs
+    // online in the server's maintainer, never in this startup transaction.
+    // See src/repositories/sqlite/entity_search_index_schema.ts.
+    await ensureEntitySearchIndexSchema(db);
 
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
     await db

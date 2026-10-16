@@ -12,6 +12,14 @@ import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import {
+  entitySearchPrefilterAvailable,
+  MIN_INDEXED_TOKEN_LENGTH,
+  prefilterStrictCandidates,
+  prefilterWeightedCandidates,
+  type LexicalCandidateEntity,
+  type LexicalCandidateScope,
+} from "../../services/entity_search_index.js";
+import {
   loadConceptTypeSynonyms,
   schemaRegistry,
   isHigherPrecedenceSchemaRow,
@@ -31,7 +39,12 @@ import {
 // Shared, dependency-free normalizer (#1572). Imported (and re-exported below
 // for back-compat) so the schema registry can use the same function without an
 // import cycle. See src/shared/search_normalization.ts.
-import { normalizeSearchText } from "../search_normalization.js";
+import {
+  buildEntityLexicalSearchText,
+  normalizeSearchText,
+  rawFragmentSearchPiece,
+  stringifySnapshot,
+} from "../search_normalization.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -81,6 +94,22 @@ interface QueryEntitiesParams {
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
+
+/**
+ * How often lexical search took each acquisition path in this process (#2659).
+ * Diagnostics and tests only: lets a test prove the prefilter actually ran
+ * rather than inferring it from unchanged results.
+ */
+export const entitySearchPrefilterStats = {
+  /** Strict candidates came from the index. */
+  strict: 0,
+  /** Partial-overlap candidates came from the index. */
+  partial: 0,
+  /** Partial-overlap fallback needed the whole scope (short tokens). */
+  partialFullScan: 0,
+  /** The index was not usable; the whole scope was hydrated. */
+  fullScan: 0,
+};
 
 /** Extra lexical/semantic rank when a query token equals the row's entity_type (e.g. "plan" → plan). */
 export const ENTITY_TYPE_KEYWORD_BOOST = 280;
@@ -178,7 +207,7 @@ type LexicalMatch = {
 
 // Re-export the shared normalizer (imported above) so existing references to
 // `normalizeSearchText` from this module keep resolving (#1572).
-export { normalizeSearchText };
+export { normalizeSearchText, buildEntityLexicalSearchText };
 
 export function matchesSearchTokens(searchableText: string, searchTokens: string[]): boolean {
   if (searchTokens.length === 0) return false;
@@ -362,32 +391,6 @@ function compareSearchRank(
   return ai - bi;
 }
 
-function stringifySnapshot(snapshot: unknown): string {
-  if (typeof snapshot === "string") {
-    return snapshot;
-  }
-  if (snapshot == null) {
-    return "";
-  }
-  try {
-    return JSON.stringify(snapshot);
-  } catch {
-    return "";
-  }
-}
-
-/** Canonical lexical haystack: canonical_name + snapshot + optional raw_fragments text. */
-export function buildEntityLexicalSearchText(
-  canonicalName: string,
-  snapshot: unknown,
-  rawFragmentText?: string
-): string {
-  const normalizedCanonical = normalizeSearchText(canonicalName);
-  const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshot));
-  const normalizedFragments = normalizeSearchText(rawFragmentText ?? "");
-  return `${normalizedCanonical} ${normalizedSnapshot} ${normalizedFragments}`.trim();
-}
-
 type RawFragmentRow = {
   entity_id: string | null;
   fragment_key: string;
@@ -398,7 +401,7 @@ function appendRawFragmentRow(fragmentTextByEntityId: Map<string, string>, row: 
   if (!row.entity_id) {
     return;
   }
-  const piece = `${row.fragment_key} ${row.fragment_value ?? ""}`.trim();
+  const piece = rawFragmentSearchPiece(row.fragment_key, row.fragment_value);
   if (!piece) {
     return;
   }
@@ -526,77 +529,122 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   const conceptSynonyms = await loadConceptTypeSynonyms(userId);
   const conceptTypeHints = conceptEntityTypeHints(searchTokens, conceptSynonyms);
 
-  let candidateLimitApplied = false;
-  let entityQuery = db
-    .from("entities")
-    .select("id, canonical_name, entity_type")
-    .eq("user_id", userId)
-    .order("id", { ascending: true });
-
-  if (typeFilter.length === 1) {
-    entityQuery = entityQuery.eq("entity_type", typeFilter[0]);
-  } else if (typeFilter.length > 1) {
-    entityQuery = entityQuery.in("entity_type", typeFilter);
+  // Candidate scope: the same owner / type / merged / cap the full scan has
+  // always applied. `types === null` is an untyped search, capped at
+  // MAX_LEXICAL_CANDIDATES entities in entity_id order (#2597: reported in the
+  // read contract rather than applied silently).
+  let scopeTypes: string[] | null = null;
+  if (typeFilter.length >= 1) {
+    scopeTypes = typeFilter;
   } else if (typeFilterTokens.size > 0) {
     const matchingTypes = await resolveEntityTypesForTypeFilters(
       typeFilterTokens,
       params.readTrace
     );
     if (matchingTypes.length > 0) {
-      entityQuery = entityQuery.in("entity_type", matchingTypes);
+      scopeTypes = matchingTypes;
       if (params.readTrace) params.readTrace.effective_types = matchingTypes;
-    } else {
-      candidateLimitApplied = true;
-      entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
     }
+  }
+  const candidateLimitApplied = scopeTypes === null;
+
+  // Tokens every strict match must contain, whatever its type: a type-filter
+  // token is dropped only for rows whose type satisfies the filter
+  // (textTokensForEntityMatch), so the remaining tokens are required of all.
+  const requiredTokens = [
+    ...new Set(searchTokens.filter((token) => !tokenIsEntityTypeFilter(token, typeFilterTokens))),
+  ];
+  const indexableRequired = requiredTokens.filter(
+    (token) => token.length >= MIN_INDEXED_TOKEN_LENGTH
+  );
+
+  // #2659: when the lexical index is current and at least one required token
+  // can be looked up, hydrate only the entities that can contain every such
+  // token (plus any whose index row is stale) instead of the whole scope. The
+  // JavaScript match below is unchanged and stays the exact check.
+  const connection = await getDb();
+  let usePrefilter = false;
+  if (indexableRequired.length > 0) {
+    try {
+      usePrefilter = await entitySearchPrefilterAvailable(connection);
+    } catch (error) {
+      logger.warn(
+        `[lexicalSearch] search index state unavailable, using full scan: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  const loadFullScope = async (): Promise<{
+    entities: LexicalCandidateEntity[];
+    capped: boolean;
+  }> => {
+    let entityQuery = db
+      .from("entities")
+      .select("id, canonical_name, entity_type")
+      .eq("user_id", userId)
+      .order("id", { ascending: true });
+    if (scopeTypes && scopeTypes.length === 1) {
+      entityQuery = entityQuery.eq("entity_type", scopeTypes[0]);
+    } else if (scopeTypes && scopeTypes.length > 1) {
+      entityQuery = entityQuery.in("entity_type", scopeTypes);
+    } else {
+      // One row past the cap tells "capped" apart from "exactly at the cap".
+      entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES + 1);
+    }
+    if (!includeMerged) {
+      entityQuery = entityQuery.is("merged_to_entity_id", null);
+    }
+    const { data, error } = await entityQuery;
+    if (error) {
+      throw new Error(`Failed lexical candidate query: ${error.message}`);
+    }
+    const rows = (data ?? []) as LexicalCandidateEntity[];
+    const capped = candidateLimitApplied && rows.length > MAX_LEXICAL_CANDIDATES;
+    return { entities: capped ? rows.slice(0, MAX_LEXICAL_CANDIDATES) : rows, capped };
+  };
+
+  let scope: LexicalCandidateScope | null = null;
+  let candidateCapped = false;
+  let fullScope: LexicalCandidateEntity[] | null = null;
+  let strictEntities: LexicalCandidateEntity[];
+  if (usePrefilter) {
+    let maxEntityId: string | null = null;
+    if (candidateLimitApplied) {
+      // The cap's boundary: the MAX_LEXICAL_CANDIDATES-th entity id in scope,
+      // and whether any entity lies past it.
+      const boundary = (await connection
+        .prepare(
+          "SELECT id FROM entities WHERE user_id = ?" +
+            (includeMerged ? "" : " AND merged_to_entity_id IS NULL") +
+            " ORDER BY id LIMIT 2 OFFSET ?"
+        )
+        .all(userId, MAX_LEXICAL_CANDIDATES - 1)) as Array<{ id: string }>;
+      maxEntityId = boundary[0]?.id ?? null;
+      candidateCapped = boundary.length > 1;
+    }
+    scope = { userId, types: scopeTypes, includeMerged, maxEntityId };
+    strictEntities = await prefilterStrictCandidates(connection, scope, indexableRequired);
+    entitySearchPrefilterStats.strict += 1;
   } else {
-    candidateLimitApplied = true;
-    entityQuery = entityQuery.limit(MAX_LEXICAL_CANDIDATES);
+    const full = await loadFullScope();
+    fullScope = full.entities;
+    candidateCapped = full.capped;
+    strictEntities = fullScope;
+    entitySearchPrefilterStats.fullScan += 1;
   }
-
-  if (!includeMerged) {
-    entityQuery = entityQuery.is("merged_to_entity_id", null);
-  }
-
-  const { data: entities, error: entitiesError } = await entityQuery;
-  if (entitiesError) {
-    throw new Error(`Failed lexical candidate query: ${entitiesError.message}`);
-  }
-  if (
-    candidateLimitApplied &&
-    (entities?.length ?? 0) >= MAX_LEXICAL_CANDIDATES &&
-    params.readTrace
-  )
+  if (candidateCapped && params.readTrace) {
     params.readTrace.candidate_capped = true;
-  if (!entities || entities.length === 0) {
+    params.readTrace.lexical_candidate_cap = MAX_LEXICAL_CANDIDATES;
+  }
+  if (!usePrefilter && strictEntities.length === 0) {
     return { entityIds: [], total: 0, strategies };
   }
 
-  const entityIds = entities.map((entity: { id: string }) => entity.id);
-  const snapshotMap = new Map<string, unknown>();
-  const chunkSize = 500;
-
-  for (let i = 0; i < entityIds.length; i += chunkSize) {
-    const chunk = entityIds.slice(i, i + chunkSize);
-    const { data: snapshots, error: snapshotsError } = await db
-      .from("entity_snapshots")
-      .select("entity_id, snapshot")
-      .in("entity_id", chunk);
-
-    if (snapshotsError) {
-      throw new Error(`Failed lexical snapshot query: ${snapshotsError.message}`);
-    }
-
-    for (const snapshot of (snapshots || []) as SnapshotRow[]) {
-      snapshotMap.set(snapshot.entity_id, snapshot.snapshot);
-    }
-  }
-
-  const fragmentTextByEntityId = await loadRawFragmentTextByEntityId(entityIds);
-
   const knownEntityTypes = await loadKnownEntityTypes(
     userId,
-    (entities as Array<{ entity_type: string }>).map((entity) => entity.entity_type),
+    strictEntities.map((entity) => entity.entity_type),
     params.readTrace
   );
   for (const token of typeFilterTokens) {
@@ -613,35 +661,66 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
     textTokens: string[];
   };
 
-  const candidates: Candidate[] = [];
-  const lexicalMatches: LexicalMatch[] = [];
-  for (const entity of entities as Array<{
-    id: string;
-    canonical_name: string;
-    entity_type: string;
-  }>) {
-    if (excludeBookkeeping && BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type)) {
-      continue;
+  const hydrate = async (entities: LexicalCandidateEntity[]): Promise<Candidate[]> => {
+    if (entities.length === 0) return [];
+    const entityIds = entities.map((entity) => entity.id);
+    const snapshotMap = new Map<string, unknown>();
+    const chunkSize = 500;
+
+    for (let i = 0; i < entityIds.length; i += chunkSize) {
+      const chunk = entityIds.slice(i, i + chunkSize);
+      const { data: snapshots, error: snapshotsError } = await db
+        .from("entity_snapshots")
+        .select("entity_id, snapshot")
+        .in("entity_id", chunk);
+
+      if (snapshotsError) {
+        throw new Error(`Failed lexical snapshot query: ${snapshotsError.message}`);
+      }
+
+      for (const snapshot of (snapshots || []) as SnapshotRow[]) {
+        snapshotMap.set(snapshot.entity_id, snapshot.snapshot);
+      }
     }
-    const snapshot = snapshotMap.get(entity.id);
-    const normalizedCanonical = normalizeSearchText(entity.canonical_name);
-    const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshot));
-    const searchableText = buildEntityLexicalSearchText(
-      entity.canonical_name,
-      snapshot,
-      fragmentTextByEntityId.get(entity.id)
-    );
-    const textTokens = textTokensForEntityMatch(searchTokens, entity.entity_type, typeFilterTokens);
-    candidates.push({
-      id: entity.id,
-      canonical_name: entity.canonical_name,
-      entity_type: entity.entity_type,
-      normalizedCanonical,
-      normalizedSnapshot,
-      searchableText,
-      textTokens,
-    });
-    if (matchesSearchTokens(searchableText, textTokens)) {
+
+    const fragmentTextByEntityId = await loadRawFragmentTextByEntityId(entityIds);
+
+    const hydrated: Candidate[] = [];
+    for (const entity of entities) {
+      if (excludeBookkeeping && BOOKKEEPING_ENTITY_TYPES.has(entity.entity_type)) {
+        continue;
+      }
+      const snapshot = snapshotMap.get(entity.id);
+      const normalizedCanonical = normalizeSearchText(entity.canonical_name);
+      const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshot));
+      const searchableText = buildEntityLexicalSearchText(
+        entity.canonical_name,
+        snapshot,
+        fragmentTextByEntityId.get(entity.id)
+      );
+      const textTokens = textTokensForEntityMatch(
+        searchTokens,
+        entity.entity_type,
+        typeFilterTokens
+      );
+      hydrated.push({
+        id: entity.id,
+        canonical_name: entity.canonical_name,
+        entity_type: entity.entity_type,
+        normalizedCanonical,
+        normalizedSnapshot,
+        searchableText,
+        textTokens,
+      });
+    }
+    return hydrated;
+  };
+
+  const candidates = await hydrate(strictEntities);
+  const lexicalMatches: LexicalMatch[] = [];
+  for (const candidate of candidates) {
+    const { normalizedCanonical, normalizedSnapshot, searchableText } = candidate;
+    if (matchesSearchTokens(searchableText, candidate.textTokens)) {
       let score = 0;
       if (normalizedCanonical.includes(normalizedSearch)) {
         score += 300;
@@ -660,11 +739,11 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
           score += 10;
         }
       }
-      score += entityTypeKeywordBoost(entity.entity_type, searchTokens);
+      score += entityTypeKeywordBoost(candidate.entity_type, searchTokens);
       strategies.add("strict");
       lexicalMatches.push({
-        entityId: entity.id,
-        canonicalName: entity.canonical_name,
+        entityId: candidate.id,
+        canonicalName: candidate.canonical_name,
         score,
       });
     }
@@ -687,7 +766,37 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
         2,
         Math.ceil(meaningfulTokens.length * PARTIAL_MATCH_MIN_OVERLAP_RATIO)
       );
-      for (const candidate of candidates) {
+      let partialCandidates: Candidate[];
+      if (!usePrefilter || !scope) {
+        partialCandidates = candidates;
+      } else {
+        // Superset of the rows the loop below can accept: a row needs at least
+        // `required` overlapping tokens, one fewer when a concept→type hint can
+        // credit it. Tokens too short for the index (two letters) are assumed
+        // to match everywhere, so they lower the bar instead of narrowing it.
+        const minOverlap = conceptTypeHints.size > 0 ? required - 1 : required;
+        const weights = new Map<string, number>();
+        let unindexed = 0;
+        for (const token of meaningfulTokens) {
+          if (token.length >= MIN_INDEXED_TOKEN_LENGTH) {
+            weights.set(token, (weights.get(token) ?? 0) + 1);
+          } else {
+            unindexed += 1;
+          }
+        }
+        const minWeight = minOverlap - unindexed;
+        if (minWeight <= 0 || weights.size === 0) {
+          fullScope ??= (await loadFullScope()).entities;
+          partialCandidates = await hydrate(fullScope);
+          entitySearchPrefilterStats.partialFullScan += 1;
+        } else {
+          partialCandidates = await hydrate(
+            await prefilterWeightedCandidates(connection, scope, weights, minWeight)
+          );
+          entitySearchPrefilterStats.partial += 1;
+        }
+      }
+      for (const candidate of partialCandidates) {
         const conceptMatch = conceptTypeHints.has(candidate.entity_type);
         let overlap = 0;
         for (const token of meaningfulTokens) {
