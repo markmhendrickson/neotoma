@@ -435,8 +435,11 @@ write that landed after it on a `last_write` or `most_specific` field, or a writ
 priority 1000 (or at 1000 with an outranking source kind) on a `highest_priority` or array
 field. The only in-tree writer that stored field data in the second group was
 `resolve_sync_conflict` with `prefer_remote`, which stored at priority 1000 with source kind
-`human` and now applies each differing field as a correction instead (so an explicit remote
-preference still wins, by recency). Other in-tree writers store field data below 1000, so
+`human` and now applies the differing declared fields as one atomic correction transaction
+instead (so an explicit remote preference still wins, by recency; it reports array fields that
+already hold a correction and undeclared fields as withheld, since a correction would not make
+the remote value land there). When no local entity exists it still ingests the remote snapshot
+as a normal write, with no correction in the way. Other in-tree writers store field data below 1000, so
 the second group is expected to flip little; external callers can store at any priority
 and are covered by the recompute check below. Snapshots that did flip keep their old value
 until recomputed; the next store, correction or other write to the entity recomputes it,

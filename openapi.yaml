@@ -9892,6 +9892,29 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+                  fields_applied:
+                    type: array
+                    description: prefer_remote only. Fields whose remote value was written as a correction and now stands.
+                    items:
+                      type: string
+                  fields_withheld:
+                    type: array
+                    description: prefer_remote only. Differing remote fields that were not applied, with the reason.
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [field, reason]
+                      properties:
+                        field:
+                          type: string
+                        reason:
+                          type: string
+                          enum: [undeclared_field, array_corrections_combine]
 
   /sync/webhook:
     post:

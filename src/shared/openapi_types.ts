@@ -10245,6 +10245,17 @@ export interface operations {
         };
         content: {
           "application/json": {
+            ok?: boolean;
+            message?: string;
+            /** @description prefer_remote only. Fields whose remote value was written as a correction and now stands. */
+            fields_applied?: string[];
+            /** @description prefer_remote only. Differing remote fields that were not applied, with the reason. */
+            fields_withheld?: {
+              field: string;
+              /** @enum {string} */
+              reason: "undeclared_field" | "array_corrections_combine";
+            }[];
+          } & {
             [key: string]: unknown;
           };
         };

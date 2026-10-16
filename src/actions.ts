@@ -9970,8 +9970,11 @@ app.post("/peers", express.json(), async (req, res) => {
   }
 });
 
-// POST /peers/resolve_sync_conflict — stub (use `correct` today). Registered
-// before `/peers/:peer_id` so `resolve_sync_conflict` is not captured as a peer_id.
+// POST /peers/resolve_sync_conflict — resolve a replication conflict. `prefer_remote`
+// and `manual` write correction-tier values, so they run the same `correct` capability
+// gate as `/correct`; `prefer_remote` applies the differing fields as one correction
+// transaction and reports applied and withheld fields. Registered before
+// `/peers/:peer_id` so `resolve_sync_conflict` is not captured as a peer_id.
 app.post("/peers/resolve_sync_conflict", express.json(), async (req, res) => {
   const schema = z.object({
     entity_id: z.string().min(1),
@@ -10001,6 +10004,14 @@ app.post("/peers/resolve_sync_conflict", express.json(), async (req, res) => {
     });
     return res.json(result);
   } catch (error) {
+    // A capability or protected-type refusal is the caller's authorization,
+    // not a server fault: 403 with the envelope `/correct` returns.
+    if (error instanceof AgentCapabilityError) {
+      logWarn("AgentCapabilityRejection:peers_resolve", req, error.toErrorEnvelope());
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
     logError("APIError:peers_resolve", req, error);
     const message = error instanceof Error ? error.message : "resolve failed";
     return sendError(res, 500, "PEER_RESOLVE_FAILED", message);

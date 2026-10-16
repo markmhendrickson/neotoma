@@ -65,7 +65,7 @@ tools:
   list_peers: "List peer_config rows for the current user (secrets redacted)."
   get_peer_status: "Fetch peer_config by peer_id plus remote_health (/health probe, semver compat vs this server)."
   sync_peer: "Bounded outbound peer sync: POST signed /sync/webhook for observations (requires NEOTOMA_PUBLIC_BASE_URL, NEOTOMA_LOCAL_PEER_ID, peer sync_target_user_id). Optional limit."
-  resolve_sync_conflict: "Stub; use correct on the entity for manual resolution today."
+  resolve_sync_conflict: "Resolve a replication conflict. prefer_remote (needs sender_peer_url and the correct capability) applies the remote snapshot's differing declared fields as one atomic correction transaction, so they hold until corrected again, and returns fields_applied and fields_withheld (array fields that already hold a local correction, undeclared fields). manual flags sync_conflict; prefer_local and last_write_wins keep local state."
   list_subscriptions: "List the current user's active subscriptions (webhook secrets omitted)."
   get_subscription_status: "Return one subscription snapshot by subscription_id (webhook secret omitted)."
   submit_entity: "Generic submission for entity types with an active submission_config. Creates the primary row plus optional conversation thread and guest_access_token; use submit_issue for GitHub-backed issues."

@@ -79,7 +79,7 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 | POST   | `/peers`                       | Add peer; optional `sync_target_user_id`.                                                         |
 | POST   | `/peers/{peer_id}/sync`        | Bounded outbound sync (optional JSON `{ "limit": number }`).                                      |
 | POST   | `/sync/webhook`                | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`).                                |
-| POST   | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches remote guest snapshot; `prefer_local` documents retention + `correct`. |
+| POST   | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches the remote guest snapshot and applies differing declared fields as one correction transaction (needs `correct`); `prefer_local` documents retention + `correct`. |
 
 ## Semver compatibility
 
@@ -95,7 +95,8 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 
 ## Conflict resolution
 
-- **`prefer_remote`**: Supply `sender_peer_url` and optional `guest_access_token`; server fetches `GET {sender_peer_url}/entities/{entity_id}` and applies each field that differs from the local snapshot as a correction, so the remote value wins even on a field that already holds a local correction (a correction wins on every merge rule and is replaced only by a later correction; see [reducer §3.6](reducer.md)). The response lists `fields_applied`. If no local entity exists, the remote snapshot is ingested as a normal write.
+- **`prefer_remote`**: Supply `sender_peer_url` and optional `guest_access_token`; server fetches `GET {sender_peer_url}/entities/{entity_id}` and applies the fields that differ from the local snapshot as one atomic correction transaction, so the remote value wins even on a field that already holds a local correction (a correction wins on every merge rule and is replaced only by a later correction; see [reducer §3.6](reducer.md)). It needs the `correct` capability on the entity type for an admitted agent, like `correct` itself. The response lists `fields_applied` (fields whose remote value now stands) and `fields_withheld` with a reason: `undeclared_field` (the local schema does not declare it, so a correction would never reach the snapshot) or `array_corrections_combine` (an array field that already holds a local correction; corrections still combine, #2341, so use `correct` to replace it). `ok` is false when nothing could be applied or the transaction refused (for example a value that fails the schema); then nothing was written. Applied fields are pinned: they hold against later replicated rows from this peer and against importers until corrected again. If no local entity exists, the remote snapshot is ingested as a normal write.
+- **`manual`**: flags the entity `sync_conflict = true` through a correction and needs the same `correct` capability.
 - **`prefer_local`**: No data change; use `correct` for targeted field overrides.
 
 ## Components — `src/services/sync/`
@@ -165,7 +166,7 @@ The default batch is 200; the cap is 500. The function is safe to re-run; observ
 
 `resolveSyncConflict({ userId, entity_id, strategy, sender_peer_url?, guest_access_token? })` covers the three explicit operator strategies:
 
-- `prefer_remote` — fetches `GET {sender_peer_url}/entities/{entity_id}` (with the supplied guest token) and applies each differing field as a correction (see above); the response lists `fields_applied`.
+- `prefer_remote` — fetches `GET {sender_peer_url}/entities/{entity_id}` (with the supplied guest token) and applies the differing fields as one correction transaction (see above); the response lists `fields_applied` and `fields_withheld`.
 - `prefer_local` — no-op with guidance to use `correct` for targeted field overrides.
 - `manual` — flags the entity with `sync_conflict = true` via a `correct` write so operators can see it in the Inspector and resolve field by field.
 

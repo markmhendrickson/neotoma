@@ -1497,7 +1497,7 @@ export function buildToolDefinitions(
       name: "resolve_sync_conflict",
       description: desc(
         "resolve_sync_conflict",
-        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url."
+        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url, applies differing declared fields as one correction transaction, and returns fields_applied and fields_withheld."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
