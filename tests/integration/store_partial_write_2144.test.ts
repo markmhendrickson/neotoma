@@ -820,6 +820,37 @@ describe("POST /store: unfinished keyed writes over HTTP (#2144)", () => {
     expect(await routeObservationCount()).toBe(CUT_OFF);
   });
 
+  it("counts written entities on the interpretation's own source when it names one", async () => {
+    // The observations of an interpretation that names a source_id land on
+    // that source, not on the keyed source. The 409 must count them there, or
+    // it reports every entity missing and a client that follows the hint
+    // writes a second observation to each entity already written.
+    const anchor = await post({
+      idempotency_key: `route-anchor-${randomUUID()}`,
+      entities: [{ entity_type: routeType, title: `anchor ${routeBatch}`, batch: "anchor" }],
+    });
+    expect(anchor.status).toBe(200);
+    const anchorSourceId = (anchor.json as { source_id?: string }).source_id;
+    expect(typeof anchorSourceId).toBe("string");
+
+    const key = `route-incomplete-src-${randomUUID()}`;
+    const interpretation = { source_id: anchorSourceId };
+    await interrupt();
+    const first = await post({ idempotency_key: key, entities: routeEntities(), interpretation });
+    expect(first.status).toBeGreaterThanOrEqual(400);
+    await uninterrupt();
+
+    const replay = await post({ idempotency_key: key, entities: routeEntities(), interpretation });
+
+    expect(replay.status).toBe(409);
+    expect(replay.json.error_code).toBe("ERR_STORE_WRITE_INCOMPLETE");
+    expect(replay.json.details).toMatchObject({
+      entities_requested: TOTAL,
+      entities_written: CUT_OFF,
+      missing_entity_indexes: Array.from({ length: TOTAL - CUT_OFF }, (_, i) => CUT_OFF + i),
+    });
+  });
+
   it("finishes an interrupted write on a same-key replay and then replays it as complete", async () => {
     const key = `route-resume-${randomUUID()}`;
     await interrupt();
