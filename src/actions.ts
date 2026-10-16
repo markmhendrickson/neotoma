@@ -5585,6 +5585,17 @@ app.post("/entities/:id/batch_correct", async (req, res) => {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
+    // Capability denial: same 403 `capability_denied` envelope as /correct.
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(
+        req,
+        res,
+        error,
+        "Failed to apply batch correction",
+        "DB_QUERY_FAILED",
+        "AgentCapabilityRejection:entity_batch_correct"
+      );
+    }
     logError("APIError:entity_batch_correct", req, error);
     const message = error instanceof Error ? error.message : "Failed to apply batch correction";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
