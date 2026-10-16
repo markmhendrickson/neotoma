@@ -23,3 +23,54 @@ export function normalizeSearchText(text: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** Serialized snapshot text as lexical search sees it (#2659). */
+export function stringifySnapshot(snapshot: unknown): string {
+  if (typeof snapshot === "string") {
+    return snapshot;
+  }
+  if (snapshot == null) {
+    return "";
+  }
+  try {
+    return JSON.stringify(snapshot);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * One `raw_fragments` row's contribution to an entity's lexical text: key and
+ * value joined by a space, in the exact form search has always used (a
+ * non-string value goes through template-literal conversion, so an object reads
+ * "[object Object]"). Returns "" for a row that contributes nothing.
+ */
+export function rawFragmentSearchPiece(fragmentKey: unknown, fragmentValue: unknown): string {
+  return `${fragmentKey} ${fragmentValue ?? ""}`.trim();
+}
+
+/** Canonical lexical haystack: canonical_name + snapshot + optional raw_fragments text. */
+export function buildEntityLexicalSearchText(
+  canonicalName: string,
+  snapshot: unknown,
+  rawFragmentText?: string
+): string {
+  const normalizedCanonical = normalizeSearchText(canonicalName);
+  const normalizedSnapshot = normalizeSearchText(stringifySnapshot(snapshot));
+  const normalizedFragments = normalizeSearchText(rawFragmentText ?? "");
+  return `${normalizedCanonical} ${normalizedSnapshot} ${normalizedFragments}`.trim();
+}
+
+/**
+ * The text stored in the lexical prefilter index for one entity (#2659): the
+ * distinct words of {@link buildEntityLexicalSearchText}, space-separated.
+ *
+ * A query token never contains a space, so it is a substring of the lexical
+ * text exactly when it is a substring of one of the text's words. Keeping each
+ * distinct word once therefore preserves every substring match a token can
+ * make, and the index stays small for repetitive snapshots.
+ */
+export function entitySearchIndexBody(lexicalText: string): string {
+  if (!lexicalText) return "";
+  return [...new Set(lexicalText.split(" ").filter(Boolean))].join(" ");
+}

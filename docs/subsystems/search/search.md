@@ -81,9 +81,23 @@ Lexical/identifier retrieval applies progressively relaxed passes so a free-text
 
 Adding a new domain type with its own concept words or identity-bearing fields requires only a registry/schema-definition edit (`query_synonyms` / `identity_search_fields`), with no change to the generic search or identifier-resolution modules.
 
+## Lexical prefilter index (#2659)
+
+Lexical search matches each query token against an entity's normalized text: `canonical_name`, the serialized snapshot and its `raw_fragments`, lowercased, with `-`/`_` turned into spaces and every other non-word character (including non-ASCII letters) deleted without leaving a gap. That text cannot be compared in SQL against the stored columns, so without an index every candidate is hydrated and normalized in process. The prefilter index lets SQL return only the entities that can match, so search cost follows the number of matches rather than the size of the entity type.
+
+- **What is stored.** `entity_search_fts` (FTS5, trigram tokenizer, contentless) holds each entity's distinct normalized words. `entity_search_docs` maps FTS rowids to entity ids. `entity_search_dirty` lists entities whose indexed text may be stale. `entity_search_state` holds the format version and the backfill cursor.
+- **Superset, never source of truth.** A query token is `[a-z0-9]+`, so it occurs in the normalized text exactly when it occurs inside one of its words; for tokens of three or more characters the trigram lookup is exact on that word set, and shorter tokens are not used to narrow. The unchanged JavaScript match runs over the candidates as the final check, so results cannot drift. `tests/integration/entity_search_prefilter_superset.test.ts` checks `candidates ⊇ exact matches` over generated data and queries, and the characterization suite runs a second time with the index current (`entity_search_semantics_indexed.test.ts`).
+- **Freshness.** Triggers on `entities`, `entity_snapshots` and `raw_fragments` record every changed entity in the dirty set in the same transaction as the write, whatever code path (or shell) made it. Search always treats dirty entities as candidates, so lexical results reflect every committed write; the index is not eventually consistent in what it returns, only in how much work a search does.
+- **Maintenance.** The server (HTTP and stdio) runs a maintainer that re-indexes dirty entities and runs the online backfill in batches of 200, each in one short write transaction, spending at most 250 ms per second. Until the backfill has covered every entity, search uses the full scan exactly as before.
+- **Encryption at rest.** With `NEOTOMA_ENCRYPTION_ENABLED=true` the index is never written or read; the maintainer empties anything a plaintext period left and search uses the full scan. Keyed hashes were rejected because substring matching needs trigram-level entries, and keyed hashes over 46,656 possible trigrams are open to frequency analysis.
+- **Off switch.** `NEOTOMA_ENTITY_SEARCH_INDEX=off` disables lookup and maintenance (the index is emptied and rebuilt from scratch if switched back on).
+- **Format changes.** Any change to normalization, snapshot serialization or the fragment text must bump `ENTITY_SEARCH_INDEX_VERSION` (`src/repositories/sqlite/entity_search_index_schema.ts`); the next open empties the index and the maintainer rebuilds it.
+- **Untyped cap (#2597).** An untyped search still examines only the first 5000 entities by `entity_id`. When entities lie past the cap, the read contract reports `coverage.state: truncated`, reason `candidate_cap`, and a `lexical_candidate_cap` diagnostic naming the cap. Pass `entity_type` to search a whole type.
+- **`total`.** Stays exact: every candidate the index returns is evaluated, and every true match is a candidate.
+
 ## Consistency
 
-Search index is **bounded eventual** (max 5s delay after ingestion).
+Search index is **bounded eventual** (max 5s delay after ingestion). Lexical search results are not: the prefilter index treats every entity changed since it was last indexed as a candidate (see above).
 See `docs/architecture/consistency.md` for UI handling.
 
 ## Agent Instructions

@@ -8,6 +8,12 @@ export type EntityFallbackReason = Exclude<EntityReadContract["mode"]["fallback_
 export interface EntityReadTrace {
   reasons: Set<string>;
   candidate_capped?: boolean;
+  /**
+   * Lexical search only (#2597): the candidate cap that truncated an untyped
+   * search, set only when entities in scope lay past it. Surfaced as a
+   * `lexical_candidate_cap` diagnostic naming the cap.
+   */
+  lexical_candidate_cap?: number;
   count_capped?: boolean;
   ordering?: { field: string; direction: "asc" | "desc"; tie_breaker: string | null };
   continuation_supported?: boolean;
@@ -225,7 +231,17 @@ export function createEntityReadContract(input: {
       common_view: false,
       collection_and_total: structured ? "separate_acquisitions" : "candidate_derived",
     },
-    diagnostics: input.diagnostics ?? [],
+    diagnostics: [
+      ...(input.diagnostics ?? []),
+      ...(input.trace.lexical_candidate_cap
+        ? [
+            {
+              code: "lexical_candidate_cap",
+              reason: `untyped_search_examined_first_${input.trace.lexical_candidate_cap}_entities_by_entity_id`,
+            },
+          ]
+        : []),
+    ],
   };
 }
 
