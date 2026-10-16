@@ -73,12 +73,12 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 
 ## HTTP surface
 
-| Method | Path                           | Purpose                                                                                           |
-| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------- |
-| GET    | `/peers/{peer_id}`             | Peer snapshot plus **`remote_health`** (`/health` probe, semver compat vs local package version). |
-| POST   | `/peers`                       | Add peer; optional `sync_target_user_id`.                                                         |
-| POST   | `/peers/{peer_id}/sync`        | Bounded outbound sync (optional JSON `{ "limit": number }`).                                      |
-| POST   | `/sync/webhook`                | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`).                                |
+| Method | Path                           | Purpose                                                                                                                                                                                     |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/peers/{peer_id}`             | Peer snapshot plus **`remote_health`** (`/health` probe, semver compat vs local package version).                                                                                           |
+| POST   | `/peers`                       | Add peer; optional `sync_target_user_id`.                                                                                                                                                   |
+| POST   | `/peers/{peer_id}/sync`        | Bounded outbound sync (optional JSON `{ "limit": number }`).                                                                                                                                |
+| POST   | `/sync/webhook`                | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`).                                                                                                                          |
 | POST   | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches the remote guest snapshot and applies differing declared fields as one correction transaction (needs `correct`); `prefer_local` documents retention + `correct`. |
 
 ## Semver compatibility
