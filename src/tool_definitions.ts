@@ -532,7 +532,7 @@ export function buildToolDefinitions(
     {
       name: "correct_transaction",
       description:
-        "Atomically compare and correct declared fields on multiple entities. Supply each loaded observation count and expected fields. Any conflict, denied write or snapshot mismatch rolls back every change. Retry the identical request and key after uncertainty. This primitive does not authorize application-level approval.",
+        "Atomically compare and correct declared fields on multiple entities. Supply each loaded observation count and expected fields. Any conflict, denied write or snapshot mismatch rolls back every change. Retry the identical request and key after uncertainty. This primitive does not authorize application-level approval. The closed native-record-transition-v1 branch currently returns NATIVE_DEPENDENCY_UNAVAILABLE with dependency/repair details and no native mutation; never fall back to ordinary corrections or dispatch.",
       inputSchema: getOpenApiInputSchemaOrThrow("correct_transaction"),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },

@@ -12372,13 +12372,27 @@ app.post("/corrections/transaction", async (req, res) => {
     const { applyCorrectionTransaction, CorrectionTransactionError } =
       await import("./services/correction_transaction.js");
     try {
-      return res.json(await applyCorrectionTransaction({ ...req.body, user_id: userId }));
+      return res.json(
+        await applyCorrectionTransaction(
+          req.body && Object.hasOwn(req.body, "protocol")
+            ? req.body
+            : { ...req.body, user_id: userId },
+          userId
+        )
+      );
     } catch (error) {
       if (error instanceof CorrectionTransactionError) {
         const status =
-          error.code === "VALIDATION_ERROR" ? 400 : error.code === "RESOURCE_NOT_FOUND" ? 404 : 409;
+          error.code === "NATIVE_DEPENDENCY_UNAVAILABLE"
+            ? 503
+            : error.code === "VALIDATION_ERROR"
+              ? 400
+              : error.code === "RESOURCE_NOT_FOUND"
+                ? 404
+                : 409;
         return sendError(res, status, error.code, error.message, {
           hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+          ...(error.details ?? {}),
         });
       }
       throw error;

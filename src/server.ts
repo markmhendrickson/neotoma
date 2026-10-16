@@ -8267,11 +8267,18 @@ export class NeotomaServer {
       args as import("./services/correction_transaction.js").CorrectionTransactionOptions;
     const userId = this.getAuthenticatedUserId(body?.user_id);
     try {
-      return this.buildTextResponse(await applyCorrectionTransaction({ ...body, user_id: userId }));
+      return this.buildTextResponse(
+        await applyCorrectionTransaction(
+          body && Object.hasOwn(body, "protocol") ? body : { ...body, user_id: userId },
+          userId
+        )
+      );
     } catch (error) {
       if (error instanceof CorrectionTransactionError)
         throw new McpError(ErrorCode.InvalidParams, error.message, {
           code: error.code,
+          error_code: error.code,
+          ...(error.details ? { details: error.details } : {}),
           hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
         });
       throw error;

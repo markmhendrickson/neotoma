@@ -23,6 +23,538 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    OrdinaryCorrectionTransactionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - entities
+      properties:
+        user_id:
+          type: string
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        entities:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - entity_id
+              - entity_type
+              - expected_observation_count
+              - expected_snapshot
+              - changes
+            properties:
+              entity_id:
+                type: string
+                minLength: 1
+              entity_type:
+                type: string
+                minLength: 1
+              expected_observation_count:
+                type: integer
+                minimum: 0
+              expected_snapshot:
+                type: object
+                additionalProperties: true
+                description: >-
+                  Declared expected values; missing differs from null. Observation count guards the
+                  whole entity.
+              changes:
+                type: array
+                minItems: 1
+                maxItems: 50
+                items:
+                  type: object
+                  additionalProperties: false
+                  required:
+                    - field
+                    - value
+                  properties:
+                    field:
+                      type: string
+                      minLength: 1
+                    value: {}
+    NativeTransitionExpected:
+      type: object
+      additionalProperties: false
+      required:
+        - recipe_version
+        - schema_reducer_sha256
+        - groups
+      properties:
+        recipe_version:
+          type: string
+          enum:
+            - native-readset-v1
+        schema_reducer_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        groups:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - selector
+              - count
+              - rows_sha256
+            properties:
+              selector:
+                oneOf:
+                  - type: object
+                    additionalProperties: false
+                    required:
+                      - entity
+                    properties:
+                      entity:
+                        type: object
+                        additionalProperties: false
+                        required:
+                          - entity_id
+                        properties:
+                          entity_id:
+                            type: string
+                            pattern: ^ent_[0-9a-f]{24}$
+                  - type: object
+                    additionalProperties: false
+                    required:
+                      - edges
+                    properties:
+                      edges:
+                        type: object
+                        additionalProperties: false
+                        required:
+                          - entity_id
+                          - direction
+                          - types
+                        properties:
+                          entity_id:
+                            type: string
+                            pattern: ^ent_[0-9a-f]{24}$
+                          direction:
+                            type: string
+                            enum:
+                              - both
+                          types:
+                            type: array
+                            items:
+                              type: string
+                              minLength: 1
+                  - type: object
+                    additionalProperties: false
+                    required:
+                      - slot
+                    properties:
+                      slot:
+                        type: object
+                        additionalProperties: false
+                        required:
+                          - target_type
+                          - target_id
+                          - step_name
+                        properties:
+                          target_type:
+                            type: string
+                            enum:
+                              - task
+                              - batch
+                          target_id:
+                            type: string
+                            pattern: ^ent_[0-9a-f]{24}$
+                          step_name:
+                            type: string
+                            nullable: true
+                            minLength: 1
+                            description: Null for task, declared nonempty step for batch; at most256 UTF-8 bytes.
+                  - type: object
+                    additionalProperties: false
+                    required:
+                      - registry
+                    properties:
+                      registry:
+                        type: object
+                        additionalProperties: false
+                        required:
+                          - entity_types
+                          - relationship_types
+                          - reducer_versions
+                        properties:
+                          entity_types:
+                            type: array
+                            items:
+                              type: string
+                              minLength: 1
+                          relationship_types:
+                            type: array
+                            items:
+                              type: string
+                              minLength: 1
+                          reducer_versions:
+                            type: array
+                            items:
+                              type: string
+                              minLength: 1
+              count:
+                type: integer
+                minimum: 0
+                maximum: 9007199254740991
+              rows_sha256:
+                type: string
+                pattern: ^[0-9a-f]{64}$
+    NativeTransition:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - name
+            - subject
+            - reason
+            - needed_input
+            - options
+            - awaited_roles
+          properties:
+            name:
+              type: string
+              enum:
+                - checkpoint.raise
+            subject:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_type
+                - entity_id
+              properties:
+                entity_type:
+                  type: string
+                  enum:
+                    - task
+                    - action
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+            reason:
+              type: string
+              minLength: 1
+            needed_input:
+              type: string
+              minLength: 1
+            options:
+              type: array
+              items:
+                description: >-
+                  Finite plain JSON, validated against the admitted registered schema before any native
+                  write.
+              minItems: 1
+            awaited_roles:
+              type: array
+              items:
+                type: string
+                minLength: 1
+              minItems: 1
+              uniqueItems: true
+        - type: object
+          additionalProperties: false
+          required:
+            - name
+            - checkpoint_id
+            - subject
+            - decision
+            - self_resolved
+            - resolution_note
+          properties:
+            name:
+              type: string
+              enum:
+                - checkpoint.resolve
+            checkpoint_id:
+              type: string
+              pattern: ^ent_[0-9a-f]{24}$
+            subject:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_type
+                - entity_id
+              properties:
+                entity_type:
+                  type: string
+                  enum:
+                    - task
+                    - action
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+            decision:
+              type: string
+              enum:
+                - approved
+                - denied
+                - vetoed
+            self_resolved:
+              type: boolean
+            resolution_note:
+              type: string
+              minLength: 1
+        - type: object
+          additionalProperties: false
+          required:
+            - name
+            - target
+            - runner_id
+            - requested_duration_seconds
+            - pinned_agent_version
+            - pinned_declaration_sha256
+          properties:
+            name:
+              type: string
+              enum:
+                - lease.acquire
+            target:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_type
+                - entity_id
+                - step_name
+              properties:
+                entity_type:
+                  type: string
+                  enum:
+                    - task
+                    - batch
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+                step_name:
+                  type: string
+                  nullable: true
+                  minLength: 1
+                  description: Null for task, declared nonempty step for batch; at most256 UTF-8 bytes.
+            runner_id:
+              type: string
+              minLength: 1
+            requested_duration_seconds:
+              type: integer
+              minimum: 1
+              maximum: 9007199254740991
+            pinned_agent_version:
+              type: string
+              minLength: 1
+            pinned_declaration_sha256:
+              type: string
+              pattern: ^[0-9a-f]{64}$
+        - type: object
+          additionalProperties: false
+          required:
+            - name
+            - target
+            - runner_id
+            - claim_observation_id
+            - expected_lease_observation_id
+            - requested_duration_seconds
+          properties:
+            name:
+              type: string
+              enum:
+                - lease.renew
+            target:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_type
+                - entity_id
+                - step_name
+              properties:
+                entity_type:
+                  type: string
+                  enum:
+                    - task
+                    - batch
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+                step_name:
+                  type: string
+                  nullable: true
+                  minLength: 1
+                  description: Null for task, declared nonempty step for batch; at most256 UTF-8 bytes.
+            runner_id:
+              type: string
+              minLength: 1
+            claim_observation_id:
+              type: string
+              minLength: 1
+            expected_lease_observation_id:
+              type: string
+              minLength: 1
+            requested_duration_seconds:
+              type: integer
+              minimum: 1
+              maximum: 9007199254740991
+        - type: object
+          additionalProperties: false
+          required:
+            - name
+            - target
+            - runner_id
+            - claim_observation_id
+            - expected_lease_observation_id
+          properties:
+            name:
+              type: string
+              enum:
+                - lease.return
+            target:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_type
+                - entity_id
+                - step_name
+              properties:
+                entity_type:
+                  type: string
+                  enum:
+                    - task
+                    - batch
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+                step_name:
+                  type: string
+                  nullable: true
+                  minLength: 1
+                  description: Null for task, declared nonempty step for batch; at most256 UTF-8 bytes.
+            runner_id:
+              type: string
+              minLength: 1
+            claim_observation_id:
+              type: string
+              minLength: 1
+            expected_lease_observation_id:
+              type: string
+              minLength: 1
+        - type: object
+          additionalProperties: false
+          required:
+            - name
+            - batch_id
+            - step_name
+            - claim_observation_id
+            - runner_id
+            - agent_version
+            - declaration_sha256
+            - conclusion
+            - artifact_refs
+            - read_refs
+            - findings
+            - successor
+          properties:
+            name:
+              type: string
+              enum:
+                - verdict.submit
+            batch_id:
+              type: string
+              pattern: ^ent_[0-9a-f]{24}$
+            step_name:
+              type: string
+              minLength: 1
+              description: Declared step name, at most256 UTF-8 bytes.
+            claim_observation_id:
+              type: string
+              minLength: 1
+            runner_id:
+              type: string
+              minLength: 1
+            agent_version:
+              type: string
+              minLength: 1
+            declaration_sha256:
+              type: string
+              pattern: ^[0-9a-f]{64}$
+            conclusion:
+              type: string
+              enum:
+                - signed
+                - blocked
+                - waived
+            artifact_refs:
+              type: array
+              items:
+                description: >-
+                  Finite plain JSON, validated against the admitted registered schema before any native
+                  write.
+            read_refs:
+              type: array
+              items:
+                description: >-
+                  Finite plain JSON, validated against the admitted registered schema before any native
+                  write.
+            findings:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - severity
+                  - kind
+                  - scope
+                  - evidence
+                  - text
+                properties:
+                  severity:
+                    description: >-
+                      Finite plain JSON, validated against the admitted registered schema before any
+                      native write.
+                  kind:
+                    description: >-
+                      Finite plain JSON, validated against the admitted registered schema before any
+                      native write.
+                  scope:
+                    description: >-
+                      Finite plain JSON, validated against the admitted registered schema before any
+                      native write.
+                  evidence:
+                    description: >-
+                      Finite plain JSON, validated against the admitted registered schema before any
+                      native write.
+                  text:
+                    type: string
+                    minLength: 1
+            successor:
+              description: >-
+                Finite plain JSON, validated against the admitted registered schema before any native
+                write.
+              nullable: true
+    NativeTransitionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol
+        - idempotency_key
+        - expected
+        - transition
+      properties:
+        protocol:
+          type: string
+          enum:
+            - native-record-transition-v1
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        expected:
+          $ref: '#/components/schemas/NativeTransitionExpected'
+        transition:
+          $ref: '#/components/schemas/NativeTransition'
     EntityReadContract:
       type: object
       additionalProperties: false
@@ -8615,7 +9147,7 @@ paths:
 
   /corrections/transaction:
     post:
-      summary: Atomically compare and correct multiple entities
+      summary: Atomically compare and correct entities or validate a native transition
       description: |
         Append declared-field corrections in one scoped database transaction.
         Every entity's type, observation count and expected snapshot fields must
@@ -8623,6 +9155,11 @@ paths:
         read-back failure rolls back all changes. Reuse the identical request
         and idempotency key after uncertainty; changed payload reuse conflicts.
         This primitive does not decide or authorize application-level approval.
+        Native protocol native-record-transition-v1 is a closed additive branch.
+        Native actor, origin, complete readset, registry and reducer prerequisites
+        must be acquired and verified before effects; unavailable prerequisites
+        return NATIVE_DEPENDENCY_UNAVAILABLE with no mutation or legacy fallback.
+        Native activation is not provided by the structural request contract.
       operationId: correctTransaction
       requestBody:
         required: true
@@ -8630,57 +9167,9 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [idempotency_key, entities]
-              properties:
-                user_id:
-                  type: string
-                idempotency_key:
-                  type: string
-                  minLength: 1
-                  maxLength: 200
-                entities:
-                  type: array
-                  minItems: 1
-                  maxItems: 50
-                  items:
-                    type: object
-                    additionalProperties: false
-                    required:
-                      [
-                        entity_id,
-                        entity_type,
-                        expected_observation_count,
-                        expected_snapshot,
-                        changes,
-                      ]
-                    properties:
-                      entity_id:
-                        type: string
-                        minLength: 1
-                      entity_type:
-                        type: string
-                        minLength: 1
-                      expected_observation_count:
-                        type: integer
-                        minimum: 0
-                      expected_snapshot:
-                        type: object
-                        additionalProperties: true
-                        description: Declared expected values; missing differs from null. Observation count guards the whole entity.
-                      changes:
-                        type: array
-                        minItems: 1
-                        maxItems: 50
-                        items:
-                          type: object
-                          additionalProperties: false
-                          required: [field, value]
-                          properties:
-                            field:
-                              type: string
-                              minLength: 1
-                            value: {}
+              oneOf:
+                - $ref: "#/components/schemas/OrdinaryCorrectionTransactionRequest"
+                - $ref: "#/components/schemas/NativeTransitionRequest"
       responses:
         "200":
           description: Committed atomically, or identical request already committed. Snapshots reflect current stored state on replay.
@@ -8736,6 +9225,11 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "500":
           description: Transaction failed and was rolled back.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "503":
+          description: Native safety prerequisite or immutable receipt unavailable; no permission to continue.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }

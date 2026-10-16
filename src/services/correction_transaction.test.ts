@@ -6,6 +6,8 @@ import { getEntityWithProvenance } from "./entity_queries.js";
 import { createCorrectionWithVersionPrecondition } from "./correction.js";
 import * as instancePolicy from "./instance_policy.js";
 import { substrateEventBus } from "../events/substrate_event_bus.js";
+import { nativeSchemaReducerHash } from "./native_transition_projection.js";
+import { createServer } from "node:http";
 import {
   applyCorrectionTransaction,
   type CorrectionTransactionOptions,
@@ -34,6 +36,48 @@ const schema = {
 };
 const events: unknown[] = [];
 const listener = (event: unknown) => events.push(event);
+
+function nativeRequest() {
+  const registryHash = "a".repeat(64);
+  return {
+    protocol: "native-record-transition-v1",
+    idempotency_key: "native-test-resolution",
+    expected: {
+      recipe_version: "native-readset-v1",
+      schema_reducer_sha256: nativeSchemaReducerHash(registryHash),
+      groups: [
+        {
+          selector: {
+            registry: {
+              entity_types: ["checkpoint"],
+              relationship_types: ["CHECKPOINTS"],
+              reducer_versions: ["native-test"],
+            },
+          },
+          count: 1,
+          rows_sha256: registryHash,
+        },
+      ],
+    },
+    transition: {
+      name: "checkpoint.resolve",
+      checkpoint_id: "ent_aaaaaaaaaaaaaaaaaaaaaaaa",
+      subject: { entity_type: "task", entity_id: "ent_bbbbbbbbbbbbbbbbbbbbbbbb" },
+      decision: "approved",
+      self_resolved: false,
+      resolution_note: "Synthetic decision",
+    },
+  };
+}
+
+async function nativeCensus() {
+  const connection = await getDb();
+  return Promise.all(
+    ["entities", "observations", "relationship_observations", "entity_snapshots"].map((table) =>
+      connection.prepare(`SELECT count(*) AS n FROM ${table}`).get()
+    )
+  );
+}
 async function seed(id: string, snapshot: Record<string, unknown>, owner = user) {
   let r = await db
     .from("entities")
@@ -98,6 +142,79 @@ afterEach(async () => {
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
 });
 describe("scoped atomic correction transaction", () => {
+  it("recognizes a structurally valid native request without inventing principal authority", async () => {
+    const before = await nativeCensus();
+    const transaction = vi.spyOn(await getDb(), "transaction");
+    // Unknown boundary input is intentional: this exercises the real service,
+    // not a mocked native handler or an assertion about a future ready fixture.
+    const invoke = applyCorrectionTransaction as (body: unknown, owner: string) => Promise<unknown>;
+    await expect(invoke(nativeRequest(), user)).rejects.toMatchObject({
+      code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+      details: { dependency: "native_principal_binding_resolution" },
+    });
+    expect(await nativeCensus()).toEqual(before);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(events).toHaveLength(0);
+  });
+  it("returns the same native dependency through actual loopback HTTP without native rows or events", async () => {
+    const { app } = await import("../actions.js");
+    const server = createServer(app);
+    try {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw Error("Owned loopback binding required.");
+      const before = await nativeCensus();
+      const response = await fetch(`http://127.0.0.1:${address.port}/corrections/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nativeRequest()),
+      });
+      const result = await response.json();
+      expect(response.status).toBe(503);
+      expect(result).toMatchObject({
+        error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "native_principal_binding_resolution" },
+      });
+      expect(await nativeCensus()).toEqual(before);
+      expect(events).toHaveLength(0);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      );
+    }
+  });
+  it("rejects mixed/native authority fields before a transaction rather than falling back", async () => {
+    const invoke = applyCorrectionTransaction as (body: unknown, owner: string) => Promise<unknown>;
+    const transaction = vi.spyOn(await getDb(), "transaction");
+    const before = await nativeCensus();
+    for (const extra of [{ entities: [] }, { user_id: user }, { actor: "synthetic-principal" }]) {
+      await expect(invoke({ ...nativeRequest(), ...extra }, user)).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+      });
+    }
+    expect(transaction).not.toHaveBeenCalled();
+    expect(await nativeCensus()).toEqual(before);
+    expect(events).toHaveLength(0);
+  });
+  it("preserves the typed native dependency through the existing MCP adapter", async () => {
+    const { NeotomaServer } = await import("../server.js");
+    const server = new NeotomaServer() as unknown as {
+      authenticatedUserId: string;
+      executeTool: (name: string, args: unknown) => Promise<unknown>;
+    };
+    server.authenticatedUserId = user;
+    const before = await nativeCensus();
+    await expect(server.executeTool("correct_transaction", nativeRequest())).rejects.toMatchObject({
+      data: {
+        code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+        error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "native_principal_binding_resolution" },
+      },
+    });
+    expect(await nativeCensus()).toEqual(before);
+    expect(events).toHaveLength(0);
+  });
   it("commits all snapshots and replays an identical request without another observation", async () => {
     const first = await applyCorrectionTransaction(request());
     expect(first.status).toBe("applied");

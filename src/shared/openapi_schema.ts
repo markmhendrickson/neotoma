@@ -80,6 +80,15 @@ function resolveSchema(schema: OpenApiSchema, spec: OpenApiSpec): OpenApiSchema 
     return merged;
   }
 
+  for (const keyword of ["oneOf", "anyOf"] as const) {
+    if (Array.isArray(schema[keyword])) {
+      schema = {
+        ...schema,
+        [keyword]: (schema[keyword] as OpenApiSchema[]).map((entry) => resolveSchema(entry, spec)),
+      };
+    }
+  }
+
   if (schema.type === "array" && schema.items) {
     return { ...schema, items: resolveSchema(schema.items as OpenApiSchema, spec) };
   }
@@ -122,6 +131,7 @@ function mergeSchemas(base: OpenApiSchema, extra: OpenApiSchema): OpenApiSchema 
   const baseRequired = (base.required ?? []) as string[];
   const extraRequired = (extra.required ?? []) as string[];
   return {
+    ...extra,
     type: "object",
     properties: { ...baseProps, ...extraProps },
     required: Array.from(new Set([...baseRequired, ...extraRequired])),

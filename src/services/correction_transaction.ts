@@ -8,6 +8,12 @@ import { getEntityWithProvenance } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { enforceAgentCapability, contextFromAgentIdentity } from "./agent_capabilities.js";
 import { getCurrentAgentIdentity } from "./request_context.js";
+import {
+  parseNativeTransitionRequest,
+  type NativeTransitionRequest,
+} from "./native_transition_request.js";
+import { NativeProjectionError } from "./native_transition_projection.js";
+import { StoreConditionError } from "./store_condition_keys.js";
 
 export interface CorrectionTransactionEntity {
   entity_id: string;
@@ -28,8 +34,10 @@ export class CorrectionTransactionError extends Error {
       | "RESOURCE_NOT_FOUND"
       | "CONFLICT"
       | "IDEMPOTENCY_CONFLICT"
-      | "SNAPSHOT_MISMATCH",
-    message: string
+      | "SNAPSHOT_MISMATCH"
+      | "NATIVE_DEPENDENCY_UNAVAILABLE",
+    message: string,
+    public readonly details?: { dependency: string; repair_hint: string }
   ) {
     super(message);
   }
@@ -125,7 +133,56 @@ function assertValid(options: CorrectionTransactionOptions) {
   }
   canonical(options);
 }
-export async function applyCorrectionTransaction(options: CorrectionTransactionOptions) {
+export async function applyCorrectionTransaction(
+  options: CorrectionTransactionOptions | NativeTransitionRequest,
+  authenticatedUserId?: string
+) {
+  if (options && Object.hasOwn(options, "protocol")) {
+    let native: NativeTransitionRequest;
+    try {
+      native = parseNativeTransitionRequest(options);
+    } catch (error) {
+      if (error instanceof NativeProjectionError || error instanceof StoreConditionError)
+        throw new CorrectionTransactionError("VALIDATION_ERROR", error.message);
+      throw error;
+    }
+    if (!authenticatedUserId?.trim())
+      throw new CorrectionTransactionError("VALIDATION_ERROR", "Authenticated scope is required.");
+    const connection = await getDb();
+    return connection.transaction(async () => {
+      // Structural parsing is not principal/origin admission. Current auth
+      // context has no native binding/original-authority acquisition. Do not
+      // turn a grant label, user_id, schema hash or synthetic fixture into one.
+      // This native branch remains incomplete until that acquisition and the
+      // complete readset/effect/reducer path are implemented here.
+      const count = native.expected.groups
+        .filter((g) => !("registry" in g.selector))
+        .reduce((sum, g) => sum + g.count, 0);
+      if (count > 4096)
+        throw new CorrectionTransactionError(
+          "NATIVE_DEPENDENCY_UNAVAILABLE",
+          "The complete native readset exceeds the supported row bound.",
+          {
+            dependency: "complete_readset_bound",
+            repair_hint:
+              "Reduce the scoped history through its owning admitted mechanism; never truncate the readset.",
+          }
+        );
+      throw new CorrectionTransactionError(
+        "NATIVE_DEPENDENCY_UNAVAILABLE",
+        "Native principal binding and admitted authority acquisition are not available.",
+        {
+          dependency: "native_principal_binding_resolution",
+          repair_hint:
+            "Complete verified native principal-binding, historical authority, registry and readset integration before retrying. Do not fall back to ordinary corrections.",
+        }
+      );
+    });
+  }
+  const ordinary = options as CorrectionTransactionOptions;
+  return applyOrdinaryCorrectionTransaction(ordinary);
+}
+async function applyOrdinaryCorrectionTransaction(options: CorrectionTransactionOptions) {
   assertValid(options);
   const capabilityContext = contextFromAgentIdentity(getCurrentAgentIdentity());
   if (capabilityContext)

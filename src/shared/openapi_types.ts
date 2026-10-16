@@ -2051,13 +2051,18 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Atomically compare and correct multiple entities
+     * Atomically compare and correct entities or validate a native transition
      * @description Append declared-field corrections in one scoped database transaction.
      *     Every entity's type, observation count and expected snapshot fields must
      *     match inside the write transaction. Any validation, policy, write or
      *     read-back failure rolls back all changes. Reuse the identical request
      *     and idempotency key after uncertainty; changed payload reuse conflicts.
      *     This primitive does not decide or authorize application-level approval.
+     *     Native protocol native-record-transition-v1 is a closed additive branch.
+     *     Native actor, origin, complete readset, registry and reducer prerequisites
+     *     must be acquired and verified before effects; unavailable prerequisites
+     *     return NATIVE_DEPENDENCY_UNAVAILABLE with no mutation or legacy fallback.
+     *     Native activation is not provided by the structural request contract.
      */
     post: operations["correctTransaction"];
     delete?: never;
@@ -2525,6 +2530,169 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    OrdinaryCorrectionTransactionRequest: {
+      user_id?: string;
+      idempotency_key: string;
+      entities: {
+        entity_id: string;
+        entity_type: string;
+        expected_observation_count: number;
+        /** @description Declared expected values; missing differs from null. Observation count guards the whole entity. */
+        expected_snapshot: {
+          [key: string]: unknown;
+        };
+        changes: {
+          field: string;
+          value: unknown;
+        }[];
+      }[];
+    };
+    NativeTransitionExpected: {
+      /** @enum {string} */
+      recipe_version: "native-readset-v1";
+      schema_reducer_sha256: string;
+      groups: {
+        selector:
+          | {
+              entity: {
+                entity_id: string;
+              };
+            }
+          | {
+              edges: {
+                entity_id: string;
+                /** @enum {string} */
+                direction: "both";
+                types: string[];
+              };
+            }
+          | {
+              slot: {
+                /** @enum {string} */
+                target_type: "task" | "batch";
+                target_id: string;
+                /** @description Null for task, declared nonempty step for batch; at most256 UTF-8 bytes. */
+                step_name: string | null;
+              };
+            }
+          | {
+              registry: {
+                entity_types: string[];
+                relationship_types: string[];
+                reducer_versions: string[];
+              };
+            };
+        count: number;
+        rows_sha256: string;
+      }[];
+    };
+    NativeTransition:
+      | {
+          /** @enum {string} */
+          name: "checkpoint.raise";
+          subject: {
+            /** @enum {string} */
+            entity_type: "task" | "action";
+            entity_id: string;
+          };
+          reason: string;
+          needed_input: string;
+          options: unknown[];
+          awaited_roles: string[];
+        }
+      | {
+          /** @enum {string} */
+          name: "checkpoint.resolve";
+          checkpoint_id: string;
+          subject: {
+            /** @enum {string} */
+            entity_type: "task" | "action";
+            entity_id: string;
+          };
+          /** @enum {string} */
+          decision: "approved" | "denied" | "vetoed";
+          self_resolved: boolean;
+          resolution_note: string;
+        }
+      | {
+          /** @enum {string} */
+          name: "lease.acquire";
+          target: {
+            /** @enum {string} */
+            entity_type: "task" | "batch";
+            entity_id: string;
+            /** @description Null for task, declared nonempty step for batch; at most256 UTF-8 bytes. */
+            step_name: string | null;
+          };
+          runner_id: string;
+          requested_duration_seconds: number;
+          pinned_agent_version: string;
+          pinned_declaration_sha256: string;
+        }
+      | {
+          /** @enum {string} */
+          name: "lease.renew";
+          target: {
+            /** @enum {string} */
+            entity_type: "task" | "batch";
+            entity_id: string;
+            /** @description Null for task, declared nonempty step for batch; at most256 UTF-8 bytes. */
+            step_name: string | null;
+          };
+          runner_id: string;
+          claim_observation_id: string;
+          expected_lease_observation_id: string;
+          requested_duration_seconds: number;
+        }
+      | {
+          /** @enum {string} */
+          name: "lease.return";
+          target: {
+            /** @enum {string} */
+            entity_type: "task" | "batch";
+            entity_id: string;
+            /** @description Null for task, declared nonempty step for batch; at most256 UTF-8 bytes. */
+            step_name: string | null;
+          };
+          runner_id: string;
+          claim_observation_id: string;
+          expected_lease_observation_id: string;
+        }
+      | {
+          /** @enum {string} */
+          name: "verdict.submit";
+          batch_id: string;
+          /** @description Declared step name, at most256 UTF-8 bytes. */
+          step_name: string;
+          claim_observation_id: string;
+          runner_id: string;
+          agent_version: string;
+          declaration_sha256: string;
+          /** @enum {string} */
+          conclusion: "signed" | "blocked" | "waived";
+          artifact_refs: unknown[];
+          read_refs: unknown[];
+          findings: {
+            /** @description Finite plain JSON, validated against the admitted registered schema before any native write. */
+            severity: unknown;
+            /** @description Finite plain JSON, validated against the admitted registered schema before any native write. */
+            kind: unknown;
+            /** @description Finite plain JSON, validated against the admitted registered schema before any native write. */
+            scope: unknown;
+            /** @description Finite plain JSON, validated against the admitted registered schema before any native write. */
+            evidence: unknown;
+            text: string;
+          }[];
+          /** @description Finite plain JSON, validated against the admitted registered schema before any native write. */
+          successor: unknown;
+        };
+    NativeTransitionRequest: {
+      /** @enum {string} */
+      protocol: "native-record-transition-v1";
+      idempotency_key: string;
+      expected: components["schemas"]["NativeTransitionExpected"];
+      transition: components["schemas"]["NativeTransition"];
+    };
     /** @description Additive acquisition evidence from the executing entity collection path. Ranked candidate zero, ignored scope, acquisition caps or degradation cannot establish predicate-population absence. Existing legacy fields retain their meaning. The read interval is not a write fence, revision lease or common database view. See query_convergence and issue #2597. */
     EntityReadContract: {
       /** @enum {string} */
@@ -9089,23 +9257,9 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": {
-          user_id?: string;
-          idempotency_key: string;
-          entities: {
-            entity_id: string;
-            entity_type: string;
-            expected_observation_count: number;
-            /** @description Declared expected values; missing differs from null. Observation count guards the whole entity. */
-            expected_snapshot: {
-              [key: string]: unknown;
-            };
-            changes: {
-              field: string;
-              value: unknown;
-            }[];
-          }[];
-        };
+        "application/json":
+          | components["schemas"]["OrdinaryCorrectionTransactionRequest"]
+          | components["schemas"]["NativeTransitionRequest"];
       };
     };
     responses: {
@@ -9180,6 +9334,15 @@ export interface operations {
       };
       /** @description Transaction failed and was rolled back. */
       500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Native safety prerequisite or immutable receipt unavailable; no permission to continue. */
+      503: {
         headers: {
           [name: string]: unknown;
         };
