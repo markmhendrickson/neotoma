@@ -35,7 +35,10 @@ implemented in `src/reducers/observation_reducer.ts`.
 **Winner:** The observation with the most recent `observed_at` timestamp.
 
 - Tie-breaker: `id ASC` (stable secondary sort when timestamps collide).
-- Implementation: `lastWriteWins()` at line 314 of `src/reducers/observation_reducer.ts`.
+- Exception: a **correction** (`correct()` and its siblings) outranks every ordinary write,
+  however recent, until a later correction replaces it. Among corrections the latest wins by
+  `observed_at`, then `created_at`, then `id`. See [reducer.md §3.6](reducer.md).
+- Implementation: `lastWriteWins()` in `src/reducers/observation_reducer.ts`.
 
 Use `last_write` for values that change over time and where the latest reading is the
 most accurate — account balances, status fields, mutable counters.
@@ -79,7 +82,9 @@ obs_b: { vendor_name: "Acme",     source_priority: 500 }
 - Primary sort: `specificity_score DESC`.
 - Secondary sort: `source_priority DESC` (when `tie_breaker: "source_priority"`) or `observation_source` rank ASC.
 - Tie-breaker: `observed_at DESC`.
-- Implementation: `mostSpecific()` at line 368 of `src/reducers/observation_reducer.ts`.
+- Exception: when the field has a correction, only corrections compete
+  ([reducer.md §3.6](reducer.md)).
+- Implementation: `mostSpecific()` in `src/reducers/observation_reducer.ts`.
 
 Use `most_specific` when specificity signals accuracy — a precise postal address beats a
 city name, a full legal name beats a nickname, an ISIN beats a ticker alias.
@@ -131,6 +136,8 @@ This means:
 - **`--source-priority` / `source_priority` has no effect on auto-discovered schemas.**
   The reducer applies `last_write`, which ignores priority entirely and picks the most
   recent observation. No matter how high you set `source_priority`, the latest write wins.
+  The one exception is a correction: `correct()` is honoured on these fields too, and holds
+  until a later correction replaces it (see [reducer.md §3.6](reducer.md)).
 - Fields you expect to resolve by priority, specificity, or accumulation will silently
   fall through to the most-recent-wins default.
 

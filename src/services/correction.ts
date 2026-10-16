@@ -28,6 +28,7 @@ import {
 } from "../events/substrate_store_emit.js";
 import { computeEntityVersion } from "./entity_version.js";
 import { stableSerialize } from "./stable_serialize.js";
+import { CORRECTION_SOURCE_PRIORITY, CORRECTION_SPECIFICITY_SCORE } from "./correction_identity.js";
 
 export interface CreateCorrectionParams {
   entity_id: string;
@@ -382,8 +383,12 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     source_id: null,
     interpretation_id: null,
     observed_at: new Date().toISOString(),
-    specificity_score: 1.0,
-    source_priority: 1000,
+    // Together with a null source, no interpretation and no observation_source,
+    // these two make the row recognisable as a correction to the reducer
+    // (correction_identity.ts). Do not set observation_source here without
+    // changing that predicate in the same change.
+    specificity_score: CORRECTION_SPECIFICITY_SCORE,
+    source_priority: CORRECTION_SOURCE_PRIORITY,
     fields: { [field]: value },
     user_id,
     idempotency_key: idempotency_key || undefined,

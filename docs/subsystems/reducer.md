@@ -98,7 +98,8 @@ interface EntitySnapshot {
 
 ### 3.1 Last Write Wins
 
-**Strategy:** Most recent observation wins.
+**Strategy:** Most recent observation wins, except that a correction beats every ordinary
+write however recent (§3.6); among corrections the most recent wins.
 **Use When:** Field values change over time, latest is most accurate.
 **Example:**
 
@@ -107,8 +108,14 @@ function lastWriteWins(
   field: string,
   observations: Observation[]
 ): { value: any; source_observation_id: string } {
-  // Observations already sorted by observed_at DESC
-  const latest = observations[0];
+  // Observations already sorted by observed_at DESC.
+  // A correction outranks any ordinary write; among corrections the latest wins
+  // by observed_at, then created_at, then id (§3.6).
+  const corrections = observations.filter(isCorrectionObservation);
+  const latest =
+    corrections.length > 0
+      ? [...corrections].sort(compareObservationRecencyThenId)[0]
+      : observations[0];
   return {
     value: latest.fields[field],
     source_observation_id: latest.id,
@@ -178,7 +185,8 @@ history.
 
 ### 3.3 Most Specific
 
-**Strategy:** Observation with highest `specificity_score` wins.
+**Strategy:** Observation with highest `specificity_score` wins. When the field has any
+correction, only corrections compete (§3.6).
 **Use When:** More specific observations are more accurate.
 **Example:**
 
@@ -359,6 +367,55 @@ order-preserving arrays, JSON scalar spellings), so callers can reproduce it por
 contract. Originating ADR: `ent_4b41bb83a4faf4428a73bfc8` (Neotoma task entity) — the
 `session_digest.tasks_claimed` lost-update reproduction this strategy exists to fix.
 
+### 3.6 Corrections Win Until a Later Correction Replaces Them
+
+**Rule.** A correction is authoritative on its field until a later correction for the same
+field replaces it. An ordinary write that arrives afterwards, however recent its
+`observed_at` and whatever its `source_priority`, does not displace it. This holds on a
+`last_write` field exactly as on any other, including every field of an auto-discovered
+schema, where `last_write` is the default. A correction to `null` holds too: a later
+ordinary write does not revive the cleared field.
+
+**What counts as a correction.** The observation `createCorrection` writes (`correct`,
+`correct_transaction`, `patch_array_item`, `/correct`, `batch_correct`): no source document,
+no interpretation run, no `observation_source`, `source_priority` 1000, `specificity_score`
+1.0. This is the shape shown in [observation architecture §2.2](observation_architecture.md).
+The reducer recognises it from those columns (`isCorrectionObservation` in
+`src/services/correction_identity.ts`), and `createCorrection` has written that shape since
+it was introduced, so corrections already in the log qualify and no migration or backfill is
+needed. A caller cannot forge one through the public write paths: `store`,
+`store_structured` and the other writers always stamp a non-null `observation_source` (the
+default is `unspecified`), so an observation sent with `source_priority: 1000` is still an
+ordinary write. An integration test pins both halves against real rows.
+
+**How each strategy applies it.**
+
+| Strategy                            | Effect                                                                                                                                                                                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `last_write`                        | Only corrections compete. The latest wins by `observed_at`, then `created_at`, then `id`.                                                                                                                                                                       |
+| `most_specific`                     | Only corrections compete; the strategy's own ordering then picks among them.                                                                                                                                                                                    |
+| `highest_priority`                  | Unchanged. Priority is already this rule's ordering axis, so a correction (1000) beats everything below it, and the later of two corrections wins (§3.2). A write an operator deliberately sends above 1000 stays authoritative, as documented and tested.      |
+| `merge_array`, `merge_array_by_key` | Unchanged. The priority gate (§3.4) already lets a correction replace lower-priority arrays. Corrections at the same top tier still merge among themselves, which `patch_array_item` relies on; replacing an array by a later correction is tracked separately. |
+
+**Determinism.** Whether an observation is a correction depends only on its own stored
+columns, never on its position in the input, its arrival order, or the clock. Narrowing a
+field's candidates to its corrections is therefore the same for every ordering of the same
+observation set, and what is left is ordered by a total order (`observed_at`, `created_at`,
+`id`; ids are unique), so the same observations reduce to the same snapshot and the same
+provenance in any order. `created_at` is stored data, written once when the row is accepted,
+not read from a clock during reduction. The unit suite reduces every permutation of a mixed
+set of corrections and ordinary writes and requires one identical result.
+
+**Compatibility and recompute.** Observations are not rewritten and no column is added. A
+stored snapshot changes only where an ordinary write had landed after a correction on a
+`last_write` or `most_specific` field and thereby displaced it. Those snapshots keep their
+old value until recomputed; the next store, correction or other write to the entity
+recomputes it, and an explicit recompute does the rest. For a deliberate rollout, call
+`POST /recompute_snapshots_by_type` with `dry_run: true` per entity type, then without it,
+and verify the returned counts and errors plus representative values and provenance. To roll
+back, revert the reducer before further bulk recomputation, then recompute the affected
+types again.
+
 ## 4. Merge Policy Configuration
 
 ### 4.1 Schema Registry Configuration
@@ -459,6 +516,7 @@ function sortObservations(observations: Observation[]): Observation[] {
 ```
 
 This order is exported from `src/reducers/observation_reducer.ts` as `compareObservationsByReducerOrder` (and `sortObservationsInReducerOrder`), and the reducer's own sort calls it. Code that needs to agree with the reducer about which observation is first (the current winner of an entity) must use the exported comparator rather than copying the ordering. It is distinct from the module-private recency comparator used for deletion handling, which also consults `created_at`.
+
 ## 6. Type Conversion During Snapshot Computation
 
 ### 6.1 Converter Application

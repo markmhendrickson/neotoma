@@ -17,6 +17,7 @@ import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
 import { canonicalizePortableScalarKey, stableSerialize } from "../services/stable_serialize.js";
+import { isCorrectionObservation } from "../services/correction_identity.js";
 
 /** Per-observation bound that prevents one full-array write from exploding reducer work. */
 export const MAX_MERGE_ARRAY_BY_KEY_ITEMS = 10_000;
@@ -49,6 +50,13 @@ export interface Observation {
   entity_type: string;
   schema_version: string;
   source_id: string;
+  /**
+   * Interpretation run that produced the observation. Null for structured
+   * writes and corrections. Read only to recognise a correction
+   * (see services/correction_identity.ts); loaders that do not carry it leave
+   * it undefined, which counts as none.
+   */
+  interpretation_id?: string | null;
   observed_at: string;
   specificity_score: number | null;
   source_priority: number;
@@ -149,6 +157,23 @@ export function sortObservationsInReducerOrder<T extends Pick<Observation, "obse
   observations: readonly T[]
 ): T[] {
   return [...observations].sort(compareObservationsByReducerOrder);
+}
+
+/**
+ * The observations that may decide a field: the corrections among them when
+ * there are any, otherwise all of them.
+ *
+ * This is the whole of the "corrections win" rule (#2033). It depends only on
+ * each observation's own columns, never on position, arrival order or the
+ * clock, so the same observation set narrows to the same candidates in any
+ * order; the strategy that runs next then resolves them by its own total
+ * order (observed_at, created_at, id), as it always has.
+ */
+function narrowToCorrections<T extends Parameters<typeof isCorrectionObservation>[0]>(
+  observations: T[]
+): T[] {
+  const corrections = observations.filter(isCorrectionObservation);
+  return corrections.length > 0 ? corrections : observations;
 }
 
 export interface SnapshotProjectionOptions {
@@ -359,37 +384,43 @@ export class ObservationReducer {
       return null;
     }
 
+    // A correction is authoritative on its field until a later correction
+    // replaces it (#2033). Two strategies would let an ordinary write displace
+    // one, because neither ranks by source_priority: last_write (recency alone,
+    // the default for every auto-discovered field) and most_specific. For
+    // those, when any observation of this field is a correction only
+    // corrections take part, so a later ordinary write cannot revert it and a
+    // later correction replaces an earlier one by the strategy's own order.
+    // highest_priority, merge_array and merge_array_by_key already rank by
+    // source_priority, where a correction (1000) beats everything below it;
+    // they keep that rule, including the documented and tested one that an
+    // explicit write above 1000 stays authoritative (#2394).
+    const candidates =
+      strategy === "last_write" || strategy === "most_specific"
+        ? narrowToCorrections(relevantObservations)
+        : relevantObservations;
+
     // Get merged value using strategy
     let mergedResult: { value: unknown; source_observation_id: string };
     switch (strategy) {
       case "last_write":
-        mergedResult = this.lastWriteWins(field, relevantObservations);
+        mergedResult = this.lastWriteWins(field, candidates);
         break;
 
       case "highest_priority":
-        mergedResult = this.highestPriority(
-          field,
-          relevantObservations,
-          tieBreaker,
-          observationSourceRank
-        );
+        mergedResult = this.highestPriority(field, candidates, tieBreaker, observationSourceRank);
         break;
 
       case "most_specific":
-        mergedResult = this.mostSpecific(
-          field,
-          relevantObservations,
-          tieBreaker,
-          observationSourceRank
-        );
+        mergedResult = this.mostSpecific(field, candidates, tieBreaker, observationSourceRank);
         break;
 
       case "merge_array":
-        mergedResult = this.mergeArray(field, relevantObservations, fieldDef);
+        mergedResult = this.mergeArray(field, candidates, fieldDef);
         break;
 
       case "merge_array_by_key":
-        mergedResult = this.mergeArrayByKey(field, relevantObservations, keyField);
+        mergedResult = this.mergeArrayByKey(field, candidates, keyField);
         break;
 
       default:
@@ -433,7 +464,16 @@ export class ObservationReducer {
     // down to those where this field is non-null, so the input list can be
     // empty for fields whose only observation is null. Return a sentinel
     // no-value result in that case; the caller drops it from the snapshot.
-    const latest = observations[0];
+    //
+    // #2033: a correction beats every ordinary write however recent, and among
+    // corrections the latest wins on the same recency order highest_priority
+    // uses (observed_at, then created_at, then id), so two corrections stamped
+    // in the same millisecond still resolve by insertion time.
+    const corrections = observations.filter(isCorrectionObservation);
+    const latest =
+      corrections.length > 0
+        ? [...corrections].sort(compareObservationRecencyThenId)[0]
+        : observations[0];
     if (!latest) {
       return { value: undefined, source_observation_id: "" };
     }
