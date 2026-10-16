@@ -117,10 +117,14 @@ describe("deploy_workflow_config", () => {
     // Nothing after checkout runs git against the remote, and `flyctl deploy
     // --remote-only` uploads the tree, so a persisted credential would travel
     // with it for no benefit.
-    const source = readWorkflow();
-    const checkout = source.slice(source.indexOf("uses: actions/checkout@"));
-    expect(source.indexOf("uses: actions/checkout@")).toBeGreaterThan(-1);
-    expect(checkout.split(/^\s+- name:/m)[0]).toMatch(/persist-credentials:\s*false\b/);
+    // Read from the parsed YAML, not the text, so a commented-out line cannot
+    // satisfy it.
+    const doc = yaml.load(readWorkflow()) as {
+      jobs: { deploy: { steps: Array<{ uses?: string; with?: Record<string, unknown> }> } };
+    };
+    const checkout = doc.jobs.deploy.steps.find((st) => st.uses?.startsWith("actions/checkout@"));
+    expect(checkout).toBeDefined();
+    expect(checkout?.with?.["persist-credentials"]).toBe(false);
   });
 
   it("retries the authenticated read probe in a bounded window and still fails without a 200", () => {
@@ -162,9 +166,13 @@ describe(
   "deploy_workflow_config: read probe behaviour against a stub curl",
   { timeout: 60_000 },
   () => {
-    const BUDGET_FOR_TEST = 3;
+    // Only the exhaustion tests need the budget to elapse, so only they use the
+    // short one. The rest get a wide one so process-spawn slowness on a loaded
+    // host cannot consume it and flake a test that is not about the budget.
+    const SHORT_BUDGET = 3;
+    const WIDE_BUDGET = 30;
 
-    function probeScript(): string {
+    function probeScript(budget: number): string {
       const doc = yaml.load(readWorkflow()) as {
         jobs: { deploy: { steps: Array<{ name?: string; run?: string }> } };
       };
@@ -174,7 +182,7 @@ describe(
       expect(at).toBeGreaterThan(-1);
       const section = step.run.slice(at);
       expect(section).toMatch(/PROBE_BUDGET_SECONDS=\d+/);
-      return section.replace(/PROBE_BUDGET_SECONDS=\d+/, `PROBE_BUDGET_SECONDS=${BUDGET_FOR_TEST}`);
+      return section.replace(/PROBE_BUDGET_SECONDS=\d+/, `PROBE_BUDGET_SECONDS=${budget}`);
     }
 
     interface Run {
@@ -184,7 +192,17 @@ describe(
       sleepCalls: number;
     }
 
-    function runProbe(codes: string[], body = '{"entities":[]}'): Run {
+    interface ProbeOptions {
+      body?: string;
+      budget?: number;
+      /** `null` runs the probe with READ_PROBE_TOKEN unset. */
+      token?: string | null;
+    }
+
+    function runProbe(codes: string[], opts: ProbeOptions = {}): Run {
+      const body = opts.body ?? '{"entities":[]}';
+      const budget = opts.budget ?? WIDE_BUDGET;
+      const token = opts.token === undefined ? "stub-token" : opts.token;
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "probe-"));
       try {
         const bin = path.join(dir, "bin");
@@ -216,12 +234,12 @@ exec /bin/sleep 1
 `,
           { mode: 0o755 }
         );
-        const script = probeScript().replaceAll("/tmp/", `${dir}/`);
+        const script = probeScript(budget).replaceAll("/tmp/", () => `${dir}/`);
         const r = spawnSync("bash", ["-eo", "pipefail", "-c", `set -euo pipefail\n${script}`], {
           env: {
             PATH: `${bin}:${process.env.PATH}`,
             HOST: "instance.example.test",
-            READ_PROBE_TOKEN: "stub-token",
+            ...(token === null ? {} : { READ_PROBE_TOKEN: token }),
           },
           encoding: "utf8",
           timeout: 25_000,
@@ -279,24 +297,33 @@ exec /bin/sleep 1
     });
 
     it("stops after the budget when the instance never answers, pacing its attempts", () => {
-      const r = runProbe(["000"]);
+      const r = runProbe(["000"], { budget: SHORT_BUDGET });
       expect(r.status).toBe(1);
       expect(r.out).toContain("FAIL: authenticated read returned HTTP 000");
       // Bounded: more than one attempt (it did retry), but nowhere near unbounded.
       expect(r.curlCalls.length).toBeGreaterThan(1);
-      expect(r.curlCalls.length).toBeLessThanOrEqual(BUDGET_FOR_TEST + 3);
+      expect(r.curlCalls.length).toBeLessThanOrEqual(SHORT_BUDGET + 3);
       // Paced: exactly one sleep between consecutive attempts, never a hot loop.
       expect(r.sleepCalls).toBe(r.curlCalls.length - 1);
     });
 
     it("still fails when a persistent 5xx exhausts the window", () => {
-      const r = runProbe(["502"]);
+      const r = runProbe(["502"], { budget: SHORT_BUDGET });
       expect(r.status).toBe(1);
       expect(r.out).toContain("HTTP 502");
     });
 
+    it("refuses to call the deploy verified when the probe token is missing", () => {
+      // A dropped OPERATOR_INSTANCE_TOKEN secret must fail the step, not skip the
+      // read probe: /health alone has passed through a total read outage.
+      const r = runProbe(["200"], { token: null });
+      expect(r.status).toBe(1);
+      expect(r.curlCalls).toHaveLength(0);
+      expect(r.out).toContain("OPERATOR_INSTANCE_TOKEN is not set");
+    });
+
     it("requires an entity array in a 200, not just the status", () => {
-      const r = runProbe(["200"], '{"error":"x"}');
+      const r = runProbe(["200"], { body: '{"error":"x"}' });
       expect(r.status).toBe(1);
       expect(r.out).toContain("returned no entity array");
     });
