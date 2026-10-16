@@ -7,6 +7,7 @@ Peer sync lets two explicit Neotoma instances exchange selected entity state wit
 - `peer_config` is the durable configuration entity for a peer.
 - `source_peer_id` on observations records which peer produced a replayed observation.
 - `observation_source: "sync"` marks replayed rows and ranks below local sources in default reducer tie-breaking.
+- Replication does not carry correction identity. A replayed row is an ordinary `sync` write, so it never displaces a local correction, and a correction made on the sender lands on the receiver as an ordinary row. A field corrected on one peer and changed (or corrected) on the other therefore stays divergent until an operator resolves it with `resolve_sync_conflict` (`prefer_remote` applies the remote value as a local correction).
 - `sync_peer_id` on subscriptions prevents loops by skipping events whose `source_peer_id` matches the destination peer.
 
 Peers are operator configured. There is no automatic discovery.
@@ -57,13 +58,14 @@ neotoma peers status simon-central
 neotoma peers sync simon-central
 neotoma peers remove simon-central
 ```
+
 # Peer sync (cross-instance)
 
 Neotoma can register **peers** (`peer_config` entities) and exchange incremental state via signed **`POST /sync/webhook`** payloads. Full symmetric batch sync is intentionally bounded; operators also use **substrate subscriptions** for event-driven delivery (see [scope decisions](../foundation/scope_decisions.md) SD-002).
 
 ## Concepts
 
-- **`peer_id`**: Stable identifier the **counterparty** uses when **they** sign inbound webhooks to your instance. Your row stores *their* `peer_id` (what appears as `sender_peer_id` on payloads you verify).
+- **`peer_id`**: Stable identifier the **counterparty** uses when **they** sign inbound webhooks to your instance. Your row stores _their_ `peer_id` (what appears as `sender_peer_id` on payloads you verify).
 - **`NEOTOMA_LOCAL_PEER_ID`**: Stable identifier **this** instance uses as `sender_peer_id` when **you** POST to a peer’s `/sync/webhook`. It must match the value your peer configured as their `peer_id` for you.
 - **`sync_target_user_id`**: Optional field on `peer_config` — the **receiver’s** Neotoma `user_id` on the peer instance. Required for outbound webhooks so the peer can look up the shared secret via `getPeerSecretForVerification(target_user_id, sender_peer_id)`.
 - **`NEOTOMA_PUBLIC_BASE_URL`**: Public base URL of **this** API (no trailing slash), used as `sender_peer_url` on outbound sync so the peer can `GET …/entities/{entity_id}`.
@@ -71,13 +73,13 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 
 ## HTTP surface
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/peers/{peer_id}` | Peer snapshot plus **`remote_health`** (`/health` probe, semver compat vs local package version). |
-| POST | `/peers` | Add peer; optional `sync_target_user_id`. |
-| POST | `/peers/{peer_id}/sync` | Bounded outbound sync (optional JSON `{ "limit": number }`). |
-| POST | `/sync/webhook` | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`). |
-| POST | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches remote guest snapshot; `prefer_local` documents retention + `correct`. |
+| Method | Path                           | Purpose                                                                                                                                                                                     |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/peers/{peer_id}`             | Peer snapshot plus **`remote_health`** (`/health` probe, semver compat vs local package version).                                                                                           |
+| POST   | `/peers`                       | Add peer; optional `sync_target_user_id`.                                                                                                                                                   |
+| POST   | `/peers/{peer_id}/sync`        | Bounded outbound sync (optional JSON `{ "limit": number }`).                                                                                                                                |
+| POST   | `/sync/webhook`                | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`).                                                                                                                          |
+| POST   | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches the remote guest snapshot and applies differing declared fields as one correction transaction (needs `correct`); `prefer_local` documents retention + `correct`. |
 
 ## Semver compatibility
 
@@ -93,7 +95,8 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 
 ## Conflict resolution
 
-- **`prefer_remote`**: Supply `sender_peer_url` and optional `guest_access_token`; server fetches `GET {sender_peer_url}/entities/{entity_id}` and applies the snapshot with elevated priority.
+- **`prefer_remote`**: Supply `sender_peer_url` and optional `guest_access_token`; server fetches `GET {sender_peer_url}/entities/{entity_id}` and applies the fields that differ from the local snapshot as one atomic correction transaction, so the remote value wins even on a field that already holds a local correction (a correction wins on every merge rule and is replaced only by a later correction; see [reducer §3.6](reducer.md)). It needs the `correct` capability on the entity type for an admitted agent, like `correct` itself. The response lists `fields_applied` (fields whose remote value now stands) and `fields_withheld` with a reason: `undeclared_field` (the local schema does not declare it, so a correction would never reach the snapshot) or `array_corrections_combine` (an array field that already holds a local correction; corrections still combine, #2341, so use `correct` to replace it). `ok: true` with a non-empty `fields_withheld` means a partial apply; check `fields_withheld`. `ok` is false when nothing could be applied or the transaction refused (for example a value that fails the schema); then nothing was written. Applied fields are pinned: they hold against later replicated rows from this peer and against importers until corrected again. If no local entity exists, the remote snapshot is ingested as a normal write.
+- **`manual`**: flags the entity `sync_conflict = true` through a correction and needs the same `correct` capability.
 - **`prefer_local`**: No data change; use `correct` for targeted field overrides.
 
 ## Components — `src/services/sync/`
@@ -163,7 +166,7 @@ The default batch is 200; the cap is 500. The function is safe to re-run; observ
 
 `resolveSyncConflict({ userId, entity_id, strategy, sender_peer_url?, guest_access_token? })` covers the three explicit operator strategies:
 
-- `prefer_remote` — fetches `GET {sender_peer_url}/entities/{entity_id}` (with the supplied guest token) and applies the snapshot at elevated priority.
+- `prefer_remote` — fetches `GET {sender_peer_url}/entities/{entity_id}` (with the supplied guest token) and applies the differing fields as one correction transaction (see above); the response lists `fields_applied` and `fields_withheld`.
 - `prefer_local` — no-op with guidance to use `correct` for targeted field overrides.
 - `manual` — flags the entity with `sync_conflict = true` via a `correct` write so operators can see it in the Inspector and resolve field by field.
 

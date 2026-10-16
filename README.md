@@ -30,7 +30,7 @@ Neotoma is a state layer, not a chat memory or a vector cache. It records immuta
 
 Three properties hold across every interface:
 
-- **Deterministic.** Entity IDs, observation IDs, event IDs, and reducer output are all derived from the inputs by hashing. The same observations produce the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
+- **Deterministic.** Entity IDs, observation IDs, event IDs, and reducer output are all derived from the inputs by hashing. The same observations produce the same snapshot regardless of the order they arrive in. The reducer reads no clock and no randomness: timestamps (`observed_at`, `created_at`) are recorded once, when a write is accepted, and are stored as ordinary data, so a snapshot is a pure function of what is stored.
 - **Immutable and auditable.** Sources and observations are append-only. Every field in a snapshot traces back to the observation that set it, and through that observation to its source, interpretation, agent, and timestamp.
 - **Self-hosted and portable.** The engine is embedded SQLite plus content-addressed file storage under a directory you control, with optional AES-256-GCM at-rest encryption. Nothing is used for training, and you can export everything. In single-user mode the data stays entirely local; multi-user, peer-sync, and hosted modes are opt-in (see Deployment modes).
 
@@ -63,7 +63,7 @@ Neotoma exposes roughly 60 MCP tools and about 100 REST endpoints, all backed by
 
 **Resolve, retrieve, and search.** Look up entities by identifier (name, email, and similar), resolve identity from multiple signals with confidence scoring, list observations, retrieve a field's provenance chain, traverse the relationship graph N hops, and pull a full graph neighborhood. When an embedding key is configured, semantic vector search runs over entity snapshots (stored locally in sqlite-vec); keyword filtering works without it.
 
-**Correct and evolve.** Submit corrections that always win in the snapshot (they are high-priority observations, never edits). Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
+**Correct and evolve.** Submit corrections that always win in the snapshot until a later correction for the same field replaces them (array fields union corrections for now, #2341). A correction is an observation marked as one, never an edit. Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
 
 **Relate and sequence.** Create typed relationships (for example `PART_OF`, `DEPENDS_ON`, `REFERS_TO`, `DUPLICATE_OF`), query timeline events across types and date ranges, and view a deterministic, replayable history.
 
@@ -205,7 +205,7 @@ Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md) — t
 
 ## Status
 
-**Version:** v0.17.0 · **License:** MIT · **Storage:** local-only (SQLite + local files).
+**Version:** see [`package.json`](package.json) and the [releases](https://github.com/markmhendrickson/neotoma/releases) · **License:** MIT · **Storage:** local-only (SQLite + local files).
 
 Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, append-only log, full provenance, same contract across CLI and MCP) are stable — phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
 

@@ -1413,7 +1413,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.12 `correct`
 
-**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
+**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. A correction stays authoritative on its field, whatever the field's merge rule and whatever the priority or source kind of any other write, until a later correction replaces it (array fields excepted: corrections union, #2341); among corrections the later one wins by deterministic recency for scalar fields in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
 
 **Request Schema:**
 
