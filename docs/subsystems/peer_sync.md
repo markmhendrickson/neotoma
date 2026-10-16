@@ -58,13 +58,14 @@ neotoma peers status simon-central
 neotoma peers sync simon-central
 neotoma peers remove simon-central
 ```
+
 # Peer sync (cross-instance)
 
 Neotoma can register **peers** (`peer_config` entities) and exchange incremental state via signed **`POST /sync/webhook`** payloads. Full symmetric batch sync is intentionally bounded; operators also use **substrate subscriptions** for event-driven delivery (see [scope decisions](../foundation/scope_decisions.md) SD-002).
 
 ## Concepts
 
-- **`peer_id`**: Stable identifier the **counterparty** uses when **they** sign inbound webhooks to your instance. Your row stores *their* `peer_id` (what appears as `sender_peer_id` on payloads you verify).
+- **`peer_id`**: Stable identifier the **counterparty** uses when **they** sign inbound webhooks to your instance. Your row stores _their_ `peer_id` (what appears as `sender_peer_id` on payloads you verify).
 - **`NEOTOMA_LOCAL_PEER_ID`**: Stable identifier **this** instance uses as `sender_peer_id` when **you** POST to a peer’s `/sync/webhook`. It must match the value your peer configured as their `peer_id` for you.
 - **`sync_target_user_id`**: Optional field on `peer_config` — the **receiver’s** Neotoma `user_id` on the peer instance. Required for outbound webhooks so the peer can look up the shared secret via `getPeerSecretForVerification(target_user_id, sender_peer_id)`.
 - **`NEOTOMA_PUBLIC_BASE_URL`**: Public base URL of **this** API (no trailing slash), used as `sender_peer_url` on outbound sync so the peer can `GET …/entities/{entity_id}`.
@@ -72,13 +73,13 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 
 ## HTTP surface
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/peers/{peer_id}` | Peer snapshot plus **`remote_health`** (`/health` probe, semver compat vs local package version). |
-| POST | `/peers` | Add peer; optional `sync_target_user_id`. |
-| POST | `/peers/{peer_id}/sync` | Bounded outbound sync (optional JSON `{ "limit": number }`). |
-| POST | `/sync/webhook` | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`). |
-| POST | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches remote guest snapshot; `prefer_local` documents retention + `correct`. |
+| Method | Path                           | Purpose                                                                                           |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| GET    | `/peers/{peer_id}`             | Peer snapshot plus **`remote_health`** (`/health` probe, semver compat vs local package version). |
+| POST   | `/peers`                       | Add peer; optional `sync_target_user_id`.                                                         |
+| POST   | `/peers/{peer_id}/sync`        | Bounded outbound sync (optional JSON `{ "limit": number }`).                                      |
+| POST   | `/sync/webhook`                | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256`).                                |
+| POST   | `/peers/resolve_sync_conflict` | `prefer_remote` re-fetches remote guest snapshot; `prefer_local` documents retention + `correct`. |
 
 ## Semver compatibility
 
