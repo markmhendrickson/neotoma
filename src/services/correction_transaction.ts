@@ -83,12 +83,11 @@ function assertValid(options: CorrectionTransactionOptions) {
       Array.isArray(entity.expected_snapshot) ||
       typeof entity.expected_snapshot !== "object" ||
       !Array.isArray(entity.changes) ||
-      !entity.changes.length ||
       entity.changes.length > 50
     )
       throw new CorrectionTransactionError(
         "VALIDATION_ERROR",
-        "Each unique entity requires its type, observed count, expected snapshot fields and 1–50 changes."
+        "Each unique entity requires its type, observed count, expected snapshot fields and 0–50 changes."
       );
     if (
       Object.keys(entity).some(
@@ -107,6 +106,11 @@ function assertValid(options: CorrectionTransactionOptions) {
         "Unexpected entity transaction property."
       );
     ids.add(entity.entity_id);
+    if (!entity.changes.length && !Object.keys(entity.expected_snapshot).length)
+      throw new CorrectionTransactionError(
+        "VALIDATION_ERROR",
+        "A compare-only participant requires at least one expected snapshot field."
+      );
     const names = new Set<string>();
     for (const change of entity.changes) {
       if (
@@ -123,6 +127,11 @@ function assertValid(options: CorrectionTransactionOptions) {
       names.add(change.field);
     }
   }
+  if (!options.entities.some((entity) => entity.changes.length))
+    throw new CorrectionTransactionError(
+      "VALIDATION_ERROR",
+      "At least one transaction participant must make a correction."
+    );
   canonical(options);
 }
 export async function applyCorrectionTransaction(options: CorrectionTransactionOptions) {
@@ -171,7 +180,11 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
         const current = await getEntityWithProvenance(entity.entity_id, false, options.user_id, {
           includeClearedFields: true,
         });
-        if (!current || current.entity_id !== entity.entity_id)
+        if (
+          !current ||
+          current.entity_id !== entity.entity_id ||
+          current.entity_type !== entity.entity_type
+        )
           throw new CorrectionTransactionError(
             "CONFLICT",
             "A previously committed transaction target is no longer available."
@@ -204,6 +217,10 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
       const schema = await schemaRegistry.loadActiveSchema(entity.entity_type, options.user_id);
       if (
         !schema ||
+        (!entity.changes.length &&
+          Object.keys(entity.expected_snapshot).some(
+            (field) => !field || !Object.hasOwn(schema.schema_definition.fields, field)
+          )) ||
         entity.changes.some(
           (change) => !Object.hasOwn(schema.schema_definition.fields, change.field)
         ) ||

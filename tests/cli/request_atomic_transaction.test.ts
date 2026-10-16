@@ -47,6 +47,130 @@ afterAll(async () => {
 });
 
 describe("generic CLI correctTransaction actual transport effects", () => {
+  it("refuses a stale compare-only guard through HTTP before changing its writer", async () => {
+    const title = "HTTP guarded source";
+    const seed = await post("/store", {
+      idempotency_key: "http-guard-seed",
+      entities: [
+        { entity_type: type, title: "HTTP guarded draft", status: "ready" },
+        { entity_type: type, title, remaining: 1 },
+      ],
+    });
+    const [draft, source] = seed.entities.map((entity: { entity_id: string }) => entity.entity_id);
+    const body = {
+      idempotency_key: "http-guard-stale",
+      entities: [
+        {
+          entity_id: draft,
+          entity_type: type,
+          expected_observation_count: 1,
+          expected_snapshot: { status: "ready" },
+          changes: [{ field: "status", value: "approved" }],
+        },
+        {
+          entity_id: source,
+          entity_type: type,
+          expected_observation_count: 1,
+          expected_snapshot: { remaining: 1 },
+          changes: [],
+        },
+      ],
+    };
+    await post("/store", {
+      idempotency_key: "http-guard-advance",
+      entities: [{ entity_type: type, title, remaining: 0 }],
+    });
+    const response = await fetch(`${server.baseUrl}/corrections/transaction`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(409);
+    const draftState = await post("/get_entity_snapshot", { entity_id: draft });
+    expect(draftState.snapshot.status).toBe("ready");
+    expect(draftState.observation_count).toBe(1);
+    const malformed = structuredClone(body);
+    malformed.entities[1].expected_snapshot = {};
+    const invalid = await fetch(`${server.baseUrl}/corrections/transaction`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` },
+      body: JSON.stringify(malformed),
+    });
+    expect(invalid.status).toBe(400);
+  });
+  it.each(["body", "params"] as const)(
+    "keeps a compare-only guard unchanged through CLI --%s and HTTP replay",
+    async (flag) => {
+      const seed = await post("/store", {
+        idempotency_key: `cli-guard-seed-${flag}`,
+        entities: [
+          { entity_type: type, title: `CLI guard ${flag} draft`, status: "ready" },
+          { entity_type: type, title: `CLI guard ${flag} source`, remaining: 1 },
+        ],
+      });
+      const [draft, source] = seed.entities.map(
+        (entity: { entity_id: string }) => entity.entity_id
+      );
+      const body = {
+        idempotency_key: `cli-guard-commit-${flag}`,
+        entities: [
+          {
+            entity_id: draft,
+            entity_type: type,
+            expected_observation_count: 1,
+            expected_snapshot: { status: "ready" },
+            changes: [{ field: "status", value: "approved" }],
+          },
+          {
+            entity_id: source,
+            entity_type: type,
+            expected_observation_count: 1,
+            expected_snapshot: { remaining: 1 },
+            changes: [],
+          },
+        ],
+      };
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          "dist/cli/index.js",
+          "--no-log-file",
+          "--json",
+          "--base-url",
+          server.baseUrl,
+          "request",
+          "--operation",
+          "correctTransaction",
+          `--${flag}`,
+          JSON.stringify(flag === "params" ? { body } : body),
+        ],
+        {
+          env: {
+            ...process.env,
+            NEOTOMA_BEARER_TOKEN: server.token,
+            NEOTOMA_FORCE_LOCAL_TRANSPORT: "false",
+          },
+        }
+      );
+      expect(JSON.parse(stdout).status).toBe("applied");
+      expect((await post("/corrections/transaction", body)).status).toBe("replayed");
+      const draftState = await post("/get_entity_snapshot", { entity_id: draft });
+      const guardState = await post("/get_entity_snapshot", { entity_id: source });
+      expect(draftState.snapshot.status).toBe("approved");
+      expect(draftState.observation_count).toBe(2);
+      expect(guardState.snapshot.remaining).toBe(1);
+      expect(guardState.observation_count).toBe(1);
+      const stale = { ...body, idempotency_key: `cli-guard-stale-${flag}` };
+      const denied = await fetch(`${server.baseUrl}/corrections/transaction`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` },
+        body: JSON.stringify(stale),
+      });
+      expect(denied.status).toBe(409);
+      expect((await post("/get_entity_snapshot", { entity_id: source })).observation_count).toBe(1);
+    },
+    30_000
+  );
   it.each(["body", "params"] as const)(
     "preserves atomic state, replay and refusal using --%s",
     async (flag) => {
