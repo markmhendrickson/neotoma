@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **729**
-- Backend and repo Vitest files: **693**
+- Total automated test files: **730**
+- Backend and repo Vitest files: **694**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -71,7 +71,7 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 196 |
 | Vitest service tests | 59 |
-| Source-adjacent tests | 69 |
+| Source-adjacent tests | 70 |
 | Vitest integration tests | 222 |
 | Vitest CLI tests | 87 |
 | Vitest contract tests | 25 |
@@ -379,7 +379,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (69):**
+**Files (70):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -432,6 +432,7 @@ flowchart TD
 - `src/services/issues/seed_schema.test.ts`
 - `src/services/issues/sync_issues_push_writeback.test.ts`
 - `src/services/memory_export.test.ts`
+- `src/services/native_transition_projection.test.ts`
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
 - `src/services/rendered_page/conformance.test.ts`
