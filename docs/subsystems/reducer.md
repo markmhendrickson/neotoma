@@ -396,7 +396,7 @@ Corrections also cover system bookkeeping fields written through `createCorrecti
 example peer sync watermarks and `sync_conflict`), not only human intent.
 
 **What counts as a correction.** The observation `createCorrection` writes (`correct`,
-`correct_transaction`, `patch_array_item`, `/correct`, `batch_correct`): no source document,
+`correct_transaction`, `patch_array_item`, `/correct`): no source document,
 no interpretation run, no `observation_source`, `source_priority` 1000, `specificity_score`
 1.0. This is the shape shown in [observation architecture §2.2](observation_architecture.md).
 The reducer recognises it from those columns (`isCorrectionObservation` in
