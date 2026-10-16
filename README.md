@@ -63,7 +63,7 @@ Neotoma exposes roughly 60 MCP tools and about 100 REST endpoints, all backed by
 
 **Resolve, retrieve, and search.** Look up entities by identifier (name, email, and similar), resolve identity from multiple signals with confidence scoring, list observations, retrieve a field's provenance chain, traverse the relationship graph N hops, and pull a full graph neighborhood. When an embedding key is configured, semantic vector search runs over entity snapshots (stored locally in sqlite-vec); keyword filtering works without it.
 
-**Correct and evolve.** Submit corrections that always win in the snapshot, until a later correction for the same field replaces them (they are high-priority observations, never edits). Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
+**Correct and evolve.** Submit corrections that always win in the snapshot until a later correction for the same field replaces them (array fields union corrections for now, #2341). A correction is an observation marked as one, never an edit. Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
 
 **Relate and sequence.** Create typed relationships (for example `PART_OF`, `DEPENDS_ON`, `REFERS_TO`, `DUPLICATE_OF`), query timeline events across types and date ranges, and view a deterministic, replayable history.
 

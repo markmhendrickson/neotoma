@@ -1,7 +1,16 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
 import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
+import { CORRECTION_RULE_TEXT } from "./services/correction_identity.js";
 
 export type ToolInputSchema = Record<string, unknown>;
+
+/**
+ * The `resolve_sync_conflict` description. The YAML mirror in
+ * docs/developer/mcp/tool_descriptions.yaml must carry the same text; a unit test
+ * (tests/unit/correct_description_parity.test.ts) fails if the two drift.
+ */
+export const RESOLVE_SYNC_CONFLICT_DESCRIPTION =
+  "Resolve a replication conflict. prefer_remote (needs sender_peer_url) applies the remote snapshot's differing declared fields as one atomic correction transaction, so they hold until corrected again, and returns fields_applied and fields_withheld (array fields that already hold a local correction, undeclared fields); ok:true with a non-empty fields_withheld means a partial apply. manual flags sync_conflict. prefer_remote and manual need the correct capability. prefer_local and last_write_wins keep local state; source_priority only explains that a corrected field is never displaced by priority.";
 
 export interface ToolDefinition {
   name: string;
@@ -538,8 +547,7 @@ export function buildToolDefinitions(
     },
     {
       name: "correct",
-      description:
-        "Create a priority-1000 correction observation to override lower-priority extracted fields. A correction stays authoritative on its field, whatever the field's merge rule and whatever the priority or source kind of any other write, until a later correction replaces it; among corrections the later one wins by deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
+      description: `Create a priority-1000 correction observation to override lower-priority extracted fields. ${CORRECTION_RULE_TEXT} Read back the entity snapshot and field provenance before claiming the correction took effect.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -1495,10 +1503,7 @@ export function buildToolDefinitions(
     },
     {
       name: "resolve_sync_conflict",
-      description: desc(
-        "resolve_sync_conflict",
-        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url, applies differing declared fields as one correction transaction, and returns fields_applied and fields_withheld."
-      ),
+      description: desc("resolve_sync_conflict", RESOLVE_SYNC_CONFLICT_DESCRIPTION),
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
     {

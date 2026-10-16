@@ -31,6 +31,15 @@
  * public store paths at the same priority do not.
  */
 
+/**
+ * The rule as agents read it, in the `correct` tool description (MCP), the YAML
+ * mirror and the MCP spec. One definition so the prose cannot drift from the reducer:
+ * a test fails if any of those surfaces stops carrying it, including the array
+ * exception (merge_array and merge_array_by_key still union corrections, #2341).
+ */
+export const CORRECTION_RULE_TEXT =
+  "A correction stays authoritative on its field, whatever the field's merge rule and whatever the priority or source kind of any other write, until a later correction replaces it (array fields excepted: corrections union, #2341); among corrections the later one wins by deterministic recency for scalar fields.";
+
 /** `source_priority` of every correction. The highest tier any in-tree writer uses for field data. */
 export const CORRECTION_SOURCE_PRIORITY = 1000;
 
