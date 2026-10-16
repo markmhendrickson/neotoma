@@ -98,6 +98,21 @@ afterEach(async () => {
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
 });
 describe("scoped atomic correction transaction", () => {
+  it("compares an unchanged participant inside the write transaction without recording it", async () => {
+    const input = request("guard-unchanged-source");
+    input.entities[1].changes = [];
+    const before = await db.from("observations").select("id").eq("user_id", user);
+    const applied = await applyCorrectionTransaction(input);
+    expect(applied.status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 1 });
+    const after = await db.from("observations").select("id,entity_id").eq("user_id", user);
+    expect(after.data).toHaveLength((before.data?.length ?? 0) + 1);
+    expect(after.data?.filter((row) => row.entity_id === "ent_atomic_source")).toHaveLength(1);
+    expect(events).toHaveLength(2);
+    expect((await applyCorrectionTransaction(input)).status).toBe("replayed");
+    expect(events).toHaveLength(2);
+  });
   it("commits all snapshots and replays an identical request without another observation", async () => {
     const first = await applyCorrectionTransaction(request());
     expect(first.status).toBe("applied");
