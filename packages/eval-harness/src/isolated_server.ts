@@ -13,7 +13,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -63,6 +63,40 @@ export interface IsolatedServer {
   stop(): Promise<void>;
 }
 
+// Resource ownership, not request authority: only this factory's live,
+// nonce-created directories may host real CLI replay children.
+const ownedServers = new WeakMap<
+  IsolatedServer,
+  { baseUrl: string; dataDir: string; token: string; realPath: string }
+>();
+
+export function requireOwnedCliFixture(
+  server: IsolatedServer | undefined,
+  baseUrl: string,
+  token: string
+): string {
+  const owned = server && ownedServers.get(server);
+  const url = new URL(baseUrl);
+  if (
+    !owned ||
+    owned.baseUrl !== baseUrl ||
+    owned.token !== token ||
+    url.protocol !== "http:" ||
+    url.hostname !== "127.0.0.1" ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    !lstatSync(owned.dataDir).isDirectory() ||
+    lstatSync(owned.dataDir).isSymbolicLink() ||
+    realpathSync(owned.dataDir) !== owned.realPath
+  ) {
+    throw new Error("CLI replay requires its live, owned loopback server fixture");
+  }
+  return owned.dataDir;
+}
+
 function randomToken(): string {
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
@@ -87,7 +121,9 @@ async function waitForHealth(
     }
     await new Promise((r) => setTimeout(r, 150));
   }
-  throw new Error(`isolated Neotoma server did not become healthy within ${timeoutMs}ms (last error: ${lastError})`);
+  throw new Error(
+    `isolated Neotoma server did not become healthy within ${timeoutMs}ms (last error: ${lastError})`
+  );
 }
 
 async function startFaultProxy(
@@ -104,16 +140,12 @@ async function startFaultProxy(
         failCount < faults.fail_first_n &&
         (urlPath.includes(faults.target) || urlPath.includes("/store") || urlPath.includes("/mcp"));
 
-      if (
-        shouldFault &&
-        (faults.target === "store_structured" || faults.target === "store")
-      ) {
+      if (shouldFault && (faults.target === "store_structured" || faults.target === "store")) {
         const body = await readRequestBody(req);
         const isStore =
           urlPath.includes("/store") ||
           (urlPath.includes("/mcp") &&
-            (body.includes("store_structured") ||
-              /"name"\s*:\s*"store"/.test(body)));
+            (body.includes("store_structured") || /"name"\s*:\s*"store"/.test(body)));
         if (isStore) {
           failCount++;
           res.writeHead(statusCode, { "content-type": "application/json" });
@@ -306,6 +338,7 @@ export async function startIsolatedNeotomaServer(
       }
     },
     async stop(): Promise<void> {
+      ownedServers.delete(handle);
       if (faultProxy) {
         await new Promise<void>((r) => faultProxy!.close(() => r()));
       }
@@ -324,5 +357,13 @@ export async function startIsolatedNeotomaServer(
       }
     },
   };
+  if (!options.dataDir && env.NEOTOMA_DATA_DIR === dataDir && env.NEOTOMA_BEARER_TOKEN === token) {
+    ownedServers.set(handle, {
+      baseUrl: effectiveBaseUrl,
+      dataDir,
+      token,
+      realPath: realpathSync(dataDir),
+    });
+  }
   return handle;
 }

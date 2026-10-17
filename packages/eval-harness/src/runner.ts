@@ -221,6 +221,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       scenario: plan.scenario,
       model: plan.model,
       neotomaBaseUrl: server.baseUrl,
+      isolatedServer: server,
       neotomaToken: server.token,
       effectiveProfile,
       mode: opts.mode,
