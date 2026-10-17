@@ -312,6 +312,12 @@ describe("closed native transaction input", () => {
     expect(branches[1].properties.expected.properties.recipe_version.enum).toEqual([
       "native-readset-v1",
     ]);
+    expect(branches[1].properties.expected.properties.groups.description).toContain(
+      "More than 256 distinct IDs"
+    );
+    expect(branches[1].properties.expected.properties.groups.description).toContain(
+      "lower-bound refusal only"
+    );
     expect(JSON.stringify(schema)).not.toContain('"$ref"');
     const actual = buildToolDefinitions().find((t) => t.name === "correct_transaction")!;
     expect(actual.inputSchema).toEqual(schema);

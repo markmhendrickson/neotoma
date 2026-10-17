@@ -7,6 +7,8 @@ import { createCorrectionWithVersionPrecondition } from "./correction.js";
 import * as instancePolicy from "./instance_policy.js";
 import { substrateEventBus } from "../events/substrate_event_bus.js";
 import { nativeSchemaReducerHash } from "./native_transition_projection.js";
+import type { NativeTransitionRequest } from "./native_transition_request.js";
+import { canonicalStoreRequest } from "./store_condition_keys.js";
 import { createServer } from "node:http";
 import {
   applyCorrectionTransaction,
@@ -68,6 +70,33 @@ function nativeRequest() {
       resolution_note: "Synthetic decision",
     },
   };
+}
+
+type SelectorFamily = "entity" | "edges" | "slot" | "mixed";
+function nativeReadIds(count: number, family: SelectorFamily, repeatAcrossFamilies = false) {
+  const request = nativeRequest() as NativeTransitionRequest;
+  for (let i = 0; i < count; i++) {
+    const entityId = "ent_" + i.toString(16).padStart(24, "0");
+    const families: Array<Exclude<SelectorFamily, "mixed">> = repeatAcrossFamilies
+      ? ["entity", "edges", "slot"]
+      : [family === "mixed" ? (["entity", "edges", "slot"] as const)[i % 3] : family];
+    for (const kind of families) {
+      const selector =
+        kind === "entity"
+          ? { entity: { entity_id: entityId } }
+          : kind === "edges"
+            ? { edges: { entity_id: entityId, direction: "both" as const, types: [] } }
+            : { slot: { target_type: "task" as const, target_id: entityId, step_name: null } };
+      request.expected.groups.push({ selector, count: 0, rows_sha256: "a".repeat(64) });
+    }
+  }
+  request.expected.groups.sort((a, b) =>
+    Buffer.compare(
+      Buffer.from(canonicalStoreRequest(a.selector), "utf8"),
+      Buffer.from(canonicalStoreRequest(b.selector), "utf8")
+    )
+  );
+  return request;
 }
 
 async function nativeCensus() {
@@ -142,6 +171,80 @@ afterEach(async () => {
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
 });
 describe("scoped atomic correction transaction", () => {
+  it.each<SelectorFamily>(["entity", "edges", "slot", "mixed"])(
+    "refuses 257 distinct %s read IDs before storage without acquiring authority",
+    async (family) => {
+      const before = await nativeCensus();
+      const connection = await getDb();
+      const transaction = vi.spyOn(connection, "transaction");
+      const prepare = vi.spyOn(connection, "prepare");
+      await expect(
+        applyCorrectionTransaction(nativeReadIds(257, family), user)
+      ).rejects.toMatchObject({
+        code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "complete_readset_bound", observed_lower_bound: 257, limit: 256 },
+      });
+      expect(transaction).not.toHaveBeenCalled();
+      expect(prepare).not.toHaveBeenCalled();
+      expect(await nativeCensus()).toEqual(before);
+      expect(events).toHaveLength(0);
+    }
+  );
+  it("counts shared selector IDs once, including the exact 256-ID boundary, without admitting effects", async () => {
+    const before = await nativeCensus();
+    const transaction = vi.spyOn(await getDb(), "transaction");
+    const request = nativeReadIds(256, "mixed", true);
+    expect(request.expected.groups).toHaveLength(769);
+    await expect(applyCorrectionTransaction(request, user)).rejects.toMatchObject({
+      code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+      details: { dependency: "native_principal_binding_resolution" },
+    });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(await nativeCensus()).toEqual(before);
+    expect(events).toHaveLength(0);
+  });
+  it("preserves the read-ID bound through actual HTTP and MCP without storage or events", async () => {
+    const { app } = await import("../actions.js");
+    const { NeotomaServer } = await import("../server.js");
+    const mcp = new NeotomaServer() as unknown as {
+      authenticatedUserId: string;
+      executeTool: (name: string, args: unknown) => Promise<unknown>;
+    };
+    mcp.authenticatedUserId = user;
+    const server = createServer(app);
+    try {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw Error("Owned loopback binding required.");
+      const before = await nativeCensus();
+      const transaction = vi.spyOn(await getDb(), "transaction");
+      const request = nativeReadIds(257, "mixed");
+      const response = await fetch(`http://127.0.0.1:${address.port}/corrections/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({
+        error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+        details: { dependency: "complete_readset_bound", observed_lower_bound: 257, limit: 256 },
+      });
+      await expect(mcp.executeTool("correct_transaction", request)).rejects.toMatchObject({
+        data: {
+          error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+          details: { dependency: "complete_readset_bound", observed_lower_bound: 257, limit: 256 },
+        },
+      });
+      expect(transaction).not.toHaveBeenCalled();
+      expect(await nativeCensus()).toEqual(before);
+      expect(events).toHaveLength(0);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      );
+    }
+  });
   it("recognizes a structurally valid native request without inventing principal authority", async () => {
     const before = await nativeCensus();
     const transaction = vi.spyOn(await getDb(), "transaction");

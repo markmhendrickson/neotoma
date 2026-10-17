@@ -96,6 +96,12 @@ components:
           type: string
           pattern: ^[0-9a-f]{64}$
         groups:
+          description: >-
+            Native preflight counts distinct entity_id values in entity and edges selectors and
+            target_id values in slot selectors. More than 256 distinct IDs returns
+            NATIVE_DEPENDENCY_UNAVAILABLE with complete_readset_bound before storage access.
+            This is a lower-bound refusal only: at or below 256 does not establish complete
+            acquisition, read authority, registry readiness or permission for native effects.
           type: array
           minItems: 1
           items:
@@ -552,9 +558,9 @@ components:
           minLength: 1
           maxLength: 200
         expected:
-          $ref: '#/components/schemas/NativeTransitionExpected'
+          $ref: "#/components/schemas/NativeTransitionExpected"
         transition:
-          $ref: '#/components/schemas/NativeTransition'
+          $ref: "#/components/schemas/NativeTransition"
     EntityReadContract:
       type: object
       additionalProperties: false

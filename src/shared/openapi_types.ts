@@ -2551,6 +2551,7 @@ export interface components {
       /** @enum {string} */
       recipe_version: "native-readset-v1";
       schema_reducer_sha256: string;
+      /** @description Native preflight counts distinct entity_id values in entity and edges selectors and target_id values in slot selectors. More than 256 distinct IDs returns NATIVE_DEPENDENCY_UNAVAILABLE with complete_readset_bound before storage access. This is a lower-bound refusal only: at or below 256 does not establish complete acquisition, read authority, registry readiness or permission for native effects. */
       groups: {
         selector:
           | {

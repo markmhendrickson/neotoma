@@ -37,7 +37,12 @@ export class CorrectionTransactionError extends Error {
       | "SNAPSHOT_MISMATCH"
       | "NATIVE_DEPENDENCY_UNAVAILABLE",
     message: string,
-    public readonly details?: { dependency: string; repair_hint: string }
+    public readonly details?: {
+      dependency: string;
+      repair_hint: string;
+      observed_lower_bound?: number;
+      limit?: number;
+    }
   ) {
     super(message);
   }
@@ -148,6 +153,28 @@ export async function applyCorrectionTransaction(
     }
     if (!authenticatedUserId?.trim())
       throw new CorrectionTransactionError("VALIDATION_ERROR", "Authenticated scope is required.");
+    // Each addressed selector ID is a lower bound on the complete acquisition.
+    // Shared entity/edge/slot IDs count once; registry names are not entity IDs.
+    // Passing this check grants no read authority and does not bound hidden
+    // endpoints/history: the final acquisition must enforce the same limit.
+    const readIds = new Set<string>();
+    for (const { selector } of native.expected.groups) {
+      if ("entity" in selector) readIds.add(selector.entity.entity_id);
+      else if ("edges" in selector) readIds.add(selector.edges.entity_id);
+      else if ("slot" in selector) readIds.add(selector.slot.target_id);
+      if (readIds.size > 256)
+        throw new CorrectionTransactionError(
+          "NATIVE_DEPENDENCY_UNAVAILABLE",
+          "The declared native read IDs exceed the complete acquisition bound.",
+          {
+            dependency: "complete_readset_bound",
+            observed_lower_bound: readIds.size,
+            limit: 256,
+            repair_hint:
+              "Reduce the scoped readset through its owning admitted mechanism; never truncate acquisition.",
+          }
+        );
+    }
     const connection = await getDb();
     return connection.transaction(async () => {
       // Structural parsing is not principal/origin admission. Current auth
