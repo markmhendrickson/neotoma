@@ -180,13 +180,14 @@ interface EntitySnapshotRow {
 export function populationContentRevision(
   entityId: string,
   snapshot: EntitySnapshotRow,
-  schema: { schema_definition: unknown; reducer_config: unknown }
+  schema: { schema_version: string; schema_definition: unknown; reducer_config: unknown }
 ): string {
   return createHash("sha256")
     .update(
       stableSerialize({
         entity_id: entityId,
         schema_version: snapshot.schema_version,
+        active_schema_version: schema.schema_version,
         snapshot: snapshot.snapshot,
         provenance: snapshot.provenance,
         schema_definition: schema.schema_definition,
@@ -375,7 +376,7 @@ export async function listVisibleEntityIdsForType(
 export async function listObservationCountsForVisibleIds(
   userId: string,
   ids: readonly string[],
-  schema: { schema_definition: unknown; reducer_config: unknown }
+  schema: { schema_version: string; schema_definition: unknown; reducer_config: unknown }
 ): Promise<Array<{ entity_id: string; observation_count: number; content_revision: string }>> {
   const revisions: Array<{
     entity_id: string;
@@ -420,7 +421,7 @@ export async function listObservationCountsForVisibleIds(
       )
         throw new Error("Complete scoped population revisions are unavailable.");
       seen.add(row.entity_id);
-      if (!row.schema_version || !row.snapshot || !row.provenance)
+      if (row.schema_version !== schema.schema_version || !row.snapshot || !row.provenance)
         throw new Error("Complete scoped population revisions are unavailable.");
       revisions.push({
         entity_id: row.entity_id,
@@ -877,7 +878,10 @@ export async function queryEntities(
   // need not perform one extra snapshot request per population member. Missing
   // schema or projection authority remains an absent token, which guarded
   // callers must refuse rather than interpreting as an empty revision.
-  const contentSchemas = new Map<string, { schema_definition: unknown; reducer_config: unknown } | null>();
+  const contentSchemas = new Map<
+    string,
+    { schema_version: string; schema_definition: unknown; reducer_config: unknown } | null
+  >();
   if (includeSnapshots && userId) {
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
@@ -1089,11 +1093,18 @@ export async function queryEntities(
         observation_count: observationCount,
         last_observation_at: lastObservationAt,
       }),
-      ...(includeSnapshots && snapshot?.schema_version && snapshot.snapshot && snapshot.provenance
-        && contentSchemas.get(entity.entity_type)
-        ? { content_revision: populationContentRevision(
-            entity.id, snapshot, contentSchemas.get(entity.entity_type)!,
-          ) }
+      ...(includeSnapshots &&
+      snapshot?.schema_version &&
+      snapshot.snapshot &&
+      snapshot.provenance &&
+      snapshot.schema_version === contentSchemas.get(entity.entity_type)?.schema_version
+        ? {
+            content_revision: populationContentRevision(
+              entity.id,
+              snapshot,
+              contentSchemas.get(entity.entity_type)!
+            ),
+          }
         : {}),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
@@ -1316,6 +1327,7 @@ export async function getEntityWithProvenance(
       snapshot &&
       !snapshotError &&
       snapshot.schema_version &&
+      snapshot.schema_version === schema?.schema_version &&
       snapshot.snapshot &&
       snapshot.provenance
     )
