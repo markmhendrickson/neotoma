@@ -9378,8 +9378,11 @@ paths:
         binds an original immutable observation, not a bearer value or digest.
         Appends complete immutable revocation evidence in one transaction and
         returns metadata only. The same idempotency key and target replay the
-        committed receipt; a different target or original under that key conflicts.
-        Does not create a replacement token, schema, or grant.
+        committed receipt without another observation; a different target or original
+        under that key conflicts. Each new successful key retains one complete
+        observation witness, preserving the first revocation timestamp even when
+        the token is already revoked. Zero growth applies to same-key replays,
+        not arbitrary new keys. Does not create a replacement token, schema, or grant.
       operationId: revokeGuestAccessToken
       parameters:
         - in: path
