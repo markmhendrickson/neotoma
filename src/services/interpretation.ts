@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 // FU-121: Interpretation Service
 // Schema validation, entity resolution, and unknown field routing
 // Implements idempotence pattern: canonicalization, hash-based IDs, deduplication
@@ -1084,7 +1085,11 @@ export async function createRelationshipObservations(
   for (const rel of relationships) {
     try {
       // Generate relationship key
-      const relationshipKey = `${rel.relationship_type}:${rel.source_entity_id}:${rel.target_entity_id}`;
+      const relationshipKey = RelationshipReducer.generateRelationshipKey(
+        rel.relationship_type,
+        rel.source_entity_id,
+        rel.target_entity_id
+      );
 
       // Relationship metadata is freeform (varies by relationship type) — do not filter
       // through canonicalizeFields which would strip fields not in the fixed relationship schema.

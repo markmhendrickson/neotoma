@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 /**
  * Observation Storage Service (Domain Layer)
  *
@@ -379,7 +380,11 @@ export async function repointRelationshipObservations(
       continue;
     }
 
-    const newRelationshipKey = `${row.relationship_type}:${newSourceEntityId}:${newTargetEntityId}`;
+    const newRelationshipKey = RelationshipReducer.generateRelationshipKey(
+      row.relationship_type,
+      newSourceEntityId,
+      newTargetEntityId
+    );
     const dedupKey = newRelationshipKey;
 
     // Rule: drop duplicates where the survivor already has this edge

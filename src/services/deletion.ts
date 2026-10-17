@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 /**
  * Deletion Service for GDPR Compliance (Phase 1: Soft Deletion)
  *
@@ -554,7 +555,10 @@ async function callerMayRestoreRelationship(
   targetEntityId: string,
   userId: string
 ): Promise<{ ok: true } | { ok: false; error?: string }> {
-  if (relationshipKey !== `${relationshipType}:${sourceEntityId}:${targetEntityId}`) {
+  if (
+    relationshipKey !==
+    RelationshipReducer.generateRelationshipKey(relationshipType, sourceEntityId, targetEntityId)
+  ) {
     return { ok: false };
   }
 

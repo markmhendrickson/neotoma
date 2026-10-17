@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "../../reducers/relationship_reducer.js";
 import crypto from "crypto";
 import {
   assertOrdinaryLifecyclePayload,
@@ -1026,7 +1027,11 @@ class LocalQueryBuilder {
                       ? payload["target_entity_id"]
                       : "";
                   if (rt && se && te) {
-                    payload["relationship_key"] = `${rt}:${se}:${te}`;
+                    payload["relationship_key"] = RelationshipReducer.generateRelationshipKey(
+                      rt,
+                      se,
+                      te
+                    );
                   }
                 }
                 if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();

@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 /**
  * Entity Merge Service (Domain Layer)
  *
@@ -156,7 +157,11 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
           continue;
         }
 
-        const newRelationshipKey = `${row.relationship_type}:${newSourceEntityId}:${newTargetEntityId}`;
+        const newRelationshipKey = RelationshipReducer.generateRelationshipKey(
+          row.relationship_type,
+          newSourceEntityId,
+          newTargetEntityId
+        );
         const dedupKey = newRelationshipKey;
 
         // Drop duplicates already present on the survivor

@@ -2530,6 +2530,30 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Internal structural hash input, not a verified presentation or admission. These exact values confer no read or write authority. No route is activated. */
+    CredentialBindingKeyPresentation: {
+      user_id: string;
+      /** @enum {string} */
+      credential_kind: "aauth_sub";
+      credential_value: string;
+      credential_issuer: string | null;
+    };
+    /** @description Structural key recipe only. An issuer null is a distinct byte input, not evidence that an issuer-less runtime identity is admitted. */
+    CredentialBindingLookupInput: {
+      /** @enum {string} */
+      identity_strategy: "credential-binding-v1";
+      presentation: components["schemas"]["CredentialBindingKeyPresentation"];
+    };
+    /** @description Internal closed key input, not a create request or authority resolver. Registry, storage, original-origin and current permission checks remain required at consuming effect boundaries. Public native writes remain held. */
+    CredentialBindingKeyInput: {
+      /** @enum {string} */
+      identity_strategy: "credential-binding-v1";
+      /** @enum {string} */
+      relationship_type: "principal_binding";
+      source_entity_id: null;
+      target_entity_id: string;
+      presentation: components["schemas"]["CredentialBindingKeyPresentation"];
+    };
     OrdinaryCorrectionTransactionRequest: {
       user_id?: string;
       idempotency_key: string;

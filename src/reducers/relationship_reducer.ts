@@ -5,6 +5,52 @@
  * Mirrors the entity observation reducer but works with relationships.
  */
 
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import type { components } from "../shared/openapi_types.js";
+import { NEOTOMA_ENTITY_ID_REGEX } from "../shared/neotoma_entity_id.js";
+import { canonicalStoreRequest } from "../services/store_condition_keys.js";
+
+type CredentialKeyInput = components["schemas"]["CredentialBindingKeyInput"];
+type CredentialLookupInput = components["schemas"]["CredentialBindingLookupInput"];
+const credentialText = z
+  .string()
+  .min(1)
+  .refine((s) => s.trim().length > 0);
+const credentialPresentation = z
+  .object({
+    user_id: credentialText,
+    credential_kind: z.literal("aauth_sub"),
+    credential_value: credentialText,
+    credential_issuer: credentialText.nullable(),
+  })
+  .strict();
+const credentialLookup = z
+  .object({
+    identity_strategy: z.literal("credential-binding-v1"),
+    presentation: credentialPresentation,
+  })
+  .strict();
+const credentialKey = credentialLookup
+  .extend({
+    relationship_type: z.literal("principal_binding"),
+    source_entity_id: z.null(),
+    target_entity_id: z.string().regex(NEOTOMA_ENTITY_ID_REGEX),
+  })
+  .strict();
+
+export class RelationshipIdentityError extends Error {
+  readonly code = "RELATIONSHIP_IDENTITY_INVALID";
+  constructor() {
+    super("Invalid structural relationship identity; key derivation supplies no admission.");
+    this.name = "RelationshipIdentityError";
+  }
+}
+
+function credentialHash(value: unknown): string {
+  return createHash("sha256").update(canonicalStoreRequest(value), "utf8").digest("hex");
+}
+
 export interface RelationshipObservation {
   id: string;
   relationship_key: string;
@@ -263,14 +309,71 @@ export class RelationshipReducer {
   }
 
   /**
-   * Generate relationship key from components
+   * Shared structural key recipe. Existing ordinary tuples retain EXACT
+   * bytes. The closed credential overload is internal arithmetic only:
+   * it proves no registered strategy, verified identity, origin or grant,
+   * and creates no successful public native persistence path.
    */
   static generateRelationshipKey(
     relationshipType: string,
     sourceEntityId: string,
     targetEntityId: string
+  ): string;
+  static generateRelationshipKey(input: CredentialKeyInput): string;
+  static generateRelationshipKey(
+    input: string | CredentialKeyInput,
+    sourceEntityId?: string,
+    targetEntityId?: string
   ): string {
-    return `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
+    if (typeof input === "string") {
+      if (
+        arguments.length !== 3 ||
+        !input ||
+        typeof sourceEntityId !== "string" ||
+        !sourceEntityId ||
+        typeof targetEntityId !== "string" ||
+        !targetEntityId
+      )
+        throw new RelationshipIdentityError();
+      return `${input}:${sourceEntityId}:${targetEntityId}`;
+    }
+    if (arguments.length !== 1) throw new RelationshipIdentityError();
+    try {
+      canonicalStoreRequest(input);
+      const parsed = credentialKey.parse(input);
+      const p = parsed.presentation;
+      return (
+        "principal_binding:v1:" +
+        credentialHash([
+          "principal-binding-v1",
+          p.user_id,
+          p.credential_kind,
+          p.credential_value,
+          p.credential_issuer,
+          parsed.target_entity_id,
+        ])
+      );
+    } catch {
+      throw new RelationshipIdentityError();
+    }
+  }
+
+  /** Internal lookup recipe only; never an external enumeration/read grant. */
+  static generateCredentialLookupKey(input: CredentialLookupInput): string {
+    try {
+      if (arguments.length !== 1) throw new RelationshipIdentityError();
+      canonicalStoreRequest(input);
+      const p = credentialLookup.parse(input).presentation;
+      return credentialHash([
+        "principal-binding-lookup-v1",
+        p.user_id,
+        p.credential_kind,
+        p.credential_value,
+        p.credential_issuer,
+      ]);
+    } catch {
+      throw new RelationshipIdentityError();
+    }
   }
 }
 

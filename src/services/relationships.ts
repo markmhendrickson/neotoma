@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 /**
  * Relationships Service for Relationship Types (FU-059)
  *
@@ -236,7 +237,11 @@ export class RelationshipsService {
     });
     await this.assertAcyclicWrite(params);
 
-    const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      params.relationship_type,
+      params.source_entity_id,
+      params.target_entity_id
+    );
     let sourceId = params.source_id || null;
 
     if (!sourceId || sourceId === "00000000-0000-0000-0000-000000000000") {
@@ -525,7 +530,11 @@ export class RelationshipsService {
     userId: string,
     includeDeleted: boolean = false
   ): Promise<RelationshipSnapshot | null> {
-    const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      relationshipType,
+      sourceEntityId,
+      targetEntityId
+    );
 
     const { data, error } = await db
       .from("relationship_snapshots")
@@ -574,7 +583,11 @@ export class RelationshipsService {
   ): Promise<RelationshipSnapshot> {
     const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
 
-    const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      relationshipType,
+      sourceEntityId,
+      targetEntityId
+    );
 
     // Get all observations for this relationship
     const { data: observations, error: fetchError } = await db

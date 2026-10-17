@@ -23,6 +23,65 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    CredentialBindingKeyPresentation:
+      description: >-
+        Internal structural hash input, not a verified presentation or admission.
+        These exact values confer no read or write authority. No route is activated.
+      type: object
+      additionalProperties: false
+      required: [user_id, credential_kind, credential_value, credential_issuer]
+      properties:
+        user_id:
+          type: string
+          minLength: 1
+          pattern: "\\S"
+        credential_kind:
+          type: string
+          enum: [aauth_sub]
+        credential_value:
+          type: string
+          minLength: 1
+          pattern: "\\S"
+        credential_issuer:
+          type: [string, "null"]
+          minLength: 1
+          pattern: "\\S"
+    CredentialBindingLookupInput:
+      description: >-
+        Structural key recipe only. An issuer null is a distinct byte input, not
+        evidence that an issuer-less runtime identity is admitted.
+      type: object
+      additionalProperties: false
+      required: [identity_strategy, presentation]
+      properties:
+        identity_strategy:
+          type: string
+          enum: [credential-binding-v1]
+        presentation:
+          $ref: "#/components/schemas/CredentialBindingKeyPresentation"
+    CredentialBindingKeyInput:
+      description: >-
+        Internal closed key input, not a create request or authority resolver.
+        Registry, storage, original-origin and current permission checks remain
+        required at consuming effect boundaries. Public native writes remain held.
+      type: object
+      additionalProperties: false
+      required:
+        [identity_strategy, relationship_type, source_entity_id, target_entity_id, presentation]
+      properties:
+        identity_strategy:
+          type: string
+          enum: [credential-binding-v1]
+        relationship_type:
+          type: string
+          enum: [principal_binding]
+        source_entity_id:
+          type: "null"
+        target_entity_id:
+          type: string
+          pattern: "^ent_[0-9a-f]{24}$"
+        presentation:
+          $ref: "#/components/schemas/CredentialBindingKeyPresentation"
     OrdinaryCorrectionTransactionRequest:
       type: object
       additionalProperties: false

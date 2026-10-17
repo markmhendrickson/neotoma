@@ -19,6 +19,7 @@ import type { components } from "../shared/openapi_types.js";
 import { NEOTOMA_ENTITY_ID_REGEX } from "../shared/neotoma_entity_id.js";
 import { canonicalStoreRequest } from "./store_condition_keys.js";
 import { NativeProjectionError } from "./native_transition_projection.js";
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 
 /**
  * Thrown when an entity id the caller named does not resolve to an entity
@@ -159,13 +160,10 @@ export async function collectOwnedPrincipalBindingCandidates(
   const requested = bindingSelector.safeParse(selector);
   if (!userId || !userId.trim() || !parsed.success || !requested.success)
     throw bindingFailure("G17_binding_history_shape");
-  const lookup = bindingHash([
-    "principal-binding-lookup-v1",
-    userId,
-    presentation.credential_kind,
-    presentation.credential_value,
-    presentation.credential_issuer,
-  ]);
+  const lookup = RelationshipReducer.generateCredentialLookupKey({
+    identity_strategy: "credential-binding-v1",
+    presentation: { user_id: userId, ...parsed.data },
+  });
   if (selector.bindings.credential_key_sha256 !== lookup)
     throw bindingFailure("G17_binding_selector_mismatch");
   // Zod's copied values cannot be changed by the caller while the transaction
@@ -226,16 +224,18 @@ async function collectBindingHistoryRows(
       const provenance = await decodeBindingObject(tx, row.provenance, true);
       const identity = bindingMetadata.safeParse(metadata);
       if (!identity.success) throw bindingFailure("G17_binding_history_shape");
-      const expectedKey =
-        "principal_binding:v1:" +
-        bindingHash([
-          "principal-binding-v1",
-          userId,
-          identity.data.credential_kind,
-          identity.data.credential_value,
-          identity.data.credential_issuer,
-          row.target_entity_id,
-        ]);
+      const expectedKey = RelationshipReducer.generateRelationshipKey({
+        identity_strategy: "credential-binding-v1",
+        relationship_type: "principal_binding",
+        source_entity_id: null,
+        target_entity_id: row.target_entity_id,
+        presentation: {
+          user_id: userId,
+          credential_kind: identity.data.credential_kind,
+          credential_value: identity.data.credential_value,
+          credential_issuer: identity.data.credential_issuer,
+        },
+      });
       if (row.relationship_key !== expectedKey) throw bindingFailure("G17_binding_history_shape");
       for (const key of ["source_id", "interpretation_id", "observed_at", "canonical_hash"])
         if (row[key] !== null && typeof row[key] !== "string")
@@ -322,9 +322,6 @@ const bindingSelector = z
       .strict(),
   })
   .strict();
-function bindingHash(value: unknown): string {
-  return createHash("sha256").update(canonicalStoreRequest(value), "utf8").digest("hex");
-}
 function bindingFailure(
   dependency: NonNullable<NativeProjectionError["dependency"]>
 ): NativeProjectionError {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 import { Command, Option } from "commander";
 import { isUtf8 } from "node:buffer";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -4451,7 +4452,11 @@ async function runSessionLoop(opts?: {
           event.relationship_key ??
           (event.table === "relationship_snapshots" ? event.id : undefined) ??
           (event.relationship_type && event.source_entity_id && event.target_entity_id
-            ? `${event.relationship_type}:${event.source_entity_id}:${event.target_entity_id}`
+            ? RelationshipReducer.generateRelationshipKey(
+                event.relationship_type,
+                event.source_entity_id,
+                event.target_entity_id
+              )
             : undefined);
         if (relationshipId) {
           argv = [
@@ -4492,7 +4497,11 @@ async function runSessionLoop(opts?: {
           event.relationship_key ??
           (event.table === "relationship_snapshots" ? event.id : undefined) ??
           (event.relationship_type && event.source_entity_id && event.target_entity_id
-            ? `${event.relationship_type}:${event.source_entity_id}:${event.target_entity_id}`
+            ? RelationshipReducer.generateRelationshipKey(
+                event.relationship_type,
+                event.source_entity_id,
+                event.target_entity_id
+              )
             : undefined);
         const isEntityGet =
           argv[2] === "entities" && argv[3] === "get" && typeof entityIdForFallback === "string";

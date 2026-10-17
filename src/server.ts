@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "./reducers/relationship_reducer.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -4264,7 +4265,11 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId();
 
     // Get relationship snapshot
-    const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      parsed.relationship_type,
+      parsed.source_entity_id,
+      parsed.target_entity_id
+    );
     const { data: snapshot, error } = await db
       .from("relationship_snapshots")
       .select("*")
@@ -8853,7 +8858,11 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = DeleteRelationshipRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
-    const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      parsed.relationship_type,
+      parsed.source_entity_id,
+      parsed.target_entity_id
+    );
 
     // Discovery guard (#277): mirrors the HTTP /delete_relationship handler.
     // Deletion requires the exact relationship_type between two entities, but a
@@ -8964,7 +8973,11 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RestoreRelationshipRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
-    const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      parsed.relationship_type,
+      parsed.source_entity_id,
+      parsed.target_entity_id
+    );
 
     let result: Awaited<ReturnType<typeof restoreRelationshipService>>;
     try {

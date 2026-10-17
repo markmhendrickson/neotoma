@@ -1,3 +1,4 @@
+import { RelationshipReducer } from "./reducers/relationship_reducer.js";
 import {
   preflightStructuredStoreAdmission,
   type StructuredStoreApiParams,
@@ -6285,7 +6286,11 @@ app.post("/relationships/snapshot", async (req, res) => {
   try {
     const { relationship_type, source_entity_id, target_entity_id, user_id } = parsed.data;
     const userId = await getAuthenticatedUserId(req, user_id);
-    const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      relationship_type,
+      source_entity_id,
+      target_entity_id
+    );
 
     const { data: snapshot, error: snapshotError } = await db
       .from("relationship_snapshots")
@@ -11640,7 +11645,11 @@ app.post("/delete_relationship", async (req, res) => {
     const { softDeleteRelationship } = await import("./services/deletion.js");
 
     // Construct relationship key
-    const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      relationship_type,
+      source_entity_id,
+      target_entity_id
+    );
 
     const result = await softDeleteRelationship(
       relationshipKey,
@@ -11690,7 +11699,11 @@ app.post("/restore_relationship", async (req, res) => {
     const { restoreRelationship } = await import("./services/deletion.js");
 
     // Construct relationship key
-    const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
+    const relationshipKey = RelationshipReducer.generateRelationshipKey(
+      relationship_type,
+      source_entity_id,
+      target_entity_id
+    );
 
     const result = await restoreRelationship(
       relationshipKey,
