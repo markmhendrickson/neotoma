@@ -5,8 +5,8 @@ meta:
 seed_strategy: generated
 source_pattern: A transition depends on all existing rows of a type, including rows not selected in the initial decision.
 privacy_transform: Synthetic schema, records, fields, and keys only.
-system_prompt: Acquire the complete scoped type before correction. Refuse a truncated inventory, a new row, and a changed previously nonselected row. Compare every existing row's revision when its content can affect selection; retry an uncertain commit with the identical key and payload.
-user_prompt: Seed three synthetic records. Try an incomplete inventory, then apply a complete revision-guarded transition. Insert another record and refuse the stale inventory. Edit that previously nonselected record, refuse its stale revision, refresh the complete inventory, apply a second transition, and replay it exactly.
+system_prompt: Page through the complete scoped type before correction. Refuse a first-page-only inventory, a new row, and a changed previously nonselected row. Compare every existing row's revision when its content can affect selection; retry an uncertain commit with the identical key and payload.
+user_prompt: Seed three synthetic records. Try a first-page-only inventory, then read the second page and apply a complete revision-guarded transition. Insert another record and refuse the stale inventory. Edit that previously nonselected record, refuse its stale revision, refresh the complete inventory, apply a second transition, and replay it exactly.
 host_tools: []
 models:
   - provider: stub
@@ -45,8 +45,7 @@ expected:
       total: 3
       read_contract:
         coverage:
-          state: complete
-          returned_count: 3
+          returned_count: 1
           scope_exhausted: true
   - type: tool_result.matches
     tool_name: correct_transaction
