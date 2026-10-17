@@ -2058,6 +2058,13 @@ export interface paths {
      *     read-back failure rolls back all changes. Reuse the identical request
      *     and idempotency key after uncertainty; changed payload reuse conflicts.
      *     This primitive does not decide or authorize application-level approval.
+     *     Optional populations compare the complete visible entity IDs of an
+     *     authenticated graph and entity type in that same write transaction.
+     *     Optional expected_observation_counts also compare every existing row's
+     *     authoritative observation count and opaque content revision, including
+     *     previously nonselected rows whose content or schema projection changes.
+     *     The caller must acquire the entire owner-scoped type population it
+     *     relies on; this guard does not choose business-relevant types.
      */
     post: operations["correctTransaction"];
     delete?: never;
@@ -3723,6 +3730,8 @@ export interface components {
       last_observation_at?: string;
       /** @description Opaque CAS token that changes for every committed observation. */
       entity_version?: string;
+      /** @description Opaque revision of the materialized content and active schema/reducer basis. Omitted when current revision authority is unavailable. */
+      content_revision?: string;
       canonical_name?: string | null;
       merged_to_entity_id?: string | null;
       /** Format: date-time */
@@ -9092,6 +9101,17 @@ export interface operations {
         "application/json": {
           user_id?: string;
           idempotency_key: string;
+          /** @description Complete visible owner/type entity ID sets read before the request. A new, removed or merged row conflicts before any correction. Include expected_observation_counts when existing row content can affect the decision. */
+          populations?: {
+            entity_type: string;
+            expected_entity_ids: string[];
+            /** @description One current observation count and opaque content revision for every expected_entity_id. Materialization lag, content or schema changes conflict before correction; missing or duplicate IDs are invalid. */
+            expected_observation_counts?: {
+              entity_id: string;
+              observation_count: number;
+              content_revision: string;
+            }[];
+          }[];
           entities: {
             entity_id: string;
             entity_type: string;

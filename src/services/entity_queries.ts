@@ -10,6 +10,9 @@ import {
   type CursorPayload,
 } from "./entity_cursor.js";
 import { computeEntityVersion } from "./entity_version.js";
+import { createHash } from "node:crypto";
+import { stableSerialize } from "./stable_serialize.js";
+import { snapshotSchemaBasis } from "./snapshot_schema_basis.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -134,6 +137,8 @@ export interface EntityWithProvenance {
   last_observation_at: string;
   /** Opaque CAS token that advances for every committed observation. */
   entity_version: string;
+  /** Opaque revision of the materialized projection and active reducer basis. */
+  content_revision?: string;
   provenance: Record<string, unknown>;
   computed_at?: string;
   merged_to_entity_id?: string | null;
@@ -161,12 +166,61 @@ export interface EntityWithProvenance {
 interface EntitySnapshotRow {
   entity_id: string;
   schema_version?: string;
+  schema_basis?: string | null;
   snapshot?: Record<string, unknown>;
   observation_count?: number;
   last_observation_at?: string;
   provenance?: Record<string, unknown>;
   computed_at?: string;
   [key: string]: unknown;
+}
+
+/** Shared opaque token for the normal read and the in-transaction population
+ * check. Including the active schema/reducer basis makes a count-preserving
+ * projection change stale, while snapshot/provenance bind its current content.
+ */
+export function populationContentRevision(
+  entityId: string,
+  snapshot: EntitySnapshotRow,
+  schema: { schema_version: string; schema_definition: unknown; reducer_config: unknown }
+): string {
+  return createHash("sha256")
+    .update(
+      stableSerialize({
+        entity_id: entityId,
+        schema_version: snapshot.schema_version,
+        active_schema_version: schema.schema_version,
+        snapshot: snapshot.snapshot,
+        provenance: snapshot.provenance,
+        schema_definition: schema.schema_definition,
+        reducer_config: schema.reducer_config,
+      })
+    )
+    .digest("hex");
+}
+
+/** Issue a population token only for a snapshot materialized under the
+ * currently selected schema and reducer. Legacy rows without a durable basis
+ * remain readable but cannot authorize a guarded write until recomputation.
+ */
+export function currentPopulationContentRevision(
+  entityId: string,
+  snapshot: EntitySnapshotRow | null | undefined,
+  schema:
+    | { schema_version: string; schema_definition: unknown; reducer_config: unknown }
+    | null
+    | undefined
+): string | undefined {
+  if (
+    !snapshot ||
+    !schema ||
+    snapshot.schema_version !== schema.schema_version ||
+    snapshot.schema_basis !== snapshotSchemaBasis(schema) ||
+    !snapshot.snapshot ||
+    !snapshot.provenance
+  )
+    return undefined;
+  return populationContentRevision(entityId, snapshot, schema);
 }
 
 // #1943: pagination bounds live in a dependency-free module so the request
@@ -300,6 +354,110 @@ async function getDeletedEntityIds(
   }
 
   return deletedEntityIds;
+}
+
+/** Complete current owner/type membership for an in-transaction absence guard.
+ * Keyset paging avoids the offset scan cost of the general display query.
+ * Visibility uses the same lifecycle authority as queryEntities.
+ */
+export async function listVisibleEntityIdsForType(
+  userId: string,
+  entityType: string,
+  maxVisible = 10000
+): Promise<string[]> {
+  const ids: string[] = [];
+  let scanned = 0;
+  let after: string | undefined;
+  for (;;) {
+    let query = db
+      .from("entities")
+      .select("id,merged_to_entity_id")
+      .eq("user_id", userId)
+      .eq("entity_type", entityType)
+      .is("merged_to_entity_id", null)
+      .order("id", { ascending: true })
+      .limit(500);
+    if (after) query = query.gt("id", after);
+    const { data, error } = await query;
+    if (error) throw new Error("Could not acquire the complete scoped type population.");
+    const rows = data ?? [];
+    if (!rows.length) return ids;
+    scanned += rows.length;
+    if (scanned > 40000) throw new Error("Scoped type population exceeds the bounded scan.");
+    const deleted = await getDeletedEntityIds(rows, userId);
+    for (const row of rows) {
+      if (!deleted.has(row.id)) ids.push(row.id);
+      if (ids.length > maxVisible)
+        throw new Error("Scoped type population exceeds the supported comparison bound.");
+    }
+    after = rows[rows.length - 1].id;
+    if (rows.length < 500) return ids;
+  }
+}
+
+/** Current materialized revisions for an already-acquired complete type set.
+ * Missing, duplicate or malformed rows are unavailable authority, never an
+ * implicit zero version. Call inside the same write transaction as the set scan.
+ */
+export async function listObservationCountsForVisibleIds(
+  userId: string,
+  ids: readonly string[],
+  schema: { schema_version: string; schema_definition: unknown; reducer_config: unknown }
+): Promise<Array<{ entity_id: string; observation_count: number; content_revision: string }>> {
+  const revisions: Array<{
+    entity_id: string;
+    observation_count: number;
+    content_revision: string;
+  }> = [];
+  const { getDb } = await import("../repositories/db/connection.js");
+  const connection = await getDb();
+  for (let start = 0; start < ids.length; start += 500) {
+    const chunk = ids.slice(start, start + 500);
+    const { data, error } = await db
+      .from("entity_snapshots")
+      .select("entity_id,observation_count,schema_version,schema_basis,snapshot,provenance")
+      .eq("user_id", userId)
+      .in("entity_id", chunk);
+    if (error || !Array.isArray(data) || data.length !== chunk.length)
+      throw new Error("Complete scoped population revisions are unavailable.");
+    // A persisted observation can outlive a failed snapshot recomputation.
+    // Count the attached ledger in the same reserved transaction; at present
+    // visible entities have only the merge-alias rule and merge rewrites
+    // observations.entity_id to the survivor. An observation-grained attachment
+    // rule must extend this acquisition before it is enabled.
+    const ledgerRows = (await connection
+      .prepare(
+        `SELECT entity_id, COUNT(*) AS observation_count FROM observations
+         WHERE user_id = ? AND entity_id IN (${chunk.map(() => "?").join(",")})
+         GROUP BY entity_id`
+      )
+      .all(userId, ...chunk)) as Array<{ entity_id: string; observation_count: number }>;
+    const ledger = new Map(ledgerRows.map((row) => [row.entity_id, row.observation_count]));
+    const wanted = new Set(chunk);
+    const seen = new Set<string>();
+    for (const row of data) {
+      if (
+        !row ||
+        typeof row.entity_id !== "string" ||
+        !wanted.has(row.entity_id) ||
+        seen.has(row.entity_id) ||
+        !Number.isSafeInteger(row.observation_count) ||
+        row.observation_count < 0 ||
+        ledger.get(row.entity_id) !== row.observation_count
+      )
+        throw new Error("Complete scoped population revisions are unavailable.");
+      seen.add(row.entity_id);
+      const contentRevision = currentPopulationContentRevision(row.entity_id, row, schema);
+      if (!contentRevision)
+        throw new Error("Complete scoped population revisions are unavailable.");
+      revisions.push({
+        entity_id: row.entity_id,
+        observation_count: row.observation_count,
+        content_revision: contentRevision,
+      });
+    }
+  }
+  return revisions.sort((a, b) => a.entity_id.localeCompare(b.entity_id));
 }
 
 /** Reuse the current visibility acquisition for derived snapshot consumers.
@@ -742,6 +900,29 @@ export async function queryEntities(
   const snapshotMap = new Map<string, EntitySnapshotRow>(
     (snapshots || []).map((s: EntitySnapshotRow) => [s.entity_id, s])
   );
+  // A complete paginated type scan already loads the snapshots for its page.
+  // Expose the same opaque revision as the single-entity reader so a caller
+  // need not perform one extra snapshot request per population member. Missing
+  // schema or projection authority remains an absent token, which guarded
+  // callers must refuse rather than interpreting as an empty revision.
+  const contentSchemas = new Map<
+    string,
+    { schema_version: string; schema_definition: unknown; reducer_config: unknown } | null
+  >();
+  if (includeSnapshots && userId) {
+    const { SchemaRegistryService } = await import("./schema_registry.js");
+    const registry = new SchemaRegistryService();
+    for (const type of new Set(entities.map((entity: any) => entity.entity_type as string))) {
+      try {
+        const schema = await registry.loadUnambiguousActiveSchema(type, userId);
+        contentSchemas.set(type, schema ?? null);
+      } catch {
+        // Ordinary listing remains usable; guarded consumers refuse the
+        // missing token. A failed schema lookup is never an empty revision.
+        contentSchemas.set(type, null);
+      }
+    }
+  }
 
   // Get raw_fragments for all entities (batch query)
   let allObservations: Array<{
@@ -918,6 +1099,13 @@ export async function queryEntities(
     const lightweightStatus = snapshotData["status"];
     const observationCount = snapshot?.observation_count || 0;
     const lastObservationAt = snapshot?.last_observation_at || entity.created_at;
+    const contentRevision = includeSnapshots
+      ? currentPopulationContentRevision(
+          entity.id,
+          snapshot,
+          contentSchemas.get(entity.entity_type)
+        )
+      : undefined;
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
@@ -939,6 +1127,7 @@ export async function queryEntities(
         observation_count: observationCount,
         last_observation_at: lastObservationAt,
       }),
+      ...(contentRevision ? { content_revision: contentRevision } : {}),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,
@@ -1150,10 +1339,15 @@ export async function getEntityWithProvenance(
   // are optional and never block the entity response.
   let entityTypeLabel: string | null = null;
   let primaryFields: string[] | undefined;
+  let contentRevision: string | undefined;
   try {
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
-    const schema = await registry.loadActiveSchema(entity.entity_type, entity.user_id ?? undefined);
+    const schema = entity.user_id
+      ? await registry.loadUnambiguousActiveSchema(entity.entity_type, entity.user_id)
+      : null;
+    if (!snapshotError)
+      contentRevision = currentPopulationContentRevision(entity.id, snapshot, schema);
     if (schema?.metadata?.label) entityTypeLabel = schema.metadata.label;
     const snapshotObj = effectiveSnapshot?.snapshot ?? {};
     if (snapshotObj && Object.keys(snapshotObj).length > 0) {
@@ -1190,6 +1384,7 @@ export async function getEntityWithProvenance(
       observation_count: observationCount,
       last_observation_at: lastObservationAt,
     }),
+    ...(contentRevision ? { content_revision: contentRevision } : {}),
     provenance: effectiveSnapshot?.provenance || {},
     computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,

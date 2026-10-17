@@ -10362,7 +10362,29 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
-  return res.json(await withSnapshotDataOrigins(data, userId));
+  let contentRevision: string | undefined;
+  try {
+    const { schemaRegistry } = await import("./services/schema_registry.js");
+    const { currentPopulationContentRevision } = await import("./services/entity_queries.js");
+    const schema = await schemaRegistry.loadUnambiguousActiveSchema(data.entity_type, userId);
+    contentRevision = currentPopulationContentRevision(entity_id, data, schema);
+  } catch {
+    // Keep the factual read available; a caller using this as a claim basis
+    // must refuse the missing revision rather than substitute a count.
+  }
+  // The persisted schema basis is internal materialization evidence. Callers
+  // receive only the opaque content revision, when that evidence is current.
+  const publicSnapshot = { ...data };
+  delete publicSnapshot.schema_basis;
+  return res.json(
+    await withSnapshotDataOrigins(
+      {
+        ...publicSnapshot,
+        ...(contentRevision ? { content_revision: contentRevision } : {}),
+      },
+      userId
+    )
+  );
 });
 
 /**
@@ -13426,6 +13448,7 @@ app.post("/health_check_snapshots", async (req, res) => {
             entity_id: newSnapshot.entity_id,
             entity_type: newSnapshot.entity_type,
             schema_version: newSnapshot.schema_version,
+            schema_basis: newSnapshot.schema_basis,
             snapshot: newSnapshot.snapshot,
             computed_at: newSnapshot.computed_at,
             observation_count: newSnapshot.observation_count,

@@ -1,0 +1,646 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "atomic_correction_population_revision",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Seed three synthetic records. Try a first-page-only inventory, then read the second page and apply a complete revision-guarded transition. Insert another record and refuse the stale inventory. Edit that previously nonselected record, refuse its stale revision, refresh the complete inventory, apply a second transition, and replay it exactly.",
+  "system_prompt": "Page through the complete scoped type before correction. Refuse a first-page-only inventory, a new row, and a changed previously nonselected row. Compare every existing row's revision when its content can affect selection; retry an uncertain commit with the identical key and payload.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "status": {
+              "type": "string"
+            },
+            "remaining": {
+              "type": "number"
+            }
+          },
+          "canonical_name_fields": [
+            "title"
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "title": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            },
+            "status": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            },
+            "remaining": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            }
+          }
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-atomic-seed",
+        "entities": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic draft alpha",
+            "status": "ready"
+          },
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic source capacity",
+            "remaining": 1
+          },
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic draft beta",
+            "status": "ready"
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "limit": 2
+      },
+      "sequence": 2
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-incomplete",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ],
+        "populations": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "expected_entity_ids": [
+              "ent_721001bcfee64e561dd21c6a",
+              "ent_7c99c4347b6961e0e5bdde0f"
+            ],
+            "expected_observation_counts": [
+              {
+                "entity_id": "ent_721001bcfee64e561dd21c6a",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 2,
+                    "entity_id": "ent_721001bcfee64e561dd21c6a"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 2,
+                    "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "limit": 2,
+        "cursor": "eyJ2IjoxLCJzb3J0X2J5IjoiZW50aXR5X2lkIiwic29ydF9vcmRlciI6ImFzYyIsImVudGl0eV9pZCI6ImVudF83Yzk5YzQzNDdiNjk2MWUwZTViZGRlMGYifQ"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-first",
+        "entities": [
+          {
+            "entity_id": "ent_721001bcfee64e561dd21c6a",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ],
+        "populations": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "expected_entity_ids": [
+              "ent_721001bcfee64e561dd21c6a",
+              "ent_7c99c4347b6961e0e5bdde0f",
+              "ent_e80de22a92c0a3db09747543"
+            ],
+            "expected_observation_counts": [
+              {
+                "entity_id": "ent_721001bcfee64e561dd21c6a",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 2,
+                    "entity_id": "ent_721001bcfee64e561dd21c6a"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 2,
+                    "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_e80de22a92c0a3db09747543",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 4,
+                    "entity_id": "ent_e80de22a92c0a3db09747543"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 5
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-population-new-source",
+        "entities": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "title": "Atomic source late",
+            "remaining": 1
+          }
+        ]
+      },
+      "sequence": 6
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-stale",
+        "entities": [
+          {
+            "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ],
+        "populations": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "expected_entity_ids": [
+              "ent_721001bcfee64e561dd21c6a",
+              "ent_7c99c4347b6961e0e5bdde0f",
+              "ent_e80de22a92c0a3db09747543"
+            ],
+            "expected_observation_counts": [
+              {
+                "entity_id": "ent_721001bcfee64e561dd21c6a",
+                "observation_count": 2,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 5,
+                    "entity_id": "ent_721001bcfee64e561dd21c6a"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 2,
+                    "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_e80de22a92c0a3db09747543",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 4,
+                    "entity_id": "ent_e80de22a92c0a3db09747543"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 7
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "limit": 100
+      },
+      "sequence": 8
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-late-edit",
+        "entities": [
+          {
+            "entity_id": "ent_06838fa1ed29da4926c1eb22",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": [
+              {
+                "field": "remaining",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 9
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-revision-stale",
+        "entities": [
+          {
+            "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ],
+        "populations": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "expected_entity_ids": [
+              "ent_06838fa1ed29da4926c1eb22",
+              "ent_721001bcfee64e561dd21c6a",
+              "ent_7c99c4347b6961e0e5bdde0f",
+              "ent_e80de22a92c0a3db09747543"
+            ],
+            "expected_observation_counts": [
+              {
+                "entity_id": "ent_06838fa1ed29da4926c1eb22",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 8,
+                    "entity_id": "ent_06838fa1ed29da4926c1eb22"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_721001bcfee64e561dd21c6a",
+                "observation_count": 2,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 8,
+                    "entity_id": "ent_721001bcfee64e561dd21c6a"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 8,
+                    "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_e80de22a92c0a3db09747543",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 8,
+                    "entity_id": "ent_e80de22a92c0a3db09747543"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 10
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "eval_atomic_transaction",
+        "limit": 100
+      },
+      "sequence": 11
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-fresh",
+        "entities": [
+          {
+            "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ],
+        "populations": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "expected_entity_ids": [
+              "ent_06838fa1ed29da4926c1eb22",
+              "ent_721001bcfee64e561dd21c6a",
+              "ent_7c99c4347b6961e0e5bdde0f",
+              "ent_e80de22a92c0a3db09747543"
+            ],
+            "expected_observation_counts": [
+              {
+                "entity_id": "ent_06838fa1ed29da4926c1eb22",
+                "observation_count": 2,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_06838fa1ed29da4926c1eb22"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_721001bcfee64e561dd21c6a",
+                "observation_count": 2,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_721001bcfee64e561dd21c6a"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_e80de22a92c0a3db09747543",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_e80de22a92c0a3db09747543"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 12
+    },
+    {
+      "name": "correct_transaction",
+      "input": {
+        "idempotency_key": "eval-population-fresh",
+        "entities": [
+          {
+            "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "status": "ready"
+            },
+            "changes": [
+              {
+                "field": "status",
+                "value": "approved"
+              }
+            ]
+          },
+          {
+            "entity_id": "ent_e80de22a92c0a3db09747543",
+            "entity_type": "eval_atomic_transaction",
+            "expected_observation_count": 1,
+            "expected_snapshot": {
+              "remaining": 1
+            },
+            "changes": []
+          }
+        ],
+        "populations": [
+          {
+            "entity_type": "eval_atomic_transaction",
+            "expected_entity_ids": [
+              "ent_06838fa1ed29da4926c1eb22",
+              "ent_721001bcfee64e561dd21c6a",
+              "ent_7c99c4347b6961e0e5bdde0f",
+              "ent_e80de22a92c0a3db09747543"
+            ],
+            "expected_observation_counts": [
+              {
+                "entity_id": "ent_06838fa1ed29da4926c1eb22",
+                "observation_count": 2,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_06838fa1ed29da4926c1eb22"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_721001bcfee64e561dd21c6a",
+                "observation_count": 2,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_721001bcfee64e561dd21c6a"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_7c99c4347b6961e0e5bdde0f",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+                  }
+                }
+              },
+              {
+                "entity_id": "ent_e80de22a92c0a3db09747543",
+                "observation_count": 1,
+                "content_revision": {
+                  "$source_content_revision": {
+                    "sequence": 11,
+                    "entity_id": "ent_e80de22a92c0a3db09747543"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sequence": 13
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_721001bcfee64e561dd21c6a"
+      },
+      "sequence": 14
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_7c99c4347b6961e0e5bdde0f"
+      },
+      "sequence": 15
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_e80de22a92c0a3db09747543"
+      },
+      "sequence": 16
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_06838fa1ed29da4926c1eb22"
+      },
+      "sequence": 17
+    }
+  ],
+  "assistant_text": "A partial inventory and a later insertion were refused. An edit to a previously unselected existing row invalidated the revision guard, while the refreshed complete guard committed and exact replay added no write."
+}

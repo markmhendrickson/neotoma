@@ -1541,6 +1541,7 @@ export class NeotomaServer {
             entity_id: newSnapshot.entity_id,
             entity_type: newSnapshot.entity_type,
             schema_version: newSnapshot.schema_version,
+            schema_basis: newSnapshot.schema_basis,
             snapshot: newSnapshot.snapshot,
             computed_at: newSnapshot.computed_at,
             observation_count: newSnapshot.observation_count,
@@ -3613,6 +3614,7 @@ export class NeotomaServer {
       cleared_fields_included?: true;
       computed_at: string | null | undefined;
       observation_count: number;
+      content_revision?: string;
       last_observation_at: string | null | undefined;
     }): Promise<{ content: Array<{ type: string; text: string }> }> => {
       // Resolve schema-level agent_instructions once for both formats.
@@ -3760,6 +3762,7 @@ export class NeotomaServer {
           | undefined) ?? {},
       computed_at: (entity as { computed_at?: string | null }).computed_at ?? null,
       observation_count: (entity as { observation_count?: number }).observation_count ?? 0,
+      ...(entity.content_revision ? { content_revision: entity.content_revision } : {}),
       last_observation_at:
         (entity as { last_observation_at?: string | null }).last_observation_at ?? null,
     });
@@ -7640,6 +7643,7 @@ export class NeotomaServer {
             entity_id: snapshot.entity_id,
             entity_type: snapshot.entity_type,
             schema_version: snapshot.schema_version,
+            schema_basis: snapshot.schema_basis,
             snapshot: snapshot.snapshot,
             computed_at: snapshot.computed_at,
             observation_count: snapshot.observation_count,

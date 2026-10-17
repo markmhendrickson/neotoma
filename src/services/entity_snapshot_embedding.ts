@@ -15,6 +15,7 @@ export interface EntitySnapshotRowForEmbedding {
   entity_id: string;
   entity_type: string;
   schema_version: string;
+  schema_basis?: string;
   snapshot: Record<string, unknown>;
   computed_at: string;
   observation_count: number;
@@ -165,6 +166,7 @@ export function getEntitySnapshotUpsertPayload(
     entity_id: row.entity_id,
     entity_type: row.entity_type,
     schema_version: row.schema_version,
+    schema_basis: row.schema_basis ?? null,
     snapshot: row.snapshot,
     computed_at: row.computed_at,
     observation_count: row.observation_count,

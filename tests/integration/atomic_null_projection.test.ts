@@ -390,11 +390,110 @@ it("missing actual active schema refuses nullable certification while default ca
   try {
     expect((await nullable(row.entity_id)).status).toBe(500);
     const after = (await request("/get_entity_snapshot", { entity_id: row.entity_id })).body;
-    expect(after).toEqual(before);
+    expect(after.snapshot).toEqual(before.snapshot);
+    expect(after.provenance).toEqual(before.provenance);
+    expect(after.content_revision).toBeUndefined();
   } finally {
     expect(
       (await db.from("schema_registry").update({ active: true }).eq("entity_type", kind)).error
     ).toBeNull();
+  }
+});
+
+it("direct HTTP snapshot omits revision after same-version schema replacement", async () => {
+  const row = await target({ reason: "before" });
+  const before = await request("/get_entity_snapshot", { entity_id: row.entity_id });
+  expect(before.status).toBe(200);
+  expect(before.body.content_revision).toMatch(/^[0-9a-f]{64}$/);
+  expect(before.body).not.toHaveProperty("schema_basis");
+  expect(before.body.content_revision).toBe(
+    (await getEntityWithProvenance(row.entity_id, false, owner))?.content_revision
+  );
+  const selected = await schemaRegistry.loadActiveSchema(kind, owner);
+  expect(selected).not.toBeNull();
+  const active = await db
+    .from("schema_registry")
+    .select("id,schema_definition,reducer_config")
+    .eq("id", selected!.id)
+    .single();
+  expect(active.error).toBeNull();
+  const original = active.data!;
+  const definition =
+    typeof original.schema_definition === "string"
+      ? JSON.parse(original.schema_definition)
+      : original.schema_definition;
+  const reducer =
+    typeof original.reducer_config === "string"
+      ? JSON.parse(original.reducer_config)
+      : original.reducer_config;
+  try {
+    expect(
+      (
+        await db
+          .from("schema_registry")
+          .update({
+            schema_definition: {
+              ...definition,
+              fields: Object.fromEntries(
+                Object.entries(definition.fields).filter(([field]) => field !== "reason")
+              ),
+            },
+            reducer_config: {
+              ...reducer,
+              merge_policies: Object.fromEntries(
+                Object.entries(reducer.merge_policies).filter(([field]) => field !== "reason")
+              ),
+            },
+          })
+          .eq("id", original.id)
+      ).error
+    ).toBeNull();
+    const after = await request("/get_entity_snapshot", { entity_id: row.entity_id });
+    expect(after.status).toBe(200);
+    expect(after.body.snapshot.reason).toBe("before");
+    expect(after.body.content_revision).toBeUndefined();
+  } finally {
+    expect(
+      (
+        await db
+          .from("schema_registry")
+          .update({
+            schema_definition: original.schema_definition,
+            reducer_config: original.reducer_config,
+          })
+          .eq("id", original.id)
+      ).error
+    ).toBeNull();
+  }
+});
+
+it("direct HTTP snapshot withholds revision for duplicate active owner schemas", async () => {
+  const row = await target({ reason: "retained" });
+  const before = await request("/get_entity_snapshot", { entity_id: row.entity_id });
+  expect(before.status).toBe(200);
+  expect(before.body.content_revision).toMatch(/^[0-9a-f]{64}$/);
+  const active = await schemaRegistry.loadActiveSchema(kind, owner);
+  expect(active).not.toBeNull();
+  const duplicateId = randomUUID();
+  try {
+    expect(
+      (
+        await db.from("schema_registry").insert({
+          ...active,
+          id: duplicateId,
+          active: true,
+        })
+      ).error
+    ).toBeNull();
+    const after = await request("/get_entity_snapshot", { entity_id: row.entity_id });
+    expect(after.status).toBe(200);
+    expect(after.body.snapshot).toEqual(before.body.snapshot);
+    expect(after.body.content_revision).toBeUndefined();
+    expect(
+      (await getEntityWithProvenance(row.entity_id, false, owner))?.content_revision
+    ).toBeUndefined();
+  } finally {
+    await db.from("schema_registry").delete().eq("id", duplicateId);
   }
 });
 
