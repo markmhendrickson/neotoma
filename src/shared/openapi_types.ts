@@ -2058,6 +2058,10 @@ export interface paths {
      *     read-back failure rolls back all changes. Reuse the identical request
      *     and idempotency key after uncertainty; changed payload reuse conflicts.
      *     This primitive does not decide or authorize application-level approval.
+     *     Optional populations compare the complete visible entity IDs of an
+     *     authenticated graph and entity type in that same write transaction.
+     *     The caller must acquire the entire owner-scoped type population it
+     *     relies on; this guard does not choose business-relevant types.
      */
     post: operations["correctTransaction"];
     delete?: never;
@@ -9092,6 +9096,11 @@ export interface operations {
         "application/json": {
           user_id?: string;
           idempotency_key: string;
+          /** @description Complete visible owner/type entity ID sets read before the request. A new, removed or merged row conflicts before any correction. */
+          populations?: {
+            entity_type: string;
+            expected_entity_ids: string[];
+          }[];
           entities: {
             entity_id: string;
             entity_type: string;

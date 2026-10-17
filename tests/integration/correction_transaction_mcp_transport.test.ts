@@ -224,4 +224,44 @@ describe("compare-only correction through POST /mcp tools/call", () => {
     expect(await count("ent_2395_other_writer")).toBe(2);
     expect(await count("ent_2395_other_guard")).toBe(1);
   });
+
+  it("holds an authenticated writer when a newly inserted visible source changes its type population", async () => {
+    await seed("ent_2395_population_writer", OWNER, { title: "Writer", status: "ready" });
+    await seed("ent_2395_population_guard", OWNER, { title: "Guard", remaining: 1 });
+    await seed("ent_2395_foreign_population", OTHER, { title: "Foreign", remaining: 1 });
+    const unchanged = {
+      ...input("ent_2395_population_writer", "ent_2395_population_guard", "mcp-2395-population"),
+      populations: [
+        {
+          entity_type: KIND,
+          expected_entity_ids: ["ent_2395_population_guard", "ent_2395_population_writer"],
+        },
+      ],
+    };
+    await seed("ent_2395_new_source", OWNER, { title: "New source", remaining: 2 });
+    const refused = await call(unchanged, "conn-2395-owner", 6);
+    expect(isRefusal(refused), refused.text).toBe(true);
+    expect(refused.text).toContain("population precondition");
+    expect(await count("ent_2395_population_writer")).toBe(1);
+
+    const refreshed = {
+      ...unchanged,
+      idempotency_key: "mcp-2395-population-refreshed",
+      populations: [
+        {
+          entity_type: KIND,
+          expected_entity_ids: [
+            "ent_2395_new_source",
+            "ent_2395_population_guard",
+            "ent_2395_population_writer",
+          ],
+        },
+      ],
+    };
+    const applied = await call(refreshed, "conn-2395-owner", 7);
+    expect(applied.status, applied.text).toBe(200);
+    expect(toolResultJson(applied.body).status).toBe("applied");
+    expect(await count("ent_2395_population_writer")).toBe(2);
+    expect(await count("ent_2395_population_guard")).toBe(1);
+  });
 });

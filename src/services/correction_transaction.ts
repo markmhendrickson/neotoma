@@ -4,7 +4,7 @@ import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
 import { createCorrection } from "./correction.js";
 import { validateChangesAgainstSchema } from "./batch_correction.js";
-import { getEntityWithProvenance } from "./entity_queries.js";
+import { getEntityWithProvenance, listVisibleEntityIdsForType } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { enforceAgentCapability, contextFromAgentIdentity } from "./agent_capabilities.js";
 import { getCurrentAgentIdentity } from "./request_context.js";
@@ -20,6 +20,7 @@ export interface CorrectionTransactionOptions {
   user_id: string;
   idempotency_key: string;
   entities: CorrectionTransactionEntity[];
+  populations?: { entity_type: string; expected_entity_ids: string[] }[];
 }
 export class CorrectionTransactionError extends Error {
   constructor(
@@ -52,7 +53,9 @@ function canonical(value: unknown): string {
 function assertValid(options: CorrectionTransactionOptions) {
   if (
     !options ||
-    Object.keys(options).some((key) => !["user_id", "idempotency_key", "entities"].includes(key))
+    Object.keys(options).some(
+      (key) => !["user_id", "idempotency_key", "entities", "populations"].includes(key)
+    )
   )
     throw new CorrectionTransactionError("VALIDATION_ERROR", "Unexpected transaction property.");
   if (
@@ -69,6 +72,34 @@ function assertValid(options: CorrectionTransactionOptions) {
       "A scoped idempotency key and 1–50 entities are required."
     );
   const ids = new Set<string>();
+  if (options.populations !== undefined) {
+    if (!Array.isArray(options.populations) || options.populations.length > 8)
+      throw new CorrectionTransactionError(
+        "VALIDATION_ERROR",
+        "At most eight scoped populations are supported."
+      );
+    const types = new Set<string>();
+    for (const population of options.populations) {
+      if (
+        !population ||
+        Object.keys(population).some(
+          (key) => !["entity_type", "expected_entity_ids"].includes(key)
+        ) ||
+        typeof population.entity_type !== "string" ||
+        !population.entity_type ||
+        types.has(population.entity_type) ||
+        !Array.isArray(population.expected_entity_ids) ||
+        population.expected_entity_ids.length > 10000 ||
+        population.expected_entity_ids.some((id) => typeof id !== "string" || !id) ||
+        new Set(population.expected_entity_ids).size !== population.expected_entity_ids.length
+      )
+        throw new CorrectionTransactionError(
+          "VALIDATION_ERROR",
+          "Each population requires one unique type and up to 10000 unique entity IDs."
+        );
+      types.add(population.entity_type);
+    }
+  }
   for (const entity of options.entities) {
     if (
       !entity ||
@@ -140,7 +171,10 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
   if (capabilityContext)
     enforceAgentCapability(
       "correct",
-      options.entities.map((entity) => entity.entity_type),
+      [
+        ...options.entities.map((entity) => entity.entity_type),
+        ...(options.populations ?? []).map((population) => population.entity_type),
+      ],
       capabilityContext
     );
   const entities = options.entities
@@ -149,8 +183,20 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
       changes: [...entity.changes].sort((a, b) => a.field.localeCompare(b.field)),
     }))
     .sort((a, b) => a.entity_id.localeCompare(b.entity_id));
+  const populations = (options.populations ?? [])
+    .map((population) => ({
+      entity_type: population.entity_type,
+      expected_entity_ids: [...population.expected_entity_ids].sort(),
+    }))
+    .sort((a, b) => a.entity_type.localeCompare(b.entity_type));
   const hash = createHash("sha256")
-    .update(canonical({ ...options, entities }))
+    .update(
+      canonical({
+        ...options,
+        entities,
+        ...(options.populations === undefined ? {} : { populations }),
+      })
+    )
     .digest("hex");
   const receiptKey =
     "correction-transaction:" +
@@ -252,6 +298,20 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
           "Transaction precondition no longer matches the stored entity."
         );
       prepared.push({ entity, schema });
+    }
+    for (const population of populations) {
+      const schema = await schemaRegistry.loadActiveSchema(population.entity_type, options.user_id);
+      if (!schema)
+        throw new CorrectionTransactionError(
+          "VALIDATION_ERROR",
+          "Population type requires an active schema."
+        );
+      const actual = await listVisibleEntityIdsForType(options.user_id, population.entity_type);
+      if (canonical(actual.sort()) !== canonical(population.expected_entity_ids))
+        throw new CorrectionTransactionError(
+          "CONFLICT",
+          "Transaction population precondition no longer matches the stored graph."
+        );
     }
     for (const { entity, schema } of prepared)
       for (const change of entity.changes)

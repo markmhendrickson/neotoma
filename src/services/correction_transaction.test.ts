@@ -1,9 +1,13 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "../db.js";
+import { config } from "../config.js";
 import { getDb } from "../repositories/db/connection.js";
+import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
-import { getEntityWithProvenance } from "./entity_queries.js";
+import { getEntityWithProvenance, listVisibleEntityIdsForType } from "./entity_queries.js";
 import { createCorrectionWithVersionPrecondition } from "./correction.js";
+import { softDeleteEntity } from "./deletion.js";
+import { runWithRequestContext } from "./request_context.js";
 import * as instancePolicy from "./instance_policy.js";
 import { substrateEventBus } from "../events/substrate_event_bus.js";
 import {
@@ -138,6 +142,218 @@ describe("scoped atomic correction transaction", () => {
     expect(events).toHaveLength(0);
     const rows = await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft");
     expect(rows.data).toHaveLength(1);
+  });
+  it("compares a complete visible type population before correcting the writer", async () => {
+    const input = request("population-unchanged");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ["ent_atomic_draft", "ent_atomic_source"],
+      },
+    ];
+    expect((await applyCorrectionTransaction(input)).status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+    await seed("ent_atomic_later_source", { title: "Later source", remaining: 2 });
+    expect((await applyCorrectionTransaction(input)).status).toBe("replayed");
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(2);
+    const changed = structuredClone(input);
+    changed.populations![0].expected_entity_ids = ["ent_atomic_draft"];
+    await expect(applyCorrectionTransaction(changed)).rejects.toThrow(/idempotency/i);
+  });
+
+  it("refuses a source inserted after complete inventory, leaving the existing writer untouched", async () => {
+    const stale = request("population-inserted");
+    stale.entities[1].changes = [];
+    stale.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ["ent_atomic_draft", "ent_atomic_source"],
+      },
+    ];
+    await seed("ent_atomic_new_source", { title: "New source", remaining: 2 });
+    events.length = 0;
+    const outcome = await applyCorrectionTransaction(stale).catch((error: Error) => error);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+    expect(outcome).toBeInstanceOf(Error);
+  });
+  it("compares beyond the first 500 visible IDs without accepting a truncated inventory", async () => {
+    const extra = Array.from(
+      { length: 499 },
+      (_, n) => `ent_atomic_page_${String(n).padStart(4, "0")}`
+    );
+    const inserted = await db.from("entities").insert(
+      extra.map((id) => ({
+        id,
+        entity_type: "atomic_test",
+        canonical_name: id,
+        user_id: user,
+      }))
+    );
+    expect(inserted.error).toBeNull();
+    const input = request("population-page");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: [...extra, "ent_atomic_draft", "ent_atomic_source"].sort(),
+      },
+    ];
+    expect((await applyCorrectionTransaction(input)).status).toBe("applied");
+
+    const stale = request("population-page-stale");
+    stale.entities[1].changes = [];
+    stale.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: [...extra, "ent_atomic_draft"].sort(),
+      },
+    ];
+    stale.entities[0].expected_observation_count = 2;
+    stale.entities[0].expected_snapshot = { status: "approved" };
+    stale.entities[0].changes = [{ field: "status", value: "sent" }];
+    await expect(applyCorrectionTransaction(stale)).rejects.toThrow(/population precondition/i);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+  });
+  it("holds the database write reservation from population read through the write boundary", async () => {
+    // The production service uses this same connection.transaction envelope for
+    // the population scan and createCorrection. A separate file-backed worker
+    // must be unable to insert a matching row between those two operations.
+    const connection = await getDb();
+    const competitor = new AsyncSqliteDatabase(config.sqlitePath);
+    const insert = () =>
+      competitor
+        .prepare(
+          "INSERT INTO entities (id, entity_type, canonical_name, user_id) VALUES (?, ?, ?, ?)"
+        )
+        .run("ent_atomic_concurrent", "atomic_test", "Concurrent", user);
+    try {
+      await competitor.exec("PRAGMA busy_timeout = 50");
+      await competitor.prepare("SELECT 1").get();
+      const mainFile = (await connection.pragma("database_list")).find(
+        (row) => (row as { name?: unknown }).name === "main"
+      );
+      const competitorFile = (await competitor.pragma("database_list")).find(
+        (row) => (row as { name?: unknown }).name === "main"
+      );
+      expect(mainFile).toBeDefined();
+      expect(competitorFile).toBeDefined();
+      expect(typeof mainFile?.file).toBe("string");
+      expect(mainFile?.file).not.toBe("");
+      expect(mainFile).toEqual(competitorFile);
+      await connection.transaction(async () => {
+        expect(await listVisibleEntityIdsForType(user, "atomic_test")).toEqual([
+          "ent_atomic_draft",
+          "ent_atomic_source",
+        ]);
+        await expect(insert()).rejects.toThrow(/locked|busy/i);
+        const insertedRow = await connection
+          .prepare("SELECT id FROM entities WHERE id = ?")
+          .get("ent_atomic_concurrent");
+        expect(insertedRow).toBeUndefined();
+        const updated = await db
+          .from("entities")
+          .update({ canonical_name: "Writer committed" })
+          .eq("id", "ent_atomic_draft")
+          .eq("user_id", user);
+        expect(updated.error).toBeNull();
+      });
+      await expect(insert()).resolves.toMatchObject({ changes: 1 });
+      expect(await listVisibleEntityIdsForType(user, "atomic_test")).toContain(
+        "ent_atomic_concurrent"
+      );
+    } finally {
+      await competitor.close();
+    }
+  });
+  it("refuses a merged or deleted member of a previously complete population", async () => {
+    await seed("ent_atomic_extra", { title: "Extra", remaining: 1 });
+    const input = request("population-merged");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ["ent_atomic_draft", "ent_atomic_extra", "ent_atomic_source"],
+      },
+    ];
+    expect(
+      (
+        await db
+          .from("entities")
+          .update({ merged_to_entity_id: "ent_atomic_source" })
+          .eq("id", "ent_atomic_extra")
+          .eq("user_id", user)
+      ).error
+    ).toBeNull();
+    await expect(applyCorrectionTransaction(input)).rejects.toThrow(/population precondition/i);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+
+    expect(
+      (
+        await db
+          .from("entities")
+          .update({ merged_to_entity_id: null })
+          .eq("id", "ent_atomic_extra")
+          .eq("user_id", user)
+      ).error
+    ).toBeNull();
+    expect((await softDeleteEntity("ent_atomic_extra", "atomic_test", user)).success).toBe(true);
+    await expect(
+      applyCorrectionTransaction({ ...input, idempotency_key: "population-deleted" })
+    ).rejects.toThrow(/population precondition/i);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+  });
+  it("rejects duplicate, malformed and unconfigured population guards before writing", async () => {
+    const invalid: unknown[] = [
+      [
+        {
+          entity_type: "atomic_test",
+          expected_entity_ids: ["ent_atomic_draft", "ent_atomic_draft"],
+        },
+      ],
+      [{ entity_type: "atomic_test", expected_entity_ids: [""] }],
+      [
+        { entity_type: "atomic_test", expected_entity_ids: [] },
+        { entity_type: "atomic_test", expected_entity_ids: [] },
+      ],
+      [{ entity_type: "unknown_type", expected_entity_ids: [] }],
+      [{ entity_type: "atomic_test", expected_entity_ids: [], unchecked: true }],
+    ];
+    for (const [index, populations] of invalid.entries()) {
+      const input = request(`population-invalid-${index}`);
+      input.entities[1].changes = [];
+      input.populations = populations as CorrectionTransactionOptions["populations"];
+      await expect(applyCorrectionTransaction(input)).rejects.toThrow();
+      expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    }
+  });
+  it("requires the caller's correction grant for every guarded population type", async () => {
+    const input = request("population-denied-type");
+    input.entities[1].changes = [];
+    input.populations = [{ entity_type: "ungranted_type", expected_entity_ids: [] }];
+    await expect(
+      runWithRequestContext(
+        {
+          agentIdentity: { tier: "software", sub: "population-test" } as never,
+          aauthAdmission: {
+            admitted: true,
+            user_id: user,
+            grant_id: "ent_population_test_grant",
+            agent_label: "population-test",
+            reason: "admitted",
+            capabilities: [{ op: "correct", entity_types: ["atomic_test"] }],
+          },
+        },
+        () => applyCorrectionTransaction(input)
+      )
+    ).rejects.toMatchObject({ code: "capability_denied" });
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
   });
   it("fails closed on absent, cross-tenant, wrong-type, undeclared and malformed guards", async () => {
     await seed(

@@ -302,6 +302,45 @@ async function getDeletedEntityIds(
   return deletedEntityIds;
 }
 
+/** Complete current owner/type membership for an in-transaction absence guard.
+ * Keyset paging avoids the offset scan cost of the general display query.
+ * Visibility uses the same lifecycle authority as queryEntities.
+ */
+export async function listVisibleEntityIdsForType(
+  userId: string,
+  entityType: string,
+  maxVisible = 10000
+): Promise<string[]> {
+  const ids: string[] = [];
+  let scanned = 0;
+  let after: string | undefined;
+  for (;;) {
+    let query = db
+      .from("entities")
+      .select("id,merged_to_entity_id")
+      .eq("user_id", userId)
+      .eq("entity_type", entityType)
+      .is("merged_to_entity_id", null)
+      .order("id", { ascending: true })
+      .limit(500);
+    if (after) query = query.gt("id", after);
+    const { data, error } = await query;
+    if (error) throw new Error("Could not acquire the complete scoped type population.");
+    const rows = data ?? [];
+    if (!rows.length) return ids;
+    scanned += rows.length;
+    if (scanned > 40000) throw new Error("Scoped type population exceeds the bounded scan.");
+    const deleted = await getDeletedEntityIds(rows, userId);
+    for (const row of rows) {
+      if (!deleted.has(row.id)) ids.push(row.id);
+      if (ids.length > maxVisible)
+        throw new Error("Scoped type population exceeds the supported comparison bound.");
+    }
+    after = rows[rows.length - 1].id;
+    if (rows.length < 500) return ids;
+  }
+}
+
 /** Reuse the current visibility acquisition for derived snapshot consumers.
  * Before explicit cutover their existing materialized-read behavior is retained.
  */
