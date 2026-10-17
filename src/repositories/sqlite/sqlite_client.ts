@@ -1,5 +1,218 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
+import { createHash } from "node:crypto";
+import { canonicalStoreRequest } from "../../services/store_condition_keys.js";
+
+const NATIVE_RELATIONSHIP_TABLES = ["relationship_observations", "relationship_snapshots"] as const;
+const NATIVE_HISTORY_INDEX = "idx_relationship_observations_native_history";
+const NATIVE_HISTORY_INDEX_SQL = `CREATE INDEX ${NATIVE_HISTORY_INDEX} ON relationship_observations(user_id,relationship_type,id)`;
+type RelationshipTable = (typeof NATIVE_RELATIONSHIP_TABLES)[number];
+type SchemaObject = { type: string; name: string; tbl_name: string; sql: string | null };
+
+/** Fixed, value-free failure: never include DDL, row values or backend messages. */
+export class RelationshipStorageCompatibilityError extends Error {
+  readonly code = "NATIVE_RELATIONSHIP_STORAGE_UNAVAILABLE";
+  constructor() {
+    super("Relationship storage compatibility could not be verified.");
+    this.name = "RelationshipStorageCompatibilityError";
+  }
+}
+
+const sqlName = (name: string) => `"${name.replace(/"/g, '""')}"`;
+const storageFailure = () => new RelationshipStorageCompatibilityError();
+
+async function relationshipColumns(tx: DbConnection, table: string) {
+  return (await tx.prepare(`PRAGMA table_info(${sqlName(table)})`).all()) as Array<{
+    cid: number;
+    name: string;
+    type: string;
+    notnull: number;
+    dflt_value: unknown;
+    pk: number;
+  }>;
+}
+
+async function relationshipCensus(tx: DbConnection, table: string, order: string) {
+  const rows = await tx
+    .prepare(`SELECT * FROM ${sqlName(table)} ORDER BY ${sqlName(order)} COLLATE BINARY`)
+    .all();
+  const hash = createHash("sha256");
+  for (const row of rows) hash.update(canonicalStoreRequest(row)).update("\n");
+  return { count: rows.length, sha256: hash.digest("hex") };
+}
+
+async function nativeHistoryIndexMatches(tx: DbConnection): Promise<boolean> {
+  const indexes = (await tx
+    .prepare('PRAGMA index_list("relationship_observations")')
+    .all()) as Array<{ name: string; unique: number; partial: number }>;
+  const index = indexes.find((i) => i.name === NATIVE_HISTORY_INDEX);
+  if (!index || index.unique !== 0 || index.partial !== 0) return false;
+  const columns = (await tx
+    .prepare(`PRAGMA index_xinfo(${sqlName(NATIVE_HISTORY_INDEX)})`)
+    .all()) as Array<{ name: string; desc: number; coll: string; key: number }>;
+  const keys = columns.filter((c) => c.key === 1);
+  return (
+    JSON.stringify(keys.map((c) => c.name)) ===
+      JSON.stringify(["user_id", "relationship_type", "id"]) &&
+    keys.every((c) => c.desc === 0 && c.coll === "BINARY")
+  );
+}
+
+/**
+ * Explicit, atomic forward rebuild for the native nullable-source layout.
+ * NOT called by ensureSchema/startup: registry/strategy/writer compatibility
+ * must be coordinated before any installation. This function supplies no
+ * native authority/readiness, and never changes a registration or grant.
+ * A reverse migration is deliberately unavailable once native history exists;
+ * no automatic delete/rekey/restore path is provided here.
+ */
+export async function migrateNullableRelationshipSources(database: DbDatabase): Promise<void> {
+  try {
+    await database.transaction(async (tx) => {
+      const objects = (await tx
+        .prepare("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name")
+        .all()) as SchemaObject[];
+      const before = new Map<
+        RelationshipTable,
+        {
+          sql: string;
+          columns: Awaited<ReturnType<typeof relationshipColumns>>;
+          census: Awaited<ReturnType<typeof relationshipCensus>>;
+          objects: SchemaObject[];
+        }
+      >();
+      // Preflight BOTH tables and every referencing schema object before DDL.
+      for (const table of NATIVE_RELATIONSHIP_TABLES) {
+        const definition = objects.find((o) => o.type === "table" && o.name === table);
+        if (!definition?.sql) throw storageFailure();
+        // An additional CHECK/generated/compound constraint mentioning this
+        // column is not the supported legacy layout. Never claim it was
+        // relaxed merely because PRAGMA table_info reports notnull: 0.
+        if ([...definition.sql.matchAll(/\bsource_entity_id\b/gi)].length !== 1)
+          throw storageFailure();
+        const columns = await relationshipColumns(tx, table);
+        const source = columns.find((c) => c.name === "source_entity_id");
+        if (!source || source.type.toUpperCase() !== "TEXT" || ![0, 1].includes(source.notnull))
+          throw storageFailure();
+        const order = table === "relationship_observations" ? "id" : "relationship_key";
+        if (
+          columns.filter((c) => c.pk > 0).length !== 1 ||
+          !columns.find((c) => c.name === order && c.pk === 1)
+        )
+          throw storageFailure();
+        if ((await tx.prepare(`PRAGMA foreign_key_list(${sqlName(table)})`).all()).length)
+          throw storageFailure();
+        if (objects.some((o) => o.name === `${table}__native_nullable`)) throw storageFailure();
+        before.set(table, {
+          sql: definition.sql,
+          columns,
+          census: await relationshipCensus(tx, table, order),
+          objects: objects.filter((o) => o.tbl_name === table && o.type !== "table"),
+        });
+      }
+      for (const object of objects) {
+        if (object.type === "table" && !object.name.startsWith("sqlite_")) {
+          const fks = (await tx
+            .prepare(`PRAGMA foreign_key_list(${sqlName(object.name)})`)
+            .all()) as Array<{ table: string }>;
+          if (fks.some((fk) => NATIVE_RELATIONSHIP_TABLES.some((table) => fk.table === table)))
+            throw storageFailure();
+        }
+        if (
+          (object.type === "view" || object.type === "trigger") &&
+          !NATIVE_RELATIONSHIP_TABLES.some((table) => object.tbl_name === table) &&
+          NATIVE_RELATIONSHIP_TABLES.some((table) =>
+            new RegExp(`\\b${table}\\b`, "i").test(object.sql ?? "")
+          )
+        )
+          throw storageFailure();
+      }
+      const nullabilities = [...before.values()].map(
+        (b) => b.columns.find((c) => c.name === "source_entity_id")!.notnull
+      );
+      // Mixed storage is not proof of an atomic prior migration.
+      if (nullabilities[0] !== nullabilities[1]) throw storageFailure();
+      const existingIndex = objects.find((o) => o.name === NATIVE_HISTORY_INDEX);
+      if (
+        existingIndex &&
+        (existingIndex.type !== "index" ||
+          existingIndex.tbl_name !== "relationship_observations" ||
+          !(await nativeHistoryIndexMatches(tx)))
+      )
+        throw storageFailure();
+      for (const table of NATIVE_RELATIONSHIP_TABLES) {
+        const original = before.get(table)!;
+        if (nullabilities[0] === 1) {
+          const temporary = `${table}__native_nullable`;
+          // Supported existing DDL only. Preserve all other text/constraints;
+          // unfamiliar column syntax refuses rather than reconstructing it.
+          const sourceDefinition =
+            /([,(]\s*)(["`[]?source_entity_id["`\]]?\s+TEXT)\s+NOT\s+NULL(?=\s*[,)])/gi;
+          if ([...original.sql.matchAll(sourceDefinition)].length !== 1) throw storageFailure();
+          const nullable = original.sql.replace(sourceDefinition, "$1$2");
+          const prefix = new RegExp(
+            `^CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?["\\x60\\[]?${table}["\\x60\\]]?\\s*\\(`,
+            "i"
+          );
+          if (!prefix.test(nullable)) throw storageFailure();
+          await tx.exec(nullable.replace(prefix, `CREATE TABLE ${sqlName(temporary)} (`));
+          const names = original.columns.map((c) => sqlName(c.name)).join(",");
+          await tx.exec(
+            `INSERT INTO ${sqlName(temporary)} (${names}) SELECT ${names} FROM ${sqlName(table)}`
+          );
+          const order = table === "relationship_observations" ? "id" : "relationship_key";
+          if (
+            canonicalStoreRequest(await relationshipCensus(tx, temporary, order)) !==
+            canonicalStoreRequest(original.census)
+          )
+            throw storageFailure();
+          // Verify in SQLite too: driver number conversion can erase the
+          // distinction between INTEGER and REAL (or large integers). No new
+          // serialization domain substitutes for the original stored values.
+          const comparisons = original.columns
+            .map(({ name }) => {
+              const left = `original.${sqlName(name)}`;
+              const right = `copied.${sqlName(name)}`;
+              return `(typeof(${left})=typeof(${right}) AND ${left} COLLATE BINARY IS ${right} COLLATE BINARY)`;
+            })
+            .join(" AND ");
+          const mismatch = await tx
+            .prepare(
+              `SELECT 1 AS mismatch FROM ${sqlName(table)} original LEFT JOIN ${sqlName(temporary)} copied ON original.${sqlName(order)} COLLATE BINARY IS copied.${sqlName(order)} COLLATE BINARY WHERE NOT (${comparisons}) LIMIT 1`
+            )
+            .get();
+          if (mismatch) throw storageFailure();
+          await tx.exec(`DROP TABLE ${sqlName(table)}`);
+          await tx.exec(`ALTER TABLE ${sqlName(temporary)} RENAME TO ${sqlName(table)}`);
+          for (const object of original.objects) if (object.sql) await tx.exec(object.sql);
+        }
+        const columns = await relationshipColumns(tx, table);
+        const expectedColumns = original.columns.map((c) =>
+          c.name === "source_entity_id" ? { ...c, notnull: 0 } : c
+        );
+        if (canonicalStoreRequest(columns) !== canonicalStoreRequest(expectedColumns))
+          throw storageFailure();
+        const order = table === "relationship_observations" ? "id" : "relationship_key";
+        if (
+          canonicalStoreRequest(await relationshipCensus(tx, table, order)) !==
+          canonicalStoreRequest(original.census)
+        )
+          throw storageFailure();
+        const restoredObjects = (await tx
+          .prepare(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name=? AND type<>'table' ORDER BY type,name"
+          )
+          .all(table)) as SchemaObject[];
+        if (canonicalStoreRequest(restoredObjects) !== canonicalStoreRequest(original.objects))
+          throw storageFailure();
+      }
+      if (!existingIndex) await tx.exec(NATIVE_HISTORY_INDEX_SQL);
+      if (!(await nativeHistoryIndexMatches(tx))) throw storageFailure();
+    });
+  } catch {
+    throw storageFailure();
+  }
+}
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
