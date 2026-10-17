@@ -86,6 +86,98 @@ afterAll(async () => {
 
 describe("generic CLI correctTransaction actual transport effects", () => {
   it.each(["http", "body", "params"] as const)(
+    "refuses a changed existing nonselected row through %s and applies a complete revision refresh",
+    async (surface) => {
+      const seed = await post("/store", {
+        idempotency_key: `revision-seed-${surface}`,
+        entities: [
+          { entity_type: type, title: `Revision ${surface} draft`, status: "ready" },
+          { entity_type: type, title: `Revision ${surface} source`, remaining: 1 },
+          { entity_type: type, title: `Revision ${surface} unselected`, remaining: 1 },
+        ],
+      });
+      const [draft, source, unselected] = seed.entities.map(
+        (entity: { entity_id: string }) => entity.entity_id
+      );
+      const client = createClient({ url: `file:${join(server.dataDir, "neotoma.db")}` });
+      try {
+        const inventory = await client.execute({
+          sql: "SELECT e.id, s.observation_count FROM entities e JOIN entity_snapshots s ON s.entity_id = e.id WHERE e.entity_type = ? ORDER BY e.id",
+          args: [type],
+        });
+        const expected_entity_ids = inventory.rows.map((row) => String(row.id));
+        const expected_observation_counts = inventory.rows.map((row) => ({
+          entity_id: String(row.id),
+          observation_count: Number(row.observation_count),
+        }));
+        expect(expected_entity_ids).toContain(unselected);
+        expect(expected_entity_ids).toContain(source);
+        const stale = {
+          idempotency_key: `revision-stale-${surface}`,
+          entities: [
+            {
+              entity_id: draft,
+              entity_type: type,
+              expected_observation_count: 1,
+              expected_snapshot: { status: "ready" },
+              changes: [{ field: "status", value: "approved" }],
+            },
+            {
+              entity_id: source,
+              entity_type: type,
+              expected_observation_count: 1,
+              expected_snapshot: { remaining: 1 },
+              changes: [],
+            },
+          ],
+          populations: [{ entity_type: type, expected_entity_ids, expected_observation_counts }],
+        };
+        expect(
+          (
+            await transaction("http", {
+              idempotency_key: `revision-edit-${surface}`,
+              entities: [
+                {
+                  entity_id: unselected,
+                  entity_type: type,
+                  expected_observation_count: 1,
+                  expected_snapshot: { remaining: 1 },
+                  changes: [{ field: "remaining", value: 0 }],
+                },
+              ],
+            })
+          ).status
+        ).toBe("applied");
+        await expect(transaction(surface, stale)).rejects.toThrow(/409|CONFLICT|population/i);
+        expect((await post("/get_entity_snapshot", { entity_id: draft })).snapshot.status).toBe(
+          "ready"
+        );
+        const refreshed = {
+          ...stale,
+          idempotency_key: `revision-fresh-${surface}`,
+          populations: [
+            {
+              entity_type: type,
+              expected_entity_ids,
+              expected_observation_counts: expected_observation_counts.map((entry) => ({
+                ...entry,
+                observation_count: entry.entity_id === unselected ? 2 : entry.observation_count,
+              })),
+            },
+          ],
+        };
+        expect((await transaction(surface, refreshed)).status).toBe("applied");
+        expect((await transaction(surface, refreshed)).status).toBe("replayed");
+        expect((await post("/get_entity_snapshot", { entity_id: draft })).observation_count).toBe(
+          2
+        );
+      } finally {
+        client.close();
+      }
+    },
+    30_000
+  );
+  it.each(["http", "body", "params"] as const)(
     "refuses a newly inserted type member through %s and applies after a complete refresh",
     async (surface) => {
       const seed = await post("/store", {

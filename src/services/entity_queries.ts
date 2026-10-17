@@ -341,6 +341,43 @@ export async function listVisibleEntityIdsForType(
   }
 }
 
+/** Current materialized revisions for an already-acquired complete type set.
+ * Missing, duplicate or malformed rows are unavailable authority, never an
+ * implicit zero version. Call inside the same write transaction as the set scan.
+ */
+export async function listObservationCountsForVisibleIds(
+  userId: string,
+  ids: readonly string[]
+): Promise<Array<{ entity_id: string; observation_count: number }>> {
+  const revisions: Array<{ entity_id: string; observation_count: number }> = [];
+  for (let start = 0; start < ids.length; start += 500) {
+    const chunk = ids.slice(start, start + 500);
+    const { data, error } = await db
+      .from("entity_snapshots")
+      .select("entity_id,observation_count")
+      .eq("user_id", userId)
+      .in("entity_id", chunk);
+    if (error || !Array.isArray(data) || data.length !== chunk.length)
+      throw new Error("Complete scoped population revisions are unavailable.");
+    const wanted = new Set(chunk);
+    const seen = new Set<string>();
+    for (const row of data) {
+      if (
+        !row ||
+        typeof row.entity_id !== "string" ||
+        !wanted.has(row.entity_id) ||
+        seen.has(row.entity_id) ||
+        !Number.isSafeInteger(row.observation_count) ||
+        row.observation_count < 0
+      )
+        throw new Error("Complete scoped population revisions are unavailable.");
+      seen.add(row.entity_id);
+      revisions.push({ entity_id: row.entity_id, observation_count: row.observation_count });
+    }
+  }
+  return revisions.sort((a, b) => a.entity_id.localeCompare(b.entity_id));
+}
+
 /** Reuse the current visibility acquisition for derived snapshot consumers.
  * Before explicit cutover their existing materialized-read behavior is retained.
  */

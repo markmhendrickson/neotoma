@@ -2060,6 +2060,8 @@ export interface paths {
      *     This primitive does not decide or authorize application-level approval.
      *     Optional populations compare the complete visible entity IDs of an
      *     authenticated graph and entity type in that same write transaction.
+     *     Optional expected_observation_counts also compare every existing row's
+     *     revision, including previously nonselected rows whose content changes.
      *     The caller must acquire the entire owner-scoped type population it
      *     relies on; this guard does not choose business-relevant types.
      */
@@ -9096,10 +9098,15 @@ export interface operations {
         "application/json": {
           user_id?: string;
           idempotency_key: string;
-          /** @description Complete visible owner/type entity ID sets read before the request. A new, removed or merged row conflicts before any correction. */
+          /** @description Complete visible owner/type entity ID sets read before the request. A new, removed or merged row conflicts before any correction. Include expected_observation_counts when existing row content can affect the decision. */
           populations?: {
             entity_type: string;
             expected_entity_ids: string[];
+            /** @description One current observation count for every expected_entity_id. A changed existing row conflicts before correction; missing or duplicate IDs are invalid. */
+            expected_observation_counts?: {
+              entity_id: string;
+              observation_count: number;
+            }[];
           }[];
           entities: {
             entity_id: string;

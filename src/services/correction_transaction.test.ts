@@ -3,6 +3,8 @@ import { db } from "../db.js";
 import { config } from "../config.js";
 import { getDb } from "../repositories/db/connection.js";
 import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import { openLibsqlDatabase } from "../repositories/libsql/libsql_driver.js";
+import { WorkerFileDatabase } from "../repositories/worker/worker_file_database.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
 import { getEntityWithProvenance, listVisibleEntityIdsForType } from "./entity_queries.js";
 import { createCorrectionWithVersionPrecondition } from "./correction.js";
@@ -182,6 +184,140 @@ describe("scoped atomic correction transaction", () => {
     ).toHaveLength(1);
     expect(events).toHaveLength(0);
     expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+  });
+  it("refuses an edit to a previously nonselected source across more than 50 visible rows", async () => {
+    const ids = ["ent_atomic_draft", "ent_atomic_source"];
+    for (let index = 0; index < 49; index++) {
+      const id = `ent_atomic_unselected_${index}`;
+      await seed(id, { title: `Unselected ${index}`, remaining: 1 });
+      ids.push(id);
+    }
+    expect(ids.length).toBeGreaterThan(50);
+    const input = request("population-existing-row-edit");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: ids.map((entity_id) => ({ entity_id, observation_count: 1 })),
+      },
+    ];
+    const edited = ids[ids.length - 1];
+    expect(
+      (
+        await db.from("observations").insert({
+          id: "edit-previously-unselected",
+          entity_id: edited,
+          entity_type: "atomic_test",
+          user_id: user,
+          fields: { remaining: 2 },
+          schema_version: "1.0",
+          source_priority: 20,
+          observed_at: "2026-01-02T00:00:00.000Z",
+        })
+      ).error
+    ).toBeNull();
+    await recomputeSnapshot(edited, user);
+    events.length = 0;
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+  });
+  it("accepts a complete unchanged revision set, and binds it into idempotency", async () => {
+    const input = request("population-revision-positive");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ["ent_atomic_source", "ent_atomic_draft"],
+        expected_observation_counts: [
+          { entity_id: "ent_atomic_source", observation_count: 1 },
+          { entity_id: "ent_atomic_draft", observation_count: 1 },
+        ],
+      },
+    ];
+    expect((await applyCorrectionTransaction(input)).status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+    expect((await applyCorrectionTransaction(input)).status).toBe("replayed");
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(2);
+    const changed = structuredClone(input);
+    changed.populations![0].expected_observation_counts![1].observation_count = 2;
+    const outcome = await applyCorrectionTransaction(changed).catch((error: Error) => error);
+    expect((outcome as { code?: string }).code).toBe("IDEMPOTENCY_CONFLICT");
+  });
+  it("refuses incomplete, duplicate, foreign and malformed population revisions without effects", async () => {
+    await seed("ent_atomic_foreign", { title: "Foreign", remaining: 1 }, "test-other-graph");
+    const cases: Array<{ entity_id: string; observation_count: number }[]> = [
+      [{ entity_id: "ent_atomic_draft", observation_count: 1 }],
+      [
+        { entity_id: "ent_atomic_draft", observation_count: 1 },
+        { entity_id: "ent_atomic_draft", observation_count: 1 },
+      ],
+      [
+        { entity_id: "ent_atomic_draft", observation_count: 1 },
+        { entity_id: "ent_atomic_foreign", observation_count: 1 },
+      ],
+      [
+        { entity_id: "ent_atomic_draft", observation_count: 1 },
+        { entity_id: "ent_atomic_source", observation_count: -1 },
+      ],
+    ];
+    for (const [index, counts] of cases.entries()) {
+      const input = request(`invalid-population-revision-${index}`);
+      input.entities[1].changes = [];
+      input.populations = [
+        {
+          entity_type: "atomic_test",
+          expected_entity_ids: ["ent_atomic_draft", "ent_atomic_source"],
+          expected_observation_counts: counts,
+        },
+      ];
+      const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+      expect((outcome as { code?: string }).code).toBe("VALIDATION_ERROR");
+    }
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+  });
+  it("refuses a missing nonselected snapshot revision without a writer effect", async () => {
+    await seed("ent_atomic_missing_revision", { title: "Unselected", remaining: 1 });
+    const ids = ["ent_atomic_draft", "ent_atomic_missing_revision", "ent_atomic_source"];
+    const input = request("population-missing-revision");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: ids.map((entity_id) => ({ entity_id, observation_count: 1 })),
+      },
+    ];
+    expect(
+      (
+        await db
+          .from("entity_snapshots")
+          .delete()
+          .eq("entity_id", "ent_atomic_missing_revision")
+          .eq("user_id", user)
+      ).error
+    ).toBeNull();
+    events.length = 0;
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
   });
   it("compares beyond the first 500 visible IDs without accepting a truncated inventory", async () => {
     const extra = Array.from(
@@ -221,12 +357,98 @@ describe("scoped atomic correction transaction", () => {
     await expect(applyCorrectionTransaction(stale)).rejects.toThrow(/population precondition/i);
     expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
   });
+  it("compares revision counts beyond the first 500 visible IDs", async () => {
+    const extra = Array.from(
+      { length: 500 },
+      (_, n) => `ent_atomic_revision_page_${String(n).padStart(4, "0")}`
+    );
+    expect(
+      (
+        await db.from("entities").insert(
+          extra.map((id) => ({
+            id,
+            entity_type: "atomic_test",
+            canonical_name: id,
+            user_id: user,
+          }))
+        )
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("observations").insert(
+          extra.map((id) => ({
+            id: `seed-${id}`,
+            entity_id: id,
+            entity_type: "atomic_test",
+            user_id: user,
+            fields: { title: id, remaining: 1 },
+            schema_version: "1.0",
+            source_priority: 10,
+            observed_at: "2026-01-01T00:00:00.000Z",
+          }))
+        )
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("entity_snapshots").upsert(
+          extra.map((id) => ({
+            entity_id: id,
+            entity_type: "atomic_test",
+            user_id: user,
+            schema_version: "1.0",
+            snapshot: JSON.stringify({ title: id, remaining: 1 }),
+            provenance: "{}",
+            observation_count: 1,
+          })),
+          { onConflict: "entity_id" }
+        )
+      ).error
+    ).toBeNull();
+    const ids = [...extra, "ent_atomic_draft", "ent_atomic_source"].sort();
+    expect(ids.length).toBe(502);
+    const input = request("population-revision-page");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: ids.map((entity_id) => ({ entity_id, observation_count: 1 })),
+      },
+    ];
+    const edited = extra[extra.length - 1];
+    expect(
+      (
+        await db.from("observations").insert({
+          id: "edit-revision-page-two",
+          entity_id: edited,
+          entity_type: "atomic_test",
+          user_id: user,
+          fields: { remaining: 0 },
+          schema_version: "1.0",
+          source_priority: 20,
+          observed_at: "2026-01-02T00:00:00.000Z",
+        })
+      ).error
+    ).toBeNull();
+    await recomputeSnapshot(edited, user);
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+  }, 30_000);
   it("holds the database write reservation from population read through the write boundary", async () => {
     // The production service uses this same connection.transaction envelope for
     // the population scan and createCorrection. A separate file-backed worker
     // must be unable to insert a matching row between those two operations.
     const connection = await getDb();
-    const competitor = new AsyncSqliteDatabase(config.sqlitePath);
+    const workerFile = connection instanceof WorkerFileDatabase;
+    const competitor = workerFile
+      ? openLibsqlDatabase(`file:${config.sqlitePath}`, { busyTimeoutMs: 2000 })
+      : new AsyncSqliteDatabase(config.sqlitePath);
     const insert = () =>
       competitor
         .prepare(
@@ -234,7 +456,7 @@ describe("scoped atomic correction transaction", () => {
         )
         .run("ent_atomic_concurrent", "atomic_test", "Concurrent", user);
     try {
-      await competitor.exec("PRAGMA busy_timeout = 50");
+      if (!workerFile) await competitor.exec("PRAGMA busy_timeout = 50");
       await competitor.prepare("SELECT 1").get();
       const mainFile = (await connection.pragma("database_list")).find(
         (row) => (row as { name?: unknown }).name === "main"
@@ -247,12 +469,26 @@ describe("scoped atomic correction transaction", () => {
       expect(typeof mainFile?.file).toBe("string");
       expect(mainFile?.file).not.toBe("");
       expect(mainFile).toEqual(competitorFile);
+      let deferredInsert: Promise<unknown> | undefined;
       await connection.transaction(async () => {
         expect(await listVisibleEntityIdsForType(user, "atomic_test")).toEqual([
           "ent_atomic_draft",
           "ent_atomic_source",
         ]);
-        await expect(insert()).rejects.toThrow(/locked|busy/i);
+        if (workerFile) {
+          deferredInsert = insert();
+          expect(
+            await Promise.race([
+              deferredInsert.then(
+                () => "committed",
+                () => "failed"
+              ),
+              new Promise<string>((resolve) => setTimeout(() => resolve("pending"), 75)),
+            ])
+          ).toBe("pending");
+        } else {
+          await expect(insert()).rejects.toThrow(/locked|busy/i);
+        }
         const insertedRow = await connection
           .prepare("SELECT id FROM entities WHERE id = ?")
           .get("ent_atomic_concurrent");
@@ -264,7 +500,8 @@ describe("scoped atomic correction transaction", () => {
           .eq("user_id", user);
         expect(updated.error).toBeNull();
       });
-      await expect(insert()).resolves.toMatchObject({ changes: 1 });
+      if (workerFile) await expect(deferredInsert).resolves.toMatchObject({ changes: 1 });
+      else await expect(insert()).resolves.toMatchObject({ changes: 1 });
       expect(await listVisibleEntityIdsForType(user, "atomic_test")).toContain(
         "ent_atomic_concurrent"
       );

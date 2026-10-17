@@ -270,4 +270,68 @@ describe("compare-only correction through POST /mcp tools/call", () => {
     expect(await count("ent_2395_population_writer")).toBe(2);
     expect(await count("ent_2395_population_guard")).toBe(1);
   });
+
+  it("holds an authenticated writer when a previously nonselected row changes revision", async () => {
+    await seed("ent_2395_revision_writer", OWNER, { title: "Writer", status: "ready" });
+    await seed("ent_2395_revision_guard", OWNER, { title: "Guard", remaining: 1 });
+    await seed("ent_2395_revision_unselected", OWNER, { title: "Unselected", remaining: 1 });
+    await seed("ent_2395_revision_foreign", OTHER, { title: "Foreign", remaining: 1 });
+    const ids = [
+      "ent_2395_revision_guard",
+      "ent_2395_revision_unselected",
+      "ent_2395_revision_writer",
+    ];
+    const stale = {
+      ...input("ent_2395_revision_writer", "ent_2395_revision_guard", "mcp-2395-revision-stale"),
+      populations: [
+        {
+          entity_type: KIND,
+          expected_entity_ids: ids,
+          expected_observation_counts: ids.map((entity_id) => ({
+            entity_id,
+            observation_count: 1,
+          })),
+        },
+      ],
+    };
+    expect(
+      (
+        await db.from("observations").insert({
+          id: "edit-unselected-mcp",
+          entity_id: "ent_2395_revision_unselected",
+          entity_type: KIND,
+          user_id: OWNER,
+          fields: { remaining: 0 },
+          schema_version: "1.0",
+          source_priority: 20,
+          observed_at: "2026-01-02T00:00:00.000Z",
+        })
+      ).error
+    ).toBeNull();
+    await recomputeSnapshot("ent_2395_revision_unselected", OWNER);
+    const refused = await call(stale, "conn-2395-owner", 8);
+    expect(isRefusal(refused), refused.text).toBe(true);
+    expect(refused.text).toContain("population revision precondition");
+    expect(await count("ent_2395_revision_writer")).toBe(1);
+    const refreshed = {
+      ...stale,
+      idempotency_key: "mcp-2395-revision-fresh",
+      populations: [
+        {
+          ...stale.populations[0],
+          expected_observation_counts: ids.map((entity_id) => ({
+            entity_id,
+            observation_count: entity_id === "ent_2395_revision_unselected" ? 2 : 1,
+          })),
+        },
+      ],
+    };
+    const applied = await call(refreshed, "conn-2395-owner", 9);
+    expect(applied.status, applied.text).toBe(200);
+    expect(toolResultJson(applied.body).status).toBe("applied");
+    expect(await count("ent_2395_revision_writer")).toBe(2);
+    const replay = await call(refreshed, "conn-2395-owner", 10);
+    expect(toolResultJson(replay.body).status).toBe("replayed");
+    expect(await count("ent_2395_revision_writer")).toBe(2);
+  });
 });
