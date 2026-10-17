@@ -13,6 +13,7 @@ import {
   queryEntities,
 } from "./entity_queries.js";
 import { SchemaRegistryService } from "./schema_registry.js";
+import { snapshotSchemaBasis } from "./snapshot_schema_basis.js";
 import { createCorrectionWithVersionPrecondition } from "./correction.js";
 import { softDeleteEntity } from "./deletion.js";
 import { runWithRequestContext } from "./request_context.js";
@@ -467,6 +468,133 @@ describe("scoped atomic correction transaction", () => {
       await db.from("schema_registry").delete().eq("id", next.id);
     }
   });
+  it("refuses a same-version schema replacement until its prior projection is rematerialized", async () => {
+    const ids = ["ent_atomic_draft", "ent_atomic_source"];
+    const input = request("population-same-version-stale-projection");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: await revisions(ids),
+      },
+    ];
+    const original = await db
+      .from("schema_registry")
+      .select("schema_definition,reducer_config")
+      .eq("id", schema.id)
+      .single();
+    expect(original.error).toBeNull();
+    const replacement = {
+      ...schema.schema_definition,
+      fields: { ...fields, newly_projected: { type: "string" } },
+    };
+    try {
+      expect(
+        (
+          await db
+            .from("schema_registry")
+            .update({
+              schema_definition: replacement,
+              reducer_config: {
+                merge_policies: {
+                  ...schema.reducer_config.merge_policies,
+                  newly_projected: { strategy: "last_write" },
+                },
+              },
+            })
+            .eq("id", schema.id)
+        ).error
+      ).toBeNull();
+      const active = await new SchemaRegistryService().loadActiveSchema("atomic_test", user);
+      expect(active?.schema_version).toBe("1.0");
+      expect(
+        (await getEntityWithProvenance("ent_atomic_source", false, user))?.content_revision
+      ).toBeUndefined();
+      await expect(listObservationCountsForVisibleIds(user, ids, active!)).rejects.toThrow(
+        /unavailable/
+      );
+      const page = await queryEntities({
+        userId: user,
+        entityType: "atomic_test",
+        includeSnapshots: true,
+      });
+      expect(
+        page.find((row) => row.entity_id === "ent_atomic_source")?.content_revision
+      ).toBeUndefined();
+      events.length = 0;
+      const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+      expect(outcome).toMatchObject({ code: "CONFLICT" });
+      expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+      expect(
+        (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+      ).toHaveLength(1);
+      expect(events).toHaveLength(0);
+    } finally {
+      expect(
+        (
+          await db
+            .from("schema_registry")
+            .update({
+              schema_definition: original.data!.schema_definition,
+              reducer_config: original.data!.reducer_config,
+            })
+            .eq("id", schema.id)
+        ).error
+      ).toBeNull();
+    }
+  });
+
+  it("withholds population authority from a legacy snapshot without materialization basis", async () => {
+    const ids = ["ent_atomic_draft", "ent_atomic_source"];
+    const input = request("population-legacy-basis-missing");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: await revisions(ids),
+      },
+    ];
+    const before = await db
+      .from("entity_snapshots")
+      .select("schema_basis")
+      .eq("entity_id", "ent_atomic_source")
+      .single();
+    expect(before.error).toBeNull();
+    try {
+      expect(
+        (
+          await db
+            .from("entity_snapshots")
+            .update({ schema_basis: null })
+            .eq("entity_id", "ent_atomic_source")
+        ).error
+      ).toBeNull();
+      expect(
+        (await getEntityWithProvenance("ent_atomic_source", false, user))?.content_revision
+      ).toBeUndefined();
+      const active = await new SchemaRegistryService().loadActiveSchema("atomic_test", user);
+      await expect(listObservationCountsForVisibleIds(user, ids, active!)).rejects.toThrow(
+        /unavailable/
+      );
+      const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+      expect(outcome).toMatchObject({ code: "CONFLICT" });
+      expect(
+        (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+      ).toHaveLength(1);
+    } finally {
+      expect(
+        (
+          await db
+            .from("entity_snapshots")
+            .update({ schema_basis: before.data!.schema_basis })
+            .eq("entity_id", "ent_atomic_source")
+        ).error
+      ).toBeNull();
+    }
+  });
+
   it("refuses incomplete, duplicate, foreign and malformed population revisions without effects", async () => {
     await seed("ent_atomic_foreign", { title: "Foreign", remaining: 1 }, "test-other-graph");
     const [draftRevision, sourceRevision] = await revisions([
@@ -608,6 +736,7 @@ describe("scoped atomic correction transaction", () => {
             entity_type: "atomic_test",
             user_id: user,
             schema_version: "1.0",
+            schema_basis: snapshotSchemaBasis(schema),
             snapshot: JSON.stringify({ title: id, remaining: 1 }),
             provenance: "{}",
             observation_count: 1,

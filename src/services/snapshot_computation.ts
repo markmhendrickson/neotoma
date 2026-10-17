@@ -22,6 +22,7 @@ export interface SnapshotRecord {
   entity_id: string;
   entity_type: string;
   schema_version: string;
+  schema_basis?: string;
   snapshot: Record<string, unknown>;
   computed_at: string;
   observation_count: number;

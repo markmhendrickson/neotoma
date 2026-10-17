@@ -12,6 +12,7 @@ import {
 import { computeEntityVersion } from "./entity_version.js";
 import { createHash } from "node:crypto";
 import { stableSerialize } from "./stable_serialize.js";
+import { snapshotSchemaBasis } from "./snapshot_schema_basis.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -165,6 +166,7 @@ export interface EntityWithProvenance {
 interface EntitySnapshotRow {
   entity_id: string;
   schema_version?: string;
+  schema_basis?: string | null;
   snapshot?: Record<string, unknown>;
   observation_count?: number;
   last_observation_at?: string;
@@ -195,6 +197,30 @@ export function populationContentRevision(
       })
     )
     .digest("hex");
+}
+
+/** Issue a population token only for a snapshot materialized under the
+ * currently selected schema and reducer. Legacy rows without a durable basis
+ * remain readable but cannot authorize a guarded write until recomputation.
+ */
+export function currentPopulationContentRevision(
+  entityId: string,
+  snapshot: EntitySnapshotRow | null | undefined,
+  schema:
+    | { schema_version: string; schema_definition: unknown; reducer_config: unknown }
+    | null
+    | undefined
+): string | undefined {
+  if (
+    !snapshot ||
+    !schema ||
+    snapshot.schema_version !== schema.schema_version ||
+    snapshot.schema_basis !== snapshotSchemaBasis(schema) ||
+    !snapshot.snapshot ||
+    !snapshot.provenance
+  )
+    return undefined;
+  return populationContentRevision(entityId, snapshot, schema);
 }
 
 // #1943: pagination bounds live in a dependency-free module so the request
@@ -389,7 +415,7 @@ export async function listObservationCountsForVisibleIds(
     const chunk = ids.slice(start, start + 500);
     const { data, error } = await db
       .from("entity_snapshots")
-      .select("entity_id,observation_count,schema_version,snapshot,provenance")
+      .select("entity_id,observation_count,schema_version,schema_basis,snapshot,provenance")
       .eq("user_id", userId)
       .in("entity_id", chunk);
     if (error || !Array.isArray(data) || data.length !== chunk.length)
@@ -421,12 +447,13 @@ export async function listObservationCountsForVisibleIds(
       )
         throw new Error("Complete scoped population revisions are unavailable.");
       seen.add(row.entity_id);
-      if (row.schema_version !== schema.schema_version || !row.snapshot || !row.provenance)
+      const contentRevision = currentPopulationContentRevision(row.entity_id, row, schema);
+      if (!contentRevision)
         throw new Error("Complete scoped population revisions are unavailable.");
       revisions.push({
         entity_id: row.entity_id,
         observation_count: row.observation_count,
-        content_revision: populationContentRevision(row.entity_id, row, schema),
+        content_revision: contentRevision,
       });
     }
   }
@@ -1072,6 +1099,13 @@ export async function queryEntities(
     const lightweightStatus = snapshotData["status"];
     const observationCount = snapshot?.observation_count || 0;
     const lastObservationAt = snapshot?.last_observation_at || entity.created_at;
+    const contentRevision = includeSnapshots
+      ? currentPopulationContentRevision(
+          entity.id,
+          snapshot,
+          contentSchemas.get(entity.entity_type)
+        )
+      : undefined;
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
@@ -1093,19 +1127,7 @@ export async function queryEntities(
         observation_count: observationCount,
         last_observation_at: lastObservationAt,
       }),
-      ...(includeSnapshots &&
-      snapshot?.schema_version &&
-      snapshot.snapshot &&
-      snapshot.provenance &&
-      snapshot.schema_version === contentSchemas.get(entity.entity_type)?.schema_version
-        ? {
-            content_revision: populationContentRevision(
-              entity.id,
-              snapshot,
-              contentSchemas.get(entity.entity_type)!
-            ),
-          }
-        : {}),
+      ...(contentRevision ? { content_revision: contentRevision } : {}),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,
@@ -1322,16 +1344,8 @@ export async function getEntityWithProvenance(
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
     const schema = await registry.loadActiveSchema(entity.entity_type, entity.user_id ?? undefined);
-    if (
-      schema &&
-      snapshot &&
-      !snapshotError &&
-      snapshot.schema_version &&
-      snapshot.schema_version === schema?.schema_version &&
-      snapshot.snapshot &&
-      snapshot.provenance
-    )
-      contentRevision = populationContentRevision(entity.id, snapshot as EntitySnapshotRow, schema);
+    if (!snapshotError)
+      contentRevision = currentPopulationContentRevision(entity.id, snapshot, schema);
     if (schema?.metadata?.label) entityTypeLabel = schema.metadata.label;
     const snapshotObj = effectiveSnapshot?.snapshot ?? {};
     if (snapshotObj && Object.keys(snapshotObj).length > 0) {

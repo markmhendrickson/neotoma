@@ -17,6 +17,7 @@ import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
 import { canonicalizePortableScalarKey, stableSerialize } from "../services/stable_serialize.js";
+import { snapshotSchemaBasis } from "../services/snapshot_schema_basis.js";
 
 /** Per-observation bound that prevents one full-array write from exploding reducer work. */
 export const MAX_MERGE_ARRAY_BY_KEY_ITEMS = 10_000;
@@ -160,6 +161,7 @@ export interface EntitySnapshot {
   entity_id: string;
   entity_type: string;
   schema_version: string;
+  schema_basis?: string;
   snapshot: Record<string, unknown>;
   computed_at: string;
   observation_count: number;
@@ -307,6 +309,7 @@ export class ObservationReducer {
       entity_id: entityId,
       entity_type: entityType,
       schema_version: schemaVersion,
+      schema_basis: snapshotSchemaBasis(schemaEntry),
       snapshot,
       computed_at: lastObservationAt,
       observation_count:
