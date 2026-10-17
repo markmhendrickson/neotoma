@@ -40,6 +40,7 @@ describe("compare-only correction through POST /mcp tools/call", () => {
   let db: typeof import("../../src/db.js").db;
   let recomputeSnapshot: typeof import("../../src/services/snapshot_computation.js").recomputeSnapshot;
   let getEntityWithProvenance: typeof import("../../src/services/entity_queries.js").getEntityWithProvenance;
+  let getDb: typeof import("../../src/repositories/db/connection.js").getDb;
   let previousHttpHost: string | undefined;
 
   beforeEach(async () => {
@@ -50,6 +51,7 @@ describe("compare-only correction through POST /mcp tools/call", () => {
     ({ db } = await import("../../src/db.js"));
     ({ recomputeSnapshot } = await import("../../src/services/snapshot_computation.js"));
     ({ getEntityWithProvenance } = await import("../../src/services/entity_queries.js"));
+    ({ getDb } = await import("../../src/repositories/db/connection.js"));
     for (const owner of [OWNER, OTHER]) {
       const registered = await db.from("schema_registry").insert({
         id: `schema-2395-${owner}`,
@@ -223,5 +225,58 @@ describe("compare-only correction through POST /mcp tools/call", () => {
     expect(toolResultJson(allowed.body).status).toBe("applied");
     expect(await count("ent_2395_other_writer")).toBe(2);
     expect(await count("ent_2395_other_guard")).toBe(1);
+  });
+
+  it("rolls back an earlier writer when a later MCP writer fails, then replays without growth", async () => {
+    await seed("ent_2395_first_writer", OWNER, { title: "First", status: "ready" });
+    await seed("ent_2395_guard_rollback", OWNER, { title: "Guard", remaining: 1 });
+    await seed("ent_2395_later_writer", OWNER, { title: "Later", status: "ready" });
+    const original = input(
+      "ent_2395_first_writer",
+      "ent_2395_guard_rollback",
+      "mcp-2395-later-failure"
+    );
+    original.entities.push({
+      entity_id: "ent_2395_later_writer",
+      entity_type: KIND,
+      expected_observation_count: 1,
+      expected_snapshot: { status: "ready" },
+      changes: [{ field: "status", value: "approved" }],
+    });
+    const connection = await getDb();
+    await connection.exec(
+      "CREATE TRIGGER fail_2395_later BEFORE INSERT ON observations WHEN NEW.entity_id = 'ent_2395_later_writer' BEGIN SELECT RAISE(ABORT, 'injected later writer failure'); END"
+    );
+    try {
+      const denied = await call(original, "conn-2395-owner", 6);
+      expect(isRefusal(denied), denied.text).toBe(true);
+      for (const id of [
+        "ent_2395_first_writer",
+        "ent_2395_guard_rollback",
+        "ent_2395_later_writer",
+      ])
+        expect(await count(id)).toBe(1);
+      expect(
+        (await getEntityWithProvenance("ent_2395_first_writer", false, OWNER))?.snapshot
+      ).toMatchObject({ status: "ready" });
+    } finally {
+      await connection.exec("DROP TRIGGER IF EXISTS fail_2395_later");
+    }
+    const applied = await call(original, "conn-2395-owner", 7);
+    expect(toolResultJson(applied.body).status).toBe("applied");
+    expect(await count("ent_2395_first_writer")).toBe(2);
+    expect(await count("ent_2395_guard_rollback")).toBe(1);
+    expect(await count("ent_2395_later_writer")).toBe(2);
+    const replay = await call(original, "conn-2395-owner", 8);
+    expect(toolResultJson(replay.body).status).toBe("replayed");
+    expect(await count("ent_2395_first_writer")).toBe(2);
+    expect(await count("ent_2395_later_writer")).toBe(2);
+    const changed = structuredClone(original);
+    changed.entities[2].changes[0].value = "changed";
+    const changedReply = await call(changed, "conn-2395-owner", 9);
+    expect(isRefusal(changedReply), changedReply.text).toBe(true);
+    expect(changedReply.text).toMatch(/idempotency/i);
+    expect(await count("ent_2395_first_writer")).toBe(2);
+    expect(await count("ent_2395_later_writer")).toBe(2);
   });
 });

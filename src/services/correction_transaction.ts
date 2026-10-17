@@ -217,10 +217,9 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
       const schema = await schemaRegistry.loadActiveSchema(entity.entity_type, options.user_id);
       if (
         !schema ||
-        (!entity.changes.length &&
-          Object.keys(entity.expected_snapshot).some(
-            (field) => !field || !Object.hasOwn(schema.schema_definition.fields, field)
-          )) ||
+        Object.keys(entity.expected_snapshot).some(
+          (field) => !field || !Object.hasOwn(schema.schema_definition.fields, field)
+        ) ||
         entity.changes.some(
           (change) => !Object.hasOwn(schema.schema_definition.fields, change.field)
         ) ||
