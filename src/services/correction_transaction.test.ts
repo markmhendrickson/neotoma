@@ -1123,6 +1123,41 @@ describe("scoped atomic correction transaction", () => {
     expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
     expect(events).toHaveLength(0);
   });
+  it("refuses a writer pinned to a field retired from the active schema without effects", async () => {
+    const retiredFields = { title: fields.title, remaining: fields.remaining };
+    const changedSchema = {
+      ...schema,
+      schema_version: "2.0",
+      schema_definition: { ...schema.schema_definition, fields: retiredFields },
+      reducer_config: {
+        merge_policies: {
+          title: schema.reducer_config.merge_policies.title,
+          remaining: schema.reducer_config.merge_policies.remaining,
+        },
+      },
+    };
+    expect(
+      (
+        await db
+          .from("schema_registry")
+          .upsert({ ...changedSchema, user_id: user, scope: "user" }, { onConflict: "id" })
+      ).error
+    ).toBeNull();
+    const input = request("retired-writer-guard");
+    input.entities = [
+      {
+        ...input.entities[0],
+        expected_snapshot: { status: "ready" },
+        changes: [{ field: "title", value: "Renamed draft" }],
+      },
+    ];
+    const before = await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft");
+    await expect(applyCorrectionTransaction(input)).rejects.toThrow(/active schema/);
+    const after = await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft");
+    expect(after.data).toHaveLength(before.data?.length ?? 0);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ title: "Draft" });
+    expect(events).toHaveLength(0);
+  });
   it("dispatches through MCP with the same scoped service and rejects identity spoofing", async () => {
     const { NeotomaServer } = await import("../server.js");
     const server = new NeotomaServer() as unknown as {
