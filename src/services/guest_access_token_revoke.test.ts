@@ -31,13 +31,19 @@ async function rows(id: string, user = owner) {
 }
 beforeEach(async () => {
   for (const user of [owner, other])
-    for (const table of ["observations", "entities"])
+    for (const table of ["observations", "entity_snapshots", "entities"])
       await db.from(table).delete().eq("user_id", user);
   events.length = 0;
   substrateEventBus.onSubstrateEvent(listener);
 });
 afterEach(async () => {
   substrateEventBus.removeListener("substrate_event", listener);
+  await db
+    .from("entity_snapshots")
+    .delete()
+    .eq("entity_id", "ent_test_guest_revoke_policy")
+    .eq("user_id", owner);
+  await db.from("entities").delete().eq("id", "ent_test_guest_revoke_policy").eq("user_id", owner);
   await (await getDb()).exec("DROP TRIGGER IF EXISTS reject_guest_revocation");
   await (await getDb()).exec("DROP TRIGGER IF EXISTS corrupt_guest_revocation");
 });
@@ -159,4 +165,44 @@ describe("immutable owner guest-token revocation", () => {
       expect(events).toHaveLength(0);
     }
   );
+  it("honors the real stored instance policy before a revocation witness or event", async () => {
+    const s = await seed();
+    const policyId = "ent_test_guest_revoke_policy";
+    const policy = { enforcement: "enforced", out_of_scope_entity_types: ["guest_access_token"] };
+    expect(
+      (
+        await db.from("entities").insert({
+          id: policyId,
+          entity_type: "instance_policy",
+          canonical_name: "Synthetic revocation policy",
+          user_id: owner,
+        })
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("entity_snapshots").insert({
+          entity_id: policyId,
+          entity_type: "instance_policy",
+          schema_version: "1.0",
+          snapshot: policy,
+          user_id: owner,
+        })
+      ).error
+    ).toBeNull();
+    const { getInstancePolicyResult } = await import("./instance_policy.js");
+    expect((await getInstancePolicyResult()).policy?.out_of_scope_entity_types).toEqual([
+      "guest_access_token",
+    ]);
+    await expect(tokens.revokeGuestAccessToken(owner, s.id, s.request)).rejects.toMatchObject({
+      code: "ERR_STORE_POLICY_DENIED",
+    });
+    expect(await rows(s.id)).toHaveLength(1);
+    expect(events).toHaveLength(0);
+    expect(await tokens.validateGuestAccessToken(s.token)).not.toBeNull();
+    await db.from("entity_snapshots").delete().eq("entity_id", policyId).eq("user_id", owner);
+    await db.from("entities").delete().eq("id", policyId).eq("user_id", owner);
+    expect((await tokens.revokeGuestAccessToken(owner, s.id, s.request)).revoked).toBe(true);
+    expect(await rows(s.id)).toHaveLength(2);
+  });
 });

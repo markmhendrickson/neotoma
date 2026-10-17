@@ -296,6 +296,16 @@ export async function revokeGuestAccessToken(
   const capabilityContext = contextFromAgentIdentity(identity);
   if (capabilityContext)
     enforceAgentCapability("correct", ["guest_access_token"], capabilityContext);
+  const requestedAt = new Date().toISOString();
+  const { assertStorePolicyAllows } = await import("./instance_policy.js");
+  const { schemaRegistry } = await import("./schema_registry.js");
+  await assertStorePolicyAllows(
+    [{ entity_type: "guest_access_token", fields: { revoked_at: requestedAt } }],
+    async (entityType) => {
+      const entry = await schemaRegistry.loadActiveSchema(entityType, owner);
+      return entry?.schema_definition ?? null;
+    }
+  );
   const key =
     "guest-token-revoke:" +
     createHash("sha256")
@@ -376,7 +386,7 @@ export async function revokeGuestAccessToken(
             revoked_at: priorPayload.revoked_at,
           };
         }
-        const now = new Date().toISOString();
+        const now = requestedAt;
         const revokedAt = (times.values().next().value as string | undefined) ?? now;
         const fields = { ...originalPayload, revoked_at: revokedAt };
         const observationId = generateObservationId(null, null, entityId, fields, key);

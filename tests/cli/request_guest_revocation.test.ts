@@ -175,4 +175,39 @@ describe("owner revocation through actual HTTP, SQLite and built generic CLI", (
       database.exec("DROP TRIGGER synthetic_revoke_readback_failure");
     }
   });
+  it("returns the existing instance-policy refusal before effects, then allows the same request when permitted", async () => {
+    const s = seed();
+    const policyId = "ent_synthetic_guest_revoke_http_policy";
+    database
+      .prepare(
+        "INSERT INTO entities(id,entity_type,canonical_name,user_id) VALUES (?, 'instance_policy','Synthetic revocation policy',?)"
+      )
+      .run(policyId, LOCAL_DEV_USER_ID);
+    database
+      .prepare(
+        "INSERT INTO entity_snapshots(entity_id,entity_type,schema_version,snapshot,user_id,observation_count) VALUES (?, 'instance_policy','1.0',?,?,1)"
+      )
+      .run(
+        policyId,
+        JSON.stringify({
+          enforcement: "enforced",
+          out_of_scope_entity_types: ["guest_access_token"],
+        }),
+        LOCAL_DEV_USER_ID
+      );
+    try {
+      const response = await request(s.id, s.body);
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("ERR_STORE_POLICY_DENIED");
+      expect(
+        database.prepare("SELECT COUNT(*) AS n FROM observations WHERE entity_id=?").get(s.id)
+      ).toEqual({ n: 1 });
+      expect((await read(s.token)).status).toBe(200);
+    } finally {
+      database.prepare("DELETE FROM entity_snapshots WHERE entity_id=?").run(policyId);
+      database.prepare("DELETE FROM entities WHERE id=?").run(policyId);
+    }
+    expect((await request(s.id, s.body)).status).toBe(200);
+    expect((await read(s.token)).status).toBe(401);
+  });
 });
