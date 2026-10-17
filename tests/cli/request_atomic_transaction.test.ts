@@ -56,6 +56,26 @@ async function transaction(surface: "http" | "body" | "params", body: unknown) {
   if (!response.ok) throw new Error(`${response.status}: ${JSON.stringify(result)}`);
   return result;
 }
+async function physicalState(entityId: string) {
+  const connection = createClient({ url: `file:${join(server.dataDir, "neotoma.db")}` });
+  try {
+    const observations = await connection.execute({
+      sql: "SELECT id FROM observations WHERE entity_id = ? ORDER BY id",
+      args: [entityId],
+    });
+    const snapshots = await connection.execute({
+      sql: "SELECT * FROM entity_snapshots WHERE entity_id = ?",
+      args: [entityId],
+    });
+    expect(snapshots.rows).toHaveLength(1); // instrument positive: the physical row exists
+    return {
+      observationIds: observations.rows.map((row) => String(row.id)),
+      snapshotRows: JSON.stringify(snapshots.rows),
+    };
+  } finally {
+    connection.close();
+  }
+}
 beforeAll(async () => {
   server = await startIsolatedNeotomaServer();
   await post("/register_schema", {
@@ -118,6 +138,8 @@ describe("generic CLI correctTransaction actual transport effects", () => {
       idempotency_key: "http-guard-advance",
       entities: [{ entity_type: type, title, remaining: 0 }],
     });
+    const writerBefore = await physicalState(draft);
+    const guardBefore = await physicalState(source);
     const response = await fetch(`${server.baseUrl}/corrections/transaction`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${server.token}` },
@@ -127,6 +149,8 @@ describe("generic CLI correctTransaction actual transport effects", () => {
     const draftState = await post("/get_entity_snapshot", { entity_id: draft });
     expect(draftState.snapshot.status).toBe("ready");
     expect(draftState.observation_count).toBe(1);
+    expect(await physicalState(draft)).toEqual(writerBefore);
+    expect(await physicalState(source)).toEqual(guardBefore);
     const malformed = structuredClone(body);
     malformed.entities[1].expected_snapshot = {};
     const invalid = await fetch(`${server.baseUrl}/corrections/transaction`, {
@@ -168,8 +192,14 @@ describe("generic CLI correctTransaction actual transport effects", () => {
           },
         ],
       };
+      const guardBefore = await physicalState(source);
       expect((await transaction(flag, body)).status).toBe("applied");
+      const writerAfter = await physicalState(draft);
+      expect(writerAfter.observationIds).toHaveLength(2);
+      expect(await physicalState(source)).toEqual(guardBefore);
       expect((await transaction(flag, body)).status).toBe("replayed");
+      expect(await physicalState(draft)).toEqual(writerAfter);
+      expect(await physicalState(source)).toEqual(guardBefore);
       const draftState = await post("/get_entity_snapshot", { entity_id: draft });
       const guardState = await post("/get_entity_snapshot", { entity_id: source });
       expect(draftState.snapshot.status).toBe("approved");
