@@ -81,8 +81,14 @@ describe("retrieval transport reliability", () => {
       entities: Array<{ id?: string; entity_id?: string }>;
     };
 
-    const mcpIds = (mcpData.entities || []).map((e) => e.id ?? e.entity_id).filter(Boolean).sort();
-    const restIds = (restData.entities || []).map((e) => e.id ?? e.entity_id).filter(Boolean).sort();
+    const mcpIds = (mcpData.entities || [])
+      .map((e) => e.id ?? e.entity_id)
+      .filter(Boolean)
+      .sort();
+    const restIds = (restData.entities || [])
+      .map((e) => e.id ?? e.entity_id)
+      .filter(Boolean)
+      .sort();
 
     expect(restResponse.ok).toBe(true);
     expect(mcpIds).toEqual(restIds);
@@ -140,5 +146,81 @@ describe("retrieval transport reliability", () => {
     expect(Array.isArray(data.entities)).toBe(true);
     expect(data.relationships?.length ?? 0).toBe(0);
     expect(data.entities?.length ?? 0).toBe(0);
+  });
+
+  it("redacts stored credentials through MCP direct retrieval and HTTP relationship hydration", async () => {
+    const suffix = String(process.hrtime.bigint());
+    const sourceEntityId = `ent_sensitive_src_${suffix}`;
+    const targetEntityId = `ent_sensitive_tgt_${suffix}`;
+    const relationshipKey = `REFERS_TO:${sourceEntityId}:${targetEntityId}`;
+    const plantedToken = "planted-recipient-path-guest-token";
+    const now = new Date().toISOString();
+    createdEntityIds.push(sourceEntityId, targetEntityId);
+    createdRelationshipKeys.push(relationshipKey);
+
+    await db.from("entities").insert([
+      {
+        id: sourceEntityId,
+        user_id: TEST_USER_ID,
+        entity_type: "note",
+        canonical_name: `sensitive source ${suffix}`,
+      },
+      {
+        id: targetEntityId,
+        user_id: TEST_USER_ID,
+        entity_type: "issue",
+        canonical_name: `sensitive target ${suffix}`,
+      },
+    ]);
+    await db.from("entity_snapshots").insert({
+      entity_id: targetEntityId,
+      entity_type: "issue",
+      canonical_name: `sensitive target ${suffix}`,
+      schema_version: "1.0",
+      snapshot: {
+        title: "Safe target title",
+        guest_access_token: plantedToken,
+      },
+      computed_at: now,
+      observation_count: 1,
+      last_observation_at: now,
+      provenance: {},
+      user_id: TEST_USER_ID,
+    });
+    await db.from("relationship_snapshots").insert({
+      relationship_key: relationshipKey,
+      relationship_type: "REFERS_TO",
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      schema_version: "1.0",
+      snapshot: {},
+      computed_at: now,
+      observation_count: 1,
+      last_observation_at: now,
+      provenance: {},
+      user_id: TEST_USER_ID,
+    });
+
+    const mcpRaw = await callMCPAction(server, "retrieve_entity_snapshot", {
+      entity_id: targetEntityId,
+      format: "json",
+    });
+    const mcpSerialized = mcpRaw.content[0].text as string;
+    expect(mcpSerialized).not.toContain(plantedToken);
+    expect(JSON.parse(mcpSerialized).snapshot.title).toBe("Safe target title");
+
+    const httpResponse = await fetch(
+      `${API_BASE}/entities/${sourceEntityId}/relationships?expand_entities=true`
+    );
+    const httpText = await httpResponse.text();
+    expect(httpResponse.ok).toBe(true);
+    expect(httpText).not.toContain(plantedToken);
+    const httpPayload = JSON.parse(httpText) as {
+      related_entities: Record<string, { snapshot?: Record<string, unknown> }>;
+    };
+    expect(httpPayload.related_entities[targetEntityId]?.snapshot?.title).toBe("Safe target title");
+    expect(httpPayload.related_entities[targetEntityId]?.snapshot).not.toHaveProperty(
+      "guest_access_token"
+    );
   });
 });

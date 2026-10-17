@@ -77,6 +77,7 @@ import {
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
 import { redactMemberAttribution } from "./services/attribution_redaction.js";
+import { projectSensitiveResponse } from "./services/sensitive_response_projection.js";
 import {
   createAgentIdentity as buildAgentIdentity,
   type ExternalActor,
@@ -2540,6 +2541,12 @@ const SENSITIVE_FIELDS = new Set([
   "publicToken",
   "bearer_token",
   "bearerToken",
+  "guest_access_token",
+  "guestAccessToken",
+  "guest_access_token_hash",
+  "guestAccessTokenHash",
+  "token_hash",
+  "tokenHash",
   "password",
   "secret",
   "api_key",
@@ -4763,10 +4770,16 @@ app.use(encryptResponseMiddleware);
 // Registered after encryptResponseMiddleware so it runs first on send.
 app.use((req, res, next) => {
   const sendJson = res.json.bind(res);
-  res.json = ((body?: unknown) =>
-    sendJson(
-      requestPrincipal(req)?.kind === "guest" ? redactMemberAttribution(body) : body
-    )) as typeof res.json;
+  res.json = ((body?: unknown) => {
+    const projected = projectSensitiveResponse(body, {
+      allowTopLevelFields: Array.isArray(res.locals.allowTopLevelCredentialFields)
+        ? res.locals.allowTopLevelCredentialFields
+        : [],
+    });
+    return sendJson(
+      requestPrincipal(req)?.kind === "guest" ? redactMemberAttribution(projected) : projected
+    );
+  }) as typeof res.json;
   next();
 });
 
@@ -11420,6 +11433,7 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
             : {}),
         });
       })();
+      res.locals.allowTopLevelCredentialFields = ["guest_access_token"];
       logDebug("Success:issues_submit", req, { entity_id: result.entity_id });
       return res.json(result);
     } finally {
@@ -13094,6 +13108,7 @@ app.post("/submit/:entity_type", express.json(), async (req, res) => {
       fields,
       initial_message,
     });
+    res.locals.allowTopLevelCredentialFields = ["guest_access_token"];
     await ops.dispose();
     return res.json(result);
   } catch (error) {
