@@ -1,0 +1,201 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "owner_token_administration",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-17T00:00:00Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Create an isolated submission, bind its original token observation, revoke, replay and refuse invalid requests without extra writes. Read back owner metadata.",
+  "tool_calls": [
+    {
+      "name": "issuesSubmit",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "title": "Synthetic token administration eval",
+          "body": "Deterministic isolated workflow fixture.",
+          "author": "synthetic-eval",
+          "local_issue_id": "owner-admin-eval",
+          "reporter_app_version": "0.0.0-eval",
+          "visibility": "private"
+        }
+      },
+      "sequence": 0
+    },
+    {
+      "name": "queryObservations",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "entity_type": "guest_access_token",
+          "limit": 10
+        }
+      },
+      "sequence": 1
+    },
+    {
+      "name": "revokeGuestAccessToken",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "idempotency_key": "synthetic-owner-admin-key",
+          "expected_observation_id": {
+            "$result": {
+              "call": 1,
+              "path": ["response", "observations", 0, "id"]
+            }
+          }
+        },
+        "params": {
+          "path": {
+            "id": {
+              "$result": {
+                "call": 1,
+                "path": ["response", "observations", 0, "entity_id"]
+              }
+            }
+          }
+        }
+      },
+      "sequence": 2
+    },
+    {
+      "name": "revokeGuestAccessToken",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "idempotency_key": "synthetic-owner-admin-key",
+          "expected_observation_id": {
+            "$result": {
+              "call": 1,
+              "path": ["response", "observations", 0, "id"]
+            }
+          }
+        },
+        "params": {
+          "path": {
+            "id": {
+              "$result": {
+                "call": 1,
+                "path": ["response", "observations", 0, "entity_id"]
+              }
+            }
+          }
+        }
+      },
+      "sequence": 3
+    },
+    {
+      "name": "revokeGuestAccessToken",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "idempotency_key": "synthetic-stale-key",
+          "expected_observation_id": "synthetic-stale-original"
+        },
+        "params": {
+          "path": {
+            "id": {
+              "$result": {
+                "call": 1,
+                "path": ["response", "observations", 0, "entity_id"]
+              }
+            }
+          }
+        }
+      },
+      "sequence": 4
+    },
+    {
+      "name": "revokeGuestAccessToken",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "idempotency_key": "synthetic-owner-admin-key",
+          "expected_observation_id": {
+            "$result": {
+              "call": 1,
+              "path": ["response", "observations", 0, "id"]
+            }
+          },
+          "extra": true
+        },
+        "params": {
+          "path": {
+            "id": {
+              "$result": {
+                "call": 1,
+                "path": ["response", "observations", 0, "entity_id"]
+              }
+            }
+          }
+        }
+      },
+      "sequence": 5
+    },
+    {
+      "name": "revokeGuestAccessToken",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "idempotency_key": "synthetic-owner-admin-key",
+          "expected_observation_id": {
+            "$result": {
+              "call": 1,
+              "path": ["response", "observations", 0, "id"]
+            }
+          }
+        },
+        "params": {
+          "path": {
+            "id": {
+              "$result": {
+                "call": 1,
+                "path": ["response", "observations", 0, "entity_id"]
+              }
+            }
+          }
+        }
+      },
+      "sequence": 6,
+      "omit_auth": true
+    },
+    {
+      "name": "queryObservations",
+      "transport": "cli",
+      "input": {
+        "body": {
+          "entity_id": {
+            "$result": {
+              "call": 1,
+              "path": ["response", "observations", 0, "entity_id"]
+            }
+          },
+          "limit": 10
+        }
+      },
+      "sequence": 7
+    },
+    {
+      "name": "getEntityById",
+      "transport": "cli",
+      "input": {
+        "params": {
+          "path": {
+            "id": {
+              "$result": {
+                "call": 0,
+                "path": ["response", "entity_id"]
+              }
+            }
+          }
+        }
+      },
+      "sequence": 8
+    }
+  ],
+  "assistant_text": "Scripted deterministic workflow replay through the actual built generic CLI and HTTP server; no model reasoning was evaluated."
+}

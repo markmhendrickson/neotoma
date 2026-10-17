@@ -9370,6 +9370,104 @@ paths:
               schema:
                 $ref: "#/components/schemas/SessionInfo"
 
+  /guest-access-tokens/{id}/revoke:
+    post:
+      summary: Revoke an owned guest access token
+      description: |
+        Owner-authenticated administration of one existing token. The request
+        binds an original immutable observation, not a bearer value or digest.
+        Appends complete immutable revocation evidence in one transaction and
+        returns metadata only. The same idempotency key and target replay the
+        committed receipt without another observation; a different target or original
+        under that key conflicts. Each new successful key retains one complete
+        observation witness, preserving the first revocation timestamp even when
+        the token is already revoked. Zero growth applies to same-key replays,
+        not arbitrary new keys. Does not create a replacement token, schema, or grant.
+      operationId: revokeGuestAccessToken
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            pattern: "^guest_token_[a-f0-9]{16}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idempotency_key, expected_observation_id]
+              properties:
+                idempotency_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                expected_observation_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        "200":
+          description: Complete revocation evidence committed or replayed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  [revoked, replayed, token_entity_id, revocation_observation_id, revoked_at]
+                properties:
+                  revoked:
+                    type: boolean
+                    enum: [true]
+                  replayed:
+                    type: boolean
+                  token_entity_id:
+                    type: string
+                  revocation_observation_id:
+                    type: string
+                  revoked_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: Malformed or unknown request fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: An authenticated owner is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Guest administration is forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Owned token entity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Original observation or idempotency key conflicts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: Complete token history or atomic commit is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
   /rendered-pages/publish:
     post:
       summary: Publish a rendered_page as a shareable guest URL

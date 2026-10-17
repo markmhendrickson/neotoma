@@ -2259,6 +2259,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/guest-access-tokens/{id}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke an owned guest access token
+     * @description Owner-authenticated administration of one existing token. The request
+     *     binds an original immutable observation, not a bearer value or digest.
+     *     Appends complete immutable revocation evidence in one transaction and
+     *     returns metadata only. The same idempotency key and target replay the
+     *     committed receipt without another observation; a different target or original
+     *     under that key conflicts. Each new successful key retains one complete
+     *     observation witness, preserving the first revocation timestamp even when
+     *     the token is already revoked. Zero growth applies to same-key replays,
+     *     not arbitrary new keys. Does not create a replacement token, schema, or grant.
+     */
+    post: operations["revokeGuestAccessToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/rendered-pages/publish": {
     parameters: {
       query?: never;
@@ -9753,6 +9781,97 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SessionInfo"];
+        };
+      };
+    };
+  };
+  revokeGuestAccessToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          idempotency_key: string;
+          expected_observation_id: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Complete revocation evidence committed or replayed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {boolean} */
+            revoked: true;
+            replayed: boolean;
+            token_entity_id: string;
+            revocation_observation_id: string;
+            /** Format: date-time */
+            revoked_at: string;
+          };
+        };
+      };
+      /** @description Malformed or unknown request fields */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description An authenticated owner is required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest administration is forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Owned token entity not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Original observation or idempotency key conflicts */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Complete token history or atomic commit is unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
