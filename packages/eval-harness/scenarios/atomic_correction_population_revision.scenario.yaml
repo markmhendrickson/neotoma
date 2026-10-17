@@ -1,0 +1,127 @@
+meta:
+  id: atomic_correction_population_revision
+  description: Real isolated-server replay of complete owner/type inventory, existing-row revision and new-row membership guards across correction attempts.
+  tags: [tier2, correct-transaction, population, revision, idempotency]
+seed_strategy: generated
+source_pattern: A transition depends on all existing rows of a type, including rows not selected in the initial decision.
+privacy_transform: Synthetic schema, records, fields, and keys only.
+system_prompt: Page through the complete scoped type before correction. Refuse a first-page-only inventory, a new row, and a changed previously nonselected row. Compare every existing row's revision when its content can affect selection; retry an uncertain commit with the identical key and payload.
+user_prompt: Seed three synthetic records. Try a first-page-only inventory, then read the second page and apply a complete revision-guarded transition. Insert another record and refuse the stale inventory. Edit that previously nonselected record, refuse its stale revision, refresh the complete inventory, apply a second transition, and replay it exactly.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: retrieve_entities
+    op: eq
+    value: 4
+  - type: mcp_tool.invocations
+    tool_name: correct_transaction
+    op: eq
+    value: 7
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 0
+    result_subset:
+      total: 3
+      read_contract:
+        coverage:
+          returned_count: 2
+          total:
+            value: 3
+            relation: exact
+            unit: entities
+          scope_exhausted: false
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 0
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 1
+    result_subset:
+      total: 3
+      read_contract:
+        coverage:
+          returned_count: 1
+          scope_exhausted: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 1
+    result_subset:
+      status: applied
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 2
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 2
+    result_subset:
+      total: 4
+      read_contract:
+        coverage:
+          state: complete
+          returned_count: 4
+          scope_exhausted: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 3
+    result_subset:
+      status: applied
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 4
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: retrieve_entities
+    which: 3
+    result_subset:
+      total: 4
+      read_contract:
+        coverage:
+          state: complete
+          returned_count: 4
+          scope_exhausted: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 5
+    result_subset:
+      status: applied
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 6
+    result_subset:
+      status: replayed
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 0
+    result_subset:
+      observation_count: 2
+      snapshot:
+        status: approved
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 1
+    result_subset:
+      observation_count: 2
+      snapshot:
+        status: approved
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 2
+    result_subset:
+      observation_count: 1
+      snapshot:
+        remaining: 1
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 3
+    result_subset:
+      observation_count: 2
+      snapshot:
+        remaining: 0

@@ -825,6 +825,7 @@ export async function runInterpretation(
             entity_id: snapshot.entity_id,
             entity_type: snapshot.entity_type,
             schema_version: snapshot.schema_version,
+            schema_basis: snapshot.schema_basis,
             snapshot: snapshot.snapshot,
             computed_at: snapshot.computed_at,
             observation_count: snapshot.observation_count,

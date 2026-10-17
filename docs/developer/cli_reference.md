@@ -904,6 +904,8 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
 
 For non-array fields, `neotoma corrections create <entityId> --field-name <field> --corrected-value <value> --expected-version <entity_version>` provides entity-level CAS. The CLI resolves the stored entity type when `--entity-type` is omitted. A stale token exits non-zero with `ERR_FIELD_VERSION_CONFLICT`, the stored token, and retry guidance; an identical idempotency replay returns the original observation and value before evaluating the now-stale CAS token.
 
+For a coordinated correction that also depends on an unchanged entity, use the generic `neotoma request --operation correctTransaction --body '<json>'` command. Include the unchanged entity in `entities` with its scoped ID, type, observation count, at least one declared expected snapshot field, and `changes: []`; another entity must have a correction. The guard is checked in the same transaction and creates no observation. See [`atomic_corrections.md`](atomic_corrections.md) for the payload and exact retry rule.
+
 ### Memory export
 
 - `neotoma memory-export`: Write a single `MEMORY.md` file with bounded, deterministic contents for agent harnesses that consume file-based memory.

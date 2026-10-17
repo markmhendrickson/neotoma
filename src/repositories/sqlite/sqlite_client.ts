@@ -112,6 +112,7 @@ const SCHEMA_STATEMENTS = [
     entity_id TEXT PRIMARY KEY,
     entity_type TEXT NOT NULL,
     schema_version TEXT NOT NULL,
+    schema_basis TEXT,
     canonical_name TEXT,
     snapshot TEXT,
     computed_at TEXT,
@@ -565,6 +566,7 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+    await addColumnIfMissing(db, "entity_snapshots", "schema_basis", "TEXT");
     await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");

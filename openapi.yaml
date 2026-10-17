@@ -1849,6 +1849,10 @@ components:
           type: string
           pattern: "^[a-f0-9]{64}$"
           description: Opaque CAS token that changes for every committed observation.
+        content_revision:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: Opaque revision of the materialized content and active schema/reducer basis. Omitted when current revision authority is unavailable.
         canonical_name:
           type: string
           nullable: true
@@ -8623,6 +8627,13 @@ paths:
         read-back failure rolls back all changes. Reuse the identical request
         and idempotency key after uncertainty; changed payload reuse conflicts.
         This primitive does not decide or authorize application-level approval.
+        Optional populations compare the complete visible entity IDs of an
+        authenticated graph and entity type in that same write transaction.
+        Optional expected_observation_counts also compare every existing row's
+        authoritative observation count and opaque content revision, including
+        previously nonselected rows whose content or schema projection changes.
+        The caller must acquire the entire owner-scoped type population it
+        relies on; this guard does not choose business-relevant types.
       operationId: correctTransaction
       requestBody:
         required: true
@@ -8639,6 +8650,43 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 200
+                populations:
+                  type: array
+                  maxItems: 8
+                  description: Complete visible owner/type entity ID sets read before the request. A new, removed or merged row conflicts before any correction. Include expected_observation_counts when existing row content can affect the decision.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [entity_type, expected_entity_ids]
+                    properties:
+                      entity_type:
+                        type: string
+                        minLength: 1
+                      expected_entity_ids:
+                        type: array
+                        maxItems: 10000
+                        uniqueItems: true
+                        items:
+                          type: string
+                          minLength: 1
+                      expected_observation_counts:
+                        type: array
+                        maxItems: 10000
+                        description: One current observation count and opaque content revision for every expected_entity_id. Materialization lag, content or schema changes conflict before correction; missing or duplicate IDs are invalid.
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [entity_id, observation_count, content_revision]
+                          properties:
+                            entity_id:
+                              type: string
+                              minLength: 1
+                            observation_count:
+                              type: integer
+                              minimum: 0
+                            content_revision:
+                              type: string
+                              pattern: "^[a-f0-9]{64}$"
                 entities:
                   type: array
                   minItems: 1
@@ -8667,11 +8715,12 @@ paths:
                       expected_snapshot:
                         type: object
                         additionalProperties: true
-                        description: Declared expected values; missing differs from null. Observation count guards the whole entity.
+                        description: Declared expected values; missing differs from null. A compare-only participant with no changes requires at least one declared expected field. Observation count guards the whole entity.
                       changes:
                         type: array
-                        minItems: 1
+                        minItems: 0
                         maxItems: 50
+                        description: Empty only for a compare-only participant; at least one other participant must have a correction. A compare-only participant adds no observation or notification.
                         items:
                           type: object
                           additionalProperties: false
