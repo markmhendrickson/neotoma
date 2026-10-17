@@ -50,6 +50,12 @@ describe("compare-only correction through POST /mcp tools/call", () => {
     ({ db } = await import("../../src/db.js"));
     ({ recomputeSnapshot } = await import("../../src/services/snapshot_computation.js"));
     ({ getEntityWithProvenance } = await import("../../src/services/entity_queries.js"));
+    if (process.env.NEOTOMA_DB_BACKEND === "libsql") {
+      const { getDb } = await import("../../src/repositories/db/connection.js");
+      const { WorkerFileDatabase } =
+        await import("../../src/repositories/worker/worker_file_database.js");
+      expect(await getDb()).toBeInstanceOf(WorkerFileDatabase);
+    }
     for (const owner of [OWNER, OTHER]) {
       const registered = await db.from("schema_registry").insert({
         id: `schema-2395-${owner}`,
