@@ -9096,10 +9096,11 @@ export interface operations {
             entity_id: string;
             entity_type: string;
             expected_observation_count: number;
-            /** @description Declared expected values; missing differs from null. Observation count guards the whole entity. */
+            /** @description Declared expected values; missing differs from null. A compare-only participant with no changes requires at least one declared expected field. Observation count guards the whole entity. */
             expected_snapshot: {
               [key: string]: unknown;
             };
+            /** @description Empty only for a compare-only participant; at least one other participant must have a correction. A compare-only participant adds no observation or notification. */
             changes: {
               field: string;
               value: unknown;

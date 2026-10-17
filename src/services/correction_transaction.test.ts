@@ -98,6 +98,90 @@ afterEach(async () => {
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
 });
 describe("scoped atomic correction transaction", () => {
+  it("compares an unchanged participant inside the write transaction without recording it", async () => {
+    const input = request("guard-unchanged-source");
+    input.entities[1].changes = [];
+    const before = await db.from("observations").select("id").eq("user_id", user);
+    const applied = await applyCorrectionTransaction(input);
+    expect(applied.status).toBe("applied");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 1 });
+    const after = await db.from("observations").select("id,entity_id").eq("user_id", user);
+    expect(after.data).toHaveLength((before.data?.length ?? 0) + 1);
+    expect(after.data?.filter((row) => row.entity_id === "ent_atomic_source")).toHaveLength(1);
+    expect(events).toHaveLength(2);
+    expect((await applyCorrectionTransaction(input)).status).toBe("replayed");
+    expect(events).toHaveLength(2);
+    const changed = structuredClone(input);
+    changed.entities[1].expected_snapshot = { remaining: 0 };
+    await expect(applyCorrectionTransaction(changed)).rejects.toThrow(/idempotency/i);
+    expect(events).toHaveLength(2);
+  });
+  it("refuses a stale guard before any writer correction or notification", async () => {
+    const input = request("stale-unchanged-source");
+    input.entities[1].changes = [];
+    const inserted = await db.from("observations").insert({
+      id: "test-atomic-guard-advance",
+      entity_id: "ent_atomic_source",
+      entity_type: "atomic_test",
+      user_id: user,
+      fields: { remaining: 0 },
+      schema_version: "1.0",
+      source_priority: 20,
+      observed_at: "2026-01-02T00:00:00.000Z",
+    });
+    expect(inserted.error).toBeNull();
+    await recomputeSnapshot("ent_atomic_source", user);
+    events.length = 0;
+    await expect(applyCorrectionTransaction(input)).rejects.toThrow(/precondition/);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(events).toHaveLength(0);
+    const rows = await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft");
+    expect(rows.data).toHaveLength(1);
+  });
+  it("fails closed on absent, cross-tenant, wrong-type, undeclared and malformed guards", async () => {
+    await seed(
+      "ent_atomic_other_owner_guard",
+      { title: "Other", remaining: 1 },
+      "test-other-graph"
+    );
+    for (const mutate of [
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].entity_id = "ent_atomic_absent_guard";
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].entity_id = "ent_atomic_other_owner_guard";
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].entity_type = "wrong_type";
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].expected_snapshot = { undeclared: 1 };
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].expected_snapshot = {};
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].expected_snapshot = { remaining: undefined };
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[1].expected_observation_count = -1;
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities.push({ ...input.entities[1] });
+      },
+      (input: CorrectionTransactionOptions) => {
+        input.entities[0].changes = [];
+      },
+    ]) {
+      const input = request("invalid-guard");
+      input.entities[1].changes = [];
+      mutate(input);
+      await expect(applyCorrectionTransaction(input)).rejects.toThrow();
+      expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    }
+    expect(events).toHaveLength(0);
+  });
   it("commits all snapshots and replays an identical request without another observation", async () => {
     const first = await applyCorrectionTransaction(request());
     expect(first.status).toBe("applied");
@@ -204,6 +288,41 @@ describe("scoped atomic correction transaction", () => {
     expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
     expect(events).toHaveLength(0);
   });
+  it("refuses a writer pinned to a field retired from the active schema without effects", async () => {
+    const retiredFields = { title: fields.title, remaining: fields.remaining };
+    const changedSchema = {
+      ...schema,
+      schema_version: "2.0",
+      schema_definition: { ...schema.schema_definition, fields: retiredFields },
+      reducer_config: {
+        merge_policies: {
+          title: schema.reducer_config.merge_policies.title,
+          remaining: schema.reducer_config.merge_policies.remaining,
+        },
+      },
+    };
+    expect(
+      (
+        await db
+          .from("schema_registry")
+          .upsert({ ...changedSchema, user_id: user, scope: "user" }, { onConflict: "id" })
+      ).error
+    ).toBeNull();
+    const input = request("retired-writer-guard");
+    input.entities = [
+      {
+        ...input.entities[0],
+        expected_snapshot: { status: "ready" },
+        changes: [{ field: "title", value: "Renamed draft" }],
+      },
+    ];
+    const before = await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft");
+    await expect(applyCorrectionTransaction(input)).rejects.toThrow(/active schema/);
+    const after = await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft");
+    expect(after.data).toHaveLength(before.data?.length ?? 0);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ title: "Draft" });
+    expect(events).toHaveLength(0);
+  });
   it("dispatches through MCP with the same scoped service and rejects identity spoofing", async () => {
     const { NeotomaServer } = await import("../server.js");
     const server = new NeotomaServer() as unknown as {
@@ -216,6 +335,102 @@ describe("scoped atomic correction transaction", () => {
     await expect(
       server.executeTool("correct_transaction", { ...request(), user_id: "test-other-graph" })
     ).rejects.toThrow(/authenticated user/);
+  });
+  it("accepts a compare-only guard through MCP without a guard observation", async () => {
+    const { NeotomaServer } = await import("../server.js");
+    const server = new NeotomaServer() as unknown as {
+      authenticatedUserId: string;
+      executeTool: (name: string, args: unknown) => Promise<{ content: { text: string }[] }>;
+    };
+    server.authenticatedUserId = user;
+    const input = request("mcp-unchanged-guard");
+    input.entities[1].changes = [];
+    const result = await server.executeTool("correct_transaction", input);
+    expect(JSON.parse(result.content[0].text).status).toBe("applied");
+    const replay = await server.executeTool("correct_transaction", input);
+    expect(JSON.parse(replay.content[0].text).status).toBe("replayed");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "approved" });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 1 });
+    const guardRows = await db
+      .from("observations")
+      .select("id")
+      .eq("entity_id", "ent_atomic_source");
+    expect(guardRows.data).toHaveLength(1);
+    expect(events).toHaveLength(2);
+    await expect(
+      server.executeTool("correct_transaction", {
+        ...input,
+        idempotency_key: "mcp-unchanged-guard-stale-writer",
+      })
+    ).rejects.toThrow(/precondition/);
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(2);
+    expect(events).toHaveLength(2);
+  });
+  it("refuses a stale compare-only guard through MCP without changing its writer", async () => {
+    const { NeotomaServer } = await import("../server.js");
+    const server = new NeotomaServer() as unknown as {
+      authenticatedUserId: string;
+      executeTool: (name: string, args: unknown) => Promise<{ content: { text: string }[] }>;
+    };
+    server.authenticatedUserId = user;
+    const input = request("mcp-stale-unchanged-guard");
+    input.entities[1].changes = [];
+    const inserted = await db.from("observations").insert({
+      id: "test-mcp-guard-advance",
+      entity_id: "ent_atomic_source",
+      entity_type: "atomic_test",
+      user_id: user,
+      fields: { remaining: 0 },
+      schema_version: "1.0",
+      source_priority: 20,
+      observed_at: "2026-01-02T00:00:00.000Z",
+    });
+    expect(inserted.error).toBeNull();
+    await recomputeSnapshot("ent_atomic_source", user);
+    events.length = 0;
+    await expect(server.executeTool("correct_transaction", input)).rejects.toThrow(/precondition/);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+  });
+  it("rolls back MCP writers when a later writer fails behind a compare-only guard", async () => {
+    const { NeotomaServer } = await import("../server.js");
+    const server = new NeotomaServer() as unknown as {
+      authenticatedUserId: string;
+      executeTool: (name: string, args: unknown) => Promise<{ content: { text: string }[] }>;
+    };
+    server.authenticatedUserId = user;
+    await seed("ent_atomic_second_draft", { title: "Second draft", status: "ready" });
+    const input = request("mcp-guard-rollback");
+    input.entities[1].changes = [];
+    input.entities.push({
+      entity_id: "ent_atomic_second_draft",
+      entity_type: "atomic_test",
+      expected_observation_count: 1,
+      expected_snapshot: { status: "ready" },
+      changes: [{ field: "status", value: "approved" }],
+    });
+    const connection = await getDb();
+    await connection.exec(
+      "CREATE TRIGGER fail_atomic_source BEFORE INSERT ON observations WHEN NEW.entity_id = 'ent_atomic_second_draft' BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
+    );
+    await expect(server.executeTool("correct_transaction", input)).rejects.toThrow();
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(await snapshot("ent_atomic_second_draft")).toMatchObject({ status: "ready" });
+    expect(await snapshot("ent_atomic_source")).toMatchObject({ remaining: 1 });
+    for (const id of ["ent_atomic_draft", "ent_atomic_second_draft", "ent_atomic_source"])
+      expect((await db.from("observations").select("id").eq("entity_id", id)).data).toHaveLength(1);
+    expect(events).toHaveLength(0);
+    await connection.exec("DROP TRIGGER fail_atomic_source");
+    const retry = await server.executeTool("correct_transaction", input);
+    expect(JSON.parse(retry.content[0].text).status).toBe("applied");
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_source")).data
+    ).toHaveLength(1);
   });
 });
 
