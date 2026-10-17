@@ -80,6 +80,96 @@ components:
                       type: string
                       minLength: 1
                     value: {}
+    NativeBindingHistoryGroup:
+      description: >-
+        Internal storage-acquisition contract for the first aauth_sub binding reader.
+        Data completeness is not identity admission or read authorization. Public native
+        reads remain unavailable until actual record-service scope, original authority,
+        installed strategy/storage and current revocation are verified. Matching-only
+        rows include all targets and historical ends/expiry; unrelated tuples are never
+        returned. This component does not activate a route or install a schema.
+      type: object
+      additionalProperties: false
+      required:
+        [
+          recipe_version,
+          selector,
+          count,
+          projected_rows,
+          canonical_json_utf8,
+          rows_sha256,
+          complete,
+        ]
+      properties:
+        recipe_version:
+          type: string
+          enum: [native-readset-v2]
+        selector:
+          type: object
+          additionalProperties: false
+          required: [bindings]
+          properties:
+            bindings:
+              type: object
+              additionalProperties: false
+              required: [credential_kind, credential_key_sha256]
+              properties:
+                credential_kind: { type: string, enum: [aauth_sub] }
+                credential_key_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        count:
+          type: integer
+          minimum: 0
+          maximum: 4096
+        projected_rows:
+          type: array
+          maxItems: 4096
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              [
+                id,
+                relationship_key,
+                relationship_type,
+                source_entity_id,
+                target_entity_id,
+                source_id,
+                interpretation_id,
+                observed_at,
+                metadata,
+                canonical_hash,
+                provenance,
+                source_priority,
+                specificity_score,
+              ]
+            properties:
+              id: { type: string, minLength: 1 }
+              relationship_key: { type: string, pattern: "^principal_binding:v1:[0-9a-f]{64}$" }
+              relationship_type: { type: string, enum: [principal_binding] }
+              source_entity_id: { type: string, nullable: true, enum: [null] }
+              target_entity_id: { type: string, pattern: "^ent_[0-9a-f]{24}$" }
+              source_id: { type: string, nullable: true }
+              interpretation_id: { type: string, nullable: true }
+              observed_at: { type: string, nullable: true }
+              metadata:
+                type: object
+                additionalProperties: false
+                required: [credential_kind, credential_value, credential_issuer, expires_at]
+                properties:
+                  credential_kind: { type: string, enum: [aauth_sub] }
+                  credential_value: { type: string, minLength: 1 }
+                  credential_issuer: { type: string, minLength: 1 }
+                  expires_at: { type: string, format: date-time, nullable: true }
+                  _deleted: { type: boolean }
+              canonical_hash: { type: string, nullable: true }
+              provenance: { type: object, additionalProperties: true, nullable: true }
+              source_priority: { type: number, nullable: true }
+              specificity_score: { type: number, nullable: true }
+        canonical_json_utf8:
+          description: Exact canonicalStoreRequest UTF-8 document bytes carried as a JSON string; no client reserialization.
+          type: string
+        rows_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        complete: { type: boolean, enum: [true] }
     NativeTransitionExpected:
       type: object
       additionalProperties: false

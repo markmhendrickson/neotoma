@@ -21,7 +21,12 @@ export class NativeProjectionError extends Error {
   constructor(
     readonly code: "VALIDATION_ERROR" | "NATIVE_DEPENDENCY_UNAVAILABLE",
     message: string,
-    readonly dependency?: "receipt_projection_version"
+    readonly dependency?:
+      | "receipt_projection_version"
+      | "complete_readset_bound"
+      | "G17_binding_history_unavailable"
+      | "G17_binding_history_shape"
+      | "G17_binding_selector_mismatch"
   ) {
     super(message);
   }

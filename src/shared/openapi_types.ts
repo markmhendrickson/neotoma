@@ -2547,6 +2547,51 @@ export interface components {
         }[];
       }[];
     };
+    /** @description Internal storage-acquisition contract for the first aauth_sub binding reader. Data completeness is not identity admission or read authorization. Public native reads remain unavailable until actual record-service scope, original authority, installed strategy/storage and current revocation are verified. Matching-only rows include all targets and historical ends/expiry; unrelated tuples are never returned. This component does not activate a route or install a schema. */
+    NativeBindingHistoryGroup: {
+      /** @enum {string} */
+      recipe_version: "native-readset-v2";
+      selector: {
+        bindings: {
+          /** @enum {string} */
+          credential_kind: "aauth_sub";
+          credential_key_sha256: string;
+        };
+      };
+      count: number;
+      projected_rows: {
+        id: string;
+        relationship_key: string;
+        /** @enum {string} */
+        relationship_type: "principal_binding";
+        /** @enum {string|null} */
+        source_entity_id: null;
+        target_entity_id: string;
+        source_id: string | null;
+        interpretation_id: string | null;
+        observed_at: string | null;
+        metadata: {
+          /** @enum {string} */
+          credential_kind: "aauth_sub";
+          credential_value: string;
+          credential_issuer: string;
+          /** Format: date-time */
+          expires_at: string | null;
+          _deleted?: boolean;
+        };
+        canonical_hash: string | null;
+        provenance: {
+          [key: string]: unknown;
+        } | null;
+        source_priority: number | null;
+        specificity_score: number | null;
+      }[];
+      /** @description Exact canonicalStoreRequest UTF-8 document bytes carried as a JSON string; no client reserialization. */
+      canonical_json_utf8: string;
+      rows_sha256: string;
+      /** @enum {boolean} */
+      complete: true;
+    };
     NativeTransitionExpected: {
       /** @enum {string} */
       recipe_version: "native-readset-v1";

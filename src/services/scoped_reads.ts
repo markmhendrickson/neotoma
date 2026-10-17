@@ -12,6 +12,13 @@
  */
 
 import { db } from "../db.js";
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import type { DbConnection, DbDatabase } from "../repositories/db/driver.js";
+import type { components } from "../shared/openapi_types.js";
+import { NEOTOMA_ENTITY_ID_REGEX } from "../shared/neotoma_entity_id.js";
+import { canonicalStoreRequest } from "./store_condition_keys.js";
+import { NativeProjectionError } from "./native_transition_projection.js";
 
 /**
  * Thrown when an entity id the caller named does not resolve to an entity
@@ -122,4 +129,230 @@ export async function assertEntitiesOwned(
       throw new OwnedEntityNotFoundError(id);
     }
   }
+}
+
+/**
+ * Immutable storage primitive, NOT an authorization or principal resolver.
+ * The owning read/transaction service must first prove its actual tenant/history
+ * read authority and verified presentation. A caller hash, tenant string, open
+ * transaction, provenance block or this function's output supplies none of that.
+ * No public route calls this primitive until that admission producer exists.
+ */
+export interface NativeBindingPresentation {
+  credential_kind: "aauth_sub";
+  credential_value: string;
+  credential_issuer: string;
+}
+
+type NativeBindingHistoryGroup = components["schemas"]["NativeBindingHistoryGroup"];
+type BindingProjection = NativeBindingHistoryGroup["projected_rows"][number];
+
+/** Preparation read: coherence is enforced by the EXISTING database transaction. */
+export async function collectOwnedPrincipalBindingCandidates(
+  database: DbDatabase,
+  userId: string,
+  presentation: NativeBindingPresentation,
+  selector: NativeBindingHistoryGroup["selector"]
+): Promise<NativeBindingHistoryGroup> {
+  canonicalStoreRequest({ userId, presentation, selector });
+  const parsed = bindingPresentation.safeParse(presentation);
+  const requested = bindingSelector.safeParse(selector);
+  if (!userId || !userId.trim() || !parsed.success || !requested.success)
+    throw bindingFailure("G17_binding_history_shape");
+  const lookup = bindingHash([
+    "principal-binding-lookup-v1",
+    userId,
+    presentation.credential_kind,
+    presentation.credential_value,
+    presentation.credential_issuer,
+  ]);
+  if (selector.bindings.credential_key_sha256 !== lookup)
+    throw bindingFailure("G17_binding_selector_mismatch");
+  // Zod's copied values cannot be changed by the caller while the transaction
+  // queues. No public authority or reusable admission token is created.
+  return database.transaction((tx) =>
+    collectBindingHistoryRows(tx, userId, parsed.data, requested.data)
+  );
+}
+
+/** Private transaction-local body; do not expose a nontransactional read path. */
+async function collectBindingHistoryRows(
+  tx: DbConnection,
+  userId: string,
+  presentation: NativeBindingPresentation,
+  selector: NativeBindingHistoryGroup["selector"]
+): Promise<NativeBindingHistoryGroup> {
+  try {
+    // Never filter by credential, target, key, current liveness or expiry here:
+    // malformed/legacy/conflicting history cannot disappear before selection.
+    const census = (await tx
+      .prepare(
+        "SELECT count(*) AS n FROM relationship_observations WHERE user_id=? AND relationship_type=?"
+      )
+      .get(userId, "principal_binding")) as { n?: unknown } | undefined;
+    if (!census || !Number.isSafeInteger(census.n) || Number(census.n) < 0)
+      throw bindingFailure("G17_binding_history_unavailable");
+    if (Number(census.n) > 4096) throw bindingFailure("complete_readset_bound");
+    const rawRows = await tx
+      .prepare(
+        "SELECT id,relationship_key,relationship_type,source_entity_id,target_entity_id," +
+          "source_id,interpretation_id,observed_at,metadata,canonical_hash,provenance," +
+          "source_priority,specificity_score,user_id FROM relationship_observations " +
+          "WHERE user_id=? AND relationship_type=? ORDER BY id ASC LIMIT 4097"
+      )
+      .all(userId, "principal_binding");
+    if (rawRows.length !== census.n) throw bindingFailure("G17_binding_history_unavailable");
+    const all: BindingProjection[] = [];
+    const matches: BindingProjection[] = [];
+    let previousId: string | undefined;
+    for (const value of rawRows) {
+      canonicalStoreRequest(value);
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw bindingFailure("G17_binding_history_shape");
+      const row = value as Record<string, unknown>;
+      if (
+        row.user_id !== userId ||
+        row.relationship_type !== "principal_binding" ||
+        row.source_entity_id !== null ||
+        typeof row.id !== "string" ||
+        !/^[\x21-\x7e]+$/.test(row.id) ||
+        (previousId !== undefined && previousId >= row.id) ||
+        typeof row.target_entity_id !== "string" ||
+        !NEOTOMA_ENTITY_ID_REGEX.test(row.target_entity_id)
+      )
+        throw bindingFailure("G17_binding_history_shape");
+      previousId = row.id;
+      const metadata = await decodeBindingObject(tx, row.metadata, false);
+      const provenance = await decodeBindingObject(tx, row.provenance, true);
+      const identity = bindingMetadata.safeParse(metadata);
+      if (!identity.success) throw bindingFailure("G17_binding_history_shape");
+      const expectedKey =
+        "principal_binding:v1:" +
+        bindingHash([
+          "principal-binding-v1",
+          userId,
+          identity.data.credential_kind,
+          identity.data.credential_value,
+          identity.data.credential_issuer,
+          row.target_entity_id,
+        ]);
+      if (row.relationship_key !== expectedKey) throw bindingFailure("G17_binding_history_shape");
+      for (const key of ["source_id", "interpretation_id", "observed_at", "canonical_hash"])
+        if (row[key] !== null && typeof row[key] !== "string")
+          throw bindingFailure("G17_binding_history_shape");
+      for (const key of ["source_priority", "specificity_score"])
+        if (row[key] !== null && (typeof row[key] !== "number" || !Number.isFinite(row[key])))
+          throw bindingFailure("G17_binding_history_shape");
+      // Numeric R3's READ projection, intentionally distinct from receipt P.
+      const columns = [
+        "id",
+        "relationship_key",
+        "relationship_type",
+        "source_entity_id",
+        "target_entity_id",
+        "source_id",
+        "interpretation_id",
+        "observed_at",
+        "canonical_hash",
+        "source_priority",
+        "specificity_score",
+      ];
+      if (
+        Object.keys(row).some(
+          (key) => ![...columns, "metadata", "provenance", "user_id"].includes(key)
+        )
+      )
+        throw bindingFailure("G17_binding_history_shape");
+      const projected = {
+        ...Object.fromEntries(columns.map((column) => [column, row[column]])),
+        metadata,
+        provenance,
+      } as BindingProjection;
+      all.push(projected);
+      if (
+        identity.data.credential_kind === presentation.credential_kind &&
+        identity.data.credential_value === presentation.credential_value &&
+        identity.data.credential_issuer === presentation.credential_issuer
+      )
+        matches.push(projected);
+    }
+    if (
+      Buffer.byteLength(canonicalStoreRequest(["native-readset-v2", selector, all]), "utf8") >
+      1024 * 1024
+    )
+      throw bindingFailure("complete_readset_bound");
+    const canonical = canonicalStoreRequest(["native-readset-v2", selector, matches]);
+    return {
+      recipe_version: "native-readset-v2",
+      selector,
+      count: matches.length,
+      projected_rows: matches,
+      canonical_json_utf8: canonical,
+      rows_sha256: createHash("sha256").update(canonical, "utf8").digest("hex"),
+      complete: true,
+    };
+  } catch (error) {
+    if (error instanceof NativeProjectionError) throw error;
+    // No SQL, stored credential/provenance or backend message in the envelope.
+    throw bindingFailure("G17_binding_history_unavailable");
+  }
+}
+
+const bindingText = z
+  .string()
+  .min(1)
+  .refine((s) => s.trim().length > 0);
+const bindingPresentation = z
+  .object({
+    credential_kind: z.literal("aauth_sub"),
+    credential_value: bindingText,
+    credential_issuer: bindingText,
+  })
+  .strict();
+const bindingMetadata = bindingPresentation
+  .extend({ expires_at: z.string().datetime().nullable(), _deleted: z.boolean().optional() })
+  .strict();
+const bindingSelector = z
+  .object({
+    bindings: z
+      .object({
+        credential_kind: z.literal("aauth_sub"),
+        credential_key_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      })
+      .strict(),
+  })
+  .strict();
+function bindingHash(value: unknown): string {
+  return createHash("sha256").update(canonicalStoreRequest(value), "utf8").digest("hex");
+}
+function bindingFailure(
+  dependency: NonNullable<NativeProjectionError["dependency"]>
+): NativeProjectionError {
+  return new NativeProjectionError(
+    "NATIVE_DEPENDENCY_UNAVAILABLE",
+    "Complete native binding history could not be acquired; do not infer absence or authority.",
+    dependency
+  );
+}
+async function decodeBindingObject(
+  tx: DbConnection,
+  raw: unknown,
+  nullable: boolean
+): Promise<Record<string, unknown> | null> {
+  if (raw === null && nullable) return null;
+  if (typeof raw !== "string") throw bindingFailure("G17_binding_history_shape");
+  // Reuse the backend's JSON parser for duplicate-name inspection BEFORE the
+  // existing JS parser loses them; no second JSON/canonical codec is added.
+  const duplicate = await tx
+    .prepare(
+      "SELECT 1 AS duplicate FROM json_tree(?) WHERE key IS NOT NULL " +
+        "GROUP BY parent,key HAVING count(*)>1 LIMIT 1"
+    )
+    .get(raw);
+  if (duplicate) throw bindingFailure("G17_binding_history_shape");
+  const decoded: unknown = JSON.parse(raw);
+  canonicalStoreRequest(decoded);
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+    throw bindingFailure("G17_binding_history_shape");
+  return decoded as Record<string, unknown>;
 }
