@@ -123,6 +123,19 @@ describe("compare-only correction through POST /mcp tools/call", () => {
     expect(rows.error).toBeNull();
     return rows.data?.length ?? 0;
   }
+  async function revisions(ids: string[]) {
+    return Promise.all(
+      ids.map(async (entity_id) => {
+        const current = await getEntityWithProvenance(entity_id, false, OWNER);
+        if (!current?.content_revision) throw new Error(`Missing revision for ${entity_id}`);
+        return {
+          entity_id,
+          observation_count: current.observation_count,
+          content_revision: current.content_revision,
+        };
+      })
+    );
+  }
 
   async function call(input: Record<string, unknown>, connectionId: string, id: number) {
     return modernPost(
@@ -281,16 +294,31 @@ describe("compare-only correction through POST /mcp tools/call", () => {
       "ent_2395_revision_unselected",
       "ent_2395_revision_writer",
     ];
+    const readRevision = await modernPost(
+      app.baseUrl,
+      {
+        id: 71,
+        method: "tools/call",
+        params: {
+          name: "retrieve_entity_snapshot",
+          arguments: {
+            entity_id: "ent_2395_revision_unselected",
+            format: "json",
+            include_cleared_fields: true,
+          },
+        },
+      },
+      { connectionId: "conn-2395-owner" }
+    );
+    expect(readRevision.status, readRevision.text).toBe(200);
+    expect(toolResultJson(readRevision.body).content_revision).toMatch(/^[0-9a-f]{64}$/);
     const stale = {
       ...input("ent_2395_revision_writer", "ent_2395_revision_guard", "mcp-2395-revision-stale"),
       populations: [
         {
           entity_type: KIND,
           expected_entity_ids: ids,
-          expected_observation_counts: ids.map((entity_id) => ({
-            entity_id,
-            observation_count: 1,
-          })),
+          expected_observation_counts: await revisions(ids),
         },
       ],
     };
@@ -319,10 +347,7 @@ describe("compare-only correction through POST /mcp tools/call", () => {
       populations: [
         {
           ...stale.populations[0],
-          expected_observation_counts: ids.map((entity_id) => ({
-            entity_id,
-            observation_count: entity_id === "ent_2395_revision_unselected" ? 2 : 1,
-          })),
+          expected_observation_counts: await revisions(ids),
         },
       ],
     };

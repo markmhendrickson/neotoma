@@ -106,10 +106,18 @@ describe("generic CLI correctTransaction actual transport effects", () => {
           args: [type],
         });
         const expected_entity_ids = inventory.rows.map((row) => String(row.id));
-        const expected_observation_counts = inventory.rows.map((row) => ({
-          entity_id: String(row.id),
-          observation_count: Number(row.observation_count),
-        }));
+        const expected_observation_counts = await Promise.all(
+          inventory.rows.map(async (row) => {
+            const current = await post("/get_entity_snapshot", { entity_id: String(row.id) });
+            if (typeof current.content_revision !== "string")
+              throw new Error("Missing content revision");
+            return {
+              entity_id: String(row.id),
+              observation_count: Number(row.observation_count),
+              content_revision: current.content_revision as string,
+            };
+          })
+        );
         expect(expected_entity_ids).toContain(unselected);
         expect(expected_entity_ids).toContain(source);
         const stale = {
@@ -159,10 +167,16 @@ describe("generic CLI correctTransaction actual transport effects", () => {
             {
               entity_type: type,
               expected_entity_ids,
-              expected_observation_counts: expected_observation_counts.map((entry) => ({
-                ...entry,
-                observation_count: entry.entity_id === unselected ? 2 : entry.observation_count,
-              })),
+              expected_observation_counts: await Promise.all(
+                expected_entity_ids.map(async (entity_id) => {
+                  const current = await post("/get_entity_snapshot", { entity_id });
+                  return {
+                    entity_id,
+                    observation_count: current.observation_count,
+                    content_revision: current.content_revision,
+                  };
+                })
+              ),
             },
           ],
         };

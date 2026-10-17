@@ -10,6 +10,8 @@ import {
   type CursorPayload,
 } from "./entity_cursor.js";
 import { computeEntityVersion } from "./entity_version.js";
+import { createHash } from "node:crypto";
+import { stableSerialize } from "./stable_serialize.js";
 
 export interface SnapshotFilter {
   op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
@@ -134,6 +136,8 @@ export interface EntityWithProvenance {
   last_observation_at: string;
   /** Opaque CAS token that advances for every committed observation. */
   entity_version: string;
+  /** Opaque revision of the materialized projection and active reducer basis. */
+  content_revision?: string;
   provenance: Record<string, unknown>;
   computed_at?: string;
   merged_to_entity_id?: string | null;
@@ -167,6 +171,29 @@ interface EntitySnapshotRow {
   provenance?: Record<string, unknown>;
   computed_at?: string;
   [key: string]: unknown;
+}
+
+/** Shared opaque token for the normal read and the in-transaction population
+ * check. Including the active schema/reducer basis makes a count-preserving
+ * projection change stale, while snapshot/provenance bind its current content.
+ */
+export function populationContentRevision(
+  entityId: string,
+  snapshot: EntitySnapshotRow,
+  schema: { schema_definition: unknown; reducer_config: unknown }
+): string {
+  return createHash("sha256")
+    .update(
+      stableSerialize({
+        entity_id: entityId,
+        schema_version: snapshot.schema_version,
+        snapshot: snapshot.snapshot,
+        provenance: snapshot.provenance,
+        schema_definition: schema.schema_definition,
+        reducer_config: schema.reducer_config,
+      })
+    )
+    .digest("hex");
 }
 
 // #1943: pagination bounds live in a dependency-free module so the request
@@ -347,18 +374,38 @@ export async function listVisibleEntityIdsForType(
  */
 export async function listObservationCountsForVisibleIds(
   userId: string,
-  ids: readonly string[]
-): Promise<Array<{ entity_id: string; observation_count: number }>> {
-  const revisions: Array<{ entity_id: string; observation_count: number }> = [];
+  ids: readonly string[],
+  schema: { schema_definition: unknown; reducer_config: unknown }
+): Promise<Array<{ entity_id: string; observation_count: number; content_revision: string }>> {
+  const revisions: Array<{
+    entity_id: string;
+    observation_count: number;
+    content_revision: string;
+  }> = [];
+  const { getDb } = await import("../repositories/db/connection.js");
+  const connection = await getDb();
   for (let start = 0; start < ids.length; start += 500) {
     const chunk = ids.slice(start, start + 500);
     const { data, error } = await db
       .from("entity_snapshots")
-      .select("entity_id,observation_count")
+      .select("entity_id,observation_count,schema_version,snapshot,provenance")
       .eq("user_id", userId)
       .in("entity_id", chunk);
     if (error || !Array.isArray(data) || data.length !== chunk.length)
       throw new Error("Complete scoped population revisions are unavailable.");
+    // A persisted observation can outlive a failed snapshot recomputation.
+    // Count the attached ledger in the same reserved transaction; at present
+    // visible entities have only the merge-alias rule and merge rewrites
+    // observations.entity_id to the survivor. An observation-grained attachment
+    // rule must extend this acquisition before it is enabled.
+    const ledgerRows = (await connection
+      .prepare(
+        `SELECT entity_id, COUNT(*) AS observation_count FROM observations
+         WHERE user_id = ? AND entity_id IN (${chunk.map(() => "?").join(",")})
+         GROUP BY entity_id`
+      )
+      .all(userId, ...chunk)) as Array<{ entity_id: string; observation_count: number }>;
+    const ledger = new Map(ledgerRows.map((row) => [row.entity_id, row.observation_count]));
     const wanted = new Set(chunk);
     const seen = new Set<string>();
     for (const row of data) {
@@ -368,11 +415,18 @@ export async function listObservationCountsForVisibleIds(
         !wanted.has(row.entity_id) ||
         seen.has(row.entity_id) ||
         !Number.isSafeInteger(row.observation_count) ||
-        row.observation_count < 0
+        row.observation_count < 0 ||
+        ledger.get(row.entity_id) !== row.observation_count
       )
         throw new Error("Complete scoped population revisions are unavailable.");
       seen.add(row.entity_id);
-      revisions.push({ entity_id: row.entity_id, observation_count: row.observation_count });
+      if (!row.schema_version || !row.snapshot || !row.provenance)
+        throw new Error("Complete scoped population revisions are unavailable.");
+      revisions.push({
+        entity_id: row.entity_id,
+        observation_count: row.observation_count,
+        content_revision: populationContentRevision(row.entity_id, row, schema),
+      });
     }
   }
   return revisions.sort((a, b) => a.entity_id.localeCompare(b.entity_id));
@@ -1226,10 +1280,20 @@ export async function getEntityWithProvenance(
   // are optional and never block the entity response.
   let entityTypeLabel: string | null = null;
   let primaryFields: string[] | undefined;
+  let contentRevision: string | undefined;
   try {
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
     const schema = await registry.loadActiveSchema(entity.entity_type, entity.user_id ?? undefined);
+    if (
+      schema &&
+      snapshot &&
+      !snapshotError &&
+      snapshot.schema_version &&
+      snapshot.snapshot &&
+      snapshot.provenance
+    )
+      contentRevision = populationContentRevision(entity.id, snapshot as EntitySnapshotRow, schema);
     if (schema?.metadata?.label) entityTypeLabel = schema.metadata.label;
     const snapshotObj = effectiveSnapshot?.snapshot ?? {};
     if (snapshotObj && Object.keys(snapshotObj).length > 0) {
@@ -1266,6 +1330,7 @@ export async function getEntityWithProvenance(
       observation_count: observationCount,
       last_observation_at: lastObservationAt,
     }),
+    ...(contentRevision ? { content_revision: contentRevision } : {}),
     provenance: effectiveSnapshot?.provenance || {},
     computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,

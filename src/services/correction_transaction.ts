@@ -27,7 +27,11 @@ export interface CorrectionTransactionOptions {
   populations?: {
     entity_type: string;
     expected_entity_ids: string[];
-    expected_observation_counts?: { entity_id: string; observation_count: number }[];
+    expected_observation_counts?: {
+      entity_id: string;
+      observation_count: number;
+      content_revision: string;
+    }[];
   }[];
 }
 export class CorrectionTransactionError extends Error {
@@ -115,17 +119,21 @@ function assertValid(options: CorrectionTransactionOptions) {
           counts.some(
             (entry) =>
               !entry ||
-              Object.keys(entry).some((key) => !["entity_id", "observation_count"].includes(key)) ||
+              Object.keys(entry).some(
+                (key) => !["entity_id", "observation_count", "content_revision"].includes(key)
+              ) ||
               typeof entry.entity_id !== "string" ||
               !allowed.has(entry.entity_id) ||
               !Number.isSafeInteger(entry.observation_count) ||
-              entry.observation_count < 0
+              entry.observation_count < 0 ||
+              typeof entry.content_revision !== "string" ||
+              !/^[0-9a-f]{64}$/.test(entry.content_revision)
           ) ||
           new Set(counts.map((entry) => entry.entity_id)).size !== allowed.size
         )
           throw new CorrectionTransactionError(
             "VALIDATION_ERROR",
-            "Population revisions must cover exactly the expected IDs with safe observation counts."
+            "Population revisions must cover exactly the expected IDs with safe counts and content revisions."
           );
       }
       types.add(population.entity_type);
@@ -353,7 +361,7 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
       if (population.expected_observation_counts !== undefined) {
         let current: Awaited<ReturnType<typeof listObservationCountsForVisibleIds>>;
         try {
-          current = await listObservationCountsForVisibleIds(options.user_id, actual);
+          current = await listObservationCountsForVisibleIds(options.user_id, actual, schema);
         } catch {
           throw new CorrectionTransactionError(
             "CONFLICT",

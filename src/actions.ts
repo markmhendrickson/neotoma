@@ -10362,7 +10362,26 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
-  return res.json(await withSnapshotDataOrigins(data, userId));
+  let contentRevision: string | undefined;
+  try {
+    const { schemaRegistry } = await import("./services/schema_registry.js");
+    const { populationContentRevision } = await import("./services/entity_queries.js");
+    const schema = await schemaRegistry.loadActiveSchema(data.entity_type, userId);
+    if (schema && data.schema_version && data.snapshot && data.provenance)
+      contentRevision = populationContentRevision(entity_id, data, schema);
+  } catch {
+    // Keep the factual read available; a caller using this as a claim basis
+    // must refuse the missing revision rather than substitute a count.
+  }
+  return res.json(
+    await withSnapshotDataOrigins(
+      {
+        ...data,
+        ...(contentRevision ? { content_revision: contentRevision } : {}),
+      },
+      userId
+    )
+  );
 });
 
 /**

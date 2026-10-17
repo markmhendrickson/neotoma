@@ -3613,6 +3613,7 @@ export class NeotomaServer {
       cleared_fields_included?: true;
       computed_at: string | null | undefined;
       observation_count: number;
+      content_revision?: string;
       last_observation_at: string | null | undefined;
     }): Promise<{ content: Array<{ type: string; text: string }> }> => {
       // Resolve schema-level agent_instructions once for both formats.
@@ -3760,6 +3761,7 @@ export class NeotomaServer {
           | undefined) ?? {},
       computed_at: (entity as { computed_at?: string | null }).computed_at ?? null,
       observation_count: (entity as { observation_count?: number }).observation_count ?? 0,
+      ...(entity.content_revision ? { content_revision: entity.content_revision } : {}),
       last_observation_at:
         (entity as { last_observation_at?: string | null }).last_observation_at ?? null,
     });

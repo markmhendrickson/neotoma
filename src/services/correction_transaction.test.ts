@@ -61,6 +61,19 @@ async function seed(id: string, snapshot: Record<string, unknown>, owner = user)
 async function snapshot(id: string) {
   return (await getEntityWithProvenance(id, false, user))?.snapshot;
 }
+async function revisions(ids: string[]) {
+  return Promise.all(
+    ids.map(async (entity_id) => {
+      const current = await getEntityWithProvenance(entity_id, false, user);
+      if (!current?.content_revision) throw new Error(`Missing content revision for ${entity_id}`);
+      return {
+        entity_id,
+        observation_count: current.observation_count,
+        content_revision: current.content_revision,
+      };
+    })
+  );
+}
 function request(key = "approve-1"): CorrectionTransactionOptions {
   return {
     user_id: user,
@@ -200,7 +213,7 @@ describe("scoped atomic correction transaction", () => {
       {
         entity_type: "atomic_test",
         expected_entity_ids: ids,
-        expected_observation_counts: ids.map((entity_id) => ({ entity_id, observation_count: 1 })),
+        expected_observation_counts: await revisions(ids),
       },
     ];
     const edited = ids[ids.length - 1];
@@ -236,10 +249,7 @@ describe("scoped atomic correction transaction", () => {
       {
         entity_type: "atomic_test",
         expected_entity_ids: ["ent_atomic_source", "ent_atomic_draft"],
-        expected_observation_counts: [
-          { entity_id: "ent_atomic_source", observation_count: 1 },
-          { entity_id: "ent_atomic_draft", observation_count: 1 },
-        ],
+        expected_observation_counts: await revisions(["ent_atomic_source", "ent_atomic_draft"]),
       },
     ];
     expect((await applyCorrectionTransaction(input)).status).toBe("applied");
@@ -253,22 +263,153 @@ describe("scoped atomic correction transaction", () => {
     const outcome = await applyCorrectionTransaction(changed).catch((error: Error) => error);
     expect((outcome as { code?: string }).code).toBe("IDEMPOTENCY_CONFLICT");
   });
+  it("refuses an accepted but unmaterialized observation in an unselected population row", async () => {
+    await seed("ent_atomic_lagged", { title: "Unselected", remaining: 1 });
+    const input = request("population-unmaterialized-observation");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ["ent_atomic_draft", "ent_atomic_lagged", "ent_atomic_source"],
+        expected_observation_counts: await revisions([
+          "ent_atomic_draft",
+          "ent_atomic_lagged",
+          "ent_atomic_source",
+        ]),
+      },
+    ];
+    // The local adapter normally materializes on insert. Restore the prior
+    // materialized row to represent the accepted-observation/failing-upsert
+    // state that the interpretation path can persist.
+    const connection = await getDb();
+    const priorSnapshot = (await connection
+      .prepare(
+        "SELECT snapshot, provenance, observation_count FROM entity_snapshots WHERE entity_id = ?"
+      )
+      .get("ent_atomic_lagged")) as {
+      snapshot: string;
+      provenance: string;
+      observation_count: number;
+    };
+    expect(
+      (
+        await db.from("observations").insert({
+          id: "accepted-but-not-materialized",
+          entity_id: "ent_atomic_lagged",
+          entity_type: "atomic_test",
+          user_id: user,
+          fields: { remaining: 2 },
+          schema_version: "1.0",
+          source_priority: 20,
+          observed_at: "2026-01-02T00:00:00.000Z",
+        })
+      ).error
+    ).toBeNull();
+    await connection
+      .prepare(
+        "UPDATE entity_snapshots SET snapshot = ?, provenance = ?, observation_count = ? WHERE entity_id = ?"
+      )
+      .run(
+        priorSnapshot.snapshot,
+        priorSnapshot.provenance,
+        priorSnapshot.observation_count,
+        "ent_atomic_lagged"
+      );
+    const laggedSnapshot = await db
+      .from("entity_snapshots")
+      .select("observation_count")
+      .eq("entity_id", "ent_atomic_lagged")
+      .single();
+    expect(laggedSnapshot.data?.observation_count).toBe(1);
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_lagged")).data
+    ).toHaveLength(2);
+    events.length = 0;
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+    expect((outcome as Error).message).toContain("population revision");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+  });
+  it("refuses a count-preserving projected content change in an unselected row", async () => {
+    await seed("ent_atomic_projection", { title: "Unselected", remaining: 1 });
+    const ids = ["ent_atomic_draft", "ent_atomic_projection", "ent_atomic_source"];
+    const input = request("population-content-change");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: await revisions(ids),
+      },
+    ];
+    const connection = await getDb();
+    await connection
+      .prepare(
+        "UPDATE entity_snapshots SET snapshot = json_set(snapshot, '$.remaining', 2) WHERE entity_id = ?"
+      )
+      .run("ent_atomic_projection");
+    expect(
+      (
+        await db
+          .from("entity_snapshots")
+          .select("observation_count")
+          .eq("entity_id", "ent_atomic_projection")
+          .single()
+      ).data?.observation_count
+    ).toBe(1);
+    events.length = 0;
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+    expect((outcome as Error).message).toContain("population revision");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+  });
+  it("refuses a changed active reducer basis even when every row count is unchanged", async () => {
+    const ids = ["ent_atomic_draft", "ent_atomic_source"];
+    const input = request("population-schema-basis-change");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: await revisions(ids),
+      },
+    ];
+    const connection = await getDb();
+    await connection
+      .prepare(
+        "UPDATE schema_registry SET reducer_config = json_set(reducer_config, '$.merge_policies.remaining.strategy', 'last_write') WHERE id = ? AND user_id = ?"
+      )
+      .run(schema.id, user);
+    events.length = 0;
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect((outcome as { code?: string }).code).toBe("CONFLICT");
+    expect((outcome as Error).message).toContain("population revision");
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(1);
+    expect(events).toHaveLength(0);
+  });
   it("refuses incomplete, duplicate, foreign and malformed population revisions without effects", async () => {
     await seed("ent_atomic_foreign", { title: "Foreign", remaining: 1 }, "test-other-graph");
-    const cases: Array<{ entity_id: string; observation_count: number }[]> = [
-      [{ entity_id: "ent_atomic_draft", observation_count: 1 }],
-      [
-        { entity_id: "ent_atomic_draft", observation_count: 1 },
-        { entity_id: "ent_atomic_draft", observation_count: 1 },
-      ],
-      [
-        { entity_id: "ent_atomic_draft", observation_count: 1 },
-        { entity_id: "ent_atomic_foreign", observation_count: 1 },
-      ],
-      [
-        { entity_id: "ent_atomic_draft", observation_count: 1 },
-        { entity_id: "ent_atomic_source", observation_count: -1 },
-      ],
+    const [draftRevision, sourceRevision] = await revisions([
+      "ent_atomic_draft",
+      "ent_atomic_source",
+    ]);
+    const cases = [
+      [draftRevision],
+      [draftRevision, draftRevision],
+      [draftRevision, { ...sourceRevision, entity_id: "ent_atomic_foreign" }],
+      [draftRevision, { ...sourceRevision, observation_count: -1 }],
+      [draftRevision, { ...sourceRevision, content_revision: "not-a-revision" }],
     ];
     for (const [index, counts] of cases.entries()) {
       const input = request(`invalid-population-revision-${index}`);
@@ -298,7 +439,7 @@ describe("scoped atomic correction transaction", () => {
       {
         entity_type: "atomic_test",
         expected_entity_ids: ids,
-        expected_observation_counts: ids.map((entity_id) => ({ entity_id, observation_count: 1 })),
+        expected_observation_counts: await revisions(ids),
       },
     ];
     expect(
@@ -414,7 +555,7 @@ describe("scoped atomic correction transaction", () => {
       {
         entity_type: "atomic_test",
         expected_entity_ids: ids,
-        expected_observation_counts: ids.map((entity_id) => ({ entity_id, observation_count: 1 })),
+        expected_observation_counts: await revisions(ids),
       },
     ];
     const edited = extra[extra.length - 1];

@@ -2061,7 +2061,8 @@ export interface paths {
      *     Optional populations compare the complete visible entity IDs of an
      *     authenticated graph and entity type in that same write transaction.
      *     Optional expected_observation_counts also compare every existing row's
-     *     revision, including previously nonselected rows whose content changes.
+     *     authoritative observation count and opaque content revision, including
+     *     previously nonselected rows whose content or schema projection changes.
      *     The caller must acquire the entire owner-scoped type population it
      *     relies on; this guard does not choose business-relevant types.
      */
@@ -3729,6 +3730,8 @@ export interface components {
       last_observation_at?: string;
       /** @description Opaque CAS token that changes for every committed observation. */
       entity_version?: string;
+      /** @description Opaque revision of the materialized content and active schema/reducer basis. Omitted when current revision authority is unavailable. */
+      content_revision?: string;
       canonical_name?: string | null;
       merged_to_entity_id?: string | null;
       /** Format: date-time */
@@ -9102,10 +9105,11 @@ export interface operations {
           populations?: {
             entity_type: string;
             expected_entity_ids: string[];
-            /** @description One current observation count for every expected_entity_id. A changed existing row conflicts before correction; missing or duplicate IDs are invalid. */
+            /** @description One current observation count and opaque content revision for every expected_entity_id. Materialization lag, content or schema changes conflict before correction; missing or duplicate IDs are invalid. */
             expected_observation_counts?: {
               entity_id: string;
               observation_count: number;
+              content_revision: string;
             }[];
           }[];
           entities: {
