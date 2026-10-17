@@ -872,6 +872,26 @@ export async function queryEntities(
   const snapshotMap = new Map<string, EntitySnapshotRow>(
     (snapshots || []).map((s: EntitySnapshotRow) => [s.entity_id, s])
   );
+  // A complete paginated type scan already loads the snapshots for its page.
+  // Expose the same opaque revision as the single-entity reader so a caller
+  // need not perform one extra snapshot request per population member. Missing
+  // schema or projection authority remains an absent token, which guarded
+  // callers must refuse rather than interpreting as an empty revision.
+  const contentSchemas = new Map<string, { schema_definition: unknown; reducer_config: unknown } | null>();
+  if (includeSnapshots && userId) {
+    const { SchemaRegistryService } = await import("./schema_registry.js");
+    const registry = new SchemaRegistryService();
+    for (const type of new Set(entities.map((entity: any) => entity.entity_type as string))) {
+      try {
+        const schema = await registry.loadActiveSchema(type, userId);
+        contentSchemas.set(type, schema ?? null);
+      } catch {
+        // Ordinary listing remains usable; guarded consumers refuse the
+        // missing token. A failed schema lookup is never an empty revision.
+        contentSchemas.set(type, null);
+      }
+    }
+  }
 
   // Get raw_fragments for all entities (batch query)
   let allObservations: Array<{
@@ -1069,6 +1089,12 @@ export async function queryEntities(
         observation_count: observationCount,
         last_observation_at: lastObservationAt,
       }),
+      ...(includeSnapshots && snapshot?.schema_version && snapshot.snapshot && snapshot.provenance
+        && contentSchemas.get(entity.entity_type)
+        ? { content_revision: populationContentRevision(
+            entity.id, snapshot, contentSchemas.get(entity.entity_type)!,
+          ) }
+        : {}),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,

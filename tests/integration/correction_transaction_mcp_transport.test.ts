@@ -311,7 +311,28 @@ describe("compare-only correction through POST /mcp tools/call", () => {
       { connectionId: "conn-2395-owner" }
     );
     expect(readRevision.status, readRevision.text).toBe(200);
-    expect(toolResultJson(readRevision.body).content_revision).toMatch(/^[0-9a-f]{64}$/);
+    const singleRevision = toolResultJson(readRevision.body).content_revision;
+    expect(singleRevision).toMatch(/^[0-9a-f]{64}$/);
+    const pageRevision = await modernPost(
+      app.baseUrl,
+      {
+        id: 72,
+        method: "tools/call",
+        params: {
+          name: "retrieve_entities",
+          arguments: { entity_type: KIND, include_snapshots: true, limit: 20 },
+        },
+      },
+      { connectionId: "conn-2395-owner" }
+    );
+    expect(pageRevision.status, pageRevision.text).toBe(200);
+    const pageRows = toolResultJson(pageRevision.body).entities;
+    expect(pageRows.find((row: { entity_id: string }) =>
+      row.entity_id === "ent_2395_revision_unselected").content_revision
+    ).toBe(singleRevision);
+    expect(pageRows.some((row: { entity_id: string }) =>
+      row.entity_id === "ent_2395_revision_foreign")
+    ).toBe(false);
     const stale = {
       ...input("ent_2395_revision_writer", "ent_2395_revision_guard", "mcp-2395-revision-stale"),
       populations: [
