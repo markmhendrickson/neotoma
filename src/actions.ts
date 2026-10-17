@@ -10366,7 +10366,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
   try {
     const { schemaRegistry } = await import("./services/schema_registry.js");
     const { currentPopulationContentRevision } = await import("./services/entity_queries.js");
-    const schema = await schemaRegistry.loadActiveSchema(data.entity_type, userId);
+    const schema = await schemaRegistry.loadUnambiguousActiveSchema(data.entity_type, userId);
     contentRevision = currentPopulationContentRevision(entity_id, data, schema);
   } catch {
     // Keep the factual read available; a caller using this as a claim basis

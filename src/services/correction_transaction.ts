@@ -306,7 +306,18 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
           "CONFLICT",
           "Transaction precondition no longer matches the stored entity."
         );
-      const schema = await schemaRegistry.loadActiveSchema(entity.entity_type, options.user_id);
+      let schema;
+      try {
+        schema = await schemaRegistry.loadUnambiguousActiveSchema(
+          entity.entity_type,
+          options.user_id
+        );
+      } catch {
+        throw new CorrectionTransactionError(
+          "CONFLICT",
+          "Scoped transaction schema authority is unavailable."
+        );
+      }
       if (
         !schema ||
         (!entity.changes.length &&
@@ -346,7 +357,18 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
       prepared.push({ entity, schema });
     }
     for (const population of populations) {
-      const schema = await schemaRegistry.loadActiveSchema(population.entity_type, options.user_id);
+      let schema;
+      try {
+        schema = await schemaRegistry.loadUnambiguousActiveSchema(
+          population.entity_type,
+          options.user_id
+        );
+      } catch {
+        throw new CorrectionTransactionError(
+          "CONFLICT",
+          "Complete scoped population schema authority is unavailable."
+        );
+      }
       if (!schema)
         throw new CorrectionTransactionError(
           "VALIDATION_ERROR",

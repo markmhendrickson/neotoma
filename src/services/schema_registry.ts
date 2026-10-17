@@ -1211,6 +1211,35 @@ export class SchemaRegistryService {
   }
 
   /**
+   * Resolve the effective schema for a guarded population read or correction.
+   * Ordinary schema reads historically use .single(), which can select an
+   * arbitrary row if a failed activation leaves two active rows in one scope.
+   * Neither row may authorize a population token in that state. The current
+   * transaction's database context is reused when called inside a correction.
+   */
+  async loadUnambiguousActiveSchema(
+    entityType: string,
+    userId: string
+  ): Promise<SchemaRegistryEntry | null> {
+    const loadScope = async (scope: "user" | "global") => {
+      let query = db
+        .from("schema_registry")
+        .select("*")
+        .eq("entity_type", entityType)
+        .eq("scope", scope)
+        .eq("active", true);
+      if (scope === "user") query = query.eq("user_id", userId);
+      const { data, error } = await query;
+      if (error) throw new Error(`Failed to load authoritative schema: ${error.message}`);
+      if (!Array.isArray(data)) throw new Error("Authoritative schema rows are unavailable.");
+      if (data.length > 1) throw new Error("The active schema is ambiguous in its owner scope.");
+      return data[0] as SchemaRegistryEntry | undefined;
+    };
+    const selected = (await loadScope("user")) ?? (await loadScope("global"));
+    return await applyBuiltInSchemaIdentityDefaults(selected ?? null);
+  }
+
+  /**
    * Report every `entity_type` that currently has BOTH an active global row and
    * one or more active user-scoped overrides (#2356).
    *

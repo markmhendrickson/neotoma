@@ -122,8 +122,51 @@ afterEach(async () => {
   const connection = await getDb();
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_source");
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
+  await db.from("schema_registry").delete().eq("id", "test-schema-duplicate-active");
 });
 describe("scoped atomic correction transaction", () => {
+  it("refuses population authority when the effective owner has two active schemas", async () => {
+    const ids = ["ent_atomic_draft", "ent_atomic_source"];
+    const input = request("population-duplicate-active-schema");
+    input.entities[1].changes = [];
+    input.populations = [
+      {
+        entity_type: "atomic_test",
+        expected_entity_ids: ids,
+        expected_observation_counts: await revisions(ids),
+      },
+    ];
+    expect(
+      (
+        await db.from("schema_registry").insert({
+          ...schema,
+          id: "test-schema-duplicate-active",
+          user_id: user,
+          scope: "user",
+        })
+      ).error
+    ).toBeNull();
+    expect(
+      (await getEntityWithProvenance("ent_atomic_source", false, user))?.content_revision
+    ).toBeUndefined();
+    const page = await queryEntities({
+      userId: user,
+      entityType: "atomic_test",
+      includeSnapshots: true,
+    });
+    expect(
+      page.find((row) => row.entity_id === "ent_atomic_source")?.content_revision
+    ).toBeUndefined();
+    const before = (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft"))
+      .data?.length;
+    const outcome = await applyCorrectionTransaction(input).catch((error: Error) => error);
+    expect(outcome).toMatchObject({ code: "CONFLICT" });
+    expect(
+      (await db.from("observations").select("id").eq("entity_id", "ent_atomic_draft")).data
+    ).toHaveLength(before);
+    expect(await snapshot("ent_atomic_draft")).toMatchObject({ status: "ready" });
+    expect(events).toHaveLength(0);
+  });
   it("compares an unchanged participant inside the write transaction without recording it", async () => {
     const input = request("guard-unchanged-source");
     input.entities[1].changes = [];

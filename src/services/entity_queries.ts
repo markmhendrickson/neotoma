@@ -914,7 +914,7 @@ export async function queryEntities(
     const registry = new SchemaRegistryService();
     for (const type of new Set(entities.map((entity: any) => entity.entity_type as string))) {
       try {
-        const schema = await registry.loadActiveSchema(type, userId);
+        const schema = await registry.loadUnambiguousActiveSchema(type, userId);
         contentSchemas.set(type, schema ?? null);
       } catch {
         // Ordinary listing remains usable; guarded consumers refuse the
@@ -1343,7 +1343,9 @@ export async function getEntityWithProvenance(
   try {
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
-    const schema = await registry.loadActiveSchema(entity.entity_type, entity.user_id ?? undefined);
+    const schema = entity.user_id
+      ? await registry.loadUnambiguousActiveSchema(entity.entity_type, entity.user_id)
+      : null;
     if (!snapshotError)
       contentRevision = currentPopulationContentRevision(entity.id, snapshot, schema);
     if (schema?.metadata?.label) entityTypeLabel = schema.metadata.label;

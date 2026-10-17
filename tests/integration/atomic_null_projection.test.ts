@@ -467,6 +467,36 @@ it("direct HTTP snapshot omits revision after same-version schema replacement", 
   }
 });
 
+it("direct HTTP snapshot withholds revision for duplicate active owner schemas", async () => {
+  const row = await target({ reason: "retained" });
+  const before = await request("/get_entity_snapshot", { entity_id: row.entity_id });
+  expect(before.status).toBe(200);
+  expect(before.body.content_revision).toMatch(/^[0-9a-f]{64}$/);
+  const active = await schemaRegistry.loadActiveSchema(kind, owner);
+  expect(active).not.toBeNull();
+  const duplicateId = randomUUID();
+  try {
+    expect(
+      (
+        await db.from("schema_registry").insert({
+          ...active,
+          id: duplicateId,
+          active: true,
+        })
+      ).error
+    ).toBeNull();
+    const after = await request("/get_entity_snapshot", { entity_id: row.entity_id });
+    expect(after.status).toBe(200);
+    expect(after.body.snapshot).toEqual(before.body.snapshot);
+    expect(after.body.content_revision).toBeUndefined();
+    expect(
+      (await getEntityWithProvenance(row.entity_id, false, owner))?.content_revision
+    ).toBeUndefined();
+  } finally {
+    await db.from("schema_registry").delete().eq("id", duplicateId);
+  }
+});
+
 it.each(["markdown", undefined])(
   "MCP opted-in view refuses unselected format %s",
   async (format) => {
