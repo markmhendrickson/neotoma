@@ -156,6 +156,44 @@ async function postNeotomaTool(
   }
 }
 
+/** Resolve an opaque revision from a prior factual read in a replay cassette.
+ * Recording a literal revision cannot work: observation IDs differ in every
+ * isolated run. Only the population guard entries use this replay reference.
+ */
+function resolvePopulationRevisions(input: unknown, priorCalls: ToolCall[]): unknown {
+  if (!input || typeof input !== "object") return input;
+  const resolved = structuredClone(input) as Record<string, unknown>;
+  if (!Array.isArray(resolved.populations)) return resolved;
+  for (const population of resolved.populations) {
+    if (!population || typeof population !== "object") continue;
+    const entries = (population as Record<string, unknown>).expected_observation_counts;
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") continue;
+      const row = entry as Record<string, unknown>;
+      const reference = row.content_revision;
+      if (!reference || typeof reference !== "object") continue;
+      const marker = (reference as Record<string, unknown>).$source_content_revision;
+      if (!marker || typeof marker !== "object") throw new Error("Invalid cassette content revision reference");
+      const { sequence, entity_id } = marker as Record<string, unknown>;
+      if (!Number.isSafeInteger(sequence) || typeof entity_id !== "string" || entity_id !== row.entity_id) {
+        throw new Error("Invalid cassette content revision source");
+      }
+      const source = priorCalls.find((call) => call.sequence === sequence);
+      if (!source || !["retrieve_entities", "correct_transaction"].includes(source.name)) {
+        throw new Error("Cassette content revision source must be a prior factual read");
+      }
+      const output = source.output as { entities?: Array<{ entity_id?: string; content_revision?: string }> } | undefined;
+      const matches = output?.entities?.filter((entity) => entity.entity_id === entity_id) ?? [];
+      if (matches.length !== 1 || !/^[0-9a-f]{64}$/.test(matches[0].content_revision ?? "")) {
+        throw new Error("Cassette content revision source is missing or ambiguous");
+      }
+      row.content_revision = matches[0].content_revision;
+    }
+  }
+  return resolved;
+}
+
 export async function replayCassetteAgainstServer(
   invocation: DriverInvocation,
   cassette: CassetteFile,
@@ -164,21 +202,24 @@ export async function replayCassetteAgainstServer(
   const start = Date.now();
   const replayedCalls: ToolCall[] = [];
   for (const call of cassette.tool_calls) {
+    const input = call.name === "correct_transaction"
+      ? resolvePopulationRevisions(call.input, replayedCalls)
+      : call.input;
     let result: { output?: unknown; error?: string };
     if (NEOTOMA_TOOL_NAMES.has(call.name)) {
       result = await postNeotomaTool(
         invocation.neotomaBaseUrl,
         call.name,
-        call.input,
+        input,
         invocation.neotomaToken
       );
     } else {
       // Host tools are deterministic stubs by definition.
-      result = await registry.invoke(call.name, call.input);
+      result = await registry.invoke(call.name, input);
     }
     replayedCalls.push({
       name: call.name,
-      input: call.input,
+      input,
       output: result.output ?? call.output,
       error: result.error ?? call.error,
       sequence: replayedCalls.length,
