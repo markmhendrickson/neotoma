@@ -3,6 +3,9 @@ import { parseNativeTransitionRequest } from "./native_transition_request.js";
 import { nativeSchemaReducerHash } from "./native_transition_projection.js";
 import { getOpenApiInputSchemaForOperationId } from "../shared/openapi_schema.js";
 import { buildToolDefinitions } from "../tool_definitions.js";
+import * as wire from "./native_transition_request.js";
+import { createHash } from "node:crypto";
+import { canonicalStoreRequest } from "./store_condition_keys.js";
 
 const entity = "ent_" + "a".repeat(24);
 const digest = "b".repeat(64);
@@ -95,6 +98,276 @@ function body(index = 1): Record<string, any> {
     transition: transitions[index],
   });
 }
+function v2Body(index = 0) {
+  const input = body(index);
+  input.expected.recipe_version = "native-readset-v2";
+  input.expected.groups.unshift({
+    selector: { bindings: { credential_kind: "aauth_sub", credential_key_sha256: digest } },
+    count: 0,
+    rows_sha256: digest,
+  });
+  return input;
+}
+const sha = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+
+describe("versioned native wire preimages without authority", () => {
+  it.each(transitions.map((t, i) => [t.name, i] as const))(
+    "retains complete v2 %s intent without admitting it",
+    (_name, i) => {
+      const input = v2Body(i);
+      expect(parseNativeTransitionRequest(input)).toEqual(input);
+      expect(input).toEqual(v2Body(i));
+    }
+  );
+  it.each([
+    ["absent binding", (n: any) => n.expected.groups.shift()],
+    [
+      "duplicate binding",
+      (n: any) => n.expected.groups.unshift(structuredClone(n.expected.groups[0])),
+    ],
+    [
+      "foreign kind",
+      (n: any) => {
+        n.expected.groups[0].selector.bindings.credential_kind = "other";
+      },
+    ],
+    [
+      "extra binding field",
+      (n: any) => {
+        n.expected.groups[0].selector.bindings.permit = true;
+      },
+    ],
+    [
+      "mixed version",
+      (n: any) => {
+        n.expected.recipe_version = "native-readset-v1";
+      },
+    ],
+    ["unsorted groups", (n: any) => n.expected.groups.reverse()],
+    [
+      "unknown version",
+      (n: any) => {
+        n.expected.recipe_version = "native-readset-v3";
+      },
+    ],
+    [
+      "extra expected field",
+      (n: any) => {
+        n.expected.complete = true;
+      },
+    ],
+    [
+      "unsafe count",
+      (n: any) => {
+        n.expected.groups[0].count = 2 ** 53;
+      },
+    ],
+    [
+      "fractional count",
+      (n: any) => {
+        n.expected.groups[0].count = 0.76;
+      },
+    ],
+    [
+      "nonfinite data",
+      (n: any) => {
+        n.transition.options[0].confidence = Infinity;
+      },
+    ],
+    [
+      "undefined data",
+      (n: any) => {
+        n.transition.options[0].confidence = undefined;
+      },
+    ],
+    [
+      "sparse data",
+      (n: any) => {
+        n.transition.options = new Array(1);
+      },
+    ],
+    [
+      "cyclic data",
+      (n: any) => {
+        n.transition.options[0] = n;
+      },
+    ],
+    [
+      "wrong registry digest",
+      (n: any) => {
+        n.expected.schema_reducer_sha256 = digest;
+      },
+    ],
+    ["absent registry", (n: any) => n.expected.groups.pop()],
+  ] as const)("refuses %s before hashing", (_name, mutate) => {
+    const input = v2Body();
+    mutate(input);
+    expect(() => parseNativeTransitionRequest(input)).toThrow();
+    if (!["nonfinite data", "undefined data", "sparse data", "cyclic data"].includes(_name))
+      expect(() => wire.nativeExpectedReadsetHash(input.expected)).toThrow();
+    expect(() => wire.nativeMcpIntentHash(input)).toThrow();
+    expect(() => wire.nativeMcpOperationFingerprint("tenant-a", "agent-a", input)).toThrow();
+  });
+  it("checks original descriptors before hashing without invoking an accessor", () => {
+    const input = v2Body();
+    let reads = 0;
+    Object.defineProperty(input.expected, "groups", {
+      enumerable: true,
+      get() {
+        reads++;
+        return [];
+      },
+    });
+    expect(() => wire.nativeExpectedReadsetHash(input.expected)).toThrow();
+    expect(() => wire.nativeMcpIntentHash(input)).toThrow();
+    expect(reads).toBe(0);
+  });
+  it("pins the exact complete expected preimage and every group count/digest", () => {
+    const input = v2Body();
+    const expectedBytes =
+      '["native-expected-readset-v1",{"groups":[{"count":0,"rows_sha256":"' +
+      digest +
+      '","selector":{"bindings":{"credential_key_sha256":"' +
+      digest +
+      '","credential_kind":"aauth_sub"}}},{"count":1,"rows_sha256":"' +
+      digest +
+      '","selector":{"registry":{"entity_types":["checkpoint"],"reducer_versions":["test-reducer"],"relationship_types":[]}}}],"recipe_version":"native-readset-v2","schema_reducer_sha256":"' +
+      nativeSchemaReducerHash(digest) +
+      '"}]';
+    expect(canonicalStoreRequest(["native-expected-readset-v1", input.expected])).toBe(
+      expectedBytes
+    );
+    const original = wire.nativeExpectedReadsetHash(input.expected);
+    expect(original).toBe(sha(expectedBytes));
+    for (const i of [0, 1]) {
+      const changed = v2Body();
+      changed.expected.groups[i].count++;
+      expect(wire.nativeExpectedReadsetHash(changed.expected)).not.toBe(original);
+    }
+    const changed = v2Body();
+    changed.expected.groups[0].rows_sha256 = "c".repeat(64);
+    expect(wire.nativeExpectedReadsetHash(changed.expected)).not.toBe(original);
+    const added = v2Body();
+    added.expected.groups.push({
+      selector: { slot: { target_type: "task", target_id: entity, step_name: null } },
+      count: 0,
+      rows_sha256: digest,
+    });
+    expect(wire.nativeExpectedReadsetHash(added.expected)).not.toBe(original);
+    const registry = v2Body();
+    registry.expected.groups[1].rows_sha256 = "c".repeat(64);
+    registry.expected.schema_reducer_sha256 = nativeSchemaReducerHash("c".repeat(64));
+    expect(wire.nativeExpectedReadsetHash(registry.expected)).not.toBe(original);
+    expect(() => wire.nativeExpectedReadsetHash(body().expected)).toThrow();
+  });
+  it("binds every native argument into MCP I/F with fixed versioned method/path and actor", () => {
+    const input = v2Body();
+    const I = wire.nativeMcpIntentHash(input);
+    expect(I).toBe(sha(canonicalStoreRequest(["native-mcp-intent-v1", input])));
+    const F = wire.nativeMcpOperationFingerprint("tenant-a", "agent-a", input);
+    const bytes =
+      '["native-transition-v2","tenant-a","agent-a",null,"POST","/mcp","tools/call","correct_transaction","' +
+      I +
+      '","' +
+      input.expected.schema_reducer_sha256 +
+      '"]';
+    expect(F).toBe(sha(bytes));
+    for (const mutate of [
+      (n: any) => {
+        n.idempotency_key += "-other";
+      },
+      (n: any) => {
+        n.transition.reason += " changed";
+      },
+      (n: any) => {
+        n.transition.options[0].confidence = 0.77;
+      },
+      (n: any) => {
+        n.expected.groups[0].count++;
+      },
+    ]) {
+      const changed = v2Body();
+      mutate(changed);
+      expect(wire.nativeMcpIntentHash(changed)).not.toBe(I);
+      expect(wire.nativeMcpOperationFingerprint("tenant-a", "agent-a", changed)).not.toBe(F);
+    }
+    expect(wire.nativeMcpOperationFingerprint("tenant-b", "agent-a", input)).not.toBe(F);
+    expect(wire.nativeMcpOperationFingerprint("tenant-a", "agent-b", input)).not.toBe(F);
+    expect(() => wire.nativeMcpIntentHash(body())).toThrow();
+    const unknown = v2Body();
+    unknown._meta = { progressToken: 1 };
+    expect(() => wire.nativeMcpIntentHash(unknown)).toThrow();
+  });
+  it("preserves finite fractional/-0/exponent C semantics without claiming raw envelope verification", () => {
+    const a = v2Body(),
+      b = v2Body();
+    a.transition.options[0] = { confidence: 0.76, zero: -0, small: 1e-7 };
+    b.transition.options[0] = { small: 0.0000001, zero: 0, confidence: 0.76 };
+    expect(wire.nativeMcpIntentHash(a)).toBe(wire.nativeMcpIntentHash(b));
+    expect(wire.nativeMcpOperationFingerprint("tenant-a", "agent-a", a)).toBe(
+      wire.nativeMcpOperationFingerprint("tenant-a", "agent-a", b)
+    );
+  });
+  it("keeps REST exact raw-byte fingerprinting distinct from MCP semantic intent", () => {
+    const n = v2Body();
+    const first = JSON.stringify(n),
+      second = JSON.stringify(n, null, 2);
+    const firstHash = sha(first),
+      secondHash = sha(second);
+    const F = wire.nativeRestOperationFingerprint(
+      "tenant-a",
+      "agent-a",
+      firstHash,
+      n.expected.schema_reducer_sha256
+    );
+    expect(F).toBe(
+      sha(
+        '["native-transition-v1","tenant-a","agent-a",null,"POST","/corrections/transaction","' +
+          firstHash +
+          '","' +
+          n.expected.schema_reducer_sha256 +
+          '"]'
+      )
+    );
+    expect(
+      wire.nativeRestOperationFingerprint(
+        "tenant-a",
+        "agent-a",
+        secondHash,
+        n.expected.schema_reducer_sha256
+      )
+    ).not.toBe(F);
+    expect(wire.nativeMcpOperationFingerprint("tenant-a", "agent-a", n)).not.toBe(F);
+  });
+  it.each(["", " ", null, 0, undefined])(
+    "refuses invalid arithmetic scope %s without defaults",
+    (value) => {
+      expect(() =>
+        wire.nativeMcpOperationFingerprint(value as string, "agent-a", v2Body())
+      ).toThrow();
+      expect(() =>
+        wire.nativeMcpOperationFingerprint("tenant-a", value as string, v2Body())
+      ).toThrow();
+      expect(() =>
+        wire.nativeRestOperationFingerprint(value as string, "agent-a", digest, digest)
+      ).toThrow();
+      expect(() =>
+        wire.nativeRestOperationFingerprint("tenant-a", value as string, digest, digest)
+      ).toThrow();
+    }
+  );
+  it.each(["", "A".repeat(64), "b".repeat(63), "b".repeat(65), null, 0])(
+    "refuses invalid digest %s",
+    (value) => {
+      expect(() =>
+        wire.nativeRestOperationFingerprint("tenant-a", "agent-a", value as string, digest)
+      ).toThrow();
+      expect(() =>
+        wire.nativeRestOperationFingerprint("tenant-a", "agent-a", digest, value as string)
+      ).toThrow();
+    }
+  );
+});
 
 describe("closed native transaction input", () => {
   it.each(transitions.map((t, index) => [t.name, index] as const))(
@@ -309,15 +582,17 @@ describe("closed native transaction input", () => {
     expect(branches[0].required).toEqual(["idempotency_key", "entities"]);
     expect(branches[1].additionalProperties).toBe(false);
     expect(branches[1].properties.transition.oneOf).toHaveLength(6);
-    expect(branches[1].properties.expected.properties.recipe_version.enum).toEqual([
-      "native-readset-v1",
+    const expected = branches[1].properties.expected.oneOf;
+    expect(expected.map((e: any) => e.properties.recipe_version.enum)).toEqual([
+      ["native-readset-v1"],
+      ["native-readset-v2"],
     ]);
-    expect(branches[1].properties.expected.properties.groups.description).toContain(
-      "More than 256 distinct IDs"
-    );
-    expect(branches[1].properties.expected.properties.groups.description).toContain(
-      "lower-bound refusal only"
-    );
+    expect(
+      expected[1].properties.groups.items.properties.selector.oneOf[1].properties.bindings
+        .properties.credential_kind.enum
+    ).toEqual(["aauth_sub"]);
+    expect(expected[0].properties.groups.description).toContain("More than 256 distinct IDs");
+    expect(expected[0].properties.groups.description).toContain("lower-bound refusal only");
     expect(JSON.stringify(schema)).not.toContain('"$ref"');
     const actual = buildToolDefinitions().find((t) => t.name === "correct_transaction")!;
     expect(actual.inputSchema).toEqual(schema);

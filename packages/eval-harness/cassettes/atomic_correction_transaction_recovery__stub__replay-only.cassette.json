@@ -325,7 +325,66 @@
         "entity_id": "ent_721001bcfee64e561dd21c6a",
         "include_cleared_fields": true
       }
+    },
+    {
+      "name": "correct_transaction",
+      "sequence": 14,
+      "input": {
+        "protocol": "native-record-transition-v1",
+        "idempotency_key": "synthetic-native-wire-refusal",
+        "expected": {
+          "recipe_version": "native-readset-v2",
+          "schema_reducer_sha256": "303b088beac8ee2182c50d6ecbc1bb1674406c13722a42859ec77d326ac087ac",
+          "groups": [
+            {
+              "selector": {
+                "bindings": {
+                  "credential_kind": "aauth_sub",
+                  "credential_key_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+              },
+              "count": 0,
+              "rows_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            {
+              "selector": {
+                "registry": {
+                  "entity_types": ["checkpoint"],
+                  "relationship_types": [],
+                  "reducer_versions": ["synthetic-native"]
+                }
+              },
+              "count": 1,
+              "rows_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "transition": {
+          "name": "checkpoint.raise",
+          "subject": {
+            "entity_type": "task",
+            "entity_id": "ent_721001bcfee64e561dd21c6a"
+          },
+          "reason": "Synthetic native wire control",
+          "needed_input": "Synthetic held input",
+          "options": [
+            {
+              "name": "continue",
+              "confidence": 0.76
+            }
+          ],
+          "awaited_roles": ["synthetic-role"]
+        }
+      }
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "sequence": 15,
+      "input": {
+        "entity_id": "ent_721001bcfee64e561dd21c6a",
+        "include_cleared_fields": true
+      }
     }
   ],
-  "assistant_text": "The first coordinated transaction committed once. Exact retry replayed; stale and changed-payload attempts left the prior snapshots and observation counts intact."
+  "assistant_text": "The first coordinated transaction committed once. Exact retry replayed; stale and changed-payload attempts left the prior snapshots and observation counts intact. The synthetic v2 native request remained blocked on principal-binding authority; the final ordinary readback stayed unchanged."
 }

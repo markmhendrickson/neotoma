@@ -164,17 +164,7 @@ components:
           type: string
           enum: [native-readset-v2]
         selector:
-          type: object
-          additionalProperties: false
-          required: [bindings]
-          properties:
-            bindings:
-              type: object
-              additionalProperties: false
-              required: [credential_kind, credential_key_sha256]
-              properties:
-                credential_kind: { type: string, enum: [aauth_sub] }
-                credential_key_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+          $ref: "#/components/schemas/NativeBindingSelector"
         count:
           type: integer
           minimum: 0
@@ -229,7 +219,118 @@ components:
           type: string
         rows_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
         complete: { type: boolean, enum: [true] }
+    NativeBindingSelector:
+      type: object
+      additionalProperties: false
+      required: [bindings]
+      properties:
+        bindings:
+          type: object
+          additionalProperties: false
+          required: [credential_kind, credential_key_sha256]
+          properties:
+            credential_kind: { type: string, enum: [aauth_sub] }
+            credential_key_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+    NativeTransitionReadSelectorV1:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - entity
+          properties:
+            entity:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_id
+              properties:
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+        - type: object
+          additionalProperties: false
+          required:
+            - edges
+          properties:
+            edges:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_id
+                - direction
+                - types
+              properties:
+                entity_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+                direction:
+                  type: string
+                  enum:
+                    - both
+                types:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+        - type: object
+          additionalProperties: false
+          required:
+            - slot
+          properties:
+            slot:
+              type: object
+              additionalProperties: false
+              required:
+                - target_type
+                - target_id
+                - step_name
+              properties:
+                target_type:
+                  type: string
+                  enum:
+                    - task
+                    - batch
+                target_id:
+                  type: string
+                  pattern: ^ent_[0-9a-f]{24}$
+                step_name:
+                  type: string
+                  nullable: true
+                  minLength: 1
+                  description: Null for task, declared nonempty step for batch; at most256 UTF-8 bytes.
+        - type: object
+          additionalProperties: false
+          required:
+            - registry
+          properties:
+            registry:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_types
+                - relationship_types
+                - reducer_versions
+              properties:
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                relationship_types:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                reducer_versions:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
     NativeTransitionExpected:
+      oneOf:
+        - $ref: "#/components/schemas/NativeTransitionExpectedV1"
+        - $ref: "#/components/schemas/NativeTransitionExpectedV2"
+    NativeTransitionExpectedV1:
       type: object
       additionalProperties: false
       required:
@@ -262,100 +363,53 @@ components:
               - rows_sha256
             properties:
               selector:
+                $ref: "#/components/schemas/NativeTransitionReadSelectorV1"
+              count:
+                type: integer
+                minimum: 0
+                maximum: 9007199254740991
+              rows_sha256:
+                type: string
+                pattern: ^[0-9a-f]{64}$
+    NativeTransitionExpectedV2:
+      type: object
+      additionalProperties: false
+      required:
+        - recipe_version
+        - schema_reducer_sha256
+        - groups
+      properties:
+        recipe_version:
+          type: string
+          enum:
+            - native-readset-v2
+        schema_reducer_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        groups:
+          description: >-
+            Native preflight counts distinct entity_id values in entity and edges selectors and
+            target_id values in slot selectors. More than 256 distinct IDs returns
+            NATIVE_DEPENDENCY_UNAVAILABLE with complete_readset_bound before storage access.
+            Exactly one bindings selector (aauth_sub) and one registry selector are required.
+            Selector canonical UTF-8 bytes must be strictly increasing; counts are safe integers.
+            Parsing a credential digest grants no matching/history read or native effect authority.
+            This is a lower-bound refusal only: at or below 256 does not establish complete
+            acquisition, read authority, registry readiness or permission for native effects.
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - selector
+              - count
+              - rows_sha256
+            properties:
+              selector:
                 oneOf:
-                  - type: object
-                    additionalProperties: false
-                    required:
-                      - entity
-                    properties:
-                      entity:
-                        type: object
-                        additionalProperties: false
-                        required:
-                          - entity_id
-                        properties:
-                          entity_id:
-                            type: string
-                            pattern: ^ent_[0-9a-f]{24}$
-                  - type: object
-                    additionalProperties: false
-                    required:
-                      - edges
-                    properties:
-                      edges:
-                        type: object
-                        additionalProperties: false
-                        required:
-                          - entity_id
-                          - direction
-                          - types
-                        properties:
-                          entity_id:
-                            type: string
-                            pattern: ^ent_[0-9a-f]{24}$
-                          direction:
-                            type: string
-                            enum:
-                              - both
-                          types:
-                            type: array
-                            items:
-                              type: string
-                              minLength: 1
-                  - type: object
-                    additionalProperties: false
-                    required:
-                      - slot
-                    properties:
-                      slot:
-                        type: object
-                        additionalProperties: false
-                        required:
-                          - target_type
-                          - target_id
-                          - step_name
-                        properties:
-                          target_type:
-                            type: string
-                            enum:
-                              - task
-                              - batch
-                          target_id:
-                            type: string
-                            pattern: ^ent_[0-9a-f]{24}$
-                          step_name:
-                            type: string
-                            nullable: true
-                            minLength: 1
-                            description: Null for task, declared nonempty step for batch; at most256 UTF-8 bytes.
-                  - type: object
-                    additionalProperties: false
-                    required:
-                      - registry
-                    properties:
-                      registry:
-                        type: object
-                        additionalProperties: false
-                        required:
-                          - entity_types
-                          - relationship_types
-                          - reducer_versions
-                        properties:
-                          entity_types:
-                            type: array
-                            items:
-                              type: string
-                              minLength: 1
-                          relationship_types:
-                            type: array
-                            items:
-                              type: string
-                              minLength: 1
-                          reducer_versions:
-                            type: array
-                            items:
-                              type: string
-                              minLength: 1
+                  - $ref: "#/components/schemas/NativeTransitionReadSelectorV1"
+                  - $ref: "#/components/schemas/NativeBindingSelector"
               count:
                 type: integer
                 minimum: 0

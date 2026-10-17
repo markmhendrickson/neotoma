@@ -171,6 +171,29 @@ afterEach(async () => {
   await connection.exec("DROP TRIGGER IF EXISTS fail_atomic_second_change");
 });
 describe("scoped atomic correction transaction", () => {
+  it("retains native v2 service refusal without storage writes/events or ordinary fallback", async () => {
+    const request = nativeRequest() as any;
+    request.expected.recipe_version = "native-readset-v2";
+    request.expected.groups.unshift({
+      selector: {
+        bindings: { credential_kind: "aauth_sub", credential_key_sha256: "b".repeat(64) },
+      },
+      count: 0,
+      rows_sha256: "b".repeat(64),
+    });
+    const before = await nativeCensus();
+    expect(before.every((r) => Number(r?.n) === 2 || Number(r?.n) === 0)).toBe(true);
+    expect(Number(before[0]?.n)).toBe(2);
+    expect(Number(before[1]?.n)).toBe(2);
+    const transaction = vi.spyOn(await getDb(), "transaction");
+    await expect(applyCorrectionTransaction(request, user)).rejects.toMatchObject({
+      code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+      details: { dependency: "native_principal_binding_resolution" },
+    });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(await nativeCensus()).toEqual(before);
+    expect(events).toHaveLength(0);
+  });
   it.each<SelectorFamily>(["entity", "edges", "slot", "mixed"])(
     "refuses 257 distinct %s read IDs before storage without acquiring authority",
     async (family) => {
@@ -203,48 +226,65 @@ describe("scoped atomic correction transaction", () => {
     expect(await nativeCensus()).toEqual(before);
     expect(events).toHaveLength(0);
   });
-  it("preserves the read-ID bound through actual HTTP and MCP without storage or events", async () => {
-    const { app } = await import("../actions.js");
-    const { NeotomaServer } = await import("../server.js");
-    const mcp = new NeotomaServer() as unknown as {
-      authenticatedUserId: string;
-      executeTool: (name: string, args: unknown) => Promise<unknown>;
-    };
-    mcp.authenticatedUserId = user;
-    const server = createServer(app);
-    try {
-      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-      const address = server.address();
-      if (!address || typeof address === "string") throw Error("Owned loopback binding required.");
-      const before = await nativeCensus();
-      const transaction = vi.spyOn(await getDb(), "transaction");
-      const request = nativeReadIds(257, "mixed");
-      const response = await fetch(`http://127.0.0.1:${address.port}/corrections/transaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
-      });
-      expect(response.status).toBe(503);
-      expect(await response.json()).toMatchObject({
-        error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
-        details: { dependency: "complete_readset_bound", observed_lower_bound: 257, limit: 256 },
-      });
-      await expect(mcp.executeTool("correct_transaction", request)).rejects.toMatchObject({
-        data: {
+  it.each(["native-readset-v1", "native-readset-v2"])(
+    "preserves the %s read-ID bound through actual HTTP and MCP without storage or events",
+    async (version) => {
+      const { app } = await import("../actions.js");
+      const { NeotomaServer } = await import("../server.js");
+      const mcp = new NeotomaServer() as unknown as {
+        authenticatedUserId: string;
+        executeTool: (name: string, args: unknown) => Promise<unknown>;
+      };
+      mcp.authenticatedUserId = user;
+      const server = createServer(app);
+      try {
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw Error("Owned loopback binding required.");
+        const before = await nativeCensus();
+        const transaction = vi.spyOn(await getDb(), "transaction");
+        const request = nativeReadIds(257, "mixed") as any;
+        request.expected.recipe_version = version;
+        if (version === "native-readset-v2")
+          request.expected.groups.unshift({
+            selector: {
+              bindings: { credential_kind: "aauth_sub", credential_key_sha256: "b".repeat(64) },
+            },
+            count: 0,
+            rows_sha256: "b".repeat(64),
+          });
+        const response = await fetch(`http://127.0.0.1:${address.port}/corrections/transaction`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        expect(response.status).toBe(503);
+        expect(await response.json()).toMatchObject({
           error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
           details: { dependency: "complete_readset_bound", observed_lower_bound: 257, limit: 256 },
-        },
-      });
-      expect(transaction).not.toHaveBeenCalled();
-      expect(await nativeCensus()).toEqual(before);
-      expect(events).toHaveLength(0);
-    } finally {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve()))
-      );
+        });
+        await expect(mcp.executeTool("correct_transaction", request)).rejects.toMatchObject({
+          data: {
+            error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+            details: {
+              dependency: "complete_readset_bound",
+              observed_lower_bound: 257,
+              limit: 256,
+            },
+          },
+        });
+        expect(transaction).not.toHaveBeenCalled();
+        expect(await nativeCensus()).toEqual(before);
+        expect(events).toHaveLength(0);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve()))
+        );
+      }
     }
-  });
+  );
   it("recognizes a structurally valid native request without inventing principal authority", async () => {
     const before = await nativeCensus();
     const transaction = vi.spyOn(await getDb(), "transaction");
@@ -259,34 +299,60 @@ describe("scoped atomic correction transaction", () => {
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(events).toHaveLength(0);
   });
-  it("returns the same native dependency through actual loopback HTTP without native rows or events", async () => {
-    const { app } = await import("../actions.js");
-    const server = createServer(app);
-    try {
-      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-      const address = server.address();
-      if (!address || typeof address === "string") throw Error("Owned loopback binding required.");
-      const before = await nativeCensus();
-      const response = await fetch(`http://127.0.0.1:${address.port}/corrections/transaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nativeRequest()),
-      });
-      const result = await response.json();
-      expect(response.status).toBe(503);
-      expect(result).toMatchObject({
-        error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
-        details: { dependency: "native_principal_binding_resolution" },
-      });
-      expect(await nativeCensus()).toEqual(before);
-      expect(events).toHaveLength(0);
-    } finally {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve()))
-      );
+  it.each(["native-readset-v1", "native-readset-v2"])(
+    "returns the same %s dependency through actual HTTP/MCP without native rows or events",
+    async (version) => {
+      const { app } = await import("../actions.js");
+      const { NeotomaServer } = await import("../server.js");
+      const mcp = new NeotomaServer() as unknown as {
+        authenticatedUserId: string;
+        executeTool: (name: string, args: unknown) => Promise<unknown>;
+      };
+      mcp.authenticatedUserId = user;
+      const request = nativeRequest() as any;
+      request.expected.recipe_version = version;
+      if (version === "native-readset-v2")
+        request.expected.groups.unshift({
+          selector: {
+            bindings: { credential_kind: "aauth_sub", credential_key_sha256: "b".repeat(64) },
+          },
+          count: 0,
+          rows_sha256: "b".repeat(64),
+        });
+      const server = createServer(app);
+      try {
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw Error("Owned loopback binding required.");
+        const before = await nativeCensus();
+        const response = await fetch(`http://127.0.0.1:${address.port}/corrections/transaction`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const result = await response.json();
+        expect(response.status).toBe(503);
+        expect(result).toMatchObject({
+          error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+          details: { dependency: "native_principal_binding_resolution" },
+        });
+        await expect(mcp.executeTool("correct_transaction", request)).rejects.toMatchObject({
+          data: {
+            error_code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+            details: { dependency: "native_principal_binding_resolution" },
+          },
+        });
+        expect(await nativeCensus()).toEqual(before);
+        expect(events).toHaveLength(0);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve()))
+        );
+      }
     }
-  });
+  );
   it("rejects mixed/native authority fields before a transaction rather than falling back", async () => {
     const invoke = applyCorrectionTransaction as (body: unknown, owner: string) => Promise<unknown>;
     const transaction = vi.spyOn(await getDb(), "transaction");

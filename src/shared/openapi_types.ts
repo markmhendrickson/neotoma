@@ -2575,13 +2575,7 @@ export interface components {
     NativeBindingHistoryGroup: {
       /** @enum {string} */
       recipe_version: "native-readset-v2";
-      selector: {
-        bindings: {
-          /** @enum {string} */
-          credential_kind: "aauth_sub";
-          credential_key_sha256: string;
-        };
-      };
+      selector: components["schemas"]["NativeBindingSelector"];
       count: number;
       projected_rows: {
         id: string;
@@ -2616,42 +2610,66 @@ export interface components {
       /** @enum {boolean} */
       complete: true;
     };
-    NativeTransitionExpected: {
+    NativeBindingSelector: {
+      bindings: {
+        /** @enum {string} */
+        credential_kind: "aauth_sub";
+        credential_key_sha256: string;
+      };
+    };
+    NativeTransitionReadSelectorV1:
+      | {
+          entity: {
+            entity_id: string;
+          };
+        }
+      | {
+          edges: {
+            entity_id: string;
+            /** @enum {string} */
+            direction: "both";
+            types: string[];
+          };
+        }
+      | {
+          slot: {
+            /** @enum {string} */
+            target_type: "task" | "batch";
+            target_id: string;
+            /** @description Null for task, declared nonempty step for batch; at most256 UTF-8 bytes. */
+            step_name: string | null;
+          };
+        }
+      | {
+          registry: {
+            entity_types: string[];
+            relationship_types: string[];
+            reducer_versions: string[];
+          };
+        };
+    NativeTransitionExpected:
+      | components["schemas"]["NativeTransitionExpectedV1"]
+      | components["schemas"]["NativeTransitionExpectedV2"];
+    NativeTransitionExpectedV1: {
       /** @enum {string} */
       recipe_version: "native-readset-v1";
       schema_reducer_sha256: string;
       /** @description Native preflight counts distinct entity_id values in entity and edges selectors and target_id values in slot selectors. More than 256 distinct IDs returns NATIVE_DEPENDENCY_UNAVAILABLE with complete_readset_bound before storage access. This is a lower-bound refusal only: at or below 256 does not establish complete acquisition, read authority, registry readiness or permission for native effects. */
       groups: {
+        selector: components["schemas"]["NativeTransitionReadSelectorV1"];
+        count: number;
+        rows_sha256: string;
+      }[];
+    };
+    NativeTransitionExpectedV2: {
+      /** @enum {string} */
+      recipe_version: "native-readset-v2";
+      schema_reducer_sha256: string;
+      /** @description Native preflight counts distinct entity_id values in entity and edges selectors and target_id values in slot selectors. More than 256 distinct IDs returns NATIVE_DEPENDENCY_UNAVAILABLE with complete_readset_bound before storage access. Exactly one bindings selector (aauth_sub) and one registry selector are required. Selector canonical UTF-8 bytes must be strictly increasing; counts are safe integers. Parsing a credential digest grants no matching/history read or native effect authority. This is a lower-bound refusal only: at or below 256 does not establish complete acquisition, read authority, registry readiness or permission for native effects. */
+      groups: {
         selector:
-          | {
-              entity: {
-                entity_id: string;
-              };
-            }
-          | {
-              edges: {
-                entity_id: string;
-                /** @enum {string} */
-                direction: "both";
-                types: string[];
-              };
-            }
-          | {
-              slot: {
-                /** @enum {string} */
-                target_type: "task" | "batch";
-                target_id: string;
-                /** @description Null for task, declared nonempty step for batch; at most256 UTF-8 bytes. */
-                step_name: string | null;
-              };
-            }
-          | {
-              registry: {
-                entity_types: string[];
-                relationship_types: string[];
-                reducer_versions: string[];
-              };
-            };
+          | components["schemas"]["NativeTransitionReadSelectorV1"]
+          | components["schemas"]["NativeBindingSelector"];
         count: number;
         rows_sha256: string;
       }[];

@@ -2,10 +2,12 @@
 import { z } from "zod";
 import type { components } from "../shared/openapi_types.js";
 import { NEOTOMA_ENTITY_ID_REGEX } from "../shared/neotoma_entity_id.js";
-import { canonicalStoreRequest } from "./store_condition_keys.js";
+import { canonicalStoreRequest, storeConditionRequestHash } from "./store_condition_keys.js";
 import { NativeProjectionError, nativeSchemaReducerHash } from "./native_transition_projection.js";
 
 export type NativeTransitionRequest = components["schemas"]["NativeTransitionRequest"];
+type NativeExpected = components["schemas"]["NativeTransitionExpected"];
+type NativeExpectedV2 = components["schemas"]["NativeTransitionExpectedV2"];
 
 const text = z
   .string()
@@ -48,17 +50,30 @@ const selector = z.union([
     })
     .strict(),
 ]);
-const expected = z
+const bindingSelector = z
+  .object({
+    bindings: z
+      .object({ credential_kind: z.literal("aauth_sub"), credential_key_sha256: digest })
+      .strict(),
+  })
+  .strict();
+const group = <T extends z.ZodTypeAny>(value: T) =>
+  z.object({ selector: value, count: integer.refine((n) => n >= 0), rows_sha256: digest }).strict();
+const expectedV1 = z
   .object({
     recipe_version: z.literal("native-readset-v1"),
     schema_reducer_sha256: digest,
-    groups: z
-      .array(
-        z.object({ selector, count: integer.refine((n) => n >= 0), rows_sha256: digest }).strict()
-      )
-      .min(1),
+    groups: z.array(group(selector)).min(1),
   })
   .strict();
+const expectedV2 = z
+  .object({
+    recipe_version: z.literal("native-readset-v2"),
+    schema_reducer_sha256: digest,
+    groups: z.array(group(z.union([selector, bindingSelector]))).min(1),
+  })
+  .strict();
+const expected = z.discriminatedUnion("recipe_version", [expectedV1, expectedV2]);
 const duration = integer.refine((n) => n > 0);
 // The registered schema still owns the JSON-valued option/ref/finding domains.
 // This parser neither declares their schemas nor defaults unknown authority.
@@ -157,15 +172,7 @@ export function parseNativeTransitionRequest(input: unknown): NativeTransitionRe
   const parsed = request.safeParse(input);
   if (!parsed.success) throw invalid();
   const body = parsed.data;
-  const groups = body.expected.groups;
-  const selectors = groups.map((g) => Buffer.from(canonicalStoreRequest(g.selector), "utf8"));
-  if (selectors.some((s, i) => i > 0 && Buffer.compare(selectors[i - 1], s) >= 0)) throw invalid();
-  const registry = groups.filter((g) => "registry" in g.selector);
-  if (
-    registry.length !== 1 ||
-    body.expected.schema_reducer_sha256 !== nativeSchemaReducerHash(registry[0].rows_sha256)
-  )
-    throw invalid();
+  validateExpected(body.expected);
   // z.unknown() accepts absent object keys; wire requiredness must not do so.
   const original = input as Record<string, unknown>;
   const fields = original.transition as Record<string, unknown>;
@@ -178,6 +185,92 @@ export function parseNativeTransitionRequest(input: unknown): NativeTransitionRe
   )
     throw invalid();
   return body as NativeTransitionRequest;
+}
+
+function validateExpected(value: NativeExpected): void {
+  const groups = value.groups;
+  const selectors = groups.map((g) => Buffer.from(canonicalStoreRequest(g.selector), "utf8"));
+  if (selectors.some((s, i) => i > 0 && Buffer.compare(selectors[i - 1], s) >= 0)) throw invalid();
+  const registry = groups.filter((g) => "registry" in g.selector);
+  if (
+    registry.length !== 1 ||
+    value.schema_reducer_sha256 !== nativeSchemaReducerHash(registry[0].rows_sha256) ||
+    (value.recipe_version === "native-readset-v2" &&
+      groups.filter((g) => "bindings" in g.selector).length !== 1)
+  )
+    throw invalid();
+}
+
+/** Whole validated v2 E; a digest supplies neither read completeness nor authority. */
+export function nativeExpectedReadsetHash(input: unknown): string {
+  canonicalStoreRequest(input);
+  const parsed = expectedV2.safeParse(input);
+  if (!parsed.success) throw invalid();
+  validateExpected(parsed.data);
+  return storeConditionRequestHash(["native-expected-readset-v1", parsed.data]);
+}
+
+function v2Request(input: unknown): NativeTransitionRequest & { expected: NativeExpectedV2 } {
+  const native = parseNativeTransitionRequest(input);
+  if (native.expected.recipe_version !== "native-readset-v2") throw invalid();
+  return native as NativeTransitionRequest & { expected: NativeExpectedV2 };
+}
+function intentHash(native: NativeTransitionRequest): string {
+  return storeConditionRequestHash(["native-mcp-intent-v1", native]);
+}
+/** Entire strict native arguments, not proof of a verified signed outer envelope. */
+export function nativeMcpIntentHash(input: unknown): string {
+  return intentHash(v2Request(input));
+}
+
+function scope(tenant: string, actualPrincipal: string): void {
+  if (!text.safeParse(tenant).success || !text.safeParse(actualPrincipal).success) throw invalid();
+}
+/** Arithmetic only. The service must independently admit the actual presentation. */
+export function nativeMcpOperationFingerprint(
+  tenant: string,
+  actualPrincipal: string,
+  input: unknown
+): string {
+  scope(tenant, actualPrincipal);
+  const native = v2Request(input);
+  return storeConditionRequestHash([
+    "native-transition-v2",
+    tenant,
+    actualPrincipal,
+    null,
+    "POST",
+    "/mcp",
+    "tools/call",
+    "correct_transaction",
+    intentHash(native),
+    native.expected.schema_reducer_sha256,
+  ]);
+}
+
+/** Exact raw verified REST body digest remains spelling-sensitive; this does not verify it. */
+export function nativeRestOperationFingerprint(
+  tenant: string,
+  actualPrincipal: string,
+  rawVerifiedBodySha256: string,
+  schemaReducerSha256: string
+): string {
+  scope(tenant, actualPrincipal);
+  if (
+    !digest.safeParse(rawVerifiedBodySha256).success ||
+    !digest.safeParse(schemaReducerSha256).success
+  )
+    throw invalid();
+  return storeConditionRequestHash([
+    "native-transition-v1",
+    tenant,
+    actualPrincipal,
+    null,
+    "POST",
+    "/corrections/transaction",
+    rawVerifiedBodySha256,
+    schemaReducerSha256,
+  ]);
 }
 
 function invalid(): NativeProjectionError {

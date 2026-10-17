@@ -30,7 +30,7 @@ expected:
   - type: mcp_tool.invocations
     tool_name: correct_transaction
     op: eq
-    value: 6
+    value: 7
   - type: tool_result.matches
     tool_name: correct_transaction
     which: 0
@@ -129,6 +129,24 @@ expected:
     tool_name: retrieve_entity_snapshot
     which: 5
     result_subset:
+      cleared_fields_included: true
+      observation_count: 3
+      snapshot:
+        status: null
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 6
+    result_subset:
+      error:
+        response:
+          error_code: NATIVE_DEPENDENCY_UNAVAILABLE
+          details:
+            dependency: native_principal_binding_resolution
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 6
+    result_subset:
+      entity_id: ent_721001bcfee64e561dd21c6a
       cleared_fields_included: true
       observation_count: 3
       snapshot:
