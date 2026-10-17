@@ -23,6 +23,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import type {
   AgentIdentity,
+  NativeHttpDeliveryCandidate,
   AttributionDecisionDiagnostics,
   AttributionProvenance,
   AuthenticatedPrincipal,
@@ -32,6 +33,8 @@ import { toAttributionProvenance } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext } from "./protected_entity_types.js";
 
 export interface RequestContext {
+  /** Actual HTTP request only; absence never supplies a native proof. */
+  nativeHttpDelivery?: NativeHttpDeliveryCandidate | null;
   /** Resolved agent identity, or null when we have nothing to attribute. */
   agentIdentity: AgentIdentity | null;
   /**
@@ -101,6 +104,11 @@ export function runWithRequestContext<T>(
 /** Fetch the current request context, or `null` outside of one. */
 export function getRequestContext(): RequestContext | null {
   return storage.getStore() ?? null;
+}
+
+/** Private delivery candidate; not authority and not part of public introspection. */
+export function getCurrentNativeHttpDelivery(): NativeHttpDeliveryCandidate | null {
+  return storage.getStore()?.nativeHttpDelivery ?? null;
 }
 
 /**
@@ -197,6 +205,7 @@ export function runWithExternalActor<T>(
     attributionDecision: existing?.attributionDecision ?? null,
     aauthAdmission: existing?.aauthAdmission ?? null,
     externalActor: actor,
+    nativeHttpDelivery: existing?.nativeHttpDelivery ?? null,
     bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
     mcpConnectionId: existing?.mcpConnectionId ?? null,
     authenticatedPrincipal: existing?.authenticatedPrincipal ?? null,

@@ -160,7 +160,21 @@ export interface AgentIdentity {
  * were present (or they failed validation — the middleware logs and
  * proceeds with `aauth === null`).
  */
+/** Private request bytes and verifier facts; never principal/read/effect admission. */
+export interface NativeHttpDeliveryCandidate {
+  readonly kind: "native-http-delivery-candidate-v1";
+  readonly method: "POST";
+  readonly path: "/corrections/transaction" | "/mcp";
+  readonly raw_body_bytes_base64: string;
+  readonly body_sha256: string;
+  readonly signature_label: string;
+  readonly key_thumbprint: string;
+  readonly covered_components: readonly string[];
+}
+
 export interface AAuthRequestContext {
+  /** Process-only; never serialize to provenance, sessions or tool results. */
+  nativeHttpDelivery?: NativeHttpDeliveryCandidate;
   verified: boolean;
   publicKey?: string;
   thumbprint?: string;

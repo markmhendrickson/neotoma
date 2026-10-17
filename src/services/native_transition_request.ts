@@ -276,3 +276,32 @@ export function nativeRestOperationFingerprint(
 function invalid(): NativeProjectionError {
   return new NativeProjectionError("VALIDATION_ERROR", "Invalid native transition request.");
 }
+
+/** Extract the closed native subset from an already strictly decoded delivery. */
+export function parseNativeHttpDelivery(
+  input: unknown,
+  path: "/corrections/transaction" | "/mcp"
+): NativeTransitionRequest {
+  canonicalStoreRequest(input);
+  if (path === "/corrections/transaction") return parseNativeTransitionRequest(input);
+  const rpcId = z.union([z.string(), z.number().int()]);
+  const envelope = z
+    .object({
+      jsonrpc: z.literal("2.0"),
+      id: rpcId,
+      method: z.literal("tools/call"),
+      params: z
+        .object({
+          name: z.literal("correct_transaction"),
+          arguments: z.unknown(),
+          _meta: z.object({ progressToken: rpcId.optional() }).strict().optional(),
+        })
+        .strict(),
+    })
+    .strict()
+    .safeParse(input);
+  if (!envelope.success || !Object.hasOwn(envelope.data.params, "arguments")) throw invalid();
+  // Raw equality is not versioned native admission. Preserve existing v1/v2
+  // structural refusal paths; the MCP v2 fingerprint separately requires v2.
+  return parseNativeTransitionRequest(envelope.data.params.arguments);
+}

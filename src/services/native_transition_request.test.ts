@@ -598,3 +598,52 @@ describe("closed native transaction input", () => {
     expect(actual.inputSchema).toEqual(schema);
   });
 });
+
+// Public-parser tests cover strict raw-object extraction only, not signed transport.
+describe("closed native HTTP/MCP delivery extraction", () => {
+  function nativeV2() {
+    const n = body();
+    n.expected.recipe_version = "native-readset-v2";
+    n.expected.groups.unshift({
+      selector: { bindings: { credential_kind: "aauth_sub", credential_key_sha256: digest } },
+      count: 0,
+      rows_sha256: digest,
+    });
+    return n;
+  }
+  const envelope = (n = nativeV2()) => ({
+    jsonrpc: "2.0",
+    id: "synthetic",
+    method: "tools/call",
+    params: { name: "correct_transaction", arguments: n, _meta: { progressToken: 1 } },
+  });
+  it("accepts complete closed REST and MCP native arguments without hashing an unsigned substitute", () => {
+    expect(wire.parseNativeHttpDelivery(body(), "/corrections/transaction")).toEqual(
+      parseNativeTransitionRequest(body())
+    );
+    expect(wire.parseNativeHttpDelivery(envelope(), "/mcp")).toEqual(
+      parseNativeTransitionRequest(nativeV2())
+    );
+    expect(wire.parseNativeHttpDelivery(envelope(body()), "/mcp")).toEqual(
+      parseNativeTransitionRequest(body())
+    );
+  });
+  it.each([
+    "batch",
+    "notification",
+    "wrong-tool",
+    "unknown-top",
+    "unknown-meta",
+    "missing-arguments",
+  ])("refuses %s in the native MCP subset", (kind) => {
+    const rpc: any = envelope();
+    let input: unknown = rpc;
+    if (kind === "batch") input = [rpc];
+    if (kind === "notification") delete rpc.id;
+    if (kind === "wrong-tool") rpc.params.name = "store";
+    if (kind === "unknown-top") rpc.extra = true;
+    if (kind === "unknown-meta") rpc.params._meta.taskId = "synthetic";
+    if (kind === "missing-arguments") delete rpc.params.arguments;
+    expect(() => wire.parseNativeHttpDelivery(input, "/mcp")).toThrow();
+  });
+});

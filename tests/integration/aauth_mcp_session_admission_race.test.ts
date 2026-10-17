@@ -56,14 +56,18 @@
  * regression).
  */
 
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { config } from "../../src/config.js";
 import { NeotomaServer } from "../../src/server.js";
 import type { AAuthAdmissionContext } from "../../src/services/protected_entity_types.js";
-import { runWithRequestContext, getCurrentAAuthAdmission } from "../../src/services/request_context.js";
+import {
+  runWithRequestContext,
+  getCurrentAAuthAdmission,
+  getCurrentNativeHttpDelivery,
+} from "../../src/services/request_context.js";
 
 // Two distinct grant owners that must never be confused
 const USER_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -123,15 +127,21 @@ describe("ALS isolation — concurrent admissions do not cross-contaminate", () 
     let seenByA: string | null | undefined;
     let seenByB: string | null | undefined;
 
-    const chainA = runWithRequestContext({ agentIdentity: null, aauthAdmission: admissionA }, async () => {
-      await yieldOnce(); // let chain B start
-      seenByA = getCurrentAAuthAdmission()?.user_id ?? null;
-    });
+    const chainA = runWithRequestContext(
+      { agentIdentity: null, aauthAdmission: admissionA },
+      async () => {
+        await yieldOnce(); // let chain B start
+        seenByA = getCurrentAAuthAdmission()?.user_id ?? null;
+      }
+    );
 
-    const chainB = runWithRequestContext({ agentIdentity: null, aauthAdmission: admissionB }, async () => {
-      await yieldOnce();
-      seenByB = getCurrentAAuthAdmission()?.user_id ?? null;
-    });
+    const chainB = runWithRequestContext(
+      { agentIdentity: null, aauthAdmission: admissionB },
+      async () => {
+        await yieldOnce();
+        seenByB = getCurrentAAuthAdmission()?.user_id ?? null;
+      }
+    );
 
     await Promise.all([chainA, chainB]);
 
@@ -199,8 +209,14 @@ describe("MCP session admission — concurrent sessions authenticate independent
     // Start both handshakes concurrently. The Promises race — exactly the
     // shape of two concurrent HTTP POSTs hitting the /mcp endpoint.
     const [clientA, clientB] = await Promise.all([
-      connectInMemoryWithAdmission(serverA, admissionA).then((c) => { openClients.push(c); return c; }),
-      connectInMemoryWithAdmission(serverB, admissionB).then((c) => { openClients.push(c); return c; }),
+      connectInMemoryWithAdmission(serverA, admissionA).then((c) => {
+        openClients.push(c);
+        return c;
+      }),
+      connectInMemoryWithAdmission(serverB, admissionB).then((c) => {
+        openClients.push(c);
+        return c;
+      }),
     ]);
 
     // Each server must have authenticated as its OWN grant owner.
@@ -228,28 +244,38 @@ describe("MCP session admission — concurrent sessions authenticate independent
     // finishes. Under the old single-field: serverA.sessionAdmission would be
     // whatever B last set (if they shared a field). Under the fix: A's ALS
     // chain is isolated from B's.
-    const raceA = runWithRequestContext({ agentIdentity: null, aauthAdmission: admissionA }, async () => {
-      // Yield so chain B can run
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      // Now connect A — this is where initialize reads the admission
-      const [at, st] = InMemoryTransport.createLinkedPair();
-      clientA = new Client({ name: "client-a", version: "0.0.0" }, { capabilities: {} });
-      await (
-        serverA as unknown as { mcpServer: { server: { connect: (t: unknown) => Promise<void> } } }
-      ).mcpServer.server.connect(st);
-      await clientA.connect(at);
-      openClients.push(clientA);
-    });
+    const raceA = runWithRequestContext(
+      { agentIdentity: null, aauthAdmission: admissionA },
+      async () => {
+        // Yield so chain B can run
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        // Now connect A — this is where initialize reads the admission
+        const [at, st] = InMemoryTransport.createLinkedPair();
+        clientA = new Client({ name: "client-a", version: "0.0.0" }, { capabilities: {} });
+        await (
+          serverA as unknown as {
+            mcpServer: { server: { connect: (t: unknown) => Promise<void> } };
+          }
+        ).mcpServer.server.connect(st);
+        await clientA.connect(at);
+        openClients.push(clientA);
+      }
+    );
 
-    const raceB = runWithRequestContext({ agentIdentity: null, aauthAdmission: admissionB }, async () => {
-      const [bt, bst] = InMemoryTransport.createLinkedPair();
-      clientB = new Client({ name: "client-b", version: "0.0.0" }, { capabilities: {} });
-      await (
-        serverB as unknown as { mcpServer: { server: { connect: (t: unknown) => Promise<void> } } }
-      ).mcpServer.server.connect(bst);
-      await clientB.connect(bt);
-      openClients.push(clientB);
-    });
+    const raceB = runWithRequestContext(
+      { agentIdentity: null, aauthAdmission: admissionB },
+      async () => {
+        const [bt, bst] = InMemoryTransport.createLinkedPair();
+        clientB = new Client({ name: "client-b", version: "0.0.0" }, { capabilities: {} });
+        await (
+          serverB as unknown as {
+            mcpServer: { server: { connect: (t: unknown) => Promise<void> } };
+          }
+        ).mcpServer.server.connect(bst);
+        await clientB.connect(bt);
+        openClients.push(clientB);
+      }
+    );
 
     await Promise.all([raceA, raceB]);
 
@@ -347,5 +373,131 @@ describe("#2070 stateless requests — concurrent grant owners do not cross-cont
     expect(authenticatedUserIdOf(serverB)).toBe(USER_B);
     expect(statelessAsB).toBe(USER_B);
     expect(statelessAsA).toBe(USER_A);
+  });
+});
+
+// Inert synthetic context fixtures; not signatures, grants or native origin.
+describe("native delivery candidate through actual MCP handler scopes", () => {
+  function delivery(label: string) {
+    return Object.freeze({
+      kind: "native-http-delivery-candidate-v1" as const,
+      method: "POST" as const,
+      path: "/mcp" as const,
+      raw_body_bytes_base64: "U1lOVEhFVElD",
+      body_sha256: "a".repeat(64),
+      signature_label: label,
+      key_thumbprint: "synthetic",
+      covered_components: Object.freeze([
+        "@method",
+        "@authority",
+        "@path",
+        "content-digest",
+        "signature-key",
+      ]),
+    });
+  }
+  function instrument(server: NeotomaServer) {
+    // The real handler catches tool errors, so assertions inside this sink
+    // alone would not bind. Retain observations for assertions after dispatch.
+    const seen: unknown[] = [];
+    vi.spyOn(server as any, "consumeRuntimeUpdateNotice").mockResolvedValue(null);
+    const sink = vi.spyOn(server as any, "executeTool").mockImplementation(async () => {
+      seen.push(getCurrentNativeHttpDelivery());
+      await Promise.resolve();
+      seen.push(getCurrentNativeHttpDelivery());
+      return { content: [{ type: "text", text: "SYNTHETIC_CONTEXT_ONLY" }] };
+    });
+    return { sink, seen };
+  }
+  it("carries distinct candidates through concurrent actual modern and legacy CallTool scopes", async () => {
+    const prior = config.encryption.enabled;
+    config.encryption.enabled = true;
+    const clients: Client[] = [];
+    try {
+      const a = delivery("first"),
+        b = delivery("second");
+      async function modern(candidate: ReturnType<typeof delivery>, user: string, id: number) {
+        const server = new NeotomaServer();
+        server.primeStatelessRequest({ connectionId: null, aauthContext: null, clientInfo: null });
+        const { sink, seen } = instrument(server);
+        const result = await runWithRequestContext(
+          {
+            agentIdentity: null,
+            aauthAdmission: makeAdmission(user, "synthetic"),
+            nativeHttpDelivery: candidate,
+          },
+          () =>
+            server.handleStatelessRequest(
+              {
+                jsonrpc: "2.0",
+                id,
+                method: "tools/call",
+                params: {
+                  name: "get_authenticated_user",
+                  arguments: {},
+                  _meta: {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities": {},
+                  },
+                },
+              },
+              { headers: {} }
+            )
+        );
+        expect(result?.body).toBeDefined();
+        expect(sink).toHaveBeenCalledTimes(1);
+        expect(seen).toHaveLength(2);
+        expect(seen[0]).toBe(candidate);
+        expect(seen[1]).toBe(candidate);
+      }
+      async function legacy(candidate: ReturnType<typeof delivery>, user: string) {
+        const server = new NeotomaServer();
+        const client = await connectInMemoryWithAdmission(server, makeAdmission(user, "synthetic"));
+        clients.push(client);
+        const { sink, seen } = instrument(server);
+        await runWithRequestContext(
+          {
+            agentIdentity: null,
+            aauthAdmission: makeAdmission(user, "synthetic"),
+            nativeHttpDelivery: candidate,
+          },
+          () => client.callTool({ name: "get_authenticated_user", arguments: {} })
+        );
+        expect(sink).toHaveBeenCalledTimes(1);
+        expect(seen).toHaveLength(2);
+        expect(seen[0]).toBe(candidate);
+        expect(seen[1]).toBe(candidate);
+      }
+      await Promise.all([
+        modern(a, USER_A, 801),
+        modern(b, USER_B, 802),
+        legacy(a, USER_A),
+        legacy(b, USER_B),
+      ]);
+    } finally {
+      await Promise.all(clients.map((c) => c.close()));
+      config.encryption.enabled = prior;
+      vi.restoreAllMocks();
+    }
+  });
+  it("strips session candidate and clears the actual local CLI scope", async () => {
+    const server = new NeotomaServer();
+    const candidate = delivery("session");
+    server.setSessionAgentIdentity({
+      verified: true,
+      thumbprint: "synthetic",
+      nativeHttpDelivery: candidate,
+    });
+    expect((server as any).sessionAAuth.nativeHttpDelivery).toBeUndefined();
+    const { sink, seen } = instrument(server);
+    try {
+      await runWithRequestContext({ agentIdentity: null, nativeHttpDelivery: candidate }, () =>
+        server.executeToolForCli("get_authenticated_user", {}, USER_A)
+      );
+      expect(sink).toHaveBeenCalledTimes(1);
+      expect(seen).toEqual([null, null]);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

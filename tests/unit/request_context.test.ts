@@ -14,6 +14,8 @@ import {
   getCurrentAttribution,
   getRequestContext,
   runWithRequestContext,
+  runWithExternalActor,
+  runWithAuthenticatedPrincipal,
 } from "../../src/services/request_context.js";
 
 describe("request_context", () => {
@@ -65,4 +67,40 @@ describe("request_context", () => {
 
     expect(results).toEqual(["Agent-A", "Agent-B"]);
   });
+});
+
+it("retains private candidate through same-request helpers, isolating provenance and concurrent scopes", async () => {
+  const a = Object.freeze({
+    kind: "native-http-delivery-candidate-v1" as const,
+    method: "POST" as const,
+    path: "/mcp" as const,
+    raw_body_bytes_base64: "U1lOVEhFVElD",
+    body_sha256: "a".repeat(64),
+    signature_label: "synthetic",
+    key_thumbprint: "synthetic",
+    covered_components: Object.freeze([] as string[]),
+  });
+  const b = Object.freeze({ ...a, signature_label: "other" });
+  const actual = await Promise.all(
+    [a, b].map((candidate) =>
+      runWithRequestContext(
+        {
+          agentIdentity: null,
+          nativeHttpDelivery: candidate,
+        },
+        () =>
+          runWithExternalActor(null, () =>
+            runWithAuthenticatedPrincipal(null, async () => {
+              await Promise.resolve();
+              expect(getCurrentAttribution()).toEqual({});
+              return getRequestContext()?.nativeHttpDelivery;
+            })
+          )
+      )
+    )
+  );
+  expect(actual).toEqual([a, b]);
+  expect(actual[0]).toBe(a);
+  expect(actual[1]).toBe(b);
+  expect(getRequestContext()).toBeNull();
 });

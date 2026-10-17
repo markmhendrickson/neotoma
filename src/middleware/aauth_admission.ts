@@ -59,6 +59,7 @@ export function aauthAdmission(): RequestHandler {
       runWithRequestContext(
         {
           agentIdentity: outer?.agentIdentity ?? null,
+          nativeHttpDelivery: outer?.nativeHttpDelivery ?? null,
           attributionDecision: outer?.attributionDecision ?? null,
           aauthAdmission: negative,
         },
@@ -88,6 +89,7 @@ export function aauthAdmission(): RequestHandler {
         runWithRequestContext(
           {
             agentIdentity: outer?.agentIdentity ?? null,
+            nativeHttpDelivery: outer?.nativeHttpDelivery ?? null,
             attributionDecision: outer?.attributionDecision ?? null,
             aauthAdmission: admission,
           },
@@ -109,6 +111,7 @@ export function aauthAdmission(): RequestHandler {
         runWithRequestContext(
           {
             agentIdentity: outer?.agentIdentity ?? null,
+            nativeHttpDelivery: outer?.nativeHttpDelivery ?? null,
             attributionDecision: outer?.attributionDecision ?? null,
             aauthAdmission: fallback,
           },

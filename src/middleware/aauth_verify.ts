@@ -26,11 +26,13 @@
  */
 
 import type { NextFunction, Request, Response } from "express";
-import { expressVerify } from "@hellocoop/httpsig";
+import { expressVerify, parseDictionary, isInnerList } from "@hellocoop/httpsig";
+import { createHash } from "node:crypto";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 
 import type {
   AAuthRequestContext,
+  NativeHttpDeliveryCandidate,
   AttributionDecisionDiagnostics,
   AttributionTier,
 } from "../crypto/agent_identity.js";
@@ -429,25 +431,34 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       rawBody ??
       (typeof req.body === "string" ? req.body : Buffer.isBuffer(req.body) ? req.body : undefined);
 
+    // The verifier receives PRIVATE copies, not request-owned mutable memory.
+    // Retaining a before/after hash of a shared Buffer would not provide custody.
+    const verificationInput = Object.freeze({
+      method: req.method,
+      protocol: req.protocol,
+      hostname: req.hostname,
+      originalUrl: req.originalUrl,
+      headers: Object.freeze(
+        Object.fromEntries(
+          Object.entries(req.headers).map(([name, value]) => [
+            name,
+            Array.isArray(value) ? Object.freeze([...value]) : value,
+          ])
+        )
+      ) as Record<string, string | string[]>,
+      body: Buffer.isBuffer(bodyForVerify) ? Buffer.from(bodyForVerify) : bodyForVerify,
+    });
+    const rawSnapshot = Buffer.isBuffer(verificationInput.body)
+      ? verificationInput.body.toString("base64")
+      : null;
+    const signatureInputSnapshot = verificationInput.headers["signature-input"];
     try {
-      const result = await expressVerify(
-        {
-          method: req.method,
-          protocol: req.protocol,
-          hostname: req.hostname,
-          originalUrl: req.originalUrl,
-          headers: req.headers as Record<string, string | string[]>,
-          body: bodyForVerify,
-        },
-        authority,
-        {
-          jwksCacheTtl: jwksCacheTtlMs,
-          maxClockSkew: maxClockSkewSec,
-          // Keep strictAAuth on so we reject signatures that forget to cover
-          // `signature-key` — that flag is the whole point of the profile.
-          strictAAuth: true,
-        }
-      );
+      const result = await expressVerify(verificationInput, authority, {
+        jwksCacheTtl: jwksCacheTtlMs,
+        maxClockSkew: maxClockSkewSec,
+        // Package2.6 always requires signature-key coverage. Native-only
+        // additional coverage is checked below; generic attribution is unchanged.
+      });
 
       if (!result.verified) {
         logger.warn(`[aauth] Signature verification failed: ${result.error ?? "unknown"}`);
@@ -510,8 +521,58 @@ export function aauthVerify(options: AAuthVerifyOptions) {
       const externalActorClaims = (
         req as Request & { _externalActorClaims?: ExternalActorTokenClaim[] }
       )._externalActorClaims;
+      // Do not publish a candidate until both the original verification and
+      // existing JWT validation have succeeded. This is still NOT native admission.
+      let nativeHttpDelivery: NativeHttpDeliveryCandidate | undefined;
+      if (
+        verificationInput.method === "POST" &&
+        (verificationInput.originalUrl === "/mcp" ||
+          verificationInput.originalUrl === "/corrections/transaction") &&
+        rawSnapshot !== null &&
+        Buffer.isBuffer(verificationInput.body) &&
+        verificationInput.body.toString("base64") === rawSnapshot &&
+        typeof signatureInputSnapshot === "string" &&
+        typeof result.label === "string" &&
+        result.label.length > 0 &&
+        typeof result.thumbprint === "string" &&
+        result.thumbprint.length > 0
+      ) {
+        try {
+          // The PUBLIC parser is the same implementation used by this verifier.
+          // Select exactly its successful label, never the first dictionary member.
+          const member = parseDictionary(signatureInputSnapshot).get(result.label);
+          if (member && isInnerList(member)) {
+            const [items] = member;
+            const components = items.map(([item]) => item);
+            if (
+              items.every(
+                ([item, parameters]) => typeof item === "string" && parameters.size === 0
+              ) &&
+              ["@method", "@authority", "@path", "content-digest", "signature-key"].every(
+                (required) => components.includes(required)
+              )
+            ) {
+              nativeHttpDelivery = Object.freeze({
+                kind: "native-http-delivery-candidate-v1",
+                method: "POST",
+                path: verificationInput.originalUrl,
+                raw_body_bytes_base64: rawSnapshot,
+                body_sha256: createHash("sha256")
+                  .update(Buffer.from(rawSnapshot, "base64"))
+                  .digest("hex"),
+                signature_label: result.label,
+                key_thumbprint: result.thumbprint,
+                covered_components: Object.freeze(components as string[]),
+              });
+            }
+          }
+        } catch {
+          // No header/body diagnostics; ordinary attribution remains unchanged.
+        }
+      }
       const ctx: AAuthRequestContext = {
         verified: true,
+        ...(nativeHttpDelivery ? { nativeHttpDelivery } : {}),
         publicKey: serialisePublicKey(result.publicKey),
         thumbprint: result.thumbprint,
         algorithm,

@@ -7,13 +7,15 @@ import { validateChangesAgainstSchema } from "./batch_correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { enforceAgentCapability, contextFromAgentIdentity } from "./agent_capabilities.js";
-import { getCurrentAgentIdentity } from "./request_context.js";
+import { getCurrentAgentIdentity, getCurrentNativeHttpDelivery } from "./request_context.js";
+import { decodeStrictJsonObject } from "./scoped_reads.js";
 import {
   parseNativeTransitionRequest,
+  parseNativeHttpDelivery,
   type NativeTransitionRequest,
 } from "./native_transition_request.js";
 import { NativeProjectionError } from "./native_transition_projection.js";
-import { StoreConditionError } from "./store_condition_keys.js";
+import { canonicalStoreRequest, StoreConditionError } from "./store_condition_keys.js";
 
 export interface CorrectionTransactionEntity {
   entity_id: string;
@@ -176,6 +178,34 @@ export async function applyCorrectionTransaction(
         );
     }
     const connection = await getDb();
+    const delivery = getCurrentNativeHttpDelivery();
+    if (delivery) {
+      try {
+        // Candidate bytes are process-local metadata, NOT native authority.
+        if (
+          delivery.kind !== "native-http-delivery-candidate-v1" ||
+          delivery.method !== "POST" ||
+          !["/mcp", "/corrections/transaction"].includes(delivery.path)
+        )
+          throw new Error();
+        const bytes = Buffer.from(delivery.raw_body_bytes_base64, "base64");
+        if (
+          bytes.toString("base64") !== delivery.raw_body_bytes_base64 ||
+          createHash("sha256").update(bytes).digest("hex") !== delivery.body_sha256
+        )
+          throw new Error();
+        const raw = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+        const decoded = await decodeStrictJsonObject(connection, raw);
+        const signedNative = parseNativeHttpDelivery(decoded, delivery.path);
+        if (canonicalStoreRequest(signedNative) !== canonicalStoreRequest(native))
+          throw new Error();
+      } catch {
+        throw new CorrectionTransactionError(
+          "VALIDATION_ERROR",
+          "Native delivery does not match strict request bytes."
+        );
+      }
+    }
     return connection.transaction(async () => {
       // Structural parsing is not principal/origin admission. Current auth
       // context has no native binding/original-authority acquisition. Do not

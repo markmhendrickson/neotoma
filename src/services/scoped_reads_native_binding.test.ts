@@ -8,6 +8,7 @@ import type { DbConnection, DbDatabase } from "../repositories/db/driver.js";
 import { canonicalStoreRequest } from "./store_condition_keys.js";
 import {
   collectOwnedPrincipalBindingCandidates,
+  decodeStrictJsonObject,
   type NativeBindingPresentation,
 } from "./scoped_reads.js";
 
@@ -265,4 +266,36 @@ describe("complete matching binding STORAGE acquisition, not authority", () => {
       dependency: "G17_binding_history_unavailable",
     });
   });
+});
+
+it("reuses input-only strict JSON1 validation with known SQLite state and finite values", async () => {
+  await insert(row(0));
+  const paths = await database.prepare("PRAGMA database_list").all();
+  expect(
+    paths.some(
+      (p: any) => p.name === "main" && p.file === join(directory, "synthetic-history.sqlite")
+    )
+  ).toBe(true);
+  expect(
+    Number((await database.prepare("SELECT count(*) AS n FROM relationship_observations").get())?.n)
+  ).toBe(1);
+  const prepare = vi.spyOn(database, "prepare");
+  expect(
+    await decodeStrictJsonObject(database, '{"confidence":0.76,"negative_zero":-0,"exponent":1e-2}')
+  ).toEqual({ confidence: 0.76, negative_zero: -0, exponent: 0.01 });
+  for (const raw of [
+    '{"a":1,"a":2}',
+    '{"nested":{"a":1,"\\u0061":2}}',
+    '{"a":1e400}',
+    "not JSON",
+    "[]",
+  ])
+    await expect(decodeStrictJsonObject(database, raw)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  expect(prepare.mock.calls.every(([sql]) => sql.includes("json_tree(?)"))).toBe(true);
+  prepare.mockRestore();
+  expect(
+    Number((await database.prepare("SELECT count(*) AS n FROM relationship_observations").get())?.n)
+  ).toBe(1);
 });

@@ -2326,6 +2326,7 @@ app.all("/mcp", async (req, res) => {
       const shaped = await runWithRequestContext(
         {
           agentIdentity: statelessServer.getAgentIdentity(),
+          nativeHttpDelivery: getAAuthContextFromRequest(req)?.nativeHttpDelivery ?? null,
           attributionDecision: getAttributionDecisionFromRequest(req),
           aauthAdmission: aauthAdmissionForRequest,
           mcpConnectionId: connectionIdHeader ?? null,
@@ -2508,6 +2509,7 @@ app.all("/mcp", async (req, res) => {
     await runWithRequestContext(
       {
         agentIdentity: fallbackIdentity,
+        nativeHttpDelivery: getAAuthContextFromRequest(req)?.nativeHttpDelivery ?? null,
         attributionDecision,
         aauthAdmission: aauthAdmissionForRequest,
         // The gate's resolved connection id: the MCP server reads this, never

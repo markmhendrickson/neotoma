@@ -110,6 +110,8 @@ export function attributionContext(): RequestHandler {
     runWithRequestContext(
       {
         agentIdentity: identity,
+        nativeHttpDelivery:
+          (req as Request & { aauth?: AAuthRequestContext }).aauth?.nativeHttpDelivery ?? null,
         attributionDecision: decision,
         externalActor,
       },

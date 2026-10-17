@@ -136,6 +136,7 @@ import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   getCurrentAAuthAdmission,
+  getCurrentNativeHttpDelivery,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
   runWithRequestContext,
@@ -1003,7 +1004,14 @@ export class NeotomaServer {
    * `null` to clear (e.g. for unsigned requests).
    */
   setSessionAgentIdentity(ctx: AAuthRequestContext | null): void {
-    this.sessionAAuth = ctx;
+    // Delivery bytes belong to the current HTTP ALS scope, never a session.
+    if (!ctx) {
+      this.sessionAAuth = null;
+      return;
+    }
+    const { nativeHttpDelivery, ...sessionIdentity } = ctx;
+    void nativeHttpDelivery;
+    this.sessionAAuth = sessionIdentity;
   }
 
   /**
@@ -2524,6 +2532,7 @@ export class NeotomaServer {
             agentIdentity: identity,
             attributionDecision,
             aauthAdmission: admissionForThisRequest,
+            nativeHttpDelivery: getCurrentNativeHttpDelivery(),
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
           },
           () => this.executeTool(name, args)

@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
+import * as dbConnections from "../repositories/db/connection.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { createCorrectionWithVersionPrecondition } from "./correction.js";
@@ -10,6 +11,9 @@ import { nativeSchemaReducerHash } from "./native_transition_projection.js";
 import type { NativeTransitionRequest } from "./native_transition_request.js";
 import { canonicalStoreRequest } from "./store_condition_keys.js";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
+import { runWithRequestContext } from "./request_context.js";
+import type { NativeHttpDeliveryCandidate } from "../crypto/agent_identity.js";
 import {
   applyCorrectionTransaction,
   type CorrectionTransactionOptions,
@@ -605,4 +609,185 @@ describe("group receipts composed with ordinary entity CAS", () => {
     expect(await count()).toBe(2);
     expect(events).toHaveLength(0);
   });
+});
+
+// Synthetic delivery metadata is not a verified signature/grant/origin fixture.
+function syntheticDelivery(
+  raw: string | Buffer,
+  path: "/mcp" | "/corrections/transaction" = "/corrections/transaction"
+): NativeHttpDeliveryCandidate {
+  const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+  return Object.freeze({
+    kind: "native-http-delivery-candidate-v1",
+    method: "POST",
+    path,
+    raw_body_bytes_base64: bytes.toString("base64"),
+    body_sha256: createHash("sha256").update(bytes).digest("hex"),
+    signature_label: "synthetic",
+    key_thumbprint: "synthetic",
+    covered_components: Object.freeze([
+      "@method",
+      "@authority",
+      "@path",
+      "content-digest",
+      "signature-key",
+    ]),
+  });
+}
+describe("consumed native whole raw delivery, not authority", () => {
+  it.each([
+    "duplicate",
+    "escaped-nested",
+    "nonfinite",
+    "invalid-utf8",
+    "argument-mismatch",
+    "digest-mismatch",
+  ])("refuses %s before native transaction/effects", async (variant) => {
+    const native = nativeRequest();
+    let raw: string | Buffer = JSON.stringify(native);
+    if (variant === "duplicate")
+      raw = raw.replace('"idempotency_key":', '"idempotency_key":"other","idempotency_key":');
+    if (variant === "escaped-nested")
+      raw = raw.replace(
+        '"subject":{',
+        '"subject":{"entity_type":"other","entity_\\u0074ype":"task",'
+      );
+    if (variant === "nonfinite")
+      raw = raw.replace(
+        '"schema_reducer_sha256":',
+        '"unknown_nonfinite":1e400,"schema_reducer_sha256":'
+      );
+    if (variant === "invalid-utf8") raw = Buffer.from([0xff]);
+    if (variant === "argument-mismatch")
+      raw = JSON.stringify({ ...native, idempotency_key: "changed" });
+    const candidate = syntheticDelivery(raw);
+    const delivery =
+      variant === "digest-mismatch" ? { ...candidate, body_sha256: "0".repeat(64) } : candidate;
+    const before = await nativeCensus();
+    expect(Number(before[0]?.n)).toBe(2);
+    const connection = await getDb();
+    const transaction = vi.spyOn(connection, "transaction");
+    const prepare = vi.spyOn(connection, "prepare");
+    await expect(
+      runWithRequestContext({ agentIdentity: null, nativeHttpDelivery: delivery }, () =>
+        applyCorrectionTransaction(native, user)
+      )
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(transaction).not.toHaveBeenCalled();
+    expect(prepare.mock.calls.every(([sql]) => sql.includes("json_tree(?)"))).toBe(true);
+    expect(await nativeCensus()).toEqual(before);
+    expect(events).toHaveLength(0);
+  });
+  it("consumes valid whole raw bytes but still refuses native authority, without record reads", async () => {
+    const native = nativeRequest();
+    const before = await nativeCensus();
+    const connection = await getDb();
+    const prepare = vi.spyOn(connection, "prepare");
+    await expect(
+      runWithRequestContext(
+        { agentIdentity: null, nativeHttpDelivery: syntheticDelivery(JSON.stringify(native)) },
+        () => applyCorrectionTransaction(native, user)
+      )
+    ).rejects.toMatchObject({
+      code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+      details: { dependency: "native_principal_binding_resolution" },
+    });
+    expect(prepare.mock.calls).toHaveLength(1);
+    expect(prepare.mock.calls[0][0]).toContain("json_tree(?)");
+    expect(await nativeCensus()).toEqual(before);
+    expect(events).toHaveLength(0);
+  });
+  it("keeps oversized duplicate raw input outside all storage preparation", async () => {
+    const native = nativeReadIds(257, "mixed");
+    const raw = JSON.stringify(native).replace(
+      '"idempotency_key":',
+      '"idempotency_key":"other","idempotency_key":'
+    );
+    const prepare = vi.spyOn(await getDb(), "prepare");
+    const getter = vi.spyOn(dbConnections, "getDb");
+    await expect(
+      runWithRequestContext(
+        { agentIdentity: null, nativeHttpDelivery: syntheticDelivery(raw) },
+        () => applyCorrectionTransaction(native, user)
+      )
+    ).rejects.toMatchObject({
+      details: { dependency: "complete_readset_bound", observed_lower_bound: 257 },
+    });
+    expect(getter).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(events).toHaveLength(0);
+  });
+  it("never persists private delivery bytes into session identity", async () => {
+    const { NeotomaServer } = await import("../server.js");
+    const server = new NeotomaServer() as any;
+    const candidate = syntheticDelivery('{"synthetic":true}');
+    server.setSessionAgentIdentity({
+      verified: true,
+      thumbprint: "synthetic",
+      nativeHttpDelivery: candidate,
+    });
+    expect(server.sessionAAuth.nativeHttpDelivery).toBeUndefined();
+    expect(server.sessionAAuth.thumbprint).toBe("synthetic");
+  });
+});
+
+it("consumes the complete synthetic MCP envelope yet retains the actual authority refusal", async () => {
+  const native: any = nativeRequest();
+  native.expected.recipe_version = "native-readset-v2";
+  native.expected.groups.unshift({
+    selector: { bindings: { credential_kind: "aauth_sub", credential_key_sha256: "b".repeat(64) } },
+    count: 0,
+    rows_sha256: "b".repeat(64),
+  });
+  const rpc = {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: {
+      name: "correct_transaction",
+      arguments: native,
+      _meta: { progressToken: "synthetic" },
+    },
+  };
+  const before = await nativeCensus();
+  expect(Number(before[0]?.n)).toBe(2);
+  await expect(
+    runWithRequestContext(
+      { agentIdentity: null, nativeHttpDelivery: syntheticDelivery(JSON.stringify(rpc), "/mcp") },
+      () => applyCorrectionTransaction(native, user)
+    )
+  ).rejects.toMatchObject({
+    code: "NATIVE_DEPENDENCY_UNAVAILABLE",
+    details: { dependency: "native_principal_binding_resolution" },
+  });
+  expect(await nativeCensus()).toEqual(before);
+  expect(events).toHaveLength(0);
+});
+
+it("compares entire actual MCP arguments against the service native object", async () => {
+  const native: any = nativeRequest();
+  native.expected.recipe_version = "native-readset-v2";
+  native.expected.groups.unshift({
+    selector: { bindings: { credential_kind: "aauth_sub", credential_key_sha256: "b".repeat(64) } },
+    count: 0,
+    rows_sha256: "b".repeat(64),
+  });
+  const rpc = {
+    jsonrpc: "2.0",
+    id: "synthetic",
+    method: "tools/call",
+    params: { name: "correct_transaction", arguments: { ...native, idempotency_key: "different" } },
+  };
+  const before = await nativeCensus();
+  expect(Number(before[0]?.n)).toBe(2);
+  const transaction = vi.spyOn(await getDb(), "transaction");
+  await expect(
+    runWithRequestContext(
+      { agentIdentity: null, nativeHttpDelivery: syntheticDelivery(JSON.stringify(rpc), "/mcp") },
+      () => applyCorrectionTransaction(native, user)
+    )
+  ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  expect(transaction).not.toHaveBeenCalled();
+  expect(await nativeCensus()).toEqual(before);
+  expect(events).toHaveLength(0);
 });

@@ -17,7 +17,7 @@ import { z } from "zod";
 import type { DbConnection, DbDatabase } from "../repositories/db/driver.js";
 import type { components } from "../shared/openapi_types.js";
 import { NEOTOMA_ENTITY_ID_REGEX } from "../shared/neotoma_entity_id.js";
-import { canonicalStoreRequest } from "./store_condition_keys.js";
+import { canonicalStoreRequest, StoreConditionError } from "./store_condition_keys.js";
 import { NativeProjectionError } from "./native_transition_projection.js";
 import { RelationshipReducer } from "../reducers/relationship_reducer.js";
 
@@ -331,25 +331,38 @@ function bindingFailure(
     dependency
   );
 }
+/** Fixed input-only JSON1 inspection; no record read or authority is acquired. */
+export async function decodeStrictJsonObject(
+  tx: DbConnection,
+  raw: unknown
+): Promise<Record<string, unknown>> {
+  try {
+    if (typeof raw !== "string") throw new Error();
+    const duplicate = await tx
+      .prepare(
+        "SELECT 1 AS duplicate FROM json_tree(?) WHERE key IS NOT NULL " +
+          "GROUP BY parent,key HAVING count(*)>1 LIMIT 1"
+      )
+      .get(raw);
+    if (duplicate) throw new Error();
+    const decoded: unknown = JSON.parse(raw);
+    canonicalStoreRequest(decoded);
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error();
+    return decoded as Record<string, unknown>;
+  } catch {
+    // Never expose SQL diagnostics or raw request/relationship content.
+    throw new StoreConditionError("VALIDATION_ERROR", "A strict finite JSON object is required.");
+  }
+}
 async function decodeBindingObject(
   tx: DbConnection,
   raw: unknown,
   nullable: boolean
 ): Promise<Record<string, unknown> | null> {
   if (raw === null && nullable) return null;
-  if (typeof raw !== "string") throw bindingFailure("G17_binding_history_shape");
-  // Reuse the backend's JSON parser for duplicate-name inspection BEFORE the
-  // existing JS parser loses them; no second JSON/canonical codec is added.
-  const duplicate = await tx
-    .prepare(
-      "SELECT 1 AS duplicate FROM json_tree(?) WHERE key IS NOT NULL " +
-        "GROUP BY parent,key HAVING count(*)>1 LIMIT 1"
-    )
-    .get(raw);
-  if (duplicate) throw bindingFailure("G17_binding_history_shape");
-  const decoded: unknown = JSON.parse(raw);
-  canonicalStoreRequest(decoded);
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+  try {
+    return await decodeStrictJsonObject(tx, raw);
+  } catch {
     throw bindingFailure("G17_binding_history_shape");
-  return decoded as Record<string, unknown>;
+  }
 }

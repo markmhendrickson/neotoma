@@ -266,7 +266,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@hellocoop/httpsig": "^1.4.0",
+    "@hellocoop/httpsig": "2.6.0",
     "@hookform/resolvers": "^5.2.2",
     "@libsql/client": "^0.17.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
