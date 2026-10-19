@@ -744,7 +744,7 @@ export async function queryEntities(
   );
 
   // Get raw_fragments for all entities (batch query)
-  let allObservations: Array<{
+  const allObservations: Array<{
     entity_id: string;
     source_id: string | null;
     user_id: string | null;
