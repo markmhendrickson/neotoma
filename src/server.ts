@@ -5810,7 +5810,7 @@ export class NeotomaServer {
     }
 
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
-    assertConditionalStoreRequest(parsed);
+    assertConditionalStoreRequest(parsed, (args as { entities?: unknown }).entities);
 
     // Overflow intake: bypass graph insertion and write to NEOTOMA_OVERFLOW_SINK (#1604)
     if (parsed.intake?.mode === "overflow") {
