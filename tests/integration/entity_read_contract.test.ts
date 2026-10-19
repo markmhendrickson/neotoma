@@ -90,6 +90,146 @@ it("shared service certifies its actual positive structured predicate, with enti
   expect(c.coverage.state).toBe("complete");
   expect(c.coherence.kind).toBe("read_interval");
 });
+
+it("currently deleted snapshotless rows preserve exact population across native transports, but restored or malformed rows do not", async () => {
+  const id = "ent_contract_deleted_" + randomUUID();
+  const observationId = randomUUID();
+  try {
+    expect(
+      (
+        await db.from("entities").insert({
+          id,
+          user_id: userId,
+          entity_type: entityType,
+          canonical_name: "Synthetic deleted",
+        })
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("observations").insert({
+          id: observationId,
+          entity_id: id,
+          user_id: userId,
+          entity_type: entityType,
+          schema_version: "1.0",
+          fields: { _deleted: true },
+          source_priority: 1000,
+          observed_at: "2026-01-01T00:00:00Z",
+        })
+      ).error
+    ).toBeNull();
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    const assertExact = (result: any) => {
+      expect(result.entities.map((row: any) => row.entity_id).sort()).toEqual([...ids].sort());
+      expect(result.read_contract.coverage.total).toEqual({
+        value: 3,
+        relation: "exact",
+        unit: "entities",
+      });
+      expect(result.read_contract.coverage.state).toBe("complete");
+    };
+    assertExact(await queryEntitiesWithCount({ userId, entityType, limit: 100 }));
+    assertExact(
+      await queryEntitiesWithCount({
+        userId,
+        entityType,
+        createdSince: "2000-01-01T00:00:00Z",
+        limit: 100,
+      })
+    );
+    assertExact(
+      await (await fetch(base + "/entities?entity_type=" + entityType + "&limit=100")).json()
+    );
+    assertExact(
+      await (
+        await fetch(base + "/entities/query", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ entity_type: entityType, limit: 100 }),
+        })
+      ).json()
+    );
+    const tool = await modernPost(base, {
+      id: 991,
+      method: "tools/call",
+      params: {
+        name: "retrieve_entities",
+        arguments: { entity_type: entityType, limit: 100 },
+      },
+    });
+    assertExact(toolResultJson(tool.body));
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const cwd = path.join(root, ".vitest", "deleted-population-cli");
+    await mkdir(cwd, { recursive: true });
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        path.join(root, "dist/cli/bootstrap.js"),
+        "--api-only",
+        "--base-url",
+        base,
+        "--json",
+        "--no-log-file",
+        "entities",
+        "list",
+        "--type",
+        entityType,
+      ],
+      {
+        cwd,
+        timeout: 15000,
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          NODE_ENV: "test",
+          NEOTOMA_ENV: "development",
+          NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
+          NODE_OPTIONS:
+            "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
+        },
+      }
+    );
+    assertExact(JSON.parse(stdout));
+    // A prior deletion is insufficient when a later winning restoration exists.
+    const restoreId = randomUUID();
+    expect(
+      (
+        await db.from("observations").insert({
+          id: restoreId,
+          entity_id: id,
+          user_id: userId,
+          entity_type: entityType,
+          schema_version: "1.0",
+          fields: { _deleted: false },
+          source_priority: 1001,
+          observed_at: "2026-01-02T00:00:00Z",
+        })
+      ).error
+    ).toBeNull();
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    expect(
+      (await queryEntitiesWithCount({ userId, entityType, limit: 100 })).read_contract.coverage
+        .total.relation
+    ).toBe("unknown");
+    await db.from("observations").delete().eq("id", restoreId);
+    for (const change of [
+      { fields: { _deleted: false } },
+      { fields: { _deleted: true }, observed_at: "malformed" },
+      { observed_at: "2026-01-01T00:00:00Z", entity_type: entityType + "_foreign" },
+    ]) {
+      await db.from("observations").update(change).eq("id", observationId);
+      await db.from("entity_snapshots").delete().eq("entity_id", id);
+      const uncertain = await queryEntitiesWithCount({ userId, entityType, limit: 100 });
+      expect(uncertain.read_contract.coverage.total.relation).toBe("unknown");
+      expect(uncertain.read_contract.coverage.reasons).toContain("count_population_unverified");
+    }
+  } finally {
+    await db.from("observations").delete().eq("entity_id", id);
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    await db.from("entities").delete().eq("id", id);
+  }
+});
 it("GET preserves an unknown raw option name and refuses to certify the requested scope", async () => {
   const response = await fetch(
     base + "/entities?entity_type=" + entityType + "&pretend_scope=private-canary-value"
@@ -104,6 +244,124 @@ it("GET preserves an unknown raw option name and refuses to certify the requeste
   });
   expect(result.read_contract.coverage.state).toBe("partial");
   expect(JSON.stringify(result.read_contract)).not.toContain("private-canary-value");
+});
+
+it("certifies a large deleted population without reading visible entities' histories", async () => {
+  const type = "synthetic_deleted_population_" + randomUUID().replaceAll("-", "");
+  const connection = await getDb();
+  const size = 5000;
+  try {
+    for (let index = 0; index < size; index++) {
+      const id = "ent_" + type + "_" + index;
+      await connection
+        .prepare("INSERT INTO entities (id,user_id,entity_type,canonical_name) VALUES (?,?,?,?)")
+        .run(id, userId, type, "Synthetic deleted");
+      await connection
+        .prepare(
+          "INSERT INTO observations (id,entity_id,user_id,entity_type,schema_version,fields,source_priority,observed_at) VALUES (?,?,?,?,?,?,?,?)"
+        )
+        .run(
+          "obs_" + id,
+          id,
+          userId,
+          type,
+          "1.0",
+          JSON.stringify({ _deleted: true }),
+          1000,
+          "2026-01-01T00:00:00Z"
+        );
+    }
+    const started = performance.now();
+    const result = await queryEntitiesWithCount({ userId, entityType: type, limit: 100 });
+    console.info(
+      "Synthetic 5000-row deleted population certification ms:",
+      Math.round(performance.now() - started)
+    );
+    expect(result.entities).toEqual([]);
+    expect(result.read_contract.coverage.total).toEqual({
+      value: 0,
+      relation: "exact",
+      unit: "entities",
+    });
+    expect(result.read_contract.coverage.state).toBe("complete");
+  } finally {
+    await db.from("observations").delete().eq("entity_type", type);
+    await db.from("entities").delete().eq("entity_type", type);
+  }
+}, 30000);
+
+it("acquires raw-fragment sources beyond a full observation batch through the terminal page", async () => {
+  const prefix = "obs_contract_sources_" + randomUUID();
+  const earlySource = "src_" + randomUUID(),
+    lateSource = "src_" + randomUUID();
+  const fragmentId = randomUUID();
+  const originalSnapshot = (
+    await db.from("entity_snapshots").select("*").eq("entity_id", ids[0]).single()
+  ).data;
+  try {
+    expect(
+      (
+        await db
+          .from("sources")
+          .insert([earlySource, lateSource].map((id) => ({ id, user_id: userId })))
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("observations").insert(
+          Array.from({ length: 1001 }, (_, index) => ({
+            id: prefix + String(index).padStart(4, "0"),
+            entity_id: ids[0],
+            entity_type: entityType,
+            user_id: userId,
+            schema_version: "1.0",
+            source_id: index < 1000 ? earlySource : lateSource,
+            fields: {},
+            source_priority: 10,
+            observed_at: "2026-01-01T00:00:00Z",
+          }))
+        )
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("raw_fragments").insert({
+          id: fragmentId,
+          source_id: lateSource,
+          entity_id: ids[0],
+          entity_type: entityType,
+          user_id: userId,
+          fragment_key: "beyond_first_source_page",
+          fragment_value: "retained",
+          fragment_envelope: { reason: "unknown_field" },
+        })
+      ).error
+    ).toBeNull();
+    const assertComplete = (result: any) => {
+      expect(result.read_contract.coverage.reasons).not.toContain("raw_fragment_source_cap");
+      expect(result.read_contract.coverage.state).toBe("complete");
+      expect(
+        result.entities.find((row: any) => row.entity_id === ids[0]).raw_fragments
+      ).toMatchObject({ beyond_first_source_page: "retained" });
+    };
+    assertComplete(
+      await queryEntitiesWithCount({ userId, entityType, limit: 100, includeSnapshots: true })
+    );
+    const reply = await modernPost(base, {
+      id: 992,
+      method: "tools/call",
+      params: {
+        name: "retrieve_entities",
+        arguments: { entity_type: entityType, limit: 100, include_snapshots: true },
+      },
+    });
+    assertComplete(toolResultJson(reply.body));
+  } finally {
+    await db.from("raw_fragments").delete().eq("id", fragmentId);
+    await db.from("observations").delete().in("source_id", [earlySource, lateSource]);
+    await db.from("sources").delete().in("id", [earlySource, lateSource]);
+    expect((await db.from("entity_snapshots").upsert(originalSnapshot)).error).toBeNull();
+  }
 });
 it("HTTP accepted collapse is reported as unapplied instead of claiming synthesized results", async () => {
   const response = await fetch(base + "/entities/query", {
