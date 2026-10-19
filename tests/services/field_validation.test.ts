@@ -12,9 +12,9 @@ describe("field_validation", () => {
         type: "string",
         required: false,
       };
-      
+
       const result = validateFieldWithConverters("name", "John Doe", fieldDef);
-      
+
       expect(result.value).toBe("John Doe");
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(false);
@@ -25,9 +25,9 @@ describe("field_validation", () => {
         type: "number",
         required: false,
       };
-      
+
       const result = validateFieldWithConverters("age", 42, fieldDef);
-      
+
       expect(result.value).toBe(42);
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(false);
@@ -38,9 +38,13 @@ describe("field_validation", () => {
         type: "date",
         required: false,
       };
-      
-      const result = validateFieldWithConverters("created_at", "2025-01-15T00:00:00.000Z", fieldDef);
-      
+
+      const result = validateFieldWithConverters(
+        "created_at",
+        "2025-01-15T00:00:00.000Z",
+        fieldDef
+      );
+
       expect(result.value).toBe("2025-01-15T00:00:00.000Z");
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(false);
@@ -51,9 +55,9 @@ describe("field_validation", () => {
         type: "date",
         required: false,
       };
-      
+
       const result = validateFieldWithConverters("created_at", 1736899200000000000, fieldDef);
-      
+
       expect(result.value).toBe(1736899200000000000);
       expect(result.shouldRouteToRawFragments).toBe(true);
       expect(result.wasConverted).toBe(false);
@@ -72,9 +76,9 @@ describe("field_validation", () => {
           },
         ],
       };
-      
+
       const result = validateFieldWithConverters("created_at", 1736899200000000000, fieldDef);
-      
+
       expect(result.value).toBe("2025-01-15T00:00:00.000Z");
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(true);
@@ -100,9 +104,9 @@ describe("field_validation", () => {
           },
         ],
       };
-      
+
       const result = validateFieldWithConverters("created_at", 1736899200000000000, fieldDef);
-      
+
       expect(result.value).toBe("2025-01-15T00:00:00.000Z");
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(true);
@@ -121,10 +125,10 @@ describe("field_validation", () => {
           },
         ],
       };
-      
+
       // Invalid timestamp (far out of range - year 2200+)
       const result = validateFieldWithConverters("created_at", 9999999999999999999, fieldDef);
-      
+
       expect(result.value).toBe(9999999999999999999);
       expect(result.shouldRouteToRawFragments).toBe(true);
       expect(result.wasConverted).toBe(false);
@@ -143,9 +147,9 @@ describe("field_validation", () => {
           },
         ],
       };
-      
+
       const result = validateFieldWithConverters("created_at", 1736899200000000000, fieldDef);
-      
+
       expect(result.value).toBe(1736899200000000000);
       expect(result.shouldRouteToRawFragments).toBe(true);
       expect(result.wasConverted).toBe(false);
@@ -156,9 +160,9 @@ describe("field_validation", () => {
         type: "array",
         required: false,
       };
-      
+
       const result = validateFieldWithConverters("tags", ["tag1", "tag2"], fieldDef);
-      
+
       expect(result.value).toEqual(["tag1", "tag2"]);
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(false);
@@ -169,9 +173,9 @@ describe("field_validation", () => {
         type: "object",
         required: false,
       };
-      
+
       const result = validateFieldWithConverters("metadata", { key: "value" }, fieldDef);
-      
+
       expect(result.value).toEqual({ key: "value" });
       expect(result.shouldRouteToRawFragments).toBe(false);
       expect(result.wasConverted).toBe(false);
@@ -315,4 +319,42 @@ describe("field_validation", () => {
       expect(result.originalValues).toEqual({});
     });
   });
+});
+
+describe("accepted own field map properties", () => {
+  it.each(["valid", "unknown", "converted"])(
+    "preserves own __proto__ in %s validation maps",
+    (kind) => {
+      const fields: Record<string, FieldDefinition> =
+        kind === "unknown"
+          ? {}
+          : {
+              ["__proto__"]: {
+                type: "string",
+                converters:
+                  kind === "converted"
+                    ? [
+                        {
+                          from: "number",
+                          to: "string",
+                          function: "number_to_string",
+                          deterministic: true,
+                        },
+                      ]
+                    : undefined,
+              },
+            };
+      const value = kind === "converted" ? 42 : "own value";
+      const result = validateFieldsWithConverters({ ["__proto__"]: value }, fields);
+      const target = kind === "unknown" ? result.unknownFields : result.validFields;
+      expect(Object.hasOwn(target, "__proto__")).toBe(true);
+      expect(target["__proto__"]).toBe(kind === "converted" ? "42" : value);
+      if (kind === "converted") {
+        expect(Object.hasOwn(result.originalValues, "__proto__")).toBe(true);
+        expect(result.originalValues["__proto__"]).toBe(42);
+      }
+      for (const map of Object.values(result))
+        expect(Object.getPrototypeOf(map)).toBe(Object.prototype);
+    }
+  );
 });

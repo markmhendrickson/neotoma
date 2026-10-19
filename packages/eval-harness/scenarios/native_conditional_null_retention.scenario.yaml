@@ -1,0 +1,78 @@
+meta:
+  id: native_conditional_null_retention
+  description: Actual isolated HTTP conditional explicit-null create, uncertain exact replay,
+    conflicting payload, present identity and legacy-mode refusal preserve one bundle.
+  tags: [tier2, conditional-store, native-receipt, idempotency]
+seed_strategy: generated
+source_pattern: A consumer must preserve an original bundle when another writer appears.
+privacy_transform: Synthetic type, values and keys only.
+system_prompt: Use the existing store with an explicit absence condition. Preserve
+  the original receipt and generation fields; never change the mode or payload for
+  an uncertain key.
+user_prompt: Create one synthetic original bundle; replay its uncertain acknowledgement
+  exactly and refuse changed payload, appeared identity, mixed mode and malformed conditions.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+real_storage: true
+expected:
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: eq
+    value: 6
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      operation_receipt:
+        status: applied
+        original_observation_fields: { code: ONLY, status: original, note: null }
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_subset:
+      operation_receipt:
+        status: replayed
+        original_observation_fields: { code: ONLY, status: original, note: null }
+  - type: tool_result.matches
+    tool_name: store
+    which: 2
+    result_key: error.response
+    present: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 3
+    result_key: error.response
+    present: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 4
+    result_key: error.response
+    present: true
+  - type: tool_result.matches
+    tool_name: store
+    which: 5
+    result_key: error.response
+    present: true
+  - type: entity.count
+    entity_type: eval_conditional_null
+    op: eq
+    value: 1
+  - type: entity.exists
+    entity_type: eval_conditional_null
+    where: { code: ONLY, status: original }
+  - type: stats.counter
+    field: total_observations
+    op: eq
+    value: 1
+  - type: stats.counter
+    field: sources_count
+    op: eq
+    value: 1
+  - type: raw_storage.file_count
+    op: eq
+    value: 1
+  - type: snapshot.field_absent
+    entity_type: eval_conditional_null
+    field: note
