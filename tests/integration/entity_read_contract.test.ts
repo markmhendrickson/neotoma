@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, it, expect, vi } from "vitest";
+import { beforeAll, afterAll, beforeEach, afterEach, it, expect, vi } from "vitest";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -85,6 +85,11 @@ beforeAll(async () => {
       )
     ).error
   ).toBeNull();
+});
+beforeEach(async () => {
+  // Slow synchronous SQLite fixtures can outlive earlier requests' keep-alive
+  // sockets. Give each test its own origin instead of reusing an expired socket
+  // from another test; every transport still exercises the native app.
   server = createServer(app);
   await new Promise<void>((ok, fail) => {
     server.once("error", fail);
@@ -94,8 +99,10 @@ beforeAll(async () => {
   if (!address || typeof address === "string") throw Error("No owned loopback");
   base = "http://127.0.0.1:" + address.port;
 });
-afterAll(async () => {
+afterEach(async () => {
   if (server) await new Promise<void>((ok) => server.close(() => ok()));
+});
+afterAll(async () => {
   await db.from("entity_snapshots").delete().in("entity_id", ids);
   await db.from("entities").delete().in("id", ids);
 });
@@ -339,6 +346,10 @@ it("acquires raw-fragment sources beyond a full observation batch through the te
     assertComplete(
       await queryEntitiesWithCount({ userId, entityType, limit: 100, includeSnapshots: true })
     );
+    // Deterministically exercise idle expiry after the synchronous fixture.
+    // A shared server reuses an earlier test's just-closed socket here and
+    // fails with ECONNRESET before the GET reaches the app. No sleeps/retries.
+    server.closeIdleConnections();
     const get = await fetch(
       base +
         "/entities?" +
