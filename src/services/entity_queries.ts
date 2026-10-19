@@ -750,17 +750,35 @@ export async function queryEntities(
     user_id: string | null;
   }> = [];
   if (includeSnapshots) {
-    const { data, error: observationError } = await db
-      .from("observations")
-      .select("entity_id, source_id, user_id")
-      .in("entity_id", filteredEntityIds)
-      .not("source_id", "is", null)
-      .limit(1000); // Reasonable limit for batch
-    if (observationError) readTrace?.reasons.add("raw_fragment_sources_unavailable");
-    if ((data?.length ?? 0) >= 1000) readTrace?.reasons.add("raw_fragment_source_cap");
-    allObservations =
-      (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) ||
-      [];
+    // A full batch is continuation, not evidence of a complete source set.
+    // Keyset acquisition avoids both the old 1000-row truncation and offset
+    // skips. The response still advertises a read interval, never a frozen view.
+    let afterId: string | undefined;
+    for (;;) {
+      let query = db
+        .from("observations")
+        .select("id, entity_id, source_id, user_id")
+        .in("entity_id", filteredEntityIds)
+        .not("source_id", "is", null)
+        .order("id", { ascending: true })
+        .limit(1000);
+      if (userId) query = query.eq("user_id", userId);
+      if (afterId) query = query.gt("id", afterId);
+      const { data, error: observationError } = await query;
+      if (observationError) {
+        readTrace?.reasons.add("raw_fragment_sources_unavailable");
+        break;
+      }
+      const page = data ?? [];
+      allObservations.push(...page);
+      if (page.length < 1000) break;
+      const nextId = page[page.length - 1]?.id;
+      if (typeof nextId !== "string" || (afterId !== undefined && nextId <= afterId)) {
+        readTrace?.reasons.add("raw_fragment_source_cap");
+        break;
+      }
+      afterId = nextId;
+    }
   }
 
   // Group observations by entity_id to get source_ids per entity
