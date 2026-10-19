@@ -1,5 +1,6 @@
 import { db } from "../../db.js";
 import { getDb } from "../../repositories/db/connection.js";
+import { certifySnapshotPopulation } from "../../services/entity_population_certificate.js";
 import {
   queryEntities,
   normalizeEntityTypeFilter,
@@ -830,27 +831,7 @@ async function countVisibleEntities(params: {
       total += mergedCount ?? 0;
     }
     if (params.readTrace) {
-      // The legacy snapshot count intentionally omits never-observed rows.
-      // Certify actual membership, not equal aggregate numbers. A
-      // deleted or otherwise unresolved row conservatively leaves the count
-      // unknown; do not reintroduce an observation-log scan or change total.
-      const typeClause = (alias: string) =>
-        typeFilter.length
-          ? ` AND ${alias}.entity_type IN (${typeFilter.map(() => "?").join(",")})`
-          : "";
-      try {
-        const connection = await getDb();
-        const mismatch = await connection
-          .prepare(
-            `SELECT 1 AS mismatch FROM entities e LEFT JOIN entity_snapshots s ON s.entity_id=e.id AND s.user_id=e.user_id AND s.entity_type=e.entity_type WHERE e.user_id=? AND e.merged_to_entity_id IS NULL${typeClause("e")} AND s.entity_id IS NULL
-           UNION ALL
-           SELECT 1 AS mismatch FROM entity_snapshots s LEFT JOIN entities e ON e.id=s.entity_id AND e.user_id=s.user_id AND e.entity_type=s.entity_type AND e.merged_to_entity_id IS NULL WHERE s.user_id=?${typeClause("s")} AND e.id IS NULL LIMIT 1`
-          )
-          .get(userId, ...typeFilter, userId, ...typeFilter);
-        params.readTrace.count_exact = mismatch == null;
-      } catch {
-        params.readTrace.count_exact = false;
-      }
+      params.readTrace.count_exact = await certifySnapshotPopulation(userId, typeFilter);
       if (!params.readTrace.count_exact)
         params.readTrace.reasons.add("count_population_unverified");
     }
@@ -947,7 +928,11 @@ async function countVisibleEntities(params: {
   }
 
   if (params.readTrace) {
-    params.readTrace.count_exact = liveCount === entityRows.length;
+    params.readTrace.count_exact = await certifySnapshotPopulation(
+      userId,
+      typeFilter,
+      candidateIds
+    );
     if (!params.readTrace.count_exact) params.readTrace.reasons.add("count_population_unverified");
   }
 

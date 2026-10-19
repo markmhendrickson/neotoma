@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, it, expect, vi } from "vitest";
+import { beforeAll, afterAll, beforeEach, afterEach, it, expect, vi } from "vitest";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -28,6 +28,29 @@ vi.mock("openai", () => ({
 const entityType = "read_contract_probe_" + randomUUID().replaceAll("-", "");
 const ids = Array.from({ length: 3 }, (_, i) => "ent_" + entityType + "_" + i);
 let server: ReturnType<typeof createServer>, base: string;
+
+async function nativeCliCommand(args: string[]) {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const binary = path.join(root, "dist/cli/bootstrap.js");
+  await access(binary);
+  const cwd = path.join(root, ".vitest", "retrieval-cli");
+  await mkdir(cwd, { recursive: true });
+  const env = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    NODE_ENV: "test",
+    NEOTOMA_ENV: "development",
+    NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
+    NODE_OPTIONS:
+      "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
+  };
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [binary, "--api-only", "--base-url", base, "--json", "--no-log-file", ...args],
+    { cwd, env, timeout: 15000, maxBuffer: 1024 * 1024 }
+  );
+  return JSON.parse(stdout) as any;
+}
 
 beforeAll(async () => {
   if (!process.env.NEOTOMA_DATA_DIR?.endsWith("/.vitest")) throw Error("Owned .vitest required");
@@ -62,6 +85,11 @@ beforeAll(async () => {
       )
     ).error
   ).toBeNull();
+});
+beforeEach(async () => {
+  // Slow synchronous SQLite fixtures can outlive earlier requests' keep-alive
+  // sockets. Give each test its own origin instead of reusing an expired socket
+  // from another test; every transport still exercises the native app.
   server = createServer(app);
   await new Promise<void>((ok, fail) => {
     server.once("error", fail);
@@ -71,8 +99,10 @@ beforeAll(async () => {
   if (!address || typeof address === "string") throw Error("No owned loopback");
   base = "http://127.0.0.1:" + address.port;
 });
-afterAll(async () => {
+afterEach(async () => {
   if (server) await new Promise<void>((ok) => server.close(() => ok()));
+});
+afterAll(async () => {
   await db.from("entity_snapshots").delete().in("entity_id", ids);
   await db.from("entities").delete().in("id", ids);
 });
@@ -90,6 +120,115 @@ it("shared service certifies its actual positive structured predicate, with enti
   expect(c.coverage.state).toBe("complete");
   expect(c.coherence.kind).toBe("read_interval");
 });
+
+it("currently deleted snapshotless rows preserve exact population across native transports, but restored or malformed rows do not", async () => {
+  const id = "ent_contract_deleted_" + randomUUID();
+  const observationId = randomUUID();
+  try {
+    expect(
+      (
+        await db.from("entities").insert({
+          id,
+          user_id: userId,
+          entity_type: entityType,
+          canonical_name: "Synthetic deleted",
+        })
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("observations").insert({
+          id: observationId,
+          entity_id: id,
+          user_id: userId,
+          entity_type: entityType,
+          schema_version: "1.0",
+          fields: { _deleted: true },
+          source_priority: 1000,
+          observed_at: "2026-01-01T00:00:00Z",
+        })
+      ).error
+    ).toBeNull();
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    const assertExact = (result: any) => {
+      expect(result.entities.map((row: any) => row.entity_id).sort()).toEqual([...ids].sort());
+      expect(result.read_contract.coverage.total).toEqual({
+        value: 3,
+        relation: "exact",
+        unit: "entities",
+      });
+      expect(result.read_contract.coverage.state).toBe("complete");
+    };
+    assertExact(await queryEntitiesWithCount({ userId, entityType, limit: 100 }));
+    assertExact(
+      await queryEntitiesWithCount({
+        userId,
+        entityType,
+        createdSince: "2000-01-01T00:00:00Z",
+        limit: 100,
+      })
+    );
+    assertExact(
+      await (await fetch(base + "/entities?entity_type=" + entityType + "&limit=100")).json()
+    );
+    assertExact(
+      await (
+        await fetch(base + "/entities/query", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ entity_type: entityType, limit: 100 }),
+        })
+      ).json()
+    );
+    const tool = await modernPost(base, {
+      id: 991,
+      method: "tools/call",
+      params: {
+        name: "retrieve_entities",
+        arguments: { entity_type: entityType, limit: 100 },
+      },
+    });
+    assertExact(toolResultJson(tool.body));
+    assertExact(await nativeCliCommand(["entities", "list", "--type", entityType]));
+    // A prior deletion is insufficient when a later winning restoration exists.
+    const restoreId = randomUUID();
+    expect(
+      (
+        await db.from("observations").insert({
+          id: restoreId,
+          entity_id: id,
+          user_id: userId,
+          entity_type: entityType,
+          schema_version: "1.0",
+          fields: { _deleted: false },
+          source_priority: 1001,
+          observed_at: "2026-01-02T00:00:00Z",
+        })
+      ).error
+    ).toBeNull();
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    expect(
+      (await queryEntitiesWithCount({ userId, entityType, limit: 100 })).read_contract.coverage
+        .total.relation
+    ).toBe("unknown");
+    await db.from("observations").delete().eq("id", restoreId);
+    for (const change of [
+      { fields: { _deleted: false } },
+      { fields: { _deleted: true }, observed_at: "malformed" },
+      { observed_at: "2026-01-01T00:00:00Z", entity_type: entityType + "_foreign" },
+    ]) {
+      await db.from("observations").update(change).eq("id", observationId);
+      await db.from("entity_snapshots").delete().eq("entity_id", id);
+      const uncertain = await queryEntitiesWithCount({ userId, entityType, limit: 100 });
+      expect(uncertain.read_contract.coverage.total.relation).toBe("unknown");
+      expect(uncertain.read_contract.coverage.reasons).toContain("count_population_unverified");
+    }
+  } finally {
+    await db.from("observations").delete().eq("entity_id", id);
+    await db.from("entity_snapshots").delete().eq("entity_id", id);
+    await db.from("entities").delete().eq("id", id);
+  }
+});
 it("GET preserves an unknown raw option name and refuses to certify the requested scope", async () => {
   const response = await fetch(
     base + "/entities?entity_type=" + entityType + "&pretend_scope=private-canary-value"
@@ -104,6 +243,147 @@ it("GET preserves an unknown raw option name and refuses to certify the requeste
   });
   expect(result.read_contract.coverage.state).toBe("partial");
   expect(JSON.stringify(result.read_contract)).not.toContain("private-canary-value");
+});
+
+it("certifies a large deleted population without reading visible entities' histories", async () => {
+  const type = "synthetic_deleted_population_" + randomUUID().replaceAll("-", "");
+  const connection = await getDb();
+  const size = 5000;
+  try {
+    for (let index = 0; index < size; index++) {
+      const id = "ent_" + type + "_" + index;
+      await connection
+        .prepare("INSERT INTO entities (id,user_id,entity_type,canonical_name) VALUES (?,?,?,?)")
+        .run(id, userId, type, "Synthetic deleted");
+      await connection
+        .prepare(
+          "INSERT INTO observations (id,entity_id,user_id,entity_type,schema_version,fields,source_priority,observed_at) VALUES (?,?,?,?,?,?,?,?)"
+        )
+        .run(
+          "obs_" + id,
+          id,
+          userId,
+          type,
+          "1.0",
+          JSON.stringify({ _deleted: true }),
+          1000,
+          "2026-01-01T00:00:00Z"
+        );
+    }
+    const started = performance.now();
+    const result = await queryEntitiesWithCount({ userId, entityType: type, limit: 100 });
+    console.info(
+      "Synthetic 5000-row deleted population certification ms:",
+      Math.round(performance.now() - started)
+    );
+    expect(result.entities).toEqual([]);
+    expect(result.read_contract.coverage.total).toEqual({
+      value: 0,
+      relation: "exact",
+      unit: "entities",
+    });
+    expect(result.read_contract.coverage.state).toBe("complete");
+  } finally {
+    await db.from("observations").delete().eq("entity_type", type);
+    await db.from("entities").delete().eq("entity_type", type);
+  }
+}, 30000);
+
+it("acquires raw-fragment sources beyond a full observation batch through the terminal page", async () => {
+  const prefix = "obs_contract_sources_" + randomUUID();
+  const earlySource = "src_" + randomUUID(),
+    lateSource = "src_" + randomUUID();
+  const fragmentId = randomUUID();
+  const originalSnapshot = (
+    await db.from("entity_snapshots").select("*").eq("entity_id", ids[0]).single()
+  ).data;
+  try {
+    expect(
+      (
+        await db
+          .from("sources")
+          .insert([earlySource, lateSource].map((id) => ({ id, user_id: userId })))
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("observations").insert(
+          Array.from({ length: 1001 }, (_, index) => ({
+            id: prefix + String(index).padStart(4, "0"),
+            entity_id: ids[0],
+            entity_type: entityType,
+            user_id: userId,
+            schema_version: "1.0",
+            source_id: index < 1000 ? earlySource : lateSource,
+            fields: {},
+            source_priority: 10,
+            observed_at: "2026-01-01T00:00:00Z",
+          }))
+        )
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db.from("raw_fragments").insert({
+          id: fragmentId,
+          source_id: lateSource,
+          entity_id: ids[0],
+          entity_type: entityType,
+          user_id: userId,
+          fragment_key: "beyond_first_source_page",
+          fragment_value: "retained",
+          fragment_envelope: { reason: "unknown_field" },
+        })
+      ).error
+    ).toBeNull();
+    const assertComplete = (result: any) => {
+      expect(result.read_contract.coverage.reasons).not.toContain("raw_fragment_source_cap");
+      expect(result.read_contract.coverage.state).toBe("complete");
+      expect(
+        result.entities.find((row: any) => row.entity_id === ids[0]).raw_fragments
+      ).toMatchObject({ beyond_first_source_page: "retained" });
+    };
+    assertComplete(
+      await queryEntitiesWithCount({ userId, entityType, limit: 100, includeSnapshots: true })
+    );
+    // Deterministically exercise idle expiry after the synchronous fixture.
+    // A shared server reuses an earlier test's just-closed socket here and
+    // fails with ECONNRESET before the GET reaches the app. No sleeps/retries.
+    server.closeIdleConnections();
+    const get = await fetch(
+      base +
+        "/entities?" +
+        new URLSearchParams({
+          entity_type: entityType,
+          limit: "100",
+          include_snapshots: "true",
+        })
+    );
+    expect(get.status).toBe(200);
+    assertComplete(await get.json());
+    const post = await fetch(base + "/entities/query", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entity_type: entityType, limit: 100, include_snapshots: true }),
+    });
+    expect(post.status).toBe(200);
+    assertComplete(await post.json());
+    assertComplete(await nativeCliCommand(["entities", "list", "--type", entityType]));
+    const reply = await modernPost(base, {
+      id: 992,
+      method: "tools/call",
+      params: {
+        name: "retrieve_entities",
+        arguments: { entity_type: entityType, limit: 100, include_snapshots: true },
+      },
+    });
+    assertComplete(toolResultJson(reply.body));
+  } finally {
+    await db.from("raw_fragments").delete().eq("id", fragmentId);
+    await db.from("observations").delete().in("source_id", [earlySource, lateSource]);
+    await db.from("sources").delete().in("id", [earlySource, lateSource]);
+    expect((await db.from("entity_snapshots").upsert(originalSnapshot)).error).toBeNull();
+  }
 });
 it("HTTP accepted collapse is reported as unapplied instead of claiming synthesized results", async () => {
   const response = await fetch(base + "/entities/query", {
@@ -621,33 +901,11 @@ it("a legacy cursor emitted from a filtered scan is not certified as a supported
 });
 
 it("built CLI list and natural operation requests retain the actual full acquisition envelope", async () => {
-  const root = fileURLToPath(new URL("../../", import.meta.url));
-  const binary = path.join(root, "dist/cli/bootstrap.js");
-  await access(binary);
-  const cwd = path.join(root, ".vitest", "retrieval-cli");
-  await mkdir(cwd, { recursive: true });
-  const env = {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
-    NODE_ENV: "test",
-    NEOTOMA_ENV: "development",
-    NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
-    NODE_OPTIONS:
-      "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
-  };
-  const command = async (args: string[]) => {
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      [binary, "--api-only", "--base-url", base, "--json", "--no-log-file", ...args],
-      { cwd, env, timeout: 15000, maxBuffer: 1024 * 1024 }
-    );
-    return JSON.parse(stdout) as any;
-  };
-  const listed = await command(["entities", "list", "--type", entityType]);
+  const listed = await nativeCliCommand(["entities", "list", "--type", entityType]);
   expect(listed.entities.map((row: any) => row.entity_id).sort()).toEqual([...ids].sort());
   expect(listed.read_contract.version).toBe("1");
   expect(listed.read_contract.coverage.returned_count).toBe(3);
-  const queried = await command([
+  const queried = await nativeCliCommand([
     "request",
     "--operation",
     "queryEntities",
@@ -662,7 +920,7 @@ it("built CLI list and natural operation requests retain the actual full acquisi
   });
   expect(queried.read_contract.coverage.state).toBe("partial");
   expect(JSON.stringify(queried.read_contract)).not.toContain("value-must-not-echo");
-  const get = await command([
+  const get = await nativeCliCommand([
     "request",
     "--operation",
     "listEntities",

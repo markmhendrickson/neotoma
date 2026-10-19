@@ -189,6 +189,17 @@ describe("authenticated entity lifecycle", () => {
     expect((await getDashboardStats(owner)).entities_by_type[type]).toBe(1);
     expect((await softDeleteEntity(id, type, owner)).success).toBe(true);
     expect((await db.from("entity_snapshots").select("*").eq("entity_id", id)).data).toEqual([]);
+    const deletedPopulation = await queryEntitiesWithCount({
+      userId: owner,
+      entityType: type,
+      limit: 100,
+    });
+    expect(deletedPopulation.read_contract.coverage.total).toEqual({
+      value: 0,
+      relation: "exact",
+      unit: "entities",
+    });
+    expect(deletedPopulation.read_contract.coverage.state).toBe("complete");
     // Derived state may be stale; it is not lifecycle authority. Controlled
     // synthetic insertion tests the consumers without changing the receipt.
     expect((await db.from("entity_snapshots").upsert(initial)).error).toBeNull();
@@ -240,6 +251,8 @@ describe("authenticated entity lifecycle", () => {
     const counted = await tool("retrieve_entities", { entity_type: type, limit: 100 });
     expect(counted.total).toBe(0);
     expect(counted.entities).toEqual([]);
+    expect(counted.read_contract.coverage.total.relation).toBe("exact");
+    expect(counted.read_contract.coverage.state).toBe("complete");
   });
   it("natural owner-scoped audit exposes authority provenance without granting current visibility", async () => {
     const original = (await db.from("observations").select("*").eq("entity_id", id)).data!;
