@@ -29,6 +29,29 @@ const entityType = "read_contract_probe_" + randomUUID().replaceAll("-", "");
 const ids = Array.from({ length: 3 }, (_, i) => "ent_" + entityType + "_" + i);
 let server: ReturnType<typeof createServer>, base: string;
 
+async function nativeCliCommand(args: string[]) {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const binary = path.join(root, "dist/cli/bootstrap.js");
+  await access(binary);
+  const cwd = path.join(root, ".vitest", "retrieval-cli");
+  await mkdir(cwd, { recursive: true });
+  const env = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    NODE_ENV: "test",
+    NEOTOMA_ENV: "development",
+    NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
+    NODE_OPTIONS:
+      "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
+  };
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [binary, "--api-only", "--base-url", base, "--json", "--no-log-file", ...args],
+    { cwd, env, timeout: 15000, maxBuffer: 1024 * 1024 }
+  );
+  return JSON.parse(stdout) as any;
+}
+
 beforeAll(async () => {
   if (!process.env.NEOTOMA_DATA_DIR?.endsWith("/.vitest")) throw Error("Owned .vitest required");
   expect(
@@ -159,38 +182,7 @@ it("currently deleted snapshotless rows preserve exact population across native 
       },
     });
     assertExact(toolResultJson(tool.body));
-    const root = fileURLToPath(new URL("../../", import.meta.url));
-    const cwd = path.join(root, ".vitest", "deleted-population-cli");
-    await mkdir(cwd, { recursive: true });
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      [
-        path.join(root, "dist/cli/bootstrap.js"),
-        "--api-only",
-        "--base-url",
-        base,
-        "--json",
-        "--no-log-file",
-        "entities",
-        "list",
-        "--type",
-        entityType,
-      ],
-      {
-        cwd,
-        timeout: 15000,
-        env: {
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          NODE_ENV: "test",
-          NEOTOMA_ENV: "development",
-          NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
-          NODE_OPTIONS:
-            "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
-        },
-      }
-    );
-    assertExact(JSON.parse(stdout));
+    assertExact(await nativeCliCommand(["entities", "list", "--type", entityType]));
     // A prior deletion is insufficient when a later winning restoration exists.
     const restoreId = randomUUID();
     expect(
@@ -347,6 +339,25 @@ it("acquires raw-fragment sources beyond a full observation batch through the te
     assertComplete(
       await queryEntitiesWithCount({ userId, entityType, limit: 100, includeSnapshots: true })
     );
+    const get = await fetch(
+      base +
+        "/entities?" +
+        new URLSearchParams({
+          entity_type: entityType,
+          limit: "100",
+          include_snapshots: "true",
+        })
+    );
+    expect(get.status).toBe(200);
+    assertComplete(await get.json());
+    const post = await fetch(base + "/entities/query", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entity_type: entityType, limit: 100, include_snapshots: true }),
+    });
+    expect(post.status).toBe(200);
+    assertComplete(await post.json());
+    assertComplete(await nativeCliCommand(["entities", "list", "--type", entityType]));
     const reply = await modernPost(base, {
       id: 992,
       method: "tools/call",
@@ -879,33 +890,11 @@ it("a legacy cursor emitted from a filtered scan is not certified as a supported
 });
 
 it("built CLI list and natural operation requests retain the actual full acquisition envelope", async () => {
-  const root = fileURLToPath(new URL("../../", import.meta.url));
-  const binary = path.join(root, "dist/cli/bootstrap.js");
-  await access(binary);
-  const cwd = path.join(root, ".vitest", "retrieval-cli");
-  await mkdir(cwd, { recursive: true });
-  const env = {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
-    NODE_ENV: "test",
-    NEOTOMA_ENV: "development",
-    NEOTOMA_DATA_DIR: process.env.NEOTOMA_DATA_DIR,
-    NODE_OPTIONS:
-      "--require " + JSON.stringify(path.join(root, "tests/helpers/owned_loopback_only.cjs")),
-  };
-  const command = async (args: string[]) => {
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      [binary, "--api-only", "--base-url", base, "--json", "--no-log-file", ...args],
-      { cwd, env, timeout: 15000, maxBuffer: 1024 * 1024 }
-    );
-    return JSON.parse(stdout) as any;
-  };
-  const listed = await command(["entities", "list", "--type", entityType]);
+  const listed = await nativeCliCommand(["entities", "list", "--type", entityType]);
   expect(listed.entities.map((row: any) => row.entity_id).sort()).toEqual([...ids].sort());
   expect(listed.read_contract.version).toBe("1");
   expect(listed.read_contract.coverage.returned_count).toBe(3);
-  const queried = await command([
+  const queried = await nativeCliCommand([
     "request",
     "--operation",
     "queryEntities",
@@ -920,7 +909,7 @@ it("built CLI list and natural operation requests retain the actual full acquisi
   });
   expect(queried.read_contract.coverage.state).toBe("partial");
   expect(JSON.stringify(queried.read_contract)).not.toContain("value-must-not-echo");
-  const get = await command([
+  const get = await nativeCliCommand([
     "request",
     "--operation",
     "listEntities",
