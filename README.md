@@ -25,7 +25,7 @@ It is built for developers building and operating AI agents who need a shared re
 
 ## What Neotoma is
 
-Neotoma is a system of record, not a chat memory or a vector cache. It records immutable observations from your sources, resolves them into entities, and computes a current snapshot for each entity by reducing its observations in a deterministic order. Nothing is overwritten by a later write. Corrections and reinterpretations add new observations, and the earlier observations stay readable for that entity.
+Neotoma is a system of record, not a chat memory or a vector cache. It records immutable observations from your sources, resolves them into entities, and computes a current snapshot for each entity by reducing its observations in a deterministic order. No observation is overwritten by a later write. Corrections and reinterpretations add new observations, and the earlier observations stay readable for that entity.
 
 Three properties hold across every interface:
 
@@ -108,6 +108,8 @@ neotoma mcp config
 ```
 
 For another host, use its row in [Connect your tools](#connect-your-tools); `neotoma setup --help` lists the supported hosts.
+
+`neotoma setup --tool claude-code --yes` writes the MCP entry (`.mcp.json` in the project) and, at project scope by default, adds allow rules to `.claude/settings.local.json` so Claude Code runs any `neotoma` command and `npm install -g neotoma` without asking each time (`--scope both` also writes `~/.claude/settings.json`; `--skip-permissions` skips the rules). For Cursor the same two rules go to `.cursor/allowlist.json`.
 
 Prerequisites: Node.js 20.x (see `.nvmrc`) and npm 9+. No `.env` is required for local storage. The `neotoma doctor` command checks your environment, database, and security configuration.
 
@@ -195,7 +197,7 @@ Neotoma stores typed entities with versioned history and provenance. The schema 
 ## Storage, privacy, and security
 
 - **Storage:** Local SQLite (`better-sqlite3`, WAL mode) plus content-addressed file storage, under `NEOTOMA_DATA_DIR`. Separate dev and prod profiles. Semantic search uses sqlite-vec locally.
-- **Privacy:** Your data is never used for training, and logs and event payloads carry IDs, not PII. No telemetry. The interactive CLI checks the npm registry for a newer version once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`), and the MCP server over stdio checks about every 6 hours (off with `NO_UPDATE_NOTIFIER=1`). Only the package name is sent. In single-user mode the data stays entirely local; once you enable MCP OAuth, peer sync, or a hosted multi-user instance, data is shared per those configurations rather than staying purely local (see Deployment modes).
+- **Privacy:** Your data is never used for training, and logs and event payloads carry IDs, not PII. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after (off with `NO_UPDATE_NOTIFIER=1`; `--no-update-check` applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address. In single-user mode the data stays entirely local; once you enable MCP OAuth, peer sync, or a hosted multi-user instance, data is shared per those configurations rather than staying purely local (see Deployment modes).
 - **Encryption:** Optional AES-256-GCM column encryption of sensitive content and metadata, keyed by a key file or BIP-39 mnemonic. Some tables (for example the event log) are not yet column-encrypted; pair with an encrypted volume for full coverage. See [architecture](docs/architecture/architecture.md).
 - **Auth:** Local auth for single-user installs, MCP OAuth for hosted use, optional hardware attestation for agents, and explicit per-operation access controls. Run `neotoma doctor` to verify your setup. See [Auth](docs/subsystems/auth.md) and [Privacy](docs/subsystems/privacy.md).
 

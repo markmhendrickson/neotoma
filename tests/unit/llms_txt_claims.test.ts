@@ -40,11 +40,24 @@ function bannedBodyMatches(body: string): string[] {
   return BANNED_BODY_PATTERNS.filter((re) => re.test(body)).map((re) => String(re));
 }
 
-/** Every "no telemetry" statement must sit in a line that also names the update check. */
+/** Fragments every "no telemetry" statement must carry: both update checks, both opt-outs, what is sent. */
+export const TELEMETRY_REQUIRED_FRAGMENTS: readonly RegExp[] = [
+  /npm registry/i,
+  /about once a day/i,
+  /when a session starts/i,
+  /about every 6 hours/i,
+  /NO_UPDATE_NOTIFIER=1/,
+  /--no-update-check/,
+  /applies to the CLI only/i,
+  /only the package name/i,
+  /connection metadata/i,
+];
+
+/** Every "no telemetry" statement must sit in a line that carries all the fragments above. */
 function telemetryLinesMissingUpdateCheck(body: string): string[] {
   return body
     .split("\n")
-    .filter((l) => /no telemetry/i.test(l) && !/no telemetry[^\n]*(npm registry|newer version)/i.test(l));
+    .filter((l) => /no telemetry/i.test(l) && !TELEMETRY_REQUIRED_FRAGMENTS.every((re) => re.test(l)));
 }
 
 describe("llms.txt body claims", () => {
@@ -74,6 +87,15 @@ describe("llms.txt body claims", () => {
     expect(body).toMatch(/no telemetry/i);
     expect(telemetryLinesMissingUpdateCheck(body)).toEqual([]);
     expect(telemetryLinesMissingUpdateCheck(`${body}\n- Local-first. No telemetry.\n`)).toHaveLength(1);
+    // The earlier wording named only the CLI and the 6-hour MCP check: it must now fail.
+    const old =
+      "- Local-first. No telemetry. The interactive CLI checks the npm registry for a newer version once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`), and the MCP server over stdio checks about every 6 hours (off with `NO_UPDATE_NOTIFIER=1`). Only the package name is sent.";
+    expect(telemetryLinesMissingUpdateCheck(`${body}\n${old}\n`)).toHaveLength(1);
+  });
+
+  it("links the override issue by full URL", () => {
+    expect(body).toContain("https://github.com/markmhendrickson/neotoma/issues/2033");
+    expect(body).not.toMatch(/issue #2033/);
   });
 
   it("keeps the category line, the lead contrast and the stated limits", () => {
@@ -104,6 +126,26 @@ describe("README checkable claims", () => {
     const head = readme.slice(0, 600);
     expect(head).toContain("**A record, not recall.**");
     expect(head).toContain("Neotoma is the system of record for AI agents.");
+  });
+
+  it("states no telemetry only with the full update-check wording", () => {
+    const lines = readme.split("\n").filter((l) => /no telemetry/i.test(l));
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) {
+      for (const re of TELEMETRY_REQUIRED_FRAGMENTS) expect(re.test(l), `${re}: ${l.slice(0, 80)}`).toBe(true);
+    }
+  });
+
+  it("says no observation is overwritten, not that nothing is", () => {
+    expect(readme).toContain("No observation is overwritten by a later write.");
+    expect(readme).not.toContain("Nothing is overwritten by a later write.");
+  });
+
+  it("explains what setup writes for Claude Code and Cursor permissions", () => {
+    expect(readme).toMatch(/`neotoma setup --tool claude-code --yes` writes the MCP entry/);
+    expect(readme).toContain(".claude/settings.local.json");
+    expect(readme).toContain(".cursor/allowlist.json");
+    expect(readme).toContain("`--skip-permissions`");
   });
 
   it("has no em dash and no retired category frame", () => {

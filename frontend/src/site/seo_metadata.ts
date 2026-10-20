@@ -10,6 +10,7 @@ import {
 import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
 import { isRetiredRoute, servesRealPage } from "@/site/route_retirement";
+import { isDocsViewerRoute } from "@/site/docs_viewer_manifest";
 
 export interface SeoRouteMetadata {
   title: string;
@@ -80,7 +81,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     jsonLdType: "WebSite",
     softwareApp: {
       version: REPO_VERSION,
-      operatingSystem: "macOS, Linux, Windows (WSL)",
+      operatingSystem: "macOS, Linux",
       applicationCategory: "DeveloperApplication",
       offers: { price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/MIT",
@@ -105,50 +106,15 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         "https://x.com/markmhendrickson",
       ],
     },
-    faqItems: [
-      {
-        question: "Does Neotoma replace Claude's memory or ChatGPT's?",
-        answer:
-          "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
-      },
-      {
-        question: "Can't I just build this with SQLite or a JSON file?",
-        answer:
-          "You can start there \u2014 many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.",
-      },
-      {
-        question: "Platform memory (Claude, ChatGPT) is good enough \u2014 why add another tool?",
-        answer:
-          "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
-      },
-      {
-        question: "Is this production-ready?",
-        answer:
-          "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
-      },
-      {
-        question: "Does Neotoma send my data to the cloud?",
-        answer:
-          "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API.",
-      },
-    ],
-    speakable: [
-      "h1",
-      "#intro p",
-      "#who h2",
-      "#who p",
-      "#common-questions summary",
-      "#common-questions p",
-    ],
   },
   "/install": {
     title: "Install | Neotoma",
     description:
-      "Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
+      "Install Neotoma in a few minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
     robots: "index,follow",
-    ogImageUrl: "https://neotoma.io/og/neotoma-og-install-1200x630.png",
+    // Uses the default card (neotoma-og-1200x630.png); a dedicated install image never existed in the build.
     ogImageAlt:
-      "Install Neotoma in 5 minutes. npm install -g neotoma. Agent-assisted setup for Cursor, Claude, ChatGPT, and MCP-connected tools.",
+      "Neotoma: the system of record for AI agents. A record, not recall. A plan-style drawing of two sources becoming two observations and one current invoice record.",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -2768,11 +2734,12 @@ export function getSeoMetadataForPath(pathname: string): SeoRouteMetadata {
 
 const DEFAULT_SEO_KEYWORDS = [
   "Neotoma",
+  "system of record",
+  "AI agents",
   "MCP",
   "Model Context Protocol",
-  "AI agents",
-  "agent memory",
-  "deterministic state",
+  "provenance",
+  "local-first",
 ] as const;
 
 /** Alt text for Open Graph / Twitter images (keep concise for screen readers and previews). */
@@ -2827,14 +2794,6 @@ function buildJsonLd(
       caption: image.alt,
     },
   };
-
-  if (type === "WebSite") {
-    primary.potentialAction = {
-      "@type": "SearchAction",
-      target: `${SEO_DEFAULTS.baseUrl}/docs?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
-    };
-  }
 
   const items: Record<string, unknown>[] = [primary];
 
@@ -3039,7 +2998,8 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
 }
 
 export function buildSitemapXml(
-  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p)),
+  // Docs viewer pages are listed by the static build, with their trailing slash.
+  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p)),
 ): string {
   const urlEntries = paths
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)

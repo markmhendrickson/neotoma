@@ -224,7 +224,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Privacy-first local storage",
     slug: "privacy-first-local-storage",
     tooltip:
-      "Whether your data stays on your machine by default with no cloud sync, telemetry, or third-party access. Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
+      "Whether your data stays on your machine by default with no cloud sync or third-party access, and no telemetry beyond npm update checks that send only the package name (the CLI checks about once a day, the stdio MCP server when a session starts and about every 6 hours after; NO_UPDATE_NOTIFIER=1 turns both off, and the registry sees ordinary connection metadata such as the address). Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "guaranteed",
@@ -409,15 +409,12 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     title: "Architecture",
     items: [
       { label: "Foundations", href: "/foundations", icon: "Shield" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
       { label: "Architecture", href: "/architecture", icon: "Layers" },
-      { label: "Memory models", href: "/memory-models", icon: "Boxes" },
     ],
   },
   {
     title: "Hosted",
     items: [
-      { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
       { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
     ],
   },
@@ -538,8 +535,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Subscriptions", href: "/subscriptions", icon: "Radio" },
       { label: "Issue reporting", href: "/issue-reporting", icon: "Bug" },
       { label: "Security hardening", href: "/security-hardening", icon: "Lock" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
-      { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
       {
         label: "Problem statement",
@@ -642,7 +637,7 @@ neotoma hooks install --tool opencode --yes   # optional OpenCode lifecycle hook
 
 Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
 
-Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.`,
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then store my first records and configure my current tool for ongoing use.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
