@@ -373,7 +373,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     modeTabs: { chat: "Chat", cli: "CLI", mcp: "MCP", api: "API", inspector: "Inspector" },
     chatPlaceholder: "Ask anything...",
     playPause: { pauseLabel: "Pause demo", playLabel: "Play demo" },
-    installCta: "Install in 5 minutes",
+    installCta: "Install in a few minutes",
     chatScenarios: CLI_DEMO_CHAT_SCENARIOS_EN,
     cliScenarios: CLI_DEMO_CLI_SCENARIOS_EN,
     agenticScenarios: CLI_DEMO_AGENTIC_SCENARIOS_EN,

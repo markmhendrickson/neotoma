@@ -148,6 +148,8 @@ export const LIVE_PAGE_RETIRED_META_PHRASES = [
   "ships those guarantees",
   "5 minutes",
   "5-minute",
+  "five minutes",
+  "five-minute",
   "no cloud sync",
   "agent memory",
   "deterministic state",
@@ -174,4 +176,5 @@ export const LIVE_PAGE_OMITTED_CLAIMS: readonly [RegExp, string][] = [
   [/state layer|memory layer/i, "retired category noun"],
   [/fully reversible/i, "unevidenced reversibility claim"],
   [/developer preview/i, "developer-preview label"],
+  [/\b(5|five)[- ]minutes?\b|\b5 minutos\b|\b5 minutes\b/i, "unmeasured install-time claim"],
 ];

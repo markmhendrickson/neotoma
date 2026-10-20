@@ -505,3 +505,30 @@ describe("no developer-preview label", () => {
     }
   });
 });
+
+/**
+ * "5 minutes" is an unmeasured install-time claim; /install says "a few minutes". The CTA, FAQ and
+ * metadata strings that still carried it are pinned here. Revert-check: put "Install in 5 minutes"
+ * back into home_body_en.ts, or "5 minutes" into the Cursor metadata, and this goes red;
+ * scripts/validate_site_export.ts repeats the check on the built pages.
+ */
+describe("no unmeasured install-time claim", () => {
+  const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
+  const claim = /\b(5|five)[- ]minutes?\b|\b5 minutos\b/i;
+  it("is gone from the install CTAs, install descriptions, FAQ answers and integration metadata", () => {
+    const sources: Record<string, string> = {
+      "home_body_en.ts": read("frontend", "src", "i18n", "locales", "home_body_en.ts"),
+      "home_body_es.ts": read("frontend", "src", "i18n", "locales", "home_body_es.ts"),
+      "static_packs.ts": read("frontend", "src", "i18n", "locales", "static_packs.ts"),
+      "install_page_strings.ts": read("frontend", "src", "i18n", "locales", "install_page_strings.ts"),
+      "IcpDetailPage.tsx": read("frontend", "src", "components", "subpages", "IcpDetailPage.tsx"),
+      "faq_items_en.ts": read("frontend", "src", "site", "faq_items_en.ts"),
+      "faq_items_es.ts": read("frontend", "src", "site", "faq_items_es.ts"),
+      "faq.md": read("docs", "site", "pages", "en", "faq.md"),
+      "seo_metadata.ts": read("frontend", "src", "site", "seo_metadata.ts"),
+    };
+    for (const [name, text] of Object.entries(sources)) {
+      expect(text, name).not.toMatch(claim);
+    }
+  });
+});

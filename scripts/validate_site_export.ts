@@ -475,6 +475,10 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
     .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ");
   // The old app shell used to render a "Developer preview" badge in the header of every held page.
+  if (/\b(5|five)[- ]minutes?\b/i.test(heldText)) {
+    fail(`site_pages${heldRoute}/index.html makes the unmeasured install-time claim "5 minutes"`);
+    liveClaimFailures++;
+  }
   if (/developer preview/i.test(heldText)) {
     fail(`site_pages${heldRoute}/index.html still shows the developer-preview label`);
     liveClaimFailures++;
@@ -487,6 +491,20 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
       fail(`site_pages${heldRoute}/index.html still offers the navigation entry "${label}", which only lands on a redirect stub`);
       liveClaimFailures++;
     }
+  }
+}
+// "5 minutes" is an unmeasured claim (the /install claim is "a few minutes"). Besides the live and held pages
+// above, check the whole served HTML, meta tags and JSON-LD included, of the pages that carried it.
+for (const route of ["/", "/install", "/evaluate", "/markdown/neotoma-with-cursor"]) {
+  const servedPath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
+  if (!fs.existsSync(servedPath)) continue;
+  const served = fs
+    .readFileSync(servedPath, "utf-8")
+    .replace(/<script(?![^>]*ld\+json)[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ");
+  const hit = /\b(5|five)[- ]minutes?\b/i.exec(served);
+  if (hit) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html still says "${hit[0]}" (text, meta or JSON-LD)`);
+    liveClaimFailures++;
   }
 }
 // /evaluate is held, and agents are sent to it from /install, so its headline (title, description, JSON-LD) and

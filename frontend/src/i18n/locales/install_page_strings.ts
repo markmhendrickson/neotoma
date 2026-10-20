@@ -302,7 +302,7 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
 /** Spanish overlays: merge over INSTALL_PAGE_EN for `es` locale. */
 export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
   title: "Opciones de instalaci\u00f3n",
-  fiveMinuteIntegration: "Integraci\u00f3n en 5 minutos",
+  fiveMinuteIntegration: "Integraci\u00f3n en unos minutos",
   fullyReversible: "Completamente reversible",
   agentAssistedInstall: "Instalaci\u00f3n asistida por agente",
   directIntegrationDocs: "Documentaci\u00f3n de integraci\u00f3n directa",

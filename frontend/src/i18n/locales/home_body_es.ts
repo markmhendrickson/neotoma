@@ -385,7 +385,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
     },
     chatPlaceholder: "Pregunta lo que quieras\u2026",
     playPause: { pauseLabel: "Pausar demo", playLabel: "Reproducir demo" },
-    installCta: "Instalar en 5 minutos",
+    installCta: "Instalar en unos minutos",
     chatScenarios: CLI_DEMO_CHAT_SCENARIOS_ES,
     cliScenarios: CLI_DEMO_CLI_SCENARIOS_ES,
     agenticScenarios: CLI_DEMO_AGENTIC_SCENARIOS_ES,

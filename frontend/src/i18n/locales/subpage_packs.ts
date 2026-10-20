@@ -326,7 +326,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Options d\u2019installation",
-      fiveMinuteIntegration: "Int\u00e9gration en 5 minutes",
+      fiveMinuteIntegration: "Int\u00e9gration en quelques minutes",
       fullyReversible: "Enti\u00e8rement r\u00e9versible",
       agentAssistedInstall: "Installation assist\u00e9e par agent",
       directIntegrationDocs: "Documentation d\u2019int\u00e9gration directe",
@@ -366,7 +366,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Op\u00e7\u00f5es de instala\u00e7\u00e3o",
-      fiveMinuteIntegration: "Integra\u00e7\u00e3o em 5 minutos",
+      fiveMinuteIntegration: "Integra\u00e7\u00e3o em alguns minutos",
       fullyReversible: "Totalmente revers\u00edvel",
       agentAssistedInstall: "Instala\u00e7\u00e3o assistida por agente",
       directIntegrationDocs: "Documenta\u00e7\u00e3o de integra\u00e7\u00e3o direta",

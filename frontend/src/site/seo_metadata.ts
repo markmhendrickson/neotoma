@@ -938,7 +938,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-cursor-1200x630.png",
     ogImageAlt:
-      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in 5 minutes via MCP.",
+      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in a few minutes via MCP.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },

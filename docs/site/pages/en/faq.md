@@ -127,7 +127,7 @@ Neotoma stores structured entities with schema validation, versioned history, an
 
 ## How do I install Neotoma? {#how-do-i-install-neotoma}
 
-Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes under 5 minutes.
+Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes a few minutes.
 
 [Install guide](/install)
 
