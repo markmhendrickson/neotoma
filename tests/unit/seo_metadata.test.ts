@@ -60,8 +60,9 @@ describe("seo_metadata", () => {
     expect(metadata.title).toContain("Neotoma");
     expect(metadata.canonicalUrl).toBe("https://neotoma.io/");
     expect(metadata.robots).toBe("index,follow");
-    expect(metadata.ogImageAlt).toContain("state layer for AI agents");
-    expect(metadata.ogImageAlt).toContain("packrat");
+    expect(metadata.title).toBe("Neotoma: the system of record for AI agents");
+    expect(metadata.ogImageAlt).toContain("system of record for AI agents");
+    expect(metadata.ogImageAlt).toContain("A record, not recall");
     expect(metadata.keywords).toContain("Neotoma");
     expect(metadata.twitterCard).toBe("summary_large_image");
     const primary = metadata.jsonLd[0] as Record<string, unknown>;
@@ -278,7 +279,8 @@ describe("seo_metadata", () => {
 
     it("leaves homepage template mostly unchanged for root route", () => {
       const result = injectRouteMetaIntoHtml(TEMPLATE, "/");
-      expect(result).toContain("<title>Your agents forget. Neotoma makes them remember.</title>");
+      expect(result).toContain("<title>Neotoma: the system of record for AI agents</title>");
+      expect(result).not.toContain("Your agents forget");
       expect(result).toContain('href="https://neotoma.io/"');
     });
   });

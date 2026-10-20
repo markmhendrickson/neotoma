@@ -170,7 +170,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Documentación",
     footerColumnExternal: "Externo",
     footerColumnLegal: "Información legal",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "El sistema de registro para agentes de IA. Código abierto y en local primero.",
     footerCtaBlurb:
       "Volver a indicar contexto cuesta tiempo. El estado erróneo cuesta confianza. Comprueba si Neotoma encaja antes de que empeore.",
     footerReleaseSingular: "versión",
@@ -226,7 +226,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Documentació",
     footerColumnExternal: "Extern",
     footerColumnLegal: "Informació legal",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "El sistema de registre per a agents d'IA. Codi obert i local-first.",
     footerCtaBlurb:
       "Tornar a demanar context porta temps. L'estat erroni costa confiança. Descobreix si Neotoma encaixa abans que empitjori.",
     footerReleaseSingular: "versió",
@@ -282,7 +282,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "文档",
     footerColumnExternal: "外部",
     footerColumnLegal: "法律",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "面向 AI 智能体的记录系统。开源且本地优先。",
     footerCtaBlurb:
       "重复提示消耗时间，错误状态消耗信任。在问题加剧之前，确认 Neotoma 是否适合。",
     footerReleaseSingular: "个版本",
@@ -338,7 +338,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "दस्तावेज़ीकरण",
     footerColumnExternal: "बाहरी",
     footerColumnLegal: "कानूनी",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "AI एजेंटों के लिए रिकॉर्ड प्रणाली। ओपन-सोर्स और लोकल-फर्स्ट।",
     footerCtaBlurb:
       "दोबारा प्रॉम्प्ट करने में समय लगता है। गलत स्थिति पर भरोसा खोता है। बिगड़ने से पहले जानें कि Neotoma उपयुक्त है या नहीं।",
     footerReleaseSingular: "रिलीज़",
@@ -394,7 +394,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "التوثيق",
     footerColumnExternal: "خارجي",
     footerColumnLegal: "قانوني",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "نظام السجلات لوكلاء الذكاء الاصطناعي. مفتوحة المصدر ومحلية أولاً.",
     footerCtaBlurb:
       "إعادة الطلب تكلف الوقت. الحالة الخاطئة تكلف الثقة. تحقق مما إذا كان Neotoma مناسبًا قبل أن تتفاقم الأمور.",
     footerReleaseSingular: "إصدار",
@@ -450,7 +450,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Documents",
     footerColumnExternal: "Externe",
     footerColumnLegal: "Mentions légales",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "Le système d'enregistrement pour les agents IA. Open source et local d'abord.",
     footerCtaBlurb:
       "Re-prompting prend du temps. Un mauvais état coûte la confiance. Vérifiez si Neotoma convient avant que cela s'aggrave.",
     footerReleaseSingular: "version",
@@ -506,7 +506,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Documentação",
     footerColumnExternal: "Externo",
     footerColumnLegal: "Informação legal",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "O sistema de registro para agentes de IA. Código aberto e local-first.",
     footerCtaBlurb:
       "Repetir prompts custa tempo. Estado errado custa confiança. Veja se o Neotoma encaixa antes de piorar.",
     footerReleaseSingular: "versão",
@@ -562,7 +562,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Документация",
     footerColumnExternal: "Внешние",
     footerColumnLegal: "Правовая информация",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "Система учёта для ИИ-агентов. Открытый код и локальность в приоритете.",
     footerCtaBlurb:
       "Повторные промпты отнимают время. Неверное состояние подрывает доверие. Узнайте, подходит ли Neotoma, пока не стало хуже.",
     footerReleaseSingular: "релиз",
@@ -618,7 +618,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "ডকুমেন্টেশন",
     footerColumnExternal: "বাহ্যিক",
     footerColumnLegal: "আইনি",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "AI এজেন্টদের জন্য রেকর্ড ব্যবস্থা। ওপেন সোর্স ও লোকাল-ফার্স্ট।",
     footerCtaBlurb:
       "আবার প্রম্পট করতে সময় লাগে। ভুল স্টেটে বিশ্বাস ক্ষয় হয়। খারাপ হওয়ার আগে Neotoma উপযুক্ত কিনা দেখুন।",
     footerReleaseSingular: "রিলিজ",
@@ -674,7 +674,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "دستاویزات",
     footerColumnExternal: "بیرونی",
     footerColumnLegal: "قانونی",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "AI ایجنٹس کے لیے ریکارڈ کا نظام۔ اوپن سورس اور مقامی ترجیح۔",
     footerCtaBlurb:
       "دوبارہ پرامپٹ وقت کھاتا ہے۔ غلط اسٹیٹ اعتماد کھاتا ہے۔ بگڑنے سے پہلے معلوم کریں کہ Neotoma موزوں ہے یا نہیں۔",
     footerReleaseSingular: "ریلیز",
@@ -730,7 +730,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Dokumentasi",
     footerColumnExternal: "Eksternal",
     footerColumnLegal: "Hukum",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "Sistem catatan untuk agen AI. Sumber terbuka dan lokal-dulu.",
     footerCtaBlurb:
       "Mengulang prompt memakan waktu. Status salah merusak kepercayaan. Pastikan Neotoma cocok sebelum memburuk.",
     footerReleaseSingular: "rilis",
@@ -786,7 +786,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     footerColumnDocumentation: "Dokumentation",
     footerColumnExternal: "Extern",
     footerColumnLegal: "Rechtliches",
-    footerTagline: "The system of record for AI agents. Open-source and local-first.",
+    footerTagline: "Das System of Record für KI-Agenten. Open Source und lokal zuerst.",
     footerCtaBlurb:
       "Neu-Prompting kostet Zeit. Falscher State kostet Vertrauen. Prüfen Sie, ob Neotoma passt, bevor es eskaliert.",
     footerReleaseSingular: "Release",
