@@ -51,9 +51,9 @@ export function NeotomaOnePager() {
           <p className="plan-label">Neotoma · the system of record for AI agents</p>
           <h1 id="s1">A record, not recall.</h1>
           <p className="plan-lede">
-            Neotoma is the system of record for AI agents. An agent recalls what it was last told. A
-            record keeps what was stored, from which source, who corrected it, and what is current
-            now, so the agents you connect can defer to one answer.
+            Neotoma is the system of record for AI agents. Without one, an agent recalls only what it
+            was last told. With one, it reads what was stored, from which source, and what is
+            current now, so the agents you connect can defer to one answer.
           </p>
           <p className="plan-meta">
             Open source (MIT) · local-first · MCP server, REST API and CLI
@@ -161,8 +161,9 @@ export function NeotomaOnePager() {
           <p className="plan-body">
             A correction is one more observation. It does not edit the earlier one, so the original
             value is still listed and every current field names the observation that set it. The run
-            below uses the v0.25.0 build with the invoice from sheet 01, plus one correction. Output
-            is reformatted from the CLI&apos;s JSON to fit the page, and ids are shortened.
+            below was run on the published npm package (0.25.0) and on main, with the invoice from
+            sheet 01 plus one correction. Output is reformatted from the CLI&apos;s JSON to fit the
+            page; observation ids are from one run and differ on every run.
           </p>
           <pre className="plan-pre" tabIndex={0} aria-label="CLI transcript">
             <code>{CLI_TRANSCRIPT}</code>
@@ -230,7 +231,8 @@ export function NeotomaOnePager() {
           </pre>
           <p className="plan-small plan-install-note">
             Using another host? Swap <code>claude-code</code> for the tool name in the setup column
-            of the sheet 04 table.
+            of the sheet 04 table. To print the MCP entry for another client, run{" "}
+            <code>neotoma mcp config</code> in a terminal; it asks which one.
           </p>
           <div className="plan-actions">
             <Link
@@ -293,8 +295,7 @@ export function NeotomaOnePager() {
           <p className="plan-small">
             Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>, an
             operating system for humans and AI agents to jointly initiate, execute, approve, and
-            reconcile work under explicit authority. Neotoma answers what was true. Ateles answers
-            who was authorized.
+            reconcile work under explicit authority.
           </p>
           <footer className="plan-footer">
             <SolidLockup />

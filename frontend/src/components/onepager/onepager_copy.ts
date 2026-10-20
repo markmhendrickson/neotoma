@@ -24,7 +24,7 @@ export const RECALL_VS_RECORD: readonly {
   {
     question: "What is stored?",
     recall: "Typically a summary of what the agent saw.",
-    record: "Each fact as an observation linked to its source.",
+    record: "Each stored fact as an observation linked to its source.",
   },
   {
     question: "What happens when a fact changes?",
@@ -66,19 +66,19 @@ export const CLI_TRANSCRIPT = `$ neotoma store --observation-source import --ent
 $ neotoma store --observation-source llm_summary --entities '[{"entity_type":"invoice",
     "invoice_number":"INV-2041","vendor_name":"Acme","invoice_date":"2026-10-01",
     "date_due":"2026-10-29"}]'
-$ neotoma corrections create ent_7cbcf2519f652626f3fe292a \\
+$ neotoma corrections create ent_7cbcf2519f652626f3fe292a --entity-type invoice \\
     --field-name amount_due --corrected-value 3250
 
 $ neotoma entities get ent_7cbcf2519f652626f3fe292a
   observation_count   3
-  amount_due          3250        set by 67071613 (correction)
-  date_due            2026-10-29  set by 2b97b9aa (llm_summary)
-  currency            USD         set by 845b4e51 (import)
+  amount_due          3250        set by b7e0392c (correction)
+  date_due            2026-10-29  set by 5e29854e (llm_summary)
+  currency            USD         set by f640b9f1 (import)
 
 $ neotoma observations list --entity-id ent_7cbcf2519f652626f3fe292a
-  67071613  correction   amount_due=3250
-  2b97b9aa  llm_summary  date_due=2026-10-29
-  845b4e51  import       amount_due=3200, date_due=2026-10-22, currency=USD`;
+  b7e0392c  correction   amount_due=3250
+  5e29854e  llm_summary  date_due=2026-10-29
+  f640b9f1  import       amount_due=3200, date_due=2026-10-22, currency=USD`;
 
 export const CONNECTIONS_SETUP: readonly { host: string; command: string }[] = [
   { host: "Claude Code", command: "neotoma setup --tool claude-code --yes" },
@@ -89,12 +89,11 @@ export const CONNECTIONS_SETUP: readonly { host: string; command: string }[] = [
 ];
 
 export const CONNECTIONS_OTHER =
-  "ChatGPT, Windsurf, Continue, VS Code, OpenCode, IronClaw and Letta. These use MCP or an HTTP connector, configured by hand";
+  "ChatGPT, Windsurf, Continue, VS Code, IronClaw and Letta use MCP or an HTTP connector, configured by hand, and OpenCode uses a plugin or MCP";
 
 export const INSTALL_COMMANDS = `npm install -g neotoma
 neotoma init
-neotoma setup --tool claude-code --yes
-neotoma mcp config`;
+neotoma setup --tool claude-code --yes`;
 
 export const LIMITS: readonly { title: string; text: string }[] = [
   {

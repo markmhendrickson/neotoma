@@ -400,6 +400,76 @@ if (routeFailures === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// 3g. Live pages: no retired phrase in JSON-LD or meta keywords, and none of the omitted claims in the text
+// ---------------------------------------------------------------------------
+// Scope: the live routes (/ and /install). Held pages (/evaluate, /markdown/*, /skills/*) keep older copy
+// until their owner decides; they are listed in the pull request, not checked here.
+const RETIRED_META_PHRASES = [
+  "append-only",
+  "detect conflicts",
+  "deterministic memory",
+  "ships those guarantees",
+  "5 minutes",
+  "5-minute",
+  "no cloud sync",
+  "agent memory",
+  "deterministic state",
+  "SearchAction",
+  "speakable",
+  "docs?q=",
+  "FAQPage",
+] as const;
+const OMITTED_CLAIMS: [RegExp, string][] = [
+  [/corrections? (always|will always) wins?/i, "corrections always win"],
+  [/append-only/i, "database-enforced append-only"],
+  [/point[- ]in[- ]time/i, "one-call point-in-time state"],
+  [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
+  [/hosted neotoma (is )?(available|for sale)/i, "hosted Neotoma for sale"],
+  [/unified platform/i, "unified platform"],
+  [/multi-operator/i, "multi-operator authority"],
+  [/state layer|memory layer/i, "retired category noun"],
+  [/fully reversible/i, "unevidenced reversibility claim"],
+];
+let liveClaimFailures = 0;
+for (const route of LIVE_ROUTES) {
+  const livePath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
+  if (!fs.existsSync(livePath)) continue; // missing live pages are reported in 3e
+  const html = fs.readFileSync(livePath, "utf-8");
+  const jsonLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]).join("\n");
+  const keywords = /<meta name="keywords" content="([^"]*)"/.exec(html)?.[1] ?? "";
+  for (const phrase of RETIRED_META_PHRASES) {
+    if (jsonLd.includes(phrase) || keywords.toLowerCase().includes(phrase.toLowerCase())) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html carries retired phrase "${phrase}" in JSON-LD or meta keywords`);
+      liveClaimFailures++;
+    }
+  }
+  if (!keywords.includes("system of record")) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html meta keywords do not name the category: "${keywords}"`);
+    liveClaimFailures++;
+  }
+  for (const m of html.matchAll(/<meta (?:property|name)="(?:og|twitter):image" content="([^"]*)"/g)) {
+    const imgPath = new URL(m[1], "https://neotoma.io").pathname;
+    if (!fs.existsSync(path.join(siteDir, imgPath))) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html names a social image that is not in the build: ${imgPath}`);
+      liveClaimFailures++;
+    }
+  }
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+  for (const [re, label] of OMITTED_CLAIMS) {
+    if (re.test(text)) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
+      liveClaimFailures++;
+    }
+  }
+}
+if (liveClaimFailures === 0) {
+  pass("Live pages: no retired phrase in JSON-LD or meta keywords, and no omitted claim in the text");
+}
+
+// ---------------------------------------------------------------------------
 // 4. 404.html must render the not-found page, not the homepage
 // ---------------------------------------------------------------------------
 const notFoundPath = path.join(siteDir, "404.html");

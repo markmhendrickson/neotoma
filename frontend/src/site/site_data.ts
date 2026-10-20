@@ -642,7 +642,7 @@ neotoma hooks install --tool opencode --yes   # optional OpenCode lifecycle hook
 
 Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
 
-Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.`,
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then store my first records and configure my current tool for ongoing use.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
