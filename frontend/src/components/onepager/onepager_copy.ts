@@ -16,6 +16,20 @@ export const FIGURE_LEGEND: readonly string[] = [
   "The amount still comes from the first observation. Both observations stay on record.",
 ];
 
+/**
+ * Text alternative for the sheet 01 plate (FIG. A-1). The photograph carries no text and the plate
+ * puts no words on the paper objects, so the alternative states what the callouts mark and says
+ * that the objects are illustrative. It must stay in step with FIGURE_LEGEND.
+ */
+export const PLATE_ALT =
+  "Plate A-1, a synthetic example: an overhead photograph of paper records laid out on beige paper, marked with four numbered drafting callouts keyed to the legend below. The paper objects carry no text and stand in for records. Callout 1 spans the two small source sheets, which disagree about one invoice's due date. Callout 2 marks the round-tabbed card that stands for the rule. Callout 3 is a revision cloud on the current record's changed line, with a leader back to the later observation. Callout 4 spans both observations, which stay on record.";
+
+/** Title-block note of the plate, one entry per line in the narrow crop. */
+export const PLATE_NOTE: readonly string[] = [
+  "Paper objects illustrate only and carry no invoice data.",
+  "Keys 1 to 4 match the legend below.",
+];
+
 export const RECALL_VS_RECORD: readonly {
   question: string;
   recall: string;

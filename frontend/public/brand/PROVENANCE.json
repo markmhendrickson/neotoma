@@ -11,5 +11,52 @@
     "neotoma-icon-32.svg": {"source": "shared/site/generator/dist/images/selected-logo-exports/neotoma-icon-32.svg", "sha256": "03b41729bad1adef001fdc59cc3d84716a16b3a82dc7912855388a9845254c71", "use": "favicon (selected solid icon)"},
     "neotoma-lockup-drafting.svg": {"derived_from": "n2-nav-light.svg", "script": "scripts/derive_neotoma_logo_drafting.mjs", "method": "path data and transforms copied unchanged; solid fill replaced by a 1px non-scaling outline stroke; nothing redrawn"}
   },
-  "note": "n2-nav-light.svg is the same file (same sha256) recorded as the accepted Neotoma lockup in the Constara preview asset provenance."
+  "note": "n2-nav-light.svg is the same file (same sha256) recorded as the accepted Neotoma lockup in the Constara preview asset provenance.",
+  "plate": {
+    "identity": "Sheet 01 plate (FIG. A-1): the accepted overhead paper-object photograph of the earlier Neotoma site, shown under inline SVG drafting annotations",
+    "source": {
+      "repository": "github.com/markmhendrickson/sites",
+      "path": "shared/site/generator/dist/images/tension-trace-r2/N-hero.jpg",
+      "checkout_commit": "b32394e8d53282afeb5e972f554bd235941a0e04",
+      "sha256": "8eee3947a65ac16fd41b359e558a6f4839c5c679cd6c8c1dcc0d4b115572476f",
+      "bytes": 316482,
+      "width": 1536,
+      "height": 1024,
+      "accepted_as": "hero image of the earlier Neotoma site; declared with this sha256 as the neotoma brand photograph in og-photo-inventory.mjs, as N-hero in tension-trace-r2-art.json, and in provenance/source-import.json of that repository. The live public review build serves the identical bytes (checked 2026-10-20 against https://markmhendrickson.github.io/sites/neotoma/images/tension-trace-r2/N-hero.jpg)."
+    },
+    "derivation": {
+      "script": "scripts/derive_neotoma_plate.mjs",
+      "method": "decode and re-encode only (WebP q88 and JPEG q85 fallback); the narrow files are a crop of the same frame (left 640, top 0, width 896, height 1024) resampled to 728 x 832. Nothing drawn, retouched, recoloured or composited; the annotations are inline SVG in the page, not in these files. The script refuses a source whose sha256 is not the accepted one."
+    },
+    "files": {
+      "plate/neotoma-plate-a1-wide.webp": {
+        "sha256": "b7b5f3b7744b5fb6ee04d4354abcd6d4b22e7ce8829634b0025b9dcfec55073b",
+        "bytes": 74430,
+        "width": 1536,
+        "height": 1024,
+        "use": "desktop plate, primary format"
+      },
+      "plate/neotoma-plate-a1-wide.jpg": {
+        "sha256": "94ae151efd8b35f92c4823e20c36f6f42e11598ee84368f60e6d9892b07f4a48",
+        "bytes": 88483,
+        "width": 1536,
+        "height": 1024,
+        "use": "desktop plate, fallback for browsers without WebP"
+      },
+      "plate/neotoma-plate-a1-narrow.webp": {
+        "sha256": "dbdaf84a25ac1c77f97b01e0dddf1c81c8bc3da014423d3b8315b9bb2bf7faf0",
+        "bytes": 22544,
+        "width": 728,
+        "height": 832,
+        "use": "phone plate (viewport 860 px and below), primary format"
+      },
+      "plate/neotoma-plate-a1-narrow.jpg": {
+        "sha256": "e9fedbcd4a848f14f001fac772aa0599e353b9234b28434db221c0293785c8bd",
+        "bytes": 31923,
+        "width": 728,
+        "height": 832,
+        "use": "phone plate, fallback for browsers without WebP"
+      }
+    }
+  }
 }

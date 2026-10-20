@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
 import { PlanTitleBlock, SolidLockup } from "./NeotomaLogos";
-import { RecordPlanNarrow, RecordPlanWide, ServicePlan } from "./onepager_figures";
+import { ServicePlan } from "./onepager_figures";
+import { RecordPlate } from "./onepager_plate";
 import {
   CLI_TRANSCRIPT,
   DEEPER_MATERIAL,
@@ -82,8 +83,7 @@ export function NeotomaOnePager() {
           </div>
 
           <figure className="plan-figure">
-            <RecordPlanWide />
-            <RecordPlanNarrow />
+            <RecordPlate />
             <figcaption>
               <ol className="plan-legend">
                 {FIGURE_LEGEND.map((item, i) => (

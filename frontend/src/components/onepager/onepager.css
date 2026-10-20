@@ -195,8 +195,44 @@
   width: 100%;
   height: auto;
 }
-.plan-svg-narrow {
+
+/*
+ * Sheet 01 plate. The accepted photograph keeps its own paper ground in both themes: it is never
+ * inverted or tinted, and the drafting annotations over it use fixed colors (see onepager_plate.tsx).
+ * Dark mode adds a subtle light frame so the photograph reads as a mounted plate on the dark sheet.
+ */
+.plan-plate {
+  position: relative;
+  aspect-ratio: 1536 / 1024;
+  line-height: 0;
+  overflow: hidden;
+  background: #e3dccd;
+  border: 1px solid var(--ink);
+}
+.plan-plate picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.plan-plate-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.plan-plate-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.plan-plate-overlay-narrow {
   display: none;
+}
+.dark .plan-plate {
+  border-color: rgba(236, 229, 212, 0.55);
+  outline: 1px solid rgba(236, 229, 212, 0.18);
+  outline-offset: 5px;
 }
 .plan-figure-small {
   margin: 0;
@@ -514,13 +550,16 @@
     padding: 30px 20px 76px;
     margin-bottom: 32px;
   }
-  .plan-svg-wide {
-    display: none;
-  }
-  .plan-svg-narrow {
-    display: block;
+  .plan-plate {
+    aspect-ratio: 728 / 832;
     max-width: 420px;
     margin: 0 auto;
+  }
+  .plan-plate-overlay-wide {
+    display: none;
+  }
+  .plan-plate-overlay-narrow {
+    display: block;
   }
   .plan-legend {
     grid-template-columns: 1fr;
