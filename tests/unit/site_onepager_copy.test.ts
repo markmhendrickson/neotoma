@@ -439,90 +439,247 @@ describe("sheet 01 plate (FIG. A-1)", () => {
   const brand = join(root, "frontend", "public", "brand");
   type FileInfo = { sha256: string; bytes: number; width: number; height: number };
   const prov = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8")).plate as {
+    identity: string;
     derived_from_hero: boolean;
     hero: { sha256: string };
-    generation: { outputs: Record<string, { sha256: string }>; credits: { exploration_total: number } };
+    generation: {
+      outputs: Record<string, { sha256: string }>;
+      credits: { exploration_total: number };
+    };
     preparation: { frames: Record<string, { sha256: string; width: number; height: number }> };
+    layout: { wide_sha256: string; narrow_sha256: string };
     files: Record<string, FileInfo>;
+    superseded: string;
   };
   const html = renderToStaticMarkup(RecordPlate());
   const attr = (tag: string, name: string) =>
     new RegExp(`\\s${name}="([^"]*)"`, "i").exec(tag)?.[1];
   const img = /<img\b[^>]*>/.exec(html)![0];
-  const WIDE = "plate/neotoma-plate-a1-r2-wide.webp";
-  const NARROW = "plate/neotoma-plate-a1-r2-narrow.webp";
+  const base = "plate/neotoma-plate-a1-r2-";
+  const FILES = ["narrow.jpg", "narrow.webp", "wide.jpg", "wide.webp"].map((f) => base + f);
+  const copyConst = (name: string) =>
+    new RegExp(`${name} =\\s*"([^"]*)"`).exec(files[1])?.[1] ?? "";
+  const legendItems = () => {
+    const legend = /FIGURE_LEGEND[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1];
+    return [...legend.matchAll(/^ {2}"(.*)",$/gm)].map((m) => m[1]);
+  };
+  const noteLines = () => {
+    const note = /PLATE_NOTE[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1];
+    return [...note.matchAll(/^ {2}"(.*)",$/gm)].map((m) => m[1]);
+  };
 
   it("keeps the committed plate files byte for byte (sha256, size and dimensions from PROVENANCE.json)", async () => {
-    expect(Object.keys(prov.files).sort()).toEqual([NARROW, WIDE]);
+    expect(Object.keys(prov.files).sort()).toEqual(FILES);
     for (const [file, info] of Object.entries(prov.files)) {
       const bytes = readFileSync(join(brand, file));
       expect(createHash("sha256").update(bytes).digest("hex"), file).toBe(info.sha256);
       expect(bytes.length, `${file} bytes`).toBe(info.bytes);
       const meta = await sharp(bytes).metadata();
-      expect(meta.format, file).toBe("webp");
+      expect(meta.format, file).toBe(file.endsWith(".webp") ? "webp" : "jpeg");
       expect([meta.width, meta.height], `${file} dimensions`).toEqual([info.width, info.height]);
     }
   });
 
-  it("records the generated plate as derived from the accepted hero, and the script refuses any other frame", async () => {
+  it("ships image data only: no metadata, text, animation chunks or trailing bytes in any plate file", () => {
+    for (const file of FILES) {
+      const b = readFileSync(join(brand, file));
+      if (file.endsWith(".webp")) {
+        expect(b.toString("latin1", 0, 4), file).toBe("RIFF");
+        expect(b.toString("latin1", 8, 12), file).toBe("WEBP");
+        expect(b.readUInt32LE(4) + 8, `${file}: RIFF size covers the whole file`).toBe(b.length);
+        const chunks: string[] = [];
+        for (let i = 12; i < b.length; ) {
+          const size = b.readUInt32LE(i + 4);
+          chunks.push(b.toString("latin1", i, i + 4));
+          i += 8 + size + (size & 1);
+          expect(i, `${file}: chunk runs past the end`).toBeLessThanOrEqual(b.length);
+        }
+        // A single lossy or lossless bitstream; no VP8X, EXIF, XMP, ICCP, ANIM or ANMF.
+        expect(chunks, file).toHaveLength(1);
+        expect(["VP8 ", "VP8L"], file).toContain(chunks[0]);
+      } else {
+        expect([b[0], b[1]], `${file}: SOI`).toEqual([0xff, 0xd8]);
+        expect([b[b.length - 2], b[b.length - 1]], `${file}: ends at EOI`).toEqual([0xff, 0xd9]);
+        const markers: number[] = [];
+        let sos = -1;
+        for (let i = 2; i < b.length; ) {
+          expect(b[i], `${file}: marker`).toBe(0xff);
+          const m = b[i + 1];
+          markers.push(m);
+          if (m === 0xda) {
+            sos = i; // entropy-coded data follows
+            break;
+          }
+          i += 2 + b.readUInt16BE(i + 2);
+        }
+        expect(sos, `${file}: SOS`).toBeGreaterThan(0);
+        // No APPn (EXIF, XMP, ICC, Photoshop) and no comment segments.
+        expect(
+          markers.filter((m) => (m >= 0xe0 && m <= 0xef) || m === 0xfe),
+          file
+        ).toEqual([]);
+        // EOI appears once, at the very end: nothing is appended after the image.
+        expect(b.indexOf(Buffer.from([0xff, 0xd9]), sos), file).toBe(b.length - 2);
+      }
+    }
+  });
+
+  it("records the plate as a generated illustration derived from the accepted hero, and the script refuses any other frame", async () => {
     // @ts-expect-error plain ESM script
     const script = await import("../../scripts/derive_neotoma_plate.mjs");
     expect(prov.derived_from_hero).toBe(true);
+    expect(prov.identity).toMatch(/generated illustration/);
+    expect(prov.superseded).toMatch(/superseded before merge and never shipped/);
     expect(prov.hero.sha256).toBe(script.ACCEPTED_HERO_SHA256);
-    for (const out of Object.values(prov.generation.outputs)) expect(out.sha256).toMatch(/^[0-9a-f]{64}$/);
+    for (const out of Object.values(prov.generation.outputs))
+      expect(out.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(prov.generation.credits.exploration_total).toBe(86);
     expect(script.FRAMES.wide.sha256).toBe(prov.preparation.frames.wide.sha256);
     expect(script.FRAMES.narrow.sha256).toBe(prov.preparation.frames.narrow.sha256);
     expect(() => script.verifyFrame("wide", Buffer.from("not the prepared frame"))).toThrow(
       /refusing to derive/
     );
-    // The frames, the files and the callout layout share one geometry (plate_layout.ts).
+  });
+
+  it("pins each frame's size and object boxes to the hash the images were registered against", async () => {
+    // @ts-expect-error plain ESM script
+    const script = await import("../../scripts/derive_neotoma_plate.mjs");
     const { PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT } =
       await import("../../frontend/src/components/onepager/plate_layout");
-    for (const [layout, frame, file] of [
-      [PLATE_WIDE_LAYOUT, script.FRAMES.wide, WIDE],
-      [PLATE_NARROW_LAYOUT, script.FRAMES.narrow, NARROW],
+    const hash = (f: typeof PLATE_WIDE_LAYOUT) =>
+      createHash("sha256")
+        .update(JSON.stringify({ width: f.width, height: f.height, objects: f.objects }))
+        .digest("hex");
+    expect(hash(PLATE_WIDE_LAYOUT)).toBe(prov.layout.wide_sha256);
+    expect(hash(PLATE_NARROW_LAYOUT)).toBe(prov.layout.narrow_sha256);
+    for (const [layout, frame] of [
+      [PLATE_WIDE_LAYOUT, script.FRAMES.wide],
+      [PLATE_NARROW_LAYOUT, script.FRAMES.narrow],
     ] as const) {
       expect([layout.width, layout.height]).toEqual([frame.width, frame.height]);
-      expect([layout.width, layout.height]).toEqual([prov.files[file].width, prov.files[file].height]);
-      expect(`plate/${frame.out}`).toBe(file);
+      for (const ext of ["webp", "jpg"]) {
+        const info = prov.files[`plate/${frame.out}.${ext}`];
+        expect([layout.width, layout.height]).toEqual([info.width, info.height]);
+      }
     }
   });
 
-  it("gives the image a text alternative and explicit dimensions that match the file", () => {
-    const alt = attr(img, "alt");
-    expect(alt && alt.length, "alt text").toBeGreaterThan(200);
-    expect(alt).toMatch(/synthetic example/i);
-    expect(alt).toMatch(/five numbered drafting callouts/);
-    // The alternative names every object by what it stands for.
-    for (const s of ["the PDF", "the later email", "an observation", "the rule", "the current snapshot"]) {
-      expect(alt, s).toContain(s);
+  it("lands every callout on what it touches: connector and leader ends at object edges, keys on their lines", async () => {
+    const { PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT } =
+      await import("../../frontend/src/components/onepager/plate_layout");
+    type Box = { x: number; y: number; w: number; h: number };
+    // Distance from a point to a box's outline (0 on the edge).
+    const toEdge = ([px, py]: readonly [number, number], b: Box) => {
+      const dx = Math.max(b.x - px, 0, px - (b.x + b.w));
+      const dy = Math.max(b.y - py, 0, py - (b.y + b.h));
+      const outside = Math.hypot(dx, dy);
+      if (outside > 0) return outside;
+      return Math.min(px - b.x, b.x + b.w - px, py - b.y, b.y + b.h - py);
+    };
+    const toPolyline = ([px, py]: readonly [number, number], pts: readonly (readonly [number, number])[]) => {
+      let best = Infinity;
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1];
+        const [bx, by] = pts[i];
+        const L2 = (bx - ax) ** 2 + (by - ay) ** 2;
+        const t = L2 ? Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L2)) : 0;
+        best = Math.min(best, Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay))));
+      }
+      return best;
+    };
+    for (const f of [PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT]) {
+      const u = f.width / f.displayWidth;
+      const box = (t: string) => (t === "cloud" ? f.cloud : f.objects[t as keyof typeof f.objects]);
+      const check = (label: string, p: readonly [number, number], t: string | null) => {
+        if (t === null) return;
+        // A printed connector stops 12 units short of the paper (its end bar or arrow tip).
+        expect(toEdge(p, box(t)), `${label} touching ${t}`).toBeLessThanOrEqual(14);
+      };
+      f.connectors.forEach((c, i) => {
+        check(`${f.width} connector ${i} start`, c.points[0], c.touches[0]);
+        check(`${f.width} connector ${i} end`, c.points[c.points.length - 1], c.touches[1]);
+      });
+      f.leaders.forEach((l, i) => {
+        check(`${f.width} leader ${i} start`, l.points[0], l.touches[0]);
+        check(`${f.width} leader ${i} end`, l.points[l.points.length - 1], l.touches[1]);
+      });
+      // Key 2's leader starts in the punched slot, inside the rule card.
+      expect(f.leaders[0].points[0]).toEqual(f.ruleTarget);
+      expect(toEdge(f.ruleTarget, f.objects.rule)).toBeGreaterThan(0);
+      const r = 11 * u;
+      for (const k of f.keys) {
+        const [kind, i] = k.on;
+        const line =
+          kind === "dim"
+            ? [f.dims[i].from, f.dims[i].to]
+            : kind === "leader"
+              ? f.leaders[i].points
+              : f.connectors[i].points;
+        expect(toPolyline(k.at, line), `${f.width} key ${k.n} sits on its line`).toBeLessThanOrEqual(r + 1);
+      }
     }
-    const wide = prov.files[WIDE];
+  });
+
+  it("gives the image a short text alternative that says it is a generated illustration and does not repeat the legend", () => {
+    const alt = attr(img, "alt")!;
+    expect(alt.length, "alt text length").toBeGreaterThan(150);
+    expect(alt.length, "alt text length").toBeLessThanOrEqual(280);
+    expect(alt).toMatch(/synthetic example/i);
+    expect(alt).toMatch(/generated illustration/);
+    expect(alt).not.toMatch(/photograph/i);
+    expect(alt).toMatch(/explained in the legend below/);
+    // The legend is HTML right below and is read in full; the alternative does not restate it.
+    for (const item of legendItems()) expect(alt, item).not.toContain(item.slice(0, 30));
+    expect(alt).not.toMatch(/October|last write|revision cloud|MCP|client/i);
+  });
+
+  it("serves WebP with a JPEG fallback for each frame, the phone frame at 860 px and below, never lazy", () => {
+    const sources = [...html.matchAll(/<source\b[^>]*>/g)].map((m) => m[0]);
+    expect(
+      sources.map((t) => [attr(t, "media") ?? null, attr(t, "type"), attr(t, "srcset")])
+    ).toEqual([
+      ["(max-width: 860px)", "image/webp", `/brand/${base}narrow.webp`],
+      ["(max-width: 860px)", "image/jpeg", `/brand/${base}narrow.jpg`],
+      [null, "image/webp", `/brand/${base}wide.webp`],
+    ]);
+    for (const tag of sources) {
+      const info = prov.files[attr(tag, "srcset")!.replace("/brand/", "")];
+      expect(Number(attr(tag, "width"))).toBe(info.width);
+      expect(Number(attr(tag, "height"))).toBe(info.height);
+    }
+    expect(attr(img, "src")).toBe(`/brand/${base}wide.jpg`);
+    const wide = prov.files[`${base}wide.jpg`];
     expect(Number(attr(img, "width"))).toBe(wide.width);
     expect(Number(attr(img, "height"))).toBe(wide.height);
-    expect(attr(img, "src")).toBe(`/brand/${WIDE}`);
-    const sources = [...html.matchAll(/<source\b[^>]*>/g)].map((m) => m[0]);
-    expect(sources.length).toBe(1);
-    const narrow = prov.files[NARROW];
-    expect(attr(sources[0], "srcset")).toBe(`/brand/${NARROW}`);
-    expect(Number(attr(sources[0], "width"))).toBe(narrow.width);
-    expect(Number(attr(sources[0], "height"))).toBe(narrow.height);
-  });
-
-  it("serves the separate phone frame at 860 px and below, and never lazy-loads the first-screen image", () => {
-    const source = /<source\b[^>]*>/.exec(html)![0];
-    expect(attr(source, "media")).toBe("(max-width: 860px)");
-    expect(attr(source, "type")).toBe("image/webp");
     expect(img).not.toMatch(/loading="lazy"/);
     expect(img).toMatch(/fetchpriority="high"/);
-    const css = read("frontend/src/components/onepager/onepager.css");
-    expect(css).toContain("aspect-ratio: 800 / 1200;");
   });
 
-  it("keeps both files light (WebP at most 60 KB each)", () => {
-    expect(prov.files[WIDE].bytes).toBeLessThanOrEqual(60 * 1024);
-    expect(prov.files[NARROW].bytes).toBeLessThanOrEqual(60 * 1024);
+  it("pins the responsive plate CSS: phone frame, phone callouts on, desktop callouts off at 860 px", () => {
+    const css = read("frontend/src/components/onepager/onepager.css");
+    const blocks: string[] = [];
+    for (const m of css.matchAll(/@media \(max-width: 860px\) \{/g)) {
+      let depth = 0;
+      let i = m.index! + m[0].length - 1;
+      const start = i;
+      for (; i < css.length; i++) {
+        if (css[i] === "{") depth++;
+        if (css[i] === "}" && --depth === 0) break;
+      }
+      blocks.push(css.slice(start, i));
+    }
+    const plateBlock = blocks.find((b) => b.includes(".plan-plate-overlay-narrow")) ?? "";
+    expect(plateBlock).toMatch(/\.plan-plate \{[^}]*aspect-ratio: 800 \/ 1200;/);
+    expect(plateBlock).toMatch(/\.plan-plate-overlay-narrow \{\s*display: block;\s*\}/);
+    expect(plateBlock).toMatch(/\.plan-plate-overlay-wide \{\s*display: none;\s*\}/);
+    // Outside the media query the phone callouts are hidden.
+    expect(css).toMatch(/\n\.plan-plate-overlay-narrow \{\s*display: none;\s*\}/);
+    // The plate box zeroes line-height; the image restores it so the alt text is not clipped.
+    expect(/\.plan-plate-img \{[^}]*\}/.exec(css)![0]).toMatch(/line-height: 1\.4;/);
+  });
+
+  it("keeps both files light (each at most 60 KB)", () => {
+    for (const file of FILES) expect(prov.files[file].bytes, file).toBeLessThanOrEqual(60 * 1024);
   });
 
   it("puts no words on the paper objects: the overlay text is only keys, labels and the note", () => {
@@ -552,23 +709,47 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     const { PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT } =
       await import("../../frontend/src/components/onepager/plate_layout");
     for (const f of [PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT]) {
-      // Two writes (one per source) and one read.
-      expect(f.connectors.filter((c) => c.arrow).length).toBe(3);
+      // Two writes (source to observation) and one read (out of the record card).
+      const arrows = f.connectors.filter((c) => c.arrow);
+      expect(arrows.map((c) => c.touches)).toEqual([
+        ["pdf", "obs1"],
+        ["email", "obs2"],
+        ["snap", null],
+      ]);
       expect(f.keys.filter((k) => k.n === 5).length).toBe(2);
       expect(new Set(f.keys.map((k) => k.n))).toEqual(new Set([1, 2, 3, 4, 5]));
-      // Every key and callout point sits inside its frame, and no two keys overlap.
+      // Every key and arrow tip sits inside its frame with room to spare, and no two keys overlap.
       const r = 11 * (f.width / f.displayWidth);
+      const margin = 10 * (f.width / f.displayWidth); // 10 CSS px
       for (const k of f.keys) {
         expect(k.at[0] - r, `key ${k.n}`).toBeGreaterThanOrEqual(0);
         expect(k.at[0] + r, `key ${k.n}`).toBeLessThanOrEqual(f.width);
         expect(k.at[1] - r, `key ${k.n}`).toBeGreaterThanOrEqual(0);
         expect(k.at[1] + r, `key ${k.n}`).toBeLessThanOrEqual(f.height);
       }
+      for (const c of arrows) {
+        const [x, y] = c.points[c.points.length - 1];
+        expect(Math.min(x, f.width - x, y, f.height - y), "arrow tip room").toBeGreaterThanOrEqual(margin);
+      }
       for (let i = 0; i < f.keys.length; i++) {
         for (let j = i + 1; j < f.keys.length; j++) {
-          const d = Math.hypot(f.keys[i].at[0] - f.keys[j].at[0], f.keys[i].at[1] - f.keys[j].at[1]);
+          const d = Math.hypot(
+            f.keys[i].at[0] - f.keys[j].at[0],
+            f.keys[i].at[1] - f.keys[j].at[1]
+          );
           expect(d, `keys ${f.keys[i].n} and ${f.keys[j].n}`).toBeGreaterThan(2 * r);
         }
+      }
+      // The note type stays readable at the size the frame is drawn at, and fits its box
+      // (monospace advance taken as 0.6 em; at least 4 CSS px to spare). The phone frame puts
+      // one note entry per line, the desktop frame joins them on one line.
+      expect(f.note.size).toBeGreaterThanOrEqual(11);
+      const u = f.width / f.displayWidth;
+      const lines = f.width === 800 ? noteLines() : [noteLines().join(" ")];
+      const inset = f.width === 800 ? 6 : 12;
+      for (const line of lines) {
+        const need = (f.note.cell + inset + line.length * 0.6 * f.note.size + 4) * u;
+        expect(need, `note line fits: ${line}`).toBeLessThanOrEqual(f.note.x1 - f.note.x0);
       }
     }
   });
@@ -582,16 +763,17 @@ describe("sheet 01 plate (FIG. A-1)", () => {
       expect(rule(sel), sel).not.toMatch(/filter|invert|mix-blend|opacity/);
     }
     expect(css).not.toMatch(/\.dark[^{]*\.plan-plate-img/);
+    // The image is a generated illustration; the CSS does not call it a photograph.
+    expect(css).not.toMatch(/photograph/i);
   });
 
-  it("keeps the four legend items word for word and adds item 5 with the MCP-only attribution limit", () => {
+  it("keeps the four legend items word for word and adds item 5 with the MCP-only, self-reported attribution limit", () => {
     const page = files[0];
     expect(page).toContain("<RecordPlate />");
     expect(page).not.toContain("RecordPlan");
     expect(files[2]).not.toContain("RecordPlan");
     expect(page).toContain("FIGURE_LEGEND.map");
-    const legend = /FIGURE_LEGEND[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1];
-    const items = [...legend.matchAll(/^ {2}"(.*)",$/gm)].map((m) => m[1]);
+    const items = legendItems();
     expect(items.length).toBe(5);
     expect(items[0]).toBe(
       "Two sources say different things about one invoice: the PDF says due 22 October, a later email says 29 October."
@@ -600,17 +782,25 @@ describe("sheet 01 plate (FIG. A-1)", () => {
       "The amount still comes from the first observation. Both observations stay on record."
     );
     expect(items[4]).toBe(
-      "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record which client made them."
+      "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports."
     );
-    // Attribution is claimed for MCP writes only; never for every write, the REST API or the CLI.
-    const plateCopy = [items[4], /PLATE_ALT =\s*"([^"]*)"/.exec(files[1])![1]].join(" ");
-    expect(plateCopy).not.toMatch(/(every|all|each) writes?[^.]*(record|attribut)/i);
-    expect(plateCopy).not.toMatch(/(REST|CLI)[^.]*(record|attribut)/i);
-    expect(/PLATE_ALT =\s*"([^"]*)"/.exec(files[1])![1]).not.toMatch(/which client|attribut/i);
-    // The caption under the legend.
+    // Every piece of plate text: attribution only for MCP writes, only as the client's own report.
+    const plateText = [
+      items[4],
+      copyConst("PLATE_ALT"),
+      copyConst("PLATE_CAPTION"),
+      ...noteLines(),
+    ];
+    expect(plateText.every((t) => t.length > 0)).toBe(true);
+    for (const t of plateText) {
+      expect(t, t).not.toMatch(/(every|all|each) writes?[^.]*(record|attribut)/i);
+      expect(t, t).not.toMatch(/(REST|CLI)[^.]*(record|attribut)/i);
+      expect(t, t).not.toMatch(/(verified|authenticated|proven) (client|identity|author)/i);
+      if (/client/i.test(t)) expect(t, t).toContain("the client name the client reports");
+    }
     expect(page).toContain("{PLATE_CAPTION}");
-    expect(files[1]).toContain(
-      '"Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03."'
+    expect(copyConst("PLATE_CAPTION")).toBe(
+      "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03."
     );
   });
 });

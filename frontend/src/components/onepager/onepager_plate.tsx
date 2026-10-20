@@ -14,20 +14,26 @@ import { PLATE_NARROW_LAYOUT, PLATE_WIDE_LAYOUT, type PlateFrame, type Pt } from
  * labels in the empty paper margin: the figure label, the "synthetic example" tag and the note.
  */
 
+/**
+ * Each frame ships as WebP plus a JPEG fallback for browsers without WebP (Safari before 14). The
+ * JPEG is never fetched by a browser that takes the WebP source.
+ */
 export const PLATE_WIDE = {
   width: PLATE_WIDE_LAYOUT.width,
   height: PLATE_WIDE_LAYOUT.height,
-  src: "/brand/plate/neotoma-plate-a1-r2-wide.webp",
+  src: "/brand/plate/neotoma-plate-a1-r2-wide",
 };
 export const PLATE_NARROW = {
   width: PLATE_NARROW_LAYOUT.width,
   height: PLATE_NARROW_LAYOUT.height,
-  src: "/brand/plate/neotoma-plate-a1-r2-narrow.webp",
+  src: "/brand/plate/neotoma-plate-a1-r2-narrow",
 };
 
 /** Fixed colors: the plate keeps its own paper ground in both themes, so it does not follow them. */
 const INK = "#28372f";
 const RUST = "#a84d33";
+/** The revision cloud is a thin outline, so it is drawn darker than the keys for contrast on the paper. */
+const CLOUD = "#7f3420";
 const KEY_FILL = "#fffbf2";
 const PRINT = "#33465a";
 const MONO = "ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace";
@@ -190,8 +196,8 @@ function Overlay({ variant }: { variant: Variant }) {
       <path
         d={cloudPath({ ...f.cloud, r: 5 * u })}
         fill="none"
-        stroke={RUST}
-        strokeWidth={1.4 * u}
+        stroke={CLOUD}
+        strokeWidth={1.6 * u}
       />
       {f.leaders.map((l, i) => {
         const end = l.points[l.points.length - 1];
@@ -242,10 +248,10 @@ function Overlay({ variant }: { variant: Variant }) {
         PLATE_NOTE.map((text, i) => (
           <text
             key={text}
-            x={note.x0 + noteCell + 8 * u}
-            y={note.y + note.h / 2 + (i === 0 ? -4 : 12) * u}
+            x={note.x0 + noteCell + 6 * u}
+            y={note.y + note.h / 2 + (i === 0 ? -0.45 : 1.2) * note.size * u}
             fill={INK}
-            fontSize={fs(10)}
+            fontSize={fs(note.size)}
           >
             {text.toUpperCase()}
           </text>
@@ -255,7 +261,7 @@ function Overlay({ variant }: { variant: Variant }) {
           x={note.x0 + noteCell + 12 * u}
           y={note.y + note.h / 2 + 4.2 * u}
           fill={INK}
-          fontSize={fs(11.5)}
+          fontSize={fs(note.size)}
         >
           {PLATE_NOTE.join(" ").toUpperCase()}
         </text>
@@ -278,14 +284,27 @@ export function RecordPlate() {
       <picture>
         <source
           media="(max-width: 860px)"
-          srcSet={PLATE_NARROW.src}
+          srcSet={`${PLATE_NARROW.src}.webp`}
           type="image/webp"
           width={PLATE_NARROW.width}
           height={PLATE_NARROW.height}
         />
+        <source
+          media="(max-width: 860px)"
+          srcSet={`${PLATE_NARROW.src}.jpg`}
+          type="image/jpeg"
+          width={PLATE_NARROW.width}
+          height={PLATE_NARROW.height}
+        />
+        <source
+          srcSet={`${PLATE_WIDE.src}.webp`}
+          type="image/webp"
+          width={PLATE_WIDE.width}
+          height={PLATE_WIDE.height}
+        />
         <img
           className="plan-plate-img"
-          src={PLATE_WIDE.src}
+          src={`${PLATE_WIDE.src}.jpg`}
           width={PLATE_WIDE.width}
           height={PLATE_WIDE.height}
           alt={PLATE_ALT}

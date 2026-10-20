@@ -14,9 +14,10 @@
  *   3. In the phone frame, the PDF and email objects were replaced with the same objects cut from the
  *      cleared desktop generation (scaled to the phone geometry, ground tone matched, edges feathered),
  *      because the phone generation dropped the email's address block.
- * This script does only the last step: decode each prepared frame and re-encode it as WebP.
+ * This script does only the last step: decode each prepared frame and re-encode it as WebP, plus a
+ * JPEG fallback for browsers without WebP (Safari before 14). Metadata is not written to either.
  * Run: node scripts/derive_neotoma_plate.mjs <wide frame PNG> <narrow frame PNG>
- * It refuses a frame whose sha256 is not the recorded one, writes the two files into
+ * It refuses a frame whose sha256 is not the recorded one, writes the four files into
  * frontend/public/brand/plate/ and prints their sha256 for PROVENANCE.json. Encoder output can
  * differ between sharp builds, so CI checks the committed files against PROVENANCE.json.
  */
@@ -38,16 +39,17 @@ export const FRAMES = {
     sha256: "869faca2f4524c52d9687ebdcded62e68afd2d355265c7a1a447ef932a7b977c",
     width: 1536,
     height: 1024,
-    out: "neotoma-plate-a1-r2-wide.webp",
+    out: "neotoma-plate-a1-r2-wide",
   },
   narrow: {
     sha256: "33c1e5a732c3f96f74b98e2febc9b12ede1e06abaa54aafc2ce1f9cd45837c30",
     width: 800,
     height: 1200,
-    out: "neotoma-plate-a1-r2-narrow.webp",
+    out: "neotoma-plate-a1-r2-narrow",
   },
 };
 export const WEBP_QUALITY = 88;
+export const JPEG_QUALITY = 70;
 
 /** Refuses a frame whose sha256 differs from the recorded hash. */
 export function verifyFrame(name, bytes) {
@@ -67,8 +69,11 @@ export async function derive(frames) {
     if (meta.width !== want.width || meta.height !== want.height) {
       throw new Error(`unexpected ${name} frame size ${meta.width}x${meta.height}`);
     }
-    out[want.out] = await sharp(bytes)
+    out[`${want.out}.webp`] = await sharp(bytes)
       .webp({ quality: WEBP_QUALITY, effort: 6, smartSubsample: true })
+      .toBuffer();
+    out[`${want.out}.jpg`] = await sharp(bytes)
+      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
       .toBuffer();
   }
   return out;

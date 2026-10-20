@@ -16,17 +16,17 @@ export const FIGURE_LEGEND: readonly string[] = [
   "Each source becomes an observation. A rule, last write per field here, computes the current value from them.",
   "The due date now reads 29 October. The revision cloud marks the field that changed, and it points to the later observation.",
   "The amount still comes from the first observation. Both observations stay on record.",
-  "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record which client made them.",
+  "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports.",
 ];
 
 /**
- * Text alternative for the sheet 01 plate (FIG. A-1). The plate's paper objects carry no text, so
- * the alternative names each object by what it stands for and says what each callout marks. It
- * must stay in step with FIGURE_LEGEND and with plate_layout.ts. Attribution is claimed only for
- * MCP writes (legend item 5); the alternative makes no attribution claim at all.
+ * Text alternative for the sheet 01 plate (FIG. A-1). The image is a generated illustration, not a
+ * photograph. The alternative says what the picture shows and that the numbered callouts are
+ * explained in the legend; it does not repeat the legend, which is HTML right below it and is read
+ * in full by screen readers. It makes no attribution claim.
  */
 export const PLATE_ALT =
-  "Plate A-1, a synthetic example: an overhead photograph of cut-paper objects on beige paper, marked with five numbered drafting callouts keyed to the legend below. The objects carry no text. At left, a stiff page laid out like an invoice, with one corner folded back, stands for the PDF, and a lighter card with a short, shallow crease stands for the later email; callout 1 spans both sources. Arrows marked 5 show agents writing each source in as a small tabbed slip, an observation, and both slips stay filed on one strip (callout 4). A card with one slot punched in each row stands for the rule, last write per field (callout 2), and feeds the large rounded record card, the current snapshot. Callout 3 is a revision cloud on its changed line with a leader back to the later slip; a second arrow marked 5 shows an agent reading the current snapshot out.";
+  "Plate A-1, a synthetic example: a generated illustration of cut-paper objects on beige paper (an invoice page, an email card, two filed slips, a punch card and a large record card) with drafting callouts numbered 1 to 5, explained in the legend below.";
 
 /** Title-block note of the plate, one entry per line in the phone frame. */
 export const PLATE_NOTE: readonly string[] = [

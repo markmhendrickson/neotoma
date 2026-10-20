@@ -13,7 +13,7 @@
   },
   "note": "n2-nav-light.svg is the same file (same sha256) recorded as the accepted Neotoma lockup in the Constara preview asset provenance.",
   "plate": {
-    "identity": "Sheet 01 plate (FIG. A-1), round 2: generated paper-object plate derived from the accepted earlier-site hero photograph, shown under inline SVG drafting callouts (keys 1 to 5)",
+    "identity": "Sheet 01 plate (FIG. A-1), round 2: a generated illustration of paper objects (not a photograph), derived from the accepted earlier-site hero photograph, shown under inline SVG drafting callouts (keys 1 to 5)",
     "derived_from_hero": true,
     "hero": {
       "repository": "github.com/markmhendrickson/sites",
@@ -88,9 +88,15 @@
       },
       "held": "the raw outputs, inputs and prepared frames are kept with the operator's exploration record, not in this repository"
     },
+    "layout": {
+      "file": "frontend/src/components/onepager/plate_layout.ts",
+      "method": "sha256 of JSON.stringify({ width, height, objects }) for each frame; the images were generated and registered against exactly these boxes, so a changed box needs new images",
+      "wide_sha256": "177494b11cf54878f35660826debfcaa60dc4bde7489a34632763d0d75d5584d",
+      "narrow_sha256": "83e804506a5f6167448b9e0ab62be0687b7c8d8299ed7e2e000c2951695cddf3"
+    },
     "derivation": {
       "script": "scripts/derive_neotoma_plate.mjs",
-      "method": "decode each prepared frame and re-encode as WebP q88; the script refuses a frame whose sha256 is not the recorded one. The callouts are inline SVG in the page (onepager_plate.tsx), not in these files."
+      "method": "decode each prepared frame and re-encode as WebP q88 and, as the fallback for browsers without WebP (Safari before 14), progressive JPEG q70; no metadata is written to either. The script refuses a frame whose sha256 is not the recorded one. The callouts are inline SVG in the page (onepager_plate.tsx), not in these files."
     },
     "files": {
       "plate/neotoma-plate-a1-r2-wide.webp": {
@@ -100,14 +106,28 @@
         "height": 1024,
         "use": "desktop plate (above 860 px)"
       },
+      "plate/neotoma-plate-a1-r2-wide.jpg": {
+        "sha256": "57d7041d4a90c780f8f6626fbb159d6c194a7868c7948bd492a36b46f2a0a663",
+        "bytes": 32484,
+        "width": 1536,
+        "height": 1024,
+        "use": "desktop plate, fallback for browsers without WebP"
+      },
       "plate/neotoma-plate-a1-r2-narrow.webp": {
         "sha256": "7ecfaa9a6da664961be3106d102766c50dbb5729bf7c963f1541fc94c70637da",
         "bytes": 27858,
         "width": 800,
         "height": 1200,
         "use": "phone plate (860 px and below)"
+      },
+      "plate/neotoma-plate-a1-r2-narrow.jpg": {
+        "sha256": "8cee9eb96c0a45d4125cd6e23cbc9f77b63f446d95f303d698c8fb0f331ce22c",
+        "bytes": 26937,
+        "width": 800,
+        "height": 1200,
+        "use": "phone plate, fallback for browsers without WebP"
       }
     },
-    "superseded": "round 1 plate files (neotoma-plate-a1-{wide,narrow}.{webp,jpg}, re-encodes of the hero itself) removed from the repository"
+    "superseded": "round 1 plate files (neotoma-plate-a1-{wide,narrow}.{webp,jpg}, re-encodes of the hero photograph itself) were superseded before merge and never shipped"
   }
 }
