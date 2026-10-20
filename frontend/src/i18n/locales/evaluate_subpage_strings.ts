@@ -80,7 +80,7 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   activationSequenceLiteral:
     "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   introP1:
-    "A record, not recall. Neotoma is the system of record for AI agents. Without one, an agent recalls only what it was last told. With one, it reads what was stored, from which source, and what is current now, so the agents you connect can defer to one answer. It is open source (MIT), local-first, and runs as an npm package with an MCP server, REST API and CLI.",
+    "A record, not recall. Neotoma is the system of record for AI agents. Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing. With one, it reads what was stored, from which source, and what is current now, so the agents you connect can defer to one answer. It is open source (MIT), local-first, and runs as an npm package with an MCP server, REST API and CLI.",
   introP2BeforeLink:
     "This page contains the facts an agent needs to judge whether Neotoma fits a given workflow. Read it end to end, then use the assessment prompt below. To skip the evaluation and install directly, go to the ",
   introInstallLink: "install page",
@@ -215,7 +215,7 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   onboardingSequenceLiteral: EVALUATE_SUBPAGE_EN.onboardingSequenceLiteral,
   activationSequenceLiteral: EVALUATE_SUBPAGE_EN.activationSequenceLiteral,
   introP1:
-    "Un registro, no recuerdo. Neotoma es el sistema de registro para agentes de IA. Sin uno, un agente solo recuerda lo último que se le dijo. Con uno, lee lo que se almacenó, de qué fuente y qué es actual ahora, de modo que los agentes que conectas puedan atenerse a una sola respuesta. Es de código abierto (MIT), local primero y funciona como paquete npm con servidor MCP, API REST y CLI.",
+    "Un registro, no recuerdo. Neotoma es el sistema de registro para agentes de IA. Sin uno, un agente trabaja con lo que le toque recordar: parte de la última sesión, una nota que guardó su herramienta, o nada. Con uno, lee lo que se almacenó, de qué fuente y qué es actual ahora, de modo que los agentes que conectas puedan atenerse a una sola respuesta. Es de código abierto (MIT), local primero y funciona como paquete npm con servidor MCP, API REST y CLI.",
   introP2BeforeLink:
     "Esta página contiene los hechos que un agente necesita para juzgar si Neotoma encaja en un flujo concreto. Léela completa y luego usa el prompt de evaluación de abajo. Para saltarte la evaluación e instalar directamente, ve a la ",
   introInstallLink: "página de instalación",

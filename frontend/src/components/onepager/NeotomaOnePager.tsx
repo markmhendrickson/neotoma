@@ -51,9 +51,10 @@ export function NeotomaOnePager() {
           <p className="plan-label">Neotoma · the system of record for AI agents</p>
           <h1 id="s1">A record, not recall.</h1>
           <p className="plan-lede">
-            Neotoma is the system of record for AI agents. Without one, an agent recalls only what it
-            was last told. With one, it reads what was stored, from which source, and what is
-            current now, so the agents you connect can defer to one answer.
+            Neotoma is the system of record for AI agents. Without one, an agent works from whatever
+            it happens to recall: part of the last session, a note its tool saved, or nothing. With
+            one, it reads what was stored, from which source, and what is current now, so the
+            agents you connect can defer to one answer.
           </p>
           <p className="plan-meta">
             Open source (MIT) · local-first · MCP server, REST API and CLI

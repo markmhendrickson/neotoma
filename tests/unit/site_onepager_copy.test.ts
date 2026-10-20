@@ -346,7 +346,10 @@ describe("/install polish", () => {
 
     it("lede reads as before and after, and does not claim who corrected it", () => {
       const lede = /plan-lede">([\s\S]*?)<\/p>/.exec(page2)![1].replace(/\s+/g, " ");
-      expect(lede).toContain("Without one, an agent recalls only what it was last told.");
+      expect(lede).toContain(
+        "Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing."
+      );
+      expect(lede).not.toMatch(/last told|recalls only/i);
       expect(lede).toContain("With one, it reads what was stored, from which source, and what is current now");
       expect(lede).not.toMatch(/corrected/i);
       expect(lede).not.toMatch(/for example/i);
