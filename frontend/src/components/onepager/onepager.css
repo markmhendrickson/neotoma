@@ -563,6 +563,15 @@
     display: block;
     width: 100%;
   }
+  .plan-table {
+    border: 0;
+    border-top: 1.5px solid var(--ink);
+  }
+  .plan-table caption {
+    display: block;
+    width: auto;
+    padding: 0 0 10px;
+  }
   .plan-table tr {
     border-bottom: 1.5px solid var(--ink);
     padding: 8px 0;

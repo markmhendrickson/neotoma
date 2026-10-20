@@ -20,6 +20,8 @@ interface Violation {
 const FILES_RELATIVE = [
   join("frontend", "src", "components", "SitePage.tsx"),
   join("frontend", "src", "components", "SeoHead.tsx"),
+  join("frontend", "src", "components", "onepager", "NeotomaOnePager.tsx"),
+  join("frontend", "src", "components", "onepager", "onepager_copy.ts"),
   join("frontend", "src", "site", "seo_metadata.ts"),
 ] as const;
 

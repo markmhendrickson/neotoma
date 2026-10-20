@@ -149,7 +149,7 @@ export function RecordPlanWide() {
       <text x="916" y="312" textAnchor="end" className="pl-t pl-b">2</text>
 
       {/* Callouts */}
-      <Key n={1} x={64} y={44} />
+      <Key n={1} x={30} y={60} />
       <Key n={2} x={566} y={160} />
       <Key n={3} x={942} y={216} />
       <Key n={4} x={942} y={252} />
@@ -160,7 +160,7 @@ export function RecordPlanWide() {
 /** Figure A-1, narrow plan: the same drawing stacked for phone widths. */
 export function RecordPlanNarrow() {
   const id = "rpn";
-  const cloud = cloudPath({ x: 18, y: 513, w: 304, h: 32, r: 6 });
+  const cloud = cloudPath({ x: 18, y: 513, w: 278, h: 32, r: 6 });
   return (
     <svg
       viewBox="0 0 340 650"
@@ -215,19 +215,19 @@ export function RecordPlanNarrow() {
       <rect x="10" y="456" width="320" height="28" className="pl-band" />
       <text x="22" y="475" className="pl-t pl-b">CURRENT SNAPSHOT</text>
       <text x="22" y="508" className="pl-t">invoice_number</text>
-      <text x="318" y="508" textAnchor="end" className="pl-t pl-b">INV-2041</text>
+      <text x="288" y="508" textAnchor="end" className="pl-t pl-b">INV-2041</text>
       <path d={cloud} className="pl-cloud" />
       <text x="22" y="534" className="pl-t">date_due</text>
-      <text x="318" y="534" textAnchor="end" className="pl-t pl-b">29 Oct</text>
+      <text x="288" y="534" textAnchor="end" className="pl-t pl-b">29 Oct</text>
       <text x="22" y="566" className="pl-t">amount_due</text>
-      <text x="318" y="566" textAnchor="end" className="pl-t pl-b">3,200</text>
+      <text x="288" y="566" textAnchor="end" className="pl-t pl-b">3,200</text>
       <path d="M22,584 H318" className="pl-hair" />
       <text x="22" y="608" className="pl-t pl-m">observations kept</text>
-      <text x="318" y="608" textAnchor="end" className="pl-t pl-b">2</text>
+      <text x="288" y="608" textAnchor="end" className="pl-t pl-b">2</text>
       <Key n={2} x={150} y={332} />
-      <Key n={3} x={322} y={504} />
-      <Key n={4} x={322} y={562} />
-      <Key n={1} x={46} y={140} />
+      <Key n={3} x={316} y={530} />
+      <Key n={4} x={316} y={562} />
+      <Key n={1} x={10} y={40} />
     </svg>
   );
 }
@@ -237,7 +237,7 @@ export function ServicePlan() {
   const id = "svc";
   return (
     <svg
-      viewBox="0 0 420 300"
+      viewBox="0 0 420 330"
       role="img"
       aria-labelledby="svc-t svc-d"
       className="plan-svg plan-svg-service"
@@ -250,27 +250,27 @@ export function ServicePlan() {
       </desc>
       <Defs id={id} />
       <text x="10" y="20" className="pl-label">FIG. B · LOCAL SERVICE, PLAN</text>
-      <rect x="120" y="52" width="180" height="196" className="pl-wall" />
+      <rect x="100" y="52" width="220" height="196" className="pl-wall" />
       {/* door gaps */}
       <path d="M180,52 H240" className="pl-gap" />
-      <path d="M300,110 V190" className="pl-gap" />
+      <path d="M320,110 V190" className="pl-gap" />
       <path d="M180,248 H240" className="pl-gap" />
-      <path d="M120,110 V190" className="pl-gap" />
+      <path d="M100,110 V190" className="pl-gap" />
       {/* door leaves and swings */}
       <path d="M180,52 V94 A42,42 0 0 0 222,52" className="pl-swing" />
-      <path d="M300,110 H258 A42,42 0 0 0 300,152" className="pl-swing" />
+      <path d="M320,110 H278 A42,42 0 0 0 320,152" className="pl-swing" />
       <path d="M180,248 V206 A42,42 0 0 1 222,248" className="pl-swing" />
-      <path d="M120,110 H162 A42,42 0 0 1 120,152" className="pl-swing" />
+      <path d="M100,110 H142 A42,42 0 0 1 100,152" className="pl-swing" />
       <text x="210" y="40" textAnchor="middle" className="pl-t pl-b">MCP</text>
-      <text x="316" y="134" className="pl-t pl-b">REST API</text>
+      <text x="336" y="134" className="pl-t pl-b">REST API</text>
       <text x="210" y="270" textAnchor="middle" className="pl-t pl-b">CLI</text>
-      <text x="108" y="134" textAnchor="end" className="pl-t pl-b">Inspector</text>
+      <text x="88" y="134" textAnchor="end" className="pl-t pl-b">Inspector</text>
       <text x="210" y="142" textAnchor="middle" className="pl-serif pl-serif-sm">the record</text>
       <text x="210" y="164" textAnchor="middle" className="pl-t pl-m">observations</text>
       <text x="210" y="180" textAnchor="middle" className="pl-t pl-m">snapshots</text>
       <text x="210" y="196" textAnchor="middle" className="pl-t pl-m">provenance</text>
-      <path d="M130,236 H290" className="pl-dim" markerStart={`url(#${id}-dim)`} markerEnd={`url(#${id}-dim)`} />
-      <text x="210" y="228" textAnchor="middle" className="pl-t pl-m">your machine or your server</text>
+      <path d="M100,304 H320" className="pl-dim" markerStart={`url(#${id}-dim)`} markerEnd={`url(#${id}-dim)`} />
+      <text x="210" y="322" textAnchor="middle" className="pl-t pl-m">your machine or your server</text>
     </svg>
   );
 }
