@@ -118,6 +118,16 @@ On main, the MCP WebSocket bridge (`src/mcp_ws_bridge.ts`) binds to loopback by 
 - **Files.** Source files are stored at `sources/<user_id>/<content_hash>` in the configured file storage.
 - **Embeddings.** Semantic search over entities is optional. When `OPENAI_API_KEY` is set, Neotoma requests embeddings from OpenAI (`text-embedding-3-small`) and stores them in SQLite through `sqlite-vec`. Without the key, search uses structured filters only.
 
+## Network use
+
+Neotoma makes these outbound requests:
+
+- **Update checks.** The CLI checks the npm registry for a newer release about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after that (off with `NO_UPDATE_NOTIFIER=1`). The request carries only the package name, and the registry sees ordinary connection metadata.
+- **OpenAI**, only when `OPENAI_API_KEY` is set: embeddings for semantic search, and model calls for schema recommendations and schema icons.
+- **Webhooks** to the URLs that subscribers register (see [Outbound signals](#outbound-signals)).
+- **Peer sync** to the peers an operator configures.
+- **GitHub**, when issue sync is configured (`neotoma issues sync` with the server's `NEOTOMA_ISSUES_GITHUB_TOKEN`).
+
 ## Code layout
 
 | Path | Role |
@@ -146,7 +156,17 @@ Each user's data is isolated in the application layer. User-scoped queries filte
 
 ### Encryption at rest
 
-When `NEOTOMA_ENCRYPTION_ENABLED=true` with a key file (`NEOTOMA_KEY_FILE_PATH`) or a mnemonic (`NEOTOMA_MNEMONIC`), the SQLite adapter encrypts sensitive columns with AES-256-GCM on write and decrypts them on read. Covered columns include observation fields, entity and relationship snapshots and their provenance, and raw fragment values. The `substrate_events` payload is encrypted with the same key. IDs, timestamps, and hashes stay in plaintext so lookups work. Embedding tables and auth tables are not column-encrypted; use an encrypted volume where that matters. `neotoma db migrate-encryption` encrypts rows written before encryption was enabled.
+When `NEOTOMA_ENCRYPTION_ENABLED=true` with a key file (`NEOTOMA_KEY_FILE_PATH`) or a mnemonic (`NEOTOMA_MNEMONIC`), the SQLite adapter encrypts these columns with AES-256-GCM on write and decrypts them on read: observation fields, entity and relationship snapshots and their provenance, raw fragment values, schema recommendations, and the auto-enhancement queue payload. The `substrate_events` payload is encrypted with the same key. `neotoma db migrate-encryption` encrypts rows written before encryption was enabled.
+
+Everything else stays in plaintext, and Neotoma has no file-level encryption:
+
+- Source files on disk at `sources/<user_id>/<content_hash>`
+- The markdown mirror, when enabled
+- Metadata columns: entity ids, types, canonical names, and aliases; source filenames, MIME types, and provenance; timeline events; observation provenance; relationship observation metadata; interpretation configuration; and IDs, timestamps, and hashes everywhere
+- Embedding tables and auth tables
+- Log files. A `NEOTOMA_LOG_ENCRYPTION_ENABLED` setting and `neotoma logs tail --decrypt` exist, but no code path writes encrypted log lines, in v0.25.0 or on main.
+
+Where any of that matters, put the data directory on an encrypted volume (for example LUKS, FileVault, or a cloud provider's volume encryption).
 
 ### In transit and in logs
 

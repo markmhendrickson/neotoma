@@ -131,8 +131,9 @@ CommonMark plus these GitHub Flavored Markdown features: tables, fenced code blo
 
 ## Code fences
 
-- Every fence names a language: `bash`, `json`, `http`, `yaml`, `ts`, `toml`, `markdown`, or `text` for prompts, URLs, diagrams, and sample output.
+- Every fence names a language, for example `bash`, `json`, `jsonc`, `http`, `yaml`, `ini`, `ts`, `toml`, `markdown`, or `text` for prompts, URLs, diagrams, and sample output.
 - Shell fences contain commands only. Put sample output in a separate `text` fence.
+- Verbatim CLI output in a `text` fence keeps the characters the CLI prints, including em dashes and symbols such as a warning sign. The dash and status-emoji rules on this page apply everywhere else.
 
 ## Tables
 
@@ -151,6 +152,10 @@ CommonMark plus these GitHub Flavored Markdown features: tables, fenced code blo
 - Do not claim that corrections always win, that the database enforces append-only storage, that any historical state of the whole record can be replayed or queried, that export includes history, that hosted Neotoma is for sale, that Neotoma is a unified platform, or that it settles authority between several operators.
 - Do not claim more tool support than `neotoma setup --tool` provides. Its documented values are claude-code, cursor, codex, openclaw, and claude-desktop; Windsurf, Continue, VS Code, and IronClaw are configured by hand.
 - The claim scan covers fenced text and diagrams as well as prose. Identifiers that contain a retired word are allowed: `kind: memory`, `MEMORY.md`, `memory-export`, and `remember-*` skill names. Third-party products' own memory features may be described by name.
+
+## Mechanical check
+
+`tests/unit/docs_hygiene.test.ts` enforces the syntax and link rules on this page, and the retired-noun rule, for the docs listed in that test. The rules themselves live in `scripts/docs_hygiene.ts` so other checks can reuse them. When you bring another doc up to these standards, add it to the test's list.
 
 ## Flows and sequences
 
@@ -240,7 +245,7 @@ Load this document when creating or editing documentation.
 
 ### Forbidden Patterns
 
-- Em dashes or en dashes
+- Em dashes or en dashes, except inside verbatim CLI output in a `text` fence
 - Conversational transitions
 - Soft questions
 - Motivational language
