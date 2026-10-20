@@ -61,7 +61,7 @@ Describe these properties only as far as the code supports them:
 - **Determinism:** the reducer produces the same snapshot from the same observations and merge policies. Entity ids are hashes of identity fields. Observation ids differ between runs.
 - **Corrections:** a correction adds an observation, and the earlier value stays listed. A later write can replace a corrected value.
 - **History:** an as-of read exists for one entity at a time (`retrieve_entity_snapshot` with `at` or `at_ingested`); there is no as-of query across the whole record, and export carries current values only.
-- **Network use:** the interactive CLI checks the npm registry for a newer release at most once a day, and the stdio MCP server about every six hours; the request names only the package. `NO_UPDATE_NOTIFIER=1` turns both off, and the CLI also accepts `--no-update-check`. Never write "no telemetry" or "no network egress" without that caveat.
+- **Network use:** the CLI checks the npm registry for a newer release about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after that (off with `NO_UPDATE_NOTIFIER=1`). The request carries only the package name, and the registry sees ordinary connection metadata. Never write "no telemetry" or "no network egress" without that caveat.
 
 ## Required document structure
 
