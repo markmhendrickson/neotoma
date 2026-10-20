@@ -282,7 +282,7 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
     { code: "npm install -g neotoma" },
     " adds a CLI binary. ",
     { code: "neotoma init" },
-    " creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in the background unless you start it. No telemetry. The CLI checks the npm registry for a newer version at most once a day, in interactive terminals only; turn that off with --no-update-check or NO_UPDATE_NOTIFIER=1.",
+    " creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in the background unless you start it. No telemetry. The interactive CLI checks the npm registry for a newer version at most once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1), and the MCP server over stdio checks about every 6 hours (off with NO_UPDATE_NOTIFIER=1). Only the package name is sent.",
   ],
   whatChangesFootnoteSegments: [
     { code: "neotoma reset" },

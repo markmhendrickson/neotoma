@@ -133,7 +133,7 @@ Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initia
 
 ## Does Neotoma send my data to the cloud? {#does-neotoma-send-my-data-to-the-cloud}
 
-No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data. You can optionally expose the API via a tunnel for remote MCP clients.
+No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync and no training on your data. No telemetry. The interactive CLI checks the npm registry for a newer version at most once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1), and the MCP server over stdio checks about every 6 hours (off with NO_UPDATE_NOTIFIER=1). Only the package name is sent. You can optionally expose the API via a tunnel for remote MCP clients.
 
 [Privacy-first architecture](/foundations)
 

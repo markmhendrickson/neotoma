@@ -6,7 +6,9 @@
  * plain and concrete, no hype, no em dashes. Do not add a claim without adding its evidence.
  * Not claimed anywhere: hosted Neotoma for sale, export with history, a unified platform,
  * multi-operator authority, "corrections always win", database-enforced append-only,
- * one-call point-in-time state.
+ * an as-of read across the whole record. A per-entity as-of read does exist
+ * (retrieve_entity_snapshot with `at` and `at_ingested`); the page does not claim it, and must not
+ * deny it.
  */
 
 export const FIGURE_LEGEND: readonly string[] = [

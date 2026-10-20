@@ -40,7 +40,8 @@ describe("neotoma.io one-pager copy", () => {
       [/multi-operator/i, "multi-operator authority"],
       [/corrections? always win/i, "corrections always win"],
       [/append-only/i, "database-enforced append-only"],
-      [/point-in-time/i, "one-call point-in-time state"],
+      [/(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i, "as-of read across the whole record"],
+      [/no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i, "denies the per-entity as-of read"],
       [/follows? a changed objective/i, "Ateles follows a changed objective"],
     ];
     for (const [re, label] of forbidden) {
@@ -367,6 +368,35 @@ describe("/install polish", () => {
       const block = /INSTALL_COMMANDS = `([^`]*)`/.exec(copy2)![1];
       expect(block).not.toContain("neotoma mcp config");
       expect(page2).toContain("neotoma mcp config");
+    });
+
+    it("never says no telemetry without the npm update-check qualification", () => {
+      const sources = [
+        "frontend/src/components/onepager/NeotomaOnePager.tsx",
+        "frontend/src/components/onepager/onepager_copy.ts",
+        "frontend/src/components/install/install_page_body.tsx",
+        "frontend/src/i18n/locales/install_page_strings.ts",
+        "frontend/src/i18n/locales/static_packs.ts",
+        "frontend/src/i18n/locales/home_body_en.ts",
+        "frontend/src/site/seo_metadata.ts",
+        "frontend/src/site/faq_items_en.ts",
+        "frontend/src/site/site_data.ts",
+        "inspector/src/lib/faq_preview.ts",
+      ];
+      let seen = 0;
+      for (const rel of sources) {
+        const text = readSrc(rel);
+        // The localized install packs (subpage_packs.ts) are deliberately absent: those routes are redirect stubs.
+        for (const m of text.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
+          seen++;
+          const after = text.slice(m.index!, m.index! + 600);
+          expect(/npm registry|npm update checks/i.test(after), `${rel}: ${m[0]}`).toBe(true);
+          expect(/NO_UPDATE_NOTIFIER=1/.test(after), `${rel}: ${m[0]}`).toBe(true);
+        }
+      }
+      expect(seen).toBeGreaterThanOrEqual(4);
+      const en = readSrc("frontend/src/i18n/locales/install_page_strings.ts");
+      expect(en).toContain("the MCP server over stdio checks about every 6 hours (off with NO_UPDATE_NOTIFIER=1). Only the package name is sent.");
     });
 
     it("says OpenCode uses a plugin or MCP", () => {

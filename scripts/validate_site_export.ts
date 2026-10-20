@@ -422,7 +422,8 @@ const RETIRED_META_PHRASES = [
 const OMITTED_CLAIMS: [RegExp, string][] = [
   [/corrections? (always|will always) wins?/i, "corrections always win"],
   [/append-only/i, "database-enforced append-only"],
-  [/point[- ]in[- ]time/i, "one-call point-in-time state"],
+  [/(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i, "as-of read across the whole record"],
+  [/no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i, "denies the per-entity as-of read"],
   [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
   [/hosted neotoma (is )?(available|for sale)/i, "hosted Neotoma for sale"],
   [/unified platform/i, "unified platform"],
@@ -458,9 +459,37 @@ for (const route of LIVE_ROUTES) {
     .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&[a-z#0-9]+;/gi, " ");
+  // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
+  const wholeText = text + " " + jsonLd;
+  for (const m of wholeText.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
+    const after = wholeText.slice(m.index, m.index + 600);
+    if (!/npm registry/i.test(after) || !/NO_UPDATE_NOTIFIER=1/.test(after)) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${m[0]}" without the npm update-check qualification`);
+      liveClaimFailures++;
+    }
+  }
   for (const [re, label] of OMITTED_CLAIMS) {
     if (re.test(text)) {
       fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
+      liveClaimFailures++;
+    }
+  }
+}
+// Held pages keep their old shell but must not offer navigation entries that only land on redirect stubs.
+const STUB_NAV_LABELS = ["Memory guarantees", "Memory models", "Hosted Neotoma"];
+for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox", "/meet", "/skills"]) {
+  const heldPath = path.join(siteDir, heldRoute.slice(1), "index.html");
+  if (!fs.existsSync(heldPath)) continue;
+  const heldText = fs
+    .readFileSync(heldPath, "utf-8")
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ");
+  for (const label of STUB_NAV_LABELS) {
+    // The old footer still carries one "Memory guarantees" link (a separate component, out of scope
+    // for this change); the sidebar navigation entry must be gone, so more than one is a failure.
+    const allowed = label === "Memory guarantees" ? 1 : 0;
+    if (heldText.split(label).length - 1 > allowed) {
+      fail(`site_pages${heldRoute}/index.html still offers the navigation entry "${label}", which only lands on a redirect stub`);
       liveClaimFailures++;
     }
   }

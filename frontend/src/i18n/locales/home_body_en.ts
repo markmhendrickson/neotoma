@@ -75,7 +75,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     },
     {
       q: "Does Neotoma send my data to the cloud?",
-      a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API (for example for remote MCP clients).",
+      a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync and no training on your data unless you choose to expose the API (for example for remote MCP clients). No telemetry. The interactive CLI checks the npm registry for a newer version at most once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1), and the MCP server over stdio checks about every 6 hours (off with NO_UPDATE_NOTIFIER=1). Only the package name is sent.",
     },
     {
       q: "What's the difference between RAG memory and deterministic memory?",

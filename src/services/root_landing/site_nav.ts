@@ -45,15 +45,12 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
     title: "Architecture",
     items: [
       { label: "Foundations", href: "/foundations", icon: "Shield" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
       { label: "Architecture", href: "/architecture", icon: "Layers" },
-      { label: "Memory models", href: "/memory-models", icon: "Boxes" },
     ],
   },
   {
     title: "Hosted",
     items: [
-      { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
       { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
     ],
   },
@@ -143,8 +140,6 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
       { label: "Subscriptions", href: "/subscriptions", icon: "Radio" },
       { label: "Issue reporting", href: "/issue-reporting", icon: "Bug" },
       { label: "Security hardening", href: "/security-hardening", icon: "Lock" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
-      { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
       { label: "Problem statement", href: "/foundation/problem-statement", icon: "FileText" },
       { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
