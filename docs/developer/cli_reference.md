@@ -501,7 +501,7 @@ The command runs four steps in sequence: (1) version check, which warns when the
 
 **Allowlist-capable harnesses** (`claude-code`, `cursor`, `codex`): without `--apply`, prints a copy-paste block; with `--apply`, writes the allowlist file(s) directly. `claude-code` writes both project (`.claude/settings.local.json`) and user (`~/.claude/settings.json`) scopes by default. `neotoma setup` calls the same write path, so running preflight before setup is only necessary when you need the allowlist entry in place before `npm install -g neotoma` runs.
 
-**Harnesses without an allowlist file** (`claude-desktop`, `openclaw`, `windsurf`, `continue`, `vscode`): passing `--apply` is accepted but writes nothing, and preflight prints a message that names `neotoma setup --tool <tool>`. For `claude-desktop` and `openclaw` that is the next step. For `windsurf`, `continue`, and `vscode`, setup does not write their MCP config (see [Harness setup](#harness-setup)); add the entry by hand.
+**Harnesses without an allowlist file** (`claude-desktop`, `openclaw`, `windsurf`, `continue`, `vscode`): passing `--apply` is accepted but writes nothing, and preflight prints a message that names `neotoma setup --tool <tool>`. Setup only writes into a Claude Desktop, Windsurf, or Continue config that already exists, and only with `--install-scope user` (or `both`); in the default project scope it writes `.cursor/mcp.json` (see [Harness setup](#harness-setup)). For OpenClaw, the plugin (`openclaw plugins install clawhub:neotoma`) is the primary path. Otherwise add the entry by hand, or run `neotoma mcp config --user-level` once the host's config file exists.
 
 The structured report includes `tool`, `apply`, `dry_run`, `patches[]`, `already_ok`, `copy_paste_block`, and `overall_ok`.
 
@@ -972,31 +972,34 @@ For non-array fields, `neotoma corrections create <entityId> --field-name <field
   - The `doctor` name is a deprecated alias retained for backward compatibility; prefer `neotoma status`. The `--json` payload shape is unchanged.
   - The global `--json` flag emits a structured report instead of the human summary, for agent-led installs and CI or operator scripts. `status` takes no options of its own; the `current_tool_hint` it reports is what `neotoma setup` uses when `--tool` is omitted.
 
-  **`--json` shape (v0.12+):**
+  **`--json` shape (v0.25.0 and main):**
 
   ```jsonc
   {
-    "version": "0.12.0",                  // installed neotoma version
-    "cwd": "/Users/.../repos/neotoma",
-    "global_cli": {
+    "neotoma": {
+      "installed": true,
+      "version": "0.25.0",
       "node_on_path": true,
-      "resolved_via": "global-bin" | "fallback" | "missing",
+      "neotoma_on_path": true,
+      "resolved_via": "mise" | "nvm" | "fnm" | "npm" | "path" | "unknown",
       "which_neotoma": "/usr/local/bin/neotoma" | null,
       "global_bin": "/usr/local/bin",
       "global_package_dir": "/usr/local/lib/node_modules/neotoma",
       "npm_global_root": "/usr/local/lib/node_modules",
-      "path_fix_hint": null | "Add /usr/local/bin to your PATH"
+      "path_fix_hint": null | "<how to put neotoma on PATH>"
     },
     "data": {
-      "config_dir": "/Users/.../.neotoma",
-      "data_dir": "/Users/.../Library/Application Support/neotoma/data",
+      "config_dir": "<path>",
+      "data_dir": "<path>",
+      "data_dir_source": "<where data_dir came from>",
+      "global_default_data_dir": "<path>",
       "db_exists": true,
       "initialized": true,
+      "env_split_warning": null,
       "risks": [
-        // 0..N entries; see "data.risks codes" below
+        // 0..N entries; see the data.risks entry shape below
       ],
-      "suggested_safe_data_dir":
-        "/Users/.../Library/Application Support/neotoma/data" | null
+      "suggested_safe_data_dir": "<path>" | null
     },
     "api": {
       "running": true,
@@ -1006,22 +1009,26 @@ For non-array fields, `neotoma corrections create <entityId> --field-name <field
       "base_url": "http://127.0.0.1:3080"
     },
     "mcp_servers_detected": {
-      "cursor": { "path": "~/.cursor/mcp.json", "has_neotoma": true, "has_neotoma_dev": false }
-      // …one entry per harness probed (cursor, claude_code, codex, claude_desktop, openclaw)
+      "<harness>": { "path": "<config path>" | null, "has_neotoma": true, "has_neotoma_dev": false }
     },
     "cli_instructions": {
       "project": { "cursor": true, "claude": false, "codex": false },
       "user":    { "cursor": true, "claude": false, "codex": false }
     },
-    "permission_files": { /* per-harness file existence + allow-list match */ },
+    "permission_files": {
+      // claude_code_project, claude_code_user, codex_user, cursor_project:
+      // { "path", "exists", "has_neotoma_allow", "has_npm_install_allow" }
+    },
     "current_tool_hint": "cursor" | null,
-    "hooks": { /* HooksReport: installed hooks by harness */ },
-    "mirror": { /* MirrorReport: mirror clone state */ },
+    "hooks": { "eligible_for_offer": false, "supported_by_tool": true, "installed": { /* per harness */ } },
+    "mirror": { "eligible_for_offer": true, "enabled": false, "path": "<path>", "inside_git_repo": false, "git_repo_root": null, "gitignored": false },
     "suggested_next_step":
       "install" | "init" | "configure-mcp" | "configure-cli-instructions" |
       "configure-permissions" | "activate" | "offer-hooks" | "offer-mirror" | "ready"
   }
   ```
+
+  With the global `--json` flag the CLI also adds a `_neotoma` object describing the transport it used.
 
   **`data.risks[]` entry shape:**
 
