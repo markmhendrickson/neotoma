@@ -308,3 +308,27 @@ describe("drafting filter has one description", () => {
     );
   });
 });
+
+describe("/install polish", () => {
+  const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
+  const css = read("frontend/src/components/onepager/onepager.css");
+  const install = read("frontend/src/components/install/install_page_body.tsx");
+
+  it("keeps the install command block on single lines (no wrap inside claude-code)", () => {
+    expect(install).toMatch(/plan-install-commands">\s*<CodeBlock\s+code=\{INSTALL_COMMANDS\}/);
+    expect(css).toMatch(/\.plan-install-commands pre \{[^}]*white-space: pre !important;/);
+  });
+
+  it("gives the label chip a visible dot and the code blocks the drawing palette in both themes", () => {
+    expect(css).toMatch(
+      /span\.rounded-full\[class\*="emerald"\] \{\s*background-color: var\(--rust\) !important;/
+    );
+    expect(css).toMatch(
+      /\.plan-install-sheet \.code-block-palette \{[^}]*background-image: none !important;[^}]*var\(--paper\)|\.plan-install-sheet \.code-block-palette \{[^}]*var\(--paper\) !important;[^}]*background-image: none !important;/
+    );
+  });
+
+  it("has no stale 280 px drafting-logo comment", () => {
+    expect(css).not.toMatch(/280 px/);
+  });
+});
