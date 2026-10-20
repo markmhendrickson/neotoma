@@ -207,6 +207,10 @@ export function resolveLink(url: string, ctx: RenderContext): ResolvedLink {
     }
     return { original, href: u.toString(), kind: "external" };
   }
+  // A backslash (raw or percent-encoded) is read as a slash by browsers: "/\\host" is protocol-relative.
+  if (/\\|%5c/i.test(probe)) {
+    return { original, href: null, kind: "blocked", problem: "blocked-scheme" };
+  }
   if (probe.startsWith("//"))
     return { original, href: null, kind: "blocked", problem: "blocked-scheme" };
 
@@ -299,6 +303,8 @@ export interface ParsedDoc {
   /** Line offset of the body in the source file (front matter lines). */
   bodyLineOffset: number;
   tree: MdRoot;
+  /** Text of the trailing Agent Instructions heading that was dropped, or null. */
+  agentInstructionsHeading: string | null;
 }
 
 export function parseDoc(sourcePath: string, source: string): ParsedDoc {
@@ -308,7 +314,15 @@ export function parseDoc(sourcePath: string, source: string): ParsedDoc {
   const bodyLineOffset = yaml === null ? 0 : yaml.split("\n").length + 2;
   const processor = unified().use(remarkParse).use(remarkGfm);
   const tree = processor.runSync(processor.parse(body)) as MdRoot;
-  return { sourcePath, frontmatter, body, bodyLineOffset, tree };
+  // The documentation standards end agent-facing pages with "## Agent Instructions". The viewer
+  // drops that trailing section (it stays on GitHub), and the lint judges only what is rendered.
+  const cut = agentInstructionsStart(tree);
+  let agentInstructionsHeading: string | null = null;
+  if (cut >= 0) {
+    agentInstructionsHeading = toString(tree.children[cut]).trim();
+    tree.children = tree.children.slice(0, cut);
+  }
+  return { sourcePath, frontmatter, body, bodyLineOffset, tree, agentInstructionsHeading };
 }
 
 export const APPLIES_TO_RE = /^applies to\b/i;
@@ -405,6 +419,10 @@ export interface RenderedDoc {
   headings: RenderedHeading[];
   links: ResolvedLink[];
   images: RenderedImage[];
+  /** Words in the rendered body, for page-length decisions (on-page contents). */
+  wordCount: number;
+  /** Heading of the trailing Agent Instructions section that was left out, or null. */
+  agentInstructionsHeading: string | null;
 }
 
 export interface RenderOptions {
@@ -471,7 +489,16 @@ export function renderDoc(
 
   const hast = toHast(tree, { allowDangerousHtml: false }) as HastRoot;
   decorate(hast);
-  return { header, html: serializeHast(hast), headings, links, images };
+  const wordCount = toString(tree).split(/\s+/).filter(Boolean).length;
+  return {
+    header,
+    html: serializeHast(hast),
+    headings,
+    links,
+    images,
+    wordCount,
+    agentInstructionsHeading: doc.agentInstructionsHeading,
+  };
 }
 
 function classList(el: HastElement): string[] {
@@ -482,6 +509,9 @@ function classList(el: HastElement): string[] {
 /** Highlight code, wrap tables and code for in-place scrolling, add heading anchors. */
 function decorate(root: HastRoot): void {
   let tableCount = 0;
+  // Tables are labelled from the heading above them, so a screen reader announces what they hold.
+  let lastHeading = "";
+  let tablesUnderHeading = 0;
   const walk = (parent: HastRoot | HastElement) => {
     const kids = parent.children as (RootContent | ElementContent)[];
     for (let i = 0; i < kids.length; i++) {
@@ -524,6 +554,12 @@ function decorate(root: HastRoot): void {
       }
       if (node.tagName === "table") {
         tableCount += 1;
+        tablesUnderHeading += 1;
+        const label = lastHeading
+          ? tablesUnderHeading > 1
+            ? `${lastHeading} (table ${tablesUnderHeading})`
+            : lastHeading
+          : `Table ${tableCount}`;
         kids[i] = {
           type: "element",
           tagName: "div",
@@ -531,7 +567,7 @@ function decorate(root: HastRoot): void {
             className: ["dv-table"],
             tabIndex: 0,
             role: "region",
-            ariaLabel: `Table ${tableCount}`,
+            ariaLabel: label,
           },
           children: [node],
         };
@@ -543,6 +579,8 @@ function decorate(root: HastRoot): void {
           .map((c) => textOf(c))
           .join("")
           .trim();
+        lastHeading = text;
+        tablesUnderHeading = 0;
         node.children.push({
           type: "element",
           tagName: "a",
@@ -566,38 +604,135 @@ function textOf(n: ElementContent | RootContent): string {
   return "";
 }
 
-/** Text of a document for claim scanning: prose and code blocks, without inline code spans. */
+/** Text of a document for claim scanning: prose (inline code included) and code blocks. */
 export interface TextSegment {
   text: string;
   /** 1-based line in the source file where the segment starts. */
   line: number;
   kind: "prose" | "code";
+  /**
+   * Character ranges exempt from the wording rules: only quoted terms and inline code inside an
+   * allow-listed forbidden-terms context (see FORBIDDEN_TERM_CONTEXTS), and fenced lines that carry
+   * an explicit forbidden-terms marker.
+   */
+  exempt: [number, number][];
+}
+
+/**
+ * The ONLY places a document may name a retired noun or an omitted claim: a vocabulary or standards
+ * page listing the terms it forbids. Exact text, case-sensitive; nothing else is exempt.
+ */
+export const FORBIDDEN_TERM_CONTEXTS = {
+  /** Headings whose list items name forbidden terms (until the next heading of the same or higher level). */
+  headings: [
+    "Forbidden synonyms",
+    "Forbidden terms",
+    "Forbidden terms in code and docs",
+    "Forbidden patterns",
+  ],
+  /** A paragraph with exactly this text introduces a list of forbidden terms (the next list only). */
+  leadIns: ["Forbidden synonyms:", "Forbidden terms:", "Avoid:", "Do not use:"],
+  /** A paragraph of exactly this construction retires one quoted phrase. */
+  sentence: /^The phrase "[^"\n]{1,60}" is (also )?retired\b/,
+  /** A fenced code line that starts with one of these markers (after an optional comment prefix). */
+  fencedLine: /^\s*(?:#|\/\/|--|-|\*)?\s*(?:Forbidden|Avoid|Do not use):/,
+} as const;
+
+const QUOTED = /"[^"\n]{1,80}"|\u201c[^\u201d\n]{1,80}\u201d/g;
+
+function quotedRanges(text: string): [number, number][] {
+  return [...text.matchAll(QUOTED)].map((m) => [m.index ?? 0, (m.index ?? 0) + m[0].length]);
 }
 
 export function textSegments(doc: ParsedDoc): TextSegment[] {
   const out: TextSegment[] = [];
-  const proseOf = (node: MdRootContent): string => {
-    if (node.type === "inlineCode") return "";
-    if (node.type === "text") return node.value;
-    if (node.type === "html") return node.value;
-    if ("children" in node) return (node.children as MdRootContent[]).map(proseOf).join("");
-    return "";
+  const lineOf = (n: { position?: { start: { line: number } } }) =>
+    (n.position?.start.line ?? 0) + doc.bodyLineOffset;
+
+  /** Prose of an inline tree, with the ranges of its inline code spans. */
+  const prose = (node: MdRootContent): { text: string; code: [number, number][] } => {
+    let text = "";
+    const code: [number, number][] = [];
+    const walk = (n: MdRootContent) => {
+      if (n.type === "inlineCode") {
+        code.push([text.length, text.length + n.value.length]);
+        text += n.value;
+      } else if (n.type === "text" || n.type === "html") text += n.value;
+      else if ("children" in n) for (const c of n.children as MdRootContent[]) walk(c);
+    };
+    walk(node);
+    return { text: text.replace(/\n/g, " "), code };
   };
-  visit(doc.tree, (node) => {
-    const line = (node.position?.start.line ?? 0) + doc.bodyLineOffset;
-    if (node.type === "code") {
-      out.push({ text: (node as Code).value, line: line + 1, kind: "code" });
-      return "skip";
+
+  const pushProse = (node: MdRootContent, forbiddenContext: boolean) => {
+    const { text, code } = prose(node);
+    let exempt: [number, number][] = [];
+    if (forbiddenContext) exempt = [...quotedRanges(text), ...code];
+    else if (node.type === "paragraph" && FORBIDDEN_TERM_CONTEXTS.sentence.test(text)) {
+      exempt = quotedRanges(text).slice(0, 1);
     }
-    if (node.type === "paragraph" || node.type === "heading" || node.type === "tableCell") {
-      out.push({ text: proseOf(node as MdRootContent).replace(/\n/g, " "), line, kind: "prose" });
-      return "skip";
+    out.push({ text, line: lineOf(node), kind: "prose", exempt });
+  };
+
+  const pushCode = (node: Code) => {
+    const exempt: [number, number][] = [];
+    let at = 0;
+    for (const l of node.value.split("\n")) {
+      if (FORBIDDEN_TERM_CONTEXTS.fencedLine.test(l)) exempt.push([at, at + l.length]);
+      at += l.length + 1;
     }
-    if (node.type === "html") {
-      out.push({ text: (node as Html).value, line, kind: "prose" });
-      return "skip";
+    out.push({ text: node.value, line: lineOf(node) + 1, kind: "code", exempt });
+  };
+
+  const walkBlocks = (children: MdRootContent[], forbidden: boolean) => {
+    let headingForbiddenDepth: number | null = null;
+    let leadIn = false;
+    for (const node of children) {
+      if (node.type === "heading") {
+        const h = node as Heading;
+        if (headingForbiddenDepth !== null && h.depth <= headingForbiddenDepth)
+          headingForbiddenDepth = null;
+        if ((FORBIDDEN_TERM_CONTEXTS.headings as readonly string[]).includes(toString(h).trim())) {
+          headingForbiddenDepth = h.depth;
+        }
+        pushProse(node, false);
+        leadIn = false;
+        continue;
+      }
+      const ctx = forbidden || headingForbiddenDepth !== null;
+      if (node.type === "paragraph") {
+        const text = toString(node).replace(/\s+/g, " ").trim();
+        // `forbidden` is true only for the content of a list item in an allow-listed context.
+        pushProse(node, forbidden);
+        leadIn = (FORBIDDEN_TERM_CONTEXTS.leadIns as readonly string[]).includes(text);
+        continue;
+      }
+      if (node.type === "list") {
+        for (const item of node.children)
+          walkBlocks(item.children as MdRootContent[], ctx || leadIn);
+        leadIn = false;
+        continue;
+      }
+      leadIn = false;
+      if (node.type === "code") pushCode(node as Code);
+      else if (node.type === "html") pushProse(node, false);
+      else if (node.type === "table") {
+        for (const row of node.children)
+          for (const cell of row.children) pushProse(cell as MdRootContent, false);
+      } else if ("children" in node) walkBlocks(node.children as MdRootContent[], ctx);
     }
-    return undefined;
-  });
+  };
+  walkBlocks(doc.tree.children, false);
   return out;
+}
+
+/** Index of a trailing "## Agent Instructions" section among the root children, or -1. */
+export function agentInstructionsStart(tree: MdRoot): number {
+  const kids = tree.children;
+  for (let i = kids.length - 1; i >= 0; i--) {
+    const n = kids[i];
+    if (n.type !== "heading" || (n as Heading).depth > 2) continue;
+    return (n as Heading).depth === 2 && /^agent instructions$/i.test(toString(n).trim()) ? i : -1;
+  }
+  return -1;
 }

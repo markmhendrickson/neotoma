@@ -1,4 +1,13 @@
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,11 +27,17 @@ import {
 import { buildSitemapXml } from "../../frontend/src/site/seo_metadata";
 import {
   appendSitemapUrls,
+  containedRepoFile,
   docsViewerSitemapUrls,
   manifestProblems,
   runDocsViewer,
 } from "../../scripts/docs_viewer/build";
-import { validateDocsViewerExport } from "../../scripts/docs_viewer/validate_export";
+import {
+  pageText,
+  retiredRouteLinks,
+  unsafeMarkup,
+  validateDocsViewerExport,
+} from "../../scripts/docs_viewer/validate_export";
 
 const root = join(__dirname, "..", "..");
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
@@ -321,5 +336,181 @@ describe("docs viewer export validation", () => {
     outDir = built();
     writeFileSync(join(outDir, "sitemap.xml"), buildSitemapXml(["/"]));
     expect(validate(outDir).join("\n")).toMatch(/sitemap.xml does not list the docs viewer page/);
+  });
+});
+
+describe("docs viewer follow-up: exclusion guard and real-path containment", () => {
+  it("refuses every spelling of an excluded path", () => {
+    for (const p of [
+      "install.md",
+      "./install.md",
+      "INSTALL.md",
+      "Install.MD",
+      "/install.md",
+      "docs//foundation/core_identity.md",
+      "docs/x/../foundation/core_identity.md",
+      "docs/./foundation/core_identity.md",
+      "Docs/Foundation/core_identity.md",
+      "docs\\foundation\\core_identity.md",
+      "foundation/x.md",
+      "",
+    ]) {
+      expect(excludedReason(p), JSON.stringify(p)).not.toBeNull();
+    }
+    expect(excludedReason("docs/api/rest_api.md")).toBeNull();
+    expect(excludedReason("docs/")).toBeNull();
+    const bad = [
+      entry("x", "./install.md", "pending", 90),
+      entry("y", "docs/x/../foundation/a.md", "pending", 91),
+    ];
+    expect(
+      manifestProblems([...MANIFEST, ...bad]).filter((p) => p.includes("may never be rendered"))
+    ).toHaveLength(2);
+  });
+
+  function tempRepo() {
+    const repo = mkdtempSync(join(tmpdir(), "docs-viewer-repo-"));
+    const outside = mkdtempSync(join(tmpdir(), "docs-viewer-outside-"));
+    dirs.push(repo, outside);
+    mkdirSync(join(repo, "docs/foundation"), { recursive: true });
+    mkdirSync(join(repo, "docs/img"), { recursive: true });
+    writeFileSync(join(repo, "docs/ok.md"), CLEAN("OK"));
+    writeFileSync(join(repo, "install.md"), CLEAN("Install"));
+    writeFileSync(join(repo, "docs/foundation/core.md"), CLEAN("Core"));
+    writeFileSync(join(outside, "secret.md"), CLEAN("Secret"));
+    writeFileSync(join(outside, "secret.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(join(repo, "docs/img/ok.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(
+      join(repo, "docs/img/logo.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    );
+    symlinkSync(join(repo, "install.md"), join(repo, "docs/link-to-install.md"));
+    symlinkSync(join(outside, "secret.md"), join(repo, "docs/link-outside.md"));
+    symlinkSync(join(repo, "docs/foundation"), join(repo, "docs/alias"));
+    symlinkSync(join(outside, "secret.png"), join(repo, "docs/img/outside.png"));
+    symlinkSync(outside, join(repo, "docs/ext"));
+    return repo;
+  }
+
+  it("reads only regular files whose real path stays inside the repository and is not excluded", () => {
+    const repo = tempRepo();
+    expect(containedRepoFile(repo, "docs/ok.md")).toHaveProperty("real");
+    expect(containedRepoFile(repo, "docs/missing.md")).toEqual({ absent: true });
+    expect(containedRepoFile(repo, "docs/link-to-install.md")).toMatchObject({
+      problem: expect.stringMatching(/symlink/),
+    });
+    expect(containedRepoFile(repo, "docs/link-outside.md")).toMatchObject({
+      problem: expect.stringMatching(/symlink/),
+    });
+    expect(containedRepoFile(repo, "docs/alias/core.md")).toMatchObject({
+      problem: expect.stringMatching(/may never be rendered/),
+    });
+    expect(containedRepoFile(repo, "docs/ext/secret.md")).toMatchObject({
+      problem: expect.stringMatching(/outside the repository/),
+    });
+    expect(containedRepoFile(repo, "docs/../install.md")).toMatchObject({
+      problem: expect.stringMatching(/plain/),
+    });
+  });
+
+  it("fails the build for a manifest entry that is a symlink or resolves into an excluded folder", () => {
+    const repo = tempRepo();
+    for (const source of [
+      "docs/link-to-install.md",
+      "docs/link-outside.md",
+      "docs/alias/core.md",
+    ]) {
+      const result = runDocsViewer({
+        repoRoot: repo,
+        manifest: [entry("x", source, "pending", 1)],
+        commit: COMMIT,
+        pathKind: () => "file",
+      });
+      expect(result.failures.join("\n"), source).toMatch(/docs viewer manifest: /);
+      expect(result.reports[0].exists).toBe(false);
+    }
+    expect(
+      runDocsViewer({
+        repoRoot: repo,
+        manifest: [entry("x", "docs/ok.md", "included", 1)],
+        commit: COMMIT,
+        pathKind: () => "file",
+      }).failures
+    ).toEqual([]);
+  });
+
+  it("copies only raster images whose real path stays inside the repository; never SVG", () => {
+    const repo = tempRepo();
+    writeFileSync(
+      join(repo, "docs/ok.md"),
+      CLEAN("OK", "\n![ok](img/ok.png)\n\n![outside](img/outside.png)\n\n![svg](img/logo.svg)\n")
+    );
+    const outDir = mkdtempSync(join(tmpdir(), "docs-viewer-out-"));
+    dirs.push(outDir);
+    const result = runDocsViewer({
+      repoRoot: repo,
+      outDir,
+      write: true,
+      manifest: [entry("ok", "docs/ok.md", "pending", 1)],
+      includePending: true,
+      commit: COMMIT,
+      pathKind: (p) => (p.startsWith("docs/img/") || p.endsWith(".md") ? "file" : "dir"),
+    });
+    const html = readFileSync(join(outDir, "docs/ok/index.html"), "utf-8");
+    expect((html.match(/<img src="\/docs\/_media\//g) ?? []).length).toBe(1);
+    expect(readdirSync(join(outDir, "docs/_media"))).toHaveLength(1);
+    const errors = result.reports[0].errors.map((f) => `${f.rule} ${f.message}`).join("\n");
+    expect(errors).toMatch(/image-source image img\/logo\.svg/);
+  });
+});
+
+describe("docs viewer follow-up: export validation", () => {
+  const index = buildDocsViewerIndex(MANIFEST.filter((e) => e.status === "included"));
+
+  it("fails when the sitemap lists anything under /docs beyond the included pages", () => {
+    const { outDir } = run(MANIFEST, { write: true });
+    writeFileSync(
+      join(outDir, "sitemap.xml"),
+      appendSitemapUrls(buildSitemapXml(["/"]), [
+        ...docsViewerSitemapUrls(index.entries),
+        "https://neotoma.io/docs/mcp/",
+      ])
+    );
+    const problems = validateDocsViewerExport(outDir, { index, manifest: MANIFEST }).problems.join(
+      "\n"
+    );
+    expect(problems).toMatch(
+      /sitemap.xml lists https:\/\/neotoma.io\/docs\/mcp\/, which is not an included docs viewer page/
+    );
+  });
+
+  it("finds unsafe markup that hides behind quoted '>' and unusual spacing", () => {
+    expect(unsafeMarkup('<style></style><a title="x>y" onclick="z()">a</a>').join()).toMatch(
+      /event attribute/
+    );
+    expect(unsafeMarkup('<style></style><img src = "javascript:alert(1)">').join()).toMatch(
+      /disallowed scheme/
+    );
+    expect(unsafeMarkup('<style></style><a href="/\\evil">a</a>').join()).toMatch(/backslash/);
+    expect(unsafeMarkup('<style></style><p aria-label="x online=1">ok</p>')).toEqual([]);
+    expect(unsafeMarkup("<style></style><SCRIPT>x</SCRIPT>").join()).toMatch(/script/);
+  });
+
+  it("runs every page check in linear time on pathological input", () => {
+    const inputs = [
+      "<".repeat(200_000),
+      "<a ".repeat(70_000),
+      '<a href="'.repeat(25_000),
+      "<style>".repeat(30_000),
+      "<!--".repeat(50_000),
+      `<a title="${"x".repeat(200_000)}`,
+    ];
+    for (const html of inputs) {
+      const t0 = performance.now();
+      unsafeMarkup(html);
+      pageText(html);
+      retiredRouteLinks(html, index);
+      expect(performance.now() - t0, html.slice(0, 12)).toBeLessThan(1000);
+    }
   });
 });

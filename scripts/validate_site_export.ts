@@ -21,8 +21,10 @@ import {
   resolveDestination,
 } from "../frontend/src/site/route_retirement";
 import {
-  LIVE_PAGE_OMITTED_CLAIMS as OMITTED_CLAIMS,
+  LIVE_PAGE_CLAIM_PATTERNS,
   LIVE_PAGE_RETIRED_META_PHRASES as RETIRED_META_PHRASES,
+  findClaimProblems,
+  telemetryProblems,
 } from "./docs_viewer/claim_patterns";
 import { validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { llmsLinkProblems } from "./llms_links";
@@ -441,23 +443,16 @@ for (const route of LIVE_ROUTES) {
     .replace(/&[a-z#0-9]+;/gi, " ");
   // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
   const wholeText = text + " " + jsonLd;
-  for (const m of wholeText.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
-    const after = wholeText.slice(m.index, m.index + 600);
-    if (
-      !/npm registry/i.test(after) ||
-      !/NO_UPDATE_NOTIFIER=1/.test(after) ||
-      !/when a session starts/i.test(after) ||
-      !/connection metadata/i.test(after)
-    ) {
-      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${m[0]}" without the npm update-check qualification`);
-      liveClaimFailures++;
-    }
+  // The fragment list is shared with the docs viewer lint (scripts/docs_viewer/claim_patterns.ts).
+  for (const t of telemetryProblems(wholeText)) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${t.match}" without the npm update-check qualification (missing: ${t.missing.join(", ")})`);
+    liveClaimFailures++;
   }
-  for (const [re, label] of OMITTED_CLAIMS) {
-    if (re.test(text)) {
-      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
-      liveClaimFailures++;
-    }
+  // The docs list plus the named live-page extras: a superset of what a docs page is checked for.
+  const omitted = findClaimProblems(text, LIVE_PAGE_CLAIM_PATTERNS).filter((f) => f.id !== "telemetry");
+  for (const label of new Set(omitted.map((f) => `${f.label} ("${f.match}")`))) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
+    liveClaimFailures++;
   }
 }
 // Held pages keep their old shell but must not offer navigation entries that only land on redirect stubs.
