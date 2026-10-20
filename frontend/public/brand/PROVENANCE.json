@@ -26,7 +26,7 @@
     },
     "derivation": {
       "script": "scripts/derive_neotoma_plate.mjs",
-      "method": "decode and re-encode only (WebP q88 and JPEG q85 fallback); the narrow files are a crop of the same frame (left 640, top 0, width 896, height 1024) resampled to 728 x 832. Nothing drawn, retouched, recoloured or composited; the annotations are inline SVG in the page, not in these files. The script refuses a source whose sha256 is not the accepted one."
+      "method": "decode and re-encode only (WebP q88 and JPEG q85 fallback); the narrow files are a crop of the same frame (left 652, top 0, width 884, height 1024) resampled to 728 x 843. Nothing drawn, retouched, recoloured or composited; the annotations are inline SVG in the page, not in these files. The script refuses a source whose sha256 is not the accepted one."
     },
     "files": {
       "plate/neotoma-plate-a1-wide.webp": {
@@ -44,17 +44,17 @@
         "use": "desktop plate, fallback for browsers without WebP"
       },
       "plate/neotoma-plate-a1-narrow.webp": {
-        "sha256": "dbdaf84a25ac1c77f97b01e0dddf1c81c8bc3da014423d3b8315b9bb2bf7faf0",
-        "bytes": 22544,
+        "sha256": "3e671d7fd2dc03ca464351fef3191bdf7c6d1f194c5ad7bf5a556a579f8b0763",
+        "bytes": 23376,
         "width": 728,
-        "height": 832,
+        "height": 843,
         "use": "phone plate (viewport 860 px and below), primary format"
       },
       "plate/neotoma-plate-a1-narrow.jpg": {
-        "sha256": "e9fedbcd4a848f14f001fac772aa0599e353b9234b28434db221c0293785c8bd",
-        "bytes": 31923,
+        "sha256": "2ba2e25b61bda27ba6850983d783f74f77b6eb50197d966da4199722db9825af",
+        "bytes": 32768,
         "width": 728,
-        "height": 832,
+        "height": 843,
         "use": "phone plate, fallback for browsers without WebP"
       }
     }

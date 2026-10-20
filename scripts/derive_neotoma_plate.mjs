@@ -29,9 +29,9 @@ export const ACCEPTED_SOURCE_SHA256 =
   "8eee3947a65ac16fd41b359e558a6f4839c5c679cd6c8c1dcc0d4b115572476f";
 export const SOURCE_SIZE = { width: 1536, height: 1024 };
 /** Window of the source frame kept for 390 px phones: the right-hand objects, not a shrunk wide frame. */
-export const NARROW_CROP = { left: 640, top: 0, width: 896, height: 1024 };
+export const NARROW_CROP = { left: 652, top: 0, width: 884, height: 1024 };
 /** About 2.3x the 314 CSS px the figure gets at a 390 px viewport. */
-export const NARROW_SIZE = { width: 728, height: 832 };
+export const NARROW_SIZE = { width: 728, height: 843 };
 export const WEBP_QUALITY = 88;
 export const JPEG_QUALITY = 85;
 

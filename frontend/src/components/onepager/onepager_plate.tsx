@@ -20,11 +20,11 @@ import { cloudPath } from "./onepager_figures";
 export const PLATE_WIDE = { width: 1536, height: 1024, src: "/brand/plate/neotoma-plate-a1-wide" };
 export const PLATE_NARROW = {
   width: 728,
-  height: 832,
+  height: 843,
   src: "/brand/plate/neotoma-plate-a1-narrow",
 };
 /** Window of the source frame that the narrow files show: left, top, width, height. */
-export const NARROW_VIEW = { x: 640, y: 0, w: 896, h: 1024 } as const;
+export const NARROW_VIEW = { x: 652, y: 0, w: 884, h: 1024 } as const;
 
 /** Fixed colors: the plate keeps its own paper ground in both themes, so it does not follow them. */
 const INK = "#28372f";
@@ -56,19 +56,7 @@ function Key({ n, x, y, u }: { n: number; x: number; y: number; u: number }) {
 }
 
 /** Dimension line with end ticks, drawn between two points. */
-function Dim({
-  x1,
-  y1,
-  x2,
-  y2,
-  u,
-}: {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  u: number;
-}) {
+function Dim({ x1, y1, x2, y2, u }: { x1: number; y1: number; x2: number; y2: number; u: number }) {
   const dx = x2 - x1;
   const dy = y2 - y1;
   const len = Math.hypot(dx, dy);
@@ -101,7 +89,7 @@ function Overlay({ variant }: { variant: Variant }) {
   const cloud = cloudPath({ x: 974, y: 702, w: 272, h: 62, r: 5 * u });
 
   // Labels in the empty paper margin.
-  const labelX = narrow ? 664 : 80;
+  const labelX = narrow ? 676 : 80;
   const labelY = narrow ? 52 : 66;
   const tagText = "SYNTHETIC EXAMPLE";
   const tagCharW = 0.6 * fs(12);
@@ -111,14 +99,13 @@ function Overlay({ variant }: { variant: Variant }) {
 
   const noteY0 = narrow ? 936 : 944;
   const noteH = narrow ? 82 : 56;
-  const noteX0 = narrow ? 664 : 80;
+  const noteX0 = narrow ? 676 : 80;
   const noteX1 = narrow ? 1514 : 1456;
-  const noteCell = 62 * u;
+  const noteCell = (narrow ? 52 : 62) * u;
 
   // Provenance leader: from the cloud up through the gap, then onto the later observation.
   const leader = "M1226,702 V452 H1204 V300";
-  const arrow = (x: number, y: number) =>
-    `M${x},${y} l${-4.5 * u},${9 * u} l${9 * u},0 Z`;
+  const arrow = (x: number, y: number) => `M${x},${y} l${-4.5 * u},${9 * u} l${9 * u},0 Z`;
 
   return (
     <svg
@@ -223,7 +210,7 @@ function Overlay({ variant }: { variant: Variant }) {
             x={noteX0 + noteCell + 8 * u}
             y={noteY0 + noteH / 2 + (i === 0 ? -4 : 12) * u}
             fill={INK}
-            fontSize={fs(10.5)}
+            fontSize={fs(10)}
           >
             {line.toUpperCase()}
           </text>

@@ -3,7 +3,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
+import { RecordPlate } from "../../frontend/src/components/onepager/onepager_plate";
 
 /**
  * Guards for the neotoma.io developer one-pager (home route).
@@ -19,7 +22,9 @@ const files = ["NeotomaOnePager.tsx", "onepager_copy.ts", "onepager_figures.tsx"
   readFileSync(join(dir, f), "utf-8")
 );
 // Doc comments list what is deliberately not claimed; only shipped copy is checked.
-const all = files.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+const all = [...files, readFileSync(join(dir, "onepager_plate.tsx"), "utf-8")]
+  .join("\n")
+  .replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("neotoma.io one-pager copy", () => {
   it("uses no em dashes", () => {
@@ -330,5 +335,129 @@ describe("/install polish", () => {
 
   it("has no stale 280 px drafting-logo comment", () => {
     expect(css).not.toMatch(/280 px/);
+  });
+});
+
+describe("sheet 01 plate (FIG. A-1)", () => {
+  const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
+  const brand = join(root, "frontend", "public", "brand");
+  const prov = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8")).plate as {
+    source: { sha256: string };
+    files: Record<string, { sha256: string; bytes: number; width: number; height: number }>;
+  };
+  const html = renderToStaticMarkup(RecordPlate());
+  const attr = (tag: string, name: string) =>
+    new RegExp(`\\s${name}="([^"]*)"`, "i").exec(tag)?.[1];
+  const img = /<img\b[^>]*>/.exec(html)![0];
+
+  it("keeps the committed plate files byte for byte (sha256, size and dimensions from PROVENANCE.json)", async () => {
+    expect(Object.keys(prov.files).length).toBe(4);
+    for (const [file, info] of Object.entries(prov.files)) {
+      const bytes = readFileSync(join(brand, file));
+      expect(createHash("sha256").update(bytes).digest("hex"), file).toBe(info.sha256);
+      expect(bytes.length, `${file} bytes`).toBe(info.bytes);
+      const meta = await sharp(bytes).metadata();
+      expect([meta.width, meta.height], `${file} dimensions`).toEqual([info.width, info.height]);
+    }
+  });
+
+  it("records the accepted source hash and refuses any other source", async () => {
+    // @ts-expect-error plain ESM script
+    const script = await import("../../scripts/derive_neotoma_plate.mjs");
+    expect(prov.source.sha256).toBe(script.ACCEPTED_SOURCE_SHA256);
+    expect(() => script.verifySource(Buffer.from("not the accepted photograph"))).toThrow(
+      /refusing to derive/
+    );
+    // The narrow files are a crop window of the source frame; the overlay must use the same window.
+    const { NARROW_VIEW, PLATE_NARROW } =
+      await import("../../frontend/src/components/onepager/onepager_plate");
+    expect(NARROW_VIEW).toEqual({
+      x: script.NARROW_CROP.left,
+      y: script.NARROW_CROP.top,
+      w: script.NARROW_CROP.width,
+      h: script.NARROW_CROP.height,
+    });
+    expect([PLATE_NARROW.width, PLATE_NARROW.height]).toEqual([
+      script.NARROW_SIZE.width,
+      script.NARROW_SIZE.height,
+    ]);
+  });
+
+  it("gives the image a text alternative and explicit dimensions that match the file", () => {
+    const alt = attr(img, "alt");
+    expect(alt && alt.length, "alt text").toBeGreaterThan(120);
+    expect(alt).toMatch(/synthetic example/i);
+    const wide = prov.files["plate/neotoma-plate-a1-wide.jpg"];
+    expect(Number(attr(img, "width"))).toBe(wide.width);
+    expect(Number(attr(img, "height"))).toBe(wide.height);
+    expect(attr(img, "src")).toBe("/brand/plate/neotoma-plate-a1-wide.jpg");
+    // Both file families carry their own dimensions on the <source> so the box is reserved either way.
+    const sources = [...html.matchAll(/<source\b[^>]*>/g)].map((m) => m[0]);
+    expect(sources.length).toBe(3);
+    for (const tag of sources) {
+      const file = attr(tag, "srcset")!.replace("/brand/", "");
+      const info = prov.files[file];
+      expect(info, file).toBeDefined();
+      expect(Number(attr(tag, "width")), file).toBe(info.width);
+      expect(Number(attr(tag, "height")), file).toBe(info.height);
+    }
+  });
+
+  it("serves a separate narrow crop at 860 px and below, and never lazy-loads the first-screen image", () => {
+    const narrow = [...html.matchAll(/<source\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((t) => attr(t, "media") === "(max-width: 860px)");
+    expect(narrow.map((t) => attr(t, "srcset"))).toEqual([
+      "/brand/plate/neotoma-plate-a1-narrow.webp",
+      "/brand/plate/neotoma-plate-a1-narrow.jpg",
+    ]);
+    expect(img).not.toMatch(/loading="lazy"/);
+    expect(img).toMatch(/fetchpriority="high"/);
+  });
+
+  it("keeps the desktop file light (WebP at most 120 KB)", () => {
+    const wide = prov.files["plate/neotoma-plate-a1-wide.webp"];
+    expect(wide.bytes).toBeLessThanOrEqual(120 * 1024);
+    expect(prov.files["plate/neotoma-plate-a1-narrow.webp"].bytes).toBeLessThan(wide.bytes);
+  });
+
+  it("puts no words on the paper objects: the overlay text is only keys, labels and the note", () => {
+    const text = [...html.matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map((m) =>
+      m[1]
+        .replace(/<[^>]+>/g, "")
+        .replace(/&#x27;|&amp;/g, "")
+        .trim()
+    );
+    const allowed = [/^[1-4]$/, /^FIG\. A-1/, /^SYNTHETIC EXAMPLE$/, /^NOTE$/, /^[A-Z0-9 .,]+$/];
+    for (const t of text) {
+      expect(
+        allowed.some((re) => re.test(t)),
+        `unexpected overlay text: ${t}`
+      ).toBe(true);
+    }
+    expect(text.filter((t) => /^[1-4]$/.test(t)).length).toBe(8); // four keys, wide and narrow
+    // No invoice data (dates, amounts) is drawn on the plate; the legend carries it.
+    expect(text.join(" ")).not.toMatch(/OCT|3,?200|3,?250/);
+    expect(html.match(/aria-hidden="true"/g)?.length).toBe(2);
+  });
+
+  it("keeps the plate's own paper ground in dark mode: framed, never inverted or tinted", () => {
+    const css = read("frontend/src/components/onepager/onepager.css");
+    const rule = (sel: string) =>
+      new RegExp(`${sel.replace(/[.]/g, "\\.")} \\{[^}]*\\}`).exec(css)?.[0] ?? "";
+    expect(rule(".dark .plan-plate")).toMatch(/border-color: rgba\(236, 229, 212/);
+    for (const sel of [".plan-plate", ".plan-plate-img", ".dark .plan-plate"]) {
+      expect(rule(sel), sel).not.toMatch(/filter|invert|mix-blend|opacity/);
+    }
+    expect(css).not.toMatch(/\.dark[^{]*\.plan-plate-img/);
+  });
+
+  it("replaces the abstract record plan in sheet 01 and keeps the four-item legend", () => {
+    const page = files[0];
+    expect(page).toContain("<RecordPlate />");
+    expect(page).not.toContain("RecordPlan");
+    expect(files[2]).not.toContain("RecordPlan");
+    expect(page).toContain("FIGURE_LEGEND.map");
+    expect(/FIGURE_LEGEND[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1].split('",\n').length).toBe(4);
   });
 });
