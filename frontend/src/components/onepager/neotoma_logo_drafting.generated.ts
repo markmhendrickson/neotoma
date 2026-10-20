@@ -58,3 +58,82 @@ export const NEOTOMA_LOGO_DRAFTING = {
   ]
 } as const;
 export const NEOTOMA_LOGO_EDGE = { radius: 0.947, edgePx: 0.5, tintOpacity: 0.07, width: 160, maxWidth: 170 } as const;
+export const NEOTOMA_LOGO_FILTER = {
+  "attrs": {
+    "x": "-5%",
+    "y": "-5%",
+    "width": "110%",
+    "height": "110%",
+    "color-interpolation-filters": "sRGB"
+  },
+  "primitives": [
+    {
+      "tag": "feMorphology",
+      "attrs": {
+        "in": "SourceAlpha",
+        "operator": "dilate",
+        "radius": "{radius}",
+        "result": "d"
+      }
+    },
+    {
+      "tag": "feComposite",
+      "attrs": {
+        "in": "d",
+        "in2": "SourceAlpha",
+        "operator": "out",
+        "result": "edge"
+      }
+    },
+    {
+      "tag": "feFlood",
+      "attrs": {
+        "flood-color": "{ink}",
+        "result": "ink"
+      }
+    },
+    {
+      "tag": "feComposite",
+      "attrs": {
+        "in": "ink",
+        "in2": "edge",
+        "operator": "in",
+        "result": "line"
+      }
+    },
+    {
+      "tag": "feFlood",
+      "attrs": {
+        "flood-color": "{ink}",
+        "flood-opacity": "{tint}",
+        "result": "t"
+      }
+    },
+    {
+      "tag": "feComposite",
+      "attrs": {
+        "in": "t",
+        "in2": "SourceAlpha",
+        "operator": "in",
+        "result": "tin"
+      }
+    },
+    {
+      "tag": "feMerge",
+      "children": [
+        {
+          "tag": "feMergeNode",
+          "attrs": {
+            "in": "tin"
+          }
+        },
+        {
+          "tag": "feMergeNode",
+          "attrs": {
+            "in": "line"
+          }
+        }
+      ]
+    }
+  ]
+} as const;

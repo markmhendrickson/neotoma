@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -199,13 +201,12 @@ describe("logo size rule and union outline", () => {
   const brand = join(root, "frontend", "public", "brand");
 
   it("outlines the union of the shapes with an SVG filter, in the component and the static file", () => {
-    for (const markup of [
-      logos,
-      readFileSync(join(brand, "neotoma-lockup-drafting.svg"), "utf-8"),
-    ]) {
+    const staticSvg = readFileSync(join(brand, "neotoma-lockup-drafting.svg"), "utf-8");
+    const filterSource = readFileSync(join(dir, "neotoma_logo_drafting.generated.ts"), "utf-8");
+    for (const markup of [staticSvg, filterSource]) {
       expect(markup).toMatch(/feMorphology/);
-      expect(markup).toMatch(/operator="dilate"/);
-      expect(markup).toMatch(/operator="out"/);
+      expect(markup).toMatch(/"?operator"?(=|: )"dilate"/);
+      expect(markup).toMatch(/"?operator"?(=|: )"out"/);
       expect(markup).toMatch(/feMerge/);
     }
     expect(readFileSync(join(brand, "neotoma-lockup-drafting.svg"), "utf-8")).toContain(
@@ -215,7 +216,7 @@ describe("logo size rule and union outline", () => {
     expect(logos).toContain("useId()");
     expect(logos).not.toMatch(/id="neotoma-/);
     // The outline follows the theme through currentColor, and the paths carry no per-path stroke.
-    expect(logos).toContain('floodColor="currentColor"');
+    expect(readFileSync(join(dir, "logo_filter.ts"), "utf-8")).toContain('ink: "currentColor"');
     expect(logos).not.toMatch(/stroke(Width)?=/);
   });
 
@@ -262,5 +263,48 @@ describe("logo size rule and union outline", () => {
     );
     // Text cells set the title block height: the logo cell has no vertical padding.
     expect(css).toMatch(/\.plan-titleblock \.plan-tb-logo \{[^}]*padding: 0 14px;/);
+  });
+});
+
+describe("drafting filter has one description", () => {
+  const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
+  /** Reduce filter markup to its structure: tag, attributes (minus id, radius and flood-color values), order. */
+  const structure = (markup: string) => {
+    const filter = /<filter\b[\s\S]*?<\/filter>/.exec(markup)?.[0] ?? "";
+    return [...filter.matchAll(/<(filter|fe\w+)((?:\s+[\w:-]+="[^"]*")*)\s*\/?>/g)].map((m) => {
+      const attrs = [...m[2].matchAll(/([\w:-]+)="([^"]*)"/g)]
+        .filter(([, name]) => name !== "id")
+        .map(([, name, value]) =>
+          name === "radius" || name === "flood-color" ? name : `${name}=${value}`
+        )
+        .sort();
+      return `${m[1]} ${attrs.join(" ")}`;
+    });
+  };
+
+  it("renders the same filter structure in the React component and the static SVG", async () => {
+    // @ts-expect-error plain ESM script
+    const script = await import("../../scripts/derive_neotoma_logo_drafting.mjs");
+    const { logoFilter } = await import("../../frontend/src/components/onepager/logo_filter");
+    const react = renderToStaticMarkup(
+      createElement("svg", null, logoFilter("x", 0.947, script.TINT_OPACITY))
+    );
+    const stat = read("frontend/public/brand/neotoma-lockup-drafting.svg");
+    const a = structure(react);
+    const b = structure(stat);
+    expect(a.length).toBeGreaterThan(8);
+    expect(a).toEqual(b);
+    // Values that must agree too: operator sequence and tint.
+    expect(react).toContain(`flood-opacity="${script.TINT_OPACITY}"`);
+    expect(stat).toContain(`flood-opacity="${script.TINT_OPACITY}"`);
+  });
+
+  it("does not hard-code filter primitives in the component", () => {
+    const logos = read("frontend/src/components/onepager/NeotomaLogos.tsx");
+    expect(logos).toContain("logoFilter(");
+    expect(logos).not.toMatch(/<feMorphology|<feComposite|<feFlood|<feMerge/);
+    expect(read("frontend/src/components/onepager/logo_filter.ts")).not.toMatch(
+      /feMorphology|feComposite/
+    );
   });
 });

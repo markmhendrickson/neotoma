@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { llmsLinkProblems } from "../../scripts/llms_links";
 import {
   HELD_ROUTES,
+  LOCALIZED_LEGAL_PATHS,
   LIVE_ROUTES,
   RETIRED_DESTINATIONS,
   buildRedirectStub,
@@ -142,5 +143,63 @@ describe("llms.txt Links block (agent-fetched)", () => {
       "# Neotoma\n\nA different body.\n\n## Links"
     );
     expect(llmsLinkProblems(rewritten, root)).toEqual([]);
+  });
+});
+
+describe("localized legal routes and their markdown mirrors", () => {
+  it("holds the page and the markdown mirror of every localized legal route", () => {
+    for (const locale of ["es", "ca", "zh", "hi", "ar", "fr", "pt", "ru", "bn", "ur", "id", "de"]) {
+      for (const legal of LOCALIZED_LEGAL_PATHS) {
+        for (const route of [`/${locale}${legal}`, `/${locale}/markdown${legal}`]) {
+          expect(isRetiredRoute(route), route).toBe(false);
+          expect(heldReason(route), route).toMatch(/counsel/);
+        }
+      }
+      // Other localized markdown mirrors are still retired.
+      expect(isRetiredRoute(`/${locale}/markdown/install`)).toBe(true);
+      expect(isRetiredRoute(`/${locale}/markdown/privacy-first`)).toBe(true);
+    }
+  });
+
+  it("has one source for the legal path list: the app shell imports it instead of repeating it", () => {
+    const main = readFileSync(join(root, "frontend/src/components/MainApp.tsx"), "utf-8");
+    expect(main).toContain("LOCALIZED_LEGAL_PATHS");
+    expect(main).toContain('from "@/site/route_retirement"');
+    expect(main).not.toMatch(/\[\s*"\/privacy"\s*,\s*"\/terms"/);
+    const validator = readFileSync(join(root, "scripts/validate_site_export.ts"), "utf-8");
+    expect(validator).toContain("LOCALIZED_LEGAL_PATHS");
+    expect(validator).toContain("renders the not-found page instead of its content");
+  });
+});
+
+describe("llms.txt link hardening", () => {
+  const llms = readFileSync(join(root, "frontend/public/llms.txt"), "utf-8");
+  const bad = (extra: string) => llmsLinkProblems(`${llms}\n- X: ${extra}\n`, root).join(" ");
+  it("rejects a path that escapes the repository, plain or percent-encoded", () => {
+    expect(bad("https://github.com/markmhendrickson/neotoma/blob/main/../../etc/passwd")).toMatch(
+      /escapes the repository/
+    );
+    expect(
+      bad("https://github.com/markmhendrickson/neotoma/blob/main/%2e%2e/%2e%2e/etc/passwd")
+    ).toMatch(/escapes the repository/);
+    expect(bad("https://github.com/markmhendrickson/neotoma/tree/main/docs/../../..")).toMatch(
+      /escapes the repository/
+    );
+  });
+
+  it("reports a malformed percent-escape as a problem instead of throwing", () => {
+    expect(() =>
+      bad("https://github.com/markmhendrickson/neotoma/blob/main/docs/%E0%A4%A")
+    ).not.toThrow();
+    expect(bad("https://github.com/markmhendrickson/neotoma/blob/main/docs/%E0%A4%A")).toMatch(
+      /malformed percent-escape/
+    );
+  });
+
+  it("still accepts a real file and folder inside the repository", () => {
+    expect(
+      bad("https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md")
+    ).toBe("");
+    expect(bad("https://github.com/markmhendrickson/neotoma/tree/main/docs/")).toBe("");
   });
 });

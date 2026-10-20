@@ -241,10 +241,13 @@ export type Destination = {
 
 const LOCALE_PREFIX = /^\/(es|ca|zh|hi|ar|fr|pt|ru|bn|ur|id|de)(\/|$)/;
 /** Localized legal and consent routes are held like their English counterparts (counsel decides). */
-const LOCALE_LEGAL =
-  /^\/(es|ca|zh|hi|ar|fr|pt|ru|bn|ur|id|de)\/(privacy|terms|sandbox\/terms-of-use)$/;
+/** Legal and consent routes that stay live in every locale (single source for the app shell and the build). */
+export const LOCALIZED_LEGAL_PATHS = ["/privacy", "/terms", "/sandbox/terms-of-use"] as const;
+const LOCALE_LEGAL = new RegExp(
+  `^/(es|ca|zh|hi|ar|fr|pt|ru|bn|ur|id|de)/(markdown/)?(${LOCALIZED_LEGAL_PATHS.map((p) => p.slice(1).replace(/\//g, "\\/")).join("|")})$`
+);
 const LEGAL_REASON =
-  "Localized legal and consent surface: held like its English counterpart. Redirecting a legal URL is a counsel decision.";
+  "Localized legal and consent surface (the page and its markdown mirror): held like its English counterpart. Redirecting a legal URL is a counsel decision.";
 
 export function isLocaleRoute(route: string): boolean {
   return LOCALE_PREFIX.test(route);

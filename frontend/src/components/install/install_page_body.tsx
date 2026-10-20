@@ -135,11 +135,13 @@ export function InstallPageBody() {
         The same commands as the home page. Swap <code>claude-code</code> for your tool: cursor,
         codex, openclaw or claude-desktop.
       </p>
-      <CodeBlock
-        code={INSTALL_COMMANDS}
-        copyFeedbackId="install-copy-quick"
-        installBlock="manual_commands"
-      />
+      <div className="plan-install-commands">
+        <CodeBlock
+          code={INSTALL_COMMANDS}
+          copyFeedbackId="install-copy-quick"
+          installBlock="manual_commands"
+        />
+      </div>
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">{s.agentAssistedInstall}</h2>
       <p className="text-[15px] leading-7 mb-4">{s.agentAssistedLead}</p>

@@ -24,6 +24,7 @@ export function llmsLinksBlock(text: string): string | null {
 export function llmsLinkProblems(text: string, repoRoot: string): string[] {
   const block = llmsLinksBlock(text);
   if (block === null) return ["llms.txt has no '## Links' block"];
+  const root = path.resolve(repoRoot);
   const problems: string[] = [];
   const urls = [...block.matchAll(/https?:\/\/[^\s)>\]]+/g)].map((m) =>
     m[0].replace(/[.,;]+$/, "")
@@ -48,8 +49,20 @@ export function llmsLinkProblems(text: string, repoRoot: string): string[] {
       const m = /^\/(blob|tree)\/main\/(.+)$/.exec(rest);
       if (!m) {
         problems.push(`unrecognised GitHub link shape: ${url}`);
-      } else if (!fs.existsSync(path.join(repoRoot, decodeURIComponent(m[2])))) {
-        problems.push(`GitHub link names a path that does not exist in the repository: ${url}`);
+      } else {
+        let decoded: string;
+        try {
+          decoded = decodeURIComponent(m[2]);
+        } catch {
+          problems.push(`GitHub link has a malformed percent-escape: ${url}`);
+          continue;
+        }
+        const resolved = path.resolve(root, decoded);
+        if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+          problems.push(`GitHub link path escapes the repository: ${url}`);
+        } else if (!fs.existsSync(resolved)) {
+          problems.push(`GitHub link names a path that does not exist in the repository: ${url}`);
+        }
       }
     } else if (url === "https://www.npmjs.com/package/neotoma") {
       continue;

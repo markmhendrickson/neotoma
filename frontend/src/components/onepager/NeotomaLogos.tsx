@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { logoFilter } from "./logo_filter";
 import { NEOTOMA_LOGO_DRAFTING, NEOTOMA_LOGO_EDGE } from "./neotoma_logo_drafting.generated";
 
 /**
@@ -51,24 +52,7 @@ export function DraftingLogo({ width = NEOTOMA_LOGO_EDGE.width }: { width?: numb
       focusable="false"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <defs>
-        <filter id={id} x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
-          <feMorphology in="SourceAlpha" operator="dilate" radius={radius} result="d" />
-          <feComposite in="d" in2="SourceAlpha" operator="out" result="edge" />
-          <feFlood floodColor="currentColor" result="ink" />
-          <feComposite in="ink" in2="edge" operator="in" result="line" />
-          <feFlood
-            floodColor="currentColor"
-            floodOpacity={NEOTOMA_LOGO_EDGE.tintOpacity}
-            result="t"
-          />
-          <feComposite in="t" in2="SourceAlpha" operator="in" result="tin" />
-          <feMerge>
-            <feMergeNode in="tin" />
-            <feMergeNode in="line" />
-          </feMerge>
-        </filter>
-      </defs>
+      <defs>{logoFilter(id, radius, NEOTOMA_LOGO_EDGE.tintOpacity)}</defs>
       <g filter={`url(#${id})`}>
         {groups.map((g, gi) => (
           <g key={gi} transform={g.transform}>

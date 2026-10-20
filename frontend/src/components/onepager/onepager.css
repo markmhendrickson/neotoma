@@ -853,7 +853,7 @@
   font-family: var(--mono);
 }
 
-/* The title block now holds the 280 px drafting logo, so sheets reserve more room under their content */
+/* The title block (35 px, text-cell height) sits at the bottom of each sheet; sheets reserve room under their content for it */
 .plan-sheet {
   padding-bottom: 84px;
 }
@@ -861,4 +861,21 @@
   .plan-sheet {
     padding-bottom: 76px;
   }
+}
+
+/* /install review fixes: no wrap inside the command block, legible label dot, dark palette for code blocks */
+.plan-install-commands pre {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  overflow-x: auto;
+}
+.plan-install-sheet span.rounded-full[class*="emerald"] {
+  background-color: var(--rust) !important;
+}
+.plan-install-sheet .code-block-palette {
+  background: var(--paper) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
 }
