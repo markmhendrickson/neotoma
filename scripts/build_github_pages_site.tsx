@@ -25,6 +25,7 @@ import {
   type SupportedLocale,
 } from "../frontend/src/i18n/config";
 import { localizePath } from "../frontend/src/i18n/routing";
+import { buildRedirectStub, isRetiredRoute } from "../frontend/src/site/route_retirement";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -248,6 +249,12 @@ async function main() {
 
   const allStaticRoutePaths = [...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths()])];
 
+  // neotoma.io is a one-pager: retired routes (every locale route and every old page that is not
+  // live or held, see frontend/src/site/route_retirement.ts) become static redirect stubs. They
+  // are written directly and are never pre-rendered.
+  const retiredRoutePaths = allStaticRoutePaths.filter((r) => r !== "/" && isRetiredRoute(r));
+  const renderedRoutePaths = allStaticRoutePaths.filter((r) => r === "/" || !isRetiredRoute(r));
+
   let routeCount = 0;
   for (const routePath of allStaticRoutePaths) {
     if (routePath === "/") continue;
@@ -256,7 +263,9 @@ async function main() {
     fs.mkdirSync(routeDir, { recursive: true });
     fs.writeFileSync(
       path.join(routeDir, "index.html"),
-      buildHtmlForRoute(rootHtml, routePath),
+      isRetiredRoute(routePath)
+        ? buildRedirectStub(routePath)
+        : buildHtmlForRoute(rootHtml, routePath),
       "utf-8",
     );
     routeCount++;
@@ -285,17 +294,26 @@ async function main() {
     fs.copyFileSync(wordmarkSrc, wordmarkDest);
     console.log(`Copied wordmark: ${path.relative(repoRoot, wordmarkDest)}`);
   }
+  const brandSrc = path.join(publicRootDir, "brand");
+  if (fs.existsSync(brandSrc)) {
+    fs.cpSync(brandSrc, path.join(outputDir, "brand"), { recursive: true });
+    console.log("Copied brand assets: site_pages/brand");
+  }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
-  fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");
+  fs.writeFileSync(
+    sitemapFile,
+    buildSitemapXml(SITEMAP_PATHS.filter((p) => !isRetiredRoute(p))),
+    "utf-8",
+  );
   if (fs.existsSync(llmsTxtSrc)) {
     fs.copyFileSync(llmsTxtSrc, llmsTxtDest);
     console.log(`Copied llms.txt: ${path.relative(repoRoot, llmsTxtDest)}`);
   }
-  await prerenderHtmlRoutes(allStaticRoutePaths);
+  await prerenderHtmlRoutes(renderedRoutePaths);
   finalizeBundledAssetPathsInAllHtml();
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);
-  console.log(`Built ${routeCount} route pages (fully pre-rendered HTML)`);
+  console.log(`Built ${routeCount} route pages (${renderedRoutePaths.length - 1} pre-rendered, ${retiredRoutePaths.length} redirect stubs)`);
   console.log(`Built 404.html (pre-rendered fallback)`);
   console.log(`Copied assets: ${path.relative(repoRoot, outputAssetsDir)}`);
   console.log(`Built robots: ${path.relative(repoRoot, robotsFile)}`);

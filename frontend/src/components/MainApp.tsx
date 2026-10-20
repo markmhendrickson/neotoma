@@ -4,10 +4,11 @@ import {
   Route,
   Routes,
   useLocation,
-  useNavigate,
   useNavigationType,
 } from "react-router-dom";
 import { Layout } from "@/components/Layout";
+import { RetiredRouteStub } from "@/components/RetiredRouteStub";
+import { isRetiredRoute } from "@/site/route_retirement";
 import { NotFound } from "@/components/NotFound";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
@@ -146,13 +147,9 @@ import {
   SchemasIndexPage,
 } from "@/components/subpages/SchemaConceptPage";
 import { sendPageView } from "@/utils/analytics";
-import { DEFAULT_LOCALE, isSupportedLocale, NON_DEFAULT_LOCALES } from "@/i18n/config";
+import { NON_DEFAULT_LOCALES } from "@/i18n/config";
 import {
-  getLocaleFromPath,
-  localizePath,
   normalizeToDefaultRoute,
-  resolvePreferredLocale,
-  stripLocaleFromPath,
 } from "@/i18n/routing";
 
 type AppRoute = {
@@ -346,10 +343,6 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/schemas/:slug", element: <SchemaConceptRouter /> },
 ];
 
-const APP_ROUTE_PATHS = new Set([
-  ...APP_ROUTES.map((route) => route.path),
-]);
-
 /** When the app is served at a product path (e.g. /neotoma-with-claude-code), show that product page at "/". */
 const BASENAME_TO_ROOT_PAGE: Record<string, JSX.Element> = {
   "/neotoma-with-cursor": <NeotomaWithCursorPage />,
@@ -375,32 +368,6 @@ function getRootElement(): JSX.Element {
   return BASENAME_TO_ROOT_PAGE[basename] ?? <MdxSitePage canonicalPath="/" shell="bare" />;
 }
 
-/**
- * Explicit `/${locale}/…` paths so segments like `markdown` are never captured as a locale.
- * (React Router ranks `/:locale/page` above `/markdown/*` when both match.)
- */
-function getLocalizedRoutePaths(routePath: string): string[] {
-  if (routePath === "/") {
-    return NON_DEFAULT_LOCALES.map((locale) => `/${locale}`);
-  }
-  return NON_DEFAULT_LOCALES.map((locale) => `/${locale}${routePath}`);
-}
-
-function LocaleSiteRedirect() {
-  const { pathname } = useLocation();
-  const locale = getLocaleFromPath(pathname) ?? DEFAULT_LOCALE;
-  const resolvedLocale = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
-  return <Navigate to={localizePath("/", resolvedLocale)} replace />;
-}
-
-function LocalizedRouteGuard({ children }: { children: React.ReactNode }) {
-  const { pathname } = useLocation();
-  const locale = getLocaleFromPath(pathname);
-  if (!locale || !isSupportedLocale(locale)) {
-    return <NotFound />;
-  }
-  return <>{children}</>;
-}
 
 const SCROLL_POSITIONS_STORAGE_KEY = "site-scroll-positions-v1";
 
@@ -486,37 +453,13 @@ function RouteScrollManager() {
  * Site-only public app shell.
  */
 export function MainApp() {
-  const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     sendPageView(normalizeToDefaultRoute(location.pathname));
   }, [location.pathname]);
 
-  useEffect(() => {
-    if (getLocaleFromPath(location.pathname)) return;
-    const preferredLocale = resolvePreferredLocale();
-    if (preferredLocale === DEFAULT_LOCALE) return;
-
-    const stripped = stripLocaleFromPath(location.pathname);
-    if (stripped === "/markdown" || stripped.startsWith("/markdown/")) {
-      const localized = localizePath(stripped, preferredLocale);
-      const target = `${localized}${location.hash || ""}`;
-      if (target !== `${location.pathname}${location.hash || ""}`) {
-        navigate(target, { replace: true });
-      }
-      return;
-    }
-
-    const defaultRoutePath = normalizeToDefaultRoute(location.pathname);
-    const targetBasePath = defaultRoutePath === "/site" ? "/" : defaultRoutePath;
-    if (!APP_ROUTE_PATHS.has(targetBasePath)) return;
-
-    const localizedPath = localizePath(targetBasePath, preferredLocale);
-    const target = `${localizedPath}${location.hash || ""}`;
-    if (target === `${location.pathname}${location.hash || ""}`) return;
-    navigate(target, { replace: true });
-  }, [location.hash, location.pathname, navigate]);
+  // No locale auto-redirect: neotoma.io is a one-pager and every locale route redirects to it.
 
   return (
     <Layout siteName="Neotoma">
@@ -525,46 +468,19 @@ export function MainApp() {
         <Route path="/site" element={<Navigate to="/" replace />} />
         <Route path="/quick-start" element={<Navigate to="/install" replace />} />
         <Route path="/docker" element={<Navigate to="/install/docker" replace />} />
-        {NON_DEFAULT_LOCALES.map((locale) => (
-          <Route
-            key={`${locale}/site`}
-            path={`/${locale}/site`}
-            element={
-              <LocalizedRouteGuard>
-                <LocaleSiteRedirect />
-              </LocalizedRouteGuard>
-            }
-          />
-        ))}
         <Route path="/" element={getRootElement()} />
         {APP_ROUTES.filter((r) => r.path !== "/").map((route) => (
-          <Route key={route.path} path={route.path} element={route.element} />
-        ))}
-        <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />
-        {NON_DEFAULT_LOCALES.map((locale) => (
           <Route
-            key={`${locale}/markdown/*`}
-            path={`/${locale}/markdown/*`}
-            element={
-              <LocalizedRouteGuard>
-                <SiteMarkdownMirrorPage />
-              </LocalizedRouteGuard>
-            }
+            key={route.path}
+            path={route.path}
+            element={isRetiredRoute(route.path) ? <RetiredRouteStub /> : route.element}
           />
         ))}
-        {APP_ROUTES.flatMap((route) =>
-          getLocalizedRoutePaths(route.path).map((localizedPath) => (
-            <Route
-              key={`localized:${route.path}:${localizedPath}`}
-              path={localizedPath}
-              element={
-                <LocalizedRouteGuard>
-                  {route.path === "/" ? getRootElement() : route.element}
-                </LocalizedRouteGuard>
-              }
-            />
-          )),
-        )}
+        <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />
+        {NON_DEFAULT_LOCALES.flatMap((locale) => [
+          <Route key={`${locale}-root`} path={`/${locale}`} element={<RetiredRouteStub />} />,
+          <Route key={`${locale}-any`} path={`/${locale}/*`} element={<RetiredRouteStub />} />,
+        ])}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>

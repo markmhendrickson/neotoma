@@ -1,0 +1,15 @@
+{
+  "identity": "Neotoma selected identity: symbol 'Retained sheets', wordmark N2 (Newsreader 600, licensed outlines)",
+  "decision": "ent_6567f7935e710b2edf5bf276 (operator_selected 2026-10-06, per Neotoma canonical brand system ent_c5f3ebd1800a887a3b405e53)",
+  "source_repository": "github.com/markmhendrickson/sites",
+  "source_commit": "2aed03818f5742e34d4bbc24d7a09662db76dd20",
+  "files": {
+    "n2-nav-light.svg": {"source": "shared/site/generator/dist/images/logo-typography-2026-10-06/exports/n2-nav-light.svg", "sha256": "49109046da1e12f583208e16ad0d2d67c6e95c12fa74682925a80c6d15e48624", "use": "solid lockup on light grounds"},
+    "n2-nav-dark.svg": {"source": "shared/site/generator/dist/images/logo-typography-2026-10-06/exports/n2-nav-dark.svg", "sha256": "dd0c9e14cca3a7780c6b3a28221165791c97ddd87264c9e46220a4ef710cb890", "use": "solid lockup on dark grounds"},
+    "neotoma-symbol-selected-light.svg": {"source": "shared/site/generator/dist/images/logo-typography-2026-10-06/exports/neotoma-symbol-selected-light.svg", "sha256": "5c81775ed43cdd32f03130408cacf9cb1fe015d06f236a918b86bbb15e45275d", "use": "solid symbol"},
+    "neotoma-symbol-selected-dark.svg": {"source": "shared/site/generator/dist/images/logo-typography-2026-10-06/exports/neotoma-symbol-selected-dark.svg", "sha256": "9511db0450cb833169411ba8430d0bc630ef64bbb07b5be15d082414ad15abd9", "use": "solid symbol"},
+    "neotoma-icon-32.svg": {"source": "shared/site/generator/dist/images/selected-logo-exports/neotoma-icon-32.svg", "sha256": "03b41729bad1adef001fdc59cc3d84716a16b3a82dc7912855388a9845254c71", "use": "favicon (selected solid icon)"},
+    "neotoma-lockup-drafting.svg": {"derived_from": "n2-nav-light.svg", "script": "scripts/derive_neotoma_logo_drafting.mjs", "method": "path data and transforms copied unchanged; solid fill replaced by a 1px non-scaling outline stroke; nothing redrawn"}
+  },
+  "note": "n2-nav-light.svg is the same file (same sha256) recorded as the accepted Neotoma lockup in the Constara preview asset provenance."
+}

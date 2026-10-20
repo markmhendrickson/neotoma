@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { SiteTailpiece } from "@/components/SiteTailpiece";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
+import { DraftingLogo, SolidLockup } from "./NeotomaLogos";
 import { RecordPlanNarrow, RecordPlanWide, ServicePlan } from "./onepager_figures";
 import {
   CLI_TRANSCRIPT,
+  DEEPER_MATERIAL,
   CONNECTIONS_OTHER,
   CONNECTIONS_SETUP,
   INSTALL_COMMANDS,
@@ -15,12 +16,14 @@ import {
 } from "./onepager_copy";
 import "./onepager.css";
 
-const SHEETS = 6;
+const SHEETS = 7;
 
 function TitleBlock({ n, title }: { n: number; title: string }) {
   return (
     <div className="plan-titleblock" aria-hidden="true">
-      <span>NEOTOMA</span>
+      <span className="plan-tb-logo">
+        <DraftingLogo height={18} />
+      </span>
       <span>{title}</span>
       <span>
         SHEET {String(n).padStart(2, "0")} / {String(SHEETS).padStart(2, "0")}
@@ -48,6 +51,12 @@ export function NeotomaOnePager() {
       <main className="plan" id="top">
         {/* Sheet 01 */}
         <section className="plan-sheet plan-hero" aria-labelledby="s1">
+          <div className="plan-masthead">
+            <SolidLockup />
+            <a className="plan-link plan-masthead-link" href={NEOTOMA_GITHUB_REPO}>
+              GitHub
+            </a>
+          </div>
           <p className="plan-label">Neotoma · the system of record for AI agents</p>
           <h1 id="s1">A record, not recall.</h1>
           <p className="plan-lede">
@@ -73,9 +82,12 @@ export function NeotomaOnePager() {
             >
               View on GitHub
             </a>
-            <Link to="/architecture" className="plan-link">
+            <a
+              href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/architecture/architecture.md`}
+              className="plan-link"
+            >
               Read the architecture
-            </Link>
+            </a>
           </div>
 
           <figure className="plan-figure">
@@ -211,7 +223,10 @@ export function NeotomaOnePager() {
           </div>
           <p className="plan-body plan-small">
             Other documented integrations: {CONNECTIONS_OTHER}. See{" "}
-            <Link to="/integrations">integrations</Link> for each guide.
+            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/integrations/matrix.md`}>
+              integrations
+            </a>{" "}
+            for each guide.
           </p>
           <TitleBlock n={4} title="SCHEDULE OF CONNECTIONS" />
         </section>
@@ -230,9 +245,9 @@ export function NeotomaOnePager() {
             >
               Full install guide
             </Link>
-            <Link to="/docs" className="plan-link">
+            <a href={`${NEOTOMA_GITHUB_REPO}/tree/main/docs`} className="plan-link">
               Documentation
-            </Link>
+            </a>
           </div>
           <TitleBlock n={5} title="INSTALL" />
         </section>
@@ -255,39 +270,43 @@ export function NeotomaOnePager() {
           <TitleBlock n={6} title="GENERAL NOTES · LIMITS" />
         </section>
 
-        {/* Reference rail */}
-        <nav className="plan-rail" aria-label="Deeper material">
-          <p className="plan-label">Deeper material</p>
-          <ul>
-            <li>
-              <a href={NEOTOMA_GITHUB_REPO}>GitHub repository</a>
-            </li>
-            <li>
-              <a href="https://www.npmjs.com/package/neotoma">npm package</a>
-            </li>
-            <li>
-              <Link to="/docs">Docs</Link>
-            </li>
-            <li>
-              <Link to="/architecture">Architecture</Link>
-            </li>
-            <li>
-              <Link to="/integrations">Integrations</Link>
-            </li>
-            <li>
-              <Link to="/changelog">Changelog</Link>
-            </li>
-          </ul>
+        {/* Sheet 07 */}
+        <section className="plan-sheet" aria-labelledby="s7">
+          <SheetHead
+            id="s7"
+            mark="Sheet 07 · Deeper material"
+            title="Everything else lives on GitHub"
+          />
+          <p className="plan-body">
+            This page is the whole site. Documentation, the architecture, integration guides and the
+            changelog are kept in the repository, next to the code they describe.
+          </p>
+          <div className="plan-deeper">
+            {DEEPER_MATERIAL.map((group) => (
+              <div key={group.title}>
+                <h3>{group.title}</h3>
+                <ul>
+                  {group.links.map((link) => (
+                    <li key={link.href}>
+                      <a href={link.href}>{link.label}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
           <p className="plan-small">
             Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>, the
             operating system for agentic organizations. Neotoma answers what was true. Ateles
             answers who was authorized.
           </p>
-        </nav>
+          <p className="plan-small plan-colophon">
+            MIT licensed · Built by <a href="https://markmhendrickson.com">Mark Hendrickson</a> ·{" "}
+            <a href="/privacy">Privacy</a> · <a href="/terms">Terms of use</a>
+          </p>
+          <TitleBlock n={7} title="DEEPER MATERIAL · GITHUB" />
+        </section>
       </main>
-      <div id="site-footer">
-        <SiteTailpiece />
-      </div>
     </div>
   );
 }

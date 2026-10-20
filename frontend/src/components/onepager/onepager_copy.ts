@@ -118,3 +118,39 @@ export const LIMITS: readonly { title: string; text: string }[] = [
     text: "Neotoma stores typed entities and their observations. It can sit beside tools that retain or retrieve context.",
   },
 ];
+
+const GH = "https://github.com/markmhendrickson/neotoma";
+export const DEEPER_MATERIAL: readonly {
+  title: string;
+  links: readonly { label: string; href: string }[];
+}[] = [
+  {
+    title: "Read",
+    links: [
+      { label: "README", href: `${GH}#readme` },
+      { label: "Documentation", href: `${GH}/tree/main/docs` },
+      { label: "Architecture", href: `${GH}/blob/main/docs/architecture/architecture.md` },
+      { label: "Integrations", href: `${GH}/blob/main/docs/integrations/matrix.md` },
+      { label: "Changelog and releases", href: `${GH}/releases` },
+    ],
+  },
+  {
+    title: "Reference",
+    links: [
+      { label: "REST API", href: `${GH}/blob/main/docs/api/rest_api.md` },
+      { label: "MCP server", href: `${GH}/blob/main/docs/developer/mcp_overview.md` },
+      { label: "CLI", href: `${GH}/blob/main/docs/developer/cli_reference.md` },
+      { label: "Vocabulary", href: `${GH}/blob/main/docs/vocabulary/canonical_terms.md` },
+    ],
+  },
+  {
+    title: "Take part",
+    links: [
+      { label: "Source code", href: GH },
+      { label: "npm package", href: "https://www.npmjs.com/package/neotoma" },
+      { label: "Issues", href: `${GH}/issues` },
+      { label: "Discussions", href: `${GH}/discussions` },
+      { label: "Talk to the author", href: "/meet" },
+    ],
+  },
+];

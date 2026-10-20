@@ -12,6 +12,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  LIVE_ROUTES,
+  RETIRED_DESTINATIONS,
+  heldReason,
+  isRetiredRoute,
+  resolveDestination,
+} from "../frontend/src/site/route_retirement";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -113,6 +120,7 @@ let missingPages = 0;
 let emptyPages = 0;
 
 for (const routePath of indexablePaths) {
+  if (isRetiredRoute(routePath)) continue; // retired routes are redirect stubs, checked in 3e
   const htmlPath =
     routePath === "/"
       ? rootIndex
@@ -132,7 +140,7 @@ for (const routePath of indexablePaths) {
 }
 
 if (missingPages === 0 && emptyPages === 0) {
-  pass(`All ${indexablePaths.length} indexable pages have prerendered HTML files`);
+  pass(`All ${indexablePaths.filter((r) => !isRetiredRoute(r)).length} live and held pages have prerendered HTML files`);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,36 +218,106 @@ if (englishHomeSentinelHits === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 3d. The home page states the current category and contrast, in every locale
+// 3d. The home page is the one-pager: current category, no old app chrome
 // ---------------------------------------------------------------------------
-const HOME_REQUIRED = ["A record, not recall.", "the system of record for AI agents"] as const;
-const HOME_FORBIDDEN = ["Your agents forget", "makes them remember", "state layer for AI agents"] as const;
-let homeCategoryFailures = 0;
-for (const loc of ["", ...NON_ENGLISH_SITE_LOCALES]) {
-  const homePath = path.join(siteDir, loc, "index.html");
-  if (!fs.existsSync(homePath)) {
-    if (loc === "") {
-      fail("site_pages/index.html does not exist");
-      homeCategoryFailures++;
-    }
-    continue;
-  }
-  const html = fs.readFileSync(homePath, "utf-8");
+const HOME_REQUIRED = [
+  "A record, not recall.",
+  "the system of record for AI agents",
+  "Sheet 07 · Deeper material",
+] as const;
+const HOME_FORBIDDEN = [
+  "Your agents forget",
+  "makes them remember",
+  "state layer for AI agents",
+  "Memory guarantees",
+  'id="site-footer"',
+] as const;
+let homeFailures = 0;
+{
+  const html = fs.readFileSync(path.join(siteDir, "index.html"), "utf-8");
   for (const phrase of HOME_REQUIRED) {
     if (!html.includes(phrase)) {
-      fail(`site_pages/${loc ? `${loc}/` : ""}index.html is missing "${phrase}"`);
-      homeCategoryFailures++;
+      fail(`site_pages/index.html is missing "${phrase}"`);
+      homeFailures++;
     }
   }
   for (const phrase of HOME_FORBIDDEN) {
     if (html.includes(phrase)) {
-      fail(`site_pages/${loc ? `${loc}/` : ""}index.html still carries retired category copy "${phrase}"`);
-      homeCategoryFailures++;
+      fail(`site_pages/index.html still carries retired or old-chrome content "${phrase}"`);
+      homeFailures++;
     }
   }
 }
-if (homeCategoryFailures === 0) {
-  pass("Home pages state the current category and carry no retired category copy");
+if (homeFailures === 0) {
+  pass("Home page is the one-pager: current category, deeper-material sheet, no old header or footer");
+}
+
+// ---------------------------------------------------------------------------
+// 3e. Route set: /install is a real page; every retired route is a redirect stub to its destination
+// ---------------------------------------------------------------------------
+let routeFailures = 0;
+const installHtml = path.join(siteDir, "install", "index.html");
+if (!fs.existsSync(installHtml)) {
+  fail("site_pages/install/index.html missing: /install must stay a real page");
+  routeFailures++;
+} else {
+  const html = fs.readFileSync(installHtml, "utf-8");
+  if (html.includes('http-equiv="refresh"') || html.length < 5000 || html.includes('<div id="root"></div>')) {
+    fail("site_pages/install/index.html is a stub or empty: /install must stay a real, prerendered page");
+    routeFailures++;
+  }
+}
+for (const route of Object.keys(RETIRED_DESTINATIONS)) {
+  const stubPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
+  if (!fs.existsSync(stubPath)) continue; // routes the build does not emit are covered by the unit test
+  const html = fs.readFileSync(stubPath, "utf-8");
+  const dest = resolveDestination(route);
+  const target = dest.url === "/" ? "https://neotoma.io/" : dest.url;
+  for (const needle of [
+    `http-equiv="refresh" content="0; url=${target}"`,
+    `<link rel="canonical" href="${target}">`,
+    'name="robots" content="noindex,follow"',
+    `<a href="${target}">Continue`,
+  ]) {
+    if (!html.includes(needle)) {
+      fail(`site_pages${route}/index.html is not a complete redirect stub (missing: ${needle.slice(0, 60)})`);
+      routeFailures++;
+      break;
+    }
+  }
+}
+for (const loc of NON_ENGLISH_SITE_LOCALES) {
+  const stub = path.join(siteDir, loc, "index.html");
+  if (!fs.existsSync(stub) || !fs.readFileSync(stub, "utf-8").includes('content="0; url=https://neotoma.io/"')) {
+    fail(`site_pages/${loc}/index.html must be a redirect stub to the one-pager`);
+    routeFailures++;
+  }
+}
+for (const route of ["/evaluate", "/privacy", "/terms", "/sandbox", "/meet"]) {
+  if (!heldReason(route)) continue;
+  const heldPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
+  if (!fs.existsSync(heldPath) || fs.readFileSync(heldPath, "utf-8").includes('http-equiv="refresh"')) {
+    fail(`held route ${route} must stay a real page until its owner retires it`);
+    routeFailures++;
+  }
+}
+{
+  const sitemap = fs.readFileSync(path.join(siteDir, "sitemap.xml"), "utf-8");
+  const locs = [...sitemap.matchAll(/<loc>https:\/\/neotoma\.io([^<]*)<\/loc>/g)].map((m) => m[1] || "/");
+  const leaked = locs.filter((r) => isRetiredRoute(r));
+  if (leaked.length) {
+    fail(`sitemap.xml lists retired routes: ${leaked.slice(0, 5).join(", ")}`);
+    routeFailures++;
+  }
+  for (const live of LIVE_ROUTES) {
+    if (!locs.includes(live)) {
+      fail(`sitemap.xml is missing live route ${live}`);
+      routeFailures++;
+    }
+  }
+}
+if (routeFailures === 0) {
+  pass("Route set holds: /install is real, retired routes are redirect stubs, sitemap lists only live and held routes");
 }
 
 // ---------------------------------------------------------------------------
