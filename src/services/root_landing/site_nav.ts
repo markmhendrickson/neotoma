@@ -50,9 +50,7 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
   },
   {
     title: "Hosted",
-    items: [
-      { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
-    ],
+    items: [{ label: "Public sandbox", href: "/sandbox", icon: "Globe" }],
   },
   {
     title: "Integrations",
