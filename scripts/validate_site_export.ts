@@ -182,7 +182,10 @@ const NON_ENGLISH_SITE_LOCALES = [
   "id",
   "de",
 ] as const;
-/** Stable English hero lines from `static_packs` / SitePage — if present in locale HTML, prerender likely missed i18n. */
+/**
+ * Retired category lines. The home route is the one-pager in every locale, so none of these may appear
+ * in any locale's home HTML (they were the pre-one-pager hero and the retired "memory" frame).
+ */
 const ENGLISH_HOME_SENTINELS = [
   "Your agents forget.",
   "Without shared memory across your AI tools:",
@@ -204,6 +207,39 @@ for (const loc of NON_ENGLISH_SITE_LOCALES) {
 }
 if (englishHomeSentinelHits === 0) {
   pass("No non-English homepage HTML contained English hero sentinels");
+}
+
+// ---------------------------------------------------------------------------
+// 3d. The home page states the current category and contrast, in every locale
+// ---------------------------------------------------------------------------
+const HOME_REQUIRED = ["A record, not recall.", "the system of record for AI agents"] as const;
+const HOME_FORBIDDEN = ["Your agents forget", "makes them remember", "state layer for AI agents"] as const;
+let homeCategoryFailures = 0;
+for (const loc of ["", ...NON_ENGLISH_SITE_LOCALES]) {
+  const homePath = path.join(siteDir, loc, "index.html");
+  if (!fs.existsSync(homePath)) {
+    if (loc === "") {
+      fail("site_pages/index.html does not exist");
+      homeCategoryFailures++;
+    }
+    continue;
+  }
+  const html = fs.readFileSync(homePath, "utf-8");
+  for (const phrase of HOME_REQUIRED) {
+    if (!html.includes(phrase)) {
+      fail(`site_pages/${loc ? `${loc}/` : ""}index.html is missing "${phrase}"`);
+      homeCategoryFailures++;
+    }
+  }
+  for (const phrase of HOME_FORBIDDEN) {
+    if (html.includes(phrase)) {
+      fail(`site_pages/${loc ? `${loc}/` : ""}index.html still carries retired category copy "${phrase}"`);
+      homeCategoryFailures++;
+    }
+  }
+}
+if (homeCategoryFailures === 0) {
+  pass("Home pages state the current category and carry no retired category copy");
 }
 
 // ---------------------------------------------------------------------------
