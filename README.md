@@ -2,7 +2,7 @@
 
 **Agents cannot own work they cannot verify.**
 
-You cannot delegate real work to agents you cannot hold to account. Accountability has two halves: what was true, and who was authorized. **Neotoma is the system of record for AI agents** — it answers what was true. Your agents can produce a value; they cannot tell you its version, its source, or whether it is still current. Neotoma keeps every fact as an observation tied to its source, so you can see where a value came from and what is current now.
+You cannot delegate real work to agents you cannot hold to account. Accountability has two halves: what was true, and who was authorized. **Neotoma is the system of record for AI agents**: it answers what was true. Your agents can produce a value; they cannot tell you its version, its source, or whether it is still current. Neotoma keeps every fact as an observation tied to its source, so you can see where a value came from and what is current now.
 
 **A record, not recall.** An agent's recall holds what it was last told. A record holds what was stored, from which source, who corrected it, and what is current now, for connected agents to defer to. What ships today is the foundation of that record: Neotoma ingests sources into immutable observations and computes reproducible entity snapshots, with each current field tracing back to the observation that set it. It is exposed over an MCP server, a REST API, a CLI, and a bundled web Inspector. See [Vision and execution status](#vision-and-execution-status) for exactly where the implementation stands against the vision.
 
@@ -12,17 +12,17 @@ It is built for developers building and operating AI agents who need a shared re
 
 ## Vision and execution status
 
-As agent use expands, reality fragments across chat histories, agent memories, files, databases, tickets, and application state. The failure is not retrieval — it is that humans and agents can no longer answer: *which assertion is current? which source introduced it? was it observed, inferred, or decided? who had authority to correct it? which agents relied on the previous version? is there legitimate disagreement?* Neotoma's long-term role is **collective epistemic coherence**: not "better semantic memory," but deterministic, governed, multi-party state that humans and agents maintain together — attributed, correctable, disagreement-aware, portable, and independent of any one model or application.
+As agent use expands, reality fragments across chat histories, agent memories, files, databases, tickets, and application state. The failure is not retrieval. It is that humans and agents can no longer answer: *which assertion is current? which source introduced it? was it observed, inferred, or decided? who had authority to correct it? which agents relied on the previous version? is there legitimate disagreement?* Neotoma's long-term role is **collective epistemic coherence**: not "better semantic memory," but deterministic, governed, multi-party state that humans and agents maintain together: attributed, correctable, disagreement-aware, portable, and independent of any one model or application.
 
 | Vision phase | What it means | Status |
 | --- | --- | --- |
-| **P0 — Deterministic single-writer state** | Immutable observations, hash-derived entity IDs, deterministic reduction, field-level provenance, corrections as new observations, per-entity observation history | ✅ **Shipped and stable** — the core guarantee, in daily use |
-| **P1 — Multi-user state foundations** | Human and agent identities, attributed writes, tenant isolation, access controls, shared instances | 🟡 **Partially shipped**: hosted multi-user mode with `user_id` tenancy, per-agent identity (AAuth, optional hardware attestation), capability grants, guest tokens, peer federation. Not yet: organizations/workspaces, membership lifecycle, invitations, offboarding |
-| **P2 — Authority over state** | Domain ownership, correction rights, supersession, policy ownership, temporary grants, disclosure logs | 🟡 **Mechanisms exist** (corrections, `SUPERSEDES` relationships, per-operation access controls); authority *semantics* — who may correct what, scoped by domain — are future work |
-| **P3 — Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | 🔜 Planned — interpretations are first-class today; dispute/official-position semantics are not |
-| **P4 — Organizational intelligence substrate** | Non-developer governance UI, "why does the system believe this?" explanations, impact analysis, authority-graph views, enterprise administration | 🔭 Vision — the Inspector's provenance and audit views are the seed |
+| **P0: Deterministic single-writer state** | Immutable observations, hash-derived entity IDs, deterministic reduction, field-level provenance, corrections as new observations, per-entity observation history | ✅ **Shipped and stable**: the core guarantee, in daily use |
+| **P1: Multi-user state foundations** | Human and agent identities, attributed writes, tenant isolation, access controls, shared instances | 🟡 **Partially shipped**: hosted multi-user mode with `user_id` tenancy, per-agent identity (AAuth, optional hardware attestation), capability grants, guest tokens, peer federation. Not yet: organizations/workspaces, membership lifecycle, invitations, offboarding |
+| **P2: Authority over state** | Domain ownership, correction rights, supersession, policy ownership, temporary grants, disclosure logs | 🟡 **Mechanisms exist** (corrections, `SUPERSEDES` relationships, per-operation access controls); authority *semantics* (who may correct what, scoped by domain) are future work |
+| **P3: Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | 🔜 Planned: interpretations are first-class today; dispute/official-position semantics are not |
+| **P4: Organizational intelligence substrate** | Non-developer governance UI, "why does the system believe this?" explanations, impact analysis, authority-graph views, enterprise administration | 🔭 Vision: the Inspector's provenance and audit views are the seed |
 
-[Ateles](https://github.com/markmhendrickson/ateles) is the other half. Accountability has two halves: **Neotoma answers what was true** (truth, memory, provenance); **Ateles answers who was authorized** (initiative, delegation, approval) — against Neotoma state. Neither is sufficient alone. Memory without authority tells you what happened but not whether it was permitted; authority without memory tells you who may act but not against what state.
+[Ateles](https://github.com/markmhendrickson/ateles) is the other half. Accountability has two halves: **Neotoma answers what was true** (truth, memory, provenance); **Ateles answers who was authorized** (initiative, delegation, approval), against Neotoma state. Neither is sufficient alone. Memory without authority tells you what happened but not whether it was permitted; authority without memory tells you who may act but not against what state.
 
 ## What Neotoma is
 
@@ -32,7 +32,7 @@ Three properties hold across every interface:
 
 - **Deterministic.** Entity IDs, event IDs, and reducer output are derived from the inputs by hashing. Observation IDs are also hashes, but of the source, the interpretation, the entity, and the fields, and each interpretation run gets a fresh ID, so the same input stored in two separate data directories yields the same entity ID and different observation IDs. The same observations produce the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
 - **Immutable and auditable.** The write path adds sources and observations and does not edit them; the database does not enforce this with a constraint. Every field in a snapshot traces back to the observation that set it, and through that observation to its source, interpretation, agent, and timestamp.
-- **Self-hosted and portable.** The engine is embedded SQLite plus content-addressed file storage under a directory you control, with optional AES-256-GCM at-rest encryption. Nothing is used for training, and you can export everything. In single-user mode the data stays entirely local; multi-user, peer-sync, and hosted modes are opt-in (see Deployment modes).
+- **Self-hosted and portable.** The engine is embedded SQLite plus content-addressed file storage under a directory you control, with optional AES-256-GCM at-rest encryption. Nothing is used for training, and you can export your data as current state; observation history is not part of the export. In single-user mode the data stays entirely local; multi-user, peer-sync, and hosted modes are opt-in (see Deployment modes).
 
 ## How it works
 
@@ -63,17 +63,17 @@ Neotoma exposes 67 MCP tools (as of v0.25.0) and about 100 REST endpoints, all b
 
 **Resolve, retrieve, and search.** Look up entities by identifier (name, email, and similar), resolve identity from multiple signals with confidence scoring, list observations, retrieve a field's provenance chain, traverse the relationship graph N hops, and pull a full graph neighborhood. When an embedding key is configured, semantic vector search runs over entity snapshots (stored locally in sqlite-vec); keyword filtering works without it.
 
-**Correct and evolve.** Submit corrections that always win in the snapshot (they are high-priority observations, never edits). Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
+**Correct and evolve.** Submit corrections as high-priority observations, never edits; the earlier observation stays readable. Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
 
 **Relate and sequence.** Create typed relationships (for example `PART_OF`, `DEPENDS_ON`, `REFERS_TO`, `DUPLICATE_OF`), query timeline events across types and date ranges, and read an entity's observation history in a deterministic order.
 
 **Manage the entity lifecycle.** Merge duplicates, split an entity by predicate, soft-delete and restore, list potential duplicates, and run GDPR-oriented deletion. Merge and split are transactional and audited.
 
-**Control multi-agent access.** Every write is attributed to an agent identity (verified key thumbprint, JWT subject, or client name), and agent grants express least-privilege capabilities (which operations on which entity types). This is what makes attribution and provenance answerable rather than asserted — it is infrastructure behind the guarantees above, not a feature to evaluate on its own. The mechanics, including optional hardware-attested authentication and guest access tokens, are documented in the [AAuth reference](https://neotoma.io/aauth).
+**Control multi-agent access.** Every write is attributed to an agent identity (verified key thumbprint, JWT subject, or client name), and agent grants express least-privilege capabilities (which operations on which entity types). This is what makes attribution and provenance answerable rather than asserted. It is infrastructure behind the guarantees above, not a feature to evaluate on its own. The mechanics, including optional hardware-attested authentication and guest access tokens, are documented in the [AAuth reference](https://neotoma.io/aauth).
 
 **Federate, sync, and intake.** Register peer instances and sync entities between them with configurable scope and conflict resolution (last-write-wins, source priority, or manual). Subscribe to entity or event changes over webhooks (HMAC-signed) or Server-Sent Events. Accept guest entity submissions, mirror GitHub issues into conversation threads, and mirror your data to deterministic, git-trackable canonical Markdown.
 
-**Export and own your data.** Produce a bounded `MEMORY.md` summary, a JSON snapshot export with full provenance and attribution metadata, or a complete Markdown mirror of every entity, relationship, source, and timeline day.
+**Export and own your data.** Produce a bounded `MEMORY.md` summary, a JSON snapshot export of current entity state with a per-field provenance map (field to the observation ID that set it) and attribution metadata (the observations themselves, and so the observation history, are not exported), or a complete Markdown mirror of every entity, relationship, source, and timeline day.
 
 ## Interfaces
 
@@ -199,15 +199,15 @@ Neotoma is primarily for developers building and operating AI agents who need a 
 
 Two further audiences follow from the same code: individuals running a personal cross-assistant memory (the built-in types are personal-information shaped, and the single-user SQLite plus Inspector path serves one person across assistants), and operators of a shared or hosted instance (OAuth, peer federation, and Docker or Fly deploy targets). The agent-identity and grants machinery is infrastructure supporting attribution and provenance for every audience, not a reason a particular audience adopts Neotoma.
 
-It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a fully hosted product with nothing running on their own machine — Neotoma is local-first by design, and that part is not a temporary state. Installation is: today it is npm and the CLI, and a guided installation is intended but not yet available. If today's install path is what stands between you and trying it, that is our problem to fix, not a sign you are the wrong user.
+It is not aimed at casual note-taking, PKM/Obsidian-style human-driven knowledge bases, or users who need a fully hosted product with nothing running on their own machine. Neotoma is local-first by design, and that part is not a temporary state. Installation is: today it is npm and the CLI, and a guided installation is intended but not yet available. If today's install path is what stands between you and trying it, that is our problem to fix, not a sign you are the wrong user.
 
-Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md) — the canonical public ICP statement. For how it relates to the other ICP documents and which is canonical for which surface, see [ICP reconciliation](docs/icp/icp_reconciliation.md).
+Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md): the canonical public ICP statement. For how it relates to the other ICP documents and which is canonical for which surface, see [ICP reconciliation](docs/icp/icp_reconciliation.md).
 
 ## Status
 
-**Version:** v0.17.0 · **License:** MIT · **Storage:** local-only (SQLite + local files).
+**Version:** see the [latest release](https://github.com/markmhendrickson/neotoma/releases) · **License:** MIT · **Storage:** local-only (SQLite + local files).
 
-Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, full provenance, same contract across CLI and MCP) are stable — phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
+Neotoma is in developer preview and used daily in real agent workflows. The core guarantees (deterministic state, versioned history, full provenance, same contract across CLI and MCP) are stable, phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, long-term replay compatibility, and backward compatibility are not yet guaranteed. Expect breaking changes.
 
 ## Development
 
