@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **733**
-- Backend and repo Vitest files: **697**
+- Total automated test files: **736**
+- Backend and repo Vitest files: **700**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 200 |
+| Vitest unit tests | 203 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 222 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (200):**
+**Files (203):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -175,6 +175,9 @@ flowchart TD
 - `tests/unit/db_url_misconfig_guard.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
+- `tests/unit/docs_viewer_build.test.ts`
+- `tests/unit/docs_viewer_lint.test.ts`
+- `tests/unit/docs_viewer_render.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
