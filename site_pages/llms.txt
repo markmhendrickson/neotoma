@@ -6,24 +6,24 @@
 
 A record, not recall. An agent's recall holds what it was last told. Neotoma is a record: it keeps what was stored, from which source, who corrected it, and what is current now, for connected agents to defer to.
 
-Neotoma is open source and local-first. It stores each fact as an immutable observation linked to its source, resolves observations into entities, and computes a current snapshot for each entity with a deterministic reducer. A correction adds a new observation; the earlier observations stay readable for that entity. Each current field names the observation that set it.
+Neotoma is open source and local-first. It stores each fact as an observation linked to its source, resolves observations into entities, and computes a current snapshot for each entity with a reducer. A correction is recorded as a new observation, and the earlier observations stay readable for that entity. Each current field names the observation that set it.
 
 ## Key facts
 
 - Open-source, MIT-licensed
 - Installs via npm: `npm install -g neotoma`, then `neotoma init`
 - Interfaces: MCP server, REST API, CLI, and a bundled web Inspector
-- Platforms: macOS, Linux, Windows (WSL)
+- Platforms: macOS and Linux; Windows is untested
 - Documented integrations: Cursor, Claude, Claude Code, ChatGPT, Codex, OpenClaw
-- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files)
+- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files); no telemetry, and the interactive CLI checks the npm registry for a newer version once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`)
 - Written in TypeScript
 
 ## What it provides
 
-- Deterministic snapshots: the same observations reduce to the same entity state, regardless of order
+- Snapshots: the current state of an entity is computed by a reducer from its observations
 - Provenance: every current field traces to the observation that set it, and through it to its source
-- Corrections as observations: a correction is recorded as a new observation, not an overwrite
-- Entity resolution: entity IDs are derived from the identity fields of the entity type
+- Corrections as observations: a correction adds a new observation and does not overwrite the earlier one
+- Entity resolution: entity IDs are hashes derived from the identity fields of the entity type
 - Idempotent writes through an `idempotency_key`
 
 ## Limits
@@ -31,15 +31,19 @@ Neotoma is open source and local-first. It stores each fact as an immutable obse
 - A record is a workflow commitment: agents must write to it and read from it, and it needs a local service and deliberate writes
 - Provenance shows the evidence trail, not that an agent read a source correctly
 - Export writes current state; observation history is not part of the export
+- A later write can override a correction in the current snapshot (open issue #2033)
+- History is readable per entity; there is no query for the state of the record at a past time
+- Field values are not checked against their types on write today; a value of the wrong type can be accepted into the snapshot
+- Observation IDs are not stable across runs: the same input stored twice in separate data directories gives the same entity ID and different observation IDs
 - Organizations, workspaces, and multi-party authority are not built
 - It is not a vector store or a chat log
 
 ## Key concepts
 
 - Entity: canonical representation of a person, company, task, or object with a deterministic ID
-- Observation: an immutable, timestamped fact about an entity, linked to its source
+- Observation: a timestamped fact about an entity, linked to its source
 - Snapshot: the current state of an entity, computed from its observations by a reducer
-- Reducer: a deterministic function that turns observations into a snapshot
+- Reducer: the function that turns an entity's observations into a snapshot
 - Provenance: the link from each snapshot field to the observation, and from there to the source, that set it
 
 ## How it compares
@@ -51,11 +55,10 @@ Neotoma is open source and local-first. It stores each fact as an immutable obse
 ## Links
 
 - Website: https://neotoma.io
-- Documentation: https://neotoma.io/docs
 - Install guide: https://neotoma.io/install
-- FAQ: https://neotoma.io/faq
 - GitHub: https://github.com/markmhendrickson/neotoma
+- Documentation: https://github.com/markmhendrickson/neotoma/tree/main/docs
+- Architecture: https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md
+- Integrations: https://github.com/markmhendrickson/neotoma/blob/main/docs/integrations/matrix.md
+- Releases: https://github.com/markmhendrickson/neotoma/releases
 - npm: https://www.npmjs.com/package/neotoma
-- Architecture: https://neotoma.io/architecture
-- Memory guarantees: https://neotoma.io/memory-guarantees
-- Memory models comparison: https://neotoma.io/memory-models
