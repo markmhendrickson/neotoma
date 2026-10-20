@@ -44,4 +44,4 @@ Other folders (`plans/`, `proposals/`, `prototypes/`, `reports/`, `implementatio
 ## Limits worth knowing before you rely on the record
 
 - Provenance shows the evidence trail for a value, not that an agent read its source correctly.
-- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, observation IDs, attribution, setup hosts), each with what you will observe, any workaround, and its tracking issue.
+- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, source and observation IDs, attribution, log encryption, setup hosts), each with what you will observe, any workaround, and its tracking issue.

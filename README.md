@@ -10,9 +10,13 @@ neotoma init
 neotoma setup --tool claude-code --yes
 ```
 
-`neotoma setup --tool claude-code --yes` writes the MCP entry (`.mcp.json` in the project) and, at project scope by default, allow rules in `.claude/settings.local.json` (`Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)`), so Claude Code runs Neotoma commands without asking each time. `--scope both` also writes `~/.claude/settings.json`, `--skip-permissions` writes no rules, and for Cursor the same two rules go to `.cursor/allowlist.json`.
+`neotoma setup --tool claude-code --yes` writes the MCP entry to `.mcp.json` in the project.
+
+It also adds two allow rules, `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)`, to `.claude/settings.local.json` (project scope, the default). The first is a wildcard: Claude Code then runs any `neotoma` command without asking, including destructive ones such as `neotoma reset`, `neotoma storage merge-db`, `neotoma backup restore`, and `neotoma processes kill`. `--scope both` also writes the rules to `~/.claude/settings.json`, and `--skip-permissions` writes none. For Cursor the same two rules go to `.cursor/allowlist.json`; for Codex they go to the user-level `~/.codex/config.toml` whatever the scope.
 
 Other hosts are listed under [Connect your tools](#connect-your-tools).
+
+**Known limitations:** [docs/known_limitations.md](docs/known_limitations.md) lists behaviour you may run into, each with a workaround and its tracking issue.
 
 **Agents cannot own work they cannot verify.**
 
@@ -30,7 +34,7 @@ Neotoma is a system of record, not a chat memory or a vector cache. It records i
 
 Three properties hold across every interface:
 
-- **Deterministic.** Entity IDs, event IDs, and reducer output are derived from the inputs by hashing. Observation IDs are also hashes, but of the source, the interpretation, the entity, and the fields, and each interpretation run gets a fresh ID, so the same source interpreted in two separate data directories yields the same entity ID and different observation IDs. The same observations and rules give the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
+- **Deterministic.** Entity IDs, event IDs, and reducer output are derived from the inputs by hashing. Observation IDs are also hashes, of the source, the interpretation run, the entity, and the fields; a source ID hashes the owning user's ID with the content, and each interpretation run gets a new ID. The same input stored in two instances therefore gets the same entity ID and can get different source and observation IDs, so do not rely on observation IDs matching across instances. The same observations and rules give the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
 - **Immutable and auditable.** The write path adds sources and observations and does not edit them; the database does not enforce this with a constraint. Every field in a snapshot traces back to the observation that set it, and through that observation to its source, interpretation, agent, and timestamp.
 - **Self-hosted and portable.** The engine is embedded SQLite plus content-addressed file storage under a directory you control, with optional AES-256-GCM at-rest encryption. Nothing is used for training, and you can export your data as current state; observation history is not part of the export. In single-user mode the data stays entirely local; multi-user, peer-sync, and hosted modes are opt-in (see Deployment modes).
 
@@ -57,7 +61,7 @@ graph LR
 
 ## What you can do with it
 
-Neotoma exposes 67 MCP tools (as of v0.25.0) and about 100 REST endpoints, all backed by the same operations. The capability surface includes:
+Neotoma exposes 67 MCP tools on `main` (65 in the published v0.25.0) and about 100 REST endpoints, all backed by the same operations. The capability surface includes:
 
 **Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. Writes are idempotent through an `idempotency_key`.
 
@@ -224,7 +228,7 @@ Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md): the 
 
 Neotoma is used daily in real agent workflows. The project moves fast, and APIs or storage formats can change between versions. The core guarantees (deterministic reduction, per-entity observation history, per-field provenance, same contract across CLI and MCP) are stable, phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, and backward compatibility are not yet guaranteed.
 
-**Known limitations:** [docs/known_limitations.md](docs/known_limitations.md) lists the specific ones, each with what you will observe, any workaround, and its tracking issue.
+**Known limitations:** [docs/known_limitations.md](docs/known_limitations.md) lists the specific ones, each with what you will observe, a workaround, and its tracking issue.
 
 ## Development
 

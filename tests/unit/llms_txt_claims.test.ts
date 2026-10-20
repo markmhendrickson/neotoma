@@ -74,6 +74,34 @@ export const LEDE_CONTRAST =
 /** The retired contrast overstated recall ("recalls only what it was last told"). */
 const OLD_CONTRAST = /last told|recalls only|recall holds/i;
 
+/**
+ * The unscoped observation-ID claim (#2681): source and observation IDs can differ between
+ * instances (the CLI's per-install user, interpretation runs), so no surface may say they match.
+ */
+const UNSCOPED_OBSERVATION_ID_CLAIMS: readonly RegExp[] = [
+  /(same|identical|stable|portable|matching) (source and )?observation ids?[^.]{0,60}\b(across|between|in (two|separate|every|each|different))\b[^.]{0,30}\b(instances?|installs?|data directories|runs?)/i,
+  /observation ids?[^.]{0,40}\b(are|stay|remain|is) (the same|identical|stable|portable)\b[^.]{0,30}\b(across|between)\b/i,
+  /ordinary structured store (also )?gives the same observation id/i,
+];
+
+function unscopedObservationIdClaims(text: string): string[] {
+  return UNSCOPED_OBSERVATION_ID_CLAIMS.filter((re) => re.test(text)).map((re) => String(re));
+}
+
+const OLD_OBSERVATION_ID_SENTENCES = [
+  "An ordinary structured store also gives the same observation ID for the same input.",
+  "Observation IDs are the same across instances for the same input.",
+  "The same input gives identical observation IDs in two separate data directories.",
+];
+
+/** GitHub's heading anchor: lowercase, drop punctuation except hyphens and spaces, spaces to hyphens. */
+function githubSlug(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replace(/[^a-z0-9 \-_]/g, "")
+    .replace(/ /g, "-");
+}
+
 function countOccurrences(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
@@ -153,6 +181,10 @@ describe("llms.txt body claims", () => {
     }
   });
 
+  it("does not claim observation IDs match across instances", () => {
+    expect(unscopedObservationIdClaims(raw)).toEqual([]);
+  });
+
   it("does not use the developer preview label", () => {
     expect(raw).not.toMatch(PREVIEW_LABEL);
     expect(PREVIEW_LABEL.test(`${body}\n- Neotoma is in developer preview.\n`)).toBe(true);
@@ -184,10 +216,21 @@ describe("llms.txt body claims", () => {
 describe("README checkable claims", () => {
   const readme = readFileSync(join(root, "README.md"), "utf-8");
 
-  it("states the MCP tool count the build exposes", () => {
-    const m = /exposes (\d+) MCP tools/.exec(readme);
-    expect(m, "README must state the MCP tool count").not.toBeNull();
+  it("states the MCP tool count on main and names the published version it differs from", () => {
+    const m = /exposes (\d+) MCP tools on `main` \((\d+) in the published v(\d+\.\d+\.\d+)\)/.exec(
+      readme
+    );
+    expect(
+      m,
+      "README must state the MCP tool count on main and in the published release"
+    ).not.toBeNull();
     expect(Number(m![1])).toBe(NEOTOMA_TOOL_NAMES.length);
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
+      version: string;
+    };
+    expect(m![3]).toBe(pkg.version);
+    // The old wording claimed main's count for the published release.
+    expect(readme).not.toMatch(/MCP tools \(as of v\d/);
   });
 
   it("opens with the lead contrast and the category sentence", () => {
@@ -227,12 +270,37 @@ describe("README checkable claims", () => {
     expect(readme).not.toMatch(/memory layer|a state layer|your agents forget/i);
   });
 
-  it("links the known-limitations doc exactly once, in a Known limitations line", () => {
-    expect(countOccurrences(readme, `](${KNOWN_LIMITATIONS_PATH})`)).toBe(1);
-    expect(countOccurrences(readme, "known_limitations.md")).toBe(2); // link text + target, one link
-    expect(readme).toMatch(
-      /^\*\*Known limitations:\*\* \[docs\/known_limitations\.md\]\(docs\/known_limitations\.md\)/m
-    );
+  it("links the known-limitations doc twice: under the install block and in Status", () => {
+    const linkLine =
+      /^\*\*Known limitations:\*\* \[docs\/known_limitations\.md\]\(docs\/known_limitations\.md\)/gm;
+    const hits = [...readme.matchAll(linkLine)].map((m) => m.index!);
+    expect(hits).toHaveLength(2);
+    expect(countOccurrences(readme, `](${KNOWN_LIMITATIONS_PATH})`)).toBe(2);
+    expect(countOccurrences(readme, "known_limitations.md")).toBe(4); // link text + target, twice
+    expect(hits[0]).toBeLessThan(readme.indexOf("## What Neotoma is"));
+    expect(hits[1]).toBeGreaterThan(readme.indexOf("## Status"));
+  });
+
+  it("says the setup allow rule covers any neotoma command, destructive ones included", () => {
+    expect(readme).toContain("runs any `neotoma` command without asking");
+    for (const cmd of [
+      "neotoma reset",
+      "neotoma storage merge-db",
+      "neotoma backup restore",
+      "neotoma processes kill",
+    ]) {
+      expect(readme).toContain(`\`${cmd}\``);
+    }
+    expect(readme).toContain("`~/.codex/config.toml`");
+    expect(readme).not.toMatch(/runs Neotoma commands without asking/);
+  });
+
+  it("does not claim observation IDs match across instances, and goes red when it does", () => {
+    expect(unscopedObservationIdClaims(readme)).toEqual([]);
+    expect(readme).toContain("do not rely on observation IDs matching across instances");
+    for (const old of OLD_OBSERVATION_ID_SENTENCES) {
+      expect(unscopedObservationIdClaims(`${readme}\n${old}\n`).length, old).toBeGreaterThan(0);
+    }
   });
 
   it("carries no issue-level limit inline, and goes red when one comes back", () => {
@@ -292,13 +360,32 @@ describe("docs/known_limitations.md", () => {
     }
   });
 
-  it("links issues by full GitHub URL", () => {
-    const tracking = entries.map((e) => /\*\*Tracking\.\*\* (.*)/.exec(e)![1]);
-    for (const t of tracking) {
-      if (/^No open issue/.test(t)) continue;
-      expect(t).toMatch(
+  it("links every entry to its tracking issue by full GitHub URL", () => {
+    expect(doc).not.toMatch(/No open issue/i);
+    for (const e of entries) {
+      const t = /\*\*Tracking\.\*\* (.*)/.exec(e)![1];
+      expect(t, e.split("\n")[0]).toMatch(
         /^\[#(\d+)\]\(https:\/\/github\.com\/markmhendrickson\/neotoma\/issues\/\1\)/
       );
+    }
+  });
+
+  it("opens with an applicability line and a list of every entry, in order", () => {
+    const intro = doc.slice(0, doc.indexOf("\n## "));
+    expect(intro).toMatch(
+      /^Applies to the published `neotoma@\d+\.\d+\.\d+` and to `main` as of \d{4}-\d{2}-\d{2}\./m
+    );
+    const listed = [...intro.matchAll(/^- \[(.+)\]\(#([^)]+)\)$/gm)].map((m) => [m[1], m[2]]);
+    const headings = entries.map((e) => e.split("\n")[0].trim());
+    expect(listed.map(([t]) => t)).toEqual(headings);
+    for (const [title, anchor] of listed) expect(anchor).toBe(githubSlug(title));
+  });
+
+  it("does not claim observation IDs match across instances", () => {
+    expect(unscopedObservationIdClaims(doc)).toEqual([]);
+    expect(doc).toMatch(/Do not rely on source or observation IDs matching across instances/);
+    for (const old of OLD_OBSERVATION_ID_SENTENCES) {
+      expect(unscopedObservationIdClaims(`${doc}\n${old}\n`).length, old).toBeGreaterThan(0);
     }
   });
 

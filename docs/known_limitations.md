@@ -2,7 +2,17 @@
 
 This page lists specific behaviours of the current build that a developer or an integrating agent will run into. Each entry says what you will observe, any workaround, and the issue that tracks it. An entry is removed from this page when its fix ships.
 
-Last checked against `main` and the published `neotoma@0.25.0` on 2026-10-20.
+Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every entry has a tracking issue.
+
+- [A later ordinary write can replace a correction](#a-later-ordinary-write-can-replace-a-correction)
+- [A correction, or a stored date, is not checked against the declared type](#a-correction-or-a-stored-date-is-not-checked-against-the-declared-type)
+- [A stored value of the wrong type is left out of the snapshot and reported as undeclared](#a-stored-value-of-the-wrong-type-is-left-out-of-the-snapshot-and-reported-as-undeclared)
+- [As-of reads are per entity](#as-of-reads-are-per-entity)
+- [Export carries current state only](#export-carries-current-state-only)
+- [Source and observation IDs are not portable across instances](#source-and-observation-ids-are-not-portable-across-instances)
+- [Who wrote or corrected a value is the writer's own claim](#who-wrote-or-corrected-a-value-is-the-writers-own-claim)
+- [Log encryption does not encrypt log files](#log-encryption-does-not-encrypt-log-files)
+- [`neotoma setup --tool` configures five hosts](#neotoma-setup---tool-configures-five-hosts)
 
 ## A later ordinary write can replace a correction
 
@@ -18,7 +28,7 @@ Last checked against `main` and the published `neotoma@0.25.0` on 2026-10-20.
 
 **Workaround.** Check values against the declared types (`describe_entity_type`) in the writing agent before you call `correct()` or store a date.
 
-**Tracking.** No open issue tracks this yet.
+**Tracking.** [#2699](https://github.com/markmhendrickson/neotoma/issues/2699)
 
 ## A stored value of the wrong type is left out of the snapshot and reported as undeclared
 
@@ -34,7 +44,7 @@ Last checked against `main` and the published `neotoma@0.25.0` on 2026-10-20.
 
 **Workaround.** Find the entities you need with a current-state query, then read each one with `retrieve_entity_snapshot` and `at`.
 
-**Tracking.** No open issue tracks a record-wide as-of query yet.
+**Tracking.** [#2700](https://github.com/markmhendrickson/neotoma/issues/2700)
 
 ## Export carries current state only
 
@@ -44,11 +54,11 @@ Last checked against `main` and the published `neotoma@0.25.0` on 2026-10-20.
 
 **Tracking.** [#2250](https://github.com/markmhendrickson/neotoma/issues/2250)
 
-## Observation IDs from an interpretation run are not portable
+## Source and observation IDs are not portable across instances
 
-**What you will observe.** Entity IDs are derived from an entity's identity fields, so the same record gets the same entity ID in every instance. An ordinary structured store also gives the same observation ID for the same input. An observation created through an interpretation run (`store` with an interpretation block, or `create_interpretation`) includes the run's ID, and every run gets a new one. Interpreting the same source in two instances therefore gives the same entity ID and different observation IDs.
+**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID in every instance. Source and observation IDs are not portable. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. Storing the same input in two instances can therefore give the same entity ID and different source and observation IDs. `neotoma store` from the CLI does this in every new install, because each install has its own local user, and every interpretation run (`create_interpretation`, or `store` with an interpretation block) gives a new observation ID.
 
-**Workaround.** Match records across instances by entity ID, not by observation ID.
+**Workaround.** Match records across instances by entity ID. Do not rely on source or observation IDs matching across instances.
 
 **Tracking.** [#2681](https://github.com/markmhendrickson/neotoma/issues/2681) (item 2)
 
@@ -59,6 +69,14 @@ Last checked against `main` and the published `neotoma@0.25.0` on 2026-10-20.
 **Workaround.** Where attribution has to be verifiable, give each agent a signed identity and a grant; see the [AAuth reference](subsystems/aauth.md). Treat `unverified_client` attribution as a label, not as proof.
 
 **Tracking.** [#2256](https://github.com/markmhendrickson/neotoma/issues/2256)
+
+## Log encryption does not encrypt log files
+
+**What you will observe.** `NEOTOMA_LOG_ENCRYPTION_ENABLED=true` is read into configuration, but no log writer uses it, so log files are written in plaintext whether or not it is set. `neotoma logs tail --decrypt` therefore finds no encrypted lines to decrypt.
+
+**Workaround.** Keep the log directory on an encrypted volume and restrict who can read it. Do not rely on the flag.
+
+**Tracking.** [#2698](https://github.com/markmhendrickson/neotoma/issues/2698)
 
 ## `neotoma setup --tool` configures five hosts
 
