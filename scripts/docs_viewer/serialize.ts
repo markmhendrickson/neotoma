@@ -60,6 +60,8 @@ export function escapeAttr(s: string): string {
 export function isSafeHref(href: string): boolean {
   const probe = href.replace(/[\u0000- \u007f-\u009f]/g, "");
   if (probe === "") return false;
+  // Browsers read a backslash as a slash, so "/\\host" and "/%5Chost" are protocol-relative.
+  if (/\\|%5c/i.test(probe)) return false;
   if (probe.startsWith("#")) return true;
   if (probe.startsWith("/") && !probe.startsWith("//")) return true;
   return /^(https?:\/\/|mailto:)/i.test(probe);

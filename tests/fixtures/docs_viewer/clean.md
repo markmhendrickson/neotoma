@@ -36,7 +36,7 @@ flowchart LR
 
 ### A third-level heading
 
-The CLI checks the npm registry for updates; there is no telemetry beyond that update check, and `--no-update-check` turns it off.
+There is no telemetry. The CLI checks the npm registry for a newer version about once a day; the stdio MCP server checks when a session starts (off with `NO_UPDATE_NOTIFIER=1`), and the registry sees ordinary connection metadata such as the address.
 
 - One
 - Two
