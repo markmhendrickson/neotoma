@@ -847,35 +847,44 @@ The mirror is a derived artifact: SQLite is the only source of truth. Mirror fil
 
 A collaborator on a shared instance runs `skills sync` with instance scripts enabled for the first time. The script is blocked pending review; after reading it, they re-run with `--approve-scripts` to pin the hash and write the file.
 
+Step 1: fetch instance skills and their script attachments. On the first run nothing is approved yet, so any script attachment is reported as blocked and not written to `<skill>/scripts/`; the bytes are downloaded only in memory to compute the hash.
+
 ```bash
-# Step 1: fetch instance skills and their script attachments. First run: nothing is
-# approved yet, so any script attachment is reported as blocked, not written to
-# <skill>/scripts/; the bytes are downloaded only in-memory to compute the hash below.
 neotoma skills sync --include-instance-scripts
+```
 
-# Skills source: /usr/local/lib/node_modules/neotoma/skills (scope=user)
-#   claude-code: up-to-date (whole-dir-symlink, dir-symlink) → ~/.claude/skills
-# All harnesses already up-to-date.
-# Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
-#   updated: deploy-helper
-#   claude-code: 3 instance skill link(s) → ~/.claude/skills
-#   ⚠ script not written (unapproved): deploy-helper/scripts/rollout.sh (sha256:9f86d081884c) — review with `neotoma sources content src_a1b2c3d4`, then re-run with --approve-scripts
+```text
+Skills source: /usr/local/lib/node_modules/neotoma/skills (scope=user)
+  claude-code: up-to-date (whole-dir-symlink, dir-symlink) → ~/.claude/skills
+All harnesses already up-to-date.
+Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
+  updated: deploy-helper
+  claude-code: 3 instance skill link(s) → ~/.claude/skills
+  ⚠ script not written (unapproved): deploy-helper/scripts/rollout.sh (sha256:9f86d081884c) — review with `neotoma sources content src_a1b2c3d4`, then re-run with --approve-scripts
+```
 
-# Step 2: review the script's content before trusting it. The blocked message names the
-# sources.id (`src_a1b2c3d4` above) needed to print the script's actual bytes.
-# `neotoma sources get <id>` only returns metadata (hash, filename); `sources content`
-# downloads and prints the real content to stdout for review:
+Step 2: review the script before trusting it. The blocked message names the `sources.id` (`src_a1b2c3d4` above). `neotoma sources get <id>` returns only metadata (hash, filename); `sources content` prints the bytes:
+
+```bash
 neotoma sources content src_a1b2c3d4
-# #!/bin/sh
-# echo "rolling out release..."
-# ...
+```
 
-# Step 3: satisfied it's safe, re-run with --approve-scripts to pin the hash and write the file.
+```text
+#!/bin/sh
+echo "rolling out release..."
+...
+```
+
+Step 3: when satisfied, re-run with `--approve-scripts` to pin the hash and write the file:
+
+```bash
 neotoma skills sync --include-instance-scripts --approve-scripts
+```
 
-# Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
-#   claude-code: 3 instance skill link(s) → ~/.claude/skills
-#   script written: deploy-helper/scripts/rollout.sh (hash approved and recorded)
+```text
+Instance skills: 3 fetched → ~/.neotoma/instance-skills/<instance-host>
+  claude-code: 3 instance skill link(s) → ~/.claude/skills
+  script written: deploy-helper/scripts/rollout.sh (hash approved and recorded)
 ```
 
 On every later sync, as long as the script's content hasn't changed, it is written silently (no re-approval needed; the `(hash approved and recorded)` suffix only appears the run a hash is newly pinned). If the script's content ever changes, the new hash is blocked again with the same two-step flow: review, then re-run with `--approve-scripts`.
@@ -1099,7 +1108,7 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
   - `decrypt`: Reverse the encryption on the covered columns.
   - `--dry-run`: Report how many rows would change without writing.
   - `--db-path <path>`: SQLite file (default: resolved from the environment).
-  - `--key-file <path>`, `--mnemonic <phrase>`, `--mnemonic-passphrase <passphrase>`: Override `NEOTOMA_KEY_FILE_PATH`, `NEOTOMA_MNEMONIC`, and `NEOTOMA_MNEMONIC_PASSPHRASE`. One key source is required.
+  - Key source (one is required): prefer a key file, through `NEOTOMA_KEY_FILE_PATH` or `--key-file <path>`, or the `NEOTOMA_MNEMONIC` and `NEOTOMA_MNEMONIC_PASSPHRASE` environment variables. `--mnemonic <phrase>` and `--mnemonic-passphrase <passphrase>` also exist, but they put the secret on the command line, where shell history and process listings (`ps`) can show it; avoid them outside a throwaway environment.
 
 - `neotoma db repair-schema-lag [--dry-run] [--types <entity_types>] [--rollback <run_id>]`: Audit and repair `raw_fragments` rows that were misrouted due to the schema-projection-lag bug (issue #142). Rows in `raw_fragments` whose `fragment_key` now matches a declared field in the active schema for their entity type are promoted to observations, and affected entity snapshots are recomputed. Safe to re-run: it uses deterministic observation IDs.
   - `--dry-run`: Report affected entity types and fragment counts without writing any rows.
@@ -1203,8 +1212,16 @@ neotoma request --operation listEntities --params '{"query":{"limit":5}}' --pret
 
 ### Store entities from a file
 
+`--file` takes a JSON array of entities. This example writes one, then stores it:
+
 ```bash
-neotoma store --file ./fixtures/tasks.json
+cat > tasks.json <<'EOF'
+[
+  { "entity_type": "task", "title": "Draft the release notes", "status": "open" },
+  { "entity_type": "task", "title": "Review the docs PR", "status": "open" }
+]
+EOF
+neotoma store --file tasks.json --observation-source human
 ```
 
 ### Stream record changes alongside MCP actions

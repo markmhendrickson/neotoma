@@ -672,6 +672,12 @@ only two approvals:
 1. `Bash(neotoma:*)` / `neotoma *` wildcard
 2. A one-time `npm install -g neotoma`
 
+The wildcard pre-approves every `neotoma` subcommand, including destructive ones:
+`neotoma reset` (backs up and removes local Neotoma state, `--yes` skips its
+prompt), `neotoma storage merge-db`, `neotoma backup restore`, and
+`neotoma processes kill`. Tell the user before adding it, and do not run those
+commands without an explicit request.
+
 Run `neotoma preflight --tool <harness> --apply` at the start of the install
 flow to write the allowlist entry directly, or `neotoma preflight --tool <harness>`
 (no `--apply`) to print a copy-paste block for manual application. Either path
@@ -765,6 +771,8 @@ Environment=NEOTOMA_ENV=production
 Environment=NEOTOMA_DATA_DIR=/var/lib/neotoma/prod
 Environment=NEOTOMA_HTTP_PORT=3080
 Environment=NEOTOMA_HTTP_HOST=127.0.0.1
+# Secrets (NEOTOMA_BEARER_TOKEN, NEOTOMA_KEY_FILE_PATH, ...) live here, not in this unit.
+EnvironmentFile=/etc/neotoma/neotoma.env
 ExecStart=/usr/bin/env node <npm-global-root>/neotoma/dist/actions.js
 Restart=on-failure
 RestartSec=5s
@@ -778,6 +786,36 @@ ProtectHome=yes
 [Install]
 WantedBy=multi-user.target
 ```
+
+Keep secrets out of the unit file, which any local user can read with
+`systemctl cat`. Put the bearer token (`NEOTOMA_BEARER_TOKEN`) and any encryption
+settings in `/etc/neotoma/neotoma.env`, owned by root with mode 0600; systemd reads
+it as root before starting the service. For encryption, prefer
+`NEOTOMA_KEY_FILE_PATH` pointing at a key file readable only by the service user
+over putting a mnemonic in the environment.
+
+```bash
+sudo install -d -m 0755 /etc/neotoma
+sudo install -m 0600 -o root -g root /dev/null /etc/neotoma/neotoma.env
+sudoedit /etc/neotoma/neotoma.env
+```
+
+Leave `NEOTOMA_TRUST_PROD_LOOPBACK` unset. With `NEOTOMA_TRUST_PROD_LOOPBACK=1`, a
+production server treats any loopback request without an untrusted
+`X-Forwarded-For` entry as local, and local requests act as the local user without
+a credential. A reverse proxy on the same host connects over loopback, so unless it
+always sends the client's address in `X-Forwarded-For`, remote requests it forwards
+pass as local. `NEOTOMA_TRUSTED_PROXY_IPS` has the same effect for the addresses it
+lists: a forwarded request whose nearest hop is listed counts as local, so list only
+hops whose traffic you would also trust without a credential (see `isLocalRequest` in
+`src/actions.ts`).
+
+The hardening options in the unit (`NoNewPrivileges`, `PrivateTmp`,
+`ProtectSystem=strict`, `ReadWritePaths`, `ProtectHome`) were not exercised for this
+page: no systemd host was available, and `systemd-analyze verify` and
+`systemd-analyze security` were not run. Check them on your host. With
+`ProtectHome=yes`, the package must not live under a home directory (for example an
+nvm install), and `NEOTOMA_DATA_DIR` must be under `ReadWritePaths`.
 
 Enable and start:
 
