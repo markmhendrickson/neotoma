@@ -933,8 +933,8 @@
   word-break: normal !important;
   overflow-wrap: normal !important;
 }
-.plan-install-commands pre,
-.plan-install-preflight pre {
+.plan-install-sheet .plan-install-commands pre,
+.plan-install-sheet .plan-install-preflight pre {
   --edge: color-mix(in srgb, var(--ink) 28%, transparent);
   background-color: var(--paper) !important;
   background-image:
