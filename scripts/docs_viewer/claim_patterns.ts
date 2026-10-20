@@ -131,3 +131,46 @@ export function findClaimProblems(text: string): ClaimFinding[] {
   }
   return out.sort((a, b) => a.index - b.index);
 }
+
+// ---------------------------------------------------------------------------
+// Live one-pager routes (/ and /install), checked by section 3g of scripts/validate_site_export.ts.
+// Stricter than the docs lists above on purpose: marketing copy bans "append-only" outright and any
+// denial of the per-entity as-of read, while docs may state the limits ("the database does not
+// enforce append-only", "there is no as-of query across the whole record"). Kept here so every claim
+// list has one home; the semantics are unchanged from #2686.
+// ---------------------------------------------------------------------------
+
+/** Phrases that may not appear in a live page's JSON-LD or meta keywords. */
+export const LIVE_PAGE_RETIRED_META_PHRASES = [
+  "append-only",
+  "detect conflicts",
+  "deterministic memory",
+  "ships those guarantees",
+  "5 minutes",
+  "5-minute",
+  "no cloud sync",
+  "agent memory",
+  "deterministic state",
+  "SearchAction",
+  "speakable",
+  "docs?q=",
+  "FAQPage",
+] as const;
+export const LIVE_PAGE_OMITTED_CLAIMS: readonly [RegExp, string][] = [
+  [/corrections? (always|will always) wins?/i, "corrections always win"],
+  [/append-only/i, "database-enforced append-only"],
+  [
+    /(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i,
+    "as-of read across the whole record",
+  ],
+  [
+    /no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i,
+    "denies the per-entity as-of read",
+  ],
+  [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
+  [/hosted neotoma (is )?(available|for sale)/i, "hosted Neotoma for sale"],
+  [/unified platform/i, "unified platform"],
+  [/multi-operator/i, "multi-operator authority"],
+  [/state layer|memory layer/i, "retired category noun"],
+  [/fully reversible/i, "unevidenced reversibility claim"],
+];

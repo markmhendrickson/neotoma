@@ -20,6 +20,10 @@ import {
   isRetiredRoute,
   resolveDestination,
 } from "../frontend/src/site/route_retirement";
+import {
+  LIVE_PAGE_OMITTED_CLAIMS as OMITTED_CLAIMS,
+  LIVE_PAGE_RETIRED_META_PHRASES as RETIRED_META_PHRASES,
+} from "./docs_viewer/claim_patterns";
 import { validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { llmsLinkProblems } from "./llms_links";
 
@@ -399,6 +403,84 @@ if (routeFailures === 0) {
   pass(
     "Route set holds: /install is real, retired routes are redirect stubs, sitemap lists only live and held routes"
   );
+}
+
+// ---------------------------------------------------------------------------
+// 3g. Live pages: no retired phrase in JSON-LD or meta keywords, and none of the omitted claims in the text
+// ---------------------------------------------------------------------------
+// Scope: the live routes (/ and /install). Held pages (/evaluate, /markdown/*, /skills/*) keep older copy
+// until their owner decides; they are listed in the pull request, not checked here.
+// The pattern lists live in scripts/docs_viewer/claim_patterns.ts with the docs viewer's lists.
+let liveClaimFailures = 0;
+for (const route of LIVE_ROUTES) {
+  const livePath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
+  if (!fs.existsSync(livePath)) continue; // missing live pages are reported in 3e
+  const html = fs.readFileSync(livePath, "utf-8");
+  const jsonLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]).join("\n");
+  const keywords = /<meta name="keywords" content="([^"]*)"/.exec(html)?.[1] ?? "";
+  for (const phrase of RETIRED_META_PHRASES) {
+    if (jsonLd.includes(phrase) || keywords.toLowerCase().includes(phrase.toLowerCase())) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html carries retired phrase "${phrase}" in JSON-LD or meta keywords`);
+      liveClaimFailures++;
+    }
+  }
+  if (!keywords.includes("system of record")) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html meta keywords do not name the category: "${keywords}"`);
+    liveClaimFailures++;
+  }
+  for (const m of html.matchAll(/<meta (?:property|name)="(?:og|twitter):image" content="([^"]*)"/g)) {
+    const imgPath = new URL(m[1], "https://neotoma.io").pathname;
+    if (!fs.existsSync(path.join(siteDir, imgPath))) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html names a social image that is not in the build: ${imgPath}`);
+      liveClaimFailures++;
+    }
+  }
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+  // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
+  const wholeText = text + " " + jsonLd;
+  for (const m of wholeText.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
+    const after = wholeText.slice(m.index, m.index + 600);
+    if (
+      !/npm registry/i.test(after) ||
+      !/NO_UPDATE_NOTIFIER=1/.test(after) ||
+      !/when a session starts/i.test(after) ||
+      !/connection metadata/i.test(after)
+    ) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${m[0]}" without the npm update-check qualification`);
+      liveClaimFailures++;
+    }
+  }
+  for (const [re, label] of OMITTED_CLAIMS) {
+    if (re.test(text)) {
+      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
+      liveClaimFailures++;
+    }
+  }
+}
+// Held pages keep their old shell but must not offer navigation entries that only land on redirect stubs.
+const STUB_NAV_LABELS = ["Memory guarantees", "Memory models", "Hosted Neotoma"];
+for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox", "/meet", "/skills"]) {
+  const heldPath = path.join(siteDir, heldRoute.slice(1), "index.html");
+  if (!fs.existsSync(heldPath)) continue;
+  const heldText = fs
+    .readFileSync(heldPath, "utf-8")
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ");
+  for (const label of STUB_NAV_LABELS) {
+    // The old footer still carries one "Memory guarantees" link (a separate component, out of scope
+    // for this change); the sidebar navigation entry must be gone, so more than one is a failure.
+    const allowed = label === "Memory guarantees" ? 1 : 0;
+    if (heldText.split(label).length - 1 > allowed) {
+      fail(`site_pages${heldRoute}/index.html still offers the navigation entry "${label}", which only lands on a redirect stub`);
+      liveClaimFailures++;
+    }
+  }
+}
+if (liveClaimFailures === 0) {
+  pass("Live pages: no retired phrase in JSON-LD or meta keywords, and no omitted claim in the text");
 }
 
 // ---------------------------------------------------------------------------
