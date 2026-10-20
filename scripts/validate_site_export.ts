@@ -499,6 +499,46 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
     }
   }
 }
+// /evaluate is held, and agents are sent to it from /install, so its headline (title, description, JSON-LD) and
+// the text above "Who Neotoma is built for" must not carry the retired frame or an omitted claim. The rest of the
+// page keeps older copy until its owner decides; this check deliberately stops at that heading.
+const EVALUATE_FIRST_SCREEN_END = "Who Neotoma is built for";
+const EVALUATE_RETIRED_PHRASES: [RegExp, string][] = [
+  [/deterministic state/i, "deterministic state layer"],
+  [/replay(able)?/i, "replay"],
+  [/pick up where|picks? up where|retomen donde/i, "pick up where they left off"],
+  [/memory layer|state layer/i, "retired category noun"],
+];
+const evaluatePath = path.join(siteDir, "evaluate", "index.html");
+if (fs.existsSync(evaluatePath)) {
+  const html = fs.readFileSync(evaluatePath, "utf-8");
+  const headline = [
+    /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "",
+    /<meta name="description" content="([^"]*)"/.exec(html)?.[1] ?? "",
+    ...[...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]),
+  ].join("\n");
+  const bodyText = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+  const endAt = bodyText.indexOf(EVALUATE_FIRST_SCREEN_END);
+  if (endAt === -1) {
+    fail(`site_pages/evaluate/index.html no longer has the "${EVALUATE_FIRST_SCREEN_END}" heading that bounds the first-screen check`);
+    liveClaimFailures++;
+  } else {
+    const firstScreen = headline + "\n" + bodyText.slice(0, endAt);
+    if (!/system of record/i.test(headline) || !/system of record for AI agents/i.test(bodyText.slice(0, endAt))) {
+      fail("site_pages/evaluate/index.html headline and first screen do not name the category (system of record for AI agents)");
+      liveClaimFailures++;
+    }
+    for (const [re, label] of [...EVALUATE_RETIRED_PHRASES, ...OMITTED_CLAIMS]) {
+      if (re.test(firstScreen)) {
+        fail(`site_pages/evaluate/index.html headline or first screen carries "${label}"`);
+        liveClaimFailures++;
+      }
+    }
+  }
+}
 if (liveClaimFailures === 0) {
   pass("Live pages: no retired phrase in JSON-LD or meta keywords, and no omitted claim in the text");
 }

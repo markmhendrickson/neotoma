@@ -4,6 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  EVALUATE_SUBPAGE_EN,
+  EVALUATE_SUBPAGE_ES,
+} from "../../frontend/src/i18n/locales/evaluate_subpage_strings";
+import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
 
 /**
  * Guards for the neotoma.io developer one-pager (home route).
@@ -430,3 +435,40 @@ describe("/install polish", () => {
   });
 });
 
+
+/**
+ * The held /evaluate page: /install sends agents there, so its headline (title, description) and the
+ * first screen (lede plus the "What Neotoma does for you" section) carry the current category and no
+ * retired frame or omitted claim. The rest of the page is held for its owner and is not checked here.
+ * Revert-check: put "replayable" or "deterministic state layer" back into introP1 or the /evaluate
+ * metadata and these go red; scripts/validate_site_export.ts repeats the check on the built HTML.
+ */
+describe("/evaluate headline and first screen", () => {
+  const meta = resolveSeoMetadata("/evaluate");
+  const en = EVALUATE_SUBPAGE_EN;
+  const firstScreen = (e: typeof en) => [e.introP1, e.introP2BeforeLink, e.whatNeotomaP1, e.whatNeotomaP2];
+  const retired: [RegExp, string][] = [
+    [/deterministic state|state layer|memory layer/i, "retired category noun"],
+    [/replay/i, "replay"],
+    [/pick up where|retomen donde/i, "pick up where they left off"],
+    [/corrections? (always|will always) wins?|correction sticks everywhere/i, "corrections always win"],
+    [/append-only/i, "database-enforced append-only"],
+    [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
+  ];
+
+  it("names the category and the lede line in the title, description and lede", () => {
+    expect(meta.title).toContain("system of record for AI agents");
+    expect(meta.description).toContain("A record, not recall.");
+    expect(en.introP1.startsWith("A record, not recall. Neotoma is the system of record for AI agents.")).toBe(true);
+    expect(EVALUATE_SUBPAGE_ES.introP1).toContain("sistema de registro para agentes de IA");
+  });
+
+  it("carries no retired phrase or omitted claim in the headline or first screen, in either locale", () => {
+    const texts = [meta.title, meta.description, ...firstScreen(en), ...firstScreen(EVALUATE_SUBPAGE_ES)];
+    for (const [re, label] of retired) {
+      for (const text of texts) {
+        expect(re.test(text), `${label}: ${text.slice(0, 80)}`).toBe(false);
+      }
+    }
+  });
+});
