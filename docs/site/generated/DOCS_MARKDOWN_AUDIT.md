@@ -2,7 +2,7 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **730**
+Total files: **731**
 
 ## By top-level folder under docs/
 
@@ -38,6 +38,7 @@ Total files: **730**
 - **api**: 1
 - **coverage_manifest.md**: 1
 - **examples**: 1
+- **known_limitations.md**: 1
 - **NEOTOMA_MANIFEST.md**: 1
 - **onboarding_elicitation_flow.md**: 1
 - **onboarding_elicitation_script.md**: 1

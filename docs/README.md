@@ -44,7 +44,4 @@ Other folders (`plans/`, `proposals/`, `prototypes/`, `reports/`, `implementatio
 ## Limits worth knowing before you rely on the record
 
 - Provenance shows the evidence trail for a value, not that an agent read its source correctly.
-- Export writes current state; observation history is not part of the export.
-- A later write can override a correction in the current snapshot today ([#2033](https://github.com/markmhendrickson/neotoma/issues/2033)).
-- A snapshot can be read as of a past time for one entity (`at` and `at_ingested` on `retrieve_entity_snapshot`); there is no as-of query across the whole record.
-- Setup commands exist for five hosts; other hosts are configured by hand. See the [integrations matrix](integrations/matrix.md); the open question is [#2681](https://github.com/markmhendrickson/neotoma/issues/2681).
+- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, observation IDs, attribution, setup hosts), each with what you will observe, any workaround, and its tracking issue.
