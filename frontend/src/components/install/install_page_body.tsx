@@ -2,9 +2,8 @@ import type { ElementType } from "react";
 import { Clock, RotateCcw } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "@/site/site_data";
-import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
-import { TrackedProductLink } from "@/components/TrackedProductNav";
 import { CodeBlock } from "@/components/InstallCodeBlock";
+import { INSTALL_COMMANDS } from "@/components/onepager/onepager_copy";
 import { PermissionsPreflight } from "@/components/PermissionsPreflight";
 import { Card, CardContent } from "@/components/ui/card";
 import { CodexIcon } from "@/components/icons/CodexIcon";
@@ -13,7 +12,6 @@ import { IronClawIcon } from "@/components/icons/IronClawIcon";
 import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { useLocale } from "@/i18n/LocaleContext";
-import { localizePath } from "@/i18n/routing";
 import type { InstallTextSegment } from "@/i18n/locales/install_page_strings";
 import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
 
@@ -39,7 +37,7 @@ function renderInstallSegments(segments: InstallTextSegment[]) {
       <code key={i} className={codeSm}>
         {seg.code}
       </code>
-    ),
+    )
   );
 }
 
@@ -51,7 +49,7 @@ function renderInstallSegmentsTight(segments: InstallTextSegment[]) {
       <code key={i} className={codeXs}>
         {seg.code}
       </code>
-    ),
+    )
   );
 }
 
@@ -107,16 +105,17 @@ function WhatChangesSection({
         </table>
       </div>
 
-      <p className="text-[13px] leading-5 text-muted-foreground">{renderInstallSegmentsTight(footnoteSegments)}</p>
+      <p className="text-[13px] leading-5 text-muted-foreground">
+        {renderInstallSegmentsTight(footnoteSegments)}
+      </p>
     </div>
   );
 }
 
 /** Main install page body (MDX-backed); shell title comes from `MdxSitePage` `detailTitle` + i18n. */
 export function InstallPageBody() {
-  const { locale, subpage } = useLocale();
+  const { subpage } = useLocale();
   const s = subpage.install;
-  const lp = (path: string) => localizePath(path, locale);
 
   return (
     <>
@@ -131,17 +130,16 @@ export function InstallPageBody() {
         </span>
       </div>
 
-      <div className="mb-8 rounded-lg border border-border/60 bg-muted/30 p-4">
-        <p className="text-[14px] leading-6 text-muted-foreground mb-3">{s.evaluateCtaBody}</p>
-        <TrackedProductLink
-          to={lp("/evaluate")}
-          navTarget="evaluate"
-          navSource={PRODUCT_NAV_SOURCES.installPageEvaluateCta}
-          className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted transition-colors"
-        >
-          {s.startWithEvaluation}
-        </TrackedProductLink>
-      </div>
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Install</h2>
+      <p className="text-[15px] leading-7 mb-4">
+        The same commands as the home page. Swap <code>claude-code</code> for your tool: cursor,
+        codex, openclaw or claude-desktop.
+      </p>
+      <CodeBlock
+        code={INSTALL_COMMANDS}
+        copyFeedbackId="install-copy-quick"
+        installBlock="manual_commands"
+      />
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">{s.agentAssistedInstall}</h2>
       <p className="text-[15px] leading-7 mb-4">{s.agentAssistedLead}</p>
@@ -163,17 +161,12 @@ export function InstallPageBody() {
         </ol>
       </div>
 
-      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">{s.expandedInstallFirstSequence}</h3>
+      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">
+        {s.expandedInstallFirstSequence}
+      </h3>
       <p className="text-[15px] leading-7 mb-3">
         {s.expandedSequenceIntroPrefix}
-        <TrackedProductLink
-          to={lp("/evaluate")}
-          navTarget="evaluate"
-          navSource={PRODUCT_NAV_SOURCES.installPageInlineEvaluate}
-          className="underline underline-offset-2 hover:no-underline"
-        >
-          /evaluate
-        </TrackedProductLink>
+        <code>/evaluate</code>
         {s.expandedSequenceIntroSuffix}
       </p>
       <ol className="list-decimal pl-5 space-y-2 mb-4">
@@ -199,28 +192,30 @@ export function InstallPageBody() {
           install.md
         </a>
         {s.canonicalRefAfterInstallMd}
-        <TrackedProductLink
-          to={lp("/evaluate")}
-          navTarget="evaluate"
-          navSource={PRODUCT_NAV_SOURCES.installPageInlineEvaluate}
-          className="underline underline-offset-2 hover:no-underline"
-        >
-          /evaluate
-        </TrackedProductLink>
+        <code>/evaluate</code>
         {s.canonicalRefSuffix}
       </p>
 
       <p className="text-[13px] leading-5 text-muted-foreground mb-4">
         {s.moreOptions}{" "}
-        <MdxI18nLink to="/install/manual" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <MdxI18nLink
+          to="/install/manual"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           {s.manualInstallLinkLabel}
         </MdxI18nLink>
         {" · "}
-        <MdxI18nLink to="/install/docker" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <MdxI18nLink
+          to="/install/docker"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           {s.dockerLinkLabel}
         </MdxI18nLink>
         {" · "}
-        <MdxI18nLink to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <MdxI18nLink
+          to="/cli"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           {s.cliReferenceLinkLabel}
         </MdxI18nLink>
       </p>
@@ -236,14 +231,22 @@ export function InstallPageBody() {
         rows={s.impactRows}
       />
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">{s.directIntegrationDocs}</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">
+        {s.directIntegrationDocs}
+      </h2>
       <p className="text-[13px] leading-6 text-muted-foreground mb-3">
         {s.hostedConnectLeadPrefix}
-        <MdxI18nLink to="/connect" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <MdxI18nLink
+          to="/connect"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           {s.hostedConnectConnectLink}
         </MdxI18nLink>
         {s.hostedConnectMiddle}
-        <MdxI18nLink to="/sandbox" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <MdxI18nLink
+          to="/sandbox"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           {s.hostedConnectSandboxLink}
         </MdxI18nLink>
         {s.hostedConnectSuffix}
@@ -267,8 +270,12 @@ export function InstallPageBody() {
                         <Icon className="h-5 w-5 shrink-0" aria-hidden />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <span className="font-medium text-[15px] text-foreground block">{label}</span>
-                        <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">{desc}</span>
+                        <span className="font-medium text-[15px] text-foreground block">
+                          {label}
+                        </span>
+                        <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
+                          {desc}
+                        </span>
                       </div>
                     </div>
                   </CardContent>
@@ -279,7 +286,9 @@ export function InstallPageBody() {
         })}
       </ul>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">{s.manualInstallAndDocker}</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
+        {s.manualInstallAndDocker}
+      </h2>
       <div className="grid gap-4 sm:grid-cols-2 mb-8">
         <MdxI18nLink
           to="/install/manual"

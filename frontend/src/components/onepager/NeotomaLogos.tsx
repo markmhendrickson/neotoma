@@ -8,22 +8,15 @@ import { NEOTOMA_LOGO_DRAFTING } from "./neotoma_logo_drafting.generated";
 /** Solid accepted lockup. Light and dark exports are the accepted files, swapped by theme. */
 export function SolidLockup({ className = "" }: { className?: string }) {
   return (
-    <span className={`plan-solid-logo ${className}`}>
+    <span className={`plan-solid-logo ${className}`} role="img" aria-label="Neotoma">
       <img
         className="plan-logo-light"
         src="/brand/n2-nav-light.svg"
-        alt="Neotoma"
-        width={132}
-        height={28}
-      />
-      <img
-        className="plan-logo-dark"
-        src="/brand/n2-nav-dark.svg"
         alt=""
-        aria-hidden="true"
         width={132}
         height={28}
       />
+      <img className="plan-logo-dark" src="/brand/n2-nav-dark.svg" alt="" width={132} height={28} />
     </span>
   );
 }

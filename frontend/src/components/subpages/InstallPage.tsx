@@ -33,7 +33,7 @@ export function InstallPage() {
             <DraftingLogo height={18} />
           </span>
           <span>INSTALL</span>
-          <span>SHEET 05 / 07</span>
+          <span>SHEET 05A / 07</span>
           <span>REV A · NTS</span>
         </div>
       </section>

@@ -103,7 +103,7 @@ describe("accepted Neotoma logo", () => {
 
   it("derives the drafting variant from the accepted geometry without changing any path", async () => {
     // @ts-expect-error plain ESM script
-    const { buildOutputs, parseLockup } =
+    const { buildOutputs, parseLockup, verifySource } =
       await import("../../scripts/derive_neotoma_logo_drafting.mjs");
     const source = readFileSync(join(brand, "n2-nav-light.svg"), "utf-8");
     const out = buildOutputs(source);
@@ -119,6 +119,19 @@ describe("accepted Neotoma logo", () => {
       );
     expect(flat(derived)).toEqual(flat(src));
     expect(flat(src).length).toBeGreaterThan(5);
+    // The parser must see every <path> element: one it skips would be skipped on both sides above.
+    const rawCount = (source.match(/<path\b/g) ?? []).length;
+    expect(flat(src).length).toBe(rawCount);
+    expect(flat(derived).length).toBe((out.staticSvg.match(/<path\b/g) ?? []).length);
+    // The script refuses a source that is not the accepted file.
+    const prov = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8"));
+    expect(() => verifySource(readFileSync(join(brand, "n2-nav-light.svg")), prov)).not.toThrow();
+    expect(() => verifySource(Buffer.from(source.replace("#172b39", "#172b3a")), prov)).toThrow(
+      /refusing to derive/
+    );
+    expect(() => buildOutputs(source.replace("</svg>", '<path d="M0 0L1 1"/></svg>'))).toThrow(
+      /partial logo/
+    );
     expect(out.staticSvg).not.toMatch(/fill="#/);
   });
 
@@ -126,5 +139,53 @@ describe("accepted Neotoma logo", () => {
     const favicon = readFileSync(join(root, "frontend", "public", "favicon.svg"), "utf-8");
     expect(favicon).toBe(readFileSync(join(brand, "neotoma-icon-32.svg"), "utf-8"));
     expect(all).not.toContain("neotoma-wordmark.svg");
+  });
+});
+
+describe("review fixes (install path, accessibility, wording)", () => {
+  const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
+  const copy = files[1];
+  const page = files[0];
+  const install = read("frontend/src/components/install/install_page_body.tsx");
+
+  it("makes the install block one pasteable command set with no placeholder on a command line", () => {
+    const block = /INSTALL_COMMANDS = `([^`]*)`/.exec(copy)![1];
+    expect(block).toContain("neotoma setup --tool claude-code --yes");
+    expect(block).not.toMatch(/[<>|]/);
+    expect(page).toContain("sheet 04 table");
+  });
+
+  it("/install leads with the same command block, then the agent prompt, and has no human evaluate callout", () => {
+    expect(install).toContain("INSTALL_COMMANDS");
+    expect(install.indexOf("code={INSTALL_COMMANDS}")).toBeLessThan(
+      install.indexOf("code={SITE_CODE_SNIPPETS.agentInstallPrompt}")
+    );
+    expect(install).not.toContain("startWithEvaluation");
+    expect(install).not.toMatch(/to=\{lp\("\/evaluate"\)\}/);
+  });
+
+  it("describes the install integration cards without the memory frame", () => {
+    const strings = read("frontend/src/i18n/locales/install_page_strings.ts");
+    const en = strings.slice(
+      strings.indexOf("const INTEGRATION_CARDS_EN"),
+      strings.indexOf("const EXPANDED_STEPS_EN")
+    );
+    expect(en.length).toBeGreaterThan(200);
+    expect(/memory/i.test(en), "memory frame in English integration cards").toBe(false);
+  });
+
+  it("opens the lede with the category, lets the document scroll, and names the logo for assistive tech", () => {
+    expect(page).toMatch(/plan-lede">\s*Neotoma is the system of record for AI agents\./);
+    expect(page).not.toContain("h-screen");
+    expect(page).not.toContain("overflow-y-auto");
+    const logos = files[3] ?? readFileSync(join(dir, "NeotomaLogos.tsx"), "utf-8");
+    expect(logos).toContain('role="img" aria-label="Neotoma"');
+  });
+
+  it("uses the Ateles repository's own wording for the companion project", () => {
+    expect(page).toContain(
+      "operating system for humans and AI agents to jointly initiate, execute, approve, and"
+    );
+    expect(page).not.toContain("agentic organizations");
   });
 });

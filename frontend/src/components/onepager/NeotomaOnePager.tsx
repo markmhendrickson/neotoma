@@ -44,10 +44,7 @@ function SheetHead({ id, mark, title }: { id: string; mark: string; title: strin
 
 export function NeotomaOnePager() {
   return (
-    <div
-      data-site-header-scroll-root
-      className="h-screen overflow-y-auto scroll-smooth print:h-auto print:overflow-visible"
-    >
+    <div>
       <main className="plan" id="top">
         {/* Sheet 01 */}
         <section className="plan-sheet plan-hero" aria-labelledby="s1">
@@ -60,9 +57,9 @@ export function NeotomaOnePager() {
           <p className="plan-label">Neotoma · the system of record for AI agents</p>
           <h1 id="s1">A record, not recall.</h1>
           <p className="plan-lede">
-            An agent recalls what it was last told. A record keeps what was stored, from which
-            source, who corrected it, and what is current now, so the agents you connect can defer
-            to one answer.
+            Neotoma is the system of record for AI agents. An agent recalls what it was last told. A
+            record keeps what was stored, from which source, who corrected it, and what is current
+            now, so the agents you connect can defer to one answer.
           </p>
           <p className="plan-meta">
             Open source (MIT) · local-first · MCP server, REST API and CLI
@@ -237,6 +234,10 @@ export function NeotomaOnePager() {
           <pre className="plan-pre" tabIndex={0} aria-label="Install commands">
             <code>{INSTALL_COMMANDS}</code>
           </pre>
+          <p className="plan-small plan-install-note">
+            Using another host? Swap <code>claude-code</code> for the tool name in the setup column
+            of the sheet 04 table.
+          </p>
           <div className="plan-actions">
             <Link
               to="/install"
@@ -296,9 +297,10 @@ export function NeotomaOnePager() {
             ))}
           </div>
           <p className="plan-small">
-            Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>, the
-            operating system for agentic organizations. Neotoma answers what was true. Ateles
-            answers who was authorized.
+            Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>, an
+            operating system for humans and AI agents to jointly initiate, execute, approve, and
+            reconcile work under explicit authority. Neotoma answers what was true. Ateles answers
+            who was authorized.
           </p>
           <p className="plan-small plan-colophon">
             MIT licensed · Built by <a href="https://markmhendrickson.com">Mark Hendrickson</a> ·{" "}

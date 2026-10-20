@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { llmsLinkProblems } from "../../scripts/llms_links";
 import {
   HELD_ROUTES,
   LIVE_ROUTES,
@@ -94,5 +95,52 @@ describe("one-pager route set", () => {
       /<a href="https:\/\/github\.com\/markmhendrickson\/neotoma\/tree\/main\/docs\/">Continue/
     );
     expect(buildRedirectStub("/es/docs")).toContain('content="0; url=https://neotoma.io/"');
+  });
+
+  it("gives every committed page that disappears a stub, including client-side-only redirects", () => {
+    for (const route of ["/docker", "/knowledge-workers", "/quick-start"]) {
+      expect(route in RETIRED_DESTINATIONS, route).toBe(true);
+      expect(isRetiredRoute(route)).toBe(true);
+    }
+    expect(resolveDestination("/docker").repoPath).toBe("docs/developer/docker.md");
+    expect(resolveDestination("/knowledge-workers").kind).toBe("onepager");
+    expect(resolveDestination("/quick-start").url).toBe("https://neotoma.io/install");
+  });
+
+  it("holds the localized legal routes and retires every other locale route", () => {
+    for (const locale of ["es", "ca", "zh", "de"]) {
+      for (const legal of ["/privacy", "/terms", "/sandbox/terms-of-use"]) {
+        expect(isRetiredRoute(`/${locale}${legal}`), `${locale}${legal}`).toBe(false);
+        expect(heldReason(`/${locale}${legal}`)).toMatch(/counsel/);
+      }
+      for (const other of ["", "/install", "/evaluate", "/sandbox", "/privacy-first", "/docs"]) {
+        expect(isRetiredRoute(`/${locale}${other}`), `${locale}${other}`).toBe(true);
+      }
+    }
+  });
+});
+
+describe("llms.txt Links block (agent-fetched)", () => {
+  const llms = readFileSync(join(root, "frontend/public/llms.txt"), "utf-8");
+  it("lands every link on a live or held route or an existing repository path", () => {
+    expect(llmsLinkProblems(llms, root)).toEqual([]);
+  });
+
+  it("flags a retired neotoma.io route, a dead GitHub path and an unknown host", () => {
+    const bad = (extra: string) => llmsLinkProblems(`${llms}\n- X: ${extra}\n`, root);
+    expect(bad("https://neotoma.io/docs").join(" ")).toMatch(/retired route/);
+    expect(
+      bad("https://github.com/markmhendrickson/neotoma/blob/main/docs/nope.md").join(" ")
+    ).toMatch(/does not exist/);
+    expect(bad("https://example.com/x").join(" ")).toMatch(/unexpected host/);
+    expect(llmsLinkProblems("# Neotoma\n", root).join(" ")).toMatch(/no '## Links' block/);
+  });
+
+  it("is based on the Links block only, so a body rewrite does not change the result", () => {
+    const rewritten = llms.replace(
+      /^[\s\S]*?## Links/,
+      "# Neotoma\n\nA different body.\n\n## Links"
+    );
+    expect(llmsLinkProblems(rewritten, root)).toEqual([]);
   });
 });

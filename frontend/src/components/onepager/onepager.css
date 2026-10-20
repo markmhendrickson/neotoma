@@ -791,3 +791,29 @@
     font-size: 12px;
   }
 }
+
+/* Review fixes: Fig. B legibility, 12px content labels, taller inline link targets */
+.plan-svg-service .pl-t {
+  font-size: 15px;
+}
+.plan-svg-service .pl-label {
+  font-size: 14px;
+}
+.plan-svg-service .pl-serif-sm {
+  font-size: 22px;
+}
+.plan-label,
+.plan-table caption,
+.plan-table thead th {
+  font-size: 12px;
+}
+.plan-small a {
+  display: inline-block;
+  padding: 7px 1px;
+}
+.plan-install-note {
+  margin: -10px 0 22px;
+}
+.plan-install-note code {
+  font-family: var(--mono);
+}

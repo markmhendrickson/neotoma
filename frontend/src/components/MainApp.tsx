@@ -152,6 +152,9 @@ import {
   normalizeToDefaultRoute,
 } from "@/i18n/routing";
 
+/** Legal routes that stay live in every locale (see route_retirement.ts). */
+const LOCALIZED_LEGAL_PATHS = ["/privacy", "/terms", "/sandbox/terms-of-use"] as const;
+
 type AppRoute = {
   path: string;
   element: JSX.Element;
@@ -477,6 +480,16 @@ export function MainApp() {
           />
         ))}
         <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />
+        {/* Localized legal routes stay live like their English counterparts (counsel decides). */}
+        {NON_DEFAULT_LOCALES.flatMap((locale) =>
+          LOCALIZED_LEGAL_PATHS.map((legalPath) => (
+            <Route
+              key={`${locale}-legal-${legalPath}`}
+              path={`/${locale}${legalPath}`}
+              element={APP_ROUTES.find((r) => r.path === legalPath)?.element ?? <NotFound />}
+            />
+          )),
+        )}
         {NON_DEFAULT_LOCALES.flatMap((locale) => [
           <Route key={`${locale}-root`} path={`/${locale}`} element={<RetiredRouteStub />} />,
           <Route key={`${locale}-any`} path={`/${locale}/*`} element={<RetiredRouteStub />} />,

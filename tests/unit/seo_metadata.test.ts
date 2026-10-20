@@ -135,12 +135,23 @@ describe("seo_metadata", () => {
     expect(buildCanonicalUrl("/de/architecture")).toBe("https://neotoma.io/de/architecture");
   });
 
-  it("resolves locale-specific OG locale and alternates", () => {
-    const metadata = resolveSeoMetadata("/es/docs");
+  it("resolves locale-specific OG locale and alternates for a localized legal route", () => {
+    const metadata = resolveSeoMetadata("/es/privacy");
     expect(metadata.ogLocale).toBe("es_ES");
-    expect(metadata.alternates.find((entry) => entry.hrefLang === "x-default")?.href).toBe("https://neotoma.io/docs");
-    expect(metadata.alternates.find((entry) => entry.hrefLang === "es")?.href).toBe("https://neotoma.io/es/docs");
-    expect(metadata.alternates.find((entry) => entry.hrefLang === "en")?.href).toBe("https://neotoma.io/docs");
+    expect(metadata.alternates.find((entry) => entry.hrefLang === "x-default")?.href).toBe("https://neotoma.io/privacy");
+    expect(metadata.alternates.find((entry) => entry.hrefLang === "es")?.href).toBe("https://neotoma.io/es/privacy");
+    expect(metadata.alternates.find((entry) => entry.hrefLang === "en")?.href).toBe("https://neotoma.io/privacy");
+  });
+
+  it("emits hreflang alternates only for locales that serve a real page", () => {
+    // Every locale route except the localized legal ones is a noindex redirect stub.
+    for (const path of ["/", "/install", "/evaluate", "/docs"]) {
+      const locales = resolveSeoMetadata(path).alternates.map((entry) => entry.hrefLang);
+      expect(locales, path).not.toContain("es");
+      expect(locales, path).not.toContain("de");
+    }
+    expect(resolveSeoMetadata("/").alternates.map((entry) => entry.hrefLang)).toEqual(["x-default", "en"]);
+    expect(resolveSeoMetadata("/terms").alternates.map((entry) => entry.hrefLang)).toContain("de");
   });
 
   it("markdown mirror routes reuse install metadata with noindex", () => {
@@ -183,11 +194,15 @@ describe("seo_metadata", () => {
       expect(SITEMAP_PATHS).not.toContain("/404");
     });
 
-    it("default buildSitemapXml includes all indexable routes", () => {
+    it("default buildSitemapXml lists live and held routes and no retired route", () => {
       const sitemap = buildSitemapXml();
-      for (const route of INDEXABLE_ROUTES) {
-        expect(sitemap).toContain(`<loc>${buildCanonicalUrl(route)}</loc>`);
+      for (const route of ["/", "/install", "/evaluate", "/privacy", "/terms", "/meet"]) {
+        expect(sitemap, route).toContain(`<loc>${buildCanonicalUrl(route)}</loc>`);
       }
+      for (const route of ["/docs", "/architecture", "/faq", "/es", "/de/install"]) {
+        expect(sitemap, route).not.toContain(`<loc>${buildCanonicalUrl(route)}</loc>`);
+      }
+      expect(INDEXABLE_ROUTES.length).toBeGreaterThan(10);
     });
   });
 

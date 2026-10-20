@@ -20,7 +20,8 @@ export const LIVE_ROUTES: readonly string[] = ["/", "/install"];
 
 /**
  * Routes kept exactly as they are, with the old app shell, until their owner decides. Each has
- * a reason; none is linked from the one-pager. See the pull request for the inbound-use evidence.
+ * a reason. Most are not linked from the one-pager; /meet, /privacy and /terms are, deliberately
+ * (sheet 07 and the colophon). See the pull request for the inbound-use evidence.
  */
 export const HELD_ROUTES: readonly { match: string | RegExp; reason: string }[] = [
   {
@@ -55,6 +56,10 @@ export const HELD_ROUTES: readonly { match: string | RegExp; reason: string }[] 
 
 /** `null` means "no GitHub equivalent: send to the one-pager". Paths ending in `/` are folders. */
 export const RETIRED_DESTINATIONS: Readonly<Record<string, string | null>> = {
+  // Client-side-only redirects in the old app that also had committed pages
+  "/docker": "docs/developer/docker.md",
+  "/knowledge-workers": null,
+  "/quick-start": "/install",
   "/install/manual": "install.md",
   "/install/docker": "docs/developer/docker.md",
   "/what-to-store": "docs/foundation/what_to_store.md",
@@ -231,10 +236,15 @@ export type Destination = {
   url: string;
   /** Repo-relative path when the destination is a file or folder in this repository. */
   repoPath: string | null;
-  kind: "github" | "onepager";
+  kind: "github" | "onepager" | "site";
 };
 
 const LOCALE_PREFIX = /^\/(es|ca|zh|hi|ar|fr|pt|ru|bn|ur|id|de)(\/|$)/;
+/** Localized legal and consent routes are held like their English counterparts (counsel decides). */
+const LOCALE_LEGAL =
+  /^\/(es|ca|zh|hi|ar|fr|pt|ru|bn|ur|id|de)\/(privacy|terms|sandbox\/terms-of-use)$/;
+const LEGAL_REASON =
+  "Localized legal and consent surface: held like its English counterpart. Redirecting a legal URL is a counsel decision.";
 
 export function isLocaleRoute(route: string): boolean {
   return LOCALE_PREFIX.test(route);
@@ -250,18 +260,24 @@ export function isLiveRoute(route: string): boolean {
 
 export function heldReason(route: string): string | null {
   const r = stripTrailingSlash(route);
+  if (LOCALE_LEGAL.test(r)) return LEGAL_REASON;
   for (const h of HELD_ROUTES) {
     if (typeof h.match === "string" ? h.match === r : h.match.test(r)) return h.reason;
   }
   return null;
 }
 
-/** A locale-prefixed route keeps its meaning only for the home route: all locale routes go to the one-pager. */
+/** Every locale route goes to the one-pager, except the localized legal routes, which stay live. */
 export function isRetiredRoute(route: string): boolean {
   const r = stripTrailingSlash(route);
-  if (isLocaleRoute(r)) return true;
+  if (isLocaleRoute(r)) return !LOCALE_LEGAL.test(r);
   if (isLiveRoute(r)) return false;
   return heldReason(r) === null;
+}
+
+/** True when the route is served as a real page (live or held), false when it is a redirect stub. */
+export function servesRealPage(route: string): boolean {
+  return !isRetiredRoute(route);
 }
 
 export function resolveDestination(route: string): Destination {
@@ -273,6 +289,8 @@ export function resolveDestination(route: string): Destination {
     return { url: "/", repoPath: null, kind: "onepager" };
   }
   if (mapped === null) return { url: "/", repoPath: null, kind: "onepager" };
+  if (mapped.startsWith("/"))
+    return { url: `https://neotoma.io${mapped}`, repoPath: null, kind: "site" };
   if (SPECIAL[mapped]) return { url: SPECIAL[mapped], repoPath: null, kind: "github" };
   const url = mapped.endsWith("/") ? `${TREE}${mapped}` : `${BLOB}${mapped}`;
   return { url, repoPath: mapped, kind: "github" };
@@ -282,8 +300,7 @@ export function resolveDestination(route: string): Destination {
 export function buildRedirectStub(route: string, origin = "https://neotoma.io"): string {
   const dest = resolveDestination(route);
   const target = dest.url === "/" ? `${origin}/` : dest.url;
-  const label =
-    dest.kind === "github" ? "the Neotoma repository on GitHub" : "the Neotoma one-page site";
+  const label = dest.kind === "github" ? "the Neotoma repository on GitHub" : "the Neotoma site";
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   return `<!DOCTYPE html>
 <html lang="en">

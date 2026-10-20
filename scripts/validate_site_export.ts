@@ -19,6 +19,7 @@ import {
   isRetiredRoute,
   resolveDestination,
 } from "../frontend/src/site/route_retirement";
+import { llmsLinkProblems } from "./llms_links";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -269,7 +270,12 @@ if (!fs.existsSync(installHtml)) {
 }
 for (const route of Object.keys(RETIRED_DESTINATIONS)) {
   const stubPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
-  if (!fs.existsSync(stubPath)) continue; // routes the build does not emit are covered by the unit test
+  if (!fs.existsSync(stubPath)) {
+    // The build emits a stub for every retired route, so a missing stub means the page now 404s.
+    fail(`site_pages${route}/index.html is missing: every retired route must have a redirect stub`);
+    routeFailures++;
+    continue;
+  }
   const html = fs.readFileSync(stubPath, "utf-8");
   const dest = resolveDestination(route);
   const target = dest.url === "/" ? "https://neotoma.io/" : dest.url;
@@ -293,8 +299,27 @@ for (const loc of NON_ENGLISH_SITE_LOCALES) {
     routeFailures++;
   }
 }
-for (const route of ["/evaluate", "/privacy", "/terms", "/sandbox", "/meet"]) {
-  if (!heldReason(route)) continue;
+// One representative of each held namespace, including the agent-fetched ones (/evaluate, /markdown, /skills)
+// and a localized legal route, must stay a real page until its owner retires it.
+for (const route of [
+  "/evaluate",
+  "/evaluate/agent-instructions",
+  "/markdown/install",
+  "/skills/ensure-neotoma",
+  "/privacy",
+  "/terms",
+  "/sandbox",
+  "/sandbox/terms-of-use",
+  "/meet",
+  "/es/privacy",
+  "/de/terms",
+  "/fr/sandbox/terms-of-use",
+]) {
+  if (!heldReason(route)) {
+    fail(`${route} is expected to be held but is not in HELD_ROUTES`);
+    routeFailures++;
+    continue;
+  }
   const heldPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
   if (!fs.existsSync(heldPath) || fs.readFileSync(heldPath, "utf-8").includes('http-equiv="refresh"')) {
     fail(`held route ${route} must stay a real page until its owner retires it`);
@@ -314,6 +339,15 @@ for (const route of ["/evaluate", "/privacy", "/terms", "/sandbox", "/meet"]) {
       fail(`sitemap.xml is missing live route ${live}`);
       routeFailures++;
     }
+  }
+}
+// llms.txt is read by agents without a browser: every link in its Links block must land on a real page.
+{
+  const llms = path.join(siteDir, "llms.txt");
+  const problems = fs.existsSync(llms) ? llmsLinkProblems(fs.readFileSync(llms, "utf-8"), repoRoot) : ["llms.txt is missing"];
+  for (const problem of problems) {
+    fail(`llms.txt: ${problem}`);
+    routeFailures++;
   }
 }
 if (routeFailures === 0) {

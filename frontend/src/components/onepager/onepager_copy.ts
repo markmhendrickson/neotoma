@@ -93,7 +93,7 @@ export const CONNECTIONS_OTHER =
 
 export const INSTALL_COMMANDS = `npm install -g neotoma
 neotoma init
-neotoma setup --tool <claude-code|cursor|codex|openclaw|claude-desktop> --yes
+neotoma setup --tool claude-code --yes
 neotoma mcp config`;
 
 export const LIMITS: readonly { title: string; text: string }[] = [
@@ -111,7 +111,7 @@ export const LIMITS: readonly { title: string; text: string }[] = [
   },
   {
     title: "Authority over the record is not modeled yet.",
-    text: "Each write carries an agent identity and agents can be limited by grants. Organizations, workspaces and rules for who may correct what are not built.",
+    text: "Writes over MCP are attributed to the connecting client, and to a signed agent identity when one is configured. Without one, the name is the client's own claim. Agents can be limited by grants. Organizations, workspaces and rules for who may correct what are not built.",
   },
   {
     title: "Not a chat log or a vector store.",

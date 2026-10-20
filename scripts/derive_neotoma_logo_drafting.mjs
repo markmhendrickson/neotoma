@@ -13,6 +13,7 @@
  *   frontend/src/components/onepager/neotoma_logo_drafting.generated.ts (data for the inline component)
  * Run: node scripts/derive_neotoma_logo_drafting.mjs   (CI test re-derives and compares)
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,8 +45,23 @@ export function parseLockup(svg) {
   return { viewBox, width, height, groups };
 }
 
+/** Refuses a source file whose sha256 differs from the accepted hash recorded in PROVENANCE.json. */
+export function verifySource(svgText, provenance, name = "n2-nav-light.svg") {
+  const expected = provenance.files?.[name]?.sha256;
+  if (!expected) throw new Error(`PROVENANCE.json records no sha256 for ${name}`);
+  const actual = crypto.createHash("sha256").update(svgText).digest("hex");
+  if (actual !== expected) {
+    throw new Error(`${name} does not match the accepted logo (sha256 ${actual} != ${expected}); refusing to derive`);
+  }
+}
+
 export function buildOutputs(svg) {
   const lockup = parseLockup(svg);
+  const raw = (svg.match(/<path\b/g) || []).length;
+  const parsed = lockup.groups.reduce((n, g) => n + g.paths.length, 0);
+  if (raw !== parsed) {
+    throw new Error(`parser read ${parsed} of ${raw} <path> elements; refusing to derive a partial logo`);
+  }
   const attr = (path) =>
     `${path.transform ? ` transform="${path.transform}"` : ""} d="${path.d}"`;
   const body = lockup.groups
@@ -62,7 +78,10 @@ export function buildOutputs(svg) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { staticSvg, ts } = buildOutputs(fs.readFileSync(SRC, "utf-8"));
+  const source = fs.readFileSync(SRC);
+  const provenance = JSON.parse(fs.readFileSync(path.join(root, "frontend/public/brand/PROVENANCE.json"), "utf-8"));
+  verifySource(source, provenance);
+  const { staticSvg, ts } = buildOutputs(source.toString("utf-8"));
   fs.writeFileSync(path.join(root, "frontend/public/brand/neotoma-lockup-drafting.svg"), staticSvg);
   fs.writeFileSync(path.join(root, "frontend/src/components/onepager/neotoma_logo_drafting.generated.ts"), ts);
   console.log("wrote drafting lockup (static svg + generated ts)");

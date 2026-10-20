@@ -9,6 +9,7 @@ import {
 } from "@/i18n/config";
 import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
+import { isRetiredRoute, servesRealPage } from "@/site/route_retirement";
 
 export interface SeoRouteMetadata {
   title: string;
@@ -2970,7 +2971,11 @@ export interface ResolvedSeoMetadata {
 
 function buildAlternates(pathname: string): { hrefLang: string; href: string }[] {
   const basePath = stripLocaleFromPath(pathname);
-  const alternates = SUPPORTED_LOCALES.map((locale) => ({
+  // Only locales that serve a real page for this path get an alternate. Retired locale routes are
+  // noindex redirect stubs, and hreflang pointing at them is ignored or flagged by search engines.
+  const alternates = SUPPORTED_LOCALES.filter((locale) =>
+    servesRealPage(localizePath(basePath, locale)),
+  ).map((locale) => ({
     hrefLang: locale,
     href: buildCanonicalUrl(localizePath(basePath, locale)),
   }));
@@ -3033,7 +3038,9 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   };
 }
 
-export function buildSitemapXml(paths: readonly string[] = SITEMAP_PATHS): string {
+export function buildSitemapXml(
+  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p)),
+): string {
   const urlEntries = paths
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)
     .join("\n");

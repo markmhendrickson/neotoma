@@ -118,42 +118,42 @@ const INTEGRATION_CARDS_EN: InstallIntegrationCard[] = [
   {
     href: "/neotoma-with-claude-code",
     label: "Claude Code",
-    desc: "Persistent memory for Claude Code's local CLI agent",
+    desc: "Connect Claude Code's local CLI agent to the record",
   },
   {
     href: "/neotoma-with-claude",
     label: "Claude",
-    desc: "Structured state alongside Claude platform memory",
+    desc: "Keep a record alongside Claude's own context",
   },
   {
     href: "/neotoma-with-chatgpt",
     label: "ChatGPT",
-    desc: "Deterministic memory for ChatGPT conversations",
+    desc: "Connect ChatGPT conversations to the record",
   },
   {
     href: "/neotoma-with-codex",
     label: "Codex",
-    desc: "Cross-task memory and CLI fallback",
+    desc: "Hooks, MCP and a CLI fallback for Codex tasks",
   },
   {
     href: "/neotoma-with-opencode",
     label: "OpenCode",
-    desc: "Lifecycle hooks and MCP memory for OpenCode",
+    desc: "Lifecycle hooks and MCP for OpenCode",
   },
   {
     href: "/neotoma-with-cursor",
     label: "Cursor",
-    desc: "Persistent memory alongside Cursor context",
+    desc: "Connect Cursor to the record alongside its context",
   },
   {
     href: "/neotoma-with-openclaw",
     label: "OpenClaw",
-    desc: "User-owned memory for OpenClaw agents",
+    desc: "A user-owned record for OpenClaw agents",
   },
   {
     href: "/neotoma-with-ironclaw",
     label: "IronClaw",
-    desc: "Structured MCP memory for IronClaw agents",
+    desc: "Structured MCP access to the record for IronClaw agents",
   },
 ];
 
