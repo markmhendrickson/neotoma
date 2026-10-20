@@ -463,7 +463,12 @@ for (const route of LIVE_ROUTES) {
   const wholeText = text + " " + jsonLd;
   for (const m of wholeText.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
     const after = wholeText.slice(m.index, m.index + 600);
-    if (!/npm registry/i.test(after) || !/NO_UPDATE_NOTIFIER=1/.test(after)) {
+    if (
+      !/npm registry/i.test(after) ||
+      !/NO_UPDATE_NOTIFIER=1/.test(after) ||
+      !/when a session starts/i.test(after) ||
+      !/connection metadata/i.test(after)
+    ) {
       fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${m[0]}" without the npm update-check qualification`);
       liveClaimFailures++;
     }

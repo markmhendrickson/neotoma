@@ -392,11 +392,20 @@ describe("/install polish", () => {
           const after = text.slice(m.index!, m.index! + 600);
           expect(/npm registry|npm update checks/i.test(after), `${rel}: ${m[0]}`).toBe(true);
           expect(/NO_UPDATE_NOTIFIER=1/.test(after), `${rel}: ${m[0]}`).toBe(true);
+          expect(/when a session starts/i.test(after), `${rel}: ${m[0]} names only part of the update checks`).toBe(true);
+          expect(/connection metadata/i.test(after), `${rel}: ${m[0]} omits what the registry sees`).toBe(true);
         }
       }
       expect(seen).toBeGreaterThanOrEqual(4);
       const en = readSrc("frontend/src/i18n/locales/install_page_strings.ts");
-      expect(en).toContain("the MCP server over stdio checks about every 6 hours (off with NO_UPDATE_NOTIFIER=1). Only the package name is sent.");
+      for (const fragment of [
+        "checks the npm registry for a newer version about once a day",
+        "The stdio MCP server checks when a session starts and about every 6 hours after",
+        "--no-update-check applies to the CLI only",
+        "The request carries only the package name, and the registry sees ordinary connection metadata such as the address.",
+      ]) {
+        expect(en, fragment).toContain(fragment);
+      }
     });
 
     it("says OpenCode uses a plugin or MCP", () => {

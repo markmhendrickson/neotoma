@@ -224,7 +224,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Privacy-first local storage",
     slug: "privacy-first-local-storage",
     tooltip:
-      "Whether your data stays on your machine by default with no cloud sync or third-party access, and no telemetry beyond npm update checks that send only the package name (NO_UPDATE_NOTIFIER=1 turns them off). Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
+      "Whether your data stays on your machine by default with no cloud sync or third-party access, and no telemetry beyond npm update checks that send only the package name (the CLI checks about once a day, the stdio MCP server when a session starts and about every 6 hours after; NO_UPDATE_NOTIFIER=1 turns both off, and the registry sees ordinary connection metadata such as the address). Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "guaranteed",

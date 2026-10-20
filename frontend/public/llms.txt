@@ -15,7 +15,7 @@ Neotoma is open source and local-first. It stores each fact as an observation li
 - Interfaces: MCP server, REST API, CLI, and a bundled web Inspector
 - Platforms: macOS and Linux; Windows is untested
 - Documented integrations: Cursor, Claude Code, Claude Desktop, ChatGPT, Codex, OpenClaw, IronClaw, Windsurf, Continue, VS Code, Letta (see the integrations matrix under Links)
-- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files). No telemetry. The interactive CLI checks the npm registry for a newer version once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`), and the MCP server over stdio checks about every 6 hours (off with `NO_UPDATE_NOTIFIER=1`). Only the package name is sent.
+- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files). No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after (off with `NO_UPDATE_NOTIFIER=1`; `--no-update-check` applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.
 - Written in TypeScript
 
 ## What it provides
@@ -31,7 +31,7 @@ Neotoma is open source and local-first. It stores each fact as an observation li
 - A record is a workflow commitment: agents must write to it and read from it, and it needs a local service and deliberate writes
 - Provenance shows the evidence trail, not that an agent read a source correctly
 - Export writes current state; observation history is not part of the export
-- A later write can override a correction in the current snapshot (open issue #2033)
+- A later write can override a correction in the current snapshot (open issue https://github.com/markmhendrickson/neotoma/issues/2033)
 - A snapshot can be read as of a past time for one entity (`at` and `at_ingested` on `retrieve_entity_snapshot`); there is no as-of query across the whole record
 - Field values are not checked against their types on write today; a value of the wrong type can be accepted into the snapshot
 - Observation IDs are not stable across runs: the same input stored twice in separate data directories gives the same entity ID and different observation IDs
