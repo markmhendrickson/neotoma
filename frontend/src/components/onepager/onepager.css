@@ -473,12 +473,12 @@
   letter-spacing: 0.1em;
   color: var(--ink);
 }
-.plan-titleblock span {
+.plan-titleblock > span {
   padding: 8px 12px;
   border-right: 0;
   border-left: 1px solid var(--line);
 }
-.plan-titleblock span:first-child {
+.plan-titleblock > span:first-child {
   border-left: 0;
   font-weight: 700;
 }
@@ -599,8 +599,8 @@
   .plan-titleblock {
     grid-template-columns: auto auto;
   }
-  .plan-titleblock span:nth-child(2),
-  .plan-titleblock span:nth-child(4) {
+  .plan-titleblock > span:nth-child(2),
+  .plan-titleblock > span:nth-child(4) {
     display: none;
   }
 }
@@ -635,10 +635,40 @@
   display: block;
   color: var(--ink);
 }
+.plan-titleblock {
+  align-items: center;
+}
 .plan-titleblock .plan-tb-logo {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 8px 14px;
+}
+/* Drafting logo needs 280 px; below the 860 px breakpoint the title block shows the solid lockup */
+.plan-tb-solid {
+  display: none;
+}
+.plan-tb-solid .plan-solid-logo img {
+  height: 22px;
+}
+@media (max-width: 860px) {
+  .plan-tb-draft {
+    display: none;
+  }
+  .plan-tb-solid {
+    display: block;
+  }
+}
+.plan-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ink);
+}
+.plan-footer .plan-colophon {
+  margin: 0;
 }
 
 /* Masthead and deeper-material sheet */
@@ -816,4 +846,14 @@
 }
 .plan-install-note code {
   font-family: var(--mono);
+}
+
+/* The title block now holds the 280 px drafting logo, so sheets reserve more room under their content */
+.plan-sheet {
+  padding-bottom: 112px;
+}
+@media (max-width: 860px) {
+  .plan-sheet {
+    padding-bottom: 76px;
+  }
 }

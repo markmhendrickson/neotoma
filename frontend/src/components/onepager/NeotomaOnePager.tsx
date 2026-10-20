@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
-import { DraftingLogo, SolidLockup } from "./NeotomaLogos";
+import { PlanTitleBlock, SolidLockup } from "./NeotomaLogos";
 import { RecordPlanNarrow, RecordPlanWide, ServicePlan } from "./onepager_figures";
 import {
   CLI_TRANSCRIPT,
@@ -20,16 +20,10 @@ const SHEETS = 7;
 
 function TitleBlock({ n, title }: { n: number; title: string }) {
   return (
-    <div className="plan-titleblock" aria-hidden="true">
-      <span className="plan-tb-logo">
-        <DraftingLogo height={18} />
-      </span>
-      <span>{title}</span>
-      <span>
-        SHEET {String(n).padStart(2, "0")} / {String(SHEETS).padStart(2, "0")}
-      </span>
-      <span>REV A · NTS</span>
-    </div>
+    <PlanTitleBlock
+      sheet={`${String(n).padStart(2, "0")} / ${String(SHEETS).padStart(2, "0")}`}
+      title={title}
+    />
   );
 }
 
@@ -302,10 +296,13 @@ export function NeotomaOnePager() {
             reconcile work under explicit authority. Neotoma answers what was true. Ateles answers
             who was authorized.
           </p>
-          <p className="plan-small plan-colophon">
-            MIT licensed · Built by <a href="https://markmhendrickson.com">Mark Hendrickson</a> ·{" "}
-            <a href="/privacy">Privacy</a> · <a href="/terms">Terms of use</a>
-          </p>
+          <footer className="plan-footer">
+            <SolidLockup />
+            <p className="plan-small plan-colophon">
+              MIT licensed · Built by <a href="https://markmhendrickson.com">Mark Hendrickson</a> ·{" "}
+              <a href="/privacy">Privacy</a> · <a href="/terms">Terms of use</a>
+            </p>
+          </footer>
           <TitleBlock n={7} title="DEEPER MATERIAL · GITHUB" />
         </section>
       </main>
