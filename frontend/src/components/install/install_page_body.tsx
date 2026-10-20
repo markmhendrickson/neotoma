@@ -1,5 +1,5 @@
 import type { ElementType } from "react";
-import { Clock, RotateCcw } from "lucide-react";
+import { Clock } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "@/site/site_data";
 import { CodeBlock } from "@/components/InstallCodeBlock";
@@ -123,10 +123,6 @@ export function InstallPageBody() {
         <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
           {s.fiveMinuteIntegration}
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
-          <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {s.fullyReversible}
         </span>
       </div>
 

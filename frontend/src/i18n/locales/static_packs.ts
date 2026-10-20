@@ -195,7 +195,7 @@ const EN_PACK: StaticLocalePack = {
     install: {
       title: "Install | Neotoma",
       description:
-        "Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
+        "Install Neotoma in a few minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
     },
     foundations: {
       title: "Foundations | Neotoma",

@@ -1,48 +1,56 @@
 # Neotoma
 
-> Deterministic state layer for long-running AI agents
+> The system of record for AI agents
 
 ## What it does
 
-Neotoma is an open-source deterministic state layer for AI agents. It uses append-only observation logs, hash-based entity IDs, and schema constraints to give agents versioned, reproducible, auditable memory that never silently mutates. Same observations always produce the same entity state.
+A record, not recall. An agent's recall holds what it was last told. Neotoma is a record: it keeps what was stored, from which source, who corrected it, and what is current now, so connected agents can read one current answer.
+
+Neotoma is open source and local-first. It stores each fact as an observation linked to its source, resolves observations into entities, and computes a current snapshot for each entity with a reducer. A correction is recorded as a new observation, and the earlier observations stay readable for that entity. Each current field names the observation that set it.
 
 ## Key facts
 
 - Open-source, MIT-licensed
-- Installs via npm: `npm install -g neotoma`
-- Interfaces: REST API, MCP server, CLI
-- Platforms: macOS, Linux, Windows (WSL)
-- AI tool integrations: Cursor, Claude, Claude Code, ChatGPT, Codex, OpenClaw
-- Local-first: data stays on your machine, no cloud sync, no telemetry
-- Written in TypeScript, backed by SQLite
+- Installs via npm: `npm install -g neotoma`, then `neotoma init`
+- Interfaces: MCP server, REST API, CLI, and a bundled web Inspector
+- Platforms: macOS and Linux; Windows is untested
+- Documented integrations: Cursor, Claude Code, Claude Desktop, ChatGPT, Codex, OpenClaw, IronClaw, Windsurf, Continue, VS Code, Letta (see the integrations matrix under Links)
+- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files). No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after (off with `NO_UPDATE_NOTIFIER=1`; `--no-update-check` applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.
+- Written in TypeScript
 
-## Core guarantees
+## What it provides
 
-- Deterministic state evolution: same observations always produce the same entity state
-- Versioned history: every change creates a new version, earlier states preserved
-- Replayable timeline: replay observations to reconstruct any historical state
-- Auditable change log: every modification records who, when, and from what source
-- Schema constraints: entities validated against defined types, malformed writes rejected
-- Silent mutation prevention: no overwrites, merges, or drops without a trace
-- Conflicting facts detection: contradictory statements detected and resolved deterministically
-- Reproducible state reconstruction: rebuild complete state from raw inputs alone
-- Human inspectability: diff any two versions, trace every fact to its origin
+- Snapshots: the current state of an entity is computed by a reducer from its observations
+- Provenance: every current field traces to the observation that set it, and through it to its source
+- Corrections as observations: a correction adds a new observation and does not overwrite the earlier one
+- Entity resolution: entity IDs are hashes derived from the identity fields of the entity type
+- Idempotent writes through an `idempotency_key`
+
+## Limits
+
+- A record is a workflow commitment: agents must write to it and read from it, and it needs a local service and deliberate writes
+- Provenance shows the evidence trail, not that an agent read a source correctly
+- Export writes current state; observation history is not part of the export
+- A later write can override a correction in the current snapshot (open issue https://github.com/markmhendrickson/neotoma/issues/2033)
+- A snapshot can be read as of a past time for one entity (`at` and `at_ingested` on `retrieve_entity_snapshot`); there is no as-of query across the whole record
+- Field values are not checked against their types on write today; a value of the wrong type can be accepted into the snapshot
+- Observation IDs are not stable across runs: the same input stored twice in separate data directories gives the same entity ID and different observation IDs
+- Organizations, workspaces, and multi-party authority are not built
+- It is not a vector store or a chat log
 
 ## Key concepts
 
-- Entity: canonical representation of a person, company, task, or object with deterministic ID
-- Observation: immutable, timestamped fact about an entity; never modified or deleted
-- Snapshot: current truth for an entity, computed by merging all observations via reducers
-- Reducer: deterministic function that merges observations into a snapshot
-- Provenance: origin tracking so every value traces back to its source
-- Memory graph: the graph of sources, observations, entities, relationships, and events
+- Entity: canonical representation of a person, company, task, or object with a deterministic ID
+- Observation: a timestamped fact about an entity, linked to its source
+- Snapshot: the current state of an entity, computed from its observations by a reducer
+- Reducer: the function that turns an entity's observations into a snapshot
+- Provenance: the link from each snapshot field to the observation, and from there to the source, that set it
 
 ## How it compares
 
-- vs Platform memory (Claude, ChatGPT): Neotoma adds deterministic state, versioned history, schema constraints, and reproducible reconstruction
-- vs Retrieval memory (Mem0, Zep): Neotoma provides state integrity instead of retrieval relevance; deterministic composition instead of probabilistic matching
-- vs File-based memory (Markdown, JSON): Neotoma adds schema validation, deterministic merging, temporal queries, and auditable provenance
-- vs RAG: Neotoma is not a RAG system; it provides deterministic entity state, not document retrieval for prompt augmentation
+- Memory and retrieval tools (platform memory, Mem0, Zep) answer what an agent remembers. A record answers what is true now, what it was before, and on whose evidence. The two overlap, and a product can cover more than one.
+- File-based notes (Markdown, JSON) hold content. Neotoma adds typed entities, a reducer that computes the current value, and field-level provenance.
+- RAG retrieves documents to augment a prompt. Neotoma maintains entity state; it is not a document retrieval system.
 
 ## Links
 

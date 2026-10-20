@@ -45,7 +45,8 @@ describe("neotoma.io one-pager copy", () => {
       [/multi-operator/i, "multi-operator authority"],
       [/corrections? always win/i, "corrections always win"],
       [/append-only/i, "database-enforced append-only"],
-      [/point-in-time/i, "one-call point-in-time state"],
+      [/(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i, "as-of read across the whole record"],
+      [/no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i, "denies the per-entity as-of read"],
       [/follows? a changed objective/i, "Ateles follows a changed objective"],
     ];
     for (const [re, label] of forbidden) {
@@ -335,6 +336,102 @@ describe("/install polish", () => {
 
   it("has no stale 280 px drafting-logo comment", () => {
     expect(css).not.toMatch(/280 px/);
+  });
+
+  describe("claims fixes (re-check at the shipping commit)", () => {
+    const readSrc = (rel: string) => readFileSync(join(root, rel), "utf-8");
+    const page2 = files[0];
+    const copy2 = files[1];
+
+    it("lede reads as before and after, and does not claim who corrected it", () => {
+      const lede = /plan-lede">([\s\S]*?)<\/p>/.exec(page2)![1].replace(/\s+/g, " ");
+      expect(lede).toContain("Without one, an agent recalls only what it was last told.");
+      expect(lede).toContain("With one, it reads what was stored, from which source, and what is current now");
+      expect(lede).not.toMatch(/corrected/i);
+      expect(lede).not.toMatch(/for example/i);
+    });
+
+    it("prints a corrections command that runs on the published package", () => {
+      expect(copy2).toMatch(/neotoma corrections create ent_\w+ --entity-type invoice/);
+    });
+
+    it("does not say the run used a single build, and says ids vary", () => {
+      expect(page2).not.toContain("uses the v0.25.0 build");
+      expect(page2).toContain("differ on every run");
+    });
+
+    it("sheet 02 R1 does not say each fact is linked unqualified", () => {
+      expect(copy2).toContain("Each stored fact as an observation linked to its source.");
+    });
+
+    it("keeps the Ateles line to what the companion project says of itself", () => {
+      expect(page2).not.toContain("Neotoma answers what was true");
+      expect(page2).not.toContain("Ateles answers");
+    });
+
+    it("lists no interactive command in the pasted install block", () => {
+      const block = /INSTALL_COMMANDS = `([^`]*)`/.exec(copy2)![1];
+      expect(block).not.toContain("neotoma mcp config");
+      expect(page2).toContain("neotoma mcp config");
+    });
+
+    it("never says no telemetry without the npm update-check qualification", () => {
+      const sources = [
+        "frontend/src/components/onepager/NeotomaOnePager.tsx",
+        "frontend/src/components/onepager/onepager_copy.ts",
+        "frontend/src/components/install/install_page_body.tsx",
+        "frontend/src/i18n/locales/install_page_strings.ts",
+        "frontend/src/i18n/locales/static_packs.ts",
+        "frontend/src/i18n/locales/home_body_en.ts",
+        "frontend/src/site/seo_metadata.ts",
+        "frontend/src/site/faq_items_en.ts",
+        "frontend/src/site/site_data.ts",
+        "inspector/src/lib/faq_preview.ts",
+      ];
+      let seen = 0;
+      for (const rel of sources) {
+        const text = readSrc(rel);
+        // The localized install packs (subpage_packs.ts) are deliberately absent: those routes are redirect stubs.
+        for (const m of text.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
+          seen++;
+          const after = text.slice(m.index!, m.index! + 600);
+          expect(/npm registry|npm update checks/i.test(after), `${rel}: ${m[0]}`).toBe(true);
+          expect(/NO_UPDATE_NOTIFIER=1/.test(after), `${rel}: ${m[0]}`).toBe(true);
+          expect(/when a session starts/i.test(after), `${rel}: ${m[0]} names only part of the update checks`).toBe(true);
+          expect(/connection metadata/i.test(after), `${rel}: ${m[0]} omits what the registry sees`).toBe(true);
+        }
+      }
+      expect(seen).toBeGreaterThanOrEqual(4);
+      const en = readSrc("frontend/src/i18n/locales/install_page_strings.ts");
+      for (const fragment of [
+        "checks the npm registry for a newer version about once a day",
+        "The stdio MCP server checks when a session starts and about every 6 hours after",
+        "--no-update-check applies to the CLI only",
+        "The request carries only the package name, and the registry sees ordinary connection metadata such as the address.",
+      ]) {
+        expect(en, fragment).toContain(fragment);
+      }
+    });
+
+    it("says OpenCode uses a plugin or MCP", () => {
+      expect(copy2).toContain("OpenCode uses a plugin or MCP");
+    });
+
+    it("install page: no unevidenced reversibility, 5-minute, or telemetry-absolute claims", () => {
+      const strings = readSrc("frontend/src/i18n/locales/install_page_strings.ts");
+      const en = strings.slice(strings.indexOf("export const INSTALL_PAGE_EN"), strings.indexOf("export const INSTALL_PAGE_ES"));
+      expect(en.length).toBeGreaterThan(500);
+      expect(en).not.toContain("5-minute integration");
+      expect(en).not.toContain("phone-home");
+      expect(en).not.toContain("reconstruct a timeline");
+      expect(en).not.toContain("activate Neotoma with your data");
+      expect(en).toContain("NO_UPDATE_NOTIFIER=1");
+      expect(en).toContain("only when run from inside a Neotoma repository");
+      const body = readSrc("frontend/src/components/install/install_page_body.tsx");
+      expect(body).not.toContain("fullyReversible");
+      const data = readSrc("frontend/src/site/site_data.ts");
+      expect(data).not.toContain("activate Neotoma with my data");
+    });
   });
 });
 
