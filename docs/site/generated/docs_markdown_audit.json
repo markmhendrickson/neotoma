@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-20T08:10:53.121Z",
-  "total_files": 729,
+  "generated_at": "2026-10-20T14:44:05.426Z",
+  "total_files": 730,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -27,6 +27,7 @@
     "plans": 69,
     "proposals": 10,
     "prototypes": 2,
+    "README.md": 1,
     "reference": 1,
     "rendered_page.md": 1,
     "reports": 48,
@@ -1430,6 +1431,10 @@
     {
       "rel": "docs/prototypes/README.md",
       "top": "prototypes"
+    },
+    {
+      "rel": "docs/README.md",
+      "top": "README.md"
     },
     {
       "rel": "docs/reference/error_codes.md",

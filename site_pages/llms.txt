@@ -4,7 +4,7 @@
 
 ## What it does
 
-A record, not recall. An agent's recall holds what it was last told. Neotoma is a record: it keeps what was stored, from which source, who corrected it, and what is current now, for connected agents to defer to.
+A record, not recall. An agent's recall holds what it was last told. Neotoma is a record: it keeps what was stored, from which source, who corrected it, and what is current now, so connected agents can read one current answer.
 
 Neotoma is open source and local-first. It stores each fact as an observation linked to its source, resolves observations into entities, and computes a current snapshot for each entity with a reducer. A correction is recorded as a new observation, and the earlier observations stay readable for that entity. Each current field names the observation that set it.
 
@@ -14,8 +14,8 @@ Neotoma is open source and local-first. It stores each fact as an observation li
 - Installs via npm: `npm install -g neotoma`, then `neotoma init`
 - Interfaces: MCP server, REST API, CLI, and a bundled web Inspector
 - Platforms: macOS and Linux; Windows is untested
-- Documented integrations: Cursor, Claude, Claude Code, ChatGPT, Codex, OpenClaw
-- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files); no telemetry, and the interactive CLI checks the npm registry for a newer version once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`)
+- Documented integrations: Cursor, Claude Code, Claude Desktop, ChatGPT, Codex, OpenClaw, IronClaw, Windsurf, Continue, VS Code, Letta (see the integrations matrix under Links)
+- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files). No telemetry. The interactive CLI checks the npm registry for a newer version once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`), and the MCP server over stdio checks about every 6 hours (off with `NO_UPDATE_NOTIFIER=1`). Only the package name is sent.
 - Written in TypeScript
 
 ## What it provides
@@ -32,7 +32,7 @@ Neotoma is open source and local-first. It stores each fact as an observation li
 - Provenance shows the evidence trail, not that an agent read a source correctly
 - Export writes current state; observation history is not part of the export
 - A later write can override a correction in the current snapshot (open issue #2033)
-- History is readable per entity; there is no query for the state of the record at a past time
+- A snapshot can be read as of a past time for one entity (`at` and `at_ingested` on `retrieve_entity_snapshot`); there is no as-of query across the whole record
 - Field values are not checked against their types on write today; a value of the wrong type can be accepted into the snapshot
 - Observation IDs are not stable across runs: the same input stored twice in separate data directories gives the same entity ID and different observation IDs
 - Organizations, workspaces, and multi-party authority are not built
