@@ -240,7 +240,6 @@ export type Destination = {
 };
 
 const LOCALE_PREFIX = /^\/(es|ca|zh|hi|ar|fr|pt|ru|bn|ur|id|de)(\/|$)/;
-/** Localized legal and consent routes are held like their English counterparts (counsel decides). */
 /** Legal and consent routes that stay live in every locale (single source for the app shell and the build). */
 export const LOCALIZED_LEGAL_PATHS = ["/privacy", "/terms", "/sandbox/terms-of-use"] as const;
 const LOCALE_LEGAL = new RegExp(

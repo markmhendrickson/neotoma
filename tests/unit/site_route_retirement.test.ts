@@ -166,6 +166,11 @@ describe("localized legal routes and their markdown mirrors", () => {
     expect(main).toContain("LOCALIZED_LEGAL_PATHS");
     expect(main).toContain('from "@/site/route_retirement"');
     expect(main).not.toMatch(/\[\s*"\/privacy"\s*,\s*"\/terms"/);
+    // The literal appears once, in the APP_ROUTES entry that defines the page, and nowhere else.
+    expect((main.match(/"\/sandbox\/terms-of-use"/g) ?? []).length).toBe(1);
+    expect(main).toMatch(/\{ path: "\/sandbox\/terms-of-use", element:/);
+    const rr = readFileSync(join(root, "frontend/src/site/route_retirement.ts"), "utf-8");
+    expect(rr).not.toMatch(/\*\/\s*\/\*\*[^*]*\*\/\s*export const LOCALIZED_LEGAL_PATHS/);
     const validator = readFileSync(join(root, "scripts/validate_site_export.ts"), "utf-8");
     expect(validator).toContain("LOCALIZED_LEGAL_PATHS");
     expect(validator).toContain("renders the not-found page instead of its content");

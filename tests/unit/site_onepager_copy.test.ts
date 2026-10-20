@@ -461,3 +461,30 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     expect(/FIGURE_LEGEND[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1].split('",\n').length).toBe(4);
   });
 });
+
+describe("/install code blocks (round 3)", () => {
+  const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
+  const css = read("frontend/src/components/onepager/onepager.css");
+  const body = read("frontend/src/components/install/install_page_body.tsx");
+
+  it("gives every pre on the install sheet the drawing palette, not the global teal gradient", () => {
+    expect(css).toMatch(
+      /\.plan-install-sheet pre \{[^}]*background: var\(--paper\) !important;[^}]*background-image: none !important;[^}]*border-color: var\(--line\) !important;/,
+    );
+  });
+
+  it("keeps the permissions snippet on single lines and focusable", () => {
+    expect(css).toMatch(/\.plan-install-preflight pre \{[^}]*white-space: pre !important;/);
+    expect(body).toContain('className="plan-install-preflight');
+    const pf = read("frontend/src/components/PermissionsPreflight.tsx");
+    expect(pf).toMatch(/<pre\s+tabIndex=\{0\}\s+role="region"\s+aria-label="Permissions pre-flight snippet/);
+  });
+
+  it("makes the clipped install block a labelled, focusable region with an edge cue", () => {
+    expect(body).toMatch(/scrollLabel="Install commands\./);
+    const block = read("frontend/src/components/InstallCodeBlock.tsx");
+    expect(block).toContain('tabIndex: 0, role: "region", "aria-label": scrollLabel');
+    expect(css).toMatch(/background-attachment: local, local, scroll, scroll !important;/);
+  });
+});
+

@@ -918,3 +918,40 @@
   border-color: var(--line) !important;
   box-shadow: none !important;
 }
+
+/* /install, round 3: every code block on the sheet takes the drawing palette (the global
+   `.mdx-site-page-content pre` rule applies a teal gradient in dark mode), the permissions snippet
+   keeps its lines, and clipped lines show a scroll cue at the edge. */
+.plan-install-sheet pre {
+  background: var(--paper) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+.plan-install-preflight pre {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+}
+.plan-install-commands pre,
+.plan-install-preflight pre {
+  --edge: color-mix(in srgb, var(--ink) 28%, transparent);
+  background-color: var(--paper) !important;
+  background-image:
+    linear-gradient(to right, var(--paper), var(--paper)),
+    linear-gradient(to left, var(--paper), var(--paper)),
+    linear-gradient(to right, var(--edge), transparent),
+    linear-gradient(to left, var(--edge), transparent) !important;
+  background-position:
+    left center,
+    right center,
+    left center,
+    right center !important;
+  background-size:
+    24px 100%,
+    24px 100%,
+    14px 100%,
+    14px 100% !important;
+  background-repeat: no-repeat !important;
+  background-attachment: local, local, scroll, scroll !important;
+}
