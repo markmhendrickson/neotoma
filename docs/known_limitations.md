@@ -56,7 +56,11 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every 
 
 ## Source and observation IDs are not portable across instances
 
-**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID in every instance. Source and observation IDs are not portable. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. Storing the same input in two instances can therefore give the same entity ID and different source and observation IDs. `neotoma store` from the CLI does this in every new install, because each install has its own local user, and every interpretation run (`create_interpretation`, or `store` with an interpretation block) gives a new observation ID.
+**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID in every instance. Source and observation IDs are not portable. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. Storing the same input in two instances gives the same entity ID, but whether the source and observation IDs differ depends on the write path:
+
+- `neotoma store` from the CLI (offline): different source and observation IDs, because each install has its own local user.
+- stdio MCP `store`: the source and observation IDs repeat, because both instances write as the shared default user.
+- stdio MCP file `store` followed by `create_interpretation`: the source ID repeats and the observation ID differs, because every interpretation run gets a new ID.
 
 **Workaround.** Match records across instances by entity ID. Do not rely on source or observation IDs matching across instances.
 
