@@ -142,7 +142,7 @@ Ordering and exactly-once delivery are not guaranteed. Consumers that need them 
 
 ### Tenant isolation
 
-Each user's data is isolated in the application layer. User-scoped queries filter on `user_id` (`src/services/entity_queries.ts`), and `getAuthenticatedUserId` in `src/actions.ts` rejects a caller-supplied user id that does not match the authenticated one. Graph and relationship reads are covered as well as flat lists; `tests/security/tenant_isolation_matrix.test.ts` is the regression test. The database does not enforce row-level security. See [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization).
+Each user's data is isolated in the application layer. User-scoped queries filter on `user_id` (`src/services/entity_queries.ts`), and `getAuthenticatedUserId` in `src/actions.ts` rejects a caller-supplied user id that does not match the authenticated one. The exception is the local development user: on a local install, a request from the same machine with no credential acts as that user, and it may pass any `user_id`. Graph and relationship reads are covered as well as flat lists; `tests/security/tenant_isolation_matrix.test.ts` is the regression test. The database does not enforce row-level security. See [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization).
 
 ### Encryption at rest
 
