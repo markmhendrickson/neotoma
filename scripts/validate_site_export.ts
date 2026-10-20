@@ -20,6 +20,7 @@ import {
   isRetiredRoute,
   resolveDestination,
 } from "../frontend/src/site/route_retirement";
+import { validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { llmsLinkProblems } from "./llms_links";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -278,6 +279,7 @@ if (!fs.existsSync(installHtml)) {
   }
 }
 for (const route of Object.keys(RETIRED_DESTINATIONS)) {
+  if (!isRetiredRoute(route)) continue; // served by a docs viewer page, checked in section 5
   const stubPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
   if (!fs.existsSync(stubPath)) {
     // The build emits a stub for every retired route, so a missing stub means the page now 404s.
@@ -412,6 +414,17 @@ if (!fs.existsSync(notFoundPath)) {
     fail("404.html does not contain expected not-found content — may be rendering wrong page");
   } else {
     pass("404.html contains not-found content");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Docs viewer pages (/docs/<slug>/, frontend/src/site/docs_viewer_manifest.ts)
+// ---------------------------------------------------------------------------
+{
+  const { problems, checked } = validateDocsViewerExport(siteDir);
+  for (const problem of problems) fail(problem);
+  if (problems.length === 0) {
+    pass(`Docs viewer: ${checked} included page(s) are real, script-free and claim-safe; stubs and sitemap point at them`);
   }
 }
 

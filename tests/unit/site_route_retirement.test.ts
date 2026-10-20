@@ -84,16 +84,16 @@ describe("one-pager route set", () => {
   });
 
   it("builds a stub with meta refresh, canonical, noindex and a visible link", () => {
-    const html = buildRedirectStub("/docs");
+    const html = buildRedirectStub("/ai-infrastructure-engineers");
     expect(html).toContain(
-      'http-equiv="refresh" content="0; url=https://github.com/markmhendrickson/neotoma/tree/main/docs/"'
+      'http-equiv="refresh" content="0; url=https://github.com/markmhendrickson/neotoma/tree/main/docs/icp/"'
     );
     expect(html).toContain(
-      '<link rel="canonical" href="https://github.com/markmhendrickson/neotoma/tree/main/docs/">'
+      '<link rel="canonical" href="https://github.com/markmhendrickson/neotoma/tree/main/docs/icp/">'
     );
     expect(html).toContain('name="robots" content="noindex,follow"');
     expect(html).toMatch(
-      /<a href="https:\/\/github\.com\/markmhendrickson\/neotoma\/tree\/main\/docs\/">Continue/
+      /<a href="https:\/\/github\.com\/markmhendrickson\/neotoma\/tree\/main\/docs\/icp\/">Continue/
     );
     expect(buildRedirectStub("/es/docs")).toContain('content="0; url=https://neotoma.io/"');
   });
@@ -129,7 +129,7 @@ describe("llms.txt Links block (agent-fetched)", () => {
 
   it("flags a retired neotoma.io route, a dead GitHub path and an unknown host", () => {
     const bad = (extra: string) => llmsLinkProblems(`${llms}\n- X: ${extra}\n`, root);
-    expect(bad("https://neotoma.io/docs").join(" ")).toMatch(/retired route/);
+    expect(bad("https://neotoma.io/faq").join(" ")).toMatch(/retired route/);
     expect(
       bad("https://github.com/markmhendrickson/neotoma/blob/main/docs/nope.md").join(" ")
     ).toMatch(/does not exist/);
