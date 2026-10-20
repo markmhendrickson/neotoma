@@ -12,6 +12,12 @@ import {
   resolveLink,
 } from "../../scripts/docs_viewer/render";
 import { isSafeHref, serializeHast } from "../../scripts/docs_viewer/serialize";
+import {
+  CONTENTS_H3_WORDS,
+  META_DESCRIPTION_MAX,
+  metaDescription,
+  renderPage,
+} from "../../scripts/docs_viewer/page";
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const GH = "https://github.com/markmhendrickson/neotoma";
@@ -333,5 +339,117 @@ describe("docs viewer rendering", () => {
     );
     expect(r.html).not.toContain("Same sentence.");
     expect(r.html).not.toContain("Applies to main.");
+  });
+});
+
+describe("docs viewer follow-up guards", () => {
+  it("rejects backslash and percent-encoded backslash hrefs (browsers read them as slashes)", () => {
+    for (const bad of [
+      "/\\evil.example",
+      "/%5Cevil.example",
+      "/%5cevil.example",
+      "\\\\evil.example",
+      "https://neotoma.io/%5C",
+    ]) {
+      expect(isSafeHref(bad), bad).toBe(false);
+    }
+    expect(resolveLink("/\\evil.example/x", ctx())).toMatchObject({ kind: "blocked", href: null });
+    expect(resolveLink("/%5Cevil.example/x", ctx())).toMatchObject({ kind: "blocked", href: null });
+    const { html } = render("[x](/\\evil.example) [y](/%5Cevil.example)");
+    expect(html).not.toMatch(/href="[^"]*(\\|%5c)/i);
+  });
+
+  it("labels each table from the heading above it", () => {
+    const { html } = render(
+      "## Hosts\n\n| a |\n| - |\n| 1 |\n\n| b |\n| - |\n| 2 |\n\n## Flags\n\n| c |\n| - |\n| 3 |\n"
+    );
+    expect(html).toContain('aria-label="Hosts"');
+    expect(html).toContain('aria-label="Hosts (table 2)"');
+    expect(html).toContain('aria-label="Flags"');
+    expect(render("| a |\n| - |\n| 1 |\n").html).toContain('aria-label="Table 1"');
+  });
+
+  it("drops a trailing Agent Instructions section from the page and says where it is", () => {
+    const md =
+      "# T\n\nA summary sentence.\n\n## Body\n\nText.\n\n## Agent Instructions\n\n### Forbidden patterns\n\n- Secret agent text\n";
+    const r = render(md);
+    expect(r.html).not.toContain("Secret agent text");
+    expect(r.html).not.toContain("Agent Instructions");
+    expect(r.agentInstructionsHeading).toBe("Agent Instructions");
+    const entry = entries[1];
+    const page = renderPage({ entry, doc: r, nav: entries, commit: COMMIT });
+    expect(page).toContain(
+      `${GH}/blob/${COMMIT}/docs/api/rest_api.md#agent-instructions">on GitHub</a>`
+    );
+    // A section that is not the last one is kept.
+    expect(render("# T\n\n## Agent Instructions\n\nKept.\n\n## After\n\nText.\n").html).toContain(
+      "Kept."
+    );
+  });
+});
+
+describe("docs viewer page chrome", () => {
+  const entry = entries[1];
+  it("uses the accepted solid logo lockup in the masthead, for light and dark", () => {
+    const page = renderPage({
+      entry,
+      doc: render("# T\n\nA summary.\n"),
+      nav: entries,
+      commit: COMMIT,
+    });
+    expect(page).toContain('src="/brand/n2-nav-light.svg" alt="Neotoma"');
+    expect(page).toContain('src="/brand/n2-nav-dark.svg" alt="Neotoma"');
+    expect(page).not.toContain("<b>Neotoma</b>");
+    // Dark mode swaps the files; the swap must come after (and outrank) the default rule.
+    const hide = page.indexOf(".dv-brand .dv-logo-dark{display:none}");
+    const swap = page.indexOf(
+      "@media (prefers-color-scheme:dark){.dv-brand .dv-logo-light{display:none}.dv-brand .dv-logo-dark{display:block}}"
+    );
+    expect(hide).toBeGreaterThan(-1);
+    expect(swap).toBeGreaterThan(hide);
+  });
+
+  it("truncates the meta description to about 155 characters at a word boundary", () => {
+    const long = "word ".repeat(80).trim() + ".";
+    expect(metaDescription(long).length).toBeLessThanOrEqual(META_DESCRIPTION_MAX);
+    expect(metaDescription(long).endsWith("…")).toBe(true);
+    expect(metaDescription("Short and complete.")).toBe("Short and complete.");
+    const page = renderPage({
+      entry,
+      doc: render(`# T\n\n${"A very long summary ".repeat(20)}end.\n`),
+      nav: entries,
+      commit: COMMIT,
+    });
+    const content = /<meta name="description" content="([^"]*)">/.exec(page)![1];
+    expect(content.length).toBeLessThanOrEqual(META_DESCRIPTION_MAX);
+  });
+
+  it("lists h3 headings in the on-page contents only on long pages", () => {
+    const body = (words: number) =>
+      `# T\n\nA summary.\n\n## One\n\n### Sub one\n\n${"text ".repeat(words)}\n\n## Two\n\n## Three\n`;
+    const short = renderPage({ entry, doc: render(body(10)), nav: entries, commit: COMMIT });
+    expect(short).toContain('<a href="#one">One</a>');
+    expect(short).not.toContain('<a href="#sub-one">');
+    const long = renderPage({
+      entry,
+      doc: render(body(CONTENTS_H3_WORDS + 50)),
+      nav: entries,
+      commit: COMMIT,
+    });
+    expect(long).toContain('<ol><li><a href="#sub-one">Sub one</a></li></ol>');
+  });
+
+  it("caps the body measure and gives small links a 24px target", () => {
+    const page = renderPage({ entry, doc: render("# T\n"), nav: entries, commit: COMMIT });
+    expect(page).toContain(".dv-body>*{max-width:72ch}");
+    for (const sel of [
+      ".dv-masthead nav a{",
+      ".dv-side li a,.dv-mnav li a{",
+      ".dv-meta a{",
+      ".dv-foot a{",
+    ]) {
+      const rule = page.slice(page.indexOf(sel), page.indexOf("}", page.indexOf(sel)));
+      expect(rule, sel).toContain("min-height:24px");
+    }
   });
 });

@@ -19,6 +19,7 @@ import {
   type DocsViewerIndex,
   buildDocsViewerIndex,
   excludedReason,
+  isPlainRepoPath,
   viewerHref,
   viewerRoute,
 } from "../../frontend/src/site/docs_viewer_manifest";
@@ -127,8 +128,10 @@ export function manifestProblems(manifest: readonly DocsViewerEntry[]): string[]
     sources.add(e.source);
     if (!e.source.endsWith(".md"))
       problems.push(`docs viewer manifest: ${e.source} is not a markdown file`);
-    const ex = excludedReason(e.source);
-    if (ex) problems.push(`docs viewer manifest: ${e.source} may never be rendered (${ex})`);
+    for (const p of [e.source, ...(e.aliases ?? [])]) {
+      const ex = excludedReason(p);
+      if (ex) problems.push(`docs viewer manifest: ${p} may never be rendered (${ex})`);
+    }
     if (!DOCS_VIEWER_GROUPS.includes(e.group))
       problems.push(`docs viewer manifest: unknown group "${e.group}" for ${e.source}`);
     if (!e.title.trim()) problems.push(`docs viewer manifest: ${e.source} has no title`);
@@ -136,10 +139,48 @@ export function manifestProblems(manifest: readonly DocsViewerEntry[]): string[]
   return problems;
 }
 
+/**
+ * Real-path containment for a repository file the build reads or copies. The path must be plain,
+ * the file must be a regular file (a symlink is refused, tracked or not), its real path must stay
+ * inside the repository, and that real path must not be excluded. Returns the real absolute path,
+ * `{ absent: true }` when nothing is there, or `{ problem }`.
+ */
+export function containedRepoFile(
+  repoRoot: string,
+  repoPath: string
+): { real: string } | { absent: true } | { problem: string } {
+  if (!isPlainRepoPath(repoPath) || repoPath.endsWith("/")) {
+    return { problem: `${repoPath} is not a plain repository file path` };
+  }
+  const abs = path.join(repoRoot, repoPath);
+  let st: fs.Stats;
+  try {
+    st = fs.lstatSync(abs);
+  } catch {
+    return { absent: true };
+  }
+  if (st.isSymbolicLink())
+    return { problem: `${repoPath} is a symlink; only regular files are read` };
+  if (!st.isFile()) return { problem: `${repoPath} is not a regular file` };
+  const realRoot = fs.realpathSync(repoRoot);
+  const real = fs.realpathSync(abs);
+  const rel = path.relative(realRoot, real);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    return { problem: `${repoPath} resolves outside the repository` };
+  }
+  const relPosix = rel.split(path.sep).join("/");
+  const ex = excludedReason(relPosix);
+  if (ex)
+    return { problem: `${repoPath} resolves to ${relPosix}, which may never be rendered (${ex})` };
+  return { real };
+}
+
 function mediaPublicPath(repoRoot: string, repoPath: string): string | null {
   if (!IMAGE_TYPES.test(repoPath)) return null;
-  const abs = path.join(repoRoot, repoPath);
-  if (!fs.existsSync(abs) || fs.statSync(abs).size > IMAGE_MAX_BYTES) return null;
+  const file = containedRepoFile(repoRoot, repoPath);
+  if (!("real" in file)) return null;
+  const abs = file.real;
+  if (fs.statSync(abs).size > IMAGE_MAX_BYTES) return null;
   const hash = crypto.createHash("sha256").update(fs.readFileSync(abs)).digest("hex").slice(0, 16);
   const ext = path.extname(repoPath).toLowerCase();
   return `/docs/_media/${hash}${ext}`;
@@ -189,13 +230,18 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
   const manifest = [...(opts.manifest ?? DOCS_VIEWER_MANIFEST)].sort((a, b) => a.order - b.order);
   const commit = resolveCommit(opts.repoRoot, opts.commit);
   const pathKind = opts.pathKind ?? trackedPathKind(opts.repoRoot);
+  const failures = manifestProblems(manifest);
   const readSource =
     opts.readSource ??
     ((p: string) => {
-      const abs = path.join(opts.repoRoot, p);
-      return fs.existsSync(abs) && fs.statSync(abs).isFile() ? fs.readFileSync(abs, "utf-8") : null;
+      const file = containedRepoFile(opts.repoRoot, p);
+      if ("absent" in file) return null;
+      if ("problem" in file) {
+        failures.push(`docs viewer manifest: ${file.problem}`);
+        return null;
+      }
+      return fs.readFileSync(file.real, "utf-8");
     });
-  const failures = manifestProblems(manifest);
   const included = manifest.filter((e) => e.status === "included");
   const published = opts.includePending
     ? manifest.filter((e) => !excludedReason(e.source))
@@ -259,8 +305,11 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
       const doc = rendered.get(r.entry.source)!;
       for (const img of doc.images) {
         const dest = path.join(opts.outDir, img.publicPath.replace(/^\//, ""));
+        const file = containedRepoFile(opts.repoRoot, img.repoPath);
+        if (!("real" in file))
+          throw new Error(`docs viewer: refusing to copy image ${img.repoPath}`);
         fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.copyFileSync(path.join(opts.repoRoot, img.repoPath), dest);
+        fs.copyFileSync(file.real, dest);
       }
       const notice =
         r.entry.status === "pending"

@@ -24,7 +24,7 @@ export interface InstallExpandedStep {
 
 export interface InstallPageStrings {
   title: string;
-  fiveMinuteIntegration: string;
+  fewMinutesIntegration: string;
   fullyReversible: string;
   agentAssistedInstall: string;
   directIntegrationDocs: string;
@@ -230,7 +230,7 @@ const EXPANDED_STEPS_EN: InstallExpandedStep[] = [
 
 export const INSTALL_PAGE_EN: InstallPageStrings = {
   title: "Install options",
-  fiveMinuteIntegration: "Takes a few minutes",
+  fewMinutesIntegration: "Takes a few minutes",
   fullyReversible: "Fully reversible",
   agentAssistedInstall: "Agent-assisted install",
   directIntegrationDocs: "Direct integration docs",
@@ -302,7 +302,7 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
 /** Spanish overlays: merge over INSTALL_PAGE_EN for `es` locale. */
 export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
   title: "Opciones de instalaci\u00f3n",
-  fiveMinuteIntegration: "Integraci\u00f3n en unos minutos",
+  fewMinutesIntegration: "Integraci\u00f3n en unos minutos",
   fullyReversible: "Completamente reversible",
   agentAssistedInstall: "Instalaci\u00f3n asistida por agente",
   directIntegrationDocs: "Documentaci\u00f3n de integraci\u00f3n directa",

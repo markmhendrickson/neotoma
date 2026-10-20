@@ -130,8 +130,28 @@ export const DOCS_VIEWER_EXCLUDED: readonly { match: RegExp; reason: string }[] 
   },
 ];
 
+/**
+ * True for a plain repository-relative POSIX path: no leading slash, no backslash or control
+ * character, no empty, "." or ".." segment. A trailing slash (a folder alias such as "docs/") is allowed.
+ */
+export function isPlainRepoPath(p: string): boolean {
+  if (!p || p.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(p)) return false;
+  const segments = (p.endsWith("/") ? p.slice(0, -1) : p).split("/");
+  return segments.every((seg) => seg !== "" && seg !== "." && seg !== "..");
+}
+
+/**
+ * Why a path may never be rendered, or null. Matching is on the case-folded path, and a path that
+ * is not plain (`./install.md`, `docs//foundation/x`, `docs/x/../foundation/x`) is refused outright,
+ * so no spelling of an excluded file gets past the guard. The build also checks the real path on
+ * disk (scripts/docs_viewer/build.ts, sourceFileProblems), so a symlink cannot either.
+ */
 export function excludedReason(source: string): string | null {
-  for (const e of DOCS_VIEWER_EXCLUDED) if (e.match.test(source)) return e.reason;
+  if (!isPlainRepoPath(source)) {
+    return "not a plain repository path (no leading slash, backslash, empty, '.' or '..' segment)";
+  }
+  const folded = source.toLowerCase();
+  for (const e of DOCS_VIEWER_EXCLUDED) if (e.match.test(folded)) return e.reason;
   return null;
 }
 

@@ -166,7 +166,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Opcions d\u2019instal\u00b7laci\u00f3",
-      fiveMinuteIntegration: "Integraci\u00f3 en 5 minuts",
+      fewMinutesIntegration: "Integraci\u00f3 en uns minuts",
       fullyReversible: "Completament reversible",
       agentAssistedInstall: "Instal\u00b7laci\u00f3 assistida per agent",
       directIntegrationDocs: "Documentaci\u00f3 d\u2019integraci\u00f3 directa",
@@ -206,7 +206,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "\u5b89\u88c5\u9009\u9879",
-      fiveMinuteIntegration: "5\u5206\u949f\u96c6\u6210",
+      fewMinutesIntegration: "\u51e0\u5206\u949f\u96c6\u6210",
       fullyReversible: "\u5b8c\u5168\u53ef\u9006",
       agentAssistedInstall: "\u4ee3\u7406\u8f85\u52a9\u5b89\u88c5",
       directIntegrationDocs: "\u76f4\u63a5\u96c6\u6210\u6587\u6863",
@@ -246,7 +246,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "\u0907\u0902\u0938\u094d\u091f\u0949\u0932 \u0935\u093f\u0915\u0932\u094d\u092a",
-      fiveMinuteIntegration: "5 \u092e\u093f\u0928\u091f \u0915\u093e \u0907\u0902\u091f\u0940\u0917\u094d\u0930\u0947\u0936\u0928",
+      fewMinutesIntegration: "\u0915\u0941\u091b \u092e\u093f\u0928\u091f \u0915\u093e \u0907\u0902\u091f\u0940\u0917\u094d\u0930\u0947\u0936\u0928",
       fullyReversible: "\u092a\u0942\u0930\u094d\u0923 \u0930\u0942\u092a \u0938\u0947 \u092a\u094d\u0930\u0924\u093f\u0935\u0930\u094d\u0924\u0940",
       agentAssistedInstall: "\u090f\u091c\u0947\u0902\u091f-\u0938\u0939\u093e\u092f\u0924\u093e \u092a\u094d\u0930\u093e\u092a\u094d\u0924 \u0907\u0902\u0938\u094d\u091f\u0949\u0932",
       directIntegrationDocs: "\u0938\u0940\u0927\u0947 \u0907\u0902\u091f\u0940\u0917\u094d\u0930\u0947\u0936\u0928 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c",
@@ -286,7 +286,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "\u062e\u064a\u0627\u0631\u0627\u062a \u0627\u0644\u062a\u062b\u0628\u064a\u062a",
-      fiveMinuteIntegration: "\u062a\u0643\u0627\u0645\u0644 \u0641\u064a 5 \u062f\u0642\u0627\u0626\u0642",
+      fewMinutesIntegration: "\u062a\u0643\u0627\u0645\u0644 \u0641\u064a \u0628\u0636\u0639 \u062f\u0642\u0627\u0626\u0642",
       fullyReversible: "\u0642\u0627\u0628\u0644 \u0644\u0644\u062a\u0631\u0627\u062c\u0639 \u0628\u0627\u0644\u0643\u0627\u0645\u0644",
       agentAssistedInstall: "\u062a\u062b\u0628\u064a\u062a \u0628\u0645\u0633\u0627\u0639\u062f\u0629 \u0627\u0644\u0648\u0643\u064a\u0644",
       directIntegrationDocs: "\u0648\u062b\u0627\u0626\u0642 \u0627\u0644\u062a\u0643\u0627\u0645\u0644 \u0627\u0644\u0645\u0628\u0627\u0634\u0631",
@@ -326,7 +326,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Options d\u2019installation",
-      fiveMinuteIntegration: "Int\u00e9gration en quelques minutes",
+      fewMinutesIntegration: "Int\u00e9gration en quelques minutes",
       fullyReversible: "Enti\u00e8rement r\u00e9versible",
       agentAssistedInstall: "Installation assist\u00e9e par agent",
       directIntegrationDocs: "Documentation d\u2019int\u00e9gration directe",
@@ -366,7 +366,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Op\u00e7\u00f5es de instala\u00e7\u00e3o",
-      fiveMinuteIntegration: "Integra\u00e7\u00e3o em alguns minutos",
+      fewMinutesIntegration: "Integra\u00e7\u00e3o em alguns minutos",
       fullyReversible: "Totalmente revers\u00edvel",
       agentAssistedInstall: "Instala\u00e7\u00e3o assistida por agente",
       directIntegrationDocs: "Documenta\u00e7\u00e3o de integra\u00e7\u00e3o direta",
@@ -406,7 +406,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "\u0412\u0430\u0440\u0438\u0430\u043d\u0442\u044b \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438",
-      fiveMinuteIntegration: "\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u044f \u0437\u0430 5 \u043c\u0438\u043d\u0443\u0442",
+      fewMinutesIntegration: "\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u044f \u0437\u0430 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u043c\u0438\u043d\u0443\u0442",
       fullyReversible: "\u041f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u043e\u0431\u0440\u0430\u0442\u0438\u043c\u043e",
       agentAssistedInstall: "\u0423\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 \u0441 \u043f\u043e\u043c\u043e\u0449\u044c\u044e \u0430\u0433\u0435\u043d\u0442\u0430",
       directIntegrationDocs: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f \u043f\u043e \u043f\u0440\u044f\u043c\u043e\u0439 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438",
@@ -446,7 +446,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "\u0987\u09a8\u09b8\u09cd\u099f\u09b2 \u09ac\u09bf\u0995\u09b2\u09cd\u09aa",
-      fiveMinuteIntegration: "\u09e9 \u09ae\u09bf\u09a8\u09bf\u099f\u09c7\u09b0 \u0987\u09a8\u09cd\u099f\u09bf\u0997\u09cd\u09b0\u09c7\u09b6\u09a8",
+      fewMinutesIntegration: "\u09e9 \u09ae\u09bf\u09a8\u09bf\u099f\u09c7\u09b0 \u0987\u09a8\u09cd\u099f\u09bf\u0997\u09cd\u09b0\u09c7\u09b6\u09a8",
       fullyReversible: "\u09b8\u09ae\u09cd\u09aa\u09c2\u09b0\u09cd\u09a3 \u09aa\u09cd\u09b0\u09a4\u09cd\u09af\u09be\u09ac\u09b0\u09cd\u09a4\u09a8\u09af\u09cb\u0997\u09cd\u09af",
       agentAssistedInstall: "\u098f\u099c\u09c7\u09a8\u09cd\u099f-\u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be\u09aa\u09cd\u09b0\u09be\u09aa\u09cd\u09a4 \u0987\u09a8\u09b8\u09cd\u099f\u09b2",
       directIntegrationDocs: "\u09b8\u09b0\u09be\u09b8\u09b0\u09bf \u0987\u09a8\u09cd\u099f\u09bf\u0997\u09cd\u09b0\u09c7\u09b6\u09a8 \u09a1\u0995\u09c1\u09ae\u09c7\u09a8\u09cd\u099f\u09c7\u09b6\u09a8",
@@ -486,7 +486,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "\u0627\u0646\u0633\u0679\u0627\u0644 \u06a9\u06d2 \u0627\u062e\u062a\u06cc\u0627\u0631\u0627\u062a",
-      fiveMinuteIntegration: "5 \u0645\u0646\u0679 \u06a9\u0627 \u0627\u0646\u0679\u06cc\u06af\u0631\u06cc\u0634\u0646",
+      fewMinutesIntegration: "\u0686\u0646\u062f \u0645\u0646\u0679 \u06a9\u0627 \u0627\u0646\u0679\u06cc\u06af\u0631\u06cc\u0634\u0646",
       fullyReversible: "\u0645\u06a9\u0645\u0644 \u0637\u0648\u0631 \u067e\u0631 \u0648\u0627\u067e\u0633 \u06c1\u0648\u0646\u06d2 \u06a9\u06d2 \u0642\u0627\u0628\u0644",
       agentAssistedInstall: "\u0627\u06cc\u062c\u0646\u0679 \u06a9\u06cc \u0645\u062f\u062f \u0633\u06d2 \u0627\u0646\u0633\u0679\u0627\u0644",
       directIntegrationDocs: "\u0628\u0631\u0627\u06c1 \u0631\u0627\u0633\u062a \u0627\u0646\u0679\u06cc\u06af\u0631\u06cc\u0634\u0646 \u062f\u0633\u062a\u0627\u0648\u06cc\u0632\u0627\u062a",
@@ -526,7 +526,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Opsi instalasi",
-      fiveMinuteIntegration: "Integrasi 5 menit",
+      fewMinutesIntegration: "Integrasi beberapa menit",
       fullyReversible: "Sepenuhnya dapat dikembalikan",
       agentAssistedInstall: "Instalasi dibantu agen",
       directIntegrationDocs: "Dokumentasi integrasi langsung",
@@ -566,7 +566,7 @@ const SUBPAGE_LOCALE_PACKS: Record<string, SubpagePackOverrides> = {
     install: {
       ...INSTALL_PAGE_EN,
       title: "Installationsoptionen",
-      fiveMinuteIntegration: "Integration in 5 Minuten",
+      fewMinutesIntegration: "Integration in wenigen Minuten",
       fullyReversible: "Vollst\u00e4ndig umkehrbar",
       agentAssistedInstall: "Agentengest\u00fctzte Installation",
       directIntegrationDocs: "Direkte Integrationsdokumentation",

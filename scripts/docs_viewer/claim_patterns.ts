@@ -1,45 +1,69 @@
 /**
- * Claim patterns for repository markdown that neotoma.io publishes as docs viewer pages.
+ * Claim patterns for neotoma.io: one module for every claim list the site checks.
  *
- * One module, shared by the docs lint (`scripts/docs_viewer/lint.ts`, run by `npm run lint:docs-viewer`
- * and by `npm run lint:site-copy`) and by the export validator (`scripts/docs_viewer/validate_export.ts`,
- * run by `npm run validate:site-export`), so the source check and the built-page check cannot drift.
+ * - Docs viewer pages: the docs lint (`scripts/docs_viewer/lint.ts`, run by `npm run lint:docs-viewer`
+ *   and `npm run lint:site-copy`) and the docs export check (`scripts/docs_viewer/validate_export.ts`)
+ *   both scan with DOCS_CLAIM_PATTERNS.
+ * - Live one-pager routes (/ and /install): section 3g of `scripts/validate_site_export.ts` scans with
+ *   LIVE_PAGE_CLAIM_PATTERNS, which is DOCS_CLAIM_PATTERNS plus the NAMED extras below, so the live
+ *   list is a superset of the docs list by construction (tests/unit/docs_viewer_lint.test.ts).
+ * - Telemetry: both use one fragment list (TELEMETRY_REQUIRED_FRAGMENTS), so a docs page that says
+ *   "no telemetry" needs the same full wording the live pages need.
  *
  * Wording rules come from the one-pager claim table: the category noun is "system of record"; the
  * retired frames and the omitted claims below must not appear on a page published under neotoma.io.
  * A per-entity as-of read exists (`at` / `at_ingested` on `retrieve_entity_snapshot`), so "as of"
- * wording is NOT banned; only replay of any historical state across the record is.
+ * wording is NOT banned on docs pages; only replay of any historical state across the record is.
+ *
+ * Every pattern is linear in the input: bounded repetition only, and the negation lookup reads a
+ * bounded window (tests/unit/docs_viewer_lint.test.ts holds a time bound on pathological input).
  */
 
 export interface ClaimPattern {
   /** Stable rule id used in reports and tests. */
   id: string;
+  /** Stable name of this pattern, used to relate the docs and live lists. */
+  name: string;
   re: RegExp;
   label: string;
   /**
-   * When set, a match does not count if the sentence it sits in matches this pattern
-   * (for example "the database does not enforce append-only").
+   * When true, a match does not count if a negation sits inside the match or among the few words
+   * just before it, in the same clause ("the database does not enforce append-only"). A negation
+   * elsewhere in the sentence does not exempt it ("the log is append-only and never loses data").
    */
-  unlessSentence?: RegExp;
+  negatable?: boolean;
 }
 
-const NEGATED = /\b(not|never|no|isn't|doesn't|does not|cannot|can't|without)\b/i;
+/** Negation words. */
+const NEGATION = /\b(not|never|no|isn't|aren't|doesn't|don't|cannot|can't|without|nor)\b|n't\b/i;
+/** Words before a match searched for a negation, within the same clause. */
+export const NEGATION_WORDS_BEFORE = 5;
+/** Characters before a match read for that search (bounds the work per match). */
+const NEGATION_CHAR_WINDOW = 80;
 
 /** Retired category nouns and frames. */
 export const RETIRED_NOUNS: readonly ClaimPattern[] = [
-  { id: "retired-noun", re: /\bmemory[- ]layer\b/i, label: 'retired category noun "memory layer"' },
   {
     id: "retired-noun",
+    name: "memory-layer",
+    re: /\bmemory[- ]layer\b/i,
+    label: 'retired category noun "memory layer"',
+  },
+  {
+    id: "retired-noun",
+    name: "state-layer",
     re: /\bstate[- ]layer\b/i,
     label: 'retired category noun "state layer" (use "system of record")',
   },
   {
     id: "retired-noun",
+    name: "your-agents-forget",
     re: /\byour agents forget\b/i,
     label: 'retired frame "your agents forget"',
   },
   {
     id: "retired-noun",
+    name: "deterministic-state",
     re: /\bdeterministic state\b/i,
     label: 'retired frame "deterministic state" (say "deterministic snapshots")',
   },
@@ -49,96 +73,141 @@ export const RETIRED_NOUNS: readonly ClaimPattern[] = [
 export const OMITTED_CLAIMS: readonly ClaimPattern[] = [
   {
     id: "omitted-claim",
-    re: /\bcorrections? (always|will always) (wins?|override|takes? precedence)\b/i,
+    name: "corrections-win",
+    re: /\bcorrections? (always |will always )?(wins?|override|overrides|takes? precedence)\b/i,
     label: "corrections always win",
   },
   {
     id: "omitted-claim",
-    re: /\b(database|db|storage|sqlite|ledger|log)[^.\n]{0,40}\bappend[- ]only\b|\bappend[- ]only\b[^.\n]{0,40}\b(enforced|guaranteed?|database|storage)\b|\bimmutable audit trail\b/i,
+    name: "append-only",
+    re: /\bappend[- ]only\b|\bimmutable audit trail\b/i,
     label: "database-enforced append-only",
-    unlessSentence: NEGATED,
+    negatable: true,
   },
   {
     id: "omitted-claim",
+    name: "hash-chain",
+    re: /\bhash[- ]chain(s|ed|ing)?\b|\bprevious_event_hash\b|\btamper[- ](evident|proof)\b/i,
+    label: "hash-chained or tamper-evident log",
+    negatable: true,
+  },
+  {
+    id: "omitted-claim",
+    name: "time-travel",
     re: /\btime[- ]travel\b|\bhistorical replay\b|\breplay(s|ed|ing)? (of )?(any|every|all|the full) (historical |past |prior )?(state|history)\b|\bstate at any point in time\b/i,
     label: "replay of any historical state or time travel across the record",
-    unlessSentence: NEGATED,
+    negatable: true,
   },
   {
     id: "omitted-claim",
+    name: "export-history",
     re: /\bexport(s|ed|ing)?\b[^.\n]{0,40}\b(with|including|includes) (the )?(full |complete |entire |observation )?history\b/i,
     label: "export with history",
-    unlessSentence: NEGATED,
+    negatable: true,
   },
   {
     id: "omitted-claim",
+    name: "hosted-for-sale",
     re: /\bhosted neotoma (is )?(available|for sale|plans?|pricing|subscription)\b|\b(buy|purchase|subscribe to) (a )?hosted\b|\bmanaged neotoma\b/i,
     label: "hosted Neotoma for sale",
   },
-  { id: "omitted-claim", re: /\bunified platform\b/i, label: "unified platform" },
-  { id: "omitted-claim", re: /\bmulti-operator\b/i, label: "multi-operator authority" },
+  {
+    id: "omitted-claim",
+    name: "unified-platform",
+    re: /\bunified platform\b/i,
+    label: "unified platform",
+  },
+  {
+    id: "omitted-claim",
+    name: "multi-operator",
+    re: /\bmulti-operator\b/i,
+    label: "multi-operator authority",
+  },
 ];
 
-/** A no-telemetry or no-egress claim must name the CLI update check in the same passage. */
-export const TELEMETRY_CLAIM =
-  /\bno (remote |opt-out )?telemetry\b|\bno network egress\b|\bphone[- ]home\b|\bnever (calls|contacts|phones) (home|the network)\b/gi;
-export const TELEMETRY_QUALIFIER =
-  /update[- ]check|npm registry|--no-update-check|NO_UPDATE_NOTIFIER/i;
-/** Characters on either side of a telemetry claim searched for the qualifier. */
-export const TELEMETRY_WINDOW = 400;
+/** Everything a docs viewer page is scanned for. */
+export const DOCS_CLAIM_PATTERNS: readonly ClaimPattern[] = [...RETIRED_NOUNS, ...OMITTED_CLAIMS];
 
-export interface ClaimFinding {
-  id: string;
-  label: string;
-  /** Character offset in the scanned text. */
-  index: number;
-  match: string;
-}
+/** The retired "Developer preview" label (operator ruling 2026-10-20). */
+export const DEVELOPER_PREVIEW = /developer preview/i;
+/**
+ * "5 minutes" is an unmeasured install-time claim (the /install claim is "a few minutes"). Covers the
+ * languages whose strings ship in the client bundle: English, Spanish, Catalan, French, Portuguese,
+ * Italian, German, Indonesian, Chinese, Hindi, Arabic, Russian and Urdu.
+ */
+export const UNMEASURED_INSTALL_TIME =
+  /\b(?:5|five)[- ]minutes?\b|\b5 (?:minutos|minuts|minuti|menit|Minuten)\b|5 ?分[钟鐘]|5 मिनट|5 دقائق|5 минут|5 منٹ/i;
+/**
+ * The overstated lede "Without one, an agent recalls only what it was last told" (and the llms.txt
+ * variant "An agent's recall holds what it was last told"), in English and Spanish. The approved lede
+ * says what an agent works from without a record: whatever it happens to recall.
+ */
+export const OLD_LEDE: readonly ClaimPattern[] = [
+  {
+    id: "retired-frame",
+    name: "live-old-lede-en",
+    re: /\blast told\b|\brecalls only\b|\brecall holds\b/i,
+    label: 'overstated lede ("recalls only what it was last told")',
+  },
+  {
+    id: "retired-frame",
+    name: "live-old-lede-es",
+    re: /lo [uú]ltimo que se le dijo|(?:s[oó]lo|solo) recuerda|recuerdo (?:solo |s[oó]lo )?contiene/i,
+    label: 'overstated lede, Spanish ("solo recuerda lo ultimo que se le dijo")',
+  },
+];
 
-function sentenceAt(text: string, index: number): string {
-  const before = text.slice(0, index);
-  const start = Math.max(before.lastIndexOf(". "), before.lastIndexOf("\n\n"), -1) + 1;
-  const rest = text.slice(index);
-  const endRel = rest.search(/\.(\s|$)|\n\n/);
-  return text.slice(start, endRel < 0 ? text.length : index + endRel + 1);
-}
+/**
+ * Extras for the live one-pager routes only, each named. Marketing copy is stricter than docs: it
+ * may not say "append-only" at all, nor deny the per-entity as-of read, while a docs page may state
+ * those limits ("the database does not enforce append-only"; "there is no as-of query across the
+ * whole record").
+ */
+export const LIVE_PAGE_EXTRA_CLAIMS: readonly ClaimPattern[] = [
+  {
+    id: "omitted-claim",
+    name: "live-append-only-any-mention",
+    re: /\bappend-only\b/i,
+    label: "database-enforced append-only",
+  },
+  {
+    id: "omitted-claim",
+    name: "live-as-of-whole-record",
+    re: /\b(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i,
+    label: "as-of read across the whole record",
+  },
+  {
+    id: "omitted-claim",
+    name: "live-denies-as-of",
+    re: /\bno (point[- ]in[- ]time|as[- ]of)|\b(cannot|can't|not) (read|query) (a )?past state/i,
+    label: "denies the per-entity as-of read",
+  },
+  {
+    id: "omitted-claim",
+    name: "live-fully-reversible",
+    re: /\bfully reversible\b/i,
+    label: "unevidenced reversibility claim",
+  },
+  {
+    id: "retired-frame",
+    name: "live-developer-preview",
+    re: DEVELOPER_PREVIEW,
+    label: "developer-preview label",
+  },
+  {
+    id: "omitted-claim",
+    name: "live-unmeasured-install-time",
+    re: UNMEASURED_INSTALL_TIME,
+    label: "unmeasured install-time claim",
+  },
+  ...OLD_LEDE,
+];
 
-/** Scan text for retired nouns, omitted claims and unqualified telemetry claims. */
-export function findClaimProblems(text: string): ClaimFinding[] {
-  const out: ClaimFinding[] = [];
-  for (const p of [...RETIRED_NOUNS, ...OMITTED_CLAIMS]) {
-    const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : `${p.re.flags}g`);
-    for (const m of text.matchAll(re)) {
-      const idx = m.index ?? 0;
-      if (p.unlessSentence && p.unlessSentence.test(sentenceAt(text, idx))) continue;
-      out.push({ id: p.id, label: p.label, index: idx, match: m[0] });
-    }
-  }
-  for (const m of text.matchAll(new RegExp(TELEMETRY_CLAIM.source, "gi"))) {
-    const idx = m.index ?? 0;
-    const around = text.slice(
-      Math.max(0, idx - TELEMETRY_WINDOW),
-      idx + m[0].length + TELEMETRY_WINDOW
-    );
-    if (!TELEMETRY_QUALIFIER.test(around)) {
-      out.push({
-        id: "telemetry",
-        label: `unqualified "${m[0]}" (name the CLI update check and how to turn it off)`,
-        index: idx,
-        match: m[0],
-      });
-    }
-  }
-  return out.sort((a, b) => a.index - b.index);
-}
-
-// ---------------------------------------------------------------------------
-// Live one-pager routes (/ and /install), checked by section 3g of scripts/validate_site_export.ts.
-// Stricter than the docs lists above on purpose: marketing copy bans "append-only" outright and any
-// denial of the per-entity as-of read, while docs may state the limits ("the database does not
-// enforce append-only", "there is no as-of query across the whole record"). Kept here so every claim
-// list has one home; the semantics are unchanged from #2686.
-// ---------------------------------------------------------------------------
+/** Live pages: the docs list plus the named extras (a superset by construction). */
+export const LIVE_PAGE_CLAIM_PATTERNS: readonly ClaimPattern[] = [
+  ...DOCS_CLAIM_PATTERNS,
+  ...LIVE_PAGE_EXTRA_CLAIMS,
+];
 
 /** Phrases that may not appear in a live page's JSON-LD or meta keywords. */
 export const LIVE_PAGE_RETIRED_META_PHRASES = [
@@ -158,23 +227,79 @@ export const LIVE_PAGE_RETIRED_META_PHRASES = [
   "docs?q=",
   "FAQPage",
 ] as const;
-export const LIVE_PAGE_OMITTED_CLAIMS: readonly [RegExp, string][] = [
-  [/corrections? (always|will always) wins?/i, "corrections always win"],
-  [/append-only/i, "database-enforced append-only"],
-  [
-    /(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i,
-    "as-of read across the whole record",
-  ],
-  [
-    /no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i,
-    "denies the per-entity as-of read",
-  ],
-  [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
-  [/hosted neotoma (is )?(available|for sale)/i, "hosted Neotoma for sale"],
-  [/unified platform/i, "unified platform"],
-  [/multi-operator/i, "multi-operator authority"],
-  [/state layer|memory layer/i, "retired category noun"],
-  [/fully reversible/i, "unevidenced reversibility claim"],
-  [/developer preview/i, "developer-preview label"],
-  [/\b(5|five)[- ]minutes?\b|\b5 minutos\b|\b5 minutes\b/i, "unmeasured install-time claim"],
+
+/** A no-telemetry or no-egress claim. */
+export const TELEMETRY_CLAIM =
+  /\bno (remote |opt-out )?telemetry\b|\bno network egress\b|\bphone[- ]home\b|\bnever (calls|contacts|phones) (home|the network)\b/gi;
+/**
+ * Every fragment must appear within TELEMETRY_WINDOW characters after the claim: the npm update
+ * check, how to turn it off, the session-start check of the stdio MCP server, and what the
+ * registry sees. Shared by docs pages and live pages.
+ */
+export const TELEMETRY_REQUIRED_FRAGMENTS: readonly { re: RegExp; label: string }[] = [
+  { re: /npm registry/i, label: "the npm registry" },
+  { re: /NO_UPDATE_NOTIFIER=1/, label: "NO_UPDATE_NOTIFIER=1" },
+  { re: /when a session starts/i, label: "the check when a session starts" },
+  { re: /connection metadata/i, label: "connection metadata" },
 ];
+export const TELEMETRY_WINDOW = 600;
+
+/** Missing fragments for each telemetry claim in `text` (empty list when qualified). */
+export function telemetryProblems(
+  text: string
+): { index: number; match: string; missing: string[] }[] {
+  const out: { index: number; match: string; missing: string[] }[] = [];
+  for (const m of text.matchAll(new RegExp(TELEMETRY_CLAIM.source, "gi"))) {
+    const idx = m.index ?? 0;
+    const after = text.slice(idx, idx + m[0].length + TELEMETRY_WINDOW);
+    const missing = TELEMETRY_REQUIRED_FRAGMENTS.filter((f) => !f.re.test(after)).map(
+      (f) => f.label
+    );
+    if (missing.length) out.push({ index: idx, match: m[0], missing });
+  }
+  return out;
+}
+
+export interface ClaimFinding {
+  id: string;
+  name: string;
+  label: string;
+  /** Character offset in the scanned text. */
+  index: number;
+  match: string;
+}
+
+/** True when a negation is inside the match or among the few words before it, in the same clause. */
+export function negatedNear(text: string, index: number, match: string): boolean {
+  if (NEGATION.test(match)) return true;
+  const before = text.slice(Math.max(0, index - NEGATION_CHAR_WINDOW), index);
+  const clause = before.split(/[.;:!?,\n()]/).pop() ?? "";
+  const words = clause.trim().split(/\s+/).filter(Boolean).slice(-NEGATION_WORDS_BEFORE);
+  return NEGATION.test(words.join(" "));
+}
+
+/** Scan text with a pattern list (the docs list by default), plus unqualified telemetry claims. */
+export function findClaimProblems(
+  text: string,
+  patterns: readonly ClaimPattern[] = DOCS_CLAIM_PATTERNS
+): ClaimFinding[] {
+  const out: ClaimFinding[] = [];
+  for (const p of patterns) {
+    const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : `${p.re.flags}g`);
+    for (const m of text.matchAll(re)) {
+      const idx = m.index ?? 0;
+      if (p.negatable && negatedNear(text, idx, m[0])) continue;
+      out.push({ id: p.id, name: p.name, label: p.label, index: idx, match: m[0] });
+    }
+  }
+  for (const t of telemetryProblems(text)) {
+    out.push({
+      id: "telemetry",
+      name: "telemetry",
+      label: `unqualified "${t.match}" (missing: ${t.missing.join(", ")})`,
+      index: t.index,
+      match: t.match,
+    });
+  }
+  return out.sort((a, b) => a.index - b.index);
+}

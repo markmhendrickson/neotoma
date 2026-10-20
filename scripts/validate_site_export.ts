@@ -21,8 +21,13 @@ import {
   resolveDestination,
 } from "../frontend/src/site/route_retirement";
 import {
-  LIVE_PAGE_OMITTED_CLAIMS as OMITTED_CLAIMS,
+  DEVELOPER_PREVIEW,
+  LIVE_PAGE_CLAIM_PATTERNS,
+  OLD_LEDE,
+  UNMEASURED_INSTALL_TIME,
   LIVE_PAGE_RETIRED_META_PHRASES as RETIRED_META_PHRASES,
+  findClaimProblems,
+  telemetryProblems,
 } from "./docs_viewer/claim_patterns";
 import { validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { llmsLinkProblems } from "./llms_links";
@@ -412,6 +417,14 @@ if (routeFailures === 0) {
 // until their owner decides; they are listed in the pull request, not checked here.
 // The pattern lists live in scripts/docs_viewer/claim_patterns.ts with the docs viewer's lists.
 let liveClaimFailures = 0;
+/** Title, every meta tag's content and every JSON-LD block of a built page, as one string. */
+function headMetaText(html: string): string {
+  return [
+    /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "",
+    ...[...html.matchAll(/<meta [^>]*?content="([^"]*)"/g)].map((m) => m[1]),
+    ...[...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]),
+  ].join("\n");
+}
 for (const route of LIVE_ROUTES) {
   const livePath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
   if (!fs.existsSync(livePath)) continue; // missing live pages are reported in 3e
@@ -441,28 +454,27 @@ for (const route of LIVE_ROUTES) {
     .replace(/&[a-z#0-9]+;/gi, " ");
   // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
   const wholeText = text + " " + jsonLd;
-  // OMITTED_CLAIMS runs on the visible text; the label must not sit in JSON-LD or meta keywords either.
-  if (/developer preview/i.test(jsonLd + " " + keywords)) {
-    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html carries the developer-preview label in JSON-LD or meta keywords`);
+  // The claim lists run on the visible text above; the title, meta tags and JSON-LD carry the same
+  // headline copy, so the old lede, the developer-preview label and the install-time claim are checked there too.
+  const headFindings = findClaimProblems(headMetaText(html), [
+    ...OLD_LEDE,
+    { id: "retired-frame", name: "dev-preview", re: DEVELOPER_PREVIEW, label: "developer-preview label" },
+    { id: "omitted-claim", name: "install-time", re: UNMEASURED_INSTALL_TIME, label: "unmeasured install-time claim" },
+  ]);
+  for (const label of new Set(headFindings.map((f) => `"${f.match}" (${f.label})`))) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html title, meta tags or JSON-LD carry ${label}`);
     liveClaimFailures++;
   }
-  for (const m of wholeText.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
-    const after = wholeText.slice(m.index, m.index + 600);
-    if (
-      !/npm registry/i.test(after) ||
-      !/NO_UPDATE_NOTIFIER=1/.test(after) ||
-      !/when a session starts/i.test(after) ||
-      !/connection metadata/i.test(after)
-    ) {
-      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${m[0]}" without the npm update-check qualification`);
-      liveClaimFailures++;
-    }
+  // The fragment list is shared with the docs viewer lint (scripts/docs_viewer/claim_patterns.ts).
+  for (const t of telemetryProblems(wholeText)) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${t.match}" without the npm update-check qualification (missing: ${t.missing.join(", ")})`);
+    liveClaimFailures++;
   }
-  for (const [re, label] of OMITTED_CLAIMS) {
-    if (re.test(text)) {
-      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
-      liveClaimFailures++;
-    }
+  // The docs list plus the named live-page extras: a superset of what a docs page is checked for.
+  const omitted = findClaimProblems(text, LIVE_PAGE_CLAIM_PATTERNS).filter((f) => f.id !== "telemetry");
+  for (const label of new Set(omitted.map((f) => `${f.label} ("${f.match}")`))) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
+    liveClaimFailures++;
   }
 }
 // Held pages keep their old shell but must not offer navigation entries that only land on redirect stubs.
@@ -474,12 +486,12 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
     .readFileSync(heldPath, "utf-8")
     .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ");
-  // The old app shell used to render a "Developer preview" badge in the header of every held page.
-  if (/\b(5|five)[- ]minutes?\b/i.test(heldText)) {
+  if (UNMEASURED_INSTALL_TIME.test(heldText)) {
     fail(`site_pages${heldRoute}/index.html makes the unmeasured install-time claim "5 minutes"`);
     liveClaimFailures++;
   }
-  if (/developer preview/i.test(heldText)) {
+  // The old app shell used to render a "Developer preview" badge in the header of every held page.
+  if (DEVELOPER_PREVIEW.test(heldText)) {
     fail(`site_pages${heldRoute}/index.html still shows the developer-preview label`);
     liveClaimFailures++;
   }
@@ -501,7 +513,7 @@ for (const route of ["/", "/install", "/evaluate", "/markdown/neotoma-with-curso
   const served = fs
     .readFileSync(servedPath, "utf-8")
     .replace(/<script(?![^>]*ld\+json)[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ");
-  const hit = /\b(5|five)[- ]minutes?\b/i.exec(served);
+  const hit = UNMEASURED_INSTALL_TIME.exec(served);
   if (hit) {
     fail(`site_pages${route === "/" ? "/" : route + "/"}index.html still says "${hit[0]}" (text, meta or JSON-LD)`);
     liveClaimFailures++;
@@ -520,11 +532,7 @@ const EVALUATE_RETIRED_PHRASES: [RegExp, string][] = [
 const evaluatePath = path.join(siteDir, "evaluate", "index.html");
 if (fs.existsSync(evaluatePath)) {
   const html = fs.readFileSync(evaluatePath, "utf-8");
-  const headline = [
-    /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "",
-    /<meta name="description" content="([^"]*)"/.exec(html)?.[1] ?? "",
-    ...[...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]),
-  ].join("\n");
+  const headline = headMetaText(html);
   const bodyText = html
     .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ")
@@ -539,11 +547,19 @@ if (fs.existsSync(evaluatePath)) {
       fail("site_pages/evaluate/index.html headline and first screen do not name the category (system of record for AI agents)");
       liveClaimFailures++;
     }
-    for (const [re, label] of [...EVALUATE_RETIRED_PHRASES, ...OMITTED_CLAIMS]) {
+    for (const [re, label] of EVALUATE_RETIRED_PHRASES) {
       if (re.test(firstScreen)) {
         fail(`site_pages/evaluate/index.html headline or first screen carries "${label}"`);
         liveClaimFailures++;
       }
+    }
+    // The shared live-page list (retired nouns, omitted claims, old lede, developer preview, install time).
+    const firstScreenProblems = findClaimProblems(firstScreen, LIVE_PAGE_CLAIM_PATTERNS).filter(
+      (f) => f.id !== "telemetry"
+    );
+    for (const label of new Set(firstScreenProblems.map((f) => `${f.label} ("${f.match}")`))) {
+      fail(`site_pages/evaluate/index.html headline or first screen carries ${label}`);
+      liveClaimFailures++;
     }
   }
 }
