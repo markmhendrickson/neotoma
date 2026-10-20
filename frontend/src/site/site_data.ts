@@ -1667,9 +1667,9 @@ export const ICP_PROFILES: IcpProfile[] = [
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
-  pageTitle: "Your agents forget. Neotoma makes them remember.",
+  pageTitle: "Neotoma: the system of record for AI agents",
   pageDescription:
-    "State integrity for AI agents, not retrieval quality. Versioned contacts, tasks, decisions, finances \u2014 stored once, queryable everywhere. Open-source and local-first.",
+    "A record, not recall. An open-source, local-first system of record for AI agents, with observations linked to sources and field-level provenance.",
   heroImageUrl: "neotoma-hero.png",
 };
 

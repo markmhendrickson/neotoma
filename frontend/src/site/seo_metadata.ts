@@ -9,6 +9,7 @@ import {
 } from "@/i18n/config";
 import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
+import { isRetiredRoute, servesRealPage } from "@/site/route_retirement";
 
 export interface SeoRouteMetadata {
   title: string;
@@ -68,12 +69,12 @@ export const SEO_DEFAULTS = {
 
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
-    title: "Your agents forget. Neotoma makes them remember.",
+    title: "Neotoma: the system of record for AI agents",
     description:
-      "Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.",
-    /** Matches on-image copy and footer positioning; dev preview img uses this for alt/figcaption. */
+      "A record, not recall. Neotoma is an open-source, local-first system of record for AI agents: observations linked to sources, corrections that add instead of overwrite, and field-level provenance, shared by the tools you connect.",
+    /** Matches the on-image copy of neotoma-og-1200x630.png. */
     ogImageAlt:
-      "Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.",
+      "Neotoma: the system of record for AI agents. A record, not recall. A plan-style drawing of two sources becoming two observations and one current invoice record.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
@@ -86,16 +87,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       codeRepository: "https://github.com/markmhendrickson/neotoma",
       installUrl: "https://neotoma.io/install",
       featureList: [
-        "Deterministic state evolution",
-        "Versioned entity history",
-        "Append-only observation log",
-        "Schema-bound entity validation",
+        "Observations linked to their sources",
+        "Corrections recorded as new observations",
         "Field-level provenance tracking",
+        "Entity resolution with deterministic entity IDs",
         "Cross-tool access via MCP",
-        "Entity resolution with canonical IDs",
-        "Temporal state queries",
-        "Privacy-first local storage",
         "CLI, REST API, and MCP interfaces",
+        "Local-first storage",
       ],
     },
     organization: {
@@ -2973,7 +2971,11 @@ export interface ResolvedSeoMetadata {
 
 function buildAlternates(pathname: string): { hrefLang: string; href: string }[] {
   const basePath = stripLocaleFromPath(pathname);
-  const alternates = SUPPORTED_LOCALES.map((locale) => ({
+  // Only locales that serve a real page for this path get an alternate. Retired locale routes are
+  // noindex redirect stubs, and hreflang pointing at them is ignored or flagged by search engines.
+  const alternates = SUPPORTED_LOCALES.filter((locale) =>
+    servesRealPage(localizePath(basePath, locale)),
+  ).map((locale) => ({
     hrefLang: locale,
     href: buildCanonicalUrl(localizePath(basePath, locale)),
   }));
@@ -2986,8 +2988,10 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   const routeMetadata = getSeoMetadataForPath(pathname);
   const pack = getStaticLocalePack(locale);
   const localizedOverride: Partial<SeoRouteMetadata> =
+    // The home route renders the English one-pager in every locale, so it takes no localized
+    // title or description (those still carried the retired category line).
     normalizedPath === "/"
-      ? pack.seo.home
+      ? {}
       : normalizedPath === "/docs"
         ? pack.seo.docs
         : normalizedPath === "/install"
@@ -3034,7 +3038,9 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   };
 }
 
-export function buildSitemapXml(paths: readonly string[] = SITEMAP_PATHS): string {
+export function buildSitemapXml(
+  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p)),
+): string {
   const urlEntries = paths
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)
     .join("\n");

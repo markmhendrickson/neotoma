@@ -12,6 +12,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  LIVE_ROUTES,
+  LOCALIZED_LEGAL_PATHS,
+  RETIRED_DESTINATIONS,
+  heldReason,
+  isRetiredRoute,
+  resolveDestination,
+} from "../frontend/src/site/route_retirement";
+import { llmsLinkProblems } from "./llms_links";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -35,7 +44,7 @@ function pass(message: string): void {
 function extractIndexablePaths(): string[] {
   const source = fs.readFileSync(seoMetadataPath, "utf-8");
   const metaMatch = source.match(
-    /const ROUTE_METADATA:\s*Record<string,\s*SeoRouteMetadata>\s*=\s*\{([^]*?)\n\};/,
+    /const ROUTE_METADATA:\s*Record<string,\s*SeoRouteMetadata>\s*=\s*\{([^]*?)\n\};/
   );
   if (!metaMatch) {
     throw new Error("Could not locate ROUTE_METADATA in seo_metadata.ts");
@@ -113,10 +122,9 @@ let missingPages = 0;
 let emptyPages = 0;
 
 for (const routePath of indexablePaths) {
+  if (isRetiredRoute(routePath)) continue; // retired routes are redirect stubs, checked in 3e
   const htmlPath =
-    routePath === "/"
-      ? rootIndex
-      : path.join(siteDir, routePath.replace(/^\//, ""), "index.html");
+    routePath === "/" ? rootIndex : path.join(siteDir, routePath.replace(/^\//, ""), "index.html");
 
   if (!fs.existsSync(htmlPath)) {
     fail(`Missing HTML for indexable route: ${routePath}`);
@@ -132,7 +140,9 @@ for (const routePath of indexablePaths) {
 }
 
 if (missingPages === 0 && emptyPages === 0) {
-  pass(`All ${indexablePaths.length} indexable pages have prerendered HTML files`);
+  pass(
+    `All ${indexablePaths.filter((r) => !isRetiredRoute(r)).length} live and held pages have prerendered HTML files`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +166,7 @@ for (const htmlPath of collectHtmlFiles(siteDir)) {
   const html = fs.readFileSync(htmlPath, "utf-8");
   if (/\.\.\/assets\//.test(html)) {
     fail(
-      `HTML must not use ../assets/ for bundles (breaks when stale vs /assets/): ${path.relative(repoRoot, htmlPath)}`,
+      `HTML must not use ../assets/ for bundles (breaks when stale vs /assets/): ${path.relative(repoRoot, htmlPath)}`
     );
     badAssetPaths++;
   }
@@ -182,7 +192,10 @@ const NON_ENGLISH_SITE_LOCALES = [
   "id",
   "de",
 ] as const;
-/** Stable English hero lines from `static_packs` / SitePage — if present in locale HTML, prerender likely missed i18n. */
+/**
+ * Retired category lines. The home route is the one-pager in every locale, so none of these may appear
+ * in any locale's home HTML (they were the pre-one-pager hero and the retired "memory" frame).
+ */
 const ENGLISH_HOME_SENTINELS = [
   "Your agents forget.",
   "Without shared memory across your AI tools:",
@@ -196,7 +209,7 @@ for (const loc of NON_ENGLISH_SITE_LOCALES) {
   for (const phrase of ENGLISH_HOME_SENTINELS) {
     if (html.includes(phrase)) {
       fail(
-        `site_pages/${loc}/index.html contains English homepage sentinel "${phrase.slice(0, 48)}${phrase.length > 48 ? "…" : ""}" — locale prerender may be wrong`,
+        `site_pages/${loc}/index.html contains English homepage sentinel "${phrase.slice(0, 48)}${phrase.length > 48 ? "…" : ""}" — locale prerender may be wrong`
       );
       englishHomeSentinelHits++;
     }
@@ -207,6 +220,186 @@ if (englishHomeSentinelHits === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// 3d. The home page is the one-pager: current category, no old app chrome
+// ---------------------------------------------------------------------------
+const HOME_REQUIRED = [
+  "A record, not recall.",
+  "the system of record for AI agents",
+  "Sheet 07 · Deeper material",
+] as const;
+const HOME_FORBIDDEN = [
+  "Your agents forget",
+  "makes them remember",
+  "state layer for AI agents",
+  "Memory guarantees",
+  'id="site-footer"',
+] as const;
+let homeFailures = 0;
+{
+  const html = fs.readFileSync(path.join(siteDir, "index.html"), "utf-8");
+  for (const phrase of HOME_REQUIRED) {
+    if (!html.includes(phrase)) {
+      fail(`site_pages/index.html is missing "${phrase}"`);
+      homeFailures++;
+    }
+  }
+  for (const phrase of HOME_FORBIDDEN) {
+    if (html.includes(phrase)) {
+      fail(`site_pages/index.html still carries retired or old-chrome content "${phrase}"`);
+      homeFailures++;
+    }
+  }
+}
+if (homeFailures === 0) {
+  pass(
+    "Home page is the one-pager: current category, deeper-material sheet, no old header or footer"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 3e. Route set: /install is a real page; every retired route is a redirect stub to its destination
+// ---------------------------------------------------------------------------
+let routeFailures = 0;
+const installHtml = path.join(siteDir, "install", "index.html");
+if (!fs.existsSync(installHtml)) {
+  fail("site_pages/install/index.html missing: /install must stay a real page");
+  routeFailures++;
+} else {
+  const html = fs.readFileSync(installHtml, "utf-8");
+  if (
+    html.includes('http-equiv="refresh"') ||
+    html.length < 5000 ||
+    html.includes('<div id="root"></div>')
+  ) {
+    fail(
+      "site_pages/install/index.html is a stub or empty: /install must stay a real, prerendered page"
+    );
+    routeFailures++;
+  }
+}
+for (const route of Object.keys(RETIRED_DESTINATIONS)) {
+  const stubPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
+  if (!fs.existsSync(stubPath)) {
+    // The build emits a stub for every retired route, so a missing stub means the page now 404s.
+    fail(`site_pages${route}/index.html is missing: every retired route must have a redirect stub`);
+    routeFailures++;
+    continue;
+  }
+  const html = fs.readFileSync(stubPath, "utf-8");
+  const dest = resolveDestination(route);
+  const target = dest.url === "/" ? "https://neotoma.io/" : dest.url;
+  for (const needle of [
+    `http-equiv="refresh" content="0; url=${target}"`,
+    `<link rel="canonical" href="${target}">`,
+    'name="robots" content="noindex,follow"',
+    `<a href="${target}">Continue`,
+  ]) {
+    if (!html.includes(needle)) {
+      fail(
+        `site_pages${route}/index.html is not a complete redirect stub (missing: ${needle.slice(0, 60)})`
+      );
+      routeFailures++;
+      break;
+    }
+  }
+}
+for (const loc of NON_ENGLISH_SITE_LOCALES) {
+  const stub = path.join(siteDir, loc, "index.html");
+  if (
+    !fs.existsSync(stub) ||
+    !fs.readFileSync(stub, "utf-8").includes('content="0; url=https://neotoma.io/"')
+  ) {
+    fail(`site_pages/${loc}/index.html must be a redirect stub to the one-pager`);
+    routeFailures++;
+  }
+}
+// One representative of each held namespace, including the agent-fetched ones (/evaluate, /markdown, /skills),
+// and EVERY localized legal route (page and markdown mirror), must stay a real page until its owner
+// retires it. "Real" means: present, not a redirect stub, and not the not-found page.
+const notFoundHtml = fs.existsSync(path.join(siteDir, "404.html"))
+  ? fs.readFileSync(path.join(siteDir, "404.html"), "utf-8")
+  : "";
+const firstHeading = (html: string): string | null =>
+  /<h1[^>]*>([\s\S]*?)<\/h1>/i
+    .exec(html)?.[1]
+    ?.replace(/<[^>]+>/g, "")
+    .trim() ?? null;
+const notFoundHeading = firstHeading(notFoundHtml);
+const heldRoutes: string[] = [
+  "/evaluate",
+  "/evaluate/agent-instructions",
+  "/markdown/install",
+  "/skills/ensure-neotoma",
+  "/privacy",
+  "/terms",
+  "/sandbox",
+  "/sandbox/terms-of-use",
+  "/meet",
+  ...NON_ENGLISH_SITE_LOCALES.flatMap((loc) =>
+    LOCALIZED_LEGAL_PATHS.flatMap((legal) => [`/${loc}${legal}`, `/${loc}/markdown${legal}`])
+  ),
+];
+for (const route of heldRoutes) {
+  if (!heldReason(route)) {
+    fail(`${route} is expected to be held but is not in HELD_ROUTES`);
+    routeFailures++;
+    continue;
+  }
+  const heldPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
+  if (!fs.existsSync(heldPath)) {
+    fail(`held route ${route} must stay a real page until its owner retires it (page missing)`);
+    routeFailures++;
+    continue;
+  }
+  const html = fs.readFileSync(heldPath, "utf-8");
+  if (html.includes('http-equiv="refresh"')) {
+    fail(
+      `held route ${route} must stay a real page until its owner retires it (it is a redirect stub)`
+    );
+    routeFailures++;
+  } else if (html.length < 5000 || html.includes('<div id="root"></div>')) {
+    fail(`held route ${route} is empty or not prerendered`);
+    routeFailures++;
+  } else if (notFoundHeading && firstHeading(html) === notFoundHeading) {
+    fail(`held route ${route} renders the not-found page instead of its content`);
+    routeFailures++;
+  }
+}
+{
+  const sitemap = fs.readFileSync(path.join(siteDir, "sitemap.xml"), "utf-8");
+  const locs = [...sitemap.matchAll(/<loc>https:\/\/neotoma\.io([^<]*)<\/loc>/g)].map(
+    (m) => m[1] || "/"
+  );
+  const leaked = locs.filter((r) => isRetiredRoute(r));
+  if (leaked.length) {
+    fail(`sitemap.xml lists retired routes: ${leaked.slice(0, 5).join(", ")}`);
+    routeFailures++;
+  }
+  for (const live of LIVE_ROUTES) {
+    if (!locs.includes(live)) {
+      fail(`sitemap.xml is missing live route ${live}`);
+      routeFailures++;
+    }
+  }
+}
+// llms.txt is read by agents without a browser: every link in its Links block must land on a real page.
+{
+  const llms = path.join(siteDir, "llms.txt");
+  const problems = fs.existsSync(llms)
+    ? llmsLinkProblems(fs.readFileSync(llms, "utf-8"), repoRoot)
+    : ["llms.txt is missing"];
+  for (const problem of problems) {
+    fail(`llms.txt: ${problem}`);
+    routeFailures++;
+  }
+}
+if (routeFailures === 0) {
+  pass(
+    "Route set holds: /install is real, retired routes are redirect stubs, sitemap lists only live and held routes"
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 4. 404.html must render the not-found page, not the homepage
 // ---------------------------------------------------------------------------
 const notFoundPath = path.join(siteDir, "404.html");
@@ -214,8 +407,7 @@ if (!fs.existsSync(notFoundPath)) {
   fail("404.html does not exist");
 } else {
   const html = fs.readFileSync(notFoundPath, "utf-8");
-  const looksLikeNotFound =
-    /page\s*not\s*found/i.test(html) || html.includes("404");
+  const looksLikeNotFound = /page\s*not\s*found/i.test(html) || html.includes("404");
   if (!looksLikeNotFound) {
     fail("404.html does not contain expected not-found content — may be rendering wrong page");
   } else {
@@ -228,7 +420,7 @@ if (!fs.existsSync(notFoundPath)) {
 // ---------------------------------------------------------------------------
 if (failures === 0) {
   console.log(
-    `\n✓  Site export validation passed — ${indexablePaths.length} indexable pages verified.\n`,
+    `\n✓  Site export validation passed — ${indexablePaths.length} indexable pages verified.\n`
   );
   process.exit(0);
 } else {
