@@ -1,48 +1,52 @@
 # Neotoma
 
-> Deterministic state layer for long-running AI agents
+> The system of record for AI agents
 
 ## What it does
 
-Neotoma is an open-source deterministic state layer for AI agents. It uses append-only observation logs, hash-based entity IDs, and schema constraints to give agents versioned, reproducible, auditable memory that never silently mutates. Same observations always produce the same entity state.
+A record, not recall. An agent's recall holds what it was last told. Neotoma is a record: it keeps what was stored, from which source, who corrected it, and what is current now, for connected agents to defer to.
+
+Neotoma is open source and local-first. It stores each fact as an immutable observation linked to its source, resolves observations into entities, and computes a current snapshot for each entity with a deterministic reducer. A correction adds a new observation; the earlier observations stay readable for that entity. Each current field names the observation that set it.
 
 ## Key facts
 
 - Open-source, MIT-licensed
-- Installs via npm: `npm install -g neotoma`
-- Interfaces: REST API, MCP server, CLI
+- Installs via npm: `npm install -g neotoma`, then `neotoma init`
+- Interfaces: MCP server, REST API, CLI, and a bundled web Inspector
 - Platforms: macOS, Linux, Windows (WSL)
-- AI tool integrations: Cursor, Claude, Claude Code, ChatGPT, Codex, OpenClaw
-- Local-first: data stays on your machine, no cloud sync, no telemetry
-- Written in TypeScript, backed by SQLite
+- Documented integrations: Cursor, Claude, Claude Code, ChatGPT, Codex, OpenClaw
+- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files)
+- Written in TypeScript
 
-## Core guarantees
+## What it provides
 
-- Deterministic state evolution: same observations always produce the same entity state
-- Versioned history: every change creates a new version, earlier states preserved
-- Replayable timeline: replay observations to reconstruct any historical state
-- Auditable change log: every modification records who, when, and from what source
-- Schema constraints: entities validated against defined types, malformed writes rejected
-- Silent mutation prevention: no overwrites, merges, or drops without a trace
-- Conflicting facts detection: contradictory statements detected and resolved deterministically
-- Reproducible state reconstruction: rebuild complete state from raw inputs alone
-- Human inspectability: diff any two versions, trace every fact to its origin
+- Deterministic snapshots: the same observations reduce to the same entity state, regardless of order
+- Provenance: every current field traces to the observation that set it, and through it to its source
+- Corrections as observations: a correction is recorded as a new observation, not an overwrite
+- Entity resolution: entity IDs are derived from the identity fields of the entity type
+- Idempotent writes through an `idempotency_key`
+
+## Limits
+
+- A record is a workflow commitment: agents must write to it and read from it, and it needs a local service and deliberate writes
+- Provenance shows the evidence trail, not that an agent read a source correctly
+- Export writes current state; observation history is not part of the export
+- Organizations, workspaces, and multi-party authority are not built
+- It is not a vector store or a chat log
 
 ## Key concepts
 
-- Entity: canonical representation of a person, company, task, or object with deterministic ID
-- Observation: immutable, timestamped fact about an entity; never modified or deleted
-- Snapshot: current truth for an entity, computed by merging all observations via reducers
-- Reducer: deterministic function that merges observations into a snapshot
-- Provenance: origin tracking so every value traces back to its source
-- Memory graph: the graph of sources, observations, entities, relationships, and events
+- Entity: canonical representation of a person, company, task, or object with a deterministic ID
+- Observation: an immutable, timestamped fact about an entity, linked to its source
+- Snapshot: the current state of an entity, computed from its observations by a reducer
+- Reducer: a deterministic function that turns observations into a snapshot
+- Provenance: the link from each snapshot field to the observation, and from there to the source, that set it
 
 ## How it compares
 
-- vs Platform memory (Claude, ChatGPT): Neotoma adds deterministic state, versioned history, schema constraints, and reproducible reconstruction
-- vs Retrieval memory (Mem0, Zep): Neotoma provides state integrity instead of retrieval relevance; deterministic composition instead of probabilistic matching
-- vs File-based memory (Markdown, JSON): Neotoma adds schema validation, deterministic merging, temporal queries, and auditable provenance
-- vs RAG: Neotoma is not a RAG system; it provides deterministic entity state, not document retrieval for prompt augmentation
+- Memory and retrieval tools (platform memory, Mem0, Zep) answer what an agent remembers. A record answers what is true now, what it was before, and on whose evidence. The two overlap, and a product can cover more than one.
+- File-based notes (Markdown, JSON) hold content. Neotoma adds typed entities, a reducer that computes the current value, and field-level provenance.
+- RAG retrieves documents to augment a prompt. Neotoma maintains entity state; it is not a document retrieval system.
 
 ## Links
 

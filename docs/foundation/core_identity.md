@@ -17,7 +17,7 @@ The authority is exercised through six powers, stated in the vision-phase table 
 | **Temporary grants** | Authority lent for a bounded scope and duration, then withdrawn |
 | **Disclosure logs** | What was released to whom, so the exercise of authority is itself on the record |
 
-Today the **mechanisms** exist (corrections always win, `SUPERSEDES` relationships, per-operation access controls) while the **semantics** — who may correct what, scoped by domain — are future work. That gap is the honest status of the category claim and is tracked as P2 in the README's vision-phase table; it is not a reason to state the category as something smaller.
+Today the **mechanisms** exist (corrections, `SUPERSEDES` relationships, per-operation access controls) while the **semantics** — who may correct what, scoped by domain — are future work. That gap is the honest status of the category claim and is tracked as P2 in the README's vision-phase table; it is not a reason to state the category as something smaller.
 
 ### What the authority covers, and what it does not
 
