@@ -132,6 +132,10 @@ describe("shared claim patterns", () => {
     const validator = readFileSync(join(root, "scripts/docs_viewer/validate_export.ts"), "utf-8");
     expect(lint).toContain('from "./claim_patterns"');
     expect(validator).toContain('from "./claim_patterns"');
+    // Section 3g of the site export validator imports the live-page lists instead of defining them.
+    const site = readFileSync(join(root, "scripts/validate_site_export.ts"), "utf-8");
+    expect(site).toContain('from "./docs_viewer/claim_patterns"');
+    expect(site).not.toMatch(/const (RETIRED_META_PHRASES|OMITTED_CLAIMS)\b/);
   });
 
   it("finds a telemetry claim only when the update check is not named nearby", () => {
