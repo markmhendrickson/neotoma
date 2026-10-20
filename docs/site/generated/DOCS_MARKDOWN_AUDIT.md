@@ -2,7 +2,7 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **729**
+Total files: **730**
 
 ## By top-level folder under docs/
 
@@ -42,6 +42,7 @@ Total files: **729**
 - **onboarding_elicitation_flow.md**: 1
 - **onboarding_elicitation_script.md**: 1
 - **performance**: 1
+- **README.md**: 1
 - **reference**: 1
 - **rendered_page.md**: 1
 - **research**: 1
