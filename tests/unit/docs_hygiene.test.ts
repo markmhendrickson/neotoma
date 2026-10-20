@@ -72,6 +72,7 @@ describe("docs hygiene", () => {
       const source = readFileSync(abs, "utf8");
       const { findings, unusedAllowlist } = checkMarkdownFile(abs, source, {
         retiredPhraseAllowedLines: (doc.retiredPhraseAllowedLines ?? []).map((a) => a.line),
+        repoRoot: REPO_ROOT,
       });
       const report = findings.map((f) => `${doc.path}:${f.line} [${f.rule}] ${f.text}`);
       expect(report, report.join("\n")).toEqual([]);
@@ -85,7 +86,7 @@ describe("docs hygiene rules", () => {
   const base =
     "# Title\n\nOne summary sentence.\n\nApplies to v0.25.0 and main.\n\n## Section\n\nText.\n";
   const rulesFor = (source: string): HygieneRule[] =>
-    checkMarkdownFile(fakePath, source).findings.map((f) => f.rule);
+    checkMarkdownFile(fakePath, source, { repoRoot: REPO_ROOT }).findings.map((f) => f.rule);
 
   it("passes a clean document", () => {
     expect(rulesFor(base)).toEqual([]);
@@ -121,6 +122,19 @@ describe("docs hygiene rules", () => {
 
   it("still flags dashes inside shell fences", () => {
     expect(rulesFor(base + "\n```bash\n# step — one\n```\n")).toContain("dash");
+  });
+
+  it("flags a link that escapes the repository, even when the target exists", () => {
+    const escapes = path.relative(path.dirname(fakePath), "/etc/hosts");
+    expect(rulesFor(base + `\nSee [hosts](${escapes}).\n`)).toContain("link");
+  });
+
+  it("flags malformed percent-encoding instead of throwing", () => {
+    expect(rulesFor(base + "\nSee [bad](./bad%E0%A4%A.md).\n")).toContain("link");
+  });
+
+  it("flags a root-relative link", () => {
+    expect(rulesFor(base + "\nSee [root](/docs/README.md).\n")).toContain("link");
   });
 
   it("resolves a real cross-file anchor", () => {

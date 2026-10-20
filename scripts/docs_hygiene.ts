@@ -56,6 +56,11 @@ export interface HygieneOptions {
    * cannot go stale silently.
    */
   retiredPhraseAllowedLines?: readonly string[];
+  /**
+   * Repository root. A relative link that resolves outside it is reported as a
+   * dead link instead of being read. Defaults to the current working directory.
+   */
+  repoRoot?: string;
 }
 
 const STATUS_EMOJI = /\p{Extended_Pictographic}/u;
@@ -184,6 +189,7 @@ export function checkMarkdownFile(
     if (h.level > 3) add("heading-depth", h.line, `h${h.level}: ${h.text}`);
   }
 
+  const repoRoot = path.resolve(options.repoRoot ?? process.cwd());
   const allowed = new Set((options.retiredPhraseAllowedLines ?? []).map((s) => s.trim()));
   const usedAllow = new Set<string>();
   const ownAnchors = headingAnchors(source);
@@ -215,10 +221,24 @@ export function checkMarkdownFile(
         continue;
       }
       const [filePart, anchor] = target.split("#", 2) as [string, string | undefined];
-      const resolved = filePart.startsWith("/")
-        ? null
-        : path.resolve(path.dirname(filePath), decodeURIComponent(filePart));
-      if (!resolved || !existsSync(resolved)) {
+      if (filePart.startsWith("/")) {
+        add("link", l.n, `root-relative link ${target}; use a path relative to the file`);
+        continue;
+      }
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(filePart);
+      } catch {
+        add("link", l.n, `malformed percent-encoding in link ${target}`);
+        continue;
+      }
+      const resolved = path.resolve(path.dirname(filePath), decoded);
+      const fromRoot = path.relative(repoRoot, resolved);
+      if (fromRoot.startsWith("..") || path.isAbsolute(fromRoot)) {
+        add("link", l.n, `link ${target} resolves outside the repository`);
+        continue;
+      }
+      if (!existsSync(resolved)) {
         add("link", l.n, `dead link ${target}`);
         continue;
       }

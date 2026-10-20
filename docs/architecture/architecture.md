@@ -51,7 +51,7 @@ An interpretation records one extraction over a stored source: the entities a cl
 
 ### Observations
 
-An observation is a set of field values about one entity, written at one time. Observations from a store or an interpretation are linked to their source. A correction observation has no source. Observation ids are not stable across runs: storing the same data again in a new run produces observations with new ids.
+An observation is a set of field values about one entity, written at one time. Observations from a store or an interpretation are linked to their source. A correction observation has no source. Observation ids are not portable across instances. An observation id is a hash of its source id, its interpretation, its entity id, and its fields (`generateObservationId` in `src/services/observation_identity.ts`), and a source id is a hash of the user id and the content hash (`generateDeterministicSourceId` in `src/services/source_identity.ts`). Both therefore depend on the user and on the interpretation run: through the CLI each install can have its own install-fingerprinted local user (`ensureLocalSandboxUser` in `src/services/local_auth.ts`), so storing the same data on another install can produce different source and observation ids, and each interpretation run gets a new id, so its observations get new ids too. Entity ids, described below, agree across instances. Do not rely on source or observation ids matching across instances.
 
 Fields that the entity's schema does not declare are kept as raw fragments rather than dropped.
 
@@ -75,7 +75,7 @@ Timeline events are derived from date fields on a snapshot. When a schema declar
 
 ### Schema registry
 
-Entity schemas (fields, types, merge policies, and identity rules) live in a registry that can be extended at runtime. Values of the wrong type are accepted on write today; schema validation does not reject them.
+Entity schemas (fields, types, merge policies, and identity rules) live in a registry that can be extended at runtime. Type checks on write are uneven today. A plain store keeps a value of the wrong type for a declared field out of the snapshot and stores it as an unknown field (a raw fragment). A `date` field accepts any string, and `correct()` does not check types, so both can put a wrong-type value into the snapshot (issues [#2219](https://github.com/markmhendrickson/neotoma/issues/2219) and [#2699](https://github.com/markmhendrickson/neotoma/issues/2699); `docs/known_limitations.md`, added by #2697, lists these limits).
 
 ## How a write becomes a current value
 
@@ -120,13 +120,20 @@ On main, the MCP WebSocket bridge (`src/mcp_ws_bridge.ts`) binds to loopback by 
 
 ## Network use
 
-Neotoma makes these outbound requests:
+Outbound requests Neotoma can make include the following. The list is not exhaustive; check the code before relying on the absence of a request.
 
 - **Update checks.** The CLI checks the npm registry for a newer release about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after that (off with `NO_UPDATE_NOTIFIER=1`). The request carries only the package name, and the registry sees ordinary connection metadata.
 - **OpenAI**, only when `OPENAI_API_KEY` is set: embeddings for semantic search, and model calls for schema recommendations and schema icons.
 - **Webhooks** to the URLs that subscribers register (see [Outbound signals](#outbound-signals)).
 - **Peer sync** to the peers an operator configures.
-- **GitHub**, when issue sync is configured (`neotoma issues sync` with the server's `NEOTOMA_ISSUES_GITHUB_TOKEN`).
+- **GitHub**, when issue sync is configured (`neotoma issues sync` with the server's `NEOTOMA_ISSUES_GITHUB_TOKEN`), and the GitHub API for release notes when `npm_check_update` runs with `include_release_notes`.
+- **Issue reports.** `submit_issue` forwards reports to the instance named by `NEOTOMA_ISSUES_TARGET_URL`; when the variable is unset, that is the maintainer's instance (`DEFAULT_ISSUES_TARGET_URL` in `src/services/issues/types.ts`). Set it to an empty string to keep reports local.
+- **Repo discovery.** Resolving which repository an issue is about can fetch that repository's `.well-known/neotoma.json` from `raw.githubusercontent.com` (`src/services/issues/repo_discovery_resolver.ts`).
+- **The `npm_check_update` tool** queries the npm registry when an agent calls it.
+- **Google sign-in**, when configured: Google's authorization endpoint and signing keys (`src/services/google_oidc.ts`).
+- **Apple App Attest revocation**, when an AAuth attestation is verified: a request to Apple's revoked-list endpoint, or to `NEOTOMA_AAUTH_APPLE_REVOCATION_URL` (`src/services/aauth_attestation_revocation.ts`).
+- **Tunnels**, when started with `--tunnel`: ngrok or cloudflared connect to their provider.
+- **Google Fonts** in the browser: the server-rendered OAuth pages load fonts from `fonts.googleapis.com` and `fonts.gstatic.com` (`renderOauthPage` in `src/actions.ts`).
 
 ## Code layout
 
