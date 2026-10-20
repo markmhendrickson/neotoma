@@ -300,3 +300,44 @@ describe("seo_metadata", () => {
     });
   });
 });
+
+describe("live page metadata carries no retired claim", () => {
+  const RETIRED = [
+    "append-only",
+    "detect conflicts",
+    "deterministic memory",
+    "ships those guarantees",
+    "5 minutes",
+    "5-minute",
+    "no cloud sync",
+    "agent memory",
+    "deterministic state",
+    "SearchAction",
+    "speakable",
+    "docs?q=",
+    "FAQPage",
+    "Windows",
+  ];
+  for (const route of ["/", "/install"]) {
+    it(`${route}: JSON-LD, keywords, description and image alt are clean`, () => {
+      const meta = resolveSeoMetadata(route);
+      const haystack = JSON.stringify(meta.jsonLd) + " " + meta.keywords + " " + meta.description + " " + meta.ogImageAlt;
+      for (const phrase of RETIRED) {
+        expect(haystack.toLowerCase(), `${route}: ${phrase}`).not.toContain(phrase.toLowerCase());
+      }
+      expect(meta.keywords).toContain("system of record");
+    });
+  }
+
+  it("uses the category keyword list on the home page", () => {
+    expect(resolveSeoMetadata("/").keywords.endsWith(
+      "Neotoma, system of record, AI agents, MCP, Model Context Protocol, provenance, local-first",
+    )).toBe(true);
+  });
+
+  it("points the install page at an image that exists in the build", () => {
+    const meta = resolveSeoMetadata("/install");
+    expect(meta.ogImageUrl).toBe("https://neotoma.io/neotoma-og-1200x630.png");
+  });
+});
+

@@ -74,7 +74,7 @@ const IMPACT_ROWS_EN: InstallImpactRow[] = [
     what: "Global npm package",
     path: "neotoma (global node_modules)",
     scope: "Global",
-    reset: "npm uninstall -g neotoma",
+    reset: "npm uninstall -g neotoma (reset runs it only from inside a Neotoma repo)",
   },
   {
     what: "Config directory",
@@ -217,7 +217,7 @@ const EXPANDED_STEPS_EN: InstallExpandedStep[] = [
   {
     title: "Run activation",
     segments: [
-      " - execute the activation sequence linked below: discover candidates, preview them, ingest confirmed sources, reconstruct a timeline, then query and correct.",
+      " - execute the activation sequence linked below: discover candidates, preview them, ingest confirmed sources, then query and correct.",
     ],
   },
   {
@@ -230,7 +230,7 @@ const EXPANDED_STEPS_EN: InstallExpandedStep[] = [
 
 export const INSTALL_PAGE_EN: InstallPageStrings = {
   title: "Install options",
-  fiveMinuteIntegration: "5-minute integration",
+  fiveMinuteIntegration: "Takes a few minutes",
   fullyReversible: "Fully reversible",
   agentAssistedInstall: "Agent-assisted install",
   directIntegrationDocs: "Direct integration docs",
@@ -244,7 +244,7 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
   whatChangesOnSystem: "What changes on your system",
   expandedInstallFirstSequence: "Expanded install-first sequence",
   evaluateCtaBody:
-    "Want the full agent-driven sequence? Start with evaluation, then let the agent install if needed, activate Neotoma with your data, and configure the tool you are in.",
+    "Want the full agent-driven sequence? Start with evaluation, then let the agent install if needed, store your first records, and configure the tool you are in.",
   agentAssistedLead:
     "If you want to skip the initial evaluation page and proceed directly from install, paste this prompt into Claude, Codex, Cursor, or a similar agent. The prompt stays intentionally short; this page documents the full install-first sequence it should follow.",
   expandedPromptLeadBold: "This page expands the prompt.",
@@ -282,13 +282,13 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
     { code: "npm install -g neotoma" },
     " adds a CLI binary. ",
     { code: "neotoma init" },
-    " creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in the background unless you start it. No telemetry, no phone-home.",
+    " creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in the background unless you start it. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.",
   ],
   whatChangesFootnoteSegments: [
     { code: "neotoma reset" },
-    " backs up every item to a timestamped directory before removing it, then runs ",
+    " backs up local state to a timestamped directory before removing it. It runs ",
     { code: "npm uninstall -g neotoma" },
-    ". If your ",
+    " only when run from inside a Neotoma repository; elsewhere it skips the global uninstall. If your ",
     { code: ".env" },
     " sets ",
     { code: "NEOTOMA_DATA_DIR" },
