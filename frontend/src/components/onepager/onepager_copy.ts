@@ -16,7 +16,27 @@ export const FIGURE_LEGEND: readonly string[] = [
   "Each source becomes an observation. A rule, last write per field here, computes the current value from them.",
   "The due date now reads 29 October. The revision cloud marks the field that changed, and it points to the later observation.",
   "The amount still comes from the first observation. Both observations stay on record.",
+  "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports.",
 ];
+
+/**
+ * Text alternative for the sheet 01 plate (FIG. A-1). The image is a generated illustration, not a
+ * photograph. The alternative says what the picture shows and that the numbered callouts are
+ * explained in the legend; it does not repeat the legend, which is HTML right below it and is read
+ * in full by screen readers. It makes no attribution claim.
+ */
+export const PLATE_ALT =
+  "Plate A-1, a synthetic example: a generated illustration of cut-paper objects on beige paper (an invoice page, an email card, two filed slips, a punch card and a large record card) with drafting callouts numbered 1 to 5, explained in the legend below.";
+
+/** Title-block note of the plate, one entry per line in the phone frame. */
+export const PLATE_NOTE: readonly string[] = [
+  "Paper objects carry no invoice data.",
+  "Keys 1 to 5 match the legend.",
+];
+
+/** Caption line under the sheet 01 legend. */
+export const PLATE_CAPTION =
+  "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03.";
 
 export const RECALL_VS_RECORD: readonly {
   question: string;

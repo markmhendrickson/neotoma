@@ -136,6 +136,7 @@ export function InstallPageBody() {
           code={INSTALL_COMMANDS}
           copyFeedbackId="install-copy-quick"
           installBlock="manual_commands"
+          scrollLabel="Install commands. Scroll sideways if a line is clipped."
         />
       </div>
 
@@ -175,7 +176,7 @@ export function InstallPageBody() {
           </li>
         ))}
       </ol>
-      <div className="mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
+      <div className="plan-install-preflight mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">{s.permissionsNote}</p>
         <PermissionsPreflight />
       </div>

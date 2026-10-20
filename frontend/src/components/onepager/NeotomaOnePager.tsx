@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
 import { PlanTitleBlock, SolidLockup } from "./NeotomaLogos";
-import { RecordPlanNarrow, RecordPlanWide, ServicePlan } from "./onepager_figures";
+import { ServicePlan } from "./onepager_figures";
+import { RecordPlate } from "./onepager_plate";
 import {
   CLI_TRANSCRIPT,
   DEEPER_MATERIAL,
@@ -13,6 +14,7 @@ import {
   PIPELINE,
   RECALL_VS_RECORD,
   FIGURE_LEGEND,
+  PLATE_CAPTION,
 } from "./onepager_copy";
 import "./onepager.css";
 
@@ -82,8 +84,7 @@ export function NeotomaOnePager() {
           </div>
 
           <figure className="plan-figure">
-            <RecordPlanWide />
-            <RecordPlanNarrow />
+            <RecordPlate />
             <figcaption>
               <ol className="plan-legend">
                 {FIGURE_LEGEND.map((item, i) => (
@@ -95,9 +96,7 @@ export function NeotomaOnePager() {
                   </li>
                 ))}
               </ol>
-              <p className="plan-note">
-                Synthetic example. The same flow is run for real in sheet 03.
-              </p>
+              <p className="plan-note">{PLATE_CAPTION}</p>
             </figcaption>
           </figure>
           <TitleBlock n={1} title="TITLE · RECORD PLAN" />

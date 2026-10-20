@@ -3,8 +3,11 @@
  *
  * Errors block an `included` manifest entry (the build fails); for a `pending` entry they are only
  * reported. Warnings never block. Claim wording comes from `claim_patterns.ts`, shared with the
- * export validator. Inline code spans are exempt from the wording rules so a vocabulary can name a
- * forbidden term as code; prose, headings, table cells and fenced code (including mermaid) are scanned.
+ * export validator. Prose, inline code, headings, table cells and fenced code (including mermaid) are
+ * all scanned. The only exemption is narrow and explicit: quoted terms and inline code inside an
+ * allow-listed forbidden-terms context (FORBIDDEN_TERM_CONTEXTS in render.ts), so a vocabulary or a
+ * standards page can list the terms it forbids. A trailing "## Agent Instructions" section is not
+ * rendered, so it is not linted either.
  */
 import type { Code, Heading, Image, ListItem, Blockquote, Html } from "mdast";
 import { toString } from "mdast-util-to-string";
@@ -37,12 +40,12 @@ export const LINT_RULES: Readonly<Record<string, { severity: LintSeverity; summa
   "omitted-claim": {
     severity: "error",
     summary:
-      "Claims the claim table omits: corrections always win, database-enforced append-only, replay of any historical state or time travel, export with history, hosted Neotoma for sale, unified platform, multi-operator authority.",
+      'Claims the claim table omits: corrections win or override (with or without "always"), "append-only" or an immutable audit trail, a hash-chained or tamper-evident log (hash chain, previous_event_hash), replay of any historical state or time travel, export with history, hosted Neotoma for sale, unified platform, multi-operator authority. A negation in the same clause just before the term exempts the negatable ones.',
   },
   telemetry: {
     severity: "error",
     summary:
-      'An unqualified "no telemetry" or "no network egress": the passage must name the CLI update check.',
+      'A "no telemetry" or "no network egress" claim not followed within 600 characters by the full wording: the npm registry, NO_UPDATE_NOTIFIER=1, the check when a session starts, and connection metadata.',
   },
   "retired-route-link": {
     severity: "error",
@@ -103,7 +106,8 @@ const ALERT = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i;
 /** Pictographs (not the text symbols (c), (r), TM or plain arrows), check and cross marks, :shortcodes:. */
 const STATUS_EMOJI =
   /(?![©®™↔-↙↩↪])\p{Extended_Pictographic}|[✓✔✗✘]|(^|\s):[a-z0-9_+-]+:(?=\s|$|[.,;])/u;
-export const IMAGE_TYPES = /\.(png|jpe?g|gif|webp|svg)$/i;
+/** Raster images only: SVG can carry script and external references, so it is not accepted. */
+export const IMAGE_TYPES = /\.(png|jpe?g|gif|webp)$/i;
 export const IMAGE_MAX_BYTES = 1_000_000;
 
 export interface LintOptions {
@@ -125,6 +129,8 @@ export function lintDoc(doc: ParsedDoc, ctx: RenderContext, opts: LintOptions = 
   const segments = textSegments(doc);
   for (const seg of segments) {
     for (const f of findClaimProblems(seg.text)) {
+      const wording = f.id === "retired-noun" || f.id === "omitted-claim";
+      if (wording && seg.exempt.some(([a, b]) => f.index >= a && f.index < b)) continue;
       const line =
         seg.line + (seg.kind === "code" ? seg.text.slice(0, f.index).split("\n").length - 1 : 0);
       out.push(finding(f.id, line, `${f.label}: "${f.match}"`));
