@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigationType } from "react-r
 import { Layout } from "@/components/Layout";
 import { RetiredRouteStub } from "@/components/RetiredRouteStub";
 import { LOCALIZED_LEGAL_PATHS, isRetiredRoute } from "@/site/route_retirement";
+import { isDocsViewerRoute } from "@/site/docs_viewer_manifest";
 import { NotFound } from "@/components/NotFound";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
@@ -479,7 +480,7 @@ export function MainApp() {
           <Route
             key={route.path}
             path={route.path}
-            element={isRetiredRoute(route.path) ? <RetiredRouteStub /> : route.element}
+            element={isRetiredRoute(route.path) || isDocsViewerRoute(route.path) ? <RetiredRouteStub /> : route.element}
           />
         ))}
         <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />

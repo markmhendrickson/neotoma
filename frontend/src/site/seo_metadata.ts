@@ -10,6 +10,7 @@ import {
 import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
 import { isRetiredRoute, servesRealPage } from "@/site/route_retirement";
+import { isDocsViewerRoute } from "@/site/docs_viewer_manifest";
 
 export interface SeoRouteMetadata {
   title: string;
@@ -2997,7 +2998,8 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
 }
 
 export function buildSitemapXml(
-  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p)),
+  // Docs viewer pages are listed by the static build, with their trailing slash.
+  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p)),
 ): string {
   const urlEntries = paths
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)

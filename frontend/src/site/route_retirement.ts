@@ -11,6 +11,12 @@
  * Adding a route to the app without listing it here fails `tests/unit/site_route_retirement.test.ts`.
  */
 
+import {
+  DOCS_VIEWER_INDEX,
+  type DocsViewerIndex,
+  viewerHrefForRepoPath,
+} from "./docs_viewer_manifest";
+
 export const GITHUB_REPO = "https://github.com/markmhendrickson/neotoma";
 const BLOB = `${GITHUB_REPO}/blob/main/`;
 const TREE = `${GITHUB_REPO}/tree/main/`;
@@ -270,11 +276,15 @@ export function heldReason(route: string): string | null {
   return null;
 }
 
-/** Every locale route goes to the one-pager, except the localized legal routes, which stay live. */
-export function isRetiredRoute(route: string): boolean {
+/**
+ * Every locale route goes to the one-pager, except the localized legal routes, which stay live.
+ * A route served by a published docs viewer page (`/docs/<slug>/`) is a real page, not retired.
+ */
+export function isRetiredRoute(route: string, viewer: DocsViewerIndex = DOCS_VIEWER_INDEX): boolean {
   const r = stripTrailingSlash(route);
   if (isLocaleRoute(r)) return !LOCALE_LEGAL.test(r);
   if (isLiveRoute(r)) return false;
+  if (viewer.byRoute.has(r)) return false;
   return heldReason(r) === null;
 }
 
@@ -283,9 +293,14 @@ export function servesRealPage(route: string): boolean {
   return !isRetiredRoute(route);
 }
 
-export function resolveDestination(route: string): Destination {
+export function resolveDestination(
+  route: string,
+  viewer: DocsViewerIndex = DOCS_VIEWER_INDEX
+): Destination {
   const r = stripTrailingSlash(route);
   if (isLocaleRoute(r)) return { url: "/", repoPath: null, kind: "onepager" };
+  const self = viewer.byRoute.get(r);
+  if (self) return { url: `https://neotoma.io${r}/`, repoPath: null, kind: "site" };
   const mapped = RETIRED_DESTINATIONS[r];
   if (mapped === undefined) {
     // Dynamic children (for example /skills/:slug are held; unknown retired routes go home).
@@ -295,13 +310,20 @@ export function resolveDestination(route: string): Destination {
   if (mapped.startsWith("/"))
     return { url: `https://neotoma.io${mapped}`, repoPath: null, kind: "site" };
   if (SPECIAL[mapped]) return { url: SPECIAL[mapped], repoPath: null, kind: "github" };
+  // A destination that neotoma.io now renders as a docs viewer page goes to that page.
+  const viewerHref = viewerHrefForRepoPath(mapped, viewer);
+  if (viewerHref) return { url: `https://neotoma.io${viewerHref}`, repoPath: null, kind: "site" };
   const url = mapped.endsWith("/") ? `${TREE}${mapped}` : `${BLOB}${mapped}`;
   return { url, repoPath: mapped, kind: "github" };
 }
 
 /** Stub page for a retired route. Meta refresh, canonical, noindex and a visible link. */
-export function buildRedirectStub(route: string, origin = "https://neotoma.io"): string {
-  const dest = resolveDestination(route);
+export function buildRedirectStub(
+  route: string,
+  origin = "https://neotoma.io",
+  viewer: DocsViewerIndex = DOCS_VIEWER_INDEX
+): string {
+  const dest = resolveDestination(route, viewer);
   const target = dest.url === "/" ? `${origin}/` : dest.url;
   const label = dest.kind === "github" ? "the Neotoma repository on GitHub" : "the Neotoma site";
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");

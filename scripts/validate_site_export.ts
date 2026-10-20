@@ -20,6 +20,11 @@ import {
   isRetiredRoute,
   resolveDestination,
 } from "../frontend/src/site/route_retirement";
+import {
+  LIVE_PAGE_OMITTED_CLAIMS as OMITTED_CLAIMS,
+  LIVE_PAGE_RETIRED_META_PHRASES as RETIRED_META_PHRASES,
+} from "./docs_viewer/claim_patterns";
+import { validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { llmsLinkProblems } from "./llms_links";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -278,6 +283,7 @@ if (!fs.existsSync(installHtml)) {
   }
 }
 for (const route of Object.keys(RETIRED_DESTINATIONS)) {
+  if (!isRetiredRoute(route)) continue; // served by a docs viewer page, checked in section 5
   const stubPath = path.join(siteDir, route.replace(/^\//, ""), "index.html");
   if (!fs.existsSync(stubPath)) {
     // The build emits a stub for every retired route, so a missing stub means the page now 404s.
@@ -404,33 +410,7 @@ if (routeFailures === 0) {
 // ---------------------------------------------------------------------------
 // Scope: the live routes (/ and /install). Held pages (/evaluate, /markdown/*, /skills/*) keep older copy
 // until their owner decides; they are listed in the pull request, not checked here.
-const RETIRED_META_PHRASES = [
-  "append-only",
-  "detect conflicts",
-  "deterministic memory",
-  "ships those guarantees",
-  "5 minutes",
-  "5-minute",
-  "no cloud sync",
-  "agent memory",
-  "deterministic state",
-  "SearchAction",
-  "speakable",
-  "docs?q=",
-  "FAQPage",
-] as const;
-const OMITTED_CLAIMS: [RegExp, string][] = [
-  [/corrections? (always|will always) wins?/i, "corrections always win"],
-  [/append-only/i, "database-enforced append-only"],
-  [/(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i, "as-of read across the whole record"],
-  [/no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i, "denies the per-entity as-of read"],
-  [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
-  [/hosted neotoma (is )?(available|for sale)/i, "hosted Neotoma for sale"],
-  [/unified platform/i, "unified platform"],
-  [/multi-operator/i, "multi-operator authority"],
-  [/state layer|memory layer/i, "retired category noun"],
-  [/fully reversible/i, "unevidenced reversibility claim"],
-];
+// The pattern lists live in scripts/docs_viewer/claim_patterns.ts with the docs viewer's lists.
 let liveClaimFailures = 0;
 for (const route of LIVE_ROUTES) {
   const livePath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
@@ -516,6 +496,17 @@ if (!fs.existsSync(notFoundPath)) {
     fail("404.html does not contain expected not-found content — may be rendering wrong page");
   } else {
     pass("404.html contains not-found content");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Docs viewer pages (/docs/<slug>/, frontend/src/site/docs_viewer_manifest.ts)
+// ---------------------------------------------------------------------------
+{
+  const { problems, checked } = validateDocsViewerExport(siteDir);
+  for (const problem of problems) fail(problem);
+  if (problems.length === 0) {
+    pass(`Docs viewer: ${checked} included page(s) are real, script-free and claim-safe; stubs and sitemap point at them`);
   }
 }
 
