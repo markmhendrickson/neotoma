@@ -88,6 +88,23 @@ function unscopedObservationIdClaims(text: string): string[] {
   return UNSCOPED_OBSERVATION_ID_CLAIMS.filter((re) => re.test(text)).map((re) => String(re));
 }
 
+/**
+ * Surface-parity and attribution overclaims a claims check found false: the MCP and REST store
+ * handlers are separate implementations, and attribution is self-reported or absent unless the
+ * writer signs its requests.
+ */
+const SURFACE_AND_ATTRIBUTION_OVERCLAIMS: readonly RegExp[] = [
+  /all backed by the same operations/i,
+  /same contract across (CLI and MCP|MCP and CLI)/i,
+  /every write is attributed/i,
+  /answerable rather than asserted/i,
+  /agents perform the same operations/i,
+];
+
+function surfaceOverclaims(text: string): string[] {
+  return SURFACE_AND_ATTRIBUTION_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
+}
+
 const OLD_OBSERVATION_ID_SENTENCES = [
   "An ordinary structured store also gives the same observation ID for the same input.",
   "Observation IDs are the same across instances for the same input.",
@@ -183,6 +200,10 @@ describe("llms.txt body claims", () => {
 
   it("does not claim observation IDs match across instances", () => {
     expect(unscopedObservationIdClaims(raw)).toEqual([]);
+  });
+
+  it("makes no surface-parity or attribution overclaim", () => {
+    expect(surfaceOverclaims(raw)).toEqual([]);
   });
 
   it("does not use the developer preview label", () => {
@@ -295,9 +316,21 @@ describe("README checkable claims", () => {
     expect(readme).not.toMatch(/runs Neotoma commands without asking/);
   });
 
+  it("makes no surface-parity or attribution overclaim, and says the surfaces are separate", () => {
+    expect(surfaceOverclaims(readme)).toEqual([]);
+    expect(readme).toContain(
+      "the MCP server, the REST API, and the CLI are separate implementations"
+    );
+    expect(readme).toContain(
+      "Unless an agent signs its requests, the name is the writer's own claim"
+    );
+    expect(readme).toContain("including the CLI, record no writer");
+  });
+
   it("does not claim observation IDs match across instances, and goes red when it does", () => {
     expect(unscopedObservationIdClaims(readme)).toEqual([]);
-    expect(readme).toContain("do not rely on observation IDs matching across instances");
+    expect(readme).toContain("Do not rely on source or observation IDs matching across instances");
+    expect(readme).toContain("when each install has its own local sandbox user");
     for (const old of OLD_OBSERVATION_ID_SENTENCES) {
       expect(unscopedObservationIdClaims(`${readme}\n${old}\n`).length, old).toBeGreaterThan(0);
     }
@@ -379,6 +412,10 @@ describe("docs/known_limitations.md", () => {
     const headings = entries.map((e) => e.split("\n")[0].trim());
     expect(listed.map(([t]) => t)).toEqual(headings);
     for (const [title, anchor] of listed) expect(anchor).toBe(githubSlug(title));
+  });
+
+  it("makes no surface-parity or attribution overclaim", () => {
+    expect(surfaceOverclaims(doc)).toEqual([]);
   });
 
   it("does not claim observation IDs match across instances", () => {

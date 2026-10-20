@@ -9,8 +9,11 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every 
 - [A stored value of the wrong type is left out of the snapshot and reported as undeclared](#a-stored-value-of-the-wrong-type-is-left-out-of-the-snapshot-and-reported-as-undeclared)
 - [As-of reads are per entity](#as-of-reads-are-per-entity)
 - [Export carries current state only](#export-carries-current-state-only)
-- [Source and observation IDs are not portable across instances](#source-and-observation-ids-are-not-portable-across-instances)
+- [Source and observation IDs can differ between instances](#source-and-observation-ids-can-differ-between-instances)
 - [Who wrote or corrected a value is the writer's own claim](#who-wrote-or-corrected-a-value-is-the-writers-own-claim)
+- [A store that fails partway does not always say what was stored](#a-store-that-fails-partway-does-not-always-say-what-was-stored)
+- [Not every read says whether its answer is complete](#not-every-read-says-whether-its-answer-is-complete)
+- [MCP, REST and the CLI are separate implementations](#mcp-rest-and-the-cli-are-separate-implementations)
 - [Log encryption does not encrypt log files](#log-encryption-does-not-encrypt-log-files)
 - [`neotoma setup --tool` configures five hosts](#neotoma-setup---tool-configures-five-hosts)
 
@@ -54,13 +57,13 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every 
 
 **Tracking.** [#2250](https://github.com/markmhendrickson/neotoma/issues/2250)
 
-## Source and observation IDs are not portable across instances
+## Source and observation IDs can differ between instances
 
-**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID in every instance. Source and observation IDs are not portable. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. Storing the same input in two instances gives the same entity ID, but whether the source and observation IDs differ depends on the write path:
+**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID on every install, unless tenant-scoped entity IDs are on (`NEOTOMA_SANDBOX_MODE` or `NEOTOMA_TENANT_SCOPED_ENTITY_IDS`). Source and observation IDs also depend on the user and on the interpretation run. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. In an ordinary local run, unauthenticated local requests use the shared local development user, so the same content gets the same source ID on every install. When the HTTP server resolves its mode to `local_sandbox`, each install gets its own fingerprinted local user, and the same data stored on two installs can get different source and observation IDs. Each interpretation run also gets a new observation ID. Probed on 0.25.0 and `main`, with two fresh installs each:
 
-- `neotoma store` from the CLI (offline): different source and observation IDs, because each install has its own local user.
-- stdio MCP `store`: the source and observation IDs repeat, because both instances write as the shared default user.
-- stdio MCP file `store` followed by `create_interpretation`: the source ID repeats and the observation ID differs, because every interpretation run gets a new ID.
+- `neotoma store` from the CLI (`--offline`), whose local server ran in `local_sandbox` mode: same entity ID, different source and observation IDs.
+- stdio MCP `store`, under the shared local development user: the entity, source, and observation IDs all repeat.
+- stdio MCP file `store` followed by `create_interpretation`: the source ID repeats and the observation ID differs.
 
 **Workaround.** Match records across instances by entity ID. Do not rely on source or observation IDs matching across instances.
 
@@ -68,11 +71,35 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every 
 
 ## Who wrote or corrected a value is the writer's own claim
 
-**What you will observe.** Each observation records the writer in its provenance. Unless the writer signs its requests with an agent identity (AAuth), that record is what the client says about itself: the client name from the MCP `initialize` handshake, or an `X-Client-Name` header over HTTP, stored with the attribution tier `unverified_client`. A write that sends neither, which includes writes from the `neotoma` CLI, records no writer name.
+**What you will observe.** Each observation records the writer in its provenance. Unless the writer signs its requests with an agent identity (AAuth), that record is what the client says about itself: the client name from the MCP `initialize` handshake, or an `X-Client-Name` header over the REST API, stored with the attribution tier `unverified_client`. A REST write without that header records no writer. The `neotoma` CLI never sends the header, so CLI writes record no writer.
 
 **Workaround.** Where attribution has to be verifiable, give each agent a signed identity and a grant; see the [AAuth reference](subsystems/aauth.md). Treat `unverified_client` attribution as a label, not as proof.
 
 **Tracking.** [#2256](https://github.com/markmhendrickson/neotoma/issues/2256)
+
+## A store that fails partway does not always say what was stored
+
+**What you will observe.** A `store` call is not one database transaction: it writes entities and observations one after another. If it fails or times out partway, the response does not always say what was stored, and a timeout or 502 error does not say whether the write landed. On the published 0.25.0, a retry with the same idempotency key replays whatever landed and reports success. On `main` (after [PR #2651](https://github.com/markmhendrickson/neotoma/pull/2651)), a same-key retry finishes the missing entities; a request that carries an interpretation returns `ERR_STORE_WRITE_INCOMPLETE` instead. `create_relationships` takes no idempotency key and reports no per-item outcome for a batch that stops partway.
+
+**Workaround.** Retry with the same idempotency key (on `main` this completes the write; on 0.25.0 it does not), then read the record back to confirm what was stored.
+
+**Tracking.** [#2144](https://github.com/markmhendrickson/neotoma/issues/2144) (umbrella), [#2657](https://github.com/markmhendrickson/neotoma/issues/2657), [#2656](https://github.com/markmhendrickson/neotoma/issues/2656)
+
+## Not every read says whether its answer is complete
+
+**What you will observe.** On `main`, entity list and search reads (MCP `retrieve_entities`, REST `POST /entities/query`, and `neotoma entities list`) return a `read_contract` whose coverage state says whether the result is complete, paginated, truncated, partial, or unknown ([PR #2612](https://github.com/markmhendrickson/neotoma/pull/2612)); 0.25.0 has no such field. Other reads carry no completeness statement: identifier lookup, relationships, observations, timeline events, and type counts. `list_timeline_events` filtered by `event_type` turns a database error into an empty result with `total: 0`. `get_entity_type_counts` can disagree with `retrieve_entities` for the same type, and list reads can omit `raw_fragments` for later entities in a large page. An empty or short result is therefore not always proof that nothing is stored.
+
+**Workaround.** Where `read_contract` is present, check its coverage state before treating an empty result as absence. Elsewhere, confirm with a second read, such as an entity list for the type.
+
+**Tracking.** [#2597](https://github.com/markmhendrickson/neotoma/issues/2597), [#2380](https://github.com/markmhendrickson/neotoma/issues/2380), [#2554](https://github.com/markmhendrickson/neotoma/issues/2554)
+
+## MCP, REST and the CLI are separate implementations
+
+**What you will observe.** The MCP `store` handler is a separate implementation from REST `POST /store`, and some checks differ. Guided schema mode rejects a type that no enabled bundle provides over MCP, but REST creates it. A same-key retry of a key stranded before the completion marker existed is resumed over HTTP and replayed as a success over MCP. Attribution differs too (see the attribution entry above). In local development mode, the CLI writes as a per-install local user and the stdio MCP server writes as a shared default user, so in one data directory each surface sees only its own records.
+
+**Workaround.** Read through the surface that wrote the data. Do not take a result seen through one surface as proof of the same result through another.
+
+**Tracking.** [#2599](https://github.com/markmhendrickson/neotoma/issues/2599), [#2629](https://github.com/markmhendrickson/neotoma/issues/2629), [#2652](https://github.com/markmhendrickson/neotoma/issues/2652), [#2224](https://github.com/markmhendrickson/neotoma/issues/2224)
 
 ## Log encryption does not encrypt log files
 

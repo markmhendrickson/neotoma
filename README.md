@@ -34,7 +34,7 @@ Neotoma is a system of record, not a chat memory or a vector cache. It records i
 
 Three properties hold across every interface:
 
-- **Deterministic.** Entity IDs, event IDs, and reducer output are derived from the inputs by hashing. Observation IDs are also hashes, of the source, the interpretation run, the entity, and the fields; a source ID hashes the owning user's ID with the content, and each interpretation run gets a new ID. The same input stored in two instances therefore gets the same entity ID and can get different source and observation IDs, so do not rely on observation IDs matching across instances. The same observations and rules give the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
+- **Deterministic.** Entity IDs, event IDs, and reducer output are derived from the inputs by hashing. Entity IDs agree across instances unless tenant-scoped entity IDs are on (`NEOTOMA_SANDBOX_MODE` or `NEOTOMA_TENANT_SCOPED_ENTITY_IDS`). Source and observation IDs also depend on the user and on the interpretation run, so they can differ between instances: they differ between installs when each install has its own local sandbox user (the HTTP server's `local_sandbox` mode), and each interpretation run gets a new observation ID. Do not rely on source or observation IDs matching across instances. The same observations and rules give the same snapshot regardless of order or timing. No `Math.random()` or wall-clock values enter the data path.
 - **Immutable and auditable.** The write path adds sources and observations and does not edit them; the database does not enforce this with a constraint. Every field in a snapshot traces back to the observation that set it, and through that observation to its source, interpretation, agent, and timestamp.
 - **Self-hosted and portable.** The engine is embedded SQLite plus content-addressed file storage under a directory you control, with optional AES-256-GCM at-rest encryption. Nothing is used for training, and you can export your data as current state; observation history is not part of the export. In single-user mode the data stays entirely local; multi-user, peer-sync, and hosted modes are opt-in (see Deployment modes).
 
@@ -61,7 +61,7 @@ graph LR
 
 ## What you can do with it
 
-Neotoma exposes 67 MCP tools on `main` (65 in the published v0.25.0) and about 100 REST endpoints, all backed by the same operations. The capability surface includes:
+Neotoma exposes 67 MCP tools on `main` (65 in the published v0.25.0) and about 100 REST endpoints. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
 
 **Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. Writes are idempotent through an `idempotency_key`.
 
@@ -73,7 +73,7 @@ Neotoma exposes 67 MCP tools on `main` (65 in the published v0.25.0) and about 1
 
 **Manage the entity lifecycle.** Merge duplicates, split an entity by predicate, soft-delete and restore, list potential duplicates, and run GDPR-oriented deletion. Merge and split are transactional and audited.
 
-**Control multi-agent access.** Every write is attributed to an agent identity (verified key thumbprint, JWT subject, or client name), and agent grants express least-privilege capabilities (which operations on which entity types). This is what makes attribution and provenance answerable rather than asserted. It is infrastructure behind the guarantees above, not a feature to evaluate on its own. The mechanics, including optional hardware-attested authentication and guest access tokens, are documented in the [AAuth reference](docs/subsystems/aauth.md).
+**Control multi-agent access.** Writes carry attribution when the writer signs its requests (AAuth) or reports a client name. Unless an agent signs its requests, the name is the writer's own claim, and some write paths, including the CLI, record no writer. Agent grants express least-privilege capabilities (which operations on which entity types). This is infrastructure behind the guarantees above, not a feature to evaluate on its own. The mechanics, including optional hardware-attested authentication and guest access tokens, are documented in the [AAuth reference](docs/subsystems/aauth.md).
 
 **Federate, sync, and intake.** Register peer instances and sync entities between them with configurable scope and conflict resolution (last-write-wins, source priority, or manual). Subscribe to entity or event changes over webhooks (HMAC-signed) or Server-Sent Events. Accept guest entity submissions, mirror GitHub issues into conversation threads, and mirror your data to deterministic, git-trackable canonical Markdown.
 
@@ -125,7 +125,7 @@ neotoma entities list --type task
 neotoma upload ./invoice.pdf
 ```
 
-Agents perform the same operations through MCP tool calls such as `store`, `retrieve_entities`, and `retrieve_entity_by_identifier`. Each MCP call logs its equivalent CLI invocation.
+Agents do the same through MCP tool calls such as `store`, `retrieve_entities`, and `retrieve_entity_by_identifier`. The MCP server and the CLI are separate implementations, so some behaviour differs (see Known limitations). The MCP server logs the equivalent CLI command for each tool call.
 
 ## Connect your tools
 
@@ -226,7 +226,7 @@ Full profile: [ICP from functionality](docs/icp/icp_from_functionality.md): the 
 
 **Version:** see the [latest release](https://github.com/markmhendrickson/neotoma/releases) · **License:** MIT · **Storage:** local-first (SQLite + local files); hosted multi-user mode is opt-in.
 
-Neotoma is used daily in real agent workflows. The project moves fast, and APIs or storage formats can change between versions. The core guarantees (deterministic reduction, per-entity observation history, per-field provenance, same contract across CLI and MCP) are stable, phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, and backward compatibility are not yet guaranteed.
+Neotoma is used daily in real agent workflows. The project moves fast, and APIs or storage formats can change between versions. The core guarantees (deterministic reduction, per-entity observation history, per-field provenance) are stable, phase P0 of the [vision roadmap](#vision-and-execution-status), with P1 partially shipped in hosted mode. Schemas, extraction across versions, and backward compatibility are not yet guaranteed.
 
 **Known limitations:** [docs/known_limitations.md](docs/known_limitations.md) lists the specific ones, each with what you will observe, a workaround, and its tracking issue.
 
