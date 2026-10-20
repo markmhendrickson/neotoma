@@ -237,7 +237,7 @@ test.describe("sitePage coverage", () => {
     // Issue #362: the page must open with a declarative statement of what
     // Neotoma is, so a cold LLM can answer "what is this?" from the top.
     const declarative = page
-      .getByText(/Neotoma is a deterministic state layer for AI agents/i)
+      .getByText(/Neotoma is the system of record for AI agents/i)
       .first();
     await expect(declarative).toBeVisible();
 

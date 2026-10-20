@@ -243,6 +243,45 @@ if (homeCategoryFailures === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// 3e. Pages reachable from the one-pager carry no retired category noun or hosted-product label
+// ---------------------------------------------------------------------------
+const LINKED_PAGES = [
+  "evaluate",
+  "neotoma-vs-mem0",
+  "neotoma-vs-zep",
+  "neotoma-vs-rag",
+  "neotoma-vs-platform-memory",
+  "neotoma-vs-files",
+  "neotoma-vs-database",
+  "hosted",
+] as const;
+const LINKED_FORBIDDEN = [
+  "deterministic state layer",
+  "shared state layer",
+  "formal guarantees",
+  ">Hosted Neotoma<",
+] as const;
+let linkedFailures = 0;
+for (const page of LINKED_PAGES) {
+  const pagePath = path.join(siteDir, page, "index.html");
+  if (!fs.existsSync(pagePath)) {
+    fail(`site_pages/${page}/index.html does not exist`);
+    linkedFailures++;
+    continue;
+  }
+  const html = fs.readFileSync(pagePath, "utf-8");
+  for (const phrase of LINKED_FORBIDDEN) {
+    if (html.includes(phrase)) {
+      fail(`site_pages/${page}/index.html still carries "${phrase}"`);
+      linkedFailures++;
+    }
+  }
+}
+if (linkedFailures === 0) {
+  pass("Pages linked from the home page carry no retired category noun or hosted-product label");
+}
+
+// ---------------------------------------------------------------------------
 // 4. 404.html must render the not-found page, not the homepage
 // ---------------------------------------------------------------------------
 const notFoundPath = path.join(siteDir, "404.html");

@@ -168,5 +168,5 @@ export function HostedLandingPageBody() {
 }
 
 export function HostedLandingPage() {
-  return <MdxSitePage canonicalPath="/hosted" detailTitle="Hosted Neotoma" />;
+  return <MdxSitePage canonicalPath="/hosted" detailTitle="Hosting options" />;
 }

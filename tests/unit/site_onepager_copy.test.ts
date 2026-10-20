@@ -61,4 +61,60 @@ describe("neotoma.io one-pager copy", () => {
       expect(mdx).toContain("NeotomaOnePager");
     }
   });
+
+  describe("pages reachable from the one-pager", () => {
+    const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
+    const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "");
+    const evaluate = read("frontend/src/i18n/locales/evaluate_subpage_strings.ts");
+    // English strings only: other locales keep their translations until reviewed ones exist.
+    const evaluateEn = evaluate.slice(
+      evaluate.indexOf("export const EVALUATE_SUBPAGE_EN"),
+      evaluate.indexOf("export const", evaluate.indexOf("export const EVALUATE_SUBPAGE_EN") + 10)
+    );
+    const packs = read("frontend/src/i18n/locales/subpage_packs.ts");
+    const hostedEn = /hostedNeotoma: "([^"]*)"/.exec(packs)?.[1];
+    const covered: Record<string, string> = {
+      "comparison pages": stripComments(
+        read("frontend/src/components/subpages/ComparisonPage.tsx")
+      ),
+      "evaluate page (English strings)": evaluateEn,
+      "comparison route SEO metadata": (() => {
+        const seo = read("frontend/src/site/seo_metadata.ts");
+        const start = seo.indexOf('"/neotoma-vs-platform-memory": {');
+        return seo.slice(start, seo.indexOf('"/neotoma-vs-rag": {') + 1800);
+      })(),
+      "evaluate SEO": read("frontend/src/site/seo_metadata.ts").slice(
+        read("frontend/src/site/seo_metadata.ts").indexOf('"/evaluate": {'),
+        read("frontend/src/site/seo_metadata.ts").indexOf('"/evaluate": {') + 900
+      ),
+    };
+    const forbidden: [RegExp, string][] = [
+      [/deterministic state layer/i, "retired category noun"],
+      [/shared state layer/i, "retired category noun"],
+      [/append-only/i, "database-enforced append-only"],
+      [
+        /point in time|point-in-time|any past moment|any point in time/i,
+        "one-call point-in-time state",
+      ],
+      [/formal (state integrity )?guarantees?/i, "formal guarantees"],
+      [/temporal state quer/i, "temporal state queries"],
+      [/\bpick up where they left off/i, "recall framing"],
+      [/correction sticks everywhere/i, "corrections always win"],
+    ];
+    for (const [label, text] of Object.entries(covered)) {
+      it(`${label} carry no retired frame or unsupported claim`, () => {
+        for (const [re, why] of forbidden) {
+          expect(re.test(text), `${label}: ${why} (${re})`).toBe(false);
+        }
+      });
+    }
+
+    it("does not label the hosting page as a hosted product", () => {
+      expect(hostedEn).toBe("Hosting options");
+      expect(read("frontend/src/site/site_data.ts")).not.toContain('label: "Hosted Neotoma"');
+      expect(read("frontend/src/components/subpages/HostedLandingPage.tsx")).not.toContain(
+        'detailTitle="Hosted Neotoma"'
+      );
+    });
+  });
 });

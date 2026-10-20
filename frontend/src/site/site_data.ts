@@ -417,7 +417,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Hosted",
     items: [
-      { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
+      { label: "Hosting options", href: "/hosted", icon: "Server" },
       { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
     ],
   },
