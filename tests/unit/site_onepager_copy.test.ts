@@ -9,6 +9,7 @@ import {
   EVALUATE_SUBPAGE_ES,
 } from "../../frontend/src/i18n/locales/evaluate_subpage_strings";
 import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
+import { LIVE_ROUTES } from "../../frontend/src/site/route_retirement";
 
 /**
  * Guards for the neotoma.io developer one-pager (home route).
@@ -469,6 +470,35 @@ describe("/evaluate headline and first screen", () => {
       for (const text of texts) {
         expect(re.test(text), `${label}: ${text.slice(0, 80)}`).toBe(false);
       }
+    }
+  });
+});
+
+/**
+ * No "developer preview" label on any public page (operator ruling 2026-10-20). The label lived in the
+ * header badge of the old app shell (which every held page uses), in the dictionaries, and in the FAQ
+ * answer "Is this production-ready?". Revert-check: put the dictionary key, the badge or the phrase
+ * back and these go red; scripts/validate_site_export.ts repeats the check on the built pages.
+ */
+describe("no developer-preview label", () => {
+  const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
+  it("is gone from the header shell, the dictionaries and the FAQ copy", () => {
+    const sources = {
+      "SiteHeaderNav.tsx": read("frontend", "src", "components", "SiteHeaderNav.tsx"),
+      "dictionaries.ts": read("frontend", "src", "i18n", "dictionaries.ts"),
+      "home_body_en.ts": read("frontend", "src", "i18n", "locales", "home_body_en.ts"),
+      "home_body_es.ts": read("frontend", "src", "i18n", "locales", "home_body_es.ts"),
+      "faq_preview.ts": read("inspector", "src", "lib", "faq_preview.ts"),
+    };
+    for (const [name, text] of Object.entries(sources)) {
+      expect(text, name).not.toMatch(/developer preview|developerPreview|vista previa para desarrolladores/i);
+    }
+  });
+  it("is absent from the JSON-LD and metadata of the live routes", () => {
+    for (const route of LIVE_ROUTES) {
+      const meta = resolveSeoMetadata(route);
+      const all = JSON.stringify([meta.title, meta.description, meta.jsonLd]);
+      expect(all, route).not.toMatch(/developer preview/i);
     }
   });
 });

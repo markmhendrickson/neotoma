@@ -67,7 +67,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     },
     {
       q: "Is this production-ready?",
-      a: "Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
+      a: "Neotoma is used daily by real agent workflows. The project moves fast, and APIs or storage formats can change between versions. Install it and let your agent evaluate the fit.",
     },
     {
       q: "Does Neotoma replace Claude's memory or ChatGPT's?",

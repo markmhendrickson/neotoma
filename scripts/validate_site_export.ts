@@ -430,6 +430,7 @@ const OMITTED_CLAIMS: [RegExp, string][] = [
   [/multi-operator/i, "multi-operator authority"],
   [/state layer|memory layer/i, "retired category noun"],
   [/fully reversible/i, "unevidenced reversibility claim"],
+  [/developer preview/i, "developer-preview label"],
 ];
 let liveClaimFailures = 0;
 for (const route of LIVE_ROUTES) {
@@ -461,6 +462,11 @@ for (const route of LIVE_ROUTES) {
     .replace(/&[a-z#0-9]+;/gi, " ");
   // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
   const wholeText = text + " " + jsonLd;
+  // OMITTED_CLAIMS runs on the visible text; the label must not sit in JSON-LD or meta keywords either.
+  if (/developer preview/i.test(jsonLd + " " + keywords)) {
+    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html carries the developer-preview label in JSON-LD or meta keywords`);
+    liveClaimFailures++;
+  }
   for (const m of wholeText.matchAll(/no (?:remote |opt-out )?telemetry|phone-home/gi)) {
     const after = wholeText.slice(m.index, m.index + 600);
     if (
@@ -489,6 +495,11 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
     .readFileSync(heldPath, "utf-8")
     .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ");
+  // The old app shell used to render a "Developer preview" badge in the header of every held page.
+  if (/developer preview/i.test(heldText)) {
+    fail(`site_pages${heldRoute}/index.html still shows the developer-preview label`);
+    liveClaimFailures++;
+  }
   for (const label of STUB_NAV_LABELS) {
     // The old footer still carries one "Memory guarantees" link (a separate component, out of scope
     // for this change); the sidebar navigation entry must be gone, so more than one is a failure.
