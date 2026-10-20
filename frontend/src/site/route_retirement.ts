@@ -30,7 +30,8 @@ export const HELD_ROUTES: readonly { match: string | RegExp; reason: string }[] 
   },
   {
     match: /^\/markdown(\/|$)/,
-    reason: "Markdown mirrors of site pages, linked from each page for agents and crawlers; llms.txt points at them.",
+    reason:
+      "Markdown mirrors of site pages, linked from each page for agents and crawlers; llms.txt points at them.",
   },
   {
     match: /^\/skills(\/|$)/,
@@ -43,9 +44,13 @@ export const HELD_ROUTES: readonly { match: string | RegExp; reason: string }[] 
   },
   {
     match: "/meet",
-    reason: "Booking gateway with no GitHub equivalent; used from outreach and the old home call to action.",
+    reason:
+      "Booking gateway with no GitHub equivalent; used from outreach and the old home call to action.",
   },
-  { match: /^\/(raw|site-markdown|404)$/, reason: "Internal rendering routes used by the markdown mirrors and the 404 page." },
+  {
+    match: /^\/(raw|site-markdown|404)$/,
+    reason: "Internal rendering routes used by the markdown mirrors and the 404 page.",
+  },
 ];
 
 /** `null` means "no GitHub equivalent: send to the one-pager". Paths ending in `/` are folders. */

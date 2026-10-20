@@ -25,7 +25,11 @@ import {
   type SupportedLocale,
 } from "../frontend/src/i18n/config";
 import { localizePath } from "../frontend/src/i18n/routing";
-import { buildRedirectStub, isRetiredRoute } from "../frontend/src/site/route_retirement";
+import {
+  RETIRED_DESTINATIONS,
+  buildRedirectStub,
+  isRetiredRoute,
+} from "../frontend/src/site/route_retirement";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -234,6 +238,18 @@ async function main() {
   }
   fs.cpSync(publicAssetsDir, outputAssetsDir, { recursive: true });
 
+  // The checked-in site_pages tree can hold stale HTML for routes that no longer exist. Remove every
+  // route directory that contains HTML (non-HTML asset folders such as og/ are kept); all live,
+  // held and retired routes are regenerated below.
+  const dirHasHtml = (dir: string): boolean =>
+    fs.readdirSync(dir, { withFileTypes: true }).some((e) =>
+      e.isDirectory() ? dirHasHtml(path.join(dir, e.name)) : e.name.endsWith(".html"),
+    );
+  for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
+    const full = path.join(outputDir, entry.name);
+    if (entry.isDirectory() && dirHasHtml(full)) fs.rmSync(full, { recursive: true, force: true });
+  }
+
   const rootHtml = readPublicHtml();
 
   // Seed static route files with route-specific metadata.
@@ -247,7 +263,15 @@ async function main() {
     }
   }
 
-  const allStaticRoutePaths = [...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths()])];
+  // Every retired route gets a stub, including routes that were never in the sitemap and their
+  // locale variants, so no stale committed page for a retired route can be deployed.
+  const retiredStubPaths = Object.keys(RETIRED_DESTINATIONS).flatMap((route) => [
+    route,
+    ...NON_DEFAULT_LOCALES.map((loc) => localizePath(route, loc)),
+  ]);
+  const allStaticRoutePaths = [
+    ...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths(), ...retiredStubPaths]),
+  ];
 
   // neotoma.io is a one-pager: retired routes (every locale route and every old page that is not
   // live or held, see frontend/src/site/route_retirement.ts) become static redirect stubs. They

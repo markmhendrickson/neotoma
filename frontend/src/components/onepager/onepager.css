@@ -757,3 +757,37 @@
     padding: 22px 14px 76px;
   }
 }
+
+/* Hard-coded accent colors in the install body (emerald, sky, blue) take the drawing palette */
+.plan-install-sheet [class*="emerald"],
+.plan-install-sheet [class*="sky-"],
+.plan-install-sheet [class*="blue-"] {
+  background-color: var(--band) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  color: var(--ink) !important;
+}
+.plan-install-sheet button[class*="emerald"],
+.plan-install-sheet a[class*="emerald"] {
+  background-color: var(--rust) !important;
+  border-color: var(--rust) !important;
+  color: var(--sheet) !important;
+}
+.dark .plan-install-sheet button[class*="emerald"],
+.dark .plan-install-sheet a[class*="emerald"] {
+  color: #1a241e !important;
+}
+
+@media (max-width: 860px) {
+  .plan-install-masthead {
+    flex-wrap: wrap;
+  }
+  .plan-install-links {
+    flex-direction: row;
+    gap: 0 18px;
+  }
+  .plan-install-links .plan-link {
+    min-height: 40px;
+    font-size: 12px;
+  }
+}
