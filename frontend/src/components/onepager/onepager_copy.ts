@@ -45,10 +45,19 @@ export const RECALL_VS_RECORD: readonly {
 
 export const PIPELINE: readonly { name: string; text: string }[] = [
   { name: "Source", text: "Raw input is stored once, content-addressed." },
-  { name: "Observation", text: "Each extracted fact is stored as an observation linked to its source." },
+  {
+    name: "Observation",
+    text: "Each extracted fact is stored as an observation linked to its source.",
+  },
   { name: "Entity", text: "The type's identity fields map the observation to an entity." },
-  { name: "Reducer", text: "Merge rules per field compute the current value from the observations." },
-  { name: "Snapshot", text: "The current entity, with a map from each field to the observation behind it." },
+  {
+    name: "Reducer",
+    text: "Merge rules per field compute the current value from the observations.",
+  },
+  {
+    name: "Snapshot",
+    text: "The current entity, with a map from each field to the observation behind it.",
+  },
 ];
 
 export const CLI_TRANSCRIPT = `$ neotoma store --observation-source import --entities '[{"entity_type":"invoice",

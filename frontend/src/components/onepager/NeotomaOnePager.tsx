@@ -51,20 +51,25 @@ export function NeotomaOnePager() {
           <p className="plan-label">Neotoma · the system of record for AI agents</p>
           <h1 id="s1">A record, not recall.</h1>
           <p className="plan-lede">
-            An agent recalls what it was last told. A record keeps what was stored, from which source, who
-            corrected it, and what is current now, so the agents you connect can defer to one answer.
+            An agent recalls what it was last told. A record keeps what was stored, from which
+            source, who corrected it, and what is current now, so the agents you connect can defer
+            to one answer.
           </p>
           <p className="plan-meta">
             Open source (MIT) · local-first · MCP server, REST API and CLI
           </p>
           <div className="plan-actions">
-            <Link to="/install" className="plan-btn plan-btn-primary" onClick={() => sendCtaClick("onepager_install")}>
+            <Link
+              to="/install"
+              className="plan-btn plan-btn-primary"
+              onClick={() => sendCtaClick("hero_install")}
+            >
               Install
             </Link>
             <a
               href={NEOTOMA_GITHUB_REPO}
               className="plan-btn"
-              onClick={() => sendCtaClick("onepager_github")}
+              onClick={() => sendCtaClick("view_repo")}
             >
               View on GitHub
             </a>
@@ -97,11 +102,16 @@ export function NeotomaOnePager() {
 
         {/* Sheet 02 */}
         <section className="plan-sheet" aria-labelledby="s2">
-          <SheetHead id="s2" mark="Sheet 02 · Schedule" title="Recall and record answer different questions" />
+          <SheetHead
+            id="s2"
+            mark="Sheet 02 · Schedule"
+            title="Recall and record answer different questions"
+          />
           <p className="plan-body">
-            Memory and retrieval tools help an agent keep and find context. A record takes on a different job.
-            It computes the current value from accepted observations and keeps a path back to the evidence for
-            each field. The two overlap, and a product can cover more than one.
+            Memory and retrieval tools help an agent keep and find context. A record takes on a
+            different job. It computes the current value from accepted observations and keeps a path
+            back to the evidence for each field. The two overlap, and a product can cover more than
+            one.
           </p>
           <div className="plan-table-wrap">
             <table className="plan-table">
@@ -146,10 +156,10 @@ export function NeotomaOnePager() {
             ))}
           </ol>
           <p className="plan-body">
-            A correction is one more observation. It does not edit the earlier one, so the original value is
-            still listed and every current field names the observation that set it. The run below uses the
-            v0.25.0 build with the invoice from sheet 01, plus one correction. Output is reformatted from the
-            CLI&apos;s JSON to fit the page, and ids are shortened.
+            A correction is one more observation. It does not edit the earlier one, so the original
+            value is still listed and every current field names the observation that set it. The run
+            below uses the v0.25.0 build with the invoice from sheet 01, plus one correction. Output
+            is reformatted from the CLI&apos;s JSON to fit the page, and ids are shortened.
           </p>
           <pre className="plan-pre" tabIndex={0} aria-label="CLI transcript">
             <code>{CLI_TRANSCRIPT}</code>
@@ -159,15 +169,19 @@ export function NeotomaOnePager() {
 
         {/* Sheet 04 */}
         <section className="plan-sheet" aria-labelledby="s4">
-          <SheetHead id="s4" mark="Sheet 04 · Schedule of connections" title="One local service, read by the tools you connect" />
+          <SheetHead
+            id="s4"
+            mark="Sheet 04 · Schedule of connections"
+            title="One local service, read by the tools you connect"
+          />
           <div className="plan-split">
             <figure className="plan-figure plan-figure-small">
               <ServicePlan />
             </figure>
             <p className="plan-body">
-              Neotoma runs as a local service. Agents reach it through an MCP server, a REST API or the CLI,
-              and you inspect it in a bundled web app. Connected agents read and write the same record, so
-              what one agent stored is what the next one reads.
+              Neotoma runs as a local service. Agents reach it through an MCP server, a REST API or
+              the CLI, and you inspect it in a bundled web app. Connected agents read and write the
+              same record, so what one agent stored is what the next one reads.
             </p>
           </div>
           <div className="plan-table-wrap">
@@ -209,7 +223,11 @@ export function NeotomaOnePager() {
             <code>{INSTALL_COMMANDS}</code>
           </pre>
           <div className="plan-actions">
-            <Link to="/install" className="plan-btn plan-btn-primary" onClick={() => sendCtaClick("onepager_install_sheet")}>
+            <Link
+              to="/install"
+              className="plan-btn plan-btn-primary"
+              onClick={() => sendCtaClick("install")}
+            >
               Full install guide
             </Link>
             <Link to="/docs" className="plan-link">
@@ -221,7 +239,11 @@ export function NeotomaOnePager() {
 
         {/* Sheet 06 */}
         <section className="plan-sheet" aria-labelledby="s6">
-          <SheetHead id="s6" mark="Sheet 06 · General notes" title="What this drawing does not show" />
+          <SheetHead
+            id="s6"
+            mark="Sheet 06 · General notes"
+            title="What this drawing does not show"
+          />
           <ol className="plan-notes">
             {LIMITS.map((note) => (
               <li key={note.title}>
@@ -257,8 +279,9 @@ export function NeotomaOnePager() {
             </li>
           </ul>
           <p className="plan-small">
-            Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>, the operating
-            system for agentic organizations. Neotoma answers what was true. Ateles answers who was authorized.
+            Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>, the
+            operating system for agentic organizations. Neotoma answers what was true. Ateles
+            answers who was authorized.
           </p>
         </nav>
       </main>

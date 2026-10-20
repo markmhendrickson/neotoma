@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 const root = join(__dirname, "..", "..");
 const dir = join(root, "frontend", "src", "components", "onepager");
 const files = ["NeotomaOnePager.tsx", "onepager_copy.ts", "onepager_figures.tsx"].map((f) =>
-  readFileSync(join(dir, f), "utf-8"),
+  readFileSync(join(dir, f), "utf-8")
 );
 // Doc comments list what is deliberately not claimed; only shipped copy is checked.
 const all = files.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
