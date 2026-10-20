@@ -261,7 +261,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/hosted": {
-    title: "Hosting options | Neotoma",
+    title: "Hosted Neotoma | Neotoma",
     description:
       "Overview of Neotoma hosted flavors: the public sandbox, personal tunnels over self-hosted installs, and future managed production. Pick the right fit for your workflow.",
     robots: "index,follow",
@@ -1921,9 +1921,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/evaluate": {
-    title: "Evaluate Neotoma: the system of record for AI agents | Neotoma",
+    title: "Evaluate Neotoma: Deterministic State Layer for AI Agents | Neotoma",
     description:
-      "Neotoma is the system of record for AI agents: observations linked to sources, a current state for each entity, and field-level provenance, shared across tools. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
+      "Neotoma is a deterministic state layer for AI agents: versioned, schema-bound, replayable memory that persists across sessions and tools. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",
@@ -2008,7 +2008,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "How does Neotoma compare to platform memory?",
         answer:
-          "Platform memory is built into products like Claude and ChatGPT and prioritizes convenience inside one vendor surface. Neotoma stores structured observations with deterministic reducers and provenance across tools.",
+          "Platform memory is built into products like Claude and ChatGPT and prioritizes convenience inside one vendor surface. Neotoma stores append-only structured observations with deterministic reducers, versioned history, and provenance across tools.",
       },
       {
         question: "Can I use platform memory and Neotoma together?",
@@ -2045,7 +2045,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/neotoma-vs-zep": {
     title: "Neotoma vs Zep | Memory System Comparison",
     description:
-      "How does Neotoma compare to Zep? Zep combines vector search with knowledge graphs. Neotoma provides deterministic state with versioned history and auditable provenance.",
+      "How does Neotoma compare to Zep? Zep combines vector search with knowledge graphs. Neotoma provides deterministic state with formal integrity guarantees, versioned history, and auditable provenance.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -2057,7 +2057,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "How does Neotoma compare to Zep?",
         answer:
-          "Zep combines vector similarity search with auto-extracted knowledge graphs. Neotoma stores observations and composes them into versioned entity snapshots via deterministic reducers.",
+          "Zep combines vector similarity search with auto-extracted knowledge graphs. Neotoma stores append-only observations and composes them into versioned entity snapshots via deterministic reducers.",
       },
       {
         question: "Does Zep provide deterministic state reconstruction?",
@@ -2086,7 +2086,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "Is Neotoma a RAG system?",
         answer:
-          "No. Neotoma provides semantic search over structured entity snapshots, but it does not chunk documents or inject retrieved text into prompts. It provides deterministic state composition.",
+          "No. Neotoma provides semantic search over structured entity snapshots, but it does not chunk documents or inject retrieved text into prompts. It provides deterministic state composition with formal guarantees.",
       },
     ],
   },

@@ -80,7 +80,7 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   activationSequenceLiteral:
     "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   introP1:
-    "Neotoma is the system of record for AI agents: a record, not recall. It stores the facts your agents work from - contacts, tasks, decisions, finances, and more - as observations linked to their sources, with a current state computed for each entity and field-level provenance. It runs locally as an npm package with MCP, CLI, and API interfaces.",
+    "Neotoma is a deterministic state layer for AI agents. It stores the facts your agents work from - contacts, tasks, decisions, finances, and more - as versioned, schema-bound, replayable state that persists across sessions and across tools. It runs locally as an npm package with MCP, CLI, and API interfaces.",
   introP2BeforeLink:
     "This page contains the facts an agent needs to judge whether Neotoma fits a given workflow. Read it end to end, then use the assessment prompt below. To skip the evaluation and install directly, go to the ",
   introInstallLink: "install page",
@@ -91,9 +91,9 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   promptToUseLabel: "Evaluation prompt",
   whatNeotomaHeading: "What Neotoma does for you",
   whatNeotomaP1:
-    "Neotoma gives your agents one record to defer to, across sessions and across tools. Store a fact once and connected agents read the same current value. Correct it and the correction is recorded as a new observation, next to the value it replaced.",
+    "Neotoma lets your agents pick up where they left off: across sessions, across tools, without you re-explaining anything. Store a fact once and every agent works from the same truth. Correct something once and the correction sticks everywhere.",
   whatNeotomaP2:
-    "Under the hood, Neotoma keeps observations and computes the current state of each entity with deterministic rules, so the same observations produce the same state. It runs locally as an npm package with MCP, CLI, and API interfaces. Not retrieval memory (RAG or vector search), but structured state you control, with the evidence behind each field.",
+    "Under the hood, Neotoma is a deterministic state layer: every change is versioned, every entity is schema-bound, and every state can be replayed from the observation log. It runs locally as an npm package with MCP, CLI, and API interfaces. Not retrieval memory (RAG or vector search), but structured, auditable state you control.",
   agentInstructionsCardTitle: "Agent: evaluation instructions \u2192",
   agentInstructionsCardDesc:
     "Step-by-step evaluation workflow for AI agents, including context sweep, install trial, fit assessment, and resource map.",
