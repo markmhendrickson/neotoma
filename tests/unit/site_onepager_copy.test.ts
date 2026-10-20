@@ -3,7 +3,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { renderToStaticMarkup } from "react-dom/server";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { RecordPlate } from "../../frontend/src/components/onepager/onepager_plate";
@@ -438,84 +437,92 @@ describe("/install polish", () => {
 describe("sheet 01 plate (FIG. A-1)", () => {
   const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
   const brand = join(root, "frontend", "public", "brand");
+  type FileInfo = { sha256: string; bytes: number; width: number; height: number };
   const prov = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8")).plate as {
-    source: { sha256: string };
-    files: Record<string, { sha256: string; bytes: number; width: number; height: number }>;
+    derived_from_hero: boolean;
+    hero: { sha256: string };
+    generation: { outputs: Record<string, { sha256: string }>; credits: { exploration_total: number } };
+    preparation: { frames: Record<string, { sha256: string; width: number; height: number }> };
+    files: Record<string, FileInfo>;
   };
   const html = renderToStaticMarkup(RecordPlate());
   const attr = (tag: string, name: string) =>
     new RegExp(`\\s${name}="([^"]*)"`, "i").exec(tag)?.[1];
   const img = /<img\b[^>]*>/.exec(html)![0];
+  const WIDE = "plate/neotoma-plate-a1-r2-wide.webp";
+  const NARROW = "plate/neotoma-plate-a1-r2-narrow.webp";
 
   it("keeps the committed plate files byte for byte (sha256, size and dimensions from PROVENANCE.json)", async () => {
-    expect(Object.keys(prov.files).length).toBe(4);
+    expect(Object.keys(prov.files).sort()).toEqual([NARROW, WIDE]);
     for (const [file, info] of Object.entries(prov.files)) {
       const bytes = readFileSync(join(brand, file));
       expect(createHash("sha256").update(bytes).digest("hex"), file).toBe(info.sha256);
       expect(bytes.length, `${file} bytes`).toBe(info.bytes);
       const meta = await sharp(bytes).metadata();
+      expect(meta.format, file).toBe("webp");
       expect([meta.width, meta.height], `${file} dimensions`).toEqual([info.width, info.height]);
     }
   });
 
-  it("records the accepted source hash and refuses any other source", async () => {
+  it("records the generated plate as derived from the accepted hero, and the script refuses any other frame", async () => {
     // @ts-expect-error plain ESM script
     const script = await import("../../scripts/derive_neotoma_plate.mjs");
-    expect(prov.source.sha256).toBe(script.ACCEPTED_SOURCE_SHA256);
-    expect(() => script.verifySource(Buffer.from("not the accepted photograph"))).toThrow(
+    expect(prov.derived_from_hero).toBe(true);
+    expect(prov.hero.sha256).toBe(script.ACCEPTED_HERO_SHA256);
+    for (const out of Object.values(prov.generation.outputs)) expect(out.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(prov.generation.credits.exploration_total).toBe(86);
+    expect(script.FRAMES.wide.sha256).toBe(prov.preparation.frames.wide.sha256);
+    expect(script.FRAMES.narrow.sha256).toBe(prov.preparation.frames.narrow.sha256);
+    expect(() => script.verifyFrame("wide", Buffer.from("not the prepared frame"))).toThrow(
       /refusing to derive/
     );
-    // The narrow files are a crop window of the source frame; the overlay must use the same window.
-    const { NARROW_VIEW, PLATE_NARROW } =
-      await import("../../frontend/src/components/onepager/onepager_plate");
-    expect(NARROW_VIEW).toEqual({
-      x: script.NARROW_CROP.left,
-      y: script.NARROW_CROP.top,
-      w: script.NARROW_CROP.width,
-      h: script.NARROW_CROP.height,
-    });
-    expect([PLATE_NARROW.width, PLATE_NARROW.height]).toEqual([
-      script.NARROW_SIZE.width,
-      script.NARROW_SIZE.height,
-    ]);
+    // The frames, the files and the callout layout share one geometry (plate_layout.ts).
+    const { PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT } =
+      await import("../../frontend/src/components/onepager/plate_layout");
+    for (const [layout, frame, file] of [
+      [PLATE_WIDE_LAYOUT, script.FRAMES.wide, WIDE],
+      [PLATE_NARROW_LAYOUT, script.FRAMES.narrow, NARROW],
+    ] as const) {
+      expect([layout.width, layout.height]).toEqual([frame.width, frame.height]);
+      expect([layout.width, layout.height]).toEqual([prov.files[file].width, prov.files[file].height]);
+      expect(`plate/${frame.out}`).toBe(file);
+    }
   });
 
   it("gives the image a text alternative and explicit dimensions that match the file", () => {
     const alt = attr(img, "alt");
-    expect(alt && alt.length, "alt text").toBeGreaterThan(120);
+    expect(alt && alt.length, "alt text").toBeGreaterThan(200);
     expect(alt).toMatch(/synthetic example/i);
-    const wide = prov.files["plate/neotoma-plate-a1-wide.jpg"];
+    expect(alt).toMatch(/five numbered drafting callouts/);
+    // The alternative names every object by what it stands for.
+    for (const s of ["the PDF", "the later email", "an observation", "the rule", "the current snapshot"]) {
+      expect(alt, s).toContain(s);
+    }
+    const wide = prov.files[WIDE];
     expect(Number(attr(img, "width"))).toBe(wide.width);
     expect(Number(attr(img, "height"))).toBe(wide.height);
-    expect(attr(img, "src")).toBe("/brand/plate/neotoma-plate-a1-wide.jpg");
-    // Both file families carry their own dimensions on the <source> so the box is reserved either way.
+    expect(attr(img, "src")).toBe(`/brand/${WIDE}`);
     const sources = [...html.matchAll(/<source\b[^>]*>/g)].map((m) => m[0]);
-    expect(sources.length).toBe(3);
-    for (const tag of sources) {
-      const file = attr(tag, "srcset")!.replace("/brand/", "");
-      const info = prov.files[file];
-      expect(info, file).toBeDefined();
-      expect(Number(attr(tag, "width")), file).toBe(info.width);
-      expect(Number(attr(tag, "height")), file).toBe(info.height);
-    }
+    expect(sources.length).toBe(1);
+    const narrow = prov.files[NARROW];
+    expect(attr(sources[0], "srcset")).toBe(`/brand/${NARROW}`);
+    expect(Number(attr(sources[0], "width"))).toBe(narrow.width);
+    expect(Number(attr(sources[0], "height"))).toBe(narrow.height);
   });
 
-  it("serves a separate narrow crop at 860 px and below, and never lazy-loads the first-screen image", () => {
-    const narrow = [...html.matchAll(/<source\b[^>]*>/g)]
-      .map((m) => m[0])
-      .filter((t) => attr(t, "media") === "(max-width: 860px)");
-    expect(narrow.map((t) => attr(t, "srcset"))).toEqual([
-      "/brand/plate/neotoma-plate-a1-narrow.webp",
-      "/brand/plate/neotoma-plate-a1-narrow.jpg",
-    ]);
+  it("serves the separate phone frame at 860 px and below, and never lazy-loads the first-screen image", () => {
+    const source = /<source\b[^>]*>/.exec(html)![0];
+    expect(attr(source, "media")).toBe("(max-width: 860px)");
+    expect(attr(source, "type")).toBe("image/webp");
     expect(img).not.toMatch(/loading="lazy"/);
     expect(img).toMatch(/fetchpriority="high"/);
+    const css = read("frontend/src/components/onepager/onepager.css");
+    expect(css).toContain("aspect-ratio: 800 / 1200;");
   });
 
-  it("keeps the desktop file light (WebP at most 120 KB)", () => {
-    const wide = prov.files["plate/neotoma-plate-a1-wide.webp"];
-    expect(wide.bytes).toBeLessThanOrEqual(120 * 1024);
-    expect(prov.files["plate/neotoma-plate-a1-narrow.webp"].bytes).toBeLessThan(wide.bytes);
+  it("keeps both files light (WebP at most 60 KB each)", () => {
+    expect(prov.files[WIDE].bytes).toBeLessThanOrEqual(60 * 1024);
+    expect(prov.files[NARROW].bytes).toBeLessThanOrEqual(60 * 1024);
   });
 
   it("puts no words on the paper objects: the overlay text is only keys, labels and the note", () => {
@@ -525,17 +532,45 @@ describe("sheet 01 plate (FIG. A-1)", () => {
         .replace(/&#x27;|&amp;/g, "")
         .trim()
     );
-    const allowed = [/^[1-4]$/, /^FIG\. A-1/, /^SYNTHETIC EXAMPLE$/, /^NOTE$/, /^[A-Z0-9 .,]+$/];
+    const allowed = [/^[1-5]$/, /^FIG\. A-1/, /^SYNTHETIC EXAMPLE$/, /^NOTE$/, /^[A-Z0-9 .,]+$/];
     for (const t of text) {
       expect(
         allowed.some((re) => re.test(t)),
         `unexpected overlay text: ${t}`
       ).toBe(true);
     }
-    expect(text.filter((t) => /^[1-4]$/.test(t)).length).toBe(8); // four keys, wide and narrow
+    // Six keys per frame (1 to 4 once, 5 at the write and at the read), two frames.
+    expect(text.filter((t) => /^[1-5]$/.test(t)).length).toBe(12);
+    expect(text.filter((t) => t === "5").length).toBe(4);
+    expect(text.join(" ")).toContain("KEYS 1 TO 5 MATCH THE LEGEND.");
     // No invoice data (dates, amounts) is drawn on the plate; the legend carries it.
     expect(text.join(" ")).not.toMatch(/OCT|3,?200|3,?250/);
     expect(html.match(/aria-hidden="true"/g)?.length).toBe(2);
+  });
+
+  it("draws write and read direction only in the callout layer, with key 5 at each", async () => {
+    const { PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT } =
+      await import("../../frontend/src/components/onepager/plate_layout");
+    for (const f of [PLATE_WIDE_LAYOUT, PLATE_NARROW_LAYOUT]) {
+      // Two writes (one per source) and one read.
+      expect(f.connectors.filter((c) => c.arrow).length).toBe(3);
+      expect(f.keys.filter((k) => k.n === 5).length).toBe(2);
+      expect(new Set(f.keys.map((k) => k.n))).toEqual(new Set([1, 2, 3, 4, 5]));
+      // Every key and callout point sits inside its frame, and no two keys overlap.
+      const r = 11 * (f.width / f.displayWidth);
+      for (const k of f.keys) {
+        expect(k.at[0] - r, `key ${k.n}`).toBeGreaterThanOrEqual(0);
+        expect(k.at[0] + r, `key ${k.n}`).toBeLessThanOrEqual(f.width);
+        expect(k.at[1] - r, `key ${k.n}`).toBeGreaterThanOrEqual(0);
+        expect(k.at[1] + r, `key ${k.n}`).toBeLessThanOrEqual(f.height);
+      }
+      for (let i = 0; i < f.keys.length; i++) {
+        for (let j = i + 1; j < f.keys.length; j++) {
+          const d = Math.hypot(f.keys[i].at[0] - f.keys[j].at[0], f.keys[i].at[1] - f.keys[j].at[1]);
+          expect(d, `keys ${f.keys[i].n} and ${f.keys[j].n}`).toBeGreaterThan(2 * r);
+        }
+      }
+    }
   });
 
   it("keeps the plate's own paper ground in dark mode: framed, never inverted or tinted", () => {
@@ -549,13 +584,34 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     expect(css).not.toMatch(/\.dark[^{]*\.plan-plate-img/);
   });
 
-  it("replaces the abstract record plan in sheet 01 and keeps the four-item legend", () => {
+  it("keeps the four legend items word for word and adds item 5 with the MCP-only attribution limit", () => {
     const page = files[0];
     expect(page).toContain("<RecordPlate />");
     expect(page).not.toContain("RecordPlan");
     expect(files[2]).not.toContain("RecordPlan");
     expect(page).toContain("FIGURE_LEGEND.map");
-    expect(/FIGURE_LEGEND[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1].split('",\n').length).toBe(4);
+    const legend = /FIGURE_LEGEND[^=]*= \[([\s\S]*?)\n\];/.exec(files[1])![1];
+    const items = [...legend.matchAll(/^ {2}"(.*)",$/gm)].map((m) => m[1]);
+    expect(items.length).toBe(5);
+    expect(items[0]).toBe(
+      "Two sources say different things about one invoice: the PDF says due 22 October, a later email says 29 October."
+    );
+    expect(items[3]).toBe(
+      "The amount still comes from the first observation. Both observations stay on record."
+    );
+    expect(items[4]).toBe(
+      "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record which client made them."
+    );
+    // Attribution is claimed for MCP writes only; never for every write, the REST API or the CLI.
+    const plateCopy = [items[4], /PLATE_ALT =\s*"([^"]*)"/.exec(files[1])![1]].join(" ");
+    expect(plateCopy).not.toMatch(/(every|all|each) writes?[^.]*(record|attribut)/i);
+    expect(plateCopy).not.toMatch(/(REST|CLI)[^.]*(record|attribut)/i);
+    expect(/PLATE_ALT =\s*"([^"]*)"/.exec(files[1])![1]).not.toMatch(/which client|attribut/i);
+    // The caption under the legend.
+    expect(page).toContain("{PLATE_CAPTION}");
+    expect(files[1]).toContain(
+      '"Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03."'
+    );
   });
 });
 

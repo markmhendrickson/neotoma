@@ -16,21 +16,27 @@ export const FIGURE_LEGEND: readonly string[] = [
   "Each source becomes an observation. A rule, last write per field here, computes the current value from them.",
   "The due date now reads 29 October. The revision cloud marks the field that changed, and it points to the later observation.",
   "The amount still comes from the first observation. Both observations stay on record.",
+  "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record which client made them.",
 ];
 
 /**
- * Text alternative for the sheet 01 plate (FIG. A-1). The photograph carries no text and the plate
- * puts no words on the paper objects, so the alternative states what the callouts mark and says
- * that the objects are illustrative. It must stay in step with FIGURE_LEGEND.
+ * Text alternative for the sheet 01 plate (FIG. A-1). The plate's paper objects carry no text, so
+ * the alternative names each object by what it stands for and says what each callout marks. It
+ * must stay in step with FIGURE_LEGEND and with plate_layout.ts. Attribution is claimed only for
+ * MCP writes (legend item 5); the alternative makes no attribution claim at all.
  */
 export const PLATE_ALT =
-  "Plate A-1, a synthetic example: an overhead photograph of paper records laid out on beige paper, marked with four numbered drafting callouts keyed to the legend below. The paper objects carry no text and stand in for records. Callout 1 spans two small pieces of paper that stand for the two sources, which disagree about one invoice's due date. Callout 2 marks the notched card with a round mark, which stands for the rule. Callout 3 is a revision cloud on the current record's changed line, with a leader back to the later observation. Callout 4 spans both observations, which stay on record.";
+  "Plate A-1, a synthetic example: an overhead photograph of cut-paper objects on beige paper, marked with five numbered drafting callouts keyed to the legend below. The objects carry no text. At left, a stiff page laid out like an invoice, with one corner folded back, stands for the PDF, and a lighter card with a short, shallow crease stands for the later email; callout 1 spans both sources. Arrows marked 5 show agents writing each source in as a small tabbed slip, an observation, and both slips stay filed on one strip (callout 4). A card with one slot punched in each row stands for the rule, last write per field (callout 2), and feeds the large rounded record card, the current snapshot. Callout 3 is a revision cloud on its changed line with a leader back to the later slip; a second arrow marked 5 shows an agent reading the current snapshot out.";
 
-/** Title-block note of the plate, one entry per line in the narrow crop. */
+/** Title-block note of the plate, one entry per line in the phone frame. */
 export const PLATE_NOTE: readonly string[] = [
   "Paper objects carry no invoice data.",
-  "Keys 1 to 4 match the legend.",
+  "Keys 1 to 5 match the legend.",
 ];
+
+/** Caption line under the sheet 01 legend. */
+export const PLATE_CAPTION =
+  "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03.";
 
 export const RECALL_VS_RECORD: readonly {
   question: string;

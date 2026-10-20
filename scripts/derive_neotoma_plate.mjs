@@ -1,21 +1,24 @@
 #!/usr/bin/env node
 /**
- * Derives the web files for the sheet 01 plate (FIG. A-1) from the ACCEPTED earlier-site hero
- * photograph, without drawing, retouching or recolouring anything.
+ * Encodes the web files for the sheet 01 plate (FIG. A-1) from the two prepared plate frames,
+ * without drawing, retouching or recolouring anything.
  *
- * Source (accepted, the neotoma brand photograph of the earlier Neotoma site; same file as the
- * "neotoma" entry of og-photo-inventory.mjs and the "N-hero" entry of tension-trace-r2-art.json in
- * the sites repository; see frontend/public/brand/PROVENANCE.json):
- *   shared/site/generator/dist/images/tension-trace-r2/N-hero.jpg   1536 x 1024 JPEG
- * Derivation, the only operations applied:
- *   wide    decode, re-encode (WebP q88, JPEG q85 fallback) at the full 1536 x 1024 frame
- *   narrow  decode, crop to NARROW_CROP, resample to NARROW_SIZE, re-encode (same settings)
- * No pixel is painted, no object is moved, nothing is composited. The drafting annotations are
- * inline SVG drawn over the image in the page (onepager_plate.tsx); the files stay annotation free.
- * Run: node scripts/derive_neotoma_plate.mjs <path to N-hero.jpg>
- * The script refuses a source whose sha256 is not the accepted one, writes the four files into
- * frontend/public/brand/plate/ and prints their sha256 for PROVENANCE.json. Encoder output can differ
- * between sharp builds, so CI checks the committed files against PROVENANCE.json, not a re-derivation.
+ * The frames are generated rasters, not photographs. How they were made (full record, with every
+ * sha256, in frontend/public/brand/PROVENANCE.json under "plate"):
+ *   1. A vector structure render of the shared layout (frontend/src/components/onepager/plate_layout.ts)
+ *      was given to Recraft's image_edit tool (external model nano_banana_pro) together with the
+ *      accepted earlier-site hero photograph as the material reference. Both frames are therefore
+ *      DERIVED FROM THE ACCEPTED HERO.
+ *   2. Each raw output was registered back onto the layout frame (a resample of under 1 percent plus
+ *      a few pixels of offset, found by edge correlation) so the inline SVG callouts land on the objects.
+ *   3. In the phone frame, the PDF and email objects were replaced with the same objects cut from the
+ *      cleared desktop generation (scaled to the phone geometry, ground tone matched, edges feathered),
+ *      because the phone generation dropped the email's address block.
+ * This script does only the last step: decode each prepared frame and re-encode it as WebP.
+ * Run: node scripts/derive_neotoma_plate.mjs <wide frame PNG> <narrow frame PNG>
+ * It refuses a frame whose sha256 is not the recorded one, writes the two files into
+ * frontend/public/brand/plate/ and prints their sha256 for PROVENANCE.json. Encoder output can
+ * differ between sharp builds, so CI checks the committed files against PROVENANCE.json.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -25,59 +28,60 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(root, "frontend/public/brand/plate");
 
-export const ACCEPTED_SOURCE_SHA256 =
+/** The accepted earlier-site hero, used as the material reference for both generations. */
+export const ACCEPTED_HERO_SHA256 =
   "8eee3947a65ac16fd41b359e558a6f4839c5c679cd6c8c1dcc0d4b115572476f";
-export const SOURCE_SIZE = { width: 1536, height: 1024 };
-/** Window of the source frame kept for 390 px phones: the right-hand objects, not a shrunk wide frame. */
-export const NARROW_CROP = { left: 652, top: 0, width: 884, height: 1024 };
-/** About 2.3x the 314 CSS px the figure gets at a 390 px viewport. */
-export const NARROW_SIZE = { width: 728, height: 843 };
+
+/** Prepared frames: registered generations (the phone frame after the object transplant). */
+export const FRAMES = {
+  wide: {
+    sha256: "869faca2f4524c52d9687ebdcded62e68afd2d355265c7a1a447ef932a7b977c",
+    width: 1536,
+    height: 1024,
+    out: "neotoma-plate-a1-r2-wide.webp",
+  },
+  narrow: {
+    sha256: "33c1e5a732c3f96f74b98e2febc9b12ede1e06abaa54aafc2ce1f9cd45837c30",
+    width: 800,
+    height: 1200,
+    out: "neotoma-plate-a1-r2-narrow.webp",
+  },
+};
 export const WEBP_QUALITY = 88;
-export const JPEG_QUALITY = 85;
 
-export const OUTPUT_NAMES = [
-  "neotoma-plate-a1-wide.webp",
-  "neotoma-plate-a1-wide.jpg",
-  "neotoma-plate-a1-narrow.webp",
-  "neotoma-plate-a1-narrow.jpg",
-];
-
-/** Refuses a source file whose sha256 differs from the accepted hash. */
-export function verifySource(bytes) {
+/** Refuses a frame whose sha256 differs from the recorded hash. */
+export function verifyFrame(name, bytes) {
   const actual = crypto.createHash("sha256").update(bytes).digest("hex");
-  if (actual !== ACCEPTED_SOURCE_SHA256) {
-    throw new Error(
-      `refusing to derive: source sha256 ${actual} is not the accepted ${ACCEPTED_SOURCE_SHA256}`
-    );
+  if (!FRAMES[name] || actual !== FRAMES[name].sha256) {
+    throw new Error(`refusing to derive: ${name} frame sha256 ${actual} is not the recorded one`);
   }
 }
 
-export async function derive(sourceBytes) {
-  verifySource(sourceBytes);
+export async function derive(frames) {
   const { default: sharp } = await import("sharp");
-  const meta = await sharp(sourceBytes).metadata();
-  if (meta.width !== SOURCE_SIZE.width || meta.height !== SOURCE_SIZE.height) {
-    throw new Error(`unexpected source size ${meta.width}x${meta.height}`);
+  const out = {};
+  for (const [name, bytes] of Object.entries(frames)) {
+    verifyFrame(name, bytes);
+    const want = FRAMES[name];
+    const meta = await sharp(bytes).metadata();
+    if (meta.width !== want.width || meta.height !== want.height) {
+      throw new Error(`unexpected ${name} frame size ${meta.width}x${meta.height}`);
+    }
+    out[want.out] = await sharp(bytes)
+      .webp({ quality: WEBP_QUALITY, effort: 6, smartSubsample: true })
+      .toBuffer();
   }
-  const wide = () => sharp(sourceBytes);
-  const narrow = () =>
-    sharp(sourceBytes)
-      .extract(NARROW_CROP)
-      .resize({ ...NARROW_SIZE, fit: "fill", kernel: "lanczos3" });
-  const webp = { quality: WEBP_QUALITY, effort: 6, smartSubsample: true };
-  const jpeg = { quality: JPEG_QUALITY, mozjpeg: true };
-  return {
-    "neotoma-plate-a1-wide.webp": await wide().webp(webp).toBuffer(),
-    "neotoma-plate-a1-wide.jpg": await wide().jpeg(jpeg).toBuffer(),
-    "neotoma-plate-a1-narrow.webp": await narrow().webp(webp).toBuffer(),
-    "neotoma-plate-a1-narrow.jpg": await narrow().jpeg(jpeg).toBuffer(),
-  };
+  return out;
 }
 
 async function main() {
-  const src = process.argv[2];
-  if (!src) throw new Error("usage: node scripts/derive_neotoma_plate.mjs <path to N-hero.jpg>");
-  const out = await derive(fs.readFileSync(src));
+  const [wide, narrow] = process.argv.slice(2);
+  if (!wide || !narrow) {
+    throw new Error(
+      "usage: node scripts/derive_neotoma_plate.mjs <wide frame PNG> <narrow frame PNG>"
+    );
+  }
+  const out = await derive({ wide: fs.readFileSync(wide), narrow: fs.readFileSync(narrow) });
   fs.mkdirSync(OUT_DIR, { recursive: true });
   for (const [name, buf] of Object.entries(out)) {
     fs.writeFileSync(path.join(OUT_DIR, name), buf);

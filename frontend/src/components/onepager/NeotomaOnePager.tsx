@@ -14,6 +14,7 @@ import {
   PIPELINE,
   RECALL_VS_RECORD,
   FIGURE_LEGEND,
+  PLATE_CAPTION,
 } from "./onepager_copy";
 import "./onepager.css";
 
@@ -95,9 +96,7 @@ export function NeotomaOnePager() {
                   </li>
                 ))}
               </ol>
-              <p className="plan-note">
-                Synthetic example. The same flow is run for real in sheet 03.
-              </p>
+              <p className="plan-note">{PLATE_CAPTION}</p>
             </figcaption>
           </figure>
           <TitleBlock n={1} title="TITLE · RECORD PLAN" />
