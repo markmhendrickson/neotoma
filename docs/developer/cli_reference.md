@@ -340,7 +340,7 @@ Details, defaults, and verification steps: **`docs/developer/mcp/proxy.md`**.
 
 ### Update check (stderr notice)
 
-When the CLI runs in an interactive context (TTY, not `--json`), it may check the npm registry for a newer version of the package. If an update is available, it writes one or two lines to **stderr only** (e.g. "Update available: neotoma 0.2.15 → 0.2.16" and "Run: npm i -g neotoma@latest"). The check is fire-and-forget and does not block startup. To disable: set `NO_UPDATE_NOTIFIER=1` or pass `--no-update-check`. The check is also skipped when `CI` is set. Cache: `~/.config/neotoma/update_check.json` with a 24-hour TTL so the registry is not queried on every run. The request names only the package. The stdio MCP server runs its own check about every six hours, which `NO_UPDATE_NOTIFIER=1` also turns off; the HTTP `/mcp` transport does not check.
+When the CLI runs in an interactive context (TTY, not `--json`), it may check the npm registry for a newer version of the package. If an update is available, it writes one or two lines to **stderr only** (e.g. "Update available: neotoma 0.2.15 → 0.2.16" and "Run: npm i -g neotoma@latest"). The check is fire-and-forget and does not block startup. To disable: set `NO_UPDATE_NOTIFIER=1` or pass `--no-update-check`. The check is also skipped when `CI` is set. Cache: `~/.config/neotoma/update_check.json` with a 24-hour TTL so the registry is not queried on every run. The stdio MCP server runs its own check when a session starts and about every 6 hours after that, which `NO_UPDATE_NOTIFIER=1` turns off; the HTTP `/mcp` transport does not check. The request carries only the package name, and the registry sees ordinary connection metadata.
 
 ### Session (interactive prompt)
 
