@@ -57,4 +57,4 @@ export const NEOTOMA_LOGO_DRAFTING = {
     }
   ]
 } as const;
-export const NEOTOMA_LOGO_EDGE = { radius: 1, tintOpacity: 0.1, minWidth: 280 } as const;
+export const NEOTOMA_LOGO_EDGE = { radius: 0.947, edgePx: 0.5, tintOpacity: 0.07, width: 160, maxWidth: 170 } as const;

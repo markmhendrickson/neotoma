@@ -474,7 +474,7 @@
   color: var(--ink);
 }
 .plan-titleblock > span {
-  padding: 8px 12px;
+  padding: 12px 14px;
   border-right: 0;
   border-left: 1px solid var(--line);
 }
@@ -641,21 +641,26 @@
 .plan-titleblock .plan-tb-logo {
   display: flex;
   align-items: center;
-  padding: 8px 14px;
+  padding: 0 14px;
 }
-/* Drafting logo needs 280 px; below the 860 px breakpoint the title block shows the solid lockup */
-.plan-tb-solid {
+/*
+ * Title-block logo. Default: the accepted solid lockup (1x displays, phones). The drafting
+ * variant is a hairline outline, 160 px wide; Chromium rounds the filter radius to whole device
+ * pixels, so it only renders cleanly where a device pixel is half a CSS pixel (2x and up).
+ * Text cells set the block's height; the logo (about 34 px tall) never exceeds it.
+ */
+.plan-tb-draft {
   display: none;
 }
 .plan-tb-solid .plan-solid-logo img {
   height: 22px;
 }
-@media (max-width: 860px) {
+@media (min-width: 861px) and (min-resolution: 2dppx) {
   .plan-tb-draft {
-    display: none;
+    display: block;
   }
   .plan-tb-solid {
-    display: block;
+    display: none;
   }
 }
 .plan-footer {
@@ -850,7 +855,7 @@
 
 /* The title block now holds the 280 px drafting logo, so sheets reserve more room under their content */
 .plan-sheet {
-  padding-bottom: 112px;
+  padding-bottom: 84px;
 }
 @media (max-width: 860px) {
   .plan-sheet {

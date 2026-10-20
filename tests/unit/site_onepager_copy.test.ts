@@ -232,16 +232,35 @@ describe("logo size rule and union outline", () => {
     expect(onepager + installPage).not.toContain("<DraftingLogo");
   });
 
-  it("uses the drafting variant only at 280 px wide or more, and the solid lockup below that", () => {
-    expect(read("scripts/derive_neotoma_logo_drafting.mjs")).toContain("MIN_DRAFTING_WIDTH = 280");
-    expect(logos).toContain("Math.max(width, NEOTOMA_LOGO_EDGE.minWidth)");
-    // The only DraftingLogo use is the title block at the minimum width; it has no height prop.
+  it("keeps the drafting logo small, in title blocks only, and only where its hairline renders cleanly", async () => {
+    // Size: about 160 px wide, never above 170; no 280 px floor.
+    // @ts-expect-error plain ESM script
+    const script = await import("../../scripts/derive_neotoma_logo_drafting.mjs");
+    expect(script.DRAFTING_WIDTH).toBe(160);
+    expect(script.MAX_DRAFTING_WIDTH).toBeLessThanOrEqual(170);
+    expect(read("scripts/derive_neotoma_logo_drafting.mjs")).not.toMatch(/280/);
+    expect(logos).not.toMatch(/280/);
+    expect(logos).toContain("Math.min(width, NEOTOMA_LOGO_EDGE.maxWidth)");
+    // Hairline: about 0.5 CSS px, tint 6 to 8 percent.
+    expect(script.EDGE_CSS_PX).toBeGreaterThanOrEqual(0.45);
+    expect(script.EDGE_CSS_PX).toBeLessThanOrEqual(0.6);
+    expect(script.TINT_OPACITY).toBeGreaterThanOrEqual(0.06);
+    expect(script.TINT_OPACITY).toBeLessThanOrEqual(0.08);
+    // The component scales the outline radius with the render width.
+    expect(logos).toContain("NEOTOMA_LOGO_EDGE.edgePx");
+    // The only DraftingLogo use is the title block, at the standard width; it has no height prop.
     const uses = [...logos.matchAll(/<DraftingLogo\s([^/>]*)\/>/g)].map((m) => m[1]);
     expect(uses.length).toBe(1);
-    expect(uses[0]).toContain("width={NEOTOMA_LOGO_EDGE.minWidth}");
+    expect(uses[0]).toContain("width={NEOTOMA_LOGO_EDGE.width}");
     expect(logos).not.toMatch(/DraftingLogo\(\{\s*height/);
+    // Chromium rounds the filter radius to whole device pixels, so on 1x displays (and phones) the
+    // title block shows the solid lockup; the drafting variant needs 2x and a wide viewport.
     const css = read("frontend/src/components/onepager/onepager.css");
-    expect(css).toMatch(/@media \(max-width: 860px\) \{\s*\.plan-tb-draft \{\s*display: none;/);
-    expect(css).toMatch(/\.plan-tb-solid \{\s*display: none;/);
+    expect(css).toMatch(/\.plan-tb-draft \{\s*display: none;/);
+    expect(css).toMatch(
+      /@media \(min-width: 861px\) and \(min-resolution: 2dppx\) \{\s*\.plan-tb-draft \{\s*display: block;/
+    );
+    // Text cells set the title block height: the logo cell has no vertical padding.
+    expect(css).toMatch(/\.plan-titleblock \.plan-tb-logo \{[^}]*padding: 0 14px;/);
   });
 });
