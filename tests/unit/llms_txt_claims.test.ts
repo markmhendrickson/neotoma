@@ -101,6 +101,28 @@ const SURFACE_AND_ATTRIBUTION_OVERCLAIMS: readonly RegExp[] = [
   /agents perform the same operations/i,
 ];
 
+/**
+ * The inverted ID-condition sentence arch caught: the HTTP server (and so the CLI) runs in
+ * `local_sandbox` mode by default with a per-install user; only the stdio MCP server uses the
+ * shared local development user.
+ */
+const INVERTED_ID_CONDITION: readonly RegExp[] = [
+  /ordinary local run[^.]{0,120}shared local development user/i,
+  /(HTTP server|CLI)\b(?:(?!MCP)[^.]){0,60}\b(writes|runs|requests?) (as|under|with) the shared (local development|default) user/i,
+  /when the HTTP server resolves its mode to `local_sandbox`/i,
+];
+
+function invertedIdCondition(text: string): string[] {
+  return INVERTED_ID_CONDITION.filter((re) => re.test(text)).map((re) => String(re));
+}
+
+/** Count the paths under `paths:` in openapi.yaml (two-space-indented keys starting with `/`). */
+function openApiPathCount(yaml: string): number {
+  const body = yaml.slice(yaml.indexOf("\npaths:\n") + 1);
+  const end = body.search(/\n\S/);
+  return (body.slice(0, end === -1 ? undefined : end).match(/^  \//gm) ?? []).length;
+}
+
 function surfaceOverclaims(text: string): string[] {
   return SURFACE_AND_ATTRIBUTION_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
 }
@@ -316,6 +338,15 @@ describe("README checkable claims", () => {
     expect(readme).not.toMatch(/runs Neotoma commands without asking/);
   });
 
+  it("states the REST path count that openapi.yaml has", () => {
+    const m = /and (\d+) REST paths in its OpenAPI spec on `main` \((\d+) in v\d+\.\d+\.\d+\)/.exec(
+      readme
+    );
+    expect(m, "README must state the REST path count").not.toBeNull();
+    expect(Number(m![1])).toBe(openApiPathCount(readFileSync(join(root, "openapi.yaml"), "utf-8")));
+    expect(readme).not.toMatch(/about \d+ REST endpoints/);
+  });
+
   it("makes no surface-parity or attribution overclaim, and says the surfaces are separate", () => {
     expect(surfaceOverclaims(readme)).toEqual([]);
     expect(readme).toContain(
@@ -330,7 +361,10 @@ describe("README checkable claims", () => {
   it("does not claim observation IDs match across instances, and goes red when it does", () => {
     expect(unscopedObservationIdClaims(readme)).toEqual([]);
     expect(readme).toContain("Do not rely on source or observation IDs matching across instances");
-    expect(readme).toContain("when each install has its own local sandbox user");
+    expect(readme).toContain(
+      "The stdio MCP server writes as the shared local development user, but the HTTP server, and therefore the CLI, runs by default in `local_sandbox` mode with a per-install user"
+    );
+    expect(invertedIdCondition(readme)).toEqual([]);
     for (const old of OLD_OBSERVATION_ID_SENTENCES) {
       expect(unscopedObservationIdClaims(`${readme}\n${old}\n`).length, old).toBeGreaterThan(0);
     }
@@ -416,6 +450,16 @@ describe("docs/known_limitations.md", () => {
 
   it("makes no surface-parity or attribution overclaim", () => {
     expect(surfaceOverclaims(doc)).toEqual([]);
+  });
+
+  it("names the stdio MCP shared user and the HTTP server's per-install user the right way round", () => {
+    expect(invertedIdCondition(doc)).toEqual([]);
+    expect(doc).toContain(
+      "The stdio MCP server writes as the shared local development user, so its source and observation IDs repeat across installs."
+    );
+    expect(doc).toContain(
+      "The HTTP server, and therefore the CLI, runs by default (a loopback bind with no auth, outside production) in `local_sandbox` mode"
+    );
   });
 
   it("does not claim observation IDs match across instances", () => {
