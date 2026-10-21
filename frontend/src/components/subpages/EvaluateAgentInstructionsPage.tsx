@@ -219,19 +219,6 @@ export function EvaluateAgentInstructionsPage() {
           .
         </p>
         <p className="text-[15px] leading-7 mb-3">
-          Before proposing a full implementation, offer{" "}
-          <Link to="/non-destructive-testing" className="underline">
-            Test safely
-          </Link>
-          : a non-destructive shadow-mode path that lets the user compare Neotoma
-          against their current setup before they roll it out fully.
-        </p>
-        <blockquote className="border-l-2 border-muted-foreground/30 pl-4 italic text-[15px] leading-7 mb-4 text-muted-foreground">
-          "Based on your workflow, Neotoma looks like a strong fit. Want me to
-          set up a Test safely shadow-mode trial first? I can compare it against
-          your current setup before we decide on a full implementation."
-        </blockquote>
-        <p className="text-[15px] leading-7 mb-3">
           If the user confirms:
         </p>
         <ol className="list-decimal pl-6 space-y-2 text-[15px] leading-7 mb-4">
@@ -262,16 +249,6 @@ export function EvaluateAgentInstructionsPage() {
             If it is already installed, skip straight to activation. Run{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma status --json</code>{" "}
             to verify the setup first.
-          </li>
-          <li>
-            Offer the{" "}
-            <Link to="/non-destructive-testing" className="underline">
-              Test safely
-            </Link>{" "}
-            path before a full rollout. If the user wants lower-risk adoption,
-            use shadow mode, side-by-side comparison, and isolated trial data
-            first. Only recommend full implementation after the trial proves
-            value or the user explicitly prefers to skip it.
           </li>
           <li>
             <strong>Do not improvise shell introspection</strong> (<code className="text-sm bg-muted px-1.5 py-0.5 rounded">python3 -c</code>,{" "}
@@ -305,17 +282,11 @@ export function EvaluateAgentInstructionsPage() {
               <strong>{ACTIVATION_SEQUENCE}</strong>
             </TrackedProductLink>{" "}
             - discover candidates, preview them, ingest confirmed sources,
-            reconstruct a timeline, then query and correct. The user should not
+            then query and correct. The user should not
             need to run the onboarding steps manually; you handle the process.
           </li>
           <li>
-            Treat full rollout as a separate decision after the non-destructive
-            test. If the user started in shadow mode, use the results of that
-            comparison to decide whether to broaden the implementation.
-          </li>
-          <li>
-            After the first successful ingest and timeline reconstruction,
-            configure the current tool for the strongest ongoing Neotoma usage:
+            After the first successful ingest, configure the current tool for the strongest ongoing Neotoma usage:
             use a Custom GPT or remote MCP for ChatGPT when supported, a Project
             plus connector and instructions for Claude, local MCP wiring first
             for Cursor, Claude Code, and Codex, and the native plugin path first
@@ -330,9 +301,15 @@ export function EvaluateAgentInstructionsPage() {
         </ol>
         <p className="text-[15px] leading-7 mb-4">
           If the user declines or wants to learn more first, point them to the{" "}
-          <a href="/architecture" className="underline">architecture</a> and{" "}
-          <a href="/memory-guarantees" className="underline">memory guarantees</a>{" "}
-          pages instead. Do not push installation.
+          <a href="/architecture" className="underline">architecture</a> page, the{" "}
+          <a href="https://github.com/markmhendrickson/neotoma#readme" className="underline">README</a> and the{" "}
+          <a
+            href="https://github.com/markmhendrickson/neotoma/blob/main/docs/known_limitations.md"
+            className="underline"
+          >
+            known limitations
+          </a>{" "}
+          instead. Do not push installation.
         </p>
         <p className="text-[15px] leading-7 mb-3">
           If the user says Neotoma looks like a fit, you may optionally ask once
@@ -410,8 +387,14 @@ export function EvaluateAgentInstructionsPage() {
           </li>
           <li>
             <strong>Deeper product context only if needed:</strong>{" "}
-            <a href="/architecture" className="underline">architecture</a> and{" "}
-            <a href="/memory-guarantees" className="underline">memory guarantees</a>
+            <a href="/architecture" className="underline">architecture</a>, the{" "}
+            <a href="https://github.com/markmhendrickson/neotoma#readme" className="underline">README</a> and the{" "}
+            <a
+              href="https://github.com/markmhendrickson/neotoma/blob/main/docs/known_limitations.md"
+              className="underline"
+            >
+              known limitations
+            </a>
           </li>
         </ul>
       </section>

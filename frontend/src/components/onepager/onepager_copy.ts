@@ -61,7 +61,7 @@ export const RECALL_VS_RECORD: readonly {
   {
     question: "What does a second agent read?",
     recall: "Whatever that tool retained.",
-    record: "The same record, when it is connected to the same instance.",
+    record: "The same record, when it is connected to the same MCP entry.",
   },
 ];
 
@@ -82,22 +82,22 @@ export const PIPELINE: readonly { name: string; text: string }[] = [
   },
 ];
 
-export const CLI_TRANSCRIPT = `$ neotoma store --observation-source import --entities '[{"entity_type":"invoice",
+export const CLI_TRANSCRIPT = `$ neotoma dev store --observation-source import --entities '[{"entity_type":"invoice",
     "invoice_number":"INV-2041","vendor_name":"Acme","invoice_date":"2026-10-01",
     "amount_due":3200,"currency":"USD","date_due":"2026-10-22"}]'
-$ neotoma store --observation-source llm_summary --entities '[{"entity_type":"invoice",
+$ neotoma dev store --observation-source llm_summary --entities '[{"entity_type":"invoice",
     "invoice_number":"INV-2041","vendor_name":"Acme","invoice_date":"2026-10-01",
     "date_due":"2026-10-29"}]'
-$ neotoma corrections create ent_7cbcf2519f652626f3fe292a --entity-type invoice \\
+$ neotoma dev corrections create ent_7cbcf2519f652626f3fe292a --entity-type invoice \\
     --field-name amount_due --corrected-value 3250
 
-$ neotoma entities get ent_7cbcf2519f652626f3fe292a
+$ neotoma dev entities get ent_7cbcf2519f652626f3fe292a
   observation_count   3
   amount_due          3250        set by b7e0392c (correction)
   date_due            2026-10-29  set by 5e29854e (llm_summary)
   currency            USD         set by f640b9f1 (import)
 
-$ neotoma observations list --entity-id ent_7cbcf2519f652626f3fe292a
+$ neotoma dev observations list --entity-id ent_7cbcf2519f652626f3fe292a
   b7e0392c  correction   amount_due=3250
   5e29854e  llm_summary  date_due=2026-10-29
   f640b9f1  import       amount_due=3200, date_due=2026-10-22, currency=USD`;
@@ -117,7 +117,8 @@ export const INSTALL_COMMANDS = `npm install -g neotoma
 neotoma init
 neotoma setup --tool claude-code --yes`;
 
-export const LIMITS: readonly { title: string; text: string }[] = [
+/** What Neotoma is and how it is used: not gaps. */
+export const EXPECTATIONS: readonly { title: string; text: string }[] = [
   {
     title: "A record is a working commitment.",
     text: "Agents have to write to it and read from it. Neotoma needs a local service and deliberate writes, and it does nothing for facts that never reach it.",
@@ -127,18 +128,33 @@ export const LIMITS: readonly { title: string; text: string }[] = [
     text: "It shows which observation set a field and where that came from. It does not show that an agent read the source correctly. Repeatable results are not proof of what is true in the world.",
   },
   {
-    title: "Export carries current state.",
-    text: "The export command writes the current value of each entity as JSONL. Observation history stays in the instance it was recorded in.",
-  },
-  {
-    title: "Authority over the record is not modeled yet.",
-    text: "Writes over MCP are attributed to the connecting client, and to a signed agent identity when one is configured. Without one, the name is the client's own claim. Agents can be limited by grants. Organizations, workspaces and rules for who may correct what are not built.",
-  },
-  {
     title: "Not a chat log or a vector store.",
     text: "Neotoma stores typed entities and their observations. It can sit beside tools that retain or retrieve context.",
   },
 ];
+
+/** The four gaps, in the order the essay lists them. Bug-level items live in docs/known_limitations.md. */
+export const NOT_BUILT_YET: readonly { title: string; text: string }[] = [
+  {
+    title: "Reading the whole record as it stood at a past date.",
+    text: "One entity can be read as of a past time today. The whole record cannot.",
+  },
+  {
+    title: "Moving a record between instances with its history.",
+    text: "The export command writes the current value of each entity as JSONL. Observation history stays in the instance it was recorded in.",
+  },
+  {
+    title: "Corrections that always hold.",
+    text: "A later ordinary write can replace a correction.",
+  },
+  {
+    title: "Verified authorship for every write.",
+    text: "Attribution is verified only for signed requests. Otherwise the name is the writer's own report, and some write paths, such as the CLI, record no writer.",
+  },
+];
+
+/** Scope, stated as a plain sentence rather than as a gap. */
+export const SCOPE_SENTENCE = "One operator per instance is the scope today.";
 
 const GH = "https://github.com/markmhendrickson/neotoma";
 export const DEEPER_MATERIAL: readonly {

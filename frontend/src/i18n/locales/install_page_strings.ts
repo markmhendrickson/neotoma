@@ -89,7 +89,7 @@ const IMPACT_ROWS_EN: InstallImpactRow[] = [
     reset: "Backed up, then removed",
   },
   {
-    what: "SQLite databases",
+    what: "SQLite databases (development and production profiles)",
     path: "<data-dir>/neotoma.db, neotoma.prod.db",
     scope: "Local",
     reset: "Backed up, then removed",
@@ -101,16 +101,34 @@ const IMPACT_ROWS_EN: InstallImpactRow[] = [
     reset: "Backed up, then removed",
   },
   {
-    what: "MCP config entries (optional)",
-    path: ".cursor/mcp.json, claude.json, etc.",
+    what: "MCP config entries: neotoma-dev and neotoma, with separate databases (init adds one to Cursor by default)",
+    path: "~/.cursor/mcp.json, .mcp.json, claude.json, etc.",
     scope: "User / Project",
     reset: "Entries stripped from configs",
   },
   {
-    what: "CLI instruction rules (optional)",
-    path: ".cursor/rules/, .claude/rules/",
-    scope: "User / Project",
+    what: "CLI instruction files for Claude Code, Cursor and Codex",
+    path: ".cursor/rules/, .claude/rules/, and the Codex equivalent",
+    scope: "Project",
     reset: "Backed up, then removed",
+  },
+  {
+    what: "Claude Code plugin with 5 hooks (only when claude is on your PATH)",
+    path: "~/.claude/",
+    scope: "User",
+    reset: "Not listed among what neotoma reset removes",
+  },
+  {
+    what: "12 Claude Code skills (only when claude is on your PATH)",
+    path: "~/.claude/ (skills)",
+    scope: "User",
+    reset: "Not listed among what neotoma reset removes",
+  },
+  {
+    what: "Claude Code settings edits (only when claude is on your PATH)",
+    path: "~/.claude/settings.json",
+    scope: "User",
+    reset: "Not listed among what neotoma reset removes",
   },
 ];
 
@@ -205,7 +223,7 @@ const EXPANDED_STEPS_EN: InstallExpandedStep[] = [
       { code: "neotoma *" },
       " or ",
       { code: "npm install -g neotoma" },
-      ", stop and ask the user to widen the allowlist (see the Permissions pre-flight block above) rather than substituting another command.",
+      ", stop and ask the user to widen the allowlist (see the Permissions pre-flight block below) rather than substituting another command.",
     ],
   },
   {
@@ -217,7 +235,7 @@ const EXPANDED_STEPS_EN: InstallExpandedStep[] = [
   {
     title: "Run activation",
     segments: [
-      " - execute the activation sequence linked below: discover candidates, preview them, ingest confirmed sources, then query and correct.",
+      " - run the activation sequence: discover candidates, preview them, ingest confirmed sources, then query and correct.",
     ],
   },
   {
@@ -282,7 +300,11 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
     { code: "npm install -g neotoma" },
     " adds a CLI binary. ",
     { code: "neotoma init" },
-    " creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in the background unless you start it. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.",
+    " creates a config directory, two local SQLite databases (development and production profiles) and an env file, and by default adds a Neotoma entry to Cursor's MCP config (~/.cursor/mcp.json). Run ",
+    { code: "neotoma init --interactive" },
+    " to choose each step. ",
+    { code: "neotoma setup --tool <tool> --yes" },
+    " writes more: two MCP entries (neotoma-dev and neotoma, with separate databases), CLI instruction files for Claude Code, Cursor and Codex in the project and, when claude is on your PATH, the Claude Code plugin (5 hooks), 12 user-level skills under ~/.claude and edits to ~/.claude/settings.json. Without claude on your PATH it exits with code 1 after writing the rest. Nothing runs in the background unless you start it. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address. Agents can also call the npm_check_update tool, which makes the same request and is not turned off by NO_UPDATE_NOTIFIER.",
   ],
   whatChangesFootnoteSegments: [
     { code: "neotoma reset" },
@@ -400,7 +422,7 @@ export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
       reset: "Copia de seguridad y eliminaci\u00f3n",
     },
     {
-      what: "Bases SQLite",
+      what: "Bases SQLite (perfiles de desarrollo y producci\u00f3n)",
       path: "<data-dir>/neotoma.db, neotoma.prod.db",
       scope: "Local",
       reset: "Copia de seguridad y eliminaci\u00f3n",
@@ -412,23 +434,45 @@ export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
       reset: "Copia de seguridad y eliminaci\u00f3n",
     },
     {
-      what: "Entradas de config MCP (opcional)",
-      path: ".cursor/mcp.json, claude.json, etc.",
+      what: "Entradas de config MCP: neotoma-dev y neotoma, con bases separadas (init a\u00f1ade una a Cursor por defecto)",
+      path: "~/.cursor/mcp.json, .mcp.json, claude.json, etc.",
       scope: "Usuario / Proyecto",
       reset: "Entradas eliminadas de las configs",
     },
     {
-      what: "Reglas de instrucciones CLI (opcional)",
-      path: ".cursor/rules/, .claude/rules/",
-      scope: "Usuario / Proyecto",
+      what: "Archivos de instrucciones CLI para Claude Code, Cursor y Codex",
+      path: ".cursor/rules/, .claude/rules/ y el equivalente de Codex",
+      scope: "Proyecto",
       reset: "Copia de seguridad y eliminaci\u00f3n",
+    },
+    {
+      what: "Plugin de Claude Code con 5 hooks (solo si claude est\u00e1 en el PATH)",
+      path: "~/.claude/",
+      scope: "Usuario",
+      reset: "No figura entre lo que elimina neotoma reset",
+    },
+    {
+      what: "12 skills de Claude Code (solo si claude est\u00e1 en el PATH)",
+      path: "~/.claude/ (skills)",
+      scope: "Usuario",
+      reset: "No figura entre lo que elimina neotoma reset",
+    },
+    {
+      what: "Cambios en la configuraci\u00f3n de Claude Code (solo si claude est\u00e1 en el PATH)",
+      path: "~/.claude/settings.json",
+      scope: "Usuario",
+      reset: "No figura entre lo que elimina neotoma reset",
     },
   ],
   whatChangesIntroSegments: [
     { code: "npm install -g neotoma" },
     " a\u00f1ade un binario CLI. ",
     { code: "neotoma init" },
-    " crea un directorio de configuraci\u00f3n, una base SQLite local y un archivo env. Los avisos opcionales durante init pueden a\u00f1adir entradas MCP y archivos de instrucciones CLI; eliges en cada paso. Nada se ejecuta en segundo plano salvo que lo arranques. Sin telemetr\u00eda ni llamadas a casa.",
+    " crea un directorio de configuraci\u00f3n, dos bases SQLite locales (perfiles de desarrollo y producci\u00f3n) y un archivo env, y por defecto a\u00f1ade una entrada de Neotoma a la configuraci\u00f3n MCP de Cursor (~/.cursor/mcp.json). Ejecuta ",
+    { code: "neotoma init --interactive" },
+    " para elegir cada paso. ",
+    { code: "neotoma setup --tool <tool> --yes" },
+    " escribe m\u00e1s: dos entradas MCP (neotoma-dev y neotoma, con bases separadas), archivos de instrucciones CLI para Claude Code, Cursor y Codex en el proyecto y, si claude est\u00e1 en el PATH, el plugin de Claude Code (5 hooks), 12 skills de usuario en ~/.claude y cambios en ~/.claude/settings.json. Sin claude en el PATH termina con c\u00f3digo 1 tras escribir el resto. Nada se ejecuta en segundo plano salvo que lo arranques. Los agentes tambi\u00e9n pueden llamar a la herramienta npm_check_update, que hace la misma petici\u00f3n al registro de npm y no se desactiva con NO_UPDATE_NOTIFIER.",
   ],
   whatChangesFootnoteSegments: [
     { code: "neotoma reset" },

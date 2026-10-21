@@ -361,12 +361,12 @@ describe("/install polish", () => {
     });
 
     it("prints a corrections command that runs on the published package", () => {
-      expect(copy2).toMatch(/neotoma corrections create ent_\w+ --entity-type invoice/);
+      expect(copy2).toMatch(/neotoma dev corrections create ent_\w+ --entity-type invoice/);
     });
 
     it("does not say the run used a single build, and says ids vary", () => {
       expect(page2).not.toContain("uses the v0.25.0 build");
-      expect(page2).toContain("differ on every run");
+      expect(page2).toContain("Store observation ids differ");
     });
 
     it("sheet 02 R1 does not say each fact is linked unqualified", () => {

@@ -127,16 +127,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         text: "Run 'npm install -g neotoma' to install the Neotoma CLI globally.",
       },
       {
-        name: "Initialize configuration",
-        text: "Run 'neotoma setup --tool cursor --yes' to initialize Neotoma and configure the default local MCP path. Replace 'cursor' with your tool if needed.",
+        name: "Initialize",
+        text: "Run 'neotoma init' to create the config directory, the local databases and an env file.",
       },
       {
-        name: "Start the API server",
-        text: "If you need the local HTTP API, Inspector, or OAuth flows, run 'neotoma api start'.",
-      },
-      {
-        name: "Connect via MCP",
-        text: "Restart your tool or session so it picks up the MCP configuration written by setup.",
+        name: "Set up your tool",
+        text: "Run 'neotoma setup --tool claude-code --yes'. Replace 'claude-code' with cursor, codex, openclaw or claude-desktop.",
       },
     ],
   },
@@ -1651,9 +1647,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/skills": {
-    title: "Skills | Guided Workflows for Agent Memory | Neotoma",
+    title: "Skills | Guided Workflows for Storing Data in Neotoma | Neotoma",
     description:
-      "Step-by-step workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. Skills for email, conversations, meetings, finances, contacts, calendar, and more.",
+      "Step-by-step workflows that teach your AI agent to import, extract, and store data in Neotoma. Skills for email, conversations, meetings, finances, contacts, calendar, and more.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1680,9 +1676,20 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Ensure Neotoma", path: "/skills/ensure-neotoma" },
     ],
   },
+  "/skills/recover-sqlite-database": {
+    title: "Recover SQLite Database Skill | Neotoma",
+    description: "Check the integrity of Neotoma's local SQLite database and recover it if it is corrupted.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Recover SQLite Database", path: "/skills/recover-sqlite-database" },
+    ],
+  },
   "/skills/remember-email": {
     title: "Remember Email Skill | Neotoma",
-    description: "Import email and extract contacts, tasks, and events into Neotoma memory.",
+    description: "Import email and extract contacts, tasks, and events into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1693,7 +1700,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-conversations": {
     title: "Remember Conversations Skill | Neotoma",
-    description: "Import conversation history into structured Neotoma memory.",
+    description: "Import conversation history into structured Neotoma entities.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1704,7 +1711,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-meetings": {
     title: "Remember Meetings Skill | Neotoma",
-    description: "Capture meetings and decisions into Neotoma memory.",
+    description: "Capture meetings and decisions into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1715,7 +1722,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-finances": {
     title: "Remember Finances Skill | Neotoma",
-    description: "Import financial records and receipts into Neotoma memory.",
+    description: "Import financial records and receipts into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1726,7 +1733,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-contacts": {
     title: "Remember Contacts Skill | Neotoma",
-    description: "Import and reconcile contacts into Neotoma memory.",
+    description: "Import and reconcile contacts into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1737,7 +1744,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-calendar": {
     title: "Remember Calendar Skill | Neotoma",
-    description: "Import calendar events into Neotoma memory.",
+    description: "Import calendar events into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

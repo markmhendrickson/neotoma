@@ -206,6 +206,23 @@ function startStaticServer(rootDir: string): Promise<{ origin: string; close: ()
   });
 }
 
+/**
+ * The static head template and react-helmet both emit the route's JSON-LD, so a captured page carries
+ * every block twice. Keep the first copy of each distinct block.
+ */
+function dedupeJsonLd(html: string): string {
+  const seen = new Set<string>();
+  return html.replace(
+    /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>\s*/g,
+    (block: string, body: string) => {
+      const key = body.trim();
+      if (seen.has(key)) return "";
+      seen.add(key);
+      return block;
+    }
+  );
+}
+
 async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void> {
   const { chromium } = await import("playwright");
   const server = await startStaticServer(outputDir);
@@ -217,13 +234,13 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
     for (const routePath of routePaths) {
       const targetUrl = `${server.origin}${routePath}`;
       await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-      const renderedHtml = normalizeBundledAssetPaths(await page.content());
+      const renderedHtml = dedupeJsonLd(normalizeBundledAssetPaths(await page.content()));
       fs.writeFileSync(getOutputPathForRoute(routePath), `<!DOCTYPE html>\n${renderedHtml}\n`, "utf-8");
     }
 
     await page.goto(`${server.origin}/404`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(250);
-    const notFoundHtml = normalizeBundledAssetPaths(await page.content());
+    const notFoundHtml = dedupeJsonLd(normalizeBundledAssetPaths(await page.content()));
     fs.writeFileSync(notFoundFile, `<!DOCTYPE html>\n${notFoundHtml}\n`, "utf-8");
   } finally {
     await page.close();

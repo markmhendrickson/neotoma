@@ -174,14 +174,6 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
     ],
   },
   {
-    title: "Where the tax shows up",
-    items: [
-      { label: "Context janitor", href: "/operating", icon: "SatelliteDish" },
-      { label: "Inference variance", href: "/building-pipelines", icon: "Zap" },
-      { label: "Log archaeology", href: "/debugging-infrastructure", icon: "Cpu" },
-    ],
-  },
-  {
     title: "Compare",
     items: [
       { label: "Build vs buy", href: "/build-vs-buy", icon: "Scale" },
