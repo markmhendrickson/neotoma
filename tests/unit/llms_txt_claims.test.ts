@@ -523,6 +523,10 @@ describe("claims true for this package", () => {
   it("qualifies interrupted keyed stores in README and llms.txt", () => {
     for (const text of [readme, llms]) {
       expect(text).toContain("finishes its missing observations on a same-key retry");
+      // The promise is limited to keys started on this release: a key left over from an earlier
+      // version (no completion marker) replays what landed, so an unqualified claim is false.
+      expect(text).toContain("started on v0.26.0");
+      expect(text).toContain("a key left over from an earlier version returns what had already landed without completing the write");
       expect(text).toContain("ERR_STORE_WRITE_INCOMPLETE");
       expect(text).not.toContain("reports success without finishing it");
     }
