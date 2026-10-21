@@ -162,12 +162,12 @@ export function NeotomaOnePager() {
           </ol>
           <p className="plan-body">
             A correction is one more observation. It does not edit the earlier one, so the original
-            value is still listed and every current field names the observation that set it. The run
-            below was run on the published npm package (0.25.0) and on main, with the invoice from
-            sheet 01 plus one correction. The commands start with <code>neotoma dev</code> because a
-            plain npm install points the CLI at the production profile, which needs a token. Output
-            is reformatted from the CLI&apos;s JSON to fit the page. Store observation ids differ
-            between installs; yours will not match these.
+            value is still listed and every current field names the observation that set it. The
+            transcript below illustrates the invoice from sheet 01 plus one correction. The commands
+            start with <code>neotoma dev</code> because a plain npm install points the CLI at the
+            production profile, which needs a token. Output is reformatted from the CLI&apos;s JSON
+            to fit the page. Store observation ids differ between installs; yours will not match
+            these.
           </p>
           <pre className="plan-pre" tabIndex={0} aria-label="CLI transcript">
             <code>{CLI_TRANSCRIPT}</code>

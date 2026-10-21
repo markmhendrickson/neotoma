@@ -21,8 +21,8 @@ import {
 } from "../../frontend/src/i18n/locales/evaluate_subpage_strings";
 
 /**
- * Guards for the served-site statements the shipping-commit claims check found wrong on the published
- * package (neotoma@0.25.0). Each one states current behaviour in plain words, so it is easy to relax
+ * Guards for served-site statements a prior shipping-commit claims check found wrong. Each one
+ * states current behaviour in plain words, so it is easy to relax
  * when the product behaviour changes. scripts/validate_site_export.ts repeats the page-level checks on the
  * built HTML. Revert-check: put any retired statement back into its source and the matching test goes red.
  */

@@ -2,7 +2,7 @@
 
 This page lists specific behaviours of the current build that a developer or an integrating agent will run into. Each entry says what you will observe, any workaround, and the issue that tracks it. An entry is removed from this page when its fix ships.
 
-Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every entry has a tracking issue.
+Applies to `neotoma@0.26.0`. Every entry has a tracking issue.
 
 **Install and setup**
 
@@ -98,9 +98,9 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every 
 
 ### A store that fails partway does not always say what was stored
 
-**What you will observe.** A `store` call is not one database transaction: it writes entities and observations one after another. If it fails or times out partway, the response does not always say what was stored, and a timeout or 502 error does not say whether the write landed. On the published 0.25.0, a retry with the same idempotency key replays whatever landed and reports success. On `main` (after [PR #2651](https://github.com/markmhendrickson/neotoma/pull/2651)), a same-key retry finishes the missing entities; a request that carries an interpretation returns `ERR_STORE_WRITE_INCOMPLETE` instead. `create_relationships` takes no idempotency key and reports no per-item outcome for a batch that stops partway.
+**What you will observe.** A `store` call is not one database transaction: it writes entities and observations one after another. If it fails or times out partway, the first response does not always say what was stored, and a timeout or 502 error does not say whether the write landed. For a committed structured `store` with an idempotency key, a same-key retry finishes missing observations. If that request carries an interpretation, the retry instead returns `ERR_STORE_WRITE_INCOMPLETE` with the missing entity indexes because it cannot safely resume the interpretation run. MCP does not repair keys stranded before the completion marker was introduced, although HTTP can repair a legacy key when its observations are on the keyed source. `create_relationships` takes no idempotency key and reports no per-item outcome for a batch that stops partway.
 
-**Workaround.** Retry with the same idempotency key (on `main` this completes the write; on 0.25.0 it does not), then read the record back to confirm what was stored.
+**Workaround.** Retry a committed structured store with the same idempotency key, then read the record back. If the retry reports `ERR_STORE_WRITE_INCOMPLETE`, resend only the entities at `missing_entity_indexes` under a new key and recreate the request's relationships separately by entity ID. For a legacy key over MCP, read back the entities instead of treating a replay as proof of completion.
 
 **Tracking.** [#2144](https://github.com/markmhendrickson/neotoma/issues/2144) (umbrella), [#2657](https://github.com/markmhendrickson/neotoma/issues/2657), [#2656](https://github.com/markmhendrickson/neotoma/issues/2656)
 
@@ -124,7 +124,7 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every 
 
 ### Not every read says whether its answer is complete
 
-**What you will observe.** On `main`, entity list and search reads (MCP `retrieve_entities`, REST `POST /entities/query`, and `neotoma entities list`) return a `read_contract` whose coverage state says whether the result is complete, paginated, truncated, partial, or unknown ([PR #2612](https://github.com/markmhendrickson/neotoma/pull/2612)); 0.25.0 has no such field. Other reads carry no completeness statement: identifier lookup, relationships, observations, timeline events, and type counts. `list_timeline_events` filtered by `event_type` turns a database error into an empty result with `total: 0`. `get_entity_type_counts` can disagree with `retrieve_entities` for the same type, and list reads can omit `raw_fragments` for later entities in a large page. An empty or short result is therefore not always proof that nothing is stored.
+**What you will observe.** Entity list and search reads (MCP `retrieve_entities`, REST `POST /entities/query`, and `neotoma entities list`) return a `read_contract` whose coverage state says whether the result is complete, paginated, truncated, partial, or unknown ([PR #2612](https://github.com/markmhendrickson/neotoma/pull/2612)). Other reads carry no completeness statement: identifier lookup, relationships, observations, timeline events, and type counts. `list_timeline_events` filtered by `event_type` turns a database error into an empty result with `total: 0`. `get_entity_type_counts` can disagree with `retrieve_entities` for the same type, and list reads can omit `raw_fragments` for later entities in a large page. An empty or short result is therefore not always proof that nothing is stored.
 
 **Workaround.** Where `read_contract` is present, check its coverage state before treating an empty result as absence. Elsewhere, confirm with a second read, such as an entity list for the type.
 
@@ -134,7 +134,7 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every 
 
 ### Source and observation IDs can differ between instances
 
-**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID on every install, unless tenant-scoped entity IDs are on (`NEOTOMA_SANDBOX_MODE` or `NEOTOMA_TENANT_SCOPED_ENTITY_IDS`). Source and observation IDs also depend on the user and on the interpretation run. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. The stdio MCP server writes as the shared local development user, so its source and observation IDs repeat across installs. The HTTP server, and therefore the CLI, runs by default (a loopback bind with no auth, outside production) in `local_sandbox` mode, which gives each install its own fingerprinted local user, so the same data stored on two installs gets different source and observation IDs. Each interpretation run also gets a new observation ID. Probed on 0.25.0 and `main`, with two fresh installs each:
+**What you will observe.** Entity IDs are derived from the entity type and its identifying fields, so the same record gets the same entity ID on every install, unless tenant-scoped entity IDs are on (`NEOTOMA_SANDBOX_MODE` or `NEOTOMA_TENANT_SCOPED_ENTITY_IDS`). Source and observation IDs also depend on the user and on the interpretation run. A source ID hashes the owning user's ID with the content, and an observation ID hashes the source ID, the interpretation run, the entity, and the fields. The stdio MCP server writes as the shared local development user, so its source and observation IDs repeat across installs. The HTTP server, and therefore the CLI, runs by default (a loopback bind with no auth, outside production) in `local_sandbox` mode, which gives each install its own fingerprinted local user, so the same data stored on two installs gets different source and observation IDs. Each interpretation run also gets a new observation ID. The original two-install probe covered 0.25.0 and the code now included in v0.26.0:
 
 - `neotoma store` from the CLI (`--offline`), whose local server ran in `local_sandbox` mode: same entity ID, different source and observation IDs.
 - stdio MCP `store`, under the shared local development user: the entity, source, and observation IDs all repeat.
@@ -146,7 +146,7 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every 
 
 ### Who wrote or corrected a value is the writer's own claim
 
-**What you will observe.** Each observation records the writer in its provenance. Unless the writer signs its requests with an agent identity (AAuth), that record is what the client says about itself: the client name from the MCP `initialize` handshake, or an `X-Client-Name` header over the REST API, stored with the attribution tier `unverified_client`. A REST write without that header records no writer. The `neotoma` CLI never sends the header, so CLI writes record no writer.
+**What you will observe.** Each observation records the writer in its provenance. Unless the writer signs its requests with an agent identity (AAuth), that record is what the client says about itself: the client name from the MCP `initialize` handshake, or an `X-Client-Name` header over the REST API, stored with the attribution tier `unverified_client`. A REST write without that header records no writer. The `neotoma` CLI never sends the header, so CLI writes record no writer. Separately from writer attribution, a `store` that omits `observation_source` records `unspecified` and returns an `OBSERVATION_SOURCE_OMITTED` warning. Send an explicit source kind if the distinction matters.
 
 **Workaround.** Where attribution has to be verifiable, give each agent a signed identity and a grant; see the [AAuth reference](subsystems/aauth.md). Treat `unverified_client` attribution as a label, not as proof.
 
@@ -156,7 +156,7 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every 
 
 ### MCP, REST and the CLI are separate implementations
 
-**What you will observe.** The MCP `store` handler is a separate implementation from REST `POST /store`, and some checks differ. Guided schema mode rejects a type that no enabled bundle provides over MCP, but REST creates it. A same-key retry of a key stranded before the completion marker existed is resumed over HTTP and replayed as a success over MCP. Attribution differs too (see the attribution entry above). By default, the CLI writes as a per-install local user (the HTTP server's `local_sandbox` mode) and the stdio MCP server writes as the shared local development user, so in one data directory each surface sees only its own records.
+**What you will observe.** The MCP `store` handler is a separate implementation from REST `POST /store`, and some checks differ. Guided schema mode rejects a type that no enabled bundle provides over MCP, but REST creates it. A same-key retry of a key stranded before the completion marker existed is resumed over HTTP and replayed as a success over MCP. Both store handlers record an omitted `observation_source` as `unspecified` and return `OBSERVATION_SOURCE_OMITTED`. Writer attribution differs (see the attribution entry above). By default, the CLI writes as a per-install local user (the HTTP server's `local_sandbox` mode) and the stdio MCP server writes as the shared local development user, so in one data directory each surface sees only its own records.
 
 **Workaround.** Read through the surface that wrote the data. Do not take a result seen through one surface as proof of the same result through another.
 

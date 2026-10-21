@@ -360,12 +360,13 @@ describe("/install polish", () => {
       expect(lede).not.toMatch(/for example/i);
     });
 
-    it("prints a corrections command that runs on the published package", () => {
+    it("keeps the corrections command in the illustrative transcript", () => {
       expect(copy2).toMatch(/neotoma dev corrections create ent_\w+ --entity-type invoice/);
     });
 
-    it("does not say the run used a single build, and says ids vary", () => {
-      expect(page2).not.toContain("uses the v0.25.0 build");
+    it("does not attribute the illustrative transcript to a release, and says ids vary", () => {
+      expect(page2).not.toContain("published npm package (0.25.0) and on main");
+      expect(page2).toContain("transcript below illustrates the invoice from sheet 01");
       expect(page2).toContain("Store observation ids differ");
     });
 
