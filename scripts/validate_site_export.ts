@@ -635,14 +635,14 @@ if (fs.existsSync(homeForLimits)) {
     "Moving a record between instances with its history.",
     "Corrections that always hold.",
     "Verified authorship for every write.",
-    "One operator per instance is the scope today",
+    "A local install serves one operator; there are no organizations, workspaces, or rules for who may correct what.",
   ]) {
     if (!homeText.includes(needle)) {
       fail(`site_pages/index.html sheet 06 no longer says "${needle}"`);
       servedPageFailures++;
     }
   }
-  if (/Authority over the record is not modeled|organizations, workspaces and rules for who may correct/i.test(homeText)) {
+  if (/Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants/i.test(homeText)) {
     fail("site_pages/index.html sheet 06 still carries the retired authority limit");
     servedPageFailures++;
   }

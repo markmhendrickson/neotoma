@@ -155,7 +155,7 @@ export const NOT_BUILT_YET: readonly { title: string; text: string }[] = [
 
 /** Scope, stated as a plain sentence rather than as a gap. */
 export const SCOPE_SENTENCE =
-  "One operator per instance is the scope today: one operator administers an instance, and its users are separate tenants.";
+  "A local install serves one operator; there are no organizations, workspaces, or rules for who may correct what.";
 
 const GH = "https://github.com/markmhendrickson/neotoma";
 export const DEEPER_MATERIAL: readonly {

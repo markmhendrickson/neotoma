@@ -187,7 +187,8 @@ describe("sheet 06 limits", () => {
     expect(gaps).toContain("some write paths, such as the CLI, record no writer");
   });
   it("states one operator per instance as scope, not as a gap, and carries no issue numbers", () => {
-    expect(copy).toContain("One operator per instance is the scope today: one operator administers an instance, and its users are separate tenants.");
+    expect(copy).toContain("A local install serves one operator; there are no organizations, workspaces, or rules for who may correct what.");
+    expect(copy).not.toMatch(/One operator per instance|users are separate tenants/);
     expect(gaps).not.toMatch(/one operator|organizations, workspaces|rules for who may correct|Authority over the record/i);
     expect(page).toContain("known_limitations.md");
     expect(expect_ + gaps).not.toMatch(/#\d{3,}|issue \d{3,}/i);
@@ -231,6 +232,7 @@ describe("served-page statement list", () => {
       "Agents connected to the same instance read the same record.",
       "Has built their own memory system",
       "see the Permissions pre-flight block above",
+      "One operator per instance is the scope today.",
     ];
     for (const text of examples) {
       expect(findClaimProblems(text, SERVED_PAGE_STATEMENTS).length, text).toBeGreaterThan(0);
