@@ -57,7 +57,9 @@ Observation ids and source ids are not portable across instances:
 
 - An observation id is a hash of its source id, its interpretation, its entity id, and its fields (`generateObservationId` in `src/services/observation_identity.ts`).
 - A source id is a hash of the user id and the content hash (`generateDeterministicSourceId` in `src/services/source_identity.ts`).
-- The user can differ between installs. In an ordinary local run, unauthenticated local requests use the shared local development user, so the same content gets the same source id on every install. When the HTTP server resolves its mode to `local_sandbox`, each install gets its own fingerprinted local user (`ensureLocalSandboxUser` in `src/services/local_auth.ts`), and the same data stored on two installs can get different source and observation ids.
+- The user can differ between installs:
+  - The stdio MCP server writes as the shared local development user, so the same content gets the same source and observation ids on every install.
+  - The HTTP server, which the CLI's local transport also starts (`src/shared/local_transport.ts`), runs in `local_sandbox` mode by default when it binds to loopback with no auth outside production (`resolveSandboxMode` in `src/services/sandbox_mode.ts`). Each install then gets its own fingerprinted local user (`ensureLocalSandboxUser` in `src/services/local_auth.ts`), so the same data stored on two installs gets different source and observation ids.
 - Each interpretation run gets a new id, so the observations it writes get new ids too.
 
 Entity ids, described below, agree across instances. Do not rely on source or observation ids matching across instances.
