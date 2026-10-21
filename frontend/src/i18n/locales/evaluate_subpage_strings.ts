@@ -75,7 +75,7 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   promptToUseLabel: "Evaluation prompt",
   whatNeotomaHeading: "What Neotoma does for you",
   whatNeotomaP1:
-    "Neotoma stores each fact as an observation linked to its source. When a fact changes, a new observation is added and the earlier one stays, and each current field names the observation that set it. Agents connected to the same instance read the same record.",
+    "Neotoma stores each fact as an observation linked to its source. When a fact changes, a new observation is added and the earlier one stays, and each current field names the observation that set it. Agents connected to the same MCP entry read the same record.",
   whatNeotomaP2:
     "Under the hood, raw input is stored once, each extracted fact becomes an observation, and merge rules per field compute the current value from the observations. It runs locally as an npm package with MCP, CLI, and API interfaces. It is not a chat log or a vector store, and it can sit beside tools that retain or retrieve context.",
   agentInstructionsCardTitle: "Agent: evaluation instructions \u2192",
@@ -91,7 +91,7 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
     "Experiences context loss when switching between tools",
     "Has built automation, scripts, or custom configs around AI tools",
     "Spends time re-prompting, copy-pasting, or manually syncing context",
-    "Has built their own memory system (markdown, JSON, SQLite, custom scripts)",
+    "Has built their own system for keeping agent data (markdown, JSON, SQLite, custom scripts)",
     "Experiences agents behaving differently across sessions with no trace of why",
     "Needs to debug, trace, or audit agent decisions",
     "Manages evolving data over time (contacts, tasks, finances, projects, health)",
@@ -108,7 +108,7 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
     'Needs "AI remembering things" without concern for sources, history, or audit',
     "No debugging, tracing, or compliance needs",
     "Single-session usage pattern only (agents don't persist across sessions)",
-    "Occasional AI use (weekly or less - insufficient frequency for memory pain to compound)",
+    "Occasional AI use (weekly or less - insufficient frequency for the pain to compound)",
   ],
   storeFirstHeading: "What to store first",
   storeFirstIntro:
@@ -184,7 +184,7 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   promptToUseLabel: "Prompt de evaluación",
   whatNeotomaHeading: "Qué hace Neotoma por ti",
   whatNeotomaP1:
-    "Neotoma almacena cada hecho como una observación enlazada a su fuente. Cuando un hecho cambia, se añade una observación nueva y la anterior permanece, y cada campo actual indica la observación que lo fijó. Los agentes conectados a la misma instancia leen el mismo registro.",
+    "Neotoma almacena cada hecho como una observación enlazada a su fuente. Cuando un hecho cambia, se añade una observación nueva y la anterior permanece, y cada campo actual indica la observación que lo fijó. Los agentes conectados a la misma entrada MCP leen el mismo registro.",
   whatNeotomaP2:
     "Por debajo, la entrada en bruto se almacena una vez, cada hecho extraído se convierte en una observación y las reglas de fusión por campo calculan el valor actual a partir de las observaciones. Funciona en local como paquete npm con MCP, CLI y API. No es un registro de chat ni un almacén vectorial, y puede convivir con herramientas que retienen o recuperan contexto.",
   agentInstructionsCardTitle: "Agente: instrucciones de evaluación \u2192",
@@ -200,7 +200,7 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
     "Pierde contexto al cambiar de herramienta",
     "Ha automatizado, scripteado o configurado a medida alrededor de la IA",
     "Pierde tiempo re-prompteando, copiando y pegando o sincronizando estado a mano",
-    "Ha montado su propia memoria (markdown, JSON, SQLite, scripts)",
+    "Ha montado su propio sistema para guardar datos de agentes (markdown, JSON, SQLite, scripts)",
     "Ve comportamientos distintos entre sesiones sin trazabilidad",
     "Necesita depurar, trazar o auditar decisiones de agentes",
     "Gestiona datos que evolucionan (contactos, tareas, finanzas, proyectos, salud)",

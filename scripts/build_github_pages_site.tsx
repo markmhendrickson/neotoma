@@ -40,6 +40,7 @@ import {
   formatReport,
   runDocsViewer,
 } from "./docs_viewer/build";
+import { dedupeJsonLd } from "./site_html";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -204,23 +205,6 @@ function startStaticServer(rootDir: string): Promise<{ origin: string; close: ()
       });
     });
   });
-}
-
-/**
- * The static head template and react-helmet both emit the route's JSON-LD, so a captured page carries
- * every block twice. Keep the first copy of each distinct block.
- */
-function dedupeJsonLd(html: string): string {
-  const seen = new Set<string>();
-  return html.replace(
-    /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>\s*/g,
-    (block: string, body: string) => {
-      const key = body.trim();
-      if (seen.has(key)) return "";
-      seen.add(key);
-      return block;
-    }
-  );
 }
 
 async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void> {

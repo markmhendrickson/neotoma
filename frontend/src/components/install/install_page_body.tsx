@@ -55,7 +55,7 @@ function renderInstallSegmentsTight(segments: InstallTextSegment[]) {
 
 function WhatChangesSection({
   heading,
-  introSegments,
+  introParagraphs,
   footnoteSegments,
   tableCreated,
   tablePath,
@@ -64,7 +64,7 @@ function WhatChangesSection({
   rows,
 }: {
   heading: string;
-  introSegments: InstallTextSegment[];
+  introParagraphs: InstallTextSegment[][];
   footnoteSegments: InstallTextSegment[];
   tableCreated: string;
   tablePath: string;
@@ -76,11 +76,26 @@ function WhatChangesSection({
     <div className="mb-8">
       <hr className="mb-6 border-border" />
       <h2 className="text-[20px] font-medium tracking-[-0.01em]">{heading}</h2>
-      <p className="text-[14px] leading-6 text-muted-foreground mt-2 mb-3">
-        {renderInstallSegmentsTight(introSegments)}
-      </p>
+      {introParagraphs.map((segments, i) => (
+        <p key={i} className="text-[14px] leading-6 text-muted-foreground mt-2 mb-3">
+          {renderInstallSegmentsTight(segments)}
+        </p>
+      ))}
 
-      <div className="rounded-lg border border-border overflow-x-auto mb-3">
+      {/* Narrow screens: a list, so the table never scrolls sideways. */}
+      <ul className="md:hidden mb-3 space-y-2 list-none pl-0">
+        {rows.map((row) => (
+          <li key={row.what} className="rounded-lg border border-border px-3 py-2 text-[13px]">
+            <div className="font-medium text-foreground break-words">{row.what}</div>
+            <div className="mt-1 font-mono text-[12px] text-muted-foreground break-words">{row.path}</div>
+            <div className="mt-1 text-muted-foreground">
+              {tableScope}: {row.scope}. <code className={codeXs}>{tableReset}</code>: {row.reset}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden md:block rounded-lg border border-border overflow-x-auto mb-3">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-border bg-muted/40">
@@ -95,7 +110,7 @@ function WhatChangesSection({
           <tbody className="text-muted-foreground">
             {rows.map((row) => (
               <tr key={row.what} className="border-b border-border/50 last:border-0">
-                <td className="px-3 py-2 text-foreground whitespace-nowrap">{row.what}</td>
+                <td className="px-3 py-2 text-foreground">{row.what}</td>
                 <td className="px-3 py-2 font-mono text-[12px]">{row.path}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{row.scope}</td>
                 <td className="px-3 py-2">{row.reset}</td>
@@ -221,7 +236,7 @@ export function InstallPageBody() {
 
       <WhatChangesSection
         heading={s.whatChangesOnSystem}
-        introSegments={s.whatChangesIntroSegments}
+        introParagraphs={s.whatChangesIntroParagraphs}
         footnoteSegments={s.whatChangesFootnoteSegments}
         tableCreated={s.impactTableCreated}
         tablePath={s.impactTablePath}

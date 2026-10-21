@@ -280,10 +280,7 @@ export function NeotomaOnePager() {
           </ol>
           <p className="plan-body plan-small">
             {SCOPE_SENTENCE} Known defects and edge cases are listed in{" "}
-            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/known_limitations.md`}>
-              known limitations
-            </a>
-            .
+            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/known_limitations.md`}>known limitations</a>.
           </p>
           <TitleBlock n={6} title="GENERAL NOTES · LIMITS" />
         </section>

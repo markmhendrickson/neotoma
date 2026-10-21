@@ -474,6 +474,10 @@
 .plan-notes + .plan-small {
   margin-top: 24px;
 }
+/* One continuous numbering across the groups on sheet 06. */
+.plan-notes ~ .plan-notes {
+  counter-reset: none;
+}
 .plan-notes {
   list-style: none;
   padding: 0;

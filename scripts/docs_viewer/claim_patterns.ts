@@ -203,6 +203,32 @@ export const LIVE_PAGE_EXTRA_CLAIMS: readonly ClaimPattern[] = [
   ...OLD_LEDE,
 ];
 
+/**
+ * Statements the claims check found wrong on the published package, or retired frames, that no served page
+ * (live, held or docs viewer) may carry in its text, title, meta tags or JSON-LD. Named `served-*` so the
+ * list stays distinct from the docs list and the live extras (tests/unit/docs_viewer_lint.test.ts relates
+ * the three). Each says what the package does today and is meant to be relaxed when that changes.
+ */
+export const SERVED_PAGE_STATEMENTS: readonly ClaimPattern[] = [
+  { id: "served-statement", name: "served-audit-trail", re: /Every modification records who made it/i, label: "audit-trail claim (retired auditable-change-log page)" },
+  { id: "served-statement", name: "served-replayable-timeline", re: /reconstruct any historical/i, label: "replayable-timeline claim" },
+  { id: "served-statement", name: "served-404-guarantees", re: /Review the state guarantees/i, label: "404 page memory-guarantees entry" },
+  { id: "served-statement", name: "served-init-prompts", re: /Optional prompts (during|in) init/i, label: "init prompts claim (init runs without prompts by default)" },
+  { id: "served-statement", name: "served-install-pointers", re: /pre-flight block above|activation sequence linked below/i, label: "install page pointer to a block that is elsewhere" },
+  { id: "served-statement", name: "served-skills-headline", re: /Guided Workflows for Agent Memory|Guided workflows that teach your agent to remember/i, label: "retired skills headline" },
+  { id: "served-statement", name: "served-persistent-memory", re: /persistent memory/i, label: "retired category wording on a skill page" },
+  { id: "served-statement", name: "served-wrong-owner-link", re: /markNZed/i, label: "skills link to a repository that does not exist" },
+  { id: "served-statement", name: "served-dead-skill-links", re: /googleworkspace\/mcp-(gmail|google-calendar)/i, label: "dead external skill link" },
+  { id: "served-statement", name: "served-sandbox-memory", re: /your memory to persist/i, label: "sandbox memory sentence" },
+  { id: "served-statement", name: "served-comparison-facets", re: /no conflict detection|deterministic state evolution|state layer on top|inference variance|log archaeology|context janitor/i, label: "retired comparison or tax facet" },
+  { id: "served-statement", name: "served-reconstruct", re: /ingest -> reconstruct|reconstruct a timeline|timeline reconstruction/i, label: "reconstruct wording" },
+  { id: "served-statement", name: "served-shared-record", re: /Connected agents read and write the same record|what one agent stored is what the next one reads|connected to the same instance read the same record/i, label: "shared-record claim that is not limited to one MCP entry" },
+  { id: "served-statement", name: "served-sheet03-ids", re: /observation ids are from one run/i, label: "sheet 03 id sentence" },
+  { id: "served-statement", name: "served-sheet03-plain-cli", re: /\$ neotoma (store|corrections|entities|observations)\b/, label: "sheet 03 command without the dev prefix (a plain npm install needs a token)" },
+  { id: "served-statement", name: "served-shadow-mode", re: /shadow-mode (trial|path)/i, label: "non-destructive shadow-mode trial" },
+  { id: "served-statement", name: "served-user-memory", re: /own memory system|memory pain to compound/i, label: "memory wording about users on the evaluate page" },
+];
+
 /** Live pages: the docs list plus the named extras (a superset by construction). */
 export const LIVE_PAGE_CLAIM_PATTERNS: readonly ClaimPattern[] = [
   ...DOCS_CLAIM_PATTERNS,
@@ -234,15 +260,16 @@ export const TELEMETRY_CLAIM =
 /**
  * Every fragment must appear within TELEMETRY_WINDOW characters after the claim: the npm update
  * check, how to turn it off, the session-start check of the stdio MCP server, and what the
- * registry sees. Shared by docs pages and live pages.
+ * registry sees, and the npm_check_update tool that makes the same request. Shared by docs pages and live pages.
  */
 export const TELEMETRY_REQUIRED_FRAGMENTS: readonly { re: RegExp; label: string }[] = [
   { re: /npm registry/i, label: "the npm registry" },
   { re: /NO_UPDATE_NOTIFIER=1/, label: "NO_UPDATE_NOTIFIER=1" },
   { re: /when a session starts/i, label: "the check when a session starts" },
   { re: /connection metadata/i, label: "connection metadata" },
+  { re: /npm_check_update/, label: "the npm_check_update tool" },
 ];
-export const TELEMETRY_WINDOW = 600;
+export const TELEMETRY_WINDOW = 900;
 
 /** Missing fragments for each telemetry claim in `text` (empty list when qualified). */
 export function telemetryProblems(

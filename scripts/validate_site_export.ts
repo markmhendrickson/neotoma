@@ -24,12 +24,14 @@ import {
   DEVELOPER_PREVIEW,
   LIVE_PAGE_CLAIM_PATTERNS,
   OLD_LEDE,
+  SERVED_PAGE_STATEMENTS,
   UNMEASURED_INSTALL_TIME,
   LIVE_PAGE_RETIRED_META_PHRASES as RETIRED_META_PHRASES,
   findClaimProblems,
   telemetryProblems,
 } from "./docs_viewer/claim_patterns";
-import { validateDocsViewerExport } from "./docs_viewer/validate_export";
+import { pageText, scanHtml, validateDocsViewerExport } from "./docs_viewer/validate_export";
+import { headMetaText, jsonLdBlocks } from "./site_html";
 import { llmsLinkProblems } from "./llms_links";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -417,19 +419,11 @@ if (routeFailures === 0) {
 // until their owner decides; they are listed in the pull request, not checked here.
 // The pattern lists live in scripts/docs_viewer/claim_patterns.ts with the docs viewer's lists.
 let liveClaimFailures = 0;
-/** Title, every meta tag's content and every JSON-LD block of a built page, as one string. */
-function headMetaText(html: string): string {
-  return [
-    /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "",
-    ...[...html.matchAll(/<meta [^>]*?content="([^"]*)"/g)].map((m) => m[1]),
-    ...[...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]),
-  ].join("\n");
-}
 for (const route of LIVE_ROUTES) {
   const livePath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
   if (!fs.existsSync(livePath)) continue; // missing live pages are reported in 3e
   const html = fs.readFileSync(livePath, "utf-8");
-  const jsonLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => m[1]).join("\n");
+  const jsonLd = jsonLdBlocks(html).join("\n");
   const keywords = /<meta name="keywords" content="([^"]*)"/.exec(html)?.[1] ?? "";
   for (const phrase of RETIRED_META_PHRASES) {
     if (jsonLd.includes(phrase) || keywords.toLowerCase().includes(phrase.toLowerCase())) {
@@ -448,10 +442,7 @@ for (const route of LIVE_ROUTES) {
       liveClaimFailures++;
     }
   }
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&[a-z#0-9]+;/gi, " ");
+  const text = pageText(html);
   // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
   const wholeText = text + " " + jsonLd;
   // The claim lists run on the visible text above; the title, meta tags and JSON-LD carry the same
@@ -482,10 +473,7 @@ const STUB_NAV_LABELS = ["Memory guarantees", "Memory models", "Hosted Neotoma"]
 for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox", "/meet", "/skills", "/privacy", "/terms", "/skills/ensure-neotoma"]) {
   const heldPath = path.join(siteDir, heldRoute.slice(1), "index.html");
   if (!fs.existsSync(heldPath)) continue;
-  const heldText = fs
-    .readFileSync(heldPath, "utf-8")
-    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
-    .replace(/<[^>]+>/g, " ");
+  const heldText = pageText(fs.readFileSync(heldPath, "utf-8"));
   if (UNMEASURED_INSTALL_TIME.test(heldText)) {
     fail(`site_pages${heldRoute}/index.html makes the unmeasured install-time claim "5 minutes"`);
     liveClaimFailures++;
@@ -508,9 +496,8 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
 for (const route of ["/", "/install", "/evaluate", "/markdown/neotoma-with-cursor"]) {
   const servedPath = path.join(siteDir, route === "/" ? "" : route.slice(1), "index.html");
   if (!fs.existsSync(servedPath)) continue;
-  const served = fs
-    .readFileSync(servedPath, "utf-8")
-    .replace(/<script(?![^>]*ld\+json)[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ");
+  const servedHtml = fs.readFileSync(servedPath, "utf-8");
+  const served = pageText(servedHtml) + "\n" + headMetaText(servedHtml);
   const hit = UNMEASURED_INSTALL_TIME.exec(served);
   if (hit) {
     fail(`site_pages${route === "/" ? "/" : route + "/"}index.html still says "${hit[0]}" (text, meta or JSON-LD)`);
@@ -531,10 +518,7 @@ const evaluatePath = path.join(siteDir, "evaluate", "index.html");
 if (fs.existsSync(evaluatePath)) {
   const html = fs.readFileSync(evaluatePath, "utf-8");
   const headline = headMetaText(html);
-  const bodyText = html
-    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&[a-z#0-9]+;/gi, " ");
+  const bodyText = pageText(html);
   const endAt = bodyText.indexOf(EVALUATE_FIRST_SCREEN_END);
   if (endAt === -1) {
     fail(`site_pages/evaluate/index.html no longer has the "${EVALUATE_FIRST_SCREEN_END}" heading that bounds the first-screen check`);
@@ -565,23 +549,6 @@ if (fs.existsSync(evaluatePath)) {
 // 3h. Every served page (not a redirect stub): statements the claims check found wrong on the published
 // package, mirror pages whose source page is retired, and duplicated JSON-LD
 // ---------------------------------------------------------------------------
-const SERVED_PAGE_RETIRED_STATEMENTS: [RegExp, string][] = [
-  [/Every modification records who made it/i, "audit-trail claim (retired auditable-change-log page)"],
-  [/reconstruct any historical/i, "replayable-timeline claim"],
-  [/Review the state guarantees/i, "404 page memory-guarantees entry"],
-  [/Optional prompts (during|in) init/i, "init prompts claim (init runs without prompts by default)"],
-  [/pre-flight block above|activation sequence linked below/i, "install page pointer to a block that is elsewhere"],
-  [/Guided Workflows for Agent Memory|Guided workflows that teach your agent to remember/i, "retired skills headline"],
-  [/persistent memory/i, "retired category wording on a skill page"],
-  [/markNZed/i, "skills link to a repository that does not exist"],
-  [/googleworkspace\/mcp-(gmail|google-calendar)/i, "dead external skill link"],
-  [/Your memory to persist past Sunday|your memory to persist/i, "sandbox memory sentence"],
-  [/no conflict detection|deterministic state evolution|state layer on top|inference variance|log archaeology|context janitor/i, "retired comparison or tax facet"],
-  [/ingest -> reconstruct|reconstruct a timeline|timeline reconstruction/i, "reconstruct wording"],
-  [/Connected agents read and write the same record|what one agent stored is what the next one reads/i, "unqualified shared-record claim"],
-  [/observation ids are from one run/i, "sheet 03 id sentence"],
-  [/shadow-mode (trial|path)/i, "non-destructive shadow-mode trial"],
-];
 function collectServedPages(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -595,10 +562,8 @@ function collectServedPages(dir: string, out: string[] = []): string[] {
   return out;
 }
 const isStubPage = (html: string): boolean => html.includes('http-equiv="refresh"');
-const stripToText = (html: string): string =>
-  html
-    .replace(/<script(?![^>]*ld\+json)[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
-    .replace(/&[a-z#0-9]+;/gi, " ");
+/** Visible text plus title, meta tags and JSON-LD: the places a retired statement can sit. */
+const servedText = (html: string): string => pageText(html) + "\n" + headMetaText(html);
 let servedPageFailures = 0;
 const servedPages = collectServedPages(siteDir);
 const isRealPageAt = (route: string): boolean => {
@@ -611,16 +576,30 @@ for (const file of servedPages) {
   if (isStubPage(html)) continue;
   const route = "/" + rel.replace(/(^|\/)index\.html$/, "").replace(/404\.html$/, "404");
   const shown = rel;
-  const text = stripToText(html);
-  for (const [re, label] of SERVED_PAGE_RETIRED_STATEMENTS) {
-    const hit = re.exec(text);
-    if (hit) {
-      fail(`site_pages/${shown} carries "${hit[0]}" (${label})`);
-      servedPageFailures++;
+  const text = servedText(html);
+  const stated = findClaimProblems(text, SERVED_PAGE_STATEMENTS).filter((f) => f.id !== "telemetry");
+  for (const f of new Map(stated.map((x) => [x.name + x.match, x])).values()) {
+    fail(`site_pages/${shown} carries "${f.match}" (${f.label})`);
+    servedPageFailures++;
+  }
+  // The old shell footer links only to served pages (a footer link to a retired page lands on a stub).
+  if (!/^\/[a-z]{2}(\/|$)/.test(route)) {
+    const footerStart = html.indexOf("<footer");
+    const footerEnd = footerStart < 0 ? -1 : html.indexOf("</footer>", footerStart);
+    if (footerEnd >= 0) {
+      for (const tag of scanHtml(html.slice(footerStart, footerEnd)).tags) {
+        const href = tag.name === "a" ? tag.attrs.find((a) => a.name === "href")?.value : undefined;
+        if (!href || !href.startsWith("/") || href.startsWith("//")) continue;
+        const target = href.split(/[?#]/)[0].replace(/\/$/, "") || "/";
+        if (!isRealPageAt(target)) {
+          fail(`site_pages/${shown} footer links to ${target}, which is a redirect stub`);
+          servedPageFailures++;
+        }
+      }
     }
   }
   // Each JSON-LD block is emitted once.
-  const blocks = [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1].trim());
+  const blocks = jsonLdBlocks(html).map((b) => b.trim());
   if (new Set(blocks).size !== blocks.length) {
     fail(`site_pages/${shown} emits the same JSON-LD block more than once`);
     servedPageFailures++;
@@ -637,9 +616,7 @@ for (const file of servedPages) {
 // The /install HowTo carries the same three steps as the visible install block.
 const installHtmlForHowTo = path.join(siteDir, "install", "index.html");
 if (fs.existsSync(installHtmlForHowTo)) {
-  const howTo = [...fs.readFileSync(installHtmlForHowTo, "utf-8").matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
-    .map((m) => m[1])
-    .find((b) => b.includes('"HowTo"'));
+  const howTo = jsonLdBlocks(fs.readFileSync(installHtmlForHowTo, "utf-8")).find((b) => b.includes('"HowTo"'));
   const steps = howTo ? (JSON.parse(howTo).step as { text: string }[]) : [];
   const joined = steps.map((st) => st.text).join(" ");
   if (steps.length !== 3 || !joined.includes("neotoma init") || !joined.includes("--tool claude-code") || joined.includes("--tool cursor")) {
@@ -650,7 +627,7 @@ if (fs.existsSync(installHtmlForHowTo)) {
 // Sheet 06 of the one-pager states the four gaps in plain words, and one operator per instance as scope.
 const homeForLimits = path.join(siteDir, "index.html");
 if (fs.existsSync(homeForLimits)) {
-  const homeText = stripToText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
+  const homeText = servedText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
   for (const needle of [
     "What to expect",
     "Not built yet",
@@ -658,7 +635,7 @@ if (fs.existsSync(homeForLimits)) {
     "Moving a record between instances with its history.",
     "Corrections that always hold.",
     "Verified authorship for every write.",
-    "One operator per instance is the scope today.",
+    "One operator per instance is the scope today",
   ]) {
     if (!homeText.includes(needle)) {
       fail(`site_pages/index.html sheet 06 no longer says "${needle}"`);

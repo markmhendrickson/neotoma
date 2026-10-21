@@ -5,6 +5,15 @@ import {
   isRetiredRoute,
   resolveDestination,
 } from "../../frontend/src/site/route_retirement";
+import { DOCS_VIEWER_INDEX } from "../../frontend/src/site/docs_viewer_manifest";
+import { dedupeJsonLd, headMetaText, jsonLdBlocks } from "../../scripts/site_html";
+import { pageText } from "../../scripts/docs_viewer/validate_export";
+import {
+  DOCS_CLAIM_PATTERNS,
+  LIVE_PAGE_CLAIM_PATTERNS,
+  SERVED_PAGE_STATEMENTS,
+  findClaimProblems,
+} from "../../scripts/docs_viewer/claim_patterns";
 import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
 import {
   EVALUATE_SUBPAGE_EN,
@@ -27,7 +36,9 @@ describe("one-pager sheets 02 to 04", () => {
     for (const cmd of ["neotoma dev store", "neotoma dev corrections create", "neotoma dev entities get", "neotoma dev observations list"]) {
       expect(copy, cmd).toContain(cmd);
     }
-    expect(copy).not.toMatch(/^\$ neotoma (store|corrections|entities|observations)/m);
+    // Not anchored to a line start: the first transcript line follows the opening backtick.
+    expect(copy).not.toMatch(/\$ neotoma (store|corrections|entities|observations)\b/);
+    expect(copy).toMatch(/`\$ neotoma dev store/);
     expect(page).toContain("Store observation ids differ");
     expect(page).not.toMatch(/ids are from one run/i);
   });
@@ -49,8 +60,16 @@ describe("/install", () => {
     expect(en).toContain("neotoma init --interactive");
     expect(en).toContain("two MCP entries (neotoma-dev and neotoma");
     expect(en).toContain("5 hooks");
-    expect(en).toContain("12 user-level skills");
-    expect(en).toContain("~/.claude/settings.json");
+    expect(en).toContain("12 user-level skills under ~/.claude when that directory exists");
+    expect(strings).toContain("claude plugin marketplace add");
+    expect(strings).toContain("claude plugin install neotoma@neotoma-marketplace");
+    // The allow rules go to the project permissions file by default; no settings-file edit is claimed.
+    expect(en).toContain("Bash(neotoma:*)");
+    expect(en).toContain("Bash(npm install -g neotoma:*)");
+    expect(strings).toContain(".claude/settings.local.json (default)");
+    expect(en).toContain("--skip-permissions");
+    expect(en).not.toMatch(/edits to ~\/\.claude\/settings\.json|Claude Code settings edits/);
+    expect(strings).not.toContain("12 Claude Code skills (only when claude is on your PATH)");
     expect(en).toContain("npm_check_update");
     expect(en).toContain("is not turned off by NO_UPDATE_NOTIFIER");
   });
@@ -86,6 +105,11 @@ describe("/evaluate below the first screen and the agent instructions page", () 
     const page = read("frontend", "src", "components", "subpages", "EvaluateAgentInstructionsPage.tsx");
     expect(page).not.toMatch(/reconstruct|memory-guarantees|non-destructive-testing|shadow-mode|shadow mode/i);
     expect(page).toContain("docs/known_limitations.md");
+    // /architecture is a retired redirect stub; link the GitHub file directly.
+    expect(page).not.toContain('href="/architecture"');
+    expect(page).toContain("docs/architecture/architecture.md");
+    expect(read("frontend", "src", "components", "subpages", "EvaluatePage.tsx")).not.toMatch(/localizePath\("\/architecture"/);
+    expect(read("frontend", "src", "components", "SiteTailpiece.tsx")).not.toMatch(/href: "\/(architecture|faq|docs|api|mcp|cli)"/);
     const nav = read("frontend", "src", "site", "site_data.ts") + read("src", "services", "root_landing", "site_nav.ts");
     expect(nav).not.toContain("Where the tax shows up");
     expect(read("frontend", "src", "site", "site_data.ts")).not.toContain("ingest -> reconstruct");
@@ -163,9 +187,96 @@ describe("sheet 06 limits", () => {
     expect(gaps).toContain("some write paths, such as the CLI, record no writer");
   });
   it("states one operator per instance as scope, not as a gap, and carries no issue numbers", () => {
-    expect(copy).toContain('SCOPE_SENTENCE = "One operator per instance is the scope today."');
+    expect(copy).toContain("One operator per instance is the scope today: one operator administers an instance, and its users are separate tenants.");
     expect(gaps).not.toMatch(/one operator|organizations, workspaces|rules for who may correct|Authority over the record/i);
     expect(page).toContain("known_limitations.md");
     expect(expect_ + gaps).not.toMatch(/#\d{3,}|issue \d{3,}/i);
+  });
+});
+
+describe("/install intro and table", () => {
+  const strings = read("frontend", "src", "i18n", "locales", "install_page_strings.ts");
+  const en = strings.slice(strings.indexOf("export const INSTALL_PAGE_EN"), strings.indexOf("export const INSTALL_PAGE_ES"));
+  it("splits the intro into what init does, what setup writes and what is sent over the network", () => {
+    const start = en.indexOf("whatChangesIntroParagraphs: [");
+    const end = en.indexOf("whatChangesFootnoteSegments", start);
+    const block = en.slice(start, end);
+    expect(block).toContain("neotoma init");
+    expect(block.match(/\n    \[\n/g)?.length).toBe(3);
+    expect(block).not.toContain("whatChangesIntroSegments");
+  });
+  it("does not let the table scroll sideways on narrow screens", () => {
+    const body = read("frontend", "src", "components", "install", "install_page_body.tsx");
+    expect(body).toContain("md:hidden");
+    expect(body).toContain("hidden md:block");
+    expect(body).not.toMatch(/<td className="px-3 py-2 text-foreground whitespace-nowrap">/);
+  });
+});
+
+describe("served-page statement list", () => {
+  it("is named, distinct from the docs and live lists, and every pattern matches its own example", () => {
+    const names = new Set<string>();
+    for (const p of [...LIVE_PAGE_CLAIM_PATTERNS, ...SERVED_PAGE_STATEMENTS]) {
+      expect(names.has(p.name), `duplicate pattern name ${p.name}`).toBe(false);
+      names.add(p.name);
+    }
+    const docs = new Set(DOCS_CLAIM_PATTERNS.map((p) => p.name));
+    for (const p of SERVED_PAGE_STATEMENTS) {
+      expect(p.name.startsWith("served-"), p.name).toBe(true);
+      expect(docs.has(p.name), p.name).toBe(false);
+    }
+    const examples = [
+      "Every modification records who made it",
+      "$ neotoma store --observation-source import",
+      "Agents connected to the same instance read the same record.",
+      "Has built their own memory system",
+      "see the Permissions pre-flight block above",
+    ];
+    for (const text of examples) {
+      expect(findClaimProblems(text, SERVED_PAGE_STATEMENTS).length, text).toBeGreaterThan(0);
+    }
+    expect(findClaimProblems("Agents connected to the same MCP entry read the same record.", SERVED_PAGE_STATEMENTS)).toEqual([]);
+  });
+});
+
+describe("telemetry wording on the shared list", () => {
+  it("needs the npm_check_update sentence next to a no-telemetry claim", () => {
+    const qualified =
+      "No telemetry. The interactive CLI checks the npm registry (off with NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts. Agents can also call the npm_check_update tool. The registry sees ordinary connection metadata.";
+    expect(findClaimProblems(qualified, [])).toEqual([]);
+    expect(findClaimProblems(qualified.replace("npm_check_update", "update tool"), []).map((f) => f.id)).toContain("telemetry");
+  });
+});
+
+describe("markdown mirror of a docs viewer page", () => {
+  it("is a stub to the viewer page itself", () => {
+    const route = [...DOCS_VIEWER_INDEX.byRoute.keys()][0];
+    expect(route).toBeTruthy();
+    expect(isRetiredRoute(route)).toBe(false);
+    expect(isRetiredRoute(`/markdown${route}`)).toBe(true);
+    expect(resolveDestination(`/markdown${route}`).url).toBe(`https://neotoma.io${route}/`);
+  });
+});
+
+describe("linear HTML helpers", () => {
+  const block = (n: number) => `<script type="application/ld+json" data-rh="true">{"n":${n}}</script>`;
+  it("remove a duplicated JSON-LD block and keep distinct ones", () => {
+    const html = `<head>${block(1)}\n${block(2)}\n</head><body>x</body><script type="application/ld+json">{"n":1}</script>\n${block(3)}`;
+    const out = dedupeJsonLd(html);
+    expect(jsonLdBlocks(out).map((b) => b.trim())).toEqual(['{"n":1}', '{"n":2}', '{"n":3}']);
+    expect(out).toContain("<body>x</body>");
+    // A page with no duplicates is returned unchanged.
+    const clean = `<head>${block(1)}${block(2)}</head>`;
+    expect(dedupeJsonLd(clean)).toBe(clean);
+  });
+  it("stay fast on unterminated markup (the lazy script and style strip took seconds)", () => {
+    const hostile = "<script>".repeat(8000) + "<style>".repeat(8000) + "<a href=\"x".repeat(4000) + "<title>" + "x".repeat(40000);
+    expect(hostile.length).toBeGreaterThan(150000);
+    const t0 = performance.now();
+    pageText(hostile);
+    headMetaText(hostile);
+    jsonLdBlocks(hostile);
+    dedupeJsonLd(hostile);
+    expect(performance.now() - t0).toBeLessThan(500);
   });
 });

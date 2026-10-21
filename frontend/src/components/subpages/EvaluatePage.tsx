@@ -126,7 +126,7 @@ export function EvaluatePage() {
             {ev.nextStepsInstallGuideLink}
           </TrackedProductLink>
           {ev.nextStepsP2Between}
-          <a href={localizePath("/architecture", locale)} className="underline">
+          <a href="https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md" className="underline">
             {ev.nextStepsArchLink}
           </a>
           {ev.nextStepsP2End}
