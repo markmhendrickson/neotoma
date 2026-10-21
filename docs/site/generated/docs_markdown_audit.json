@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-20T14:44:05.426Z",
-  "total_files": 730,
+  "generated_at": "2026-10-20T16:14:45.398Z",
+  "total_files": 731,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -16,6 +16,7 @@
     "implementation": 2,
     "infrastructure": 3,
     "integrations": 12,
+    "known_limitations.md": 1,
     "legal": 8,
     "migration": 2,
     "NEOTOMA_MANIFEST.md": 1,
@@ -1003,6 +1004,10 @@
     {
       "rel": "docs/integrations/smithery_external_url.md",
       "top": "integrations"
+    },
+    {
+      "rel": "docs/known_limitations.md",
+      "top": "known_limitations.md"
     },
     {
       "rel": "docs/legal/compliance.md",

@@ -11,7 +11,7 @@ A running Neotoma server also serves these files at its own `/docs` route. To in
 - [Developer getting started](developer/getting_started.md): local development setup with SQLite and the local filesystem.
 - [CLI reference](developer/cli_reference.md): every `neotoma` command.
 - [MCP overview](developer/mcp_overview.md): connect an agent host over MCP, with a guide per host.
-- [REST API](api/rest_api.md) and the [OpenAPI spec](../openapi.yaml): the same operations over HTTP.
+- [REST API](api/rest_api.md) and the [OpenAPI spec](../openapi.yaml): largely the same capabilities over HTTP, as a separate implementation from the MCP server.
 - [Integrations matrix](integrations/matrix.md): every documented host and how it connects. The README table covers the common hosts; the matrix also lists hosts that are configured by hand.
 
 ## How the record works
@@ -46,7 +46,4 @@ Other folders (`plans/`, `proposals/`, `prototypes/`, `reports/`, `implementatio
 ## Limits worth knowing before you rely on the record
 
 - Provenance shows the evidence trail for a value, not that an agent read its source correctly.
-- Export writes current state; observation history is not part of the export.
-- A later write can override a correction in the current snapshot today ([#2033](https://github.com/markmhendrickson/neotoma/issues/2033)).
-- A snapshot can be read as of a past time for one entity (`at` and `at_ingested` on `retrieve_entity_snapshot`); there is no as-of query across the whole record.
-- Setup commands exist for five hosts; other hosts are configured by hand. See the [integrations matrix](integrations/matrix.md); the open question is [#2681](https://github.com/markmhendrickson/neotoma/issues/2681).
+- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, source and observation IDs, attribution, partial writes, read completeness, differences between surfaces, log encryption, setup hosts), each with what you will observe, any workaround, and its tracking issue.
