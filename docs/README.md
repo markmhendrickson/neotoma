@@ -20,7 +20,7 @@ A running Neotoma server also serves these files at its own `/docs` route. To in
 - [Reducer](subsystems/reducer.md): how the current value of each field is computed from observations.
 - [Observation architecture](subsystems/observation_architecture.md): how observations are stored and linked to sources.
 - [Determinism](architecture/determinism.md): what is derived from inputs, and how.
-- [Atomic corrections](developer/atomic_corrections.md): apply a bounded set of corrections in one transaction.
+- [Atomic corrections](developer/atomic_corrections.md): apply a bounded set of corrections in one transaction (main; not in v0.25.0).
 
 ## Foundation
 
@@ -46,4 +46,4 @@ Other folders (`plans/`, `proposals/`, `prototypes/`, `reports/`, `implementatio
 ## Limits worth knowing before you rely on the record
 
 - Provenance shows the evidence trail for a value, not that an agent read its source correctly.
-- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, source and observation IDs, attribution, partial writes, read completeness, differences between surfaces, log encryption, setup hosts), each with what you will observe, any workaround, and its tracking issue.
+- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, source and observation IDs, attribution, partial writes, read completeness, differences between surfaces, log encryption, setup hosts, CLI auth after an npm install, what init and setup write, the update-check tool, quiet hook failures), each with what you will observe, any workaround, and its tracking issue.

@@ -2,7 +2,7 @@
 
 This page lists specific behaviours of the current build that a developer or an integrating agent will run into. Each entry says what you will observe, any workaround, and the issue that tracks it. An entry is removed from this page when its fix ships.
 
-Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every entry has a tracking issue.
+Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-21. Every entry has a tracking issue.
 
 - [A later ordinary write can replace a correction](#a-later-ordinary-write-can-replace-a-correction)
 - [A correction, or a stored date, is not checked against the declared type](#a-correction-or-a-stored-date-is-not-checked-against-the-declared-type)
@@ -16,6 +16,11 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every 
 - [MCP, REST and the CLI are separate implementations](#mcp-rest-and-the-cli-are-separate-implementations)
 - [Log encryption does not encrypt log files](#log-encryption-does-not-encrypt-log-files)
 - [`neotoma setup --tool` configures five hosts](#neotoma-setup---tool-configures-five-hosts)
+- [CLI data commands need a token after a plain npm install](#cli-data-commands-need-a-token-after-a-plain-npm-install)
+- [`neotoma init` adds a Cursor MCP entry without asking](#neotoma-init-adds-a-cursor-mcp-entry-without-asking)
+- [`neotoma init` and `neotoma setup` write different MCP entries on separate databases](#neotoma-init-and-neotoma-setup-write-different-mcp-entries-on-separate-databases)
+- [The `npm_check_update` tool ignores `NO_UPDATE_NOTIFIER`](#the-npm_check_update-tool-ignores-no_update_notifier)
+- [Claude Code hooks fail quietly when the local API is not running](#claude-code-hooks-fail-quietly-when-the-local-api-is-not-running)
 
 ## A later ordinary write can replace a correction
 
@@ -116,3 +121,43 @@ Applies to the published `neotoma@0.25.0` and to `main` as of 2026-10-20. Every 
 **Workaround.** Configure Windsurf, Continue, and VS Code by hand, using the per-host guides in the [integrations matrix](integrations/matrix.md).
 
 **Tracking.** [#2691](https://github.com/markmhendrickson/neotoma/issues/2691)
+
+## CLI data commands need a token after a plain npm install
+
+**What you will observe.** After `npm install -g neotoma` and `neotoma init`, CLI data commands such as `neotoma store` return `AUTH_REQUIRED: Missing Bearer token`. A plain npm install points the CLI at the production profile, which needs a token.
+
+**Workaround.** Prefix the command with `dev` (for example `neotoma dev store ...`), or set `NEOTOMA_ENV=development`.
+
+**Tracking.** [#1905](https://github.com/markmhendrickson/neotoma/issues/1905)
+
+## `neotoma init` adds a Cursor MCP entry without asking
+
+**What you will observe.** `neotoma init` applies its default plan without prompts unless you pass `--interactive`. It creates a config directory, two local SQLite databases (`neotoma.db` for the development profile and `neotoma.prod.db` for production) and an env file, and it adds one MCP entry, `neotoma` (production profile, `neotoma.prod.db`), to Cursor's MCP config (`~/.cursor/mcp.json`) whether or not Cursor is installed.
+
+**Workaround.** Run `neotoma init --interactive` to choose each step, or remove the entry from `~/.cursor/mcp.json` afterwards.
+
+**Tracking.** [#2703](https://github.com/markmhendrickson/neotoma/issues/2703)
+
+## `neotoma init` and `neotoma setup` write different MCP entries on separate databases
+
+**What you will observe.** `neotoma init` writes one MCP entry, `neotoma`, which runs with the production profile and uses `neotoma.prod.db`. `neotoma setup --yes` writes two: `neotoma-dev`, which uses the development database (`neotoma.db`), and `neotoma`, on `neotoma.prod.db`. An agent connected to one entry does not see what an agent on the other entry stored.
+
+**Workaround.** Connect every agent that should share a record to the same entry, and remove or disable the other one.
+
+**Tracking.** [#2704](https://github.com/markmhendrickson/neotoma/issues/2704)
+
+## The `npm_check_update` tool ignores `NO_UPDATE_NOTIFIER`
+
+**What you will observe.** `NO_UPDATE_NOTIFIER=1` turns off the CLI's daily update check and the stdio MCP server's own checks. The `npm_check_update` MCP tool, whose description asks agents to call it at session start, does not read the variable: when an agent calls it, the server can request the latest version from the npm registry.
+
+**Workaround.** Deny the `npm_check_update` tool in your MCP client's tool permissions if no registry request may be made.
+
+**Tracking.** [#2705](https://github.com/markmhendrickson/neotoma/issues/2705)
+
+## Claude Code hooks fail quietly when the local API is not running
+
+**What you will observe.** The Claude Code plugin's hooks post each turn to `http://127.0.0.1:3080` unless `NEOTOMA_BASE_URL` is set. When nothing is listening there, the hooks catch the error, log it to stderr, and the turn is not captured.
+
+**Workaround.** Start the local API (`neotoma api start --background`) before the session, or point `NEOTOMA_BASE_URL` at an API that is running.
+
+**Tracking.** [#2706](https://github.com/markmhendrickson/neotoma/issues/2706)
