@@ -274,7 +274,9 @@ export function heldReason(route: string): string | null {
   const r = stripTrailingSlash(route);
   if (LOCALE_LEGAL.test(r)) return LEGAL_REASON;
   if (r.startsWith("/markdown/")) {
-    // A mirror carries its source page's content and metadata, so it is served only while the source is.
+    // A mirror carries its source page's content and metadata, so it is served only while the source is a
+    // live or held page. The mirror of a retired page, or of a docs viewer page (which is served at its
+    // own route), is a redirect stub to wherever its source goes: for a viewer page, the viewer page itself.
     const source = r.slice("/markdown".length);
     if (isLiveRoute(source) || (!source.startsWith("/markdown") && heldReason(source) !== null)) {
       return MARKDOWN_MIRROR_REASON;

@@ -36,7 +36,7 @@ flowchart LR
 
 ### A third-level heading
 
-There is no telemetry. The CLI checks the npm registry for a newer version about once a day; the stdio MCP server checks when a session starts (off with `NO_UPDATE_NOTIFIER=1`), and the registry sees ordinary connection metadata such as the address.
+There is no telemetry. The CLI checks the npm registry for a newer version about once a day; the stdio MCP server checks when a session starts (off with `NO_UPDATE_NOTIFIER=1`), agents can also call the `npm_check_update` tool, which makes the same request, and the registry sees ordinary connection metadata such as the address.
 
 - One
 - Two

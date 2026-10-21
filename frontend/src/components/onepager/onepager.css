@@ -474,6 +474,10 @@
 .plan-notes + .plan-small {
   margin-top: 24px;
 }
+/* One continuous numbering across the groups on sheet 06. */
+.plan-notes ~ .plan-notes {
+  counter-reset: none;
+}
 .plan-notes {
   list-style: none;
   padding: 0;
@@ -895,6 +899,11 @@
 .plan-small a {
   display: inline-block;
   padding: 7px 1px;
+}
+/* The closing link sits inside a sentence: no touch-target padding, so no gap before the full stop. */
+.plan-small.plan-scope a {
+  display: inline;
+  padding: 0;
 }
 .plan-install-note {
   margin: -10px 0 22px;

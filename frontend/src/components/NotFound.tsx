@@ -78,8 +78,7 @@ export function NotFound() {
           </h1>
 
           <p className="max-w-2xl text-[16px] leading-7 text-muted-foreground mb-6">
-            {dict.notFoundDescription} The page may have moved, or the URL may be mistyped.
-            Use the main pages below to get back to Neotoma.
+            {dict.notFoundDescription} Use the main pages below to get back to Neotoma.
           </p>
 
           <div className="mb-10 flex flex-wrap gap-2">

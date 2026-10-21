@@ -14,7 +14,7 @@ import { type RenderContext, parseDoc } from "../../scripts/docs_viewer/render";
 
 const root = join(__dirname, "..", "..");
 const FULL_TELEMETRY =
-  "The CLI checks the npm registry about once a day; the stdio MCP server checks when a session starts (off with NO_UPDATE_NOTIFIER=1), and the registry sees ordinary connection metadata such as the address.";
+  "The CLI checks the npm registry about once a day; the stdio MCP server checks when a session starts (off with NO_UPDATE_NOTIFIER=1), agents can also call the npm_check_update tool, which makes the same request, and the registry sees ordinary connection metadata such as the address.";
 const FIXTURE = "tests/fixtures/docs_viewer/clean.md";
 const files = new Set([
   "docs/api/rest_api.md",
@@ -295,12 +295,13 @@ describe("shared claim patterns", () => {
     ).toBe(1);
   });
 
-  it("names the four telemetry fragments the live pages require", () => {
+  it("names the five telemetry fragments the live pages require", () => {
     expect(TELEMETRY_REQUIRED_FRAGMENTS.map((f) => f.label)).toEqual([
       "the npm registry",
       "NO_UPDATE_NOTIFIER=1",
       "the check when a session starts",
       "connection metadata",
+      "the npm_check_update tool",
     ]);
     // Without the session-start check, a docs page fails exactly as a live page does.
     expect(

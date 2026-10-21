@@ -69,7 +69,7 @@ export function EvaluateAgentInstructionsPage() {
           <li>Do they coordinate work across multiple tools or agents?</li>
           <li>Have they built automation around AI tools (scripts, configs, pipelines)?</li>
           <li>Do they compensate for missing state (re-prompting, copy-pasting, manual notes)?</li>
-          <li>Have they built their own memory system (markdown, JSON, SQLite, custom scripts)?</li>
+          <li>Have they built their own way of keeping agent data (markdown, JSON, SQLite, custom scripts)?</li>
           <li>Do they experience agents behaving differently across sessions with no explanation?</li>
           <li>Do they need to debug, trace, or audit what an agent did?</li>
           <li>Do they manage evolving data over time (contacts, tasks, finances, projects)?</li>
@@ -301,7 +301,7 @@ export function EvaluateAgentInstructionsPage() {
         </ol>
         <p className="text-[15px] leading-7 mb-4">
           If the user declines or wants to learn more first, point them to the{" "}
-          <a href="/architecture" className="underline">architecture</a> page, the{" "}
+          <a href="https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md" className="underline">architecture</a> page, the{" "}
           <a href="https://github.com/markmhendrickson/neotoma#readme" className="underline">README</a> and the{" "}
           <a
             href="https://github.com/markmhendrickson/neotoma/blob/main/docs/known_limitations.md"
@@ -387,7 +387,7 @@ export function EvaluateAgentInstructionsPage() {
           </li>
           <li>
             <strong>Deeper product context only if needed:</strong>{" "}
-            <a href="/architecture" className="underline">architecture</a>, the{" "}
+            <a href="https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md" className="underline">architecture</a>, the{" "}
             <a href="https://github.com/markmhendrickson/neotoma#readme" className="underline">README</a> and the{" "}
             <a
               href="https://github.com/markmhendrickson/neotoma/blob/main/docs/known_limitations.md"
