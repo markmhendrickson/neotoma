@@ -46,7 +46,7 @@ function validateDictionary(locale: string, dict: LocaleDictionary): void {
   const dictKeys: (keyof LocaleDictionary)[] = [
     "languageName", "docs", "search", "quickStart", "install", "evaluate",
     "meetTheCreator", "architecture", "memoryGuaranteesNav", "allDocumentation",
-    "developerPreview", "home", "themeSystem", "themeDark", "themeLight",
+    "home", "themeSystem", "themeDark", "themeLight",
     "language", "pageNotFound", "notFoundDescription", "goHome", "docsIntro",
     "categoryGettingStarted", "categoryReference", "categoryAgentBehavior",
     "categoryUseCases", "categoryIntegrationGuides", "categoryExternal",

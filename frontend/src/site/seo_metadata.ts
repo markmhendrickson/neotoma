@@ -938,7 +938,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-cursor-1200x630.png",
     ogImageAlt:
-      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in 5 minutes via MCP.",
+      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in a few minutes via MCP.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
@@ -1888,9 +1888,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/evaluate": {
-    title: "Evaluate Neotoma: Deterministic State Layer for AI Agents | Neotoma",
+    title: "Evaluate Neotoma: the system of record for AI agents | Neotoma",
     description:
-      "Neotoma is a deterministic state layer for AI agents: versioned, schema-bound, replayable memory that persists across sessions and tools. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
+      "A record, not recall. Neotoma is an open-source, local-first system of record for AI agents. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",

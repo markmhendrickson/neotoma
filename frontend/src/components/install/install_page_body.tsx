@@ -122,7 +122,7 @@ export function InstallPageBody() {
       <div className="flex flex-wrap gap-2 mb-6">
         <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {s.fiveMinuteIntegration}
+          {s.fewMinutesIntegration}
         </span>
       </div>
 
