@@ -46,4 +46,4 @@ Other folders (`plans/`, `proposals/`, `prototypes/`, `reports/`, `implementatio
 ## Limits worth knowing before you rely on the record
 
 - Provenance shows the evidence trail for a value, not that an agent read its source correctly.
-- [Known limitations](known_limitations.md) lists the specific ones (corrections, field types, as-of reads, export, source and observation IDs, attribution, partial writes, read completeness, differences between surfaces, log encryption, setup hosts, CLI auth after an npm install, what init and setup write, the update-check tool, quiet hook failures), each with what you will observe, any workaround, and its tracking issue.
+- [Known limitations](known_limitations.md) lists the specific ones, grouped as writes and corrections, reads and export, identity and attribution, surfaces and logs, and install and setup, each with what you will observe, any workaround, and its tracking issue.

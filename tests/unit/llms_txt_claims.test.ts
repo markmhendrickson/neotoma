@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NEOTOMA_TOOL_NAMES } from "../../src/tool_definitions.js";
+import { listInstallableSkillNames } from "../../src/cli/skills_mirror.js";
 
 /**
  * Text guards for the agent-facing llms.txt body and the README's checkable claims.
@@ -404,8 +405,42 @@ describe("README checkable claims", () => {
     expect(block![1]).not.toContain("neotoma mcp config");
     const after = readme.slice(block!.index + block![0].length).trimStart();
     expect(
-      after.startsWith("`neotoma setup --tool claude-code --yes` writes the MCP entries and more")
+      after.startsWith(
+        "`neotoma setup --tool claude-code --yes` connects Claude Code: it writes MCP entries, CLI instruction files, and an allow rule that lets Claude Code run any `neotoma` command; [Install](#install) lists everything it writes."
+      )
     ).toBe(true);
+  });
+
+  it("keeps the note under the install block to one setup sentence plus the token workaround", () => {
+    const top = readme.slice(0, readme.indexOf("Other hosts are listed under"));
+    const note = top.slice(top.indexOf("```\n\n") + 5).trim();
+    const paragraphs = note.split(/\n\n+/);
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[1]).toContain("return `AUTH_REQUIRED`");
+    expect(paragraphs[1]).toContain("`neotoma dev ...`");
+    expect(paragraphs[1]).toContain("`NEOTOMA_ENV=development`");
+    expect(note).not.toContain("`.codex/neotoma_cli.md`");
+  });
+
+  it("lists what setup writes in the Install section", () => {
+    const install = readme.slice(
+      readme.indexOf("## Install\n"),
+      readme.indexOf("## Connect your tools")
+    );
+    for (const s of [
+      "`neotoma-dev`",
+      "`.codex/neotoma_cli.md`",
+      "`claude plugin install`",
+      "runs any `neotoma` command without asking",
+      "`~/.codex/config.toml`",
+    ])
+      expect(install, s).toContain(s);
+  });
+
+  it("states the skill count that setup links, derived from the skills directory", () => {
+    const m = /links (\d+) Neotoma skills into `~\/\.claude\/skills`/.exec(readme);
+    expect(m, "README must state the skill count").not.toBeNull();
+    expect(Number(m![1])).toBe(listInstallableSkillNames(join(root, "skills")).length);
   });
 
   it("does not claim the record shows who corrected a value", () => {
@@ -418,6 +453,9 @@ describe("README checkable claims", () => {
  * README.md and llms.txt; the copy describes current behaviour and relaxes when the fix ships.
  */
 const V0250_OVERCLAIMS: readonly RegExp[] = [
+  /observations are immutable\./i,
+  /Writes are idempotent through an `idempotency_key`\./,
+  /^- Idempotent writes through an `idempotency_key`\s*$/m,
   /writes the MCP entry to `\.mcp\.json`/,
   /through (that observation|it) to its source/i,
   /source, interpretation, agent, and timestamp/i,
@@ -442,6 +480,16 @@ describe("claims true on the published v0.25.0", () => {
   it("README and llms.txt carry none of the overclaims", () => {
     expect(v0250Overclaims(readme)).toEqual([]);
     expect(v0250Overclaims(llms)).toEqual([]);
+    expect(v0250Overclaims(readFileSync(join(root, KNOWN_LIMITATIONS_PATH), "utf-8"))).toEqual([]);
+  });
+
+  it("goes red on an unqualified immutability or idempotency sentence", () => {
+    for (const bad of [
+      "Observations are immutable.",
+      "Writes are idempotent through an `idempotency_key`.",
+      "- Idempotent writes through an `idempotency_key`",
+    ])
+      expect(v0250Overclaims(`${readme}\n${bad}\n`).length, bad).toBeGreaterThan(0);
   });
 
   it("README lists everything setup writes", () => {
@@ -496,7 +544,31 @@ describe("claims true on the published v0.25.0", () => {
 
 describe("docs/known_limitations.md", () => {
   const doc = readFileSync(join(root, KNOWN_LIMITATIONS_PATH), "utf-8");
-  const entries = doc.split(/^## /m).slice(1);
+  const entries = doc.split(/^### /m).slice(1);
+  const GROUPS = [
+    "Install and setup",
+    "Writes and corrections",
+    "Reads and export",
+    "Identity and attribution",
+    "Surfaces and logs",
+  ];
+
+  it("groups entries under the five labels, install and setup first, the token entry at the top", () => {
+    expect([...doc.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(GROUPS);
+    const intro = doc.slice(0, doc.indexOf("\n## "));
+    expect([...intro.matchAll(/^\*\*(.+)\*\*$/gm)].map((m) => m[1])).toEqual(GROUPS);
+    expect(entries[0].split("\n")[0]).toBe(
+      "CLI data commands need a token after a plain npm install"
+    );
+    for (const g of doc.split(/^## /m).slice(1)) expect(g, g.split("\n")[0]).toMatch(/^### /m);
+  });
+
+  it("says the hooks send session content and hide most failures at a level that is off by default", () => {
+    const hooks = entries.find((e) => e.startsWith("Claude Code hooks fail quietly"))!;
+    expect(hooks).toContain("so a remote `NEOTOMA_BASE_URL` receives session content");
+    expect(hooks).toContain("logged at debug level, which is off by default");
+    expect(hooks).not.toMatch(/catch the error, log it to stderr/);
+  });
 
   it("says entries are removed when their fix ships", () => {
     expect(doc.slice(0, doc.indexOf("\n## "))).toMatch(/removed from this page when its fix ships/);

@@ -10,14 +10,9 @@ neotoma init
 neotoma setup --tool claude-code --yes
 ```
 
-`neotoma setup --tool claude-code --yes` writes the MCP entries and more. On the published v0.25.0 it writes:
+`neotoma setup --tool claude-code --yes` connects Claude Code: it writes MCP entries, CLI instruction files, and an allow rule that lets Claude Code run any `neotoma` command; [Install](#install) lists everything it writes.
 
-- Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
-- CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.
-- When `claude` is on your PATH, it runs `claude plugin marketplace add` and `claude plugin install` to install the Neotoma Claude Code plugin (five hooks). Without `claude` on PATH, setup writes everything else and then exits with status 1.
-- When `~/.claude` exists, it links 12 Neotoma skills into `~/.claude/skills`.
-
-It also adds two allow rules, `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)`, to `.claude/settings.local.json` (project scope, the default). The first is a wildcard: Claude Code then runs any `neotoma` command without asking, including destructive ones such as `neotoma reset`, `neotoma storage merge-db`, `neotoma backup restore`, and `neotoma processes kill`. `--scope both` also writes the rules to `~/.claude/settings.json`, and `--skip-permissions` writes none. For Cursor the same two rules go to `.cursor/allowlist.json`; for Codex they go to the user-level `~/.codex/config.toml` whatever the scope.
+After a plain npm install, CLI data commands such as `neotoma store` return `AUTH_REQUIRED`, because the CLI uses the production profile, which needs a token. Run them as `neotoma dev ...` or with `NEOTOMA_ENV=development`.
 
 Other hosts are listed under [Connect your tools](#connect-your-tools).
 
@@ -116,6 +111,15 @@ neotoma init
 neotoma setup --tool claude-code --yes
 ```
 
+On the published v0.25.0, `neotoma setup --tool claude-code --yes` writes the MCP entries and more:
+
+- Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
+- CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.
+- When `claude` is on your PATH, it runs `claude plugin marketplace add` and `claude plugin install` to install the Neotoma Claude Code plugin (five hooks). Without `claude` on PATH, setup writes everything else and then exits with status 1.
+- When `~/.claude` exists, it links 12 Neotoma skills into `~/.claude/skills`.
+
+It also adds two allow rules, `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)`, to `.claude/settings.local.json` (project scope, the default). The first is a wildcard: Claude Code then runs any `neotoma` command without asking, including destructive ones such as `neotoma reset`, `neotoma storage merge-db`, `neotoma backup restore`, and `neotoma processes kill`. `--scope both` also writes the rules to `~/.claude/settings.json`, and `--skip-permissions` writes none. For Cursor the same two rules go to `.cursor/allowlist.json`; for Codex they go to the user-level `~/.codex/config.toml` whatever the scope.
+
 For another host, use its row in [Connect your tools](#connect-your-tools); `neotoma setup --help` lists the supported hosts. To check MCP config files later, `neotoma mcp config` scans for them and asks before adding a missing entry.
 
 Prerequisites: Node.js 20.x (see `.nvmrc`) and npm 9+. No `.env` is required for local storage. The `neotoma doctor` command checks your environment, database, and security configuration.
@@ -204,7 +208,7 @@ Neotoma stores typed entities with versioned history and provenance. The schema 
 ## Storage, privacy, and security
 
 - **Storage:** Local SQLite (`better-sqlite3`, WAL mode) plus content-addressed file storage, under `NEOTOMA_DATA_DIR`. Separate dev and prod profiles. Semantic search uses sqlite-vec locally.
-- **Privacy:** Your data is never used for training, and logs and event payloads carry IDs, not PII. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after (off with `NO_UPDATE_NOTIFIER=1`; `--no-update-check` applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address. Agents can also call the `npm_check_update` MCP tool, which can make the same registry request and is not turned off by `NO_UPDATE_NOTIFIER`. In single-user mode the data stays entirely local; once you enable MCP OAuth, peer sync, or a hosted multi-user instance, data is shared per those configurations rather than staying purely local (see Deployment modes).
+- **Privacy:** Your data is never used for training; logs and event payloads carry IDs, not PII. No telemetry. Update checks ask the npm registry for the latest version: the interactive CLI about once a day (off with `NO_UPDATE_NOTIFIER=1`, or `--no-update-check`, which applies to the CLI only), and the stdio MCP server when a session starts and about every 6 hours (off with `NO_UPDATE_NOTIFIER=1`). Each request carries only the package name, and the registry sees ordinary connection metadata such as your address. The `npm_check_update` MCP tool can make the same request when an agent calls it, and is not turned off by `NO_UPDATE_NOTIFIER`. In single-user mode data stays local; MCP OAuth, peer sync, and hosted instances share data as configured (see Deployment modes).
 - **Encryption:** Optional AES-256-GCM column encryption of sensitive content and metadata, keyed by a key file or BIP-39 mnemonic. Some tables (for example the event log) are not yet column-encrypted; pair with an encrypted volume for full coverage. See [architecture](docs/architecture/architecture.md).
 - **Auth:** Local auth for single-user installs, MCP OAuth for hosted use, optional hardware attestation for agents, and explicit per-operation access controls. Run `neotoma doctor` to verify your setup. See [Auth](docs/subsystems/auth.md) and [Privacy](docs/subsystems/privacy.md).
 
