@@ -6,7 +6,7 @@
 
 A record, not recall. Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing. With one, it reads what was stored, from which source, and what is current now, so the agents you connect can defer to one answer.
 
-Neotoma is open source and local-first. It stores each fact as an observation linked to its source, resolves observations into entities, and computes a current snapshot for each entity with a reducer. A correction is recorded as a new observation, and the earlier observations stay readable for that entity. Each current field names the observation that set it.
+Neotoma is open source and local-first. It stores each fact as an observation (a stored observation names its source; a correction has none), resolves observations into entities, and computes a current snapshot for each entity with a reducer. A correction is recorded as a new observation, and the earlier observations stay readable for that entity. Each current field names the observation that set it.
 
 ## Key facts
 
@@ -15,16 +15,16 @@ Neotoma is open source and local-first. It stores each fact as an observation li
 - Interfaces: MCP server, REST API, CLI, and a bundled web Inspector
 - Platforms: macOS and Linux; Windows is untested
 - Documented integrations: Cursor, Claude Code, Claude Desktop, ChatGPT, Codex, OpenClaw, IronClaw, Windsurf, Continue, VS Code, Letta (see the integrations matrix under Links)
-- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files). No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after (off with `NO_UPDATE_NOTIFIER=1`; `--no-update-check` applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.
+- Local-first: data lives in a directory you control (embedded SQLite plus content-addressed files). No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after (off with `NO_UPDATE_NOTIFIER=1`; `--no-update-check` applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address. Agents can also call the `npm_check_update` MCP tool, which can make the same registry request and is not turned off by `NO_UPDATE_NOTIFIER`.
 - Written in TypeScript
 
 ## What it provides
 
 - Snapshots: the current state of an entity is computed by a reducer from its observations
-- Provenance: every current field traces to the observation that set it, and through it to its source
+- Provenance: each current field names the observation that set it, and a stored observation names its source
 - Corrections as observations: a correction adds a new observation and does not overwrite the earlier one
 - Entity resolution: entity IDs are hashes derived from the identity fields of the entity type
-- Idempotent writes through an `idempotency_key`
+- Idempotent writes through an `idempotency_key` (on the published v0.25.0, a same-key retry of a write that stopped partway reports success without finishing it)
 
 ## Limits
 
@@ -39,10 +39,10 @@ Neotoma is open source and local-first. It stores each fact as an observation li
 ## Key concepts
 
 - Entity: canonical representation of a person, company, task, or object with a deterministic ID
-- Observation: a timestamped fact about an entity, linked to its source
+- Observation: a timestamped fact about an entity; a stored observation is linked to its source, a correction is not
 - Snapshot: the current state of an entity, computed from its observations by a reducer
 - Reducer: the function that turns an entity's observations into a snapshot
-- Provenance: the link from each snapshot field to the observation, and from there to the source, that set it
+- Provenance: the link from each snapshot field to the observation that set it, and from a stored observation to its source
 
 ## How it compares
 
