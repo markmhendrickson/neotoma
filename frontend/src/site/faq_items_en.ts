@@ -156,7 +156,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     sectionId: "how-do-i-install-neotoma",
     question: "How do I install Neotoma?",
     answer:
-      "Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes under 5 minutes.",
+      "Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes a few minutes.",
     link: { href: "/install", label: "Install guide" },
   },
   {

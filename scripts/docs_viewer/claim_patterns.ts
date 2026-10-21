@@ -128,6 +128,35 @@ export const OMITTED_CLAIMS: readonly ClaimPattern[] = [
 /** Everything a docs viewer page is scanned for. */
 export const DOCS_CLAIM_PATTERNS: readonly ClaimPattern[] = [...RETIRED_NOUNS, ...OMITTED_CLAIMS];
 
+/** The retired "Developer preview" label (operator ruling 2026-10-20). */
+export const DEVELOPER_PREVIEW = /developer preview/i;
+/**
+ * "5 minutes" is an unmeasured install-time claim (the /install claim is "a few minutes"). Covers the
+ * languages whose strings ship in the client bundle: English, Spanish, Catalan, French, Portuguese,
+ * Italian, German, Indonesian, Chinese, Hindi, Arabic, Russian and Urdu.
+ */
+export const UNMEASURED_INSTALL_TIME =
+  /\b(?:5|five)[- ]minutes?\b|\b5 (?:minutos|minuts|minuti|menit|Minuten)\b|5 ?分[钟鐘]|5 मिनट|5 دقائق|5 минут|5 منٹ/i;
+/**
+ * The overstated lede "Without one, an agent recalls only what it was last told" (and the llms.txt
+ * variant "An agent's recall holds what it was last told"), in English and Spanish. The approved lede
+ * says what an agent works from without a record: whatever it happens to recall.
+ */
+export const OLD_LEDE: readonly ClaimPattern[] = [
+  {
+    id: "retired-frame",
+    name: "live-old-lede-en",
+    re: /\blast told\b|\brecalls only\b|\brecall holds\b/i,
+    label: 'overstated lede ("recalls only what it was last told")',
+  },
+  {
+    id: "retired-frame",
+    name: "live-old-lede-es",
+    re: /lo [uú]ltimo que se le dijo|(?:s[oó]lo|solo) recuerda|recuerdo (?:solo |s[oó]lo )?contiene/i,
+    label: 'overstated lede, Spanish ("solo recuerda lo ultimo que se le dijo")',
+  },
+];
+
 /**
  * Extras for the live one-pager routes only, each named. Marketing copy is stricter than docs: it
  * may not say "append-only" at all, nor deny the per-entity as-of read, while a docs page may state
@@ -159,6 +188,19 @@ export const LIVE_PAGE_EXTRA_CLAIMS: readonly ClaimPattern[] = [
     re: /\bfully reversible\b/i,
     label: "unevidenced reversibility claim",
   },
+  {
+    id: "retired-frame",
+    name: "live-developer-preview",
+    re: DEVELOPER_PREVIEW,
+    label: "developer-preview label",
+  },
+  {
+    id: "omitted-claim",
+    name: "live-unmeasured-install-time",
+    re: UNMEASURED_INSTALL_TIME,
+    label: "unmeasured install-time claim",
+  },
+  ...OLD_LEDE,
 ];
 
 /** Live pages: the docs list plus the named extras (a superset by construction). */
@@ -175,6 +217,8 @@ export const LIVE_PAGE_RETIRED_META_PHRASES = [
   "ships those guarantees",
   "5 minutes",
   "5-minute",
+  "five minutes",
+  "five-minute",
   "no cloud sync",
   "agent memory",
   "deterministic state",

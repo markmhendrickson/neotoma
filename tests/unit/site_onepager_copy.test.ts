@@ -5,6 +5,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
+import {
+  EVALUATE_SUBPAGE_EN,
+  EVALUATE_SUBPAGE_ES,
+} from "../../frontend/src/i18n/locales/evaluate_subpage_strings";
+import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
+import { LIVE_ROUTES } from "../../frontend/src/site/route_retirement";
+import { OLD_LEDE, UNMEASURED_INSTALL_TIME } from "../../scripts/docs_viewer/claim_patterns";
 import { RecordPlate } from "../../frontend/src/components/onepager/onepager_plate";
 
 /**
@@ -344,7 +351,10 @@ describe("/install polish", () => {
 
     it("lede reads as before and after, and does not claim who corrected it", () => {
       const lede = /plan-lede">([\s\S]*?)<\/p>/.exec(page2)![1].replace(/\s+/g, " ");
-      expect(lede).toContain("Without one, an agent recalls only what it was last told.");
+      expect(lede).toContain(
+        "Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing."
+      );
+      expect(lede).not.toMatch(/last told|recalls only/i);
       expect(lede).toContain("With one, it reads what was stored, from which source, and what is current now");
       expect(lede).not.toMatch(/corrected/i);
       expect(lede).not.toMatch(/for example/i);
@@ -831,3 +841,154 @@ describe("/install code blocks (round 3)", () => {
   });
 });
 
+
+
+/**
+ * The held /evaluate page: /install sends agents there, so its headline (title, description) and the
+ * first screen (lede plus the "What Neotoma does for you" section) carry the current category and no
+ * retired frame or omitted claim. The rest of the page is held for its owner and is not checked here.
+ * Revert-check: put "replayable" or "deterministic state layer" back into introP1 or the /evaluate
+ * metadata and these go red; scripts/validate_site_export.ts repeats the check on the built HTML.
+ */
+describe("/evaluate headline and first screen", () => {
+  const meta = resolveSeoMetadata("/evaluate");
+  const en = EVALUATE_SUBPAGE_EN;
+  const firstScreen = (e: typeof en) => [e.introP1, e.introP2BeforeLink, e.whatNeotomaP1, e.whatNeotomaP2];
+  const retired: [RegExp, string][] = [
+    [/deterministic state|state layer|memory layer/i, "retired category noun"],
+    [/replay/i, "replay"],
+    [/pick up where|retomen donde/i, "pick up where they left off"],
+    [/corrections? (always|will always) wins?|correction sticks everywhere/i, "corrections always win"],
+    [/append-only/i, "database-enforced append-only"],
+    [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
+  ];
+
+  it("names the category and the lede line in the title, description and lede", () => {
+    expect(meta.title).toContain("system of record for AI agents");
+    expect(meta.description).toContain("A record, not recall.");
+    expect(en.introP1.startsWith("A record, not recall. Neotoma is the system of record for AI agents.")).toBe(true);
+    expect(EVALUATE_SUBPAGE_ES.introP1).toContain("sistema de registro para agentes de IA");
+  });
+
+  it("carries no retired phrase or omitted claim in the headline or first screen, in either locale", () => {
+    const texts = [meta.title, meta.description, ...firstScreen(en), ...firstScreen(EVALUATE_SUBPAGE_ES)];
+    for (const [re, label] of retired) {
+      for (const text of texts) {
+        expect(re.test(text), `${label}: ${text.slice(0, 80)}`).toBe(false);
+      }
+    }
+  });
+});
+
+/**
+ * No "developer preview" label on any public page (operator ruling 2026-10-20). The label lived in the
+ * header badge of the old app shell (which every held page uses), in the dictionaries, and in the FAQ
+ * answer "Is this production-ready?". Revert-check: put the dictionary key, the badge or the phrase
+ * back and these go red; scripts/validate_site_export.ts repeats the check on the built pages.
+ */
+describe("no developer-preview label", () => {
+  const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
+  it("is gone from the header shell, the dictionaries and the FAQ copy", () => {
+    const sources = {
+      "SiteHeaderNav.tsx": read("frontend", "src", "components", "SiteHeaderNav.tsx"),
+      "dictionaries.ts": read("frontend", "src", "i18n", "dictionaries.ts"),
+      "home_body_en.ts": read("frontend", "src", "i18n", "locales", "home_body_en.ts"),
+      "home_body_es.ts": read("frontend", "src", "i18n", "locales", "home_body_es.ts"),
+      "faq_preview.ts": read("inspector", "src", "lib", "faq_preview.ts"),
+    };
+    for (const [name, text] of Object.entries(sources)) {
+      expect(text, name).not.toMatch(/developer preview|developerPreview|vista previa para desarrolladores/i);
+    }
+  });
+  it("is absent from the JSON-LD and metadata of the live routes", () => {
+    for (const route of LIVE_ROUTES) {
+      const meta = resolveSeoMetadata(route);
+      const all = JSON.stringify([meta.title, meta.description, meta.jsonLd]);
+      expect(all, route).not.toMatch(/developer preview/i);
+    }
+  });
+});
+
+/**
+ * "5 minutes" is an unmeasured install-time claim; /install says "a few minutes". The CTA, FAQ and
+ * metadata strings that still carried it are pinned here. Revert-check: put "Install in 5 minutes"
+ * back into home_body_en.ts, or "5 minutes" into the Cursor metadata, and this goes red;
+ * scripts/validate_site_export.ts repeats the check on the built pages.
+ */
+describe("no unmeasured install-time claim", () => {
+  const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
+  const claim = UNMEASURED_INSTALL_TIME;
+  /** Packs store non-Latin text as \u escapes; compare the decoded text. */
+  const decode = (t: string) => t.replace(/\\u([0-9a-f]{4})/gi, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
+  it("is gone from the install CTAs, install descriptions, FAQ answers and integration metadata", () => {
+    const sources: Record<string, string> = {
+      "home_body_en.ts": read("frontend", "src", "i18n", "locales", "home_body_en.ts"),
+      "home_body_es.ts": read("frontend", "src", "i18n", "locales", "home_body_es.ts"),
+      "static_packs.ts": read("frontend", "src", "i18n", "locales", "static_packs.ts"),
+      "install_page_strings.ts": read("frontend", "src", "i18n", "locales", "install_page_strings.ts"),
+      "subpage_packs.ts": read("frontend", "src", "i18n", "locales", "subpage_packs.ts"),
+      "IcpDetailPage.tsx": read("frontend", "src", "components", "subpages", "IcpDetailPage.tsx"),
+      "faq_items_en.ts": read("frontend", "src", "site", "faq_items_en.ts"),
+      "faq_items_es.ts": read("frontend", "src", "site", "faq_items_es.ts"),
+      "faq.md": read("docs", "site", "pages", "en", "faq.md"),
+      "seo_metadata.ts": read("frontend", "src", "site", "seo_metadata.ts"),
+    };
+    for (const [name, text] of Object.entries(sources)) {
+      expect(decode(text), name).not.toMatch(claim);
+    }
+  });
+  it("the pattern covers the words every shipped locale used", () => {
+    for (const phrase of [
+      "Install in 5 minutes",
+      "5-minute install",
+      "Instalar en 5 minutos",
+      "Instal·lar en 5 minuts",
+      "Installer en 5 minutes",
+      "In 5 Minuten installieren",
+      "Instal dalam 5 menit",
+      "5 分钟安装",
+      "5 मिनट में इंस्टॉल करें",
+      "التثبيت في 5 دقائق",
+      "Установить за 5 минут",
+      "5 منٹ میں انسٹال کریں",
+    ]) {
+      expect(claim.test(phrase), phrase).toBe(true);
+    }
+    expect(claim.test("Install in a few minutes")).toBe(false);
+  });
+});
+
+/**
+ * The overstated lede ("Without one, an agent recalls only what it was last told", llms.txt variant
+ * "recall holds what it was last told") must not come back on the one-pager, in the /evaluate lede (EN and
+ * ES), or in the title, description or JSON-LD of / and /evaluate. Revert-check: restore the old sentence
+ * into the /evaluate English lede, the Spanish pack, or a meta description and this goes red;
+ * scripts/validate_site_export.ts repeats the check on the built pages.
+ */
+describe("old lede guard", () => {
+  const sameLede = (text: string) => OLD_LEDE.filter((p) => p.re.test(text)).map((p) => p.name);
+  it("matches the old sentences in both languages", () => {
+    expect(sameLede("Without one, an agent recalls only what it was last told.")).toContain("live-old-lede-en");
+    expect(sameLede("An agent's recall holds what it was last told.")).toContain("live-old-lede-en");
+    expect(sameLede("Sin uno, un agente solo recuerda lo último que se le dijo.")).toContain("live-old-lede-es");
+    expect(sameLede("Without one, an agent works from whatever it happens to recall")).toEqual([]);
+  });
+  it("is absent from the one-pager, the /evaluate lede strings and the route metadata", () => {
+    const en = EVALUATE_SUBPAGE_EN;
+    const es = EVALUATE_SUBPAGE_ES;
+    const texts: Record<string, string> = {
+      "one-pager source": all,
+      "/evaluate EN strings": JSON.stringify(en),
+      "/evaluate ES strings": JSON.stringify(es),
+    };
+    for (const route of ["/", "/install", "/evaluate"]) {
+      const meta = resolveSeoMetadata(route);
+      texts[`${route} metadata`] = JSON.stringify([meta.title, meta.description, meta.ogImageAlt, meta.jsonLd]);
+    }
+    for (const [name, text] of Object.entries(texts)) {
+      expect(sameLede(text), name).toEqual([]);
+    }
+    expect(en.introP1).toContain("works from whatever it happens to recall");
+    expect(es.introP1).toContain("trabaja con lo que le toque recordar");
+  });
+});
