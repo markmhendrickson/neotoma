@@ -479,7 +479,7 @@ for (const route of LIVE_ROUTES) {
 }
 // Held pages keep their old shell but must not offer navigation entries that only land on redirect stubs.
 const STUB_NAV_LABELS = ["Memory guarantees", "Memory models", "Hosted Neotoma"];
-for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox", "/meet", "/skills"]) {
+for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox", "/meet", "/skills", "/privacy", "/terms", "/skills/ensure-neotoma"]) {
   const heldPath = path.join(siteDir, heldRoute.slice(1), "index.html");
   if (!fs.existsSync(heldPath)) continue;
   const heldText = fs
@@ -496,10 +496,8 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
     liveClaimFailures++;
   }
   for (const label of STUB_NAV_LABELS) {
-    // The old footer still carries one "Memory guarantees" link (a separate component, out of scope
-    // for this change); the sidebar navigation entry must be gone, so more than one is a failure.
-    const allowed = label === "Memory guarantees" ? 1 : 0;
-    if (heldText.split(label).length - 1 > allowed) {
+    // The footer entry is gone too, so no held page offers any of these labels.
+    if (heldText.includes(label)) {
       fail(`site_pages${heldRoute}/index.html still offers the navigation entry "${label}", which only lands on a redirect stub`);
       liveClaimFailures++;
     }
@@ -563,6 +561,120 @@ if (fs.existsSync(evaluatePath)) {
     }
   }
 }
+// ---------------------------------------------------------------------------
+// 3h. Every served page (not a redirect stub): statements the claims check found wrong on the published
+// package, mirror pages whose source page is retired, and duplicated JSON-LD
+// ---------------------------------------------------------------------------
+const SERVED_PAGE_RETIRED_STATEMENTS: [RegExp, string][] = [
+  [/Every modification records who made it/i, "audit-trail claim (retired auditable-change-log page)"],
+  [/reconstruct any historical/i, "replayable-timeline claim"],
+  [/Review the state guarantees/i, "404 page memory-guarantees entry"],
+  [/Optional prompts (during|in) init/i, "init prompts claim (init runs without prompts by default)"],
+  [/pre-flight block above|activation sequence linked below/i, "install page pointer to a block that is elsewhere"],
+  [/Guided Workflows for Agent Memory|Guided workflows that teach your agent to remember/i, "retired skills headline"],
+  [/persistent memory/i, "retired category wording on a skill page"],
+  [/markNZed/i, "skills link to a repository that does not exist"],
+  [/googleworkspace\/mcp-(gmail|google-calendar)/i, "dead external skill link"],
+  [/Your memory to persist past Sunday|your memory to persist/i, "sandbox memory sentence"],
+  [/no conflict detection|deterministic state evolution|state layer on top|inference variance|log archaeology|context janitor/i, "retired comparison or tax facet"],
+  [/ingest -> reconstruct|reconstruct a timeline|timeline reconstruction/i, "reconstruct wording"],
+  [/Connected agents read and write the same record|what one agent stored is what the next one reads/i, "unqualified shared-record claim"],
+  [/observation ids are from one run/i, "sheet 03 id sentence"],
+  [/shadow-mode (trial|path)/i, "non-destructive shadow-mode trial"],
+];
+function collectServedPages(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "assets") continue;
+      collectServedPages(full, out);
+    } else if (entry.name === "index.html" || entry.name === "404.html") {
+      out.push(full);
+    }
+  }
+  return out;
+}
+const isStubPage = (html: string): boolean => html.includes('http-equiv="refresh"');
+const stripToText = (html: string): string =>
+  html
+    .replace(/<script(?![^>]*ld\+json)[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+let servedPageFailures = 0;
+const servedPages = collectServedPages(siteDir);
+const isRealPageAt = (route: string): boolean => {
+  const file = route === "/" ? path.join(siteDir, "index.html") : path.join(siteDir, route.slice(1), "index.html");
+  return fs.existsSync(file) && !isStubPage(fs.readFileSync(file, "utf-8"));
+};
+for (const file of servedPages) {
+  const rel = path.relative(siteDir, file).replace(/\\/g, "/");
+  const html = fs.readFileSync(file, "utf-8");
+  if (isStubPage(html)) continue;
+  const route = "/" + rel.replace(/(^|\/)index\.html$/, "").replace(/404\.html$/, "404");
+  const shown = rel;
+  const text = stripToText(html);
+  for (const [re, label] of SERVED_PAGE_RETIRED_STATEMENTS) {
+    const hit = re.exec(text);
+    if (hit) {
+      fail(`site_pages/${shown} carries "${hit[0]}" (${label})`);
+      servedPageFailures++;
+    }
+  }
+  // Each JSON-LD block is emitted once.
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1].trim());
+  if (new Set(blocks).size !== blocks.length) {
+    fail(`site_pages/${shown} emits the same JSON-LD block more than once`);
+    servedPageFailures++;
+  }
+  // A markdown mirror is served only while its source page is.
+  if (/^\/markdown\/./.test(route)) {
+    const source = route.slice("/markdown".length).replace(/\/$/, "");
+    if (!isRealPageAt(source)) {
+      fail(`site_pages/${shown} is a markdown mirror whose source page ${source} is a redirect stub; the mirror must be a stub too`);
+      servedPageFailures++;
+    }
+  }
+}
+// The /install HowTo carries the same three steps as the visible install block.
+const installHtmlForHowTo = path.join(siteDir, "install", "index.html");
+if (fs.existsSync(installHtmlForHowTo)) {
+  const howTo = [...fs.readFileSync(installHtmlForHowTo, "utf-8").matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => m[1])
+    .find((b) => b.includes('"HowTo"'));
+  const steps = howTo ? (JSON.parse(howTo).step as { text: string }[]) : [];
+  const joined = steps.map((st) => st.text).join(" ");
+  if (steps.length !== 3 || !joined.includes("neotoma init") || !joined.includes("--tool claude-code") || joined.includes("--tool cursor")) {
+    fail("site_pages/install/index.html HowTo does not match the visible three install lines (npm install, neotoma init, neotoma setup --tool claude-code --yes)");
+    servedPageFailures++;
+  }
+}
+// Sheet 06 of the one-pager states the four gaps in plain words, and one operator per instance as scope.
+const homeForLimits = path.join(siteDir, "index.html");
+if (fs.existsSync(homeForLimits)) {
+  const homeText = stripToText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
+  for (const needle of [
+    "What to expect",
+    "Not built yet",
+    "Reading the whole record as it stood at a past date.",
+    "Moving a record between instances with its history.",
+    "Corrections that always hold.",
+    "Verified authorship for every write.",
+    "One operator per instance is the scope today.",
+  ]) {
+    if (!homeText.includes(needle)) {
+      fail(`site_pages/index.html sheet 06 no longer says "${needle}"`);
+      servedPageFailures++;
+    }
+  }
+  if (/Authority over the record is not modeled|organizations, workspaces and rules for who may correct/i.test(homeText)) {
+    fail("site_pages/index.html sheet 06 still carries the retired authority limit");
+    servedPageFailures++;
+  }
+}
+liveClaimFailures += servedPageFailures;
+if (servedPageFailures === 0) {
+  pass(`Served pages: ${servedPages.length} files checked for retired statements, duplicate JSON-LD, orphan markdown mirrors and the /install HowTo`);
+}
+
 if (liveClaimFailures === 0) {
   pass("Live pages: no retired phrase in JSON-LD or meta keywords, and no omitted claim in the text");
 }

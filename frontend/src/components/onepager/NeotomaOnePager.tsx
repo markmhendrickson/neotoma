@@ -10,7 +10,9 @@ import {
   CONNECTIONS_OTHER,
   CONNECTIONS_SETUP,
   INSTALL_COMMANDS,
-  LIMITS,
+  EXPECTATIONS,
+  NOT_BUILT_YET,
+  SCOPE_SENTENCE,
   PIPELINE,
   RECALL_VS_RECORD,
   FIGURE_LEGEND,
@@ -162,8 +164,10 @@ export function NeotomaOnePager() {
             A correction is one more observation. It does not edit the earlier one, so the original
             value is still listed and every current field names the observation that set it. The run
             below was run on the published npm package (0.25.0) and on main, with the invoice from
-            sheet 01 plus one correction. Output is reformatted from the CLI&apos;s JSON to fit the
-            page; observation ids are from one run and differ on every run.
+            sheet 01 plus one correction. The commands start with <code>neotoma dev</code> because a
+            plain npm install points the CLI at the production profile, which needs a token. Output
+            is reformatted from the CLI&apos;s JSON to fit the page. Store observation ids differ
+            between installs; yours will not match these.
           </p>
           <pre className="plan-pre" tabIndex={0} aria-label="CLI transcript">
             <code>{CLI_TRANSCRIPT}</code>
@@ -184,8 +188,8 @@ export function NeotomaOnePager() {
             </figure>
             <p className="plan-body">
               Neotoma runs as a local service. Agents reach it through an MCP server, a REST API or
-              the CLI, and you inspect it in a bundled web app. Connected agents read and write the
-              same record, so what one agent stored is what the next one reads.
+              the CLI, and you inspect it in a bundled web app. Agents connected to the same MCP entry
+              read and write the same record.
             </p>
           </div>
           <div className="plan-table-wrap">
@@ -256,14 +260,31 @@ export function NeotomaOnePager() {
             mark="Sheet 06 · General notes"
             title="What this drawing does not show"
           />
+          <p className="plan-label">What to expect</p>
           <ol className="plan-notes">
-            {LIMITS.map((note) => (
+            {EXPECTATIONS.map((note) => (
               <li key={note.title}>
                 <h3>{note.title}</h3>
                 <p>{note.text}</p>
               </li>
             ))}
           </ol>
+          <p className="plan-label">Not built yet</p>
+          <ol className="plan-notes">
+            {NOT_BUILT_YET.map((note) => (
+              <li key={note.title}>
+                <h3>{note.title}</h3>
+                <p>{note.text}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="plan-body plan-small">
+            {SCOPE_SENTENCE} Known defects and edge cases are listed in{" "}
+            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/known_limitations.md`}>
+              known limitations
+            </a>
+            .
+          </p>
           <TitleBlock n={6} title="GENERAL NOTES · LIMITS" />
         </section>
 

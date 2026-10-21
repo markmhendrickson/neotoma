@@ -88,10 +88,9 @@ export function SiteTailpiece() {
     () => [
       { label: dict.install, href: "/install" },
       { label: dict.architecture, href: "/architecture" },
-      { label: dict.footerLinkMemoryGuarantees, href: "/memory-guarantees" },
       { label: subpage.faq.title, href: "/faq" },
     ],
-    [dict.install, dict.architecture, dict.footerLinkMemoryGuarantees, subpage.faq.title],
+    [dict.install, dict.architecture, subpage.faq.title],
   );
 
   const docLinks = useMemo(

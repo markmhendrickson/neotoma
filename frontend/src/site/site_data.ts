@@ -591,15 +591,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     ],
   },
   {
-    title: "Where the tax shows up",
-    sidebarTitle: "The tax",
-    items: [
-      { label: "Context janitor", href: "/operating", icon: "SatelliteDish" },
-      { label: "Inference variance", href: "/building-pipelines", icon: "Zap" },
-      { label: "Log archaeology", href: "/debugging-infrastructure", icon: "Cpu" },
-    ],
-  },
-  {
     title: "Compare",
     items: [
       { label: "Build vs buy", href: "/build-vs-buy", icon: "Scale" },
@@ -623,7 +614,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
 
 export const SITE_CODE_SNIPPETS = {
   onboardingSequence: "evaluation -> installation -> activation -> tooling config",
-  activationSequence: "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
+  activationSequence: "detect context -> discover -> propose -> preview -> ingest -> query -> correct",
   installCommands: `# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
 npm install -g neotoma
 

@@ -468,6 +468,12 @@
 }
 
 /* General notes */
+.plan-notes + .plan-label {
+  margin-top: 32px;
+}
+.plan-notes + .plan-small {
+  margin-top: 24px;
+}
 .plan-notes {
   list-style: none;
   padding: 0;

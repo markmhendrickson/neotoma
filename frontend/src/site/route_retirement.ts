@@ -24,6 +24,9 @@ const TREE = `${GITHUB_REPO}/tree/main/`;
 /** Routes that are real pages on the one-pager site. */
 export const LIVE_ROUTES: readonly string[] = ["/", "/install"];
 
+const MARKDOWN_MIRROR_REASON =
+  "Markdown mirrors of site pages that are themselves served, linked from each page for agents and crawlers; llms.txt points at them.";
+
 /**
  * Routes kept exactly as they are, with the old app shell, until their owner decides. Each has
  * a reason. Most are not linked from the one-pager; /meet, /privacy and /terms are, deliberately
@@ -36,9 +39,10 @@ export const HELD_ROUTES: readonly { match: string | RegExp; reason: string }[] 
       "Fetched by agents: the evaluation prompt on the install page and in install.md says 'Read https://neotoma.io/evaluate'.",
   },
   {
-    match: /^\/markdown(\/|$)/,
-    reason:
-      "Markdown mirrors of site pages, linked from each page for agents and crawlers; llms.txt points at them.",
+    // Only the mirror root. A mirror of a page is held exactly while its source page is served as a
+    // real page (see heldReason); the mirror of a retired page is a redirect stub like its source.
+    match: "/markdown",
+    reason: MARKDOWN_MIRROR_REASON,
   },
   {
     match: /^\/skills(\/|$)/,
@@ -269,6 +273,14 @@ export function isLiveRoute(route: string): boolean {
 export function heldReason(route: string): string | null {
   const r = stripTrailingSlash(route);
   if (LOCALE_LEGAL.test(r)) return LEGAL_REASON;
+  if (r.startsWith("/markdown/")) {
+    // A mirror carries its source page's content and metadata, so it is served only while the source is.
+    const source = r.slice("/markdown".length);
+    if (isLiveRoute(source) || (!source.startsWith("/markdown") && heldReason(source) !== null)) {
+      return MARKDOWN_MIRROR_REASON;
+    }
+    return null;
+  }
   for (const h of HELD_ROUTES) {
     if (typeof h.match === "string" ? h.match === r : h.match.test(r)) return h.reason;
   }
@@ -300,6 +312,10 @@ export function resolveDestination(
   if (isLocaleRoute(r)) return { url: "/", repoPath: null, kind: "onepager" };
   const self = viewer.byRoute.get(r);
   if (self) return { url: `https://neotoma.io${r}/`, repoPath: null, kind: "site" };
+  // The mirror of a retired page goes where its source page goes.
+  if (r.startsWith("/markdown/") && RETIRED_DESTINATIONS[r] === undefined) {
+    return resolveDestination(r.slice("/markdown".length), viewer);
+  }
   const mapped = RETIRED_DESTINATIONS[r];
   if (mapped === undefined) {
     // Dynamic children (for example /skills/:slug are held; unknown retired routes go home).
