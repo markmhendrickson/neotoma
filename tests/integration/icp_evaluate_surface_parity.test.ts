@@ -168,18 +168,20 @@ describe("ICP ↔ /evaluate cross-surface parity (#2415)", () => {
 
     it("POSITIVE: both locales of /evaluate carry the Candidate-B signal the docs carry", () => {
       // The docs state B as "would not build it themselves". `/evaluate` must score
-      // the same thing, in each locale's natural wording.
+      // the same thing, in each locale's natural wording. The page no longer uses the retired
+      // "state layer" noun (PR 2709), so the bullet says "their own store for agent data"; the
+      // contract is the signal, not the old noun.
       expect(
         EVALUATE_SUBPAGE_EN.strongFitBullets.some((b) =>
-          /building your own state layer.*distraction from real work/i.test(b),
+          /building and maintaining their own store for agent data.*distraction from real work/i.test(b),
         ),
-        "EN /evaluate does not score the reader on treating state-layer building as a distraction",
+        "EN /evaluate does not score the reader on treating building their own agent-data store as a distraction",
       ).toBe(true);
       expect(
         EVALUATE_SUBPAGE_ES.strongFitBullets.some((b) =>
-          /construir su propia capa de estado.*distracci[óo]n del trabajo real/i.test(b),
+          /construir y mantener su propio almac[ée]n de datos de agentes.*distracci[óo]n del trabajo real/i.test(b),
         ),
-        "ES /evaluate does not score the reader on treating state-layer building as a distraction",
+        "ES /evaluate does not score the reader on treating building their own agent-data store as a distraction",
       ).toBe(true);
     });
 
