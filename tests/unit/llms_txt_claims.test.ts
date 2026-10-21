@@ -156,6 +156,8 @@ export const TELEMETRY_REQUIRED_FRAGMENTS: readonly RegExp[] = [
   /applies to the CLI only/i,
   /only the package name/i,
   /connection metadata/i,
+  /`npm_check_update` MCP tool/,
+  /not turned off by `NO_UPDATE_NOTIFIER`/,
 ];
 
 /** Every "no telemetry" statement must sit in a line that carries all the fragments above. */
@@ -302,7 +304,9 @@ describe("README checkable claims", () => {
   });
 
   it("explains what setup writes for Claude Code and Cursor permissions", () => {
-    expect(readme).toMatch(/`neotoma setup --tool claude-code --yes` writes the MCP entry/);
+    expect(readme).toMatch(
+      /`neotoma setup --tool claude-code --yes` writes the MCP entries and more/
+    );
     expect(readme).toContain(".claude/settings.local.json");
     expect(readme).toContain(".cursor/allowlist.json");
     expect(readme).toContain("`--skip-permissions`");
@@ -399,13 +403,94 @@ describe("README checkable claims", () => {
     expect(block![1].trim()).toBe(m![1].trim());
     expect(block![1]).not.toContain("neotoma mcp config");
     const after = readme.slice(block!.index + block![0].length).trimStart();
-    expect(after.startsWith("`neotoma setup --tool claude-code --yes` writes the MCP entry")).toBe(
-      true
-    );
+    expect(
+      after.startsWith("`neotoma setup --tool claude-code --yes` writes the MCP entries and more")
+    ).toBe(true);
   });
 
   it("does not claim the record shows who corrected a value", () => {
     expect(readme.slice(0, 600)).not.toMatch(/who corrected it/i);
+  });
+});
+
+/**
+ * Statements a claims check found false on the published neotoma@0.25.0. Each must stay out of
+ * README.md and llms.txt; the copy describes current behaviour and relaxes when the fix ships.
+ */
+const V0250_OVERCLAIMS: readonly RegExp[] = [
+  /writes the MCP entry to `\.mcp\.json`/,
+  /through (that observation|it) to its source/i,
+  /source, interpretation, agent, and timestamp/i,
+  /no `?Math\.random\(\)`? or wall-clock values enter/i,
+  /same guarantees are reachable/i,
+  /OpenAPI-backed contract/i,
+  /guaranteed capture/i,
+  /immutable observations/i,
+  /Shipped and stable/i,
+  /Ateles answers who was authorized/i,
+];
+
+function v0250Overclaims(text: string): string[] {
+  return V0250_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
+}
+
+describe("claims true on the published v0.25.0", () => {
+  const readme = readFileSync(join(root, "README.md"), "utf-8");
+  const llms = readFileSync(join(root, "frontend/public/llms.txt"), "utf-8");
+  const docsReadme = readFileSync(join(root, "docs/README.md"), "utf-8");
+
+  it("README and llms.txt carry none of the overclaims", () => {
+    expect(v0250Overclaims(readme)).toEqual([]);
+    expect(v0250Overclaims(llms)).toEqual([]);
+  });
+
+  it("README lists everything setup writes", () => {
+    for (const s of [
+      "`neotoma-dev`",
+      "`neotoma.prod.db`",
+      "They use separate databases",
+      "`.claude/rules/neotoma_cli.mdc`",
+      "`.cursor/rules/neotoma_cli.mdc`",
+      "`.codex/neotoma_cli.md`",
+      "`claude plugin install`",
+      "(five hooks)",
+      "exits with status 1",
+      "`~/.claude/skills`",
+    ])
+      expect(readme, s).toContain(s);
+  });
+
+  it("names the observation and its source without claiming every field reaches a source", () => {
+    expect(readme).toContain(
+      "Each current field names the observation that set it, and a stored observation names its source."
+    );
+    expect(readme).toContain(
+      "A correction observation has no source, and a write from the CLI records no writer."
+    );
+    expect(llms).toContain(
+      "- Provenance: each current field names the observation that set it, and a stored observation names its source"
+    );
+  });
+
+  it("qualifies idempotent writes for v0.25.0 in README and llms.txt", () => {
+    expect(readme).toContain(
+      "retrying a write that stopped partway with the same key reports success without finishing it"
+    );
+    expect(llms).toContain(
+      "a same-key retry of a write that stopped partway reports success without finishing it"
+    );
+  });
+
+  it("states timestamps are wall-clock and hooks capture only while the API runs", () => {
+    expect(readme).toContain(
+      "observation timestamps are wall-clock, and the default merge rule orders by them"
+    );
+    expect(readme).toContain("which capture turns automatically when the local API is running");
+    expect(readme).toContain("fail quietly when nothing is listening there");
+  });
+
+  it("marks atomic corrections as main-only in docs/README.md", () => {
+    expect(docsReadme).toMatch(/one transaction \(main; not in v0\.25\.0\)/);
   });
 });
 
