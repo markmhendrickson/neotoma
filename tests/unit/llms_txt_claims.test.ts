@@ -261,21 +261,17 @@ describe("llms.txt body claims", () => {
 
 describe("README checkable claims", () => {
   const readme = readFileSync(join(root, "README.md"), "utf-8");
-
-  it("states the MCP tool count on main and names the published version it differs from", () => {
-    const m = /exposes (\d+) MCP tools on `main` \((\d+) in the published v(\d+\.\d+\.\d+)\)/.exec(
-      readme
-    );
-    expect(
-      m,
-      "README must state the MCP tool count on main and in the published release"
-    ).not.toBeNull();
-    expect(Number(m![1])).toBe(NEOTOMA_TOOL_NAMES.length);
-    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
+  const packageVersion = (
+    JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
       version: string;
-    };
-    expect(m![3]).toBe(pkg.version);
-    // The old wording claimed main's count for the published release.
+    }
+  ).version;
+
+  it("states this package version and its registered MCP tool count", () => {
+    const m = /Neotoma v(\d+\.\d+\.\d+) exposes (\d+) MCP tools/.exec(readme);
+    expect(m, "README must state this package version and its MCP tool count").not.toBeNull();
+    expect(m![1]).toBe(packageVersion);
+    expect(Number(m![2])).toBe(NEOTOMA_TOOL_NAMES.length);
     expect(readme).not.toMatch(/MCP tools \(as of v\d/);
   });
 
@@ -344,11 +340,13 @@ describe("README checkable claims", () => {
   });
 
   it("states the REST path count that openapi.yaml has", () => {
-    const m = /and (\d+) REST paths in its OpenAPI spec on `main` \((\d+) in v\d+\.\d+\.\d+\)/.exec(
-      readme
-    );
+    const m =
+      /Neotoma v(\d+\.\d+\.\d+) exposes \d+ MCP tools and (\d+) REST paths in its OpenAPI spec/.exec(
+        readme
+      );
     expect(m, "README must state the REST path count").not.toBeNull();
-    expect(Number(m![1])).toBe(openApiPathCount(readFileSync(join(root, "openapi.yaml"), "utf-8")));
+    expect(m![1]).toBe(packageVersion);
+    expect(Number(m![2])).toBe(openApiPathCount(readFileSync(join(root, "openapi.yaml"), "utf-8")));
     expect(readme).not.toMatch(/about \d+ REST endpoints/);
   });
 
@@ -449,10 +447,10 @@ describe("README checkable claims", () => {
 });
 
 /**
- * Statements a claims check found false on the published neotoma@0.25.0. Each must stay out of
- * README.md and llms.txt; the copy describes current behaviour and relaxes when the fix ships.
+ * Unsupported statements from the previous claims check. Each must stay out of README.md and
+ * llms.txt unless the current package supports it.
  */
-const V0250_OVERCLAIMS: readonly RegExp[] = [
+const UNSUPPORTED_OVERCLAIMS: readonly RegExp[] = [
   /observations are immutable\./i,
   /Writes are idempotent through an `idempotency_key`\./,
   /^- Idempotent writes through an `idempotency_key`\s*$/m,
@@ -468,19 +466,21 @@ const V0250_OVERCLAIMS: readonly RegExp[] = [
   /Ateles answers who was authorized/i,
 ];
 
-function v0250Overclaims(text: string): string[] {
-  return V0250_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
+function unsupportedOverclaims(text: string): string[] {
+  return UNSUPPORTED_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
 }
 
-describe("claims true on the published v0.25.0", () => {
+describe("claims true for this package", () => {
   const readme = readFileSync(join(root, "README.md"), "utf-8");
   const llms = readFileSync(join(root, "frontend/public/llms.txt"), "utf-8");
   const docsReadme = readFileSync(join(root, "docs/README.md"), "utf-8");
 
   it("README and llms.txt carry none of the overclaims", () => {
-    expect(v0250Overclaims(readme)).toEqual([]);
-    expect(v0250Overclaims(llms)).toEqual([]);
-    expect(v0250Overclaims(readFileSync(join(root, KNOWN_LIMITATIONS_PATH), "utf-8"))).toEqual([]);
+    expect(unsupportedOverclaims(readme)).toEqual([]);
+    expect(unsupportedOverclaims(llms)).toEqual([]);
+    expect(
+      unsupportedOverclaims(readFileSync(join(root, KNOWN_LIMITATIONS_PATH), "utf-8"))
+    ).toEqual([]);
   });
 
   it("goes red on an unqualified immutability or idempotency sentence", () => {
@@ -489,7 +489,7 @@ describe("claims true on the published v0.25.0", () => {
       "Writes are idempotent through an `idempotency_key`.",
       "- Idempotent writes through an `idempotency_key`",
     ])
-      expect(v0250Overclaims(`${readme}\n${bad}\n`).length, bad).toBeGreaterThan(0);
+      expect(unsupportedOverclaims(`${readme}\n${bad}\n`).length, bad).toBeGreaterThan(0);
   });
 
   it("README lists everything setup writes", () => {
@@ -520,13 +520,12 @@ describe("claims true on the published v0.25.0", () => {
     );
   });
 
-  it("qualifies idempotent writes for v0.25.0 in README and llms.txt", () => {
-    expect(readme).toContain(
-      "retrying a write that stopped partway with the same key reports success without finishing it"
-    );
-    expect(llms).toContain(
-      "a same-key retry of a write that stopped partway reports success without finishing it"
-    );
+  it("qualifies interrupted keyed stores in README and llms.txt", () => {
+    for (const text of [readme, llms]) {
+      expect(text).toContain("finishes its missing observations on a same-key retry");
+      expect(text).toContain("ERR_STORE_WRITE_INCOMPLETE");
+      expect(text).not.toContain("reports success without finishing it");
+    }
   });
 
   it("states timestamps are wall-clock and hooks capture only while the API runs", () => {
@@ -537,8 +536,13 @@ describe("claims true on the published v0.25.0", () => {
     expect(readme).toContain("fail quietly when nothing is listening there");
   });
 
-  it("marks atomic corrections as main-only in docs/README.md", () => {
-    expect(docsReadme).toMatch(/one transaction \(main; not in v0\.25\.0\)/);
+  it("marks atomic corrections as part of this version in docs/README.md", () => {
+    const version = (
+      JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
+        version: string;
+      }
+    ).version;
+    expect(docsReadme).toContain(`one transaction (added in v${version})`);
   });
 });
 
@@ -584,6 +588,17 @@ describe("docs/known_limitations.md", () => {
     }
   });
 
+  it("keeps the remaining interrupted-store and omitted-source limits for this version", () => {
+    const partialStore = entries.find((e) => e.startsWith("A store that fails partway"))!;
+    expect(partialStore).toContain("a same-key retry finishes missing observations");
+    expect(partialStore).toContain("ERR_STORE_WRITE_INCOMPLETE");
+    expect(partialStore).toContain("MCP does not repair keys stranded before the completion marker");
+    expect(partialStore).toContain("create_relationships` takes no idempotency key");
+    const attribution = entries.find((e) => e.startsWith("Who wrote or corrected"))!;
+    expect(attribution).toContain("records `unspecified`");
+    expect(attribution).toContain("OBSERVATION_SOURCE_OMITTED");
+  });
+
   it("links every entry to its tracking issue by full GitHub URL", () => {
     expect(doc).not.toMatch(/No open issue/i);
     for (const e of entries) {
@@ -596,9 +611,12 @@ describe("docs/known_limitations.md", () => {
 
   it("opens with an applicability line and a list of every entry, in order", () => {
     const intro = doc.slice(0, doc.indexOf("\n## "));
-    expect(intro).toMatch(
-      /^Applies to the published `neotoma@\d+\.\d+\.\d+` and to `main` as of \d{4}-\d{2}-\d{2}\./m
-    );
+    const version = (
+      JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
+        version: string;
+      }
+    ).version;
+    expect(intro).toContain(`Applies to \`neotoma@${version}\`.`);
     const listed = [...intro.matchAll(/^- \[(.+)\]\(#([^)]+)\)$/gm)].map((m) => [m[1], m[2]]);
     const headings = entries.map((e) => e.split("\n")[0].trim());
     expect(listed.map(([t]) => t)).toEqual(headings);
