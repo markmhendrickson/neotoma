@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
 import { PlanTitleBlock, SolidLockup } from "./NeotomaLogos";
-import { RecordPlanNarrow, RecordPlanWide, ServicePlan } from "./onepager_figures";
+import { ServicePlan } from "./onepager_figures";
+import { RecordPlate } from "./onepager_plate";
 import {
   CLI_TRANSCRIPT,
   DEEPER_MATERIAL,
@@ -13,6 +14,7 @@ import {
   PIPELINE,
   RECALL_VS_RECORD,
   FIGURE_LEGEND,
+  PLATE_CAPTION,
 } from "./onepager_copy";
 import "./onepager.css";
 
@@ -51,9 +53,10 @@ export function NeotomaOnePager() {
           <p className="plan-label">Neotoma · the system of record for AI agents</p>
           <h1 id="s1">A record, not recall.</h1>
           <p className="plan-lede">
-            Neotoma is the system of record for AI agents. Without one, an agent recalls only what it
-            was last told. With one, it reads what was stored, from which source, and what is
-            current now, so the agents you connect can defer to one answer.
+            Neotoma is the system of record for AI agents. Without one, an agent works from whatever
+            it happens to recall: part of the last session, a note its tool saved, or nothing. With
+            one, it reads what was stored, from which source, and what is current now, so the
+            agents you connect can defer to one answer.
           </p>
           <p className="plan-meta">
             Open source (MIT) · local-first · MCP server, REST API and CLI
@@ -82,8 +85,7 @@ export function NeotomaOnePager() {
           </div>
 
           <figure className="plan-figure">
-            <RecordPlanWide />
-            <RecordPlanNarrow />
+            <RecordPlate />
             <figcaption>
               <ol className="plan-legend">
                 {FIGURE_LEGEND.map((item, i) => (
@@ -95,9 +97,7 @@ export function NeotomaOnePager() {
                   </li>
                 ))}
               </ol>
-              <p className="plan-note">
-                Synthetic example. The same flow is run for real in sheet 03.
-              </p>
+              <p className="plan-note">{PLATE_CAPTION}</p>
             </figcaption>
           </figure>
           <TitleBlock n={1} title="TITLE · RECORD PLAN" />

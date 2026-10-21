@@ -9,7 +9,7 @@
 import type { DocsViewerEntry } from "../../frontend/src/site/docs_viewer_manifest";
 import { DOCS_VIEWER_GROUPS, viewerHref } from "../../frontend/src/site/docs_viewer_manifest";
 import type { RenderedDoc } from "./render";
-import { GITHUB_REPO_URL } from "./render";
+import { GITHUB_REPO_URL, githubSlug } from "./render";
 import { escapeAttr, escapeText } from "./serialize";
 
 export const SITE_ORIGIN = "https://neotoma.io";
@@ -45,17 +45,19 @@ a:focus-visible,pre:focus-visible,.dv-table:focus-visible,summary:focus-visible{
 .dv-mono{font:600 12px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase}
 .dv-masthead{border-bottom:2px solid var(--ink);background:var(--sheet)}
 .dv-masthead-inner{max-width:1240px;margin:0 auto;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between}
-.dv-brand{display:flex;gap:10px;align-items:baseline;text-decoration:none}
-.dv-brand b{font:400 22px/1 var(--serif);letter-spacing:-.02em}
+.dv-brand{display:inline-flex;gap:12px;align-items:center;min-height:44px;text-decoration:none}
+.dv-brand img{display:block;width:132px;height:28px}
+.dv-brand .dv-logo-dark{display:none}
+@media (prefers-color-scheme:dark){.dv-brand .dv-logo-light{display:none}.dv-brand .dv-logo-dark{display:block}}
 .dv-brand span{color:var(--rust)}
-.dv-masthead nav{display:flex;gap:16px;flex-wrap:wrap}
-.dv-masthead nav a{font:600 13px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.dv-masthead nav{display:flex;gap:8px 16px;flex-wrap:wrap}
+.dv-masthead nav a{display:inline-flex;align-items:center;min-height:24px;padding:6px 2px;font:600 13px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase}
 .dv-layout{max-width:1240px;margin:0 auto;padding:24px 16px 48px;display:grid;grid-template-columns:15rem minmax(0,1fr);gap:28px;align-items:start}
 .dv-side{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;border:2px solid var(--ink);background:var(--sheet);padding:16px}
 .dv-side h2,.dv-mnav h2{margin:16px 0 6px;color:var(--rust)}
 .dv-side h2:first-child{margin-top:0}
 .dv-side ul,.dv-mnav ul{list-style:none;margin:0;padding:0}
-.dv-side li a,.dv-mnav li a{display:block;padding:5px 8px;margin:0 -8px;text-decoration:none;font-size:15px;line-height:1.35;border-left:3px solid transparent}
+.dv-side li a,.dv-mnav li a{display:block;min-height:24px;padding:5px 8px;margin:0 -8px;text-decoration:none;font-size:15px;line-height:1.35;border-left:3px solid transparent}
 .dv-side li a:hover,.dv-mnav li a:hover{text-decoration:underline}
 .dv-side li a[aria-current=page],.dv-mnav li a[aria-current=page]{border-left-color:var(--rust);font-weight:600}
 .dv-mnav{display:none;border:2px solid var(--ink);background:var(--sheet);margin-bottom:16px}
@@ -69,15 +71,18 @@ a:focus-visible,pre:focus-visible,.dv-table:focus-visible,summary:focus-visible{
 .dv-applies{margin:0 0 12px;font-size:15px}
 .dv-applies .dv-mono{color:var(--rust);margin-right:8px}
 .dv-meta{margin:0;font:13px/1.6 var(--mono);color:var(--muted)}
-.dv-meta a{color:var(--ink);font-weight:600}
+.dv-meta a{display:inline-block;min-height:24px;line-height:24px;color:var(--ink);font-weight:600}
 .dv-meta code{font:inherit}
 .dv-preview{margin:0 0 14px;padding:10px 12px;border:2px dashed var(--rust);font-size:15px}
 .dv-toc{margin:16px 0 0}
 .dv-toc summary{cursor:pointer;color:var(--muted)}
 .dv-toc ol{margin:8px 0 0;padding-left:22px;columns:2 16rem;font-size:15px}
+.dv-toc ol ol{columns:auto;margin:2px 0 4px;padding-left:18px;font-size:14px}
 .dv-toc li{margin:2px 0;break-inside:avoid}
+.dv-toc a{display:inline-block;min-height:24px;line-height:24px}
+.dv-note{margin:2rem 0 0;padding:10px 12px;border-left:3px solid var(--line);font-size:15px;color:var(--muted)}
 .dv-body{padding:8px 32px 32px;color:var(--text);font:17px/1.7 var(--sans)}
-.dv-body>*{max-width:48rem}
+.dv-body>*{max-width:72ch}
 .dv-body>.dv-table,.dv-body>.dv-code{max-width:100%}
 .dv-body p,.dv-body li{overflow-wrap:anywhere}
 .dv-body td,.dv-body th{overflow-wrap:break-word}
@@ -116,7 +121,7 @@ a:focus-visible,pre:focus-visible,.dv-table:focus-visible,summary:focus-visible{
 .dv-pager .dv-mono{display:block;color:var(--rust);margin-bottom:2px}
 .dv-pager .next{text-align:right;grid-column:2}
 .dv-foot{max-width:1240px;margin:0 auto;padding:0 16px 40px;font:12px/1.7 var(--mono);color:var(--muted)}
-.dv-foot a{color:var(--ink)}
+.dv-foot a{display:inline-block;min-height:24px;line-height:24px;color:var(--ink)}
 @media (max-width:900px){
 .dv-layout{grid-template-columns:minmax(0,1fr);padding-top:16px;gap:0}
 .dv-side{display:none}
@@ -151,6 +156,40 @@ export function canonicalUrl(entry: DocsViewerEntry): string {
   return `${SITE_ORIGIN}${viewerHref(entry.slug)}`;
 }
 
+/** Meta description: the summary, cut at a word boundary to about 155 characters. */
+export const META_DESCRIPTION_MAX = 155;
+export function metaDescription(text: string): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= META_DESCRIPTION_MAX) return t;
+  const cut = t.slice(0, META_DESCRIPTION_MAX - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 80 ? cut.slice(0, space) : cut).replace(/[\s,;:.]+$/, "")}…`;
+}
+
+/** Long pages (over this many words) list their h3 headings under each h2 in the on-page contents. */
+export const CONTENTS_H3_WORDS = 1500;
+
+function onPageContents(doc: RenderedDoc): string {
+  const h2s = doc.headings.filter((h) => h.depth === 2);
+  if (h2s.length < 3) return "";
+  const withH3 = doc.wordCount > CONTENTS_H3_WORDS;
+  let items = "";
+  for (let k = 0; k < doc.headings.length; k++) {
+    const h = doc.headings[k];
+    if (h.depth !== 2) continue;
+    let sub = "";
+    if (withH3) {
+      for (let m = k + 1; m < doc.headings.length && doc.headings[m].depth > 2; m++) {
+        const h3 = doc.headings[m];
+        if (h3.depth === 3)
+          sub += `<li><a href="#${escapeAttr(h3.id)}">${escapeText(h3.text)}</a></li>`;
+      }
+    }
+    items += `<li><a href="#${escapeAttr(h.id)}">${escapeText(h.text)}</a>${sub ? `<ol>${sub}</ol>` : ""}</li>`;
+  }
+  return `<details class="dv-toc"><summary class="dv-mono">On this page (${h2s.length} sections)</summary><ol>${items}</ol></details>`;
+}
+
 export function renderPage(input: PageInput): string {
   const { entry, doc, nav, commit } = input;
   const short = commit.slice(0, 7);
@@ -158,17 +197,11 @@ export function renderPage(input: PageInput): string {
   const prev = i > 0 ? nav[i - 1] : null;
   const next = i >= 0 && i < nav.length - 1 ? nav[i + 1] : null;
   const summary = doc.header.summary ?? "";
-  const description = summary || `${entry.title}, from the Neotoma repository.`;
+  const description = metaDescription(summary || `${entry.title}, from the Neotoma repository.`);
   const sourceUrl = githubBlobUrl(commit, entry.source);
   const rawUrl = `https://raw.githubusercontent.com/markmhendrickson/neotoma/${commit}/${entry.source}`;
   const canonical = canonicalUrl(entry);
-  const h2s = doc.headings.filter((h) => h.depth === 2);
-  const toc =
-    h2s.length >= 3
-      ? `<details class="dv-toc"><summary class="dv-mono">On this page (${h2s.length} sections)</summary><ol>${h2s
-          .map((h) => `<li><a href="#${escapeAttr(h.id)}">${escapeText(h.text)}</a></li>`)
-          .join("")}</ol></details>`
-      : "";
+  const toc = onPageContents(doc);
   const navHtml = navList(nav, entry);
   const title = `${entry.title} | Neotoma docs`;
   return `<!DOCTYPE html>
@@ -197,7 +230,7 @@ export function renderPage(input: PageInput): string {
 <body>
 <a class="dv-skip" href="#dv-main">Skip to the document</a>
 <header class="dv-masthead"><div class="dv-masthead-inner">
-<a class="dv-brand" href="/"><b>Neotoma</b><span class="dv-mono">Docs</span></a>
+<a class="dv-brand" href="/" aria-label="Neotoma home"><img class="dv-logo-light" src="/brand/n2-nav-light.svg" alt="Neotoma" width="132" height="28"><img class="dv-logo-dark" src="/brand/n2-nav-dark.svg" alt="Neotoma" width="132" height="28"><span class="dv-mono">Docs</span></a>
 <nav aria-label="Site"><a href="/">Home</a><a href="/install">Install</a><a href="${GITHUB_REPO_URL}">GitHub</a></nav>
 </div></header>
 <div class="dv-layout">
@@ -216,16 +249,25 @@ ${toc}
 </header>
 <div class="dv-body">
 ${doc.html}
+${
+  doc.agentInstructionsHeading
+    ? `<p class="dv-note">The file ends with an “${escapeText(doc.agentInstructionsHeading)}” section written for coding agents. It is left out here; read it <a href="${escapeAttr(`${sourceUrl}#${githubSlug(doc.agentInstructionsHeading)}`)}">on GitHub</a>.</p>`
+    : ""
+}
 </div>
-<nav class="dv-pager" aria-label="Previous and next document">${
-    prev
-      ? `<a class="prev" href="${escapeAttr(viewerHref(prev.slug))}" rel="prev"><span class="dv-mono">Previous</span>${escapeText(prev.title)}</a>`
-      : ""
-  }${
-    next
-      ? `<a class="next" href="${escapeAttr(viewerHref(next.slug))}" rel="next"><span class="dv-mono">Next</span>${escapeText(next.title)}</a>`
-      : ""
-  }</nav>
+${
+  prev || next
+    ? `<nav class="dv-pager" aria-label="Previous and next document">${
+        prev
+          ? `<a class="prev" href="${escapeAttr(viewerHref(prev.slug))}" rel="prev"><span class="dv-mono">Previous</span>${escapeText(prev.title)}</a>`
+          : ""
+      }${
+        next
+          ? `<a class="next" href="${escapeAttr(viewerHref(next.slug))}" rel="next"><span class="dv-mono">Next</span>${escapeText(next.title)}</a>`
+          : ""
+      }</nav>`
+    : ""
+}
 </article>
 </main>
 </div>

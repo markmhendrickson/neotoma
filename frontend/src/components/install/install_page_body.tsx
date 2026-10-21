@@ -122,7 +122,7 @@ export function InstallPageBody() {
       <div className="flex flex-wrap gap-2 mb-6">
         <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {s.fiveMinuteIntegration}
+          {s.fewMinutesIntegration}
         </span>
       </div>
 
@@ -136,6 +136,7 @@ export function InstallPageBody() {
           code={INSTALL_COMMANDS}
           copyFeedbackId="install-copy-quick"
           installBlock="manual_commands"
+          scrollLabel="Install commands. Scroll sideways if a line is clipped."
         />
       </div>
 
@@ -175,7 +176,7 @@ export function InstallPageBody() {
           </li>
         ))}
       </ol>
-      <div className="mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
+      <div className="plan-install-preflight mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">{s.permissionsNote}</p>
         <PermissionsPreflight />
       </div>

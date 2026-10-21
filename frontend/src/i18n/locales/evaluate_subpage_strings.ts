@@ -80,7 +80,7 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   activationSequenceLiteral:
     "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   introP1:
-    "Neotoma is a deterministic state layer for AI agents. It stores the facts your agents work from - contacts, tasks, decisions, finances, and more - as versioned, schema-bound, replayable state that persists across sessions and across tools. It runs locally as an npm package with MCP, CLI, and API interfaces.",
+    "A record, not recall. Neotoma is the system of record for AI agents. Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing. With one, it reads what was stored, from which source, and what is current now, so the agents you connect can defer to one answer. It is open source (MIT), local-first, and runs as an npm package with an MCP server, REST API and CLI.",
   introP2BeforeLink:
     "This page contains the facts an agent needs to judge whether Neotoma fits a given workflow. Read it end to end, then use the assessment prompt below. To skip the evaluation and install directly, go to the ",
   introInstallLink: "install page",
@@ -91,9 +91,9 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   promptToUseLabel: "Evaluation prompt",
   whatNeotomaHeading: "What Neotoma does for you",
   whatNeotomaP1:
-    "Neotoma lets your agents pick up where they left off: across sessions, across tools, without you re-explaining anything. Store a fact once and every agent works from the same truth. Correct something once and the correction sticks everywhere.",
+    "Neotoma stores each fact as an observation linked to its source. When a fact changes, a new observation is added and the earlier one stays, and each current field names the observation that set it. Agents connected to the same instance read the same record.",
   whatNeotomaP2:
-    "Under the hood, Neotoma is a deterministic state layer: every change is versioned, every entity is schema-bound, and every state can be replayed from the observation log. It runs locally as an npm package with MCP, CLI, and API interfaces. Not retrieval memory (RAG or vector search), but structured, auditable state you control.",
+    "Under the hood, raw input is stored once, each extracted fact becomes an observation, and merge rules per field compute the current value from the observations. It runs locally as an npm package with MCP, CLI, and API interfaces. It is not a chat log or a vector store, and it can sit beside tools that retain or retrieve context.",
   agentInstructionsCardTitle: "Agent: evaluation instructions \u2192",
   agentInstructionsCardDesc:
     "Step-by-step evaluation workflow for AI agents, including context sweep, install trial, fit assessment, and resource map.",
@@ -215,7 +215,7 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   onboardingSequenceLiteral: EVALUATE_SUBPAGE_EN.onboardingSequenceLiteral,
   activationSequenceLiteral: EVALUATE_SUBPAGE_EN.activationSequenceLiteral,
   introP1:
-    "Neotoma es una capa de estado determinista para agentes de IA. Almacena los hechos con los que trabajan tus agentes - contactos, tareas, decisiones, finanzas y más - como estado versionado, ligado a esquema y reproducible que persiste entre sesiones y entre herramientas. Funciona en local como paquete npm con interfaces MCP, CLI y API.",
+    "Un registro, no recuerdo. Neotoma es el sistema de registro para agentes de IA. Sin uno, un agente trabaja con lo que le toque recordar: parte de la última sesión, una nota que guardó su herramienta, o nada. Con uno, lee lo que se almacenó, de qué fuente y qué es actual ahora, de modo que los agentes que conectas puedan atenerse a una sola respuesta. Es de código abierto (MIT), local primero y funciona como paquete npm con servidor MCP, API REST y CLI.",
   introP2BeforeLink:
     "Esta página contiene los hechos que un agente necesita para juzgar si Neotoma encaja en un flujo concreto. Léela completa y luego usa el prompt de evaluación de abajo. Para saltarte la evaluación e instalar directamente, ve a la ",
   introInstallLink: "página de instalación",
@@ -227,9 +227,9 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   promptToUseLabel: "Prompt de evaluación",
   whatNeotomaHeading: "Qué hace Neotoma por ti",
   whatNeotomaP1:
-    "Neotoma permite que tus agentes retomen donde lo dejaron: entre sesiones y herramientas, sin que vuelvas a explicar todo. Guarda un hecho una vez y todos los agentes trabajan con la misma verdad. Corrige una vez y la corrección perdura.",
+    "Neotoma almacena cada hecho como una observación enlazada a su fuente. Cuando un hecho cambia, se añade una observación nueva y la anterior permanece, y cada campo actual indica la observación que lo fijó. Los agentes conectados a la misma instancia leen el mismo registro.",
   whatNeotomaP2:
-    "Por debajo, Neotoma es una capa de estado determinista: cada cambio está versionado, cada entidad va ligada a un esquema y el estado puede reproducirse desde el registro de observaciones. Funciona en local como paquete npm con MCP, CLI y API. No es memoria de recuperación (RAG ni búsqueda vectorial), sino estado estructurado y auditable bajo tu control.",
+    "Por debajo, la entrada en bruto se almacena una vez, cada hecho extraído se convierte en una observación y las reglas de fusión por campo calculan el valor actual a partir de las observaciones. Funciona en local como paquete npm con MCP, CLI y API. No es un registro de chat ni un almacén vectorial, y puede convivir con herramientas que retienen o recuperan contexto.",
   agentInstructionsCardTitle: "Agente: instrucciones de evaluación \u2192",
   agentInstructionsCardDesc:
     "Flujo de evaluación paso a paso para agentes de IA: barrido de contexto, prueba de instalación, valoración de encaje y mapa de recursos.",
