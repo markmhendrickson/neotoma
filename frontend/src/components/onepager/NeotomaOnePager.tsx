@@ -278,7 +278,7 @@ export function NeotomaOnePager() {
               </li>
             ))}
           </ol>
-          <p className="plan-body plan-small">
+          <p className="plan-body plan-small plan-scope">
             {SCOPE_SENTENCE} Known defects and edge cases are listed in{" "}
             <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/known_limitations.md`}>known limitations</a>.
           </p>
