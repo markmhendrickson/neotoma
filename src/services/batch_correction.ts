@@ -29,12 +29,15 @@
  */
 import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
+import { contextFromAgentIdentity, enforceAgentCapability } from "./agent_capabilities.js";
 import {
   createCorrection,
   emitCommittedCorrection,
   type DeferredCorrectionEvent,
 } from "./correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
+import { assertCanWriteProtectedBatch } from "./protected_entity_types.js";
+import { getCurrentAAuthAdmission, getCurrentAgentIdentity } from "./request_context.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { stableSerialize } from "./stable_serialize.js";
 
@@ -178,9 +181,33 @@ function typeOf(v: unknown): string {
 }
 
 /**
+ * Apply the same `correct` capability scope the other correction entry points
+ * apply (`POST /correct`, `POST /patch_array_item`, MCP `correct` and the
+ * atomic correction transaction), keyed on the entity's stored type rather
+ * than anything the caller supplied. A no-op for requests that carry no agent
+ * identity (operator / user-authenticated callers). Throws
+ * `AgentCapabilityError` (surfaced as 403 `capability_denied`) before any
+ * write when the request's grant does not cover the type.
+ */
+function assertCorrectAuthority(entityType: string): void {
+  const identity = getCurrentAgentIdentity();
+  const capabilityContext = contextFromAgentIdentity(identity);
+  if (capabilityContext) {
+    enforceAgentCapability("correct", [entityType], capabilityContext);
+  }
+  assertCanWriteProtectedBatch({
+    entity_types: [entityType],
+    op: "correct",
+    identity,
+    admission: getCurrentAAuthAdmission(),
+  });
+}
+
+/**
  * Apply a batch of field corrections to one entity. The flow is:
  *
- *   1. Resolve entity snapshot and schema.
+ *   1. Resolve entity snapshot and schema; apply the `correct` capability
+ *      scope for the entity's type.
  *   2. Optimistic concurrency check against `expected_last_observation_at`.
  *   3. Schema validation across all changes (fail-fast).
  *   4. Alphabetical application via createCorrection; snapshot recomputes
@@ -227,6 +254,7 @@ async function applyBatchCorrectionInTransaction(
     if (!current) {
       throw new Error(`Entity not found: ${entity_id}`);
     }
+    assertCorrectAuthority(current.entity_type ?? options.entity_type ?? "");
     return {
       status: "applied",
       entity_id,
@@ -242,6 +270,7 @@ async function applyBatchCorrectionInTransaction(
     throw new Error(`Entity not found: ${entity_id}`);
   }
   const entity_type = current.entity_type;
+  assertCorrectAuthority(entity_type);
   const storedLast = current.last_observation_at ?? null;
 
   if (
