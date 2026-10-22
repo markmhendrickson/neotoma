@@ -68,6 +68,8 @@ import {
 } from "./issue_operations.js";
 import type { Operations } from "../../core/operations.js";
 import { IssueTransportError } from "./errors.js";
+import { githubIssueThreadConversationId } from "./github_issue_thread.js";
+import { githubIssueCommentTurnKey } from "./github_thread_keys.js";
 import { getRequestContext, runWithRequestContext } from "../request_context.js";
 
 function createMockOps(): Operations {
@@ -1726,6 +1728,322 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       await expect(resolveIssueRow(ops, { entity_id: "ent-x", issue_number: 99 })).rejects.toThrow(
         /does not match github_number/
       );
+    });
+  });
+
+  describe("per-issue repo for a row mirrored from another repo (#2536)", () => {
+    const OTHER = "acme/widgets";
+
+    function mirroredSnapshot(overrides: Record<string, unknown> = {}) {
+      return {
+        title: "Mirrored issue",
+        status: "open",
+        labels: [],
+        github_number: 7,
+        github_url: `https://github.com/${OTHER}/issues/7`,
+        repo: OTHER,
+        visibility: "public",
+        author: "someone",
+        created_at: "2026-05-01T00:00:00Z",
+        closed_at: null,
+        last_synced_at: "2026-05-01T00:00:00Z",
+        ...overrides,
+      };
+    }
+
+    function useSnapshot(snapshot: Record<string, unknown>) {
+      mockRetrieveEntitySnapshot.mockImplementation(async (input: { entity_id: string }) => ({
+        entity_type: "issue",
+        entity_id: input.entity_id,
+        snapshot,
+      }));
+    }
+
+    function useConfig(overrides: Record<string, unknown>) {
+      // No operator target: the add_issue_message path then stores locally after GitHub.
+      mockLoadIssuesConfig.mockResolvedValue({
+        ...defaultIssuesConfig,
+        target_url: null,
+        ...overrides,
+      });
+    }
+
+    const githubComment = {
+      id: 555,
+      body: "Comment",
+      user: { login: "commenter" },
+      created_at: "2026-05-01T10:00:00Z",
+      updated_at: "2026-05-01T10:00:00Z",
+      html_url: `https://github.com/${OTHER}/issues/7#issuecomment-555`,
+    };
+
+    beforeEach(() => {
+      ops = createMockOps();
+      mockAddIssueComment.mockResolvedValue(githubComment);
+      mockSyncIssueIfStale.mockResolvedValue(false);
+    });
+
+    describe("add_issue_message", () => {
+      it("posts the comment to the issue's own repo, not the configured repo", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot());
+
+        const result = await addIssueMessage(ops, { entity_id: "ent-mirror", body: "Follow-up" });
+
+        expect(result.pushed_to_github).toBe(true);
+        expect(mockAddIssueComment).toHaveBeenCalledTimes(1);
+        expect(mockAddIssueComment).toHaveBeenCalledWith(7, "Follow-up", { repo: OTHER });
+      });
+
+      it("keys the thread and the message on the issue's repo", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot());
+
+        await addIssueMessage(ops, { entity_id: "ent-mirror", body: "Follow-up" });
+
+        const stored = mockStore.mock.calls[0]?.[0] as {
+          entities: Array<Record<string, unknown>>;
+        };
+        const conversation = stored.entities.find((e) => e.entity_type === "conversation");
+        const message = stored.entities.find((e) => e.entity_type === "conversation_message");
+        expect(conversation?.conversation_id).toBe(githubIssueThreadConversationId(OTHER, 7));
+        expect(message?.turn_key).toBe(githubIssueCommentTurnKey(OTHER, 7, "555"));
+        expect(JSON.stringify(stored)).not.toContain("test/repo");
+      });
+
+      it("does not call GitHub for a stored repo that is not permitted, and still records locally under that repo", async () => {
+        useConfig({ allowed_repos: [] });
+        useSnapshot(mirroredSnapshot());
+
+        const result = await addIssueMessage(ops, { entity_id: "ent-mirror", body: "Follow-up" });
+
+        expect(mockAddIssueComment).not.toHaveBeenCalled();
+        expect(result.pushed_to_github).toBe(false);
+        const stored = mockStore.mock.calls[0]?.[0] as {
+          entities: Array<Record<string, unknown>>;
+        };
+        const conversation = stored.entities.find((e) => e.entity_type === "conversation");
+        expect(conversation?.conversation_id).toBe(githubIssueThreadConversationId(OTHER, 7));
+      });
+
+      it("uses the configured repo for a row with no stored repo (unchanged behaviour)", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot({ repo: undefined }));
+
+        await addIssueMessage(ops, { entity_id: "ent-legacy", body: "Follow-up" });
+
+        expect(mockAddIssueComment).toHaveBeenCalledWith(7, "Follow-up", { repo: "test/repo" });
+      });
+
+      it("falls back to the configured repo when the stored repo is not a valid slug", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot({ repo: "../../evil?x=1" }));
+
+        await addIssueMessage(ops, { entity_id: "ent-bad", body: "Follow-up" });
+
+        expect(mockAddIssueComment).toHaveBeenCalledWith(7, "Follow-up", { repo: "test/repo" });
+      });
+
+      describe("forward to the operator's target_url", () => {
+        const TARGET = "https://neotoma.example.com";
+
+        beforeEach(() => {
+          mockAddMessageToRemote.mockResolvedValue({ message_entity_id: "remote-msg-1" });
+        });
+
+        it("forwards a row that belongs to the configured repo", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+          useSnapshot(mirroredSnapshot({ repo: "test/repo" }));
+
+          await addIssueMessage(ops, { entity_id: "ent-configured", body: "Follow-up" });
+
+          expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+          expect(mockAddMessageToRemote.mock.calls[0]?.[0]).toMatchObject({
+            body: "Follow-up",
+            githubIssueNumber: 7,
+          });
+        });
+
+        it("forwards a legacy row with no stored repo (it belongs to the configured repo)", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+          useSnapshot(mirroredSnapshot({ repo: undefined }));
+
+          await addIssueMessage(ops, { entity_id: "ent-legacy", body: "Follow-up" });
+
+          expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+        });
+
+        it("does not forward a row from an allowlisted other repo, but still posts to that repo", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+          useSnapshot(mirroredSnapshot());
+
+          const result = await addIssueMessage(ops, { entity_id: "ent-other", body: "Follow-up" });
+
+          expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+          expect(mockAddIssueComment).toHaveBeenCalledWith(7, "Follow-up", { repo: OTHER });
+          expect(result.remote_submission_error).toBeNull();
+        });
+
+        it("does not forward a row from a repo that is not permitted, and records it locally", async () => {
+          useConfig({ target_url: TARGET, allowed_repos: [] });
+          useSnapshot(mirroredSnapshot());
+
+          const result = await addIssueMessage(ops, {
+            entity_id: "ent-blocked",
+            body: "Follow-up",
+          });
+
+          expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+          expect(mockAddIssueComment).not.toHaveBeenCalled();
+          expect(result.pushed_to_github).toBe(false);
+          expect(result.remote_submission_error).toBeNull();
+          expect(mockStore).toHaveBeenCalled();
+        });
+
+        // Rows filed to the target through `submit_issue` with `target_repo` carry an explicit
+        // identity on that instance, so their follow-ups are forwarded by entity id whatever
+        // repo the row names and whether or not that repo is allowlisted.
+        describe("a row filed to the target instance (explicit remote identity)", () => {
+          it.each([
+            ["an allowlisted other repo", [OTHER]],
+            ["a repo that is not permitted", []],
+          ])(
+            "forwards by entity id for %s when it has a remote id and a token",
+            async (_label, allowed) => {
+              useConfig({ target_url: TARGET, allowed_repos: allowed });
+              useSnapshot(
+                mirroredSnapshot({
+                  remote_entity_id: "remote-ent-1",
+                  guest_access_token: "guest-token-1",
+                })
+              );
+
+              const result = await addIssueMessage(ops, {
+                entity_id: "ent-filed",
+                body: "Follow-up",
+              });
+
+              expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+              expect(mockAddMessageToRemote.mock.calls[0]?.[0]).toMatchObject({
+                body: "Follow-up",
+                issue_entity_id: "remote-ent-1",
+                guest_access_token: "guest-token-1",
+              });
+              expect(result.submitted_to_neotoma).toBe(true);
+              expect(result.remote_submission_error).toBeNull();
+            }
+          );
+
+          it("forwards a row with a remote id and a stored remote thread id but no token", async () => {
+            useConfig({ target_url: TARGET, allowed_repos: [] });
+            useSnapshot(
+              mirroredSnapshot({
+                remote_entity_id: "remote-ent-2",
+                remote_conversation_id: "remote-thread-2",
+              })
+            );
+
+            await addIssueMessage(ops, { entity_id: "ent-filed-thread", body: "Follow-up" });
+
+            expect(mockAddMessageToRemote).toHaveBeenCalledTimes(1);
+            expect(mockAddMessageToRemote.mock.calls[0]?.[0]).toMatchObject({
+              issue_entity_id: "remote-ent-2",
+              remote_conversation_id: "remote-thread-2",
+            });
+          });
+
+          it("does not forward a row with a remote id but neither a token nor a remote thread id", async () => {
+            useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+            useSnapshot(mirroredSnapshot({ remote_entity_id: "remote-ent-3" }));
+
+            const result = await addIssueMessage(ops, {
+              entity_id: "ent-no-identity",
+              body: "Follow-up",
+            });
+
+            expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+            expect(result.submitted_to_neotoma).toBe(false);
+            expect(result.remote_submission_error).toBeNull();
+          });
+
+          it("does not forward a sync-mirrored row (no remote id) even when it carries a token", async () => {
+            useConfig({ target_url: TARGET, allowed_repos: [OTHER] });
+            useSnapshot(mirroredSnapshot({ guest_access_token: "guest-token-4" }));
+
+            await addIssueMessage(ops, { entity_id: "ent-mirrored-token", body: "Follow-up" });
+
+            expect(mockAddMessageToRemote).not.toHaveBeenCalled();
+          });
+        });
+      });
+    });
+
+    describe("get_issue_status", () => {
+      it("refreshes a stale mirrored row from its own repo", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot());
+
+        await getIssueStatus(ops, { entity_id: "ent-mirror" });
+
+        expect(mockSyncIssueIfStale).toHaveBeenCalledTimes(1);
+        expect(mockSyncIssueIfStale).toHaveBeenCalledWith(
+          expect.anything(),
+          7,
+          "2026-05-01T00:00:00Z",
+          OTHER
+        );
+      });
+
+      it("does not refresh a row whose stored repo is not permitted", async () => {
+        useConfig({ allowed_repos: [] });
+        useSnapshot(mirroredSnapshot());
+
+        const result = await getIssueStatus(ops, { entity_id: "ent-mirror" });
+
+        expect(mockSyncIssueIfStale).not.toHaveBeenCalled();
+        expect(result.synced).toBe(false);
+      });
+
+      it("refreshes a row with no stored repo from the configured repo", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot({ repo: undefined, github_url: undefined }));
+
+        const result = await getIssueStatus(ops, { entity_id: "ent-legacy" });
+
+        expect(mockSyncIssueIfStale).toHaveBeenCalledWith(
+          expect.anything(),
+          7,
+          "2026-05-01T00:00:00Z",
+          "test/repo"
+        );
+        expect(result.github_url).toBe("https://github.com/test/repo/issues/7");
+      });
+
+      it("builds the fallback URL from the row's repo", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot({ github_url: undefined }));
+
+        const result = await getIssueStatus(ops, { entity_id: "ent-mirror" });
+
+        expect(result.github_url).toBe(`https://github.com/${OTHER}/issues/7`);
+      });
+    });
+
+    describe("resolveIssueRow", () => {
+      it("returns the effective repo and whether GitHub calls against it are permitted", async () => {
+        useConfig({ allowed_repos: [OTHER] });
+        useSnapshot(mirroredSnapshot());
+        await expect(resolveIssueRow(ops, { entity_id: "ent-mirror" })).resolves.toMatchObject({
+          repo: OTHER,
+          githubAllowed: true,
+        });
+
+        useConfig({ allowed_repos: [] });
+        await expect(resolveIssueRow(ops, { entity_id: "ent-mirror" })).resolves.toMatchObject({
+          repo: OTHER,
+          githubAllowed: false,
+        });
+      });
     });
   });
 });

@@ -21,6 +21,11 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "..", "..", "..", "..");
 
+/** Inline twin of src/shared/harness_force_mode.ts (package rootDir cannot import repo src/). */
+function resolveHarnessForceMode(env: NodeJS.ProcessEnv = process.env): string {
+  return env.NEOTOMA_FORCE_MODE ?? "refuse";
+}
+
 export interface ServerFaultConfig {
   target: string;
   fail_first_n: number;
@@ -184,6 +189,13 @@ export async function startIsolatedNeotomaServer(
     NEOTOMA_LOG_LEVEL: process.env.NEOTOMA_LOG_LEVEL ?? "warn",
     NEOTOMA_HOOKS_ENABLED: options.hooksEnabled === false ? "0" : "1",
     NEOTOMA_BEARER_TOKEN: token,
+    // Pin sandbox mode so unauthenticated bookkeeping calls
+    // (seedEntities, /stats, assertions.ts's /entities/query etc. — none of
+    // which send a Bearer header) keep resolving to the same shared dev
+    // user as the Bearer-authenticated agent calls. See
+    // resolveHarnessForceMode — without this pin, loopback-only bind
+    // activates local_sandbox and assertions read back zero.
+    NEOTOMA_FORCE_MODE: resolveHarnessForceMode(process.env),
     ...(options.env ?? {}),
   };
 

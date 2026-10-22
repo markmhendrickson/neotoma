@@ -9,11 +9,44 @@ visibility: internal
 
 # Secondary ICPs (Adjacent / Later in Dev Release)
 
-> Reconciliation: the functional audit recommends naming a security-conscious multi-agent fleet operator as a first-class secondary ICP here, since the code already invests heavily in attested agent identity, grants, and provenance. See [ICP reconciliation](icp_reconciliation.md) and [ICP from functionality](icp_from_functionality.md).
+> Reconciliation: the functional audit once recommended naming a security-conscious multi-agent fleet operator as a first-class secondary ICP here, since the code invests heavily in attested agent identity, grants, and provenance. **That recommendation was withdrawn on 2026-09-16 (O3) and must not be executed.** The attestation and capability-grants surface is infrastructure serving the product's own guarantees, not a feature a segment buys; the nearest named party is disqualified at [`primary_icp.md`](./primary_icp.md) D3. See [ICP reconciliation](icp_reconciliation.md#o3-the-attestation-and-capability-grants-surface-is-infrastructure) and [ICP from functionality](icp_from_functionality.md).
 
 ## Scope
 
 Secondary ICPs that are adjacent to the developer release but require more API stability or adoption signal before full engagement. For the primary ICP, see [`primary_icp.md`](./primary_icp.md).
+
+> **Read this document as mostly, but not entirely, forward-looking.** Every entry below except one describes a segment Neotoma expects to engage *later*. The exception is **Infrastructure Builders**, added 2026-09-16, who are **current adopters** — the people actually running Neotoma today. They are placed here because they are no longer the target, not because they are a future segment. The distinction is load-bearing and is restated in that section.
+
+---
+
+## Infrastructure Builders (Candidate A) — **current adopters, not a future segment**
+
+*Added 2026-09-16, following the durable-ICP decision of 2026-09-15.*
+
+> **Read this entry differently from every other entry in this document.** The rest of this file describes segments Neotoma expects to engage *later*. This one describes the people using Neotoma **today**. They moved here because they stopped being the target, not because they are ahead of us on a timeline. Nothing here should be read as "when we get to them" — we are already there, and they are already here.
+
+- **Summary:** The technically strong individual who builds their own infrastructure. Reads Python, mints keypairs, adapts daemons, and would be entirely capable of assembling a state layer of their own — and in many cases already has, in the form of a custom MCP plus Postgres, homegrown validation, or a maintained pile of structured files.
+- **Who they are:** The archetype `primary_icp.md` was written around before 2026-09-15: at home in terminals, config files, and environment variables; comfortable reading source to answer a question the docs do not.
+- **Current pain:** The same pain the durable ICP has — ad-hoc agent state, drift, unreproducible decisions — with the crucial difference that they have the capacity to build around it, and often do.
+- **Why they are not the target:** The sharpest filter, first written in [`developer_release_targeting.md`](./developer_release_targeting.md), asks whether someone would describe *setting up Neotoma* as a worthwhile Saturday project but *building their own state layer* as a distraction from real work. This cohort fails the second half. The alternative they weigh Neotoma against is their own weekend, which is why appetite to build is the single trait most predictive of non-adoption — recorded as soft disqualifier **D12** in [`primary_icp.md`](./primary_icp.md).
+- **Why they are nonetheless who is here now:** The shipped install path — npm plus the CLI — rewards precisely their skills. They are over-represented among current adopters because the delivery mechanism selects for them, not because the product is for them. Field evidence sharpens the point: `general_release_criteria.md` records 0 of 3 round-2 fresh-install attempts clearing the install-path gate, all by evaluators who wanted the product.
+
+### How to read evidence from this cohort
+
+This is the part that matters operationally, and it is easy to get wrong in both directions.
+
+- **Strong evidence about architecture and correctness.** They independently arrive at the same conclusions the design did — schema constraints, deterministic validation, multi-agent review hooks. That convergence is the most useful thing they give us and is worth soliciting deliberately. Listen to them closely on whether the guarantees hold.
+- **Weak evidence about the market.** Their adoption does not validate the ICP, their enthusiasm does not size a segment, and their tolerance for install friction says nothing about whether the durable ICP will tolerate it. **Do not read adoption by this cohort as ICP validation.**
+- **Retention reads in a specific way.** One who churns is telling you about maintenance burden. One who stays is *not* telling you the ICP is right.
+- **They must not pull the roadmap.** Targeting, onboarding, and roadmap decisions do not optimize for this cohort. Narrowing toward whoever survives the install path is the anti-pattern — it selects for exactly this group and calls the result product-market fit.
+
+### Why here rather than in `primary_icp.md`
+
+`primary_icp.md` is about **one buyer**, and keeping it that way is the point of the durable-ICP decision. This cohort is real, present, and worth serving well — but they are not that buyer, and describing them at length in the primary document would re-blur the line the decision drew. [`primary_icp.md`](./primary_icp.md) retains the short boundary statement that names them and points here; the full treatment lives in this file.
+
+### Relationship to primary ICP
+
+They are the durable ICP's *neighbour*, not its predecessor — the same pain, a different answer to it. The durable ICP patches around the problem and will not build the fix; this cohort builds the fix. That single difference is what separates a buyer from a validator, and it is why the two cannot be collapsed into one profile.
 
 ---
 

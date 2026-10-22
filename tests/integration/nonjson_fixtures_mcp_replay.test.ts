@@ -43,6 +43,26 @@ async function deleteExistingSourcesByContentHash(contentHash: string): Promise<
     .eq("content_hash", contentHash);
   const sourceIds = (existingSources ?? []).map((s) => s.id).filter(Boolean) as string[];
   if (sourceIds.length === 0) return;
+  // Asset entity ids are derived from content (global id, no tenant salt), so
+  // a prior run under a DIFFERENT random testUserId leaves the same entity
+  // row behind, still owned by that earlier user. Clearing the source/
+  // observation/fragment rows alone is not enough — this suite mints a fresh
+  // random testUserId every run specifically for isolation, so the leftover
+  // entities row must go too, or the next run's write is correctly refused
+  // as a cross-owner write by the entity-resolution ownership guard
+  // (EntityOwnerConflictError). Mirrors the equivalent cleanup in
+  // nonjson_csv_store_behavior.test.ts.
+  const { data: priorObservations } = await db
+    .from("observations")
+    .select("entity_id")
+    .in("source_id", sourceIds);
+  const entityIds = Array.from(
+    new Set((priorObservations ?? []).map((o) => o.entity_id).filter(Boolean) as string[])
+  );
+  if (entityIds.length > 0) {
+    await db.from("entity_snapshots").delete().in("entity_id", entityIds);
+    await db.from("entities").delete().in("id", entityIds);
+  }
   await db.from("observations").delete().in("source_id", sourceIds);
   await db.from("raw_fragments").delete().in("source_id", sourceIds);
   await db.from("sources").delete().in("id", sourceIds);
@@ -90,7 +110,9 @@ describe("Non-JSON fixtures MCP raw store replay", () => {
         continue;
       }
 
-      const result = await (server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }).store(payload);
+      const result = await (
+        server as { store: (p: unknown) => Promise<{ content: Array<{ text: string }> }> }
+      ).store(payload);
       const parsed = JSON.parse(result.content[0]?.text ?? "{}") as {
         source_id?: string;
         asset_entity_id?: string;

@@ -13,7 +13,7 @@ triggers:
 
 ## Purpose
 
-Run a session-close audit so nothing intended for follow-up or for Neotoma storage falls through the cracks. Distinct from `/store-data` (single per-record persistence) and `/store-neotoma` (full chat-transcript persistence): `/end` is the meta-step that decides which of those to invoke, and what remaining tasks need to be tracked.
+Run a session-close audit so nothing intended for follow-up or for Neotoma storage falls through the cracks. Distinct from the primitive `store` MCP tool call (single per-record persistence) and `/store-neotoma` (full chat-transcript persistence): `/end` is the meta-step that decides which of those to invoke, and what remaining tasks need to be tracked.
 
 ## Scope
 
@@ -40,7 +40,7 @@ Determine what should be in Neotoma from this session and what already is.
 3. **Files or attachments** — any files the user pasted, screenshots, transcripts, or external URLs fetched. Check whether each has a corresponding `source_id` / content-addressed source row.
 4. **Memory-worthy facts** — items that should be written to the auto-memory directory (`~/.claude/projects/.../memory/`) per the auto-memory protocol.
 
-Produce a table with columns: `item`, `kind` (entity / source / memory), `stored?` (yes/no/partial), `action` (store via `store-data` / store via `store-neotoma` / write memory file / skip).
+Produce a table with columns: `item`, `kind` (entity / source / memory), `stored?` (yes/no/partial), `action` (store via the `store` MCP tool / store via `store-neotoma` / write memory file / skip).
 
 ## Phase 3: Confirmation and execution
 
@@ -52,7 +52,7 @@ Present Phases 1 and 2 to the user as a single end-of-session report with two se
 On confirmation:
 
 1. File `task` entities for each `track` item from Phase 1 via the `store` MCP tool with appropriate REFERS_TO edges to relevant entities.
-2. Store missing entities or sources flagged in Phase 2 via the `store` MCP tool (the same primitive `store-data` wraps).
+2. Store missing entities or sources flagged in Phase 2 via the `store` MCP tool directly.
 3. If the conversation itself has not been persisted as a `conversation` + dual `conversation_message` shape end-to-end, invoke `store-neotoma` to do the full transcript sweep.
 4. Write any memory files per the auto-memory protocol and update `MEMORY.md` index.
 5. If `do-now` items exist and the user requested execution, perform them inline; otherwise file them as tasks.
@@ -71,9 +71,9 @@ Render the mandatory `🧠 Neotoma` turn report covering all entities created in
 
 ## Relationship to other skills
 
-- **`store-data`** — per-entity/per-file store primitive. `/end` calls `store-data` (or the underlying `store` MCP tool) for each gap identified in Phase 2.
+- **`store` (MCP tool)** — per-entity/per-file store primitive. `/end` calls it directly for each gap identified in Phase 2.
 - **`store-neotoma`** — full chat-transcript persistence with preview/confirm. `/end` delegates to it when the conversation as a whole is not yet stored.
-- **Redundancy note:** `store-data` and `store-neotoma` are not redundant — `store-data` is per-record and per-call; `store-neotoma` is the bulk session-end transcript sweep with preview. They could be consolidated into one skill with a `mode: per-record | transcript` switch; flagged for a separate consolidation task rather than handled here.
+- **Redundancy note:** the primitive `store` MCP tool and `store-neotoma` are not redundant — direct `store` calls are per-record and per-call; `store-neotoma` is the bulk session-end transcript sweep with preview.
 
 ## Constraints
 

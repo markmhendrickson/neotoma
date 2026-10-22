@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { NeotomaApiClient } from "../shared/api_client.js";
+import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "../shared/repo_slug.js";
 
 /**
  * CLI implementation for `neotoma issues` commands.
@@ -70,6 +71,12 @@ export interface IssuesSyncOpts {
   since?: string;
   state?: "open" | "closed" | "all";
   labels?: string;
+  /** GitHub repo to mirror, `owner/name`. Defaults to the server-configured repo. */
+  repo?: string;
+  /** Explicit push opt-in/out. Undefined = server default (on only for the default repo). */
+  push?: boolean;
+  /** Dry run: report what would be created, updated and pushed; write nothing. */
+  dryRun?: boolean;
   json?: boolean;
 }
 
@@ -356,11 +363,23 @@ export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): P
         .filter(Boolean)
     : undefined;
 
+  // Reject a malformed --repo locally so the caller gets an immediate, specific error
+  // instead of a round-trip 400. The server validates again (it is the authority).
+  if (opts.repo !== undefined && !isValidRepoSlug(opts.repo)) {
+    process.stderr.write(`issues sync failed: ${REPO_SLUG_FORMAT_MESSAGE}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const { data, error } = await api.POST("/issues/sync", {
     body: {
       since: opts.since,
       state: opts.state ?? "all",
       labels: labelArr && labelArr.length > 0 ? labelArr : undefined,
+      ...(opts.repo !== undefined ? { repo: opts.repo } : {}),
+      // Only send push when the caller chose; otherwise the server default applies.
+      ...(opts.push !== undefined ? { push: opts.push } : {}),
+      ...(opts.dryRun ? { commit: false } : {}),
     },
   });
 
@@ -370,24 +389,64 @@ export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): P
     return;
   }
 
-  const row = data as
-    | {
-        issues_synced?: number;
-        messages_synced?: number;
-        errors?: string[];
-      }
-    | undefined;
+  const row = (data ?? {}) as {
+    repo?: string;
+    dry_run?: boolean;
+    push_enabled?: boolean;
+    issues_synced?: number;
+    messages_synced?: number;
+    issues_pushed?: number;
+    errors?: string[];
+    push_errors?: string[];
+    plan?: {
+      issues_to_create?: Array<{ github_number: number; title: string }>;
+      issues_to_update?: Array<{ github_number: number; title: string }>;
+      issues_unchanged?: number;
+      messages_to_sync?: number;
+      issues_to_push?: Array<{ entity_id: string; title: string }>;
+      warnings?: string[];
+    };
+  };
 
-  const issuesSynced = row?.issues_synced ?? 0;
-  const messagesSynced = row?.messages_synced ?? 0;
-  const errors = row?.errors ?? [];
+  const errors = row.errors ?? [];
+  const pushErrors = row.push_errors ?? [];
 
   if (opts.json) {
-    output({ issues_synced: issuesSynced, messages_synced: messagesSynced, errors }, true);
+    output(row, true);
+  } else if (row.dry_run && row.plan) {
+    const plan = row.plan;
+    const create = plan.issues_to_create ?? [];
+    const update = plan.issues_to_update ?? [];
+    const push = plan.issues_to_push ?? [];
+    process.stdout.write(
+      `Dry run for ${row.repo ?? "(configured repo)"} — nothing was written.\n` +
+        `  Would create ${create.length} issue(s), update ${update.length}, ` +
+        `leave ${plan.issues_unchanged ?? 0} unchanged; ${plan.messages_to_sync ?? 0} message(s) considered.\n` +
+        `  Push leg ${row.push_enabled ? "on" : "off"}: would push ${push.length} local issue(s) to GitHub.\n`
+    );
+    for (const i of create) process.stdout.write(`  + create #${i.github_number} ${i.title}\n`);
+    for (const i of update) process.stdout.write(`  ~ update #${i.github_number} ${i.title}\n`);
+    for (const i of push) process.stdout.write(`  ^ push ${i.entity_id} ${i.title}\n`);
+    for (const w of plan.warnings ?? []) process.stdout.write(`  ! ${w}\n`);
   } else {
-    process.stdout.write(`Synced ${issuesSynced} issues, ${messagesSynced} messages.\n`);
+    process.stdout.write(
+      `Synced ${row.issues_synced ?? 0} issues, ${row.messages_synced ?? 0} messages` +
+        `${row.repo ? ` from ${row.repo}` : ""}.\n`
+    );
+    if (row.push_enabled) {
+      process.stdout.write(`Pushed ${row.issues_pushed ?? 0} local issue(s) to GitHub.\n`);
+    } else {
+      process.stdout.write(
+        `Push leg off: local issues were not exported to GitHub (pass --push to opt in).\n`
+      );
+    }
+  }
+  if (!opts.json) {
     if (errors.length) {
       process.stderr.write(`Errors:\n${errors.map((e) => `  - ${e}`).join("\n")}\n`);
+    }
+    if (pushErrors.length) {
+      process.stderr.write(`Push errors:\n${pushErrors.map((e) => `  - ${e}`).join("\n")}\n`);
     }
   }
 }

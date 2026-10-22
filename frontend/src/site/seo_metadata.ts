@@ -9,6 +9,8 @@ import {
 } from "@/i18n/config";
 import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
+import { isRetiredRoute, servesRealPage } from "@/site/route_retirement";
+import { isDocsViewerRoute } from "@/site/docs_viewer_manifest";
 
 export interface SeoRouteMetadata {
   title: string;
@@ -68,34 +70,31 @@ export const SEO_DEFAULTS = {
 
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
-    title: "Your agents forget. Neotoma makes them remember.",
+    title: "Neotoma: the system of record for AI agents",
     description:
-      "Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.",
-    /** Matches on-image copy and footer positioning; dev preview img uses this for alt/figcaption. */
+      "A record, not recall. Neotoma is an open-source, local-first system of record for AI agents: observations linked to sources, corrections that add instead of overwrite, and field-level provenance, shared by the tools you connect.",
+    /** Matches the on-image copy of neotoma-og-1200x630.png. */
     ogImageAlt:
-      "Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.",
+      "Neotoma: the system of record for AI agents. A record, not recall. A plan-style drawing of two sources becoming two observations and one current invoice record.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
     softwareApp: {
       version: REPO_VERSION,
-      operatingSystem: "macOS, Linux, Windows (WSL)",
+      operatingSystem: "macOS, Linux",
       applicationCategory: "DeveloperApplication",
       offers: { price: "0", priceCurrency: "USD" },
       license: "https://opensource.org/licenses/MIT",
       codeRepository: "https://github.com/markmhendrickson/neotoma",
       installUrl: "https://neotoma.io/install",
       featureList: [
-        "Deterministic state evolution",
-        "Versioned entity history",
-        "Append-only observation log",
-        "Schema-bound entity validation",
+        "Observations linked to their sources",
+        "Corrections recorded as new observations",
         "Field-level provenance tracking",
+        "Entity resolution with deterministic entity IDs",
         "Cross-tool access via MCP",
-        "Entity resolution with canonical IDs",
-        "Temporal state queries",
-        "Privacy-first local storage",
         "CLI, REST API, and MCP interfaces",
+        "Local-first storage",
       ],
     },
     organization: {
@@ -107,50 +106,15 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         "https://x.com/markmhendrickson",
       ],
     },
-    faqItems: [
-      {
-        question: "Does Neotoma replace Claude's memory or ChatGPT's?",
-        answer:
-          "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
-      },
-      {
-        question: "Can't I just build this with SQLite or a JSON file?",
-        answer:
-          "You can start there \u2014 many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.",
-      },
-      {
-        question: "Platform memory (Claude, ChatGPT) is good enough \u2014 why add another tool?",
-        answer:
-          "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
-      },
-      {
-        question: "Is this production-ready?",
-        answer:
-          "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
-      },
-      {
-        question: "Does Neotoma send my data to the cloud?",
-        answer:
-          "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API.",
-      },
-    ],
-    speakable: [
-      "h1",
-      "#intro p",
-      "#who h2",
-      "#who p",
-      "#common-questions summary",
-      "#common-questions p",
-    ],
   },
   "/install": {
     title: "Install | Neotoma",
     description:
-      "Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
+      "Install Neotoma in a few minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
     robots: "index,follow",
-    ogImageUrl: "https://neotoma.io/og/neotoma-og-install-1200x630.png",
+    // Uses the default card (neotoma-og-1200x630.png); a dedicated install image never existed in the build.
     ogImageAlt:
-      "Install Neotoma in 5 minutes. npm install -g neotoma. Agent-assisted setup for Cursor, Claude, ChatGPT, and MCP-connected tools.",
+      "Neotoma: the system of record for AI agents. A record, not recall. A plan-style drawing of two sources becoming two observations and one current invoice record.",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -163,16 +127,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         text: "Run 'npm install -g neotoma' to install the Neotoma CLI globally.",
       },
       {
-        name: "Initialize configuration",
-        text: "Run 'neotoma setup --tool cursor --yes' to initialize Neotoma and configure the default local MCP path. Replace 'cursor' with your tool if needed.",
+        name: "Initialize",
+        text: "Run 'neotoma init' to create the config directory, the local databases and an env file.",
       },
       {
-        name: "Start the API server",
-        text: "If you need the local HTTP API, Inspector, or OAuth flows, run 'neotoma api start'.",
-      },
-      {
-        name: "Connect via MCP",
-        text: "Restart your tool or session so it picks up the MCP configuration written by setup.",
+        name: "Set up your tool",
+        text: "Run 'neotoma setup --tool claude-code --yes'. Replace 'claude-code' with cursor, codex, openclaw or claude-desktop.",
       },
     ],
   },
@@ -974,7 +934,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-cursor-1200x630.png",
     ogImageAlt:
-      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in 5 minutes via MCP.",
+      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in a few minutes via MCP.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
@@ -1687,9 +1647,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/skills": {
-    title: "Skills | Guided Workflows for Agent Memory | Neotoma",
+    title: "Skills | Guided Workflows for Storing Data in Neotoma | Neotoma",
     description:
-      "Step-by-step workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. Skills for email, conversations, meetings, finances, contacts, calendar, and more.",
+      "Step-by-step workflows that teach your AI agent to import, extract, and store data in Neotoma. Skills for email, conversations, meetings, finances, contacts, calendar, and more.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1716,9 +1676,20 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Ensure Neotoma", path: "/skills/ensure-neotoma" },
     ],
   },
+  "/skills/recover-sqlite-database": {
+    title: "Recover SQLite Database Skill | Neotoma",
+    description: "Check the integrity of Neotoma's local SQLite database and recover it if it is corrupted.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Recover SQLite Database", path: "/skills/recover-sqlite-database" },
+    ],
+  },
   "/skills/remember-email": {
     title: "Remember Email Skill | Neotoma",
-    description: "Import email and extract contacts, tasks, and events into Neotoma memory.",
+    description: "Import email and extract contacts, tasks, and events into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1729,7 +1700,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-conversations": {
     title: "Remember Conversations Skill | Neotoma",
-    description: "Import conversation history into structured Neotoma memory.",
+    description: "Import conversation history into structured Neotoma entities.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1740,7 +1711,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-meetings": {
     title: "Remember Meetings Skill | Neotoma",
-    description: "Capture meetings and decisions into Neotoma memory.",
+    description: "Capture meetings and decisions into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1751,7 +1722,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-finances": {
     title: "Remember Finances Skill | Neotoma",
-    description: "Import financial records and receipts into Neotoma memory.",
+    description: "Import financial records and receipts into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1762,7 +1733,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-contacts": {
     title: "Remember Contacts Skill | Neotoma",
-    description: "Import and reconcile contacts into Neotoma memory.",
+    description: "Import and reconcile contacts into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1773,7 +1744,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/remember-calendar": {
     title: "Remember Calendar Skill | Neotoma",
-    description: "Import calendar events into Neotoma memory.",
+    description: "Import calendar events into Neotoma.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1791,28 +1762,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Skills", path: "/skills" },
       { name: "Remember Codebase", path: "/skills/remember-codebase" },
-    ],
-  },
-  "/skills/store-data": {
-    title: "Store Data Skill | Neotoma",
-    description: "Structured store workflow for agent-created data.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Skills", path: "/skills" },
-      { name: "Store Data", path: "/skills/store-data" },
-    ],
-  },
-  "/skills/query-memory": {
-    title: "Query Memory Skill | Neotoma",
-    description: "Retrieval and provenance workflow for Neotoma memory.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Skills", path: "/skills" },
-      { name: "Query Memory", path: "/skills/query-memory" },
     ],
   },
   "/use-cases": {
@@ -1946,9 +1895,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/evaluate": {
-    title: "Evaluate Neotoma: Deterministic State Layer for AI Agents | Neotoma",
+    title: "Evaluate Neotoma: the system of record for AI agents | Neotoma",
     description:
-      "Neotoma is a deterministic state layer for AI agents: versioned, schema-bound, replayable memory that persists across sessions and tools. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
+      "A record, not recall. Neotoma is an open-source, local-first system of record for AI agents. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",
@@ -2792,11 +2741,12 @@ export function getSeoMetadataForPath(pathname: string): SeoRouteMetadata {
 
 const DEFAULT_SEO_KEYWORDS = [
   "Neotoma",
+  "system of record",
+  "AI agents",
   "MCP",
   "Model Context Protocol",
-  "AI agents",
-  "agent memory",
-  "deterministic state",
+  "provenance",
+  "local-first",
 ] as const;
 
 /** Alt text for Open Graph / Twitter images (keep concise for screen readers and previews). */
@@ -2851,14 +2801,6 @@ function buildJsonLd(
       caption: image.alt,
     },
   };
-
-  if (type === "WebSite") {
-    primary.potentialAction = {
-      "@type": "SearchAction",
-      target: `${SEO_DEFAULTS.baseUrl}/docs?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
-    };
-  }
 
   const items: Record<string, unknown>[] = [primary];
 
@@ -2995,7 +2937,11 @@ export interface ResolvedSeoMetadata {
 
 function buildAlternates(pathname: string): { hrefLang: string; href: string }[] {
   const basePath = stripLocaleFromPath(pathname);
-  const alternates = SUPPORTED_LOCALES.map((locale) => ({
+  // Only locales that serve a real page for this path get an alternate. Retired locale routes are
+  // noindex redirect stubs, and hreflang pointing at them is ignored or flagged by search engines.
+  const alternates = SUPPORTED_LOCALES.filter((locale) =>
+    servesRealPage(localizePath(basePath, locale)),
+  ).map((locale) => ({
     hrefLang: locale,
     href: buildCanonicalUrl(localizePath(basePath, locale)),
   }));
@@ -3008,8 +2954,10 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   const routeMetadata = getSeoMetadataForPath(pathname);
   const pack = getStaticLocalePack(locale);
   const localizedOverride: Partial<SeoRouteMetadata> =
+    // The home route renders the English one-pager in every locale, so it takes no localized
+    // title or description (those still carried the retired category line).
     normalizedPath === "/"
-      ? pack.seo.home
+      ? {}
       : normalizedPath === "/docs"
         ? pack.seo.docs
         : normalizedPath === "/install"
@@ -3056,7 +3004,10 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   };
 }
 
-export function buildSitemapXml(paths: readonly string[] = SITEMAP_PATHS): string {
+export function buildSitemapXml(
+  // Docs viewer pages are listed by the static build, with their trailing slash.
+  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p)),
+): string {
   const urlEntries = paths
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)
     .join("\n");

@@ -39,18 +39,32 @@ interface GitHubApiOptions {
   repo?: string;
 }
 
+/**
+ * Error text for a sync/GitHub call made with no usable token. Names the setting to
+ * configure (`NEOTOMA_ISSUES_GITHUB_TOKEN`) and where it is read: the environment of
+ * the process running the Neotoma server, not the caller's shell, which is the
+ * common surprise for MCP / REST / `neotoma issues sync` callers.
+ */
+export function missingGitHubTokenMessage(repo?: string): string {
+  return (
+    `No GitHub token available${repo ? ` for ${repo}` : ""}. ` +
+    "Set NEOTOMA_ISSUES_GITHUB_TOKEN in the environment of the process that runs the " +
+    "Neotoma server (a token with access to the repo), or run `gh auth login` as the " +
+    "user that runs it."
+  );
+}
+
 async function resolveOptions(
   opts?: GitHubApiOptions
 ): Promise<{ token: string; owner: string; repo: string }> {
-  const token = opts?.token ?? (await resolveGitHubToken());
-  if (!token) {
-    throw new Error(
-      "No GitHub token available. Run `gh auth login` or set NEOTOMA_ISSUES_GITHUB_TOKEN."
-    );
-  }
-
   const cfg = await loadIssuesConfig();
   const fullRepo = opts?.repo ?? cfg.repo;
+
+  const token = opts?.token ?? (await resolveGitHubToken());
+  if (!token) {
+    throw new Error(missingGitHubTokenMessage(fullRepo));
+  }
+
   const [owner, repo] = fullRepo.split("/");
   if (!owner || !repo) {
     throw new Error(`Invalid repo format: "${fullRepo}". Expected "owner/repo".`);

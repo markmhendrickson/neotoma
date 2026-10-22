@@ -345,6 +345,138 @@ describe("CLI issues commands", () => {
     });
   });
 
+  it("issues sync sends repo, opt-in push and dry run as commit:false; omits push by default (#2536)", async () => {
+    await withTempHome(async () => {
+      const capturedBodies: Record<string, unknown> = {};
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = input instanceof Request ? input : null;
+          const url = request?.url ?? String(input);
+          const body = init?.body ?? (request ? await request.clone().text() : undefined);
+          if (body) {
+            capturedBodies[url] = JSON.parse(String(body)) as Record<string, unknown>;
+          }
+          return new Response(
+            JSON.stringify({
+              repo: "acme/widgets",
+              dry_run: true,
+              push_enabled: false,
+              issues_synced: 0,
+              messages_synced: 0,
+              issues_pushed: 0,
+              errors: [],
+              push_errors: [],
+              plan: {
+                issues_to_create: [{ github_number: 3, title: "New one" }],
+                issues_to_update: [],
+                issues_unchanged: 0,
+                messages_to_sync: 0,
+                issues_to_push: [],
+                warnings: [],
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }),
+      );
+
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli([
+          "node",
+          "cli",
+          "issues",
+          "sync",
+          "--repo",
+          "acme/widgets",
+          "--dry-run",
+        ]);
+      } finally {
+        stdout.restore();
+      }
+
+      const body = capturedBodyForPath(capturedBodies, "/issues/sync") as Record<string, unknown>;
+      expect(body).toMatchObject({ repo: "acme/widgets", commit: false });
+      // Push not chosen -> not sent, so the server default (off for a non-default repo) applies.
+      expect(body).not.toHaveProperty("push");
+      expect(stdout.output.join("")).toContain("Dry run for acme/widgets");
+      expect(stdout.output.join("")).toContain("create #3 New one");
+
+      for (const k of Object.keys(capturedBodies)) delete capturedBodies[k];
+      const out2 = captureStdout();
+      try {
+        await runCli(["node", "cli", "issues", "sync", "--repo", "acme/widgets", "--push"]);
+      } finally {
+        out2.restore();
+      }
+      expect(capturedBodyForPath(capturedBodies, "/issues/sync")).toMatchObject({
+        repo: "acme/widgets",
+        push: true,
+      });
+      expect(capturedBodyForPath(capturedBodies, "/issues/sync")).not.toHaveProperty("commit");
+    });
+  });
+
+  it.each([
+    [false, /Push leg off: local issues were not exported/],
+    [true, /Pushed 2 local issue\(s\) to GitHub/],
+  ])("issues sync summary always states the push leg (push_enabled=%s) (#2536)", async (pushEnabled, expected) => {
+    await withTempHome(async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          new Response(
+            JSON.stringify({
+              repo: "acme/widgets",
+              dry_run: false,
+              push_enabled: pushEnabled,
+              issues_synced: 1,
+              messages_synced: 0,
+              issues_pushed: pushEnabled ? 2 : 0,
+              errors: [],
+              push_errors: [],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      );
+
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "issues", "sync", "--repo", "acme/widgets"]);
+      } finally {
+        stdout.restore();
+      }
+      expect(stdout.output.join("")).toMatch(expected);
+    });
+  });
+
+  it("issues sync rejects a malformed --repo locally without calling the server (#2536)", async () => {
+    await withTempHome(async () => {
+      const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      const previousExitCode = process.exitCode;
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+      const { runCli } = await loadCli();
+      try {
+        await runCli(["node", "cli", "issues", "sync", "--repo", "not-a-slug"]);
+        expect(process.exitCode).toBe(1);
+        expect(stderr.mock.calls.map((c) => String(c[0])).join("")).toContain("owner/name");
+        const syncCalls = fetchMock.mock.calls.filter((c) =>
+          String((c as unknown[])[0] instanceof Request ? ((c as unknown[])[0] as Request).url : (c as unknown[])[0]).includes("/issues/sync"),
+        );
+        expect(syncCalls).toHaveLength(0);
+      } finally {
+        stderr.mockRestore();
+        process.exitCode = previousExitCode;
+      }
+    });
+  });
+
   it("issues sync uses bearer Authorization when NEOTOMA_AAUTH_PRIVATE_JWK_PATH is unset", async () => {
     await withTempHome(async () => {
       delete process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH;

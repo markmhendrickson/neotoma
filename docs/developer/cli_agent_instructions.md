@@ -37,13 +37,14 @@ Instance skills / scripts (CLI-only, no MCP tool — materialization writes to t
 - **When MCP is available (installed and running):** Prefer **MCP** for Neotoma operations (**`store`**, `create_relationship`, retrieval tools, etc.) per the MCP instruction block. Deprecated aliases `store_structured` / `store_unstructured` still work but map to the same **`store`** handler.
 - **When both neotoma-dev and neotoma MCP servers are configured:** Default to **neotoma** (production) for retrieval/store/instruction precedence. Use **neotoma-dev** only when the user explicitly requests development behavior or the task is clearly dev-only.
 - **When MCP is not available:** Use the **Neotoma CLI** as backup. Data commands are offline-first with in-process local transport by default. Use `--api-only` to require remote API; `--offline` forces local transport. For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
+- **MCP 2026-07-28 clients over HTTP** (#2070): `POST /mcp` is dual-era. A request with no `Mcp-Session-Id` whose `params._meta` carries `io.modelcontextprotocol/protocolVersion` (plus `clientCapabilities`, and `clientInfo` for attribution) is served statelessly: no `initialize`, no session, identity from that request's own credentials. Call `server/discover` for instructions, capabilities and supported versions; it carries no per-user data (standing rules, instance skills), so read those with `retrieve_entities` (`entity_type: "standing_rule"` / `"skill"`). `Mcp-Method` / `Mcp-Name` carry only the method and the tool/resource/prompt name; a 400 naming either header means the value looked like a credential or personal data, so resend without it (credentials go only in `Authorization`). Legacy `initialize` + session clients are unchanged. Full normative rule lives in the MCP fenced block (`docs/developer/mcp/instructions.md` → `[INITIALIZATION]`); this is a transport-layer pointer only.
 
 ## CLI startup protocol (use-existing)
 
 CLI uses connect-only startup for interactive sessions. It does not auto-start servers on session start. On no-args startup, it discovers running local API instances from session ports, defaults (`3080`, `3180`), remembered ports, and optional configured ports. If multiple instances are healthy, it applies `--env` as a preference and then prompts for explicit selection.
 
 ```bash
-neotoma store --json='[...]'
+neotoma store --observation-source llm_summary --json='[...]'
 neotoma entities list --type contact
 neotoma schemas list
 ```
@@ -59,12 +60,18 @@ For server commands (`api start`, `api stop`, `api logs`, `watch`), pass `--env 
 When using the CLI (MCP not available):
 
 ```bash
-neotoma store --json='[{"entity_type":"person","name":"Sarah"},{"entity_type":"task","title":"Pay Sarah $20","description":"Owe Sarah $20"}]'
+neotoma store --observation-source llm_summary --json='[{"entity_type":"person","name":"Sarah"},{"entity_type":"task","title":"Pay Sarah $20","description":"Owe Sarah $20"}]'
 ```
+
+Pass **`--observation-source`** on every store: `llm_summary` for content you extracted or summarized, `import` for file or batch loads, or `unspecified` when you cannot say. Omitting it stores `unspecified` and returns an `OBSERVATION_SOURCE_OMITTED` warning.
 
 Each object in the array must be **flat** (all fields alongside `entity_type`). Do **not** wrap rows in a root **`attributes`** object — that pre-v0.5 shape is rejected with **`ERR_STORE_RESOLUTION_FAILED`**; see **`docs/developer/mcp/instructions.md`** [STORE RECIPES] (first bullets after the tool-parameter line).
 
-For long payloads, use `neotoma store --file <path>` with a JSON file containing the entities array.
+For long payloads, use `neotoma store --observation-source llm_summary --file <path>` with a JSON file containing the entities array.
+
+If a keyed store times out or fails transiently, retry it with the same `idempotency_key` and the same payload: the retry finishes an interrupted write or replays a finished one; do not change either. **`ERR_STORE_WRITE_INCOMPLETE`** is the exception: the request carried an `interpretation`, so the same key cannot finish it and a same-key retry returns this error again. Resend only the entities at `missing_entity_indexes` under a new key (an empty list means every entity is stored; resend none). None of the request's relationships were written: recreate them by entity id, looking up each id by the entity's identifying fields with `neotoma entities search`. A request without an `interpretation` never returns this code.
+
+Data origin (transport mapping for the MCP `data_origin` rule in **`docs/developer/mcp/instructions.md`**): pass `--data-origin '<json>'` (e.g. `'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}'`) or a top-level `data_origin` key in a `--file` envelope; a `data_origin` key inside one entity overrides it for that entity.
 
 ## Relationship creation (CLI backup)
 
@@ -78,9 +85,24 @@ neotoma relationships create --source-entity-id <container_id> --target-entity-i
 
 Entity IDs are returned in the `store` response (`entities[].entity_id`). If `relationships create` fails or is unavailable, check `neotoma relationships --help` for current syntax.
 
+Both `--source-entity-id` and `--target-entity-id` must be existing entities owned by the authenticated user; an endpoint that does not exist and one owned by another user are refused identically. Store the entity first, then link it. After a `store` call that named relationships, check the response's `relationships_refused` array rather than assuming every requested edge exists — see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION] and `docs/subsystems/relationships.md` § 6.1.
+
+For an admitted agent, one `create_relationship` capability entry must cover the operation, both endpoint entity types, and the relationship type. Partial entries do not compose. Missing or empty `relationship_types` denies edge writes, including for legacy grants; follow the structured `capability_denied` hint to update the existing grant rather than retrying with broader scope. The canonical rule, including delete, restore, and schema-auto-link behavior, is in `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
+
 ## Relationship creation guidance (canonical)
 
 For when and how to link a newly stored entity to existing entities (pre-store candidate discovery, `retrieve_related_entities`, canonical relationship examples, direction convention), see `docs/developer/mcp/instructions.md` [RELATIONSHIP CREATION].
+
+## Structured array patching (CLI backup)
+
+For a field whose schema declares `strategy: "merge_array_by_key"`, patch one item by key instead of reading the whole array and writing it back:
+
+```bash
+neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"in_review"}'
+neotoma array-item patch <entityId> <entityType> <field> <keyField> <keyValue> --item-json '{"status":"queued"}' --expected-item-absent
+```
+
+`keyValue` must be a string, boolean, or finite JSON number within the safe-integer range. A stale `--expected-item-version` (from a prior patch's `item_version`) returns a structured conflict (exit code non-zero, `status: "conflict"` with `current_item` / `current_item_version` in the JSON output) instead of overwriting; re-apply your change against `current_item` and retry with the fresh version. `--expected-item-absent` makes creation race-safe: exactly one concurrent creator succeeds. For non-array fields, read `entity_version` with `neotoma entities get`, then pass it to `neotoma corrections create <id> --expected-version <token>`; `--entity-type` is optional because the CLI resolves the stored type. See `docs/developer/mcp/instructions.md` [ENTITY & RELATIONSHIP LIFECYCLE] "Patching structured array fields" for the full contract.
 
 ## Pre-check before storing (CLI backup)
 
@@ -103,6 +125,10 @@ neotoma schemas audit-fragments contact         # one entity type
 ```
 
 It is read-only (declares nothing) and reports, per type, the undeclared `fragment_key`s with occurrence / affected-entity counts and a `schema_missing` flag. Use it before drafting `neotoma schemas update` (`update_schema_incremental`) / `register_schema` work to pick the high-occurrence fields to promote first.
+
+**Scope mismatch (`ERR_SCHEMA_SCOPE_MISMATCH`):** `neotoma schemas update` without `--user-specific` / `--no-user-specific` writes to whichever scope your schema resolves to. The error means `--no-user-specific` checked global only while the schema is user-scoped: retry without the flag, or with `neotoma schemas update --user-specific`. Do not run `neotoma schemas register` for that error. Canonical behavioral rule: `neotoma instructions print` (search "Schema scope mismatch").
+
+**Naming guard (`force`):** when `neotoma schemas update` or `neotoma schemas register` rejects an entity type name as plural or test-artifact-like, `--force` bypasses only those two naming checks; it does not skip the existence, scope, or identity guards. Rename the type instead unless the name is deliberate.
 
 ## Retrieval command quick reference (CLI backup)
 
@@ -128,9 +154,11 @@ neotoma relationships list --entity-id <entity_id>
 
 Use narrow queries first, then expand only if needed.
 
-**Entity-id identifiers:** when the identifier is a literal entity_id (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
+**Entity-id identifiers:** when the identifier is a literal `entity_id` (`ent_<hex>`), `entities search` / `retrieve_entity_by_identifier` short-circuits to a direct primary-key lookup and returns that entity exclusively (`match_mode: "direct"`) — it does not run name/text matching that would surface tangential rows mentioning the id. If no entity has that id for the caller, the response is `{ entities: [], total: 0, match_mode: "none", hint: … }` where `hint` points to `retrieve_entity_snapshot`; treat that as an explicit not-found for the id. For a known exact id, `retrieve_entity_snapshot` (`neotoma entities snapshot <entity_id>`) is the canonical direct fetch.
 
 **Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
+
+**Agent-initiated file reads and dangling source-file citations:** see `docs/developer/mcp/instructions.md` [PROVENANCE] (search "Agent-initiated file reads") and [QA REFLECTION] (search "Dangling source-file citation check"). The persistence obligation for a file the agent reads itself (not just user-attached files) is identical in the CLI backup path, including its exception for secret-bearing files, whose bytes are never persisted: run `neotoma instructions print` to see the canonical behavioral rule before relying on a `source_file`-style field without a stored file asset.
 
 **Deep pagination:** use `--cursor`, not `--offset`. Offset paging re-scans every prior row, so deep pages get slower the further you go and are rejected past a bounded depth (2000). Pass the `next_cursor` from the previous response to `--cursor` to page in constant time at any depth:
 
@@ -195,3 +223,57 @@ Load when configuring or documenting agent behavior, or when choosing between MC
 - `docs/foundation/what_to_store.md` — Canonical rubric for what facts are worth storing
 - `docs/developer/agent_cli_configuration.md` — Agent CLI configuration and MCP/CLI strategy
 - `docs/developer/cli_reference.md` — CLI command reference
+
+## Relationship type discovery and registration
+
+This section is not part of the MCP instruction block (the fenced block that
+`neotoma instructions print` emits and MCP clients receive), so it is carried here
+in full for CLI-installed agents. It is kept verbatim with the section of the same
+name in `docs/developer/mcp/instructions.md`; edit both together.
+
+The vocabulary is instance data. Call `list_relationship_types` (CLI:
+`neotoma relationship-types list`) before using an unfamiliar edge type. If the
+meaning is absent, an authorized principal calls `register_relationship_type`
+(CLI: `neotoma relationship-types register --relationship-type knows --description
+"Explicit acquaintance"`). Registration defaults to user scope; global scope needs
+an explicit global permission in the registration grant. An absent grant is refused,
+including clients with no agent identity. Obtain a grant through the operator's
+normal grant-administration process; do not retry with wider scope.
+
+Refresh cached tool definitions after registration, verify the census includes the
+type, create the edge, and read it back with its type filter. Endpoint type hints,
+inverse and symmetry are advisory. Acyclic declarations are enforced on every edge
+creation surface and cannot be removed by re-registering metadata.
+
+An empty `list_relationship_types` result never means no vocabulary exists — the
+built-in types (`PART_OF`, `REFERS_TO`, and 26 others) are always expected to be
+present. When `relationship_types` is empty, the response carries `empty_reason`
+and `hint`: `registry_unseeded` means the instance's registry (including the
+built-ins) failed to seed and self-repairs on the very next read — call
+`list_relationship_types` again rather than concluding the vocabulary is
+unavailable; `filtered_to_empty` means a supplied `keyword` matched nothing —
+retry without `keyword`. Do not call `register_relationship_type` to work around
+either case: it registers a new custom type and cannot restore a missing built-in.
+
+If a write refuses a **built-in** type name (`PART_OF`, `REFERS_TO`, etc.) as
+unregistered, the error's `hint` says so explicitly and the remedy is the same as
+above — call `list_relationship_types` and retry, not `register_relationship_type`.
+If `register_relationship_type` itself refuses a built-in name for capability
+reasons (no grant covering it), the denial may ALSO mention a possible seed/registry
+cause — but only when the registry is genuinely unhealthy for that type; an ordinary
+grant-scope refusal (the far more common case: your grant simply does not cover this
+type) reads as a plain capability denial. Either way, request the grant through the
+operator's normal grant-administration process; do not retry with wider scope, and
+do not read a capability denial as evidence of a registry problem unless the denial
+says so.
+
+To re-type the historical `related_to` + `metadata.relation="knows"` convention,
+register `knows`, list the old edges, and select only those with that exact metadata
+value. For each selected edge, create `knows` with the same endpoints and provenance
+metadata, read it back, then soft-delete the old edge. Do not delete the original
+before verification. Repeating the same endpoints/type is idempotent; unrelated
+`related_to` edges remain unchanged. This is an explicit consumer migration, never
+automatic registry side effect.
+
+Atomic correction transport: `neotoma request --operation correctTransaction --body '<json>'` uses the same contract as MCP `correct_transaction`. See `docs/developer/atomic_corrections.md` and the canonical behavioral instructions for retry and precondition semantics.
+The committed `atomic_keyed_array_disjoint_writers` replay scenario uses the actual isolated HTTP tool. It binds deterministic portable item-version tokens by asserting the server's returned versions, then verifies a stale same-key conflict with current item/version, reviewed reapplication, exact replay and changed-payload refusal. Snapshot observation counts prove refusals/replay add no writes and the disjoint row survives. The cassette contains requests only. Removing the item-version comparison makes the same scenario fail; simultaneous arrival and post-commit event behavior are separately covered by `tests/unit/array_item_patch_atomic.test.ts`, including queued identical entity-CAS retries. This replay does not claim live-model reasoning or simultaneous HTTP arrival.

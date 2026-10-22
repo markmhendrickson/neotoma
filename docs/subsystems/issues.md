@@ -133,7 +133,7 @@ These keys are stable so `syncIssuesFromGitHub` can replay GitHub state without 
 
 Neotoma can **pull** state from the configured **issue mirror** (today: GitHub Issues via `github_client`) into local `issue` / `conversation` / `conversation_message` rows. This is mirror ingest, not peer sync; see [`peer_sync.md`](peer_sync.md) for cross-instance replication.
 
-Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels? })`:
+Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels?, repo?, push?, commit? })`:
 
 1. List remote issues matching the filter (mirror API).
 2. For each issue, list remote comments.
@@ -141,7 +141,47 @@ Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels? })`:
 4. Store via `ops.store` with idempotency keys derived from the remote ids so re-runs are safe.
 5. Update `last_synced_at` and clear `sync_pending` when the mirror roundtrip succeeds.
 
-`syncIssueIfStale({ entity_id })` performs the same flow scoped to a single issue and is invoked transparently by `getIssueStatus` / `addIssueMessage` whenever the cache is older than `sync_staleness_ms`.
+`syncIssueIfStale(ops, issueNumber, lastSyncedAt, repo?)` performs the same flow scoped to a single issue and is invoked by `getIssueStatus` whenever the cache is older than `sync_staleness_ms`. `repo` is the mirrored entity's own repo (default: the configured repo) and is checked against the allowlist below before any GitHub request.
+
+### Repo allowlist and per-issue repo
+
+The server's GitHub credential is an instance-level resource, so a caller-supplied `repo` selects a target only from a set the operator has approved:
+
+- The configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`) is always allowed.
+- `NEOTOMA_ISSUES_ALLOWED_REPOS` adds more: a comma-separated list of `owner/name`. `issues.allowed_repos` (an array in the config file) is the file equivalent; when the environment variable is set at all, it wins. Entries are validated with the same `owner/name` rule as `repo`, matched case-insensitively, with no wildcards. A malformed entry is dropped with a warning and never widens the list. Unset or empty means the configured repo only.
+- The check runs in `resolveSyncTarget` before any GitHub request or local read or write, and applies equally to pull, push and dry run. A repo that is not permitted is rejected with HTTP 403 (`ERR_ISSUE_REPO_NOT_ALLOWED`) on REST and `InvalidParams` on MCP. The text is the same whether or not the repo exists or the credential can reach it, and it does not list the approved repos.
+
+Once a repo has been mirrored, the other `issue` tools follow the entity, not the instance config. The repo for a row is resolved once (`resolveIssueRow`, through `resolveIssueRepo`): the row's stored `repo` when it is a valid slug, otherwise the configured repo. That repo is used for `getIssue`, `listIssueComments`, `addIssueComment` and `closeIssue`, and for the thread and message identity keys, so a message added to an issue mirrored from another repo is posted to that repo's issue and threads under that repo's conversation. A row's GitHub calls are made only when its repo is permitted (the configured repo or on the allowlist). If the stored repo is a valid slug that is not permitted, the row is handled locally only (falling back to the configured repo would send the text to a different repo's issue of the same number).
+
+What each `issue`-family path does with a row from a repo other than the configured one:
+
+| Path                                                | Row from an allowlisted other repo                                                                                                                                                   | Row from a repo that is not permitted                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `get_issue_status` refresh                          | Refreshed from that repo                                                                                                                                                             | Not refreshed; local data only                       |
+| `add_issue_message`, GitHub comment                 | Posted to that repo's issue                                                                                                                                                          | Not posted; recorded locally                         |
+| `add_issue_message`, forward to `issues.target_url` | Forwarded only when the row was filed to the target instance (it carries `remote_entity_id` and a guest token or `remote_conversation_id`); not forwarded for a row mirrored by sync | Same rule (the allowlist does not apply to this leg) |
+| Inspector bulk close / remove                       | Closes that repo's issue, then updates locally                                                                                                                                       | Local only; no GitHub call                           |
+
+The forward to `issues.target_url` follows the row's identity on the target instance, not its repo. `add_issue_message` forwards in two cases:
+
+- **The row was filed to the target instance** (for example through `submit_issue` with `target_repo`). It carries `remote_entity_id` plus either the guest access token or a stored `remote_conversation_id`. The follow-up is posted to that same record on the target, by entity id, whichever repo the row names and whether or not that repo is allowlisted: this leg sends no GitHub credential, so the allowlist does not apply to it. This is the same record `get_issue_status` reads through to.
+- **A permitted row that belongs to the configured repo** (including a legacy row with no stored `repo`).
+
+A row mirrored by sync from another repo has no `remote_entity_id`, so it is not forwarded: the target instance keys its thread on the configured repo, so it has no correct thread for another repo's issue, and forwarding would file the text under the configured repo's same-numbered issue. A row with a `remote_entity_id` but neither a guest token nor a stored `remote_conversation_id` is not forwarded either, for the same reason. In both cases the message stays on this instance and no `remote_submission_error` is reported for the skipped forward. Everything else in this family that goes to GitHub (the comment above, the refresh, and Inspector close / remove) follows the row's own repo when it is permitted and is skipped otherwise.
+
+Allowlisting a repo grants more than read access. The server credential is used to comment on, and to close, issues in every allowlisted repo, for any caller who can write an `issue` row that names it (through `add_issue_message` and Inspector close / remove), not only to pull issues from it. Add a repo to `NEOTOMA_ISSUES_ALLOWED_REPOS` only when that is intended.
+
+Behavior change: rows filed through `submit_issue` with `target_repo` set to a repo that is not on the allowlist are now local-only. Their follow-up messages and refreshes no longer reach GitHub, where previously they went, wrongly, to the configured repo's issue of the same number. Follow-ups still reach the `target_url` instance for these rows, because they carry an explicit identity there. Add the repo to the allowlist to restore GitHub-backed follow-ups for it.
+
+Note: `submit_issue`'s `target_repo` is not yet covered by the allowlist (tracked separately).
+
+### Target repo, push opt-in and dry run
+
+- **`repo`** (`owner/name`, validated) selects the GitHub repo for one call. The server-config value (`NEOTOMA_ISSUES_REPO` / `issues.repo`) stays the default and is not changed by a call that passes `repo`, so pointing one sync at another repo does not retarget every other sync on the instance. A malformed value is rejected (REST/MCP validation error; CLI exits 1) and a value outside the allowlist is rejected (403 / `InvalidParams`), both before any GitHub request or local write. The check is stricter than `submit_issue`'s `target_repo`: one slash, GitHub owner/name character rules, no `.`/`..` segment.
+- **`push`** (the Neotoma to GitHub leg) defaults to **true when `repo` is omitted or equals the configured default repo, and false for any other `repo`**. Rationale: the push leg creates public GitHub issues from local `visibility: "public"` records that carry no repo binding, so a sync aimed at a different repo must not export them there unless the caller says so (`push: true` / `--push`). The default repo keeps push-on because that is the repo the operator configured to receive them and the scheduled `neotoma issues sync` job relies on it; a global default-off would silently stop that mirror. When a push does go to a non-default repo, `repo` is written back onto the local issue so its `github_number` stays unambiguous.
+- **`commit: false`** (CLI `--dry-run`) is a dry run: it reads GitHub and local state, performs no `store`, no `correct` and no GitHub create, and returns `plan` with `issues_to_create`, `issues_to_update` (local `last_synced_at` differs from GitHub `updated_at`), `issues_unchanged`, `messages_to_sync`, `issues_to_push` and `warnings`. `issues_synced`, `messages_synced` and `issues_pushed` are 0 in a dry run.
+- Every result reports the resolved `repo`, `dry_run` and `push_enabled`.
+- **Missing token:** the error names the `NEOTOMA_ISSUES_GITHUB_TOKEN` setting and that it is read from the environment of the process running the Neotoma server (or `gh auth login` as that user), not the caller's shell.
 
 **MCP vs CLI vs HTTP:** `sync_issues` (MCP), `POST /issues/sync`, and `neotoma issues sync` all call `syncIssuesFromGitHub` in `src/services/issues/sync_issues_from_github.ts` via the HTTP handlers in `src/actions.ts` (CLI uses the typed API client).
 
@@ -151,7 +191,7 @@ When `visibility: "public"` or when read/append paths touch the mirror, Neotoma 
 
 `gh_auth.resolveGitHubToken` order:
 
-1. `NEOTOMA_GH_TOKEN` env var (CI / bot deployments).
+1. `NEOTOMA_ISSUES_GITHUB_TOKEN` env var (CI / bot deployments), read from the server process environment.
 2. `gh auth token` shell-out (developer machines using the GitHub CLI).
 3. Configured machine agent — `IssuesConfig.github_auth = "bot"` (literal enum) plus a server-side credential resolver registered out-of-band.
 4. Otherwise, throw — public issue actions that require the mirror cannot proceed.
@@ -169,7 +209,7 @@ Canonical programmatic surface for full issue lifecycle (see [`docs/specs/MCP_SP
 - `submit_issue({ title, body, labels?, visibility?, reporter_git_sha?, ... })`.
 - `add_issue_message({ entity_id, body, guest_access_token? })` — optional `guest_access_token` when the local row mirrors a remote operator issue and the token is not stored on the issue snapshot. If remote append fails after local/GitHub side effects are recorded, the result carries `remote_submission_error` so callers avoid duplicate fallback comments.
 - `get_issue_status({ entity_id, skip_sync?, guest_access_token? })` — optional `guest_access_token` for the same read-through case.
-- `sync_issues({ since?, state?, labels? })`.
+- `sync_issues({ since?, state?, labels?, repo?, push?, commit? })` — `repo` is `owner/name`; `push` defaults to false for any repo other than the configured default; `commit: false` is a dry run.
 - `bulk_close_issues({ entity_ids: string[], reason?: string })` — closes multiple `issue` entities in one call, mirrors `POST /issues/bulk_close`, and is what the Inspector bulk-close action drives.
 - `bulk_remove_issues({ entity_ids: string[], reason?: string })` — soft-deletes multiple `issue` entities (via `deleteEntity` observations), mirrors `POST /issues/bulk_remove`. Use this for triage clean-up; restoration goes through `restore_entity`, not a bulk-restore tool.
 
@@ -181,7 +221,7 @@ Operator and agent backup (see `openapi.yaml` operationIds `issuesSubmit`, `issu
 - `neotoma issues message [number] --body <b>` (GitHub issue number) or `neotoma issues message --entity-id <id> --body <b>` — calls `POST /issues/add_message` → `addIssueMessage`.
 - `neotoma issues status --entity-id <id> [--skip-sync] [--guest-access-token <t>]` — calls `POST /issues/status` → `getIssueStatus`.
 - `neotoma issues list [--state open|closed|all] [--labels csv] [--since <iso>]` — GitHub list only (no MCP twin).
-- `neotoma issues sync [--since <iso>] [--state ...] [--labels csv]` — calls `POST /issues/sync` → `syncIssuesFromGitHub`.
+- `neotoma issues sync [--since <iso>] [--state ...] [--labels csv] [--repo <owner/name>] [--push|--no-push] [--dry-run]` — calls `POST /issues/sync` → `syncIssuesFromGitHub`.
 - `neotoma issues config [--repo <slug>] [--mode proactive|consent|off] [--sync-staleness-ms <n>]`.
 - `neotoma issues auth` — runs `verifyGhAuth` and reports the resolved auth method.
 

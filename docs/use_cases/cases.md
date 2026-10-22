@@ -26,8 +26,7 @@ Legal proceedings and investigations hinge on establishing what was known at spe
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured case entities, evidence, and filings |
-| `query-memory` | Reconstructs case knowledge state at any timeline point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

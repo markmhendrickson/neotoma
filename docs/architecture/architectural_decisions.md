@@ -116,7 +116,7 @@ flowchart TD
 
 **Rationale:**
 - Hierarchies **emerge from edges** rather than schema design
-- Enables out-of-order [ingestion](../vocabulary/canonical_terms.md#ingestion), multiple parents, overlapping summaries, corrections
+- Enables out-of-order [ingestion](../vocabulary/canonical_terms.md#ingestion), multiple parents, overlapping summaries, corrections — out of order among an owner's own entities; both endpoints must already exist and be owned by the caller at link time (see `docs/subsystems/relationships.md` § 6.1), so this does not permit linking to an entity that has not yet been stored or that belongs to another user
 - Supports flexible domain modeling without schema changes
 - [Relationships](../vocabulary/canonical_terms.md#relationship) are queryable and traversable
 

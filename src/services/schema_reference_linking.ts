@@ -161,7 +161,40 @@ async function retractStaleAutoLinkedEdges(
   };
   if (stale.length === 0) return result;
   const { softDeleteRelationship } = await import("./deletion.js");
+  const { enforceCurrentAgentRelationshipWrites } =
+    await import("./relationship_write_capability.js");
   for (const edge of stale) {
+    try {
+      // Retraction changes whether an edge is live, so it is governed by the
+      // same relationship-type + endpoint-type grant as create, explicit
+      // delete and restore. The shared helper is request-context aware: owner
+      // and other non-agent callers remain unchanged, while admitted agents
+      // fail closed before the tombstone write.
+      await enforceCurrentAgentRelationshipWrites({
+        userId,
+        relationships: [
+          {
+            relationship_type: relationshipType,
+            source_entity_id: entityId,
+            target_entity_id: edge.target_entity_id,
+          },
+        ],
+      });
+    } catch (error) {
+      result.failed++;
+      result.failedTargetEntityIds.push(edge.target_entity_id);
+      result.failedRetractions.push({
+        field,
+        relationship_type: relationshipType,
+        target_entity_id: edge.target_entity_id,
+      });
+      logger.error(
+        `[SCHEMA_REF_LINK] Refused stale auto-linked edge retraction ` +
+          `${edge.relationship_key} for ${entityType}.${field} ` +
+          `(target ${edge.target_entity_id}): ${error instanceof Error ? error.message : String(error)}`
+      );
+      continue;
+    }
     const retraction = await softDeleteRelationship(
       edge.relationship_key,
       relationshipType,
@@ -547,6 +580,14 @@ export async function autoLinkReferenceFields(
       }
     } catch (err) {
       result.skipped++;
+      result.details.push({
+        field: ref.field,
+        target_entity_type: ref.target_entity_type,
+        target_canonical_name: candidate,
+        target_entity_id: targetEntityId,
+        relationship_type: relationshipType,
+        linked: false,
+      });
       logger.warn(
         `[SCHEMA_REF_LINK] Failed to auto-link ${params.entityType}.${ref.field} -> ` +
           `${ref.target_entity_type}(${candidate}): ${

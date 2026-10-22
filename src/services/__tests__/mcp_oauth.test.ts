@@ -494,23 +494,72 @@ describe("MCP OAuth Service", () => {
       }
 
       const connectionId = "cursor-local-123";
+      const { codeVerifier, codeChallenge } = generatePKCE();
       const request = await oauth.createLocalAuthorizationRequest({
         connectionId,
         redirectUri: "cursor://oauth",
         clientState: "client-state",
-        codeChallenge: "test-challenge",
+        codeChallenge,
       });
 
       expect(request.state).toBeTruthy();
 
       const callback = await oauth.completeLocalAuthorization(request.state, user.id);
       expect(callback.connectionId).toBe(connectionId);
+      expect(callback.code).toBeTruthy();
+      expect(callback.code).not.toBe(connectionId);
 
       const status = await oauth.getConnectionStatus(connectionId);
       expect(status).toBe("active");
 
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseForConnection(callback.code, codeVerifier);
       expect(tokenResponse.access_token).toMatch(/^local_access_/);
+      expect(tokenResponse.connection_id).toBe(connectionId);
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("concurrent redemption of the same authorization code: exactly one succeeds", async () => {
+      // Modeled on "concurrent refresh calls both succeed" below, but the
+      // opposite assertion: refresh tokens are reusable by design (that test
+      // asserts both concurrent refreshes succeed), while an authorization
+      // code is single-use, so of two concurrent redemptions with the SAME
+      // code and the SAME correct verifier, exactly one must succeed and the
+      // other must be refused as already-used/invalid — never both.
+      const tempDir = path.join(
+        process.cwd(),
+        "tmp",
+        `neotoma-oauth-code-redemption-race-${Date.now()}`
+      );
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      await localAuth.createLocalAuthUser("race@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("race@example.com");
+      if (!user) throw new Error("Local auth user not found in test");
+
+      const connectionId = "cursor-local-race";
+      const { codeVerifier, codeChallenge } = generatePKCE();
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge,
+      });
+      const callback = await oauth.completeLocalAuthorization(request.state, user.id);
+
+      const results = await Promise.allSettled([
+        oauth.getTokenResponseForConnection(callback.code, codeVerifier),
+        oauth.getTokenResponseForConnection(callback.code, codeVerifier),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+      expect(
+        (fulfilled[0] as PromiseFulfilledResult<{ access_token: string }>).value.access_token
+      ).toMatch(/^local_access_/);
 
       rmSync(tempDir, { recursive: true, force: true });
     });
@@ -534,7 +583,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       await (await getDb())
         .prepare(
@@ -543,7 +592,7 @@ describe("MCP OAuth Service", () => {
         .run(new Date(Date.now() - 60_000).toISOString(), connectionId);
 
       const renewed = await oauth.getAccessTokenForConnection(connectionId);
-      const secondToken = await oauth.getTokenResponseForConnection(connectionId);
+      const secondToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       expect(renewed.userId).toBe(user.id);
       expect(renewed.accessToken).toMatch(/^local_access_/);
@@ -574,7 +623,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseByConnectionId(connectionId);
       await (await getDb())
         .prepare(
           "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
@@ -653,7 +702,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseByConnectionId(connectionId);
 
       const validated = await mcpAuth.validateSessionToken(tokenResponse.access_token);
       expect(validated.userId).toBe(user.id);
@@ -680,7 +729,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) {
         throw new Error("Expected local OAuth flow to return a refresh token");
       }
@@ -711,7 +760,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
       const [r1, r2] = await Promise.all([
@@ -722,7 +771,7 @@ describe("MCP OAuth Service", () => {
       expect(r1.access_token).toMatch(/^local_access_/);
       expect(r2.access_token).toMatch(/^local_access_/);
 
-      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      const finalToken = await oauth.getTokenResponseByConnectionId(connectionId);
       expect(finalToken.access_token).toMatch(/^local_access_/);
       expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
@@ -749,7 +798,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
       await (await getDb())
@@ -780,7 +829,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       await (await getDb())
         .prepare(
@@ -799,7 +848,7 @@ describe("MCP OAuth Service", () => {
       const finalStatus = await oauth.getConnectionStatus(connectionId);
       expect(finalStatus).toBe("active");
 
-      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      const finalToken = await oauth.getTokenResponseByConnectionId(connectionId);
       expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
       rmSync(tempDir, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 {
-  "_comment": "Default agent capability registry. Loaded by src/services/agent_capabilities.ts when NEOTOMA_AGENT_CAPABILITIES_JSON and NEOTOMA_AGENT_CAPABILITIES_FILE are unset. Scopes the agent.neotoma.io Netlify forwarder to neotoma_feedback only so a compromised forwarder cannot touch unrelated entity types. See docs/subsystems/agent_capabilities.md for the format.",
+  "_comment": "Default agent capability registry. Loaded by src/services/agent_capabilities.ts when NEOTOMA_AGENT_CAPABILITIES_JSON and NEOTOMA_AGENT_CAPABILITIES_FILE are unset. Scopes the agent.neotoma.io Netlify forwarder to neotoma_feedback only so a compromised forwarder cannot touch unrelated entity types. It grants no create_relationship: an edge-write entry needs relationship_types (neotoma#2524) and the forwarder writes no edges. See docs/subsystems/agent_capabilities.md for the format.",
   "default_deny": false,
   "agents": {
     "agent-site@neotoma.io": {
@@ -9,7 +9,6 @@
       },
       "capabilities": [
         { "op": "store_structured", "entity_types": ["neotoma_feedback"] },
-        { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
         { "op": "correct", "entity_types": ["neotoma_feedback"] },
         { "op": "retrieve", "entity_types": ["neotoma_feedback"] }
       ]

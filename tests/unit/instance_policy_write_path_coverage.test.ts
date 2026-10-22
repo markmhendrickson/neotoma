@@ -122,6 +122,21 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
 
+/**
+ * Offset of the EARLIEST observation insert in `body`: either the shared
+ * primitive (`insertObservationRow(`) or a raw `db.from("observations").insert`
+ * (whitespace and line breaks between the chained calls allowed). -1 when the
+ * body contains neither. Measuring the earlier of the two keeps the
+ * gate-before-insert assertions meaningful if a raw insert is reintroduced.
+ */
+function earliestObservationInsertOffset(body: string): number {
+  const offsets = [
+    body.indexOf("insertObservationRow("),
+    body.search(/db\s*\.from\(\s*["']observations["']\s*\)\s*\.insert\b/),
+  ].filter((n) => n >= 0);
+  return offsets.length === 0 ? -1 : Math.min(...offsets);
+}
+
 describe("instance store-policy is enforced on every write path", () => {
   it("the REST/CLI/sync store core calls the policy gate", () => {
     const src = read("src/actions.ts");
@@ -193,36 +208,124 @@ describe("instance store-policy is enforced on every write path", () => {
     // names the write calls it must precede, and matching that prose would
     // report a false ordering violation against correct code.
     const actionsCore = stripComments(
-      sliceFunctionBody(read("src/actions.ts"), "export async function storeStructuredForApi")
+      sliceFunctionBody(read("src/actions.ts"), "async function storeStructuredForApiUnguarded")
     );
     const actionsGate = actionsCore.indexOf(ENFORCE_CALL);
     // In this core the source row is written via storeRawContent; observations
     // follow it. The gate must come first.
     const actionsFirstWrite = actionsCore.indexOf("storeRawContent");
-    expect(actionsGate, "gate not found inside storeStructuredForApi").toBeGreaterThan(-1);
+    expect(actionsGate, "gate not found inside storeStructuredForApiUnguarded").toBeGreaterThan(-1);
     expect(
       actionsFirstWrite,
-      "source write not found inside storeStructuredForApi"
+      "source write not found inside storeStructuredForApiUnguarded"
     ).toBeGreaterThan(-1);
     expect(
       actionsGate,
-      "policy gate must run before the source row is written in storeStructuredForApi"
+      "policy gate must run before the source row is written in storeStructuredForApiUnguarded"
     ).toBeLessThan(actionsFirstWrite);
 
     const mcpCore = stripComments(
-      sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternal")
+      sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternalUnguarded")
     );
     const mcpGate = mcpCore.indexOf(ENFORCE_CALL);
-    const mcpObservationInsert = mcpCore.indexOf('db.from("observations").insert');
-    expect(mcpGate, "gate not found inside storeStructuredInternal").toBeGreaterThan(-1);
+    // The structured-store core issues its observation insert through the
+    // shared primitive (src/services/observation_insert.ts); the earliest of
+    // that call and a raw insert is measured, so reintroducing a raw insert
+    // before the gate still fails.
+    const mcpObservationInsert = earliestObservationInsertOffset(mcpCore);
+    expect(mcpGate, "gate not found inside storeStructuredInternalUnguarded").toBeGreaterThan(-1);
     expect(
       mcpObservationInsert,
-      "observation insert not found inside storeStructuredInternal"
+      "observation insert not found inside storeStructuredInternalUnguarded"
     ).toBeGreaterThan(-1);
     expect(
       mcpGate,
-      "policy gate must run before the raw observation insert in storeStructuredInternal"
+      "policy gate must run before the raw observation insert in storeStructuredInternalUnguarded"
     ).toBeLessThan(mcpObservationInsert);
+  });
+
+  it("both store cores are reached only through the keyed, non-cancellable write wrapper (#2144)", () => {
+    // The gates above are asserted inside the `...Unguarded` cores. This pins
+    // the other half: the public entry points must hand those cores to
+    // runKeyedStoreWrite, which detaches the request's abort signal and
+    // serialises a same-key replay behind the original write. Without it a
+    // client hang-up can end the write loop between two observations.
+    const apiEntry = stripComments(
+      sliceFunctionBody(read("src/actions.ts"), "export async function storeStructuredForApi")
+    );
+    expect(apiEntry).toContain("runKeyedStoreWrite(");
+    expect(apiEntry).toContain("storeStructuredForApiUnguarded(");
+
+    const mcpEntry = stripComments(
+      sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternal(")
+    );
+    expect(mcpEntry).toContain("runKeyedStoreWrite(");
+    expect(mcpEntry).toContain("storeStructuredInternalUnguarded(");
+  });
+
+  it("an observation insert placed before the gate is detected, whichever form it takes", () => {
+    // Self-test of the offset measure used above: it must see a raw
+    // `db.from("observations").insert(...)` as well as the shared primitive,
+    // and report the EARLIER of the two.
+    const gateThenPrimitive = `${ENFORCE_CALL}(x); insertObservationRow(row);`;
+    expect(earliestObservationInsertOffset(gateThenPrimitive)).toBeGreaterThan(
+      gateThenPrimitive.indexOf(ENFORCE_CALL)
+    );
+
+    const rawBeforeGate = `await db.from("observations").insert(row); ${ENFORCE_CALL}(x); insertObservationRow(row);`;
+    expect(earliestObservationInsertOffset(rawBeforeGate)).toBe(rawBeforeGate.indexOf("db."));
+    expect(earliestObservationInsertOffset(rawBeforeGate)).toBeLessThan(
+      rawBeforeGate.indexOf(ENFORCE_CALL)
+    );
+
+    const rawMultiline = `await db\n  .from("observations")\n  .insert(row);`;
+    expect(earliestObservationInsertOffset(rawMultiline)).toBe(rawMultiline.indexOf("db"));
+
+    expect(earliestObservationInsertOffset("noop();")).toBe(-1);
+  });
+
+  it("createObservation and createCorrection clear every guard before they insert", () => {
+    // `insertObservationRow` carries no guards of its own. The guards live at
+    // the call sites, so pin their order against the earliest observation
+    // insert (shared primitive or raw) in each function body.
+    const sites: Array<{ label: string; file: string; signature: string; gates: string[] }> = [
+      {
+        label: "createObservation",
+        file: "src/services/observation_storage.ts",
+        signature: "export async function createObservation(",
+        gates: [
+          "enforceAttributionPolicy(",
+          "assertCanWriteProtected(",
+          "enforceOverridePolicy(",
+          "assertNoOwnerConflict(",
+        ],
+      },
+      {
+        label: "createCorrection",
+        file: "src/services/correction.ts",
+        signature: "export async function createCorrection(",
+        gates: [
+          "enforceAttributionPolicy(",
+          "assertCanWriteProtected(",
+          "enforceOverridePolicy(",
+          "assertNoOwnerConflict(",
+          ENFORCE_CALL,
+        ],
+      },
+    ];
+    for (const site of sites) {
+      const body = stripComments(sliceFunctionBody(read(site.file), site.signature));
+      const insertAt = earliestObservationInsertOffset(body);
+      expect(insertAt, `${site.label}: observation insert not found`).toBeGreaterThan(-1);
+      for (const gate of site.gates) {
+        const gateAt = body.indexOf(gate);
+        expect(gateAt, `${site.label}: guard ${gate} not found`).toBeGreaterThan(-1);
+        expect(
+          gateAt,
+          `${site.label}: ${gate} must run before the observation insert`
+        ).toBeLessThan(insertAt);
+      }
+    }
   });
 
   it("the policy evaluator contains no hardcoded per-entity-type branch", () => {

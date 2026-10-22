@@ -67,7 +67,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     },
     {
       q: "Is this production-ready?",
-      a: "Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
+      a: "Neotoma is used daily by real agent workflows. The project moves fast, and APIs or storage formats can change between versions. Install it and let your agent evaluate the fit.",
     },
     {
       q: "Does Neotoma replace Claude's memory or ChatGPT's?",
@@ -75,7 +75,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     },
     {
       q: "Does Neotoma send my data to the cloud?",
-      a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API (for example for remote MCP clients).",
+      a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync and no training on your data unless you choose to expose the API (for example for remote MCP clients). No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.",
     },
     {
       q: "What's the difference between RAG memory and deterministic memory?",
@@ -373,7 +373,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
     modeTabs: { chat: "Chat", cli: "CLI", mcp: "MCP", api: "API", inspector: "Inspector" },
     chatPlaceholder: "Ask anything...",
     playPause: { pauseLabel: "Pause demo", playLabel: "Play demo" },
-    installCta: "Install in 5 minutes",
+    installCta: "Install in a few minutes",
     chatScenarios: CLI_DEMO_CHAT_SCENARIOS_EN,
     cliScenarios: CLI_DEMO_CLI_SCENARIOS_EN,
     agenticScenarios: CLI_DEMO_AGENTIC_SCENARIOS_EN,

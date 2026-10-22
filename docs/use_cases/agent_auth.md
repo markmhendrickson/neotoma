@@ -27,7 +27,7 @@ As AI agents gain the ability to act autonomously — executing transactions, ac
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists policy evaluations, consent grants, and delegation chains |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

@@ -3,6 +3,7 @@ import {
   buildExternalActor,
   buildExternalActorFromGithubIssue,
   buildExternalActorFromGithubComment,
+  externalActorFromCallerInput,
 } from "../../src/services/issues/external_actor_builder.js";
 import type { GitHubIssue, GitHubComment } from "../../src/services/issues/types.js";
 
@@ -120,5 +121,40 @@ describe("buildExternalActor", () => {
     expect(actor.repository).toBe("foo/bar");
     expect(actor.event_id).toBe(10);
     expect(actor.comment_id).toBe(20);
+  });
+});
+
+describe("externalActorFromCallerInput", () => {
+  it("records every caller-named tier as claim and drops delivery_id", () => {
+    for (const tier of [
+      "claim",
+      "linked_attestation",
+      "oauth_link",
+      "webhook_signature",
+    ] as const) {
+      const actor = externalActorFromCallerInput({
+        provider: "github",
+        login: "octocat",
+        id: 1,
+        type: "Bot",
+        verified_via: tier,
+        delivery_id: "d",
+        event_type: "issues",
+        repository: "owner/repo",
+        event_id: 3,
+        comment_id: 4,
+      });
+      expect(actor).toEqual({
+        provider: "github",
+        login: "octocat",
+        id: 1,
+        type: "Bot",
+        verified_via: "claim",
+        event_type: "issues",
+        repository: "owner/repo",
+        event_id: 3,
+        comment_id: 4,
+      });
+    }
   });
 });

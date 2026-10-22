@@ -449,7 +449,7 @@ See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 | `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+).                           | Strong      | Partial       | Available |
 | `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
 | `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
-| `sync_issues`      | Bulk pull issues (and messages) from configured GitHub into local Neotoma                                                                                                           | Strong      | Partial       | Available |
+| `sync_issues`      | Bulk pull issues (and messages) from the configured or `repo`-selected GitHub repo into local Neotoma; push opt-in for non-default repos; `commit: false` dry run                   | Strong      | Partial       | Available |
 | `bulk_close_issues`| Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                          | Strong      | Yes           | Available |
 | `bulk_remove_issues`| Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.   | Strong      | Yes           | Available |
 
@@ -687,7 +687,7 @@ Clients can subscribe to resource updates:
   entities?: Array<Record<string, unknown>>;
   relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
   source_priority?: number;
-  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync";
+  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync" | "unspecified";
   source_peer_id?: string;
   external_actor?: { kind: "github_user"; login: string; html_url?: string };
   file_content?: string;
@@ -702,7 +702,7 @@ Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_
 
 **Write-classification, sync, and external attribution (v0.12+):**
 
-- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` so classified writes beat unclassified legacy rows. Set this only when the writer is **not** an LLM summary — for sensor / state-machine / human / import / sync writes. Plain agent extraction omits the field and defaults to `llm_summary`.
+- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` (default order `sensor` > `workflow_state` > `llm_summary` = `unspecified` > `human` > `import` > `sync`; legacy null rows last). Every writer should set it: agent extraction and summaries send `llm_summary`; sensor / state-machine / human / import / sync writes send their own value. When the field is omitted the observations are stored as `unspecified` (a lineage sentinel that makes no claim about origin; unless a schema ranks it explicitly it shares `llm_summary`'s rank, so recency decides between the two, because legacy omitted writes were stored as `llm_summary`) and the response carries one `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Before #2241 omission was stored as `llm_summary`, so a legacy `llm_summary` row is not by itself evidence of model authorship.
 - `source_peer_id` stamps observations with the peer that produced them. Used for loop prevention on subscriptions whose `sync_peer_id` matches, and for the `Inspector → peers` audit view. Always pairs with `observation_source: "sync"`.
 - `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the *signing agent*, `external_actor` identifies the *human or account on whose behalf* the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
 
@@ -785,10 +785,11 @@ The server handles all interpretation automatically. Agents should only pass the
   observation_source?:                 // Optional: classifies the KIND of write (v0.12+)
     | "sensor"                         //   deterministic tool / telemetry emission
     | "workflow_state"                 //   state machine transitions
-    | "llm_summary"                    //   LLM-authored content (default; omit for plain extraction)
+    | "llm_summary"                    //   LLM-authored content (set explicitly for agent extraction)
     | "human"                          //   direct human edit or acceptance
     | "import"                         //   batch / ETL ingestion
-    | "sync";                          //   cross-instance peer replication (always pairs with source_peer_id)
+    | "sync"                           //   cross-instance peer replication (always pairs with source_peer_id)
+    | "unspecified";                   //   no claim; the default when omitted (+ OBSERVATION_SOURCE_OMITTED warning)
   source_peer_id?: string;             // Optional (v0.12+): peer_id of the producing instance for sync replays
   external_actor?: {                   // Optional (v0.12+): upstream human / account behind a guest write
     kind: "github_user";
@@ -1525,14 +1526,14 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES' | 'EMBEDS'; // Required
+  relationship_type: string; // Required. Any type registered on the instance; read via list_relationship_types.
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
   metadata?: Record<string, any>; // Optional: Relationship-specific metadata (e.g. caption, order for EMBEDS)
 }
 ```
 
-**Relationship types:** `PART_OF` (source is part of target), `CORRECTS`, `REFERS_TO`, `SETTLES`, `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment). See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
+**Relationship types:** the vocabulary is a runtime registry — call `list_relationship_types` to read what an instance accepts, and `register_relationship_type` to add to it. `PART_OF` (source is part of target) and `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment) are two of the built-ins. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
 
 **Response Schema:**
 
@@ -1615,14 +1616,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  relationship_type: "PART_OF" |
-    "CORRECTS" |
-    "REFERS_TO" |
-    "SETTLES" |
-    "DUPLICATE_OF" |
-    "DEPENDS_ON" |
-    "SUPERSEDES" |
-    "EMBEDS"; // Required
+  relationship_type: string; // Required. Any type registered on the instance; read via list_relationship_types.
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
 }
@@ -1786,14 +1780,17 @@ This enables full explainability: for any fact in the system, you can trace it b
   }>;
   fields_to_remove?: string[]; // Optional: Field names to remove (triggers major version bump)
   schema_version?: string; // Optional: New schema version (auto-increments if not provided)
-  user_specific?: boolean; // Optional: Create user-specific schema variant (default: false)
+  user_specific?: boolean; // Optional, no default. Omitted: write to the scope the schema resolves to (your user-scoped override if you have one, else global), matching describe_entity_type. true: write to your user-specific variant. false: extend the global schema, even if you hold an override.
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: true)
   migrate_existing?: boolean; // Optional: Migrate existing raw_fragments (default: false)
+  force?: boolean; // Optional: Bypass the entity-type naming guards (test-artifact pattern, plural heuristic) for this call only (default: false)
 }
 ```
 
 At least one of `fields_to_add` or `fields_to_remove` must be provided and non-empty.
+
+**Scope resolution:** the write follows the same resolution as the read (user scope first, global fallback; `schema_registry.md` §4.4). An explicit `user_specific` is an override. An explicit `user_specific: false` reads and extends the global schema only; it never copies the caller's user-scoped override into a new global version. If the type has no global registry row and no code-defined baseline (but does have a user-scoped schema), that call returns `ERR_SCHEMA_SCOPE_MISMATCH` instead of promoting the override. With a code-defined baseline, the update extends that baseline as the first global row.
 
 **Response Schema:**
 
@@ -1805,8 +1802,17 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   fields_added: string[]; // List of field names added
   fields_removed: string[]; // List of field names removed
   activated: boolean; // Whether schema was activated
-  migrated_existing: boolean; // Whether historical data was migrated
-  scope: 'global' | 'user';
+  migrated_existing: boolean; // True only when this call actually promoted at least one raw_fragment (migration_result.migrated_count > 0); never an echo of the migrate_existing request flag
+  migration_result?: { // Present only when migrate_existing was requested
+    migrated_count: number;
+    skipped: Array<{
+      field_name: string;
+      reason: 'no_entity_resolution' | 'no_active_schema' | 'observation_insert_failed' | 'already_promoted' | 'unexpected_error';
+      count: number;
+    }>;
+  };
+  scope: 'global' | 'user'; // The scope actually written, read from the persisted row
+  user_id?: string; // Present only when scope is 'user': the user whose row was written
 }
 ```
 
@@ -1816,6 +1822,8 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid field definition or empty add/remove | No |
 | `SCHEMA_NOT_FOUND` | 404 | No active schema found for entity type | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
+| `ERR_SCHEMA_SCOPE_MISMATCH` | 200 (error envelope) | Explicit `user_specific: false`, but the type has no global registry row and no code-defined baseline, and an active schema exists in the caller's user scope (`details.guard_scope` vs `details.found_scope`) | Yes: retry without `user_specific`, or with `user_specific: true`. Do not call `register_schema` for this code. See `docs/reference/error_codes.md`. |
+| `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema updates are atomic)
 **Determinism:** Yes (same fields + same schema version → same snapshot)
@@ -1859,6 +1867,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
   user_specific?: boolean; // Optional (default: false)
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: false)
+  force?: boolean; // Optional: Bypass the entity-type naming guards (test-artifact pattern, plural heuristic) for this call only (default: false)
 }
 ```
 
@@ -1881,6 +1890,7 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 | `VALIDATION_ERROR` | 400 | Invalid schema definition or reducer config | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
 | `SCHEMA_EXISTS` | 409 | Schema version already exists | No |
+| `ERR_PLURAL_ENTITY_TYPE` / `ERR_FORBIDDEN_ENTITY_TYPE` | 400 | Entity type name rejected by a naming guard | Yes, with `force: true` when the name is deliberate |
 
 **Consistency:** Strong (schema registration is atomic)
 **Determinism:** Yes (same schema → same result)
@@ -2149,7 +2159,7 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`. |
 | `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
 | `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
-| `sync_issues` | Yes | Optional `state`, `labels`, `since`. |
+| `sync_issues` | Yes | Optional `state`, `labels`, `since`, `repo` (`owner/name`, defaults to the configured repo), `push` (default true only for the configured repo, false for any other `repo`), `commit` (`false` = dry run, writes nothing). `repo` must be the configured repo or listed in `NEOTOMA_ISSUES_ALLOWED_REPOS`; otherwise `InvalidParams`. |
 | `bulk_close_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `bulk_remove_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |
@@ -2162,6 +2172,8 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `get_peer_status` | No | `peer_id`. |
 | `sync_peer` | Yes | Bounded fan-out; requires peer + public base URL configuration. |
 | `resolve_sync_conflict` | Yes | Strategy enum + entity/observation selectors per OpenAPI. |
+| `register_relationship_type` | Yes | Runtime relationship-type registry. `relationship_type`, optional `description`, `scope` (`user` default, `global` requires an explicit grant), `acyclic`, `inverse`, `symmetric`, `source_entity_types`, `target_entity_types`. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md). |
+| `list_relationship_types` | No | Optional `keyword`, `scope`, `include_edge_counts`. Empty result carries `empty_reason` (`registry_unseeded` or `filtered_to_empty`) rather than being ambiguous with "no vocabulary exists." |
 
 When adding or renaming an MCP tool, update **this catalog**, **`NEOTOMA_TOOL_NAMES`**, and the change-guardrails checklist in [`docs/architecture/change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc).
 

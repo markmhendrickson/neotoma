@@ -8,6 +8,111 @@
 
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
+import { getDb } from "../repositories/db/connection.js";
+import {
+  appendEntityLifecycleAction,
+  acquireEntityLifecycleContext,
+  hasRecordedEntityLifecycleCutover,
+} from "./entity_lifecycle_storage.js";
+import { selectEntityLifecycleVisibility } from "./entity_lifecycle_authority.js";
+import { resolveAttachmentTarget, resolveAttachedObservations } from "./attachment_resolution.js";
+import { recomputeSnapshot } from "./snapshot_computation.js";
+
+async function authoritativeEntityAction(
+  entityId: string,
+  entityType: string,
+  userId: string,
+  kind: "delete" | "restore",
+  reason?: string,
+  timestamp?: string
+): Promise<DeletionResult | null> {
+  const database = await getDb();
+  if (!(await hasRecordedEntityLifecycleCutover(database))) return null; // no implicit adoption
+  const observedAt = timestamp ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(observedAt)))
+    return { success: false, entity_id: entityId, error: "Invalid lifecycle timestamp" };
+  let committed: { id: string; type: string; observationId: string } | undefined;
+  try {
+    const outcome = await database.transaction(async (tx) => {
+      const initial = (await tx
+        .prepare("SELECT * FROM entities WHERE id=? AND user_id=?")
+        .get(entityId, userId)) as { id: string; entity_type: string } | undefined;
+      if (!initial)
+        return {
+          success: false,
+          entity_id: entityId,
+          error: ENTITY_NOT_FOUND_MESSAGE,
+          not_found: true,
+        };
+      const resolution = await resolveAttachmentTarget(entityId, userId);
+      if (resolution.truncated)
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      const target = (await tx
+        .prepare("SELECT id,entity_type,user_id FROM entities WHERE id=? AND user_id=?")
+        .get(resolution.resolvedEntityId, userId)) as
+        | { id: string; entity_type: string; user_id: string }
+        | undefined;
+      if (
+        !target ||
+        target.entity_type !== entityType ||
+        initial.entity_type !== target.entity_type
+      )
+        return {
+          success: false,
+          entity_id: entityId,
+          error: ENTITY_NOT_FOUND_MESSAGE,
+          not_found: true,
+        };
+      if (kind === "restore" && target.entity_type === "agent_grant") {
+        const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+        await assertGrantEntityPinsUnique(userId, target.id);
+      }
+      const attached = await resolveAttachedObservations(target.id, userId);
+      if (attached.truncated)
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      const context = await acquireEntityLifecycleContext(tx, target, attached.observations);
+      selectEntityLifecycleVisibility(attached.observations, context); // refuse corrupt prior state before append
+      const fields: Record<string, unknown> =
+        kind === "delete"
+          ? {
+              _deleted: true,
+              deleted_at: observedAt,
+              deleted_by: userId,
+              ...(reason ? { deletion_reason: reason } : {}),
+            }
+          : {
+              _deleted: false,
+              restored_at: observedAt,
+              restored_by: userId,
+              ...(reason ? { restoration_reason: reason } : {}),
+            };
+      const observationId = await appendEntityLifecycleAction(tx, target, kind, fields, observedAt);
+      await recomputeSnapshot(target.id, userId, true);
+      committed = { id: target.id, type: target.entity_type, observationId };
+      return { success: true, entity_id: entityId, observation_id: observationId };
+    });
+    if (outcome.success && committed)
+      emitEntityLifecycle({
+        user_id: userId,
+        entity_id: committed.id,
+        entity_type: committed.type,
+        event_type: kind === "delete" ? "entity.deleted" : "entity.restored",
+        timestamp: observedAt,
+        observation_id: committed.observationId,
+      });
+    return outcome;
+  } catch (error) {
+    // Preserve the existing grant conflict class and transport response. The
+    // transaction has already rolled back before this error reaches the caller.
+    const { AgentGrantPinConflictError } = await import("./agent_grants.js");
+    if (error instanceof AgentGrantPinConflictError) throw error;
+    return {
+      success: false,
+      entity_id: entityId,
+      error: "Entity lifecycle action could not be committed",
+    };
+  }
+}
 
 import { emitEntityLifecycle, emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 
@@ -50,6 +155,45 @@ export interface DeletionResult {
   observation_id?: string;
   entity_id: string;
   error?: string;
+  /**
+   * True when the target does not resolve to something the caller owns.
+   * Set identically for a missing target and for one owned by another user,
+   * so handlers can map it to one not-found response for both.
+   */
+  not_found?: boolean;
+}
+
+/** Error text for a restore target the caller does not own (or that does not exist). */
+export const ENTITY_NOT_FOUND_MESSAGE = "Entity not found";
+export const RELATIONSHIP_NOT_FOUND_MESSAGE = "Relationship not found";
+
+/**
+ * Explicit lifecycle actions must outrank every earlier observation for this
+ * edge, including a previous restoration. A fixed delete priority of 1000
+ * cannot supersede a restoration at 1001 on a later delete (#2570).
+ */
+async function nextRelationshipLifecyclePriority(
+  relationshipKey: string,
+  userId: string
+): Promise<number> {
+  const { data, error } = await db
+    .from("relationship_observations")
+    .select("source_priority")
+    .eq("relationship_key", relationshipKey)
+    .eq("user_id", userId)
+    .order("source_priority", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to read relationship lifecycle priority: ${error.message}`);
+  }
+
+  const nextPriority = Math.max(1000, (data?.source_priority ?? 999) + 1);
+  if (!Number.isSafeInteger(nextPriority)) {
+    throw new Error("Relationship lifecycle priority exceeds the safe integer range");
+  }
+  return nextPriority;
 }
 
 /**
@@ -69,6 +213,16 @@ export async function softDeleteEntity(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  const authoritative = await authoritativeEntityAction(
+    entityId,
+    entityType,
+    userId,
+    "delete",
+    reason,
+    timestamp
+  );
+  if (authoritative) return authoritative;
+
   // Verify entity exists and belongs to user before creating deletion observation
   const { data: existing, error: fetchError } = await db
     .from("entities")
@@ -176,11 +330,6 @@ export async function softDeleteRelationship(
 ): Promise<DeletionResult> {
   const deletedAt = timestamp || new Date().toISOString();
 
-  // Create deterministic observation ID
-  const observationId = createHash("sha256")
-    .update(`${relationshipKey}:deletion:${deletedAt}`)
-    .digest("hex");
-
   // Create canonical hash for deletion metadata
   const metadataString = JSON.stringify({
     _deleted: true,
@@ -190,52 +339,53 @@ export async function softDeleteRelationship(
   });
   const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
-  const deletionObservation = {
-    id: observationId,
-    relationship_key: relationshipKey,
-    source_entity_id: sourceEntityId,
-    target_entity_id: targetEntityId,
-    relationship_type: relationshipType,
-    observed_at: deletedAt,
-    source_priority: 1000, // Highest priority
-    metadata: {
-      _deleted: true,
-      deleted_at: deletedAt,
-      deleted_by: userId,
-      ...(reason && { deletion_reason: reason }),
-    },
-    canonical_hash: canonicalHash,
-    user_id: userId,
-  };
-
   try {
-    const { data, error } = await db
-      .from("relationship_observations")
-      .insert(deletionObservation)
-      .select()
-      .single();
-
-    if (error) {
-      return {
-        success: false,
-        entity_id: relationshipKey,
-        error: `Failed to create relationship deletion observation: ${error.message}`,
-      };
-    }
-
-    // Materialize liveness on the snapshot (#1570). The deletion observation we
-    // just wrote is at source_priority 1000 — by definition now the
-    // highest-priority observation for this key — so the edge is dead. Flip the
-    // snapshot's `is_live` to 0 so the default list_relationships read (which
-    // filters `is_live = 1` at the DB) stops surfacing it without re-deriving
-    // liveness from the observation log on every read. The observation log
-    // remains the source of truth; this is a derived cache that
-    // computeRelationshipSnapshot also re-stamps on any later recompute.
-    await db
-      .from("relationship_snapshots")
-      .update({ is_live: 0 })
-      .eq("relationship_key", relationshipKey)
-      .eq("user_id", userId);
+    const { relationshipsService } = await import("./relationships.js");
+    const database = await getDb();
+    // BEGIN IMMEDIATE serializes the read, append and derived-snapshot write
+    // across requests and processes. A later action cannot reuse this priority
+    // or overwrite a newer action's materialized liveness (#2570).
+    const observationId = await database.transaction(async () => {
+      const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
+      // Include the lifecycle sequence: two deletes in one millisecond must
+      // still have distinct deterministic observation IDs.
+      const id = createHash("sha256")
+        .update(`${relationshipKey}:deletion:${deletedAt}:${sourcePriority}`)
+        .digest("hex");
+      const { data, error } = await db
+        .from("relationship_observations")
+        .insert({
+          id,
+          relationship_key: relationshipKey,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
+          relationship_type: relationshipType,
+          observed_at: deletedAt,
+          source_priority: sourcePriority,
+          metadata: {
+            _deleted: true,
+            deleted_at: deletedAt,
+            deleted_by: userId,
+            ...(reason && { deletion_reason: reason }),
+          },
+          canonical_hash: canonicalHash,
+          user_id: userId,
+        })
+        .select()
+        .single();
+      if (error || !data) {
+        throw new Error(
+          `Failed to create relationship deletion observation: ${error?.message ?? "no row returned"}`
+        );
+      }
+      await relationshipsService.computeRelationshipSnapshot(
+        relationshipType,
+        sourceEntityId,
+        targetEntityId,
+        userId
+      );
+      return data.id as string;
+    });
 
     emitRelationshipLifecycle({
       user_id: userId,
@@ -245,11 +395,11 @@ export async function softDeleteRelationship(
       target_entity_id: targetEntityId,
       event_type: "relationship.deleted",
       timestamp: deletedAt,
-      observation_id: data.id as string,
+      observation_id: observationId,
     });
     return {
       success: true,
-      observation_id: data.id,
+      observation_id: observationId,
       entity_id: relationshipKey,
     };
   } catch (err) {
@@ -278,6 +428,51 @@ export async function restoreEntity(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  const authoritative = await authoritativeEntityAction(
+    entityId,
+    entityType,
+    userId,
+    "restore",
+    reason,
+    timestamp
+  );
+  if (authoritative) return authoritative;
+
+  // Same ownership check as softDeleteEntity: only an entity the caller owns
+  // can be restored. A missing entity and another user's entity get the same
+  // not-found result.
+  const { data: existing, error: fetchError } = await db
+    .from("entities")
+    .select("id, entity_type")
+    .eq("id", entityId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: `Failed to verify entity: ${fetchError.message}`,
+    };
+  }
+  if (!existing) {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: ENTITY_NOT_FOUND_MESSAGE,
+      not_found: true,
+    };
+  }
+
+  // A key thumbprint may be pinned by agent_grants under one owner only.
+  // Restoring a grant brings its pin back, so refuse when a grant under
+  // another owner pins the same key. Keyed on the stored entity_type, not
+  // the caller-supplied one. Throws before anything is written.
+  if ((existing as { entity_type?: string }).entity_type === "agent_grant") {
+    const { assertGrantEntityPinsUnique } = await import("./agent_grants.js");
+    await assertGrantEntityPinsUnique(userId, entityId);
+  }
+
   const restoredAt = timestamp || new Date().toISOString();
 
   // Create deterministic observation ID
@@ -340,7 +535,71 @@ export async function restoreEntity(
 }
 
 /**
- * Restore a deleted relationship by creating a restoration observation
+ * Decide whether `userId` may restore the relationship `relationshipKey`.
+ *
+ * Restore revives a relationship the caller already holds; it never creates
+ * one. So the caller must:
+ *   - name a key that matches the (type, source, target) triple,
+ *   - already have at least one observation of that relationship,
+ *   - not be addressing a relationship snapshot owned by another user, and
+ *   - own both endpoints (the same rule `createRelationship` applies).
+ *
+ * Every refusal returns the same result, so a caller cannot tell a missing
+ * relationship from one belonging to someone else.
+ */
+async function callerMayRestoreRelationship(
+  relationshipKey: string,
+  relationshipType: string,
+  sourceEntityId: string,
+  targetEntityId: string,
+  userId: string
+): Promise<{ ok: true } | { ok: false; error?: string }> {
+  if (relationshipKey !== `${relationshipType}:${sourceEntityId}:${targetEntityId}`) {
+    return { ok: false };
+  }
+
+  const { data: priorObservations, error: priorError } = await db
+    .from("relationship_observations")
+    .select("id")
+    .eq("relationship_key", relationshipKey)
+    .eq("user_id", userId)
+    .limit(1);
+  if (priorError) {
+    return { ok: false, error: `Failed to verify relationship: ${priorError.message}` };
+  }
+  if (!priorObservations || priorObservations.length === 0) {
+    return { ok: false };
+  }
+
+  const { data: snapshots, error: snapshotError } = await db
+    .from("relationship_snapshots")
+    .select("user_id")
+    .eq("relationship_key", relationshipKey);
+  if (snapshotError) {
+    return { ok: false, error: `Failed to verify relationship: ${snapshotError.message}` };
+  }
+  if ((snapshots ?? []).some((row: { user_id?: string | null }) => row.user_id !== userId)) {
+    return { ok: false };
+  }
+
+  const { filterOwnedEntityIds } = await import("./scoped_reads.js");
+  const owned = await filterOwnedEntityIds([sourceEntityId, targetEntityId], userId);
+  if (!owned.has(sourceEntityId) || !owned.has(targetEntityId)) {
+    return { ok: false };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Restore a deleted relationship by creating a restoration observation.
+ *
+ * Only a relationship the caller already holds can be restored (see
+ * {@link callerMayRestoreRelationship}); anything else returns
+ * `not_found: true` with the same message whether the relationship is
+ * missing or owned by another user. The relationship type must be
+ * registered, as for creation: an unregistered type throws
+ * `UnregisteredRelationshipTypeError`.
  *
  * @param relationshipKey - Relationship key (format: type:source:target)
  * @param relationshipType - Relationship type
@@ -360,12 +619,45 @@ export async function restoreRelationship(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
-  const restoredAt = timestamp || new Date().toISOString();
+  const { relationshipsService } = await import("./relationships.js");
+  await relationshipsService.assertRegisteredType(relationshipType, userId);
 
-  // Create deterministic observation ID
-  const observationId = createHash("sha256")
-    .update(`${relationshipKey}:restoration:${restoredAt}`)
-    .digest("hex");
+  const permitted = await callerMayRestoreRelationship(
+    relationshipKey,
+    relationshipType,
+    sourceEntityId,
+    targetEntityId,
+    userId
+  );
+  if (!permitted.ok) {
+    if (permitted.error) {
+      return { success: false, entity_id: relationshipKey, error: permitted.error };
+    }
+    return {
+      success: false,
+      entity_id: relationshipKey,
+      error: RELATIONSHIP_NOT_FOUND_MESSAGE,
+      not_found: true,
+    };
+  }
+
+  // Reviving an edge makes it live again, so it is an edge write under the
+  // same relationship-type + endpoint-type capability as creating it
+  // (neotoma#2524). After the not-found check so absence keeps its answer.
+  const { enforceCurrentAgentRelationshipWrites } =
+    await import("./relationship_write_capability.js");
+  await enforceCurrentAgentRelationshipWrites({
+    userId,
+    relationships: [
+      {
+        relationship_type: relationshipType,
+        source_entity_id: sourceEntityId,
+        target_entity_id: targetEntityId,
+      },
+    ],
+  });
+
+  const restoredAt = timestamp || new Date().toISOString();
 
   // Create canonical hash for restoration metadata
   const metadataString = JSON.stringify({
@@ -376,38 +668,49 @@ export async function restoreRelationship(
   });
   const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
-  const restorationObservation = {
-    id: observationId,
-    relationship_key: relationshipKey,
-    source_entity_id: sourceEntityId,
-    target_entity_id: targetEntityId,
-    relationship_type: relationshipType,
-    observed_at: restoredAt,
-    source_priority: 1001, // Higher than deletion (1000)
-    metadata: {
-      _deleted: false,
-      restored_at: restoredAt,
-      restored_by: userId,
-      ...(reason && { restoration_reason: reason }),
-    },
-    canonical_hash: canonicalHash,
-    user_id: userId,
-  };
-
   try {
-    const { data, error } = await db
-      .from("relationship_observations")
-      .insert(restorationObservation)
-      .select()
-      .single();
-
-    if (error) {
-      return {
-        success: false,
-        entity_id: relationshipKey,
-        error: `Failed to create relationship restoration observation: ${error.message}`,
-      };
-    }
+    const database = await getDb();
+    const observationId = await database.transaction(async () => {
+      const sourcePriority = await nextRelationshipLifecyclePriority(relationshipKey, userId);
+      const id = createHash("sha256")
+        .update(`${relationshipKey}:restoration:${restoredAt}:${sourcePriority}`)
+        .digest("hex");
+      const { data, error } = await db
+        .from("relationship_observations")
+        .insert({
+          id,
+          relationship_key: relationshipKey,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
+          relationship_type: relationshipType,
+          observed_at: restoredAt,
+          source_priority: sourcePriority,
+          metadata: {
+            _deleted: false,
+            restored_at: restoredAt,
+            restored_by: userId,
+            ...(reason && { restoration_reason: reason }),
+          },
+          canonical_hash: canonicalHash,
+          user_id: userId,
+        })
+        .select()
+        .single();
+      if (error || !data) {
+        throw new Error(
+          `Failed to create relationship restoration observation: ${error?.message ?? "no row returned"}`
+        );
+      }
+      // Recompute from the winning observation while this writer still owns
+      // the transaction; no later delete can be overwritten by a stale cache.
+      await relationshipsService.computeRelationshipSnapshot(
+        relationshipType,
+        sourceEntityId,
+        targetEntityId,
+        userId
+      );
+      return data.id as string;
+    });
 
     emitRelationshipLifecycle({
       user_id: userId,
@@ -417,11 +720,11 @@ export async function restoreRelationship(
       target_entity_id: targetEntityId,
       event_type: "relationship.restored",
       timestamp: restoredAt,
-      observation_id: data.id as string,
+      observation_id: observationId,
     });
     return {
       success: true,
-      observation_id: data.id,
+      observation_id: observationId,
       entity_id: relationshipKey,
     };
   } catch (err) {
@@ -441,28 +744,33 @@ export async function restoreRelationship(
  * @returns True if entity is deleted
  */
 export async function isEntityDeleted(entityId: string, userId: string): Promise<boolean> {
-  const { data, error } = await db
-    .from("observations")
-    .select("fields, source_priority, observed_at")
-    .eq("entity_id", entityId)
-    .eq("user_id", userId);
-
-  if (error || !data || data.length === 0) {
-    return false;
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) {
+    // Preserve this facade's actual legacy comparator until the explicit cutover.
+    const { data, error } = await db
+      .from("observations")
+      .select("fields, source_priority, observed_at")
+      .eq("entity_id", entityId)
+      .eq("user_id", userId);
+    if (error || !data?.length) return false;
+    const sorted = [...data].sort(
+      (a, b) =>
+        b.source_priority - a.source_priority ||
+        new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
+    );
+    return sorted[0].fields?._deleted === true;
   }
-
-  // Sort by priority and observed_at to find highest priority observation
-  const sorted = [...data].sort((a, b) => {
-    // Primary: source_priority DESC
-    if (b.source_priority !== a.source_priority) {
-      return b.source_priority - a.source_priority;
-    }
-    // Secondary: observed_at DESC
-    return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-  });
-
-  const highestPriorityObs = sorted[0];
-  return highestPriorityObs.fields?._deleted === true;
+  const attached = await resolveAttachedObservations(entityId, userId);
+  if (attached.truncated)
+    throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+  const rows = attached.observations;
+  const target = (await (await getDb())
+    .prepare("SELECT id,user_id,entity_type FROM entities WHERE id=? AND user_id=?")
+    .get(attached.resolvedEntityId, userId)) as
+    | { id: string; user_id: string; entity_type: string }
+    | undefined;
+  if (!target) return false;
+  const context = await acquireEntityLifecycleContext(await getDb(), target, rows);
+  return selectEntityLifecycleVisibility(rows, context).hidden;
 }
 
 /**

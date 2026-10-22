@@ -1,6 +1,7 @@
 ---
 name: store-data
-description: Store structured entities or files in Neotoma memory with proper provenance and relationship linking.
+description: "[Deprecated] Do not use. Storing data follows the live Neotoma MCP instructions; no skill is needed."
+deprecated: true
 triggers:
   - store this
   - remember this
@@ -9,7 +10,16 @@ triggers:
   - store entities
 ---
 
-# Store Data in Neotoma
+# Store Data in Neotoma (deprecated)
+
+Retired: this skill duplicated the per-turn retrieval/store/idempotency/
+relationship guidance that the live Neotoma MCP tool instructions already
+provide at session start, and had drifted from that contract. No skill needs
+to be loaded to store structured data in a connected MCP session.
+
+This file is kept on disk only so existing links (symlinks, SkillHub
+listings, GitHub blob links) keep resolving. It is excluded from fresh
+installs and from `available_skills`.
 
 ## When to use
 

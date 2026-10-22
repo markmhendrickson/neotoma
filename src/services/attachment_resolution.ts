@@ -244,6 +244,8 @@ export async function resolveOwnedObservations(
   userId: string | null
 ): Promise<Observation[] | null> {
   const attached = await resolveAttachedObservations(entityId, userId);
+  if (attached.truncated)
+    throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
   if (attached.resolvedEntityId !== entityId) {
     logger.info(
       `[AttachmentResolution] ${entityId} resolves to ${attached.resolvedEntityId}; ` +

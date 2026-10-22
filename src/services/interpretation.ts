@@ -58,6 +58,11 @@ export interface InterpretationOptions {
   config: InterpretationConfig;
   /** When set, stamped onto created observations for exact idempotent replay. */
   idempotencyKey?: string;
+  /**
+   * Effective data origin per `extractedData` index (#2242), stamped as
+   * `provenance.data_origin` on the observation created for that entity.
+   */
+  dataOrigins?: Array<import("../shared/action_schemas.js").DataOrigin | undefined>;
 }
 
 export const UNKNOWN_FIELDS_HINT =
@@ -399,7 +404,8 @@ export async function runInterpretation(
     ];
 
     // Process each extracted entity
-    for (const entityData of extractedData) {
+    for (const [entityIndex, entityData] of extractedData.entries()) {
+      const entityDataOrigin = options.dataOrigins?.[entityIndex];
       // Support both 'entity_type' and 'type' fields for entity type identification
       let entityType =
         (entityData.entity_type as string) || (entityData.type as string) || "generic";
@@ -684,6 +690,17 @@ export async function runInterpretation(
         continue;
       }
 
+      if (entityType === "agent_grant") {
+        // A key thumbprint may be pinned by agent_grants under one owner only.
+        const { assertGrantWriteKeepsPinUnique } = await import("./agent_grants.js");
+        await assertGrantWriteKeepsPinUnique({
+          userId,
+          entityType,
+          fields: canonicalFields,
+          entityId,
+        });
+      }
+
       // Create observation with canonical fields and hash
       // Handle schema cache issues: if canonical_hash column not in cache, retry without it
       const observationData: Record<string, unknown> = {
@@ -700,6 +717,7 @@ export async function runInterpretation(
         canonical_hash: canonicalHash, // Store hash for deduplication
         user_id: userId,
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        ...(entityDataOrigin ? { provenance: { data_origin: entityDataOrigin } } : {}),
       };
 
       let { error: obsError } = await db.from("observations").insert(observationData);

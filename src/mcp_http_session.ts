@@ -40,18 +40,21 @@ export type AppOriginResolution = {
  * Mint a new in-memory Streamable HTTP transport + NeotomaServer, register it
  * in the session maps on initialize, and connect via `runHTTP`. Shared by the
  * client-driven initialize path and recover-in-place.
+ *
+ * `gateConnectionId` is the connection id the `/mcp` gate resolved for this
+ * request (assigned, admitted, or validated), or `undefined` when it resolved
+ * none. It is passed explicitly rather than read from the request headers so
+ * the session's identity always matches the gate's decision.
  */
 export async function mintMcpHttpSession(
   req: Request,
   maps: McpHttpSessionMaps,
-  resolveAppOrigin: (req: Request) => AppOriginResolution
+  resolveAppOrigin: (req: Request) => AppOriginResolution,
+  gateConnectionId: string | undefined
 ): Promise<MintedMcpHttpSession> {
   const serverInstance = new NeotomaServer();
-  const connectionIdFromReq = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as
-    | string
-    | undefined;
-  if (connectionIdFromReq) {
-    serverInstance.setSessionConnectionId(connectionIdFromReq);
+  if (gateConnectionId) {
+    serverInstance.setSessionConnectionId(gateConnectionId);
   }
   const appOrigin = resolveAppOrigin(req);
   serverInstance.setSessionAppOrigin(appOrigin.origin ?? null, appOrigin.source ?? null);

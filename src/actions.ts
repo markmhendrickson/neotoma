@@ -1,3 +1,8 @@
+import {
+  preflightStructuredStoreAdmission,
+  type StructuredStoreApiParams,
+  type StoreRelationshipRef,
+} from "./services/store_admission.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -6,11 +11,15 @@ import morgan from "morgan";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
+import { pathToFileURL } from "node:url";
 import { db } from "./db.js";
 import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
 import { writeLocalHttpPortFile } from "./utils/local_http_port_file.js";
+import { WorkerDbAbortError } from "./repositories/worker/worker_file_database.js";
+import { peekCachedDb } from "./repositories/db/connection.js";
 import yaml from "js-yaml";
 import {
   ensurePublicKeyRegistered,
@@ -34,31 +43,40 @@ import { evaluateStoreWarningRule } from "./services/store_warning_rule.js";
 import { probeReadiness } from "./services/readiness.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { OverridePolicyViolationError } from "./services/override_validation.js";
+import { EntityOwnerConflictError } from "./services/entity_resolution.js";
+import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
+import { OwnedEntityNotFoundError, SOURCES_STORAGE_BUCKET } from "./services/scoped_reads.js";
+import {
+  invalidEntityIdRelationshipRefusal,
+  relationshipRefusalFromError,
+  unresolvedRelationshipRefusal,
+  type StoreRelationshipCreated,
+  type StoreRelationshipRefused,
+} from "./services/store_relationships.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
-import { StorePolicyUnavailableError } from "./services/instance_policy.js";
+import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
-import {
-  assertGuestWriteAllowed,
-  AccessPolicyError,
-  type GuestIdentity,
-} from "./services/access_policy.js";
+import { AccessPolicyError, type GuestIdentity } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
+import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
 import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
+import { externalActorFromCallerInput } from "./services/issues/external_actor_builder.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
   getCurrentAttribution,
   getCurrentExternalActor,
-  getRequestContext,
+  runWithAuthenticatedPrincipal,
   runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
+import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
   createAgentIdentity as buildAgentIdentity,
   type ExternalActor,
@@ -89,9 +107,20 @@ import {
   unknownSessionJsonRpcBody,
   type McpHttpSessionMaps,
 } from "./mcp_http_session.js";
+import {
+  describeMcpStandardHeadersForLog,
+  headerRejectionJsonRpcBody,
+  jsonRpcIdOf,
+  readClientInfoFromMeta,
+  readRequestMeta,
+  screenMcpStandardHeaders,
+  selectMcpHttpEra,
+  validateModernMcpRequest,
+} from "./mcp_http_stateless.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
+import { connectionIdForLog } from "./utils/connection_id_log.js";
 import {
   emitEntitySnapshotChange,
   emitObservationCreated,
@@ -108,6 +137,8 @@ import {
 } from "./services/local_auth.js";
 import {
   buildSandboxBootBannerLines,
+  decidePostureReconciliation,
+  extractBoundHost,
   isSandboxMode,
   resolveForceMode,
   resolveRefusePolicy,
@@ -170,6 +201,7 @@ import {
   normalizeOauthNextPath,
   OAuthKeySessionStore,
 } from "./services/oauth_key_gate.js";
+import type { BoundIdentity } from "./services/oauth_key_gate.js";
 import {
   buildGoogleAuthorizeUrl,
   createGoogleSigninNonce,
@@ -184,6 +216,7 @@ import {
   AnalyzeSchemaCandidatesRequestSchema,
   AuditUndeclaredFragmentsRequestSchema,
   CorrectEntityRequestSchema,
+  PatchArrayItemRequestSchema,
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
@@ -212,10 +245,11 @@ import {
   RetrieveRelatedEntitiesSchema,
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+  ObservationSourceSchema,
   StoreRequestSchema,
-  type StoreInterpretationInput,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
+import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
@@ -241,6 +275,8 @@ import { getTimelineEventForUser, listTimelineEventsForUser } from "./services/t
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 import { computeEntitySnapshotAtTime } from "./services/entity_snapshot_at_time.js";
+import { isProductionEnvironment } from "./shared/environment.js";
+import { isLoopbackHost, resolveBindHostFromEnv } from "./shared/bind_host.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -664,23 +700,28 @@ const WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
   Number.parseInt(process.env.NEOTOMA_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 120
 );
-const writeRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: WRITE_RATE_LIMIT_PER_MIN,
-  keyGenerator: (req) => {
-    const userId =
-      ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
-        | string
-        | undefined) || "";
-    if (userId) return `u:${userId}`;
-    // Use the library-provided IPv6-safe key helper; keying directly on
-    // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
-    return `ip:${ipKeyGenerator(req.ip || "")}`;
-  },
-  skip: isInternalSeedRequest,
-  message: "Write rate limit exceeded, please slow down",
-  ...rateLimitOptions,
-});
+/** Build the shared write limiter; exported so its limiting effect is testable without a listener. */
+export function createWriteRateLimit(max: number = WRITE_RATE_LIMIT_PER_MIN) {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    max,
+    keyGenerator: (req) => {
+      const userId =
+        ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
+          | string
+          | undefined) || "";
+      if (userId) return `u:${userId}`;
+      // Use the library-provided IPv6-safe key helper; keying directly on
+      // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
+      return `ip:${ipKeyGenerator(req.ip || "")}`;
+    },
+    skip: isInternalSeedRequest,
+    message: "Write rate limit exceeded, please slow down",
+    ...rateLimitOptions,
+  });
+}
+
+const writeRateLimit = createWriteRateLimit();
 
 // SECURITY: guest-capable write routes (issue submission / thread append,
 // subscribe / unsubscribe) should not share the broader `/store` bucket.
@@ -1338,16 +1379,20 @@ export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = process.en
 
   // Strip IPv4-mapped IPv6 prefix for comparison
   const normalized = ip.trim().replace(/^::ffff:/i, "");
+  // A non-IP string (or a non-IPv4 string reaching the CIDR branch below)
+  // must never land inside a configured range by accident: the dotted-part
+  // coercion below is otherwise lenient about what it accepts as a number.
+  if (!isIP(normalized)) return false;
 
   for (const candidate of candidates) {
     if (candidate === normalized || candidate === ip.trim()) return true;
 
     // Simple IPv4 CIDR check (covers the common case: 100.64.0.0/10 for Cloudflare Tunnel egress)
     const slashIdx = candidate.indexOf("/");
-    if (slashIdx !== -1) {
+    if (slashIdx !== -1 && isIP(normalized) === 4) {
       const cidrBase = candidate.slice(0, slashIdx);
       const prefixLen = parseInt(candidate.slice(slashIdx + 1), 10);
-      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32) {
+      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32 && isIP(cidrBase) === 4) {
         const ipParts = normalized.split(".").map(Number);
         const cidrParts = cidrBase.split(".").map(Number);
         if (ipParts.length === 4 && cidrParts.length === 4) {
@@ -1393,9 +1438,74 @@ function forwardedForValues(req: express.Request): string[] {
     .filter(Boolean);
 }
 
-function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
-  return value === "production" || value === "prod";
+// isProductionEnvironment is imported from ./shared/environment.js — see that
+// module's docstring for the EITHER-variable-says-production precedence.
+
+/**
+ * Names which signal caused `isProductionEnvironment()` to resolve true, for
+ * diagnostic text only — never used for the determination itself. An
+ * operator seeing a refusal they didn't expect needs to know whether it's
+ * their own `NEOTOMA_ENV`, an inherited `NODE_ENV`, or a NEOTOMA_ENV typo,
+ * without having to already know this precedence rule exists.
+ */
+function describeProductionSource(env: NodeJS.ProcessEnv = process.env): string {
+  const neotomaEnvRaw = (env.NEOTOMA_ENV ?? "").trim();
+  const neotomaEnv = neotomaEnvRaw.toLowerCase();
+  const nodeEnv = (env.NODE_ENV ?? "").trim().toLowerCase();
+  if (neotomaEnv === "production" || neotomaEnv === "prod") {
+    return `NEOTOMA_ENV=${neotomaEnvRaw} is set`;
+  }
+  if (neotomaEnvRaw.length > 0 && !["development", "dev", "test"].includes(neotomaEnv)) {
+    return `NEOTOMA_ENV=${JSON.stringify(neotomaEnvRaw)} is not a recognized value (development, dev, test, production, prod)`;
+  }
+  if (nodeEnv === "production") {
+    return `NODE_ENV=production is set${neotomaEnvRaw.length === 0 ? " (NEOTOMA_ENV is unset)" : ""}`;
+  }
+  return "the process environment resolves to production";
+}
+
+// Rate-limits the "loopback/trusted chain, but nearest hop isn't itself a
+// trusted proxy" diagnostic below so a hot path (a same-host sidecar that
+// always sends this shape) can't flood stderr. One line per interval is
+// enough for an operator to notice and go fix their config; it never
+// includes header values, only the setting names to use.
+const UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS = 60_000;
+let lastUntrustedNearestHopLogAt = 0;
+
+function logUntrustedNearestHopOncePerInterval(): void {
+  const now = Date.now();
+  if (now - lastUntrustedNearestHopLogAt < UNTRUSTED_NEAREST_HOP_LOG_INTERVAL_MS) return;
+  lastUntrustedNearestHopLogAt = now;
+  process.stderr.write(
+    `[neotoma] isLocalRequest: production request refused (${describeProductionSource()}) — ` +
+      "loopback socket with a forwarded chain of only loopback/trusted hops, but the nearest " +
+      "hop is not itself a configured trusted proxy. Set NEOTOMA_TRUSTED_PROXY_IPS to the " +
+      "nearest hop's address (or its enclosing CIDR), or set NEOTOMA_TRUST_PROD_LOOPBACK=1 for " +
+      "a single-host deployment.\n"
+  );
+}
+
+// Rate-limits the bare-loopback (no forwarded-for header at all) production
+// refusal below. Before this, the most common self-hosted shape — no
+// reverse proxy, so `forwardedFor.length === 0` — refused silently: nothing
+// distinguished this refusal from any other auth failure. Mirrors
+// logUntrustedNearestHopOncePerInterval's style: one line per interval,
+// names the settings that change the outcome, never echoes header/IP
+// values (there are none on this path to echo).
+const BARE_LOOPBACK_REFUSAL_LOG_INTERVAL_MS = 60_000;
+let lastBareLoopbackRefusalLogAt = 0;
+
+function logBareLoopbackRefusalOncePerInterval(): void {
+  const now = Date.now();
+  if (now - lastBareLoopbackRefusalLogAt < BARE_LOOPBACK_REFUSAL_LOG_INTERVAL_MS) return;
+  lastBareLoopbackRefusalLogAt = now;
+  process.stderr.write(
+    `[neotoma] isLocalRequest: production request refused (${describeProductionSource()}) — ` +
+      "loopback socket with no forwarded-for header is not local-trusted in production. Set " +
+      "NEOTOMA_TRUST_PROD_LOOPBACK=1 for a genuinely single-host deployment, or set " +
+      "NEOTOMA_ENV=development if this process is not actually production. See " +
+      'docs/operations/configuration.md "Environments" for the full precedence rule.\n'
+  );
 }
 
 /**
@@ -1405,9 +1515,14 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
  * connects to Node over loopback even for public internet callers. In
  * production, loopback alone is therefore not enough to grant local-dev auth.
  *
+ * X-Forwarded-For can only disqualify a caller, never qualify one: a loopback
+ * socket with an all-loopback forwarded chain is treated like a loopback
+ * socket with no forwarded header, so in production it is not local.
+ *
  * NEOTOMA_TRUSTED_PROXY_IPS: comma-separated list of IPs or IPv4 CIDRs whose
  * XFF entries are trusted and do not disqualify a loopback-socket request from
- * being considered local. Use this for tunnel setups where cloudflared (or
+ * being considered local. In production, a forwarded chain whose nearest hop
+ * is one of these addresses is treated as local. Use this for tunnel setups where cloudflared (or
  * similar) injects a non-loopback XFF entry that represents a controlled
  * internal hop, not a public internet caller.
  *
@@ -1430,26 +1545,114 @@ export function isLocalRequest(req: express.Request): boolean {
   if (forwardedFor.length > 0) {
     // A forwarded-for entry disqualifies the request as local unless every
     // entry is either a loopback address or an explicitly trusted proxy IP.
-    if (forwardedFor.every((ip) => isLoopbackAddress(ip) || isTrustedProxyIP(ip))) {
-      return true;
-    }
     const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
-    const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
-    const displayed = debugTunnel ? untrusted.join(", ") : untrusted.map(redactIpForLog).join(", ");
-    process.stderr.write(
-      `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
-        `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
-        (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
-        `.\n`
-    );
-    return false;
+    if (untrusted.length > 0) {
+      const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
+      const displayed = debugTunnel
+        ? untrusted.join(", ")
+        : untrusted.map(redactIpForLog).join(", ");
+      process.stderr.write(
+        `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
+          `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
+          (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
+          `.\n`
+      );
+      return false;
+    }
+    // A chain that passes that check is only "not disqualified"; forwarded
+    // headers never qualify a caller on their own. In production the chain
+    // counts as local only when its nearest hop is a configured trusted proxy
+    // (NEOTOMA_TRUSTED_PROXY_IPS); otherwise the environment rule below
+    // applies, exactly as when no X-Forwarded-For is present. Development is
+    // unchanged: a loopback socket is local there either way.
+    const nearestHop = forwardedFor[forwardedFor.length - 1]!;
+    if (isProductionEnvironment() && isTrustedProxyIP(nearestHop)) return true;
+
+    // The chain passed the untrusted-entry check above (every hop is
+    // loopback or a trusted proxy), but in production it still didn't
+    // qualify because the nearest hop specifically isn't a trusted proxy
+    // (e.g. it's loopback, or NEOTOMA_TRUSTED_PROXY_IPS is unset). Without
+    // this line that refusal is silent: the branch above only fires when an
+    // untrusted IP is present, and this chain has none. Only log when the
+    // request is actually about to be refused — not when
+    // NEOTOMA_TRUST_PROD_LOOPBACK=1 will still admit it below. Never echo
+    // header values here — only the setting names an operator needs.
+    if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK !== "1") {
+      logUntrustedNearestHopOncePerInterval();
+    }
   }
 
   if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
     return true;
   }
 
-  return !isProductionEnvironment();
+  if (isProductionEnvironment()) {
+    // A bare loopback socket with NO forwarded-for header at all (the most
+    // common self-hosted, no-reverse-proxy shape) is refused here. When
+    // forwardedFor.length > 0, any refusal was already logged above by
+    // logUntrustedNearestHopOncePerInterval (or the untrusted-XFF branch);
+    // only log here for the genuinely silent case, to avoid double-logging.
+    if (forwardedFor.length === 0) {
+      logBareLoopbackRefusalOncePerInterval();
+    }
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Connection ids that name a development identity rather than a stored OAuth
+ * connection: `dev-local` / `dev-local-http` (assigned by the /mcp gate to a
+ * local caller in development mode) and `test-connection-bypass` (honoured by
+ * the MCP server only under the test runner).
+ */
+const DEVELOPMENT_CONNECTION_IDS: ReadonlySet<string> = new Set([
+  "dev-local",
+  "dev-local-http",
+  "test-connection-bypass",
+]);
+
+export function isDevelopmentConnectionId(value: unknown): boolean {
+  return typeof value === "string" && DEVELOPMENT_CONNECTION_IDS.has(value);
+}
+
+/**
+ * Whether a client-sent development connection id may be honoured for this
+ * request. Mirrors the conditions under which the /mcp gate assigns one
+ * itself, so sending the header never grants more than omitting it:
+ *
+ *   - development mode: encryption disabled, and `isLocalRequest`'s own
+ *     environment rule (non-production `NEOTOMA_ENV`, or the explicit
+ *     `NEOTOMA_TRUST_PROD_LOOPBACK=1` opt-in);
+ *   - a local caller by `isLocalRequest`: loopback socket address, and every
+ *     X-Forwarded-For hop loopback or a configured trusted proxy. Forwarded
+ *     headers can only disqualify a caller, never qualify one.
+ */
+export function developmentConnectionIdAllowed(req: express.Request): boolean {
+  if (config.encryption.enabled) return false;
+  return isLocalRequest(req);
+}
+
+/**
+ * Set (or, with `undefined`, remove) the request's X-Connection-Id to the
+ * value the /mcp gate resolved. Both `req.headers` and `req.rawHeaders` are
+ * rewritten, because the MCP transport builds its request from `rawHeaders`.
+ * The MCP server does not read this header for identity (it reads the gate's
+ * decision from the request context); keeping both copies in step means no
+ * downstream reader sees a value the gate did not resolve.
+ */
+function setGateConnectionIdHeader(req: express.Request, value: string | undefined): void {
+  if (value === undefined) delete req.headers["x-connection-id"];
+  else req.headers["x-connection-id"] = value;
+  const raw = req.rawHeaders;
+  if (!Array.isArray(raw)) return;
+  const kept: string[] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    if (String(raw[i]).toLowerCase() !== "x-connection-id") kept.push(raw[i]!, raw[i + 1]!);
+  }
+  if (value !== undefined) kept.push("X-Connection-Id", value);
+  raw.splice(0, raw.length, ...kept);
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
@@ -1760,12 +1963,30 @@ export function setOAuthKeySessionCookie(
   return token;
 }
 
-/** Resolve the local-auth user_id a Google-verified session (if any) mapped to this request. */
+/**
+ * Resolve the GRAPH SCOPE user_id a Google-verified session (if any) mapped to
+ * this request — the user_id whose graph is read and written. Under
+ * shared-graph mode this is the shared owner, not the signer; use
+ * {@link getGoogleVerifiedIdentity} to learn who signed in (#2228).
+ */
 export function getGoogleVerifiedUserId(req: express.Request): string | undefined {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
   // getBoundUser enforces session validity itself, so an expired session can
   // never resolve a user even if a binding is still in memory.
   return oauthKeySessions.getBoundUser(token);
+}
+
+/**
+ * Resolve the full identity bound to a Google-verified session: the graph being
+ * operated on plus, when shared-graph mode remapped the scope, the verified
+ * email and per-email user_id of the person who signed in (#2228).
+ *
+ * Session validity is enforced by the store, so an expired session resolves to
+ * undefined rather than a stale identity.
+ */
+export function getGoogleVerifiedIdentity(req: express.Request): BoundIdentity | undefined {
+  const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
+  return oauthKeySessions.getBoundIdentity(token);
 }
 
 /**
@@ -1870,6 +2091,28 @@ app.all("/mcp", async (req, res) => {
     const base = host ? `${proto}://${host}` : config.apiBase;
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
+    // Dual-era dispatch (#2070), decided from request SHAPE before any
+    // credential is read so credential material is never threaded into both
+    // branches: a request carrying Mcp-Session-Id, or an `initialize` body,
+    // takes the legacy session path; a session-less POST whose `_meta`
+    // declares a protocol version takes the 2026-07-28 stateless path.
+    const mcpEra = selectMcpHttpEra(req);
+
+    // Mcp-Method / Mcp-Name are gateway-visible. A value shaped like a
+    // credential or personal data is rejected on either era, before auth, and
+    // is never echoed or logged: only header presence and length are logged.
+    if (req.method === "POST") {
+      const headerRejection = screenMcpStandardHeaders(req);
+      if (headerRejection) {
+        logger.warn(
+          `[MCP HTTP] Rejected ${headerRejection.header} header (reason=${headerRejection.reason}, length=${headerRejection.length}); ${describeMcpStandardHeadersForLog(req)}`
+        );
+        return res
+          .status(400)
+          .json(headerRejectionJsonRpcBody(headerRejection, jsonRpcIdOf(req.body)));
+      }
+    }
+
     // Check for authentication BEFORE processing MCP requests
     // When encryption off: no auth by default; optional NEOTOMA_BEARER_TOKEN (or OAuth)
     // When encryption on: require Bearer token derived from private key (same key as data encryption)
@@ -1881,6 +2124,18 @@ app.all("/mcp", async (req, res) => {
       | undefined;
     let bearerValidated = false;
 
+    // Development connection identities are assigned by this gate, not by the
+    // client. A client-sent value is honoured only where the gate would assign
+    // the same identity itself: a local caller in development mode. Anywhere
+    // else it is dropped, so the request is authenticated exactly as if the
+    // header had been omitted. The MCP server takes its connection id from the
+    // gate's resolved value (request context and session mint below), not from
+    // the header; the header is removed from both header views as well.
+    if (isDevelopmentConnectionId(connectionIdHeader) && !developmentConnectionIdAllowed(req)) {
+      setGateConnectionIdHeader(req, undefined);
+      connectionIdHeader = undefined;
+    }
+
     // Key-derived Bearer token is accepted whenever a key source is configured (regardless of
     // NEOTOMA_ENCRYPTION_ENABLED). This lets tunnel setups authenticate via `neotoma auth mcp-token`
     // without enabling full data-at-rest encryption.
@@ -1888,7 +2143,7 @@ app.all("/mcp", async (req, res) => {
     if (authHeader?.startsWith("Bearer ") && mcpExpectedToken) {
       const token = authHeader.slice(7).trim();
       if (safeCompareTokens(token, mcpExpectedToken)) {
-        req.headers["x-connection-id"] = "dev-local";
+        setGateConnectionIdHeader(req, "dev-local");
         connectionIdHeader = "dev-local";
         bearerValidated = true;
       }
@@ -1902,10 +2157,10 @@ app.all("/mcp", async (req, res) => {
         if (isLocalRequest(req)) {
           const isInsecure = req.protocol === "http" || !(req as any).secure;
           if (isInsecure) {
-            req.headers["x-connection-id"] = "dev-local-http";
+            setGateConnectionIdHeader(req, "dev-local-http");
             connectionIdHeader = "dev-local-http";
           } else {
-            req.headers["x-connection-id"] = "dev-local";
+            setGateConnectionIdHeader(req, "dev-local");
             connectionIdHeader = "dev-local";
           }
         }
@@ -1913,7 +2168,7 @@ app.all("/mcp", async (req, res) => {
       if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
         if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
-          req.headers["x-connection-id"] = "dev-local";
+          setGateConnectionIdHeader(req, "dev-local");
           connectionIdHeader = "dev-local";
           bearerValidated = true;
         }
@@ -1923,7 +2178,7 @@ app.all("/mcp", async (req, res) => {
           const token = authHeader.slice(7).trim();
           const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
           const { connectionId } = await validateTokenAndGetConnectionId(token);
-          req.headers["x-connection-id"] = connectionId;
+          setGateConnectionIdHeader(req, connectionId);
           connectionIdHeader = connectionId;
           bearerValidated = true;
         } catch {
@@ -2002,21 +2257,24 @@ app.all("/mcp", async (req, res) => {
       });
     }
 
-    // Validate X-Connection-Id when that is the auth method (no Bearer). Invalid IDs return 401
-    // so Cursor shows Connect button instead of blocking on "Loading tools".
-    // Skip validation for dev-local and dev-local-http (no-auth defaults).
+    // Validate X-Connection-Id when it is the auth method (no Bearer was validated above).
+    // Invalid IDs return 401 so Cursor shows Connect button instead of blocking on
+    // "Loading tools". dev-local and dev-local-http skip lookup: reaching this point they
+    // were either assigned by this gate or passed the local-development check above.
+    // An unvalidated Bearer does not excuse the lookup: the connection id is then the
+    // only credential on the request.
     if (
       connectionIdHeader &&
       connectionIdHeader !== "dev-local" &&
       connectionIdHeader !== "dev-local-http" &&
-      !authHeader?.startsWith("Bearer ")
+      !bearerValidated
     ) {
       try {
         const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
         await getAccessTokenForConnection(connectionIdHeader as string);
       } catch {
         logger.info(
-          `[MCP HTTP] Invalid or expired X-Connection-Id: ${connectionIdHeader}. Returning 401 to show Connect button.`
+          `[MCP HTTP] Invalid or expired X-Connection-Id (${connectionIdForLog(connectionIdHeader)}). Returning 401 to show Connect button.`
         );
         // RFC 6750: error=invalid_token signals client to clear credentials and re-authenticate.
         // Use consistent error format so Cursor may show Connect prompt.
@@ -2041,6 +2299,55 @@ app.all("/mcp", async (req, res) => {
       }
     }
 
+    // 2026-07-28 stateless path (#2070). Identity is resolved from this
+    // request's own credentials (validated above) on a FRESH NeotomaServer that
+    // is discarded when the request ends. Nothing is read from or written to
+    // the session maps, so any API instance can serve any request behind a
+    // plain round-robin load balancer, and concurrent requests never share an
+    // instance.
+    if (mcpEra === "modern") {
+      const modernRejection = validateModernMcpRequest(req);
+      if (modernRejection) {
+        logger.info(
+          `[MCP HTTP] Rejected 2026-07-28 request (${modernRejection.logReason}); ${describeMcpStandardHeadersForLog(req)}`
+        );
+        return res.status(modernRejection.httpStatus).json(modernRejection.body);
+      }
+      const body = req.body as Record<string, unknown>;
+      const statelessServer = new NeotomaServer();
+      statelessServer.primeStatelessRequest({
+        // The gate's resolved connection id, never the request header.
+        connectionId: connectionIdHeader,
+        aauthContext: getAAuthContextFromRequest(req),
+        clientInfo: readClientInfoFromMeta(readRequestMeta(body)),
+        appOrigin: resolvePublicAppOriginFromRequest(req),
+      });
+      const shaped = await runWithRequestContext(
+        {
+          agentIdentity: statelessServer.getAgentIdentity(),
+          attributionDecision: getAttributionDecisionFromRequest(req),
+          aauthAdmission: aauthAdmissionForRequest,
+          mcpConnectionId: connectionIdHeader ?? null,
+        },
+        () => statelessServer.handleStatelessRequest(body, { headers: req.headers })
+      );
+      if (!shaped) {
+        return res.status(202).end();
+      }
+      if (shaped.authFailure) {
+        // Same challenge the credential gate above sends, so a client shows
+        // its Connect / re-authenticate flow.
+        res.setHeader(
+          "WWW-Authenticate",
+          shaped.authFailure === "invalid_connection"
+            ? `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token"`
+            : `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
+        );
+      }
+      return res.status(shaped.status).json(shaped.body);
+    }
+
+    // Legacy session path (2025-11-25 and earlier). Unchanged by #2070.
     // Get or create transport
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
     let serverInstance: NeotomaServer | undefined = sessionId
@@ -2067,7 +2374,8 @@ app.all("/mcp", async (req, res) => {
       const minted = await mintMcpHttpSession(
         req,
         mcpSessionMaps,
-        resolvePublicAppOriginFromRequest
+        resolvePublicAppOriginFromRequest,
+        connectionIdHeader
       );
       transport = minted.transport;
       serverInstance = minted.serverInstance;
@@ -2088,7 +2396,8 @@ app.all("/mcp", async (req, res) => {
         const minted = await mintMcpHttpSession(
           req,
           mcpSessionMaps,
-          resolvePublicAppOriginFromRequest
+          resolvePublicAppOriginFromRequest,
+          connectionIdHeader
         );
         const handshakeOk = await completeSyntheticMcpHandshake(minted.transport);
         const recoveredSessionId = minted.transport.sessionId;
@@ -2125,7 +2434,7 @@ app.all("/mcp", async (req, res) => {
         error: {
           code: -32000,
           message:
-            "Bad Request: No MCP session on this request. Send an initialize JSON-RPC message first, then include the mcp-session-id response header on every subsequent POST.",
+            "Bad Request: No MCP session on this request. Send an initialize JSON-RPC message first, then include the mcp-session-id response header on every subsequent POST. (MCP 2026-07-28 clients: send no session and carry io.modelcontextprotocol/protocolVersion and clientCapabilities in params._meta instead.)",
         },
         id: rpcIdForUnknownSession,
       });
@@ -2200,6 +2509,9 @@ app.all("/mcp", async (req, res) => {
         agentIdentity: fallbackIdentity,
         attributionDecision,
         aauthAdmission: aauthAdmissionForRequest,
+        // The gate's resolved connection id: the MCP server reads this, never
+        // the request's X-Connection-Id header.
+        mcpConnectionId: connectionIdHeader ?? null,
       },
       () => transport!.handleRequest(req, res, req.body)
     );
@@ -2245,6 +2557,10 @@ function redactHeaders(headers: Record<string, unknown>): Record<string, unknown
   const clone = { ...headers } as Record<string, unknown>;
   if (clone.authorization) clone.authorization = "[REDACTED]";
   if (clone.Authorization) clone.Authorization = "[REDACTED]";
+  // A connection id authenticates on its own at /mcp, so it is a credential.
+  for (const key of Object.keys(clone)) {
+    if (key.toLowerCase() === "x-connection-id") clone[key] = connectionIdForLog(clone[key]);
+  }
   return clone;
 }
 
@@ -2973,8 +3289,19 @@ app.get("/mcp/oauth/google/callback", async (req, res) => {
     // resolves the user via this session instead of always ensureLocalDevUser().
     // Sign-in gets the long session TTL, not the key-entry gate's 15 minutes,
     // and the user binding lives in the same store so it expires with it (#2005).
+    //
+    // #2228: bind the verified identity ALONGSIDE the graph scope. Previously
+    // only `resolvedUserId` was bound, so under shared-graph mode the verified
+    // Google email was discarded here and every downstream surface resolved the
+    // email from the shared user_id — telling a signed-in teammate they were the
+    // graph owner. `graphUserId` still decides which graph is read and written;
+    // the identity fields only say who is doing it.
     const sessionToken = setOAuthKeySessionCookie(req, res, SIGN_IN_SESSION_TTL_MS);
-    oauthKeySessions.bindUser(sessionToken, resolvedUserId);
+    oauthKeySessions.bindUser(sessionToken, {
+      graphUserId: resolvedUserId,
+      authenticatedUserId: perEmailUser.id,
+      authenticatedEmail: email,
+    });
 
     return res.redirect(nextPath);
   } catch (error: any) {
@@ -3036,9 +3363,8 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       logger.warn("[MCP OAuth] Authorize rejected: missing state");
       return sendAuthorizeRefusal(res, 400, "state is required");
     }
-    const isOpenAiCustomGptRedirect =
-      redirect_uri &&
-      (redirect_uri.includes("chatgpt.com") || redirect_uri.includes("chat.openai.com"));
+    const { isOpenAiCustomGptRedirectUri } = await import("./services/mcp_oauth.js");
+    const isOpenAiCustomGptRedirect = isOpenAiCustomGptRedirectUri(redirect_uri);
     const hasPkce = code_challenge && code_challenge_method === "S256";
 
     if (!hasPkce && !isOpenAiCustomGptRedirect) {
@@ -3050,10 +3376,6 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         400,
         "code_challenge and code_challenge_method=S256 are required"
       );
-    }
-    if (!hasPkce && isOpenAiCustomGptRedirect) {
-      // Allow OAuth without client PKCE for OpenAI Custom GPT only (weaker security; see docs).
-      // Server generates PKCE for state storage; OpenAI does not send code_verifier at token exchange.
     }
     if (config.requireKeyForOauth && !hasValidOAuthKeySession(req)) {
       const nextPath = normalizeOauthNextPath(req.originalUrl);
@@ -3109,8 +3431,11 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
 
       const { randomUUID } = await import("node:crypto");
       const connectionId = randomUUID();
-      const { createLocalAuthorizationRequest, generatePKCE: generatePKCEFromService } =
-        await import("./services/mcp_oauth.js");
+      const {
+        createLocalAuthorizationRequest,
+        generatePKCE: generatePKCEFromService,
+        OAUTH_CODE_PROVENANCE,
+      } = await import("./services/mcp_oauth.js");
 
       const pkce = hasPkce
         ? undefined
@@ -3125,19 +3450,22 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         clientState: state,
         codeChallenge: pkce ? pkce.codeChallenge : (code_challenge as string),
         codeVerifier: pkce?.codeVerifier,
+        authorizationCodeProvenance: hasPkce
+          ? OAUTH_CODE_PROVENANCE.CLIENT_PKCE
+          : OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE,
       });
       // Keep local OAuth redirects on the current origin (tunnel or localhost) even if
       // authRequest.authUrl was built from a different absolute base URL.
       try {
         const parsed = new URL(authRequest.authUrl);
         logger.info("[MCP OAuth] Authorize accepted (local backend)", {
-          connection_id: connectionId,
+          connection_id: connectionIdForLog(connectionId),
           redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
         });
         return res.redirect(`${parsed.pathname}${parsed.search}`);
       } catch {
         logger.info("[MCP OAuth] Authorize accepted (local backend fallback URL)", {
-          connection_id: connectionId,
+          connection_id: connectionIdForLog(connectionId),
           redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
         });
         return res.redirect(authRequest.authUrl);
@@ -3162,7 +3490,7 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
       serverPkce
     );
     logger.info("[MCP OAuth] Authorize accepted (remote backend)", {
-      connection_id: connectionId,
+      connection_id: connectionIdForLog(connectionId),
       redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
     });
 
@@ -3234,28 +3562,68 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   }
 
   try {
+    // Defense in depth, independent of config.requireKeyForOauth: on a
+    // non-loopback request, the dev-user fallback below must never complete
+    // without EITHER a verified identity (Google sign-in) OR a valid key
+    // session. The requireKeyForOauth check above already refuses this when
+    // that config is true (the default) — but it is a config default, not a
+    // hard requirement, and this instance's own security_finding
+    // (neotoma-2229-oauth-key-gate-posture-hosted) records that an explicit
+    // `NEOTOMA_REQUIRE_KEY_FOR_OAUTH=false` on such a deployment would remove
+    // the only other gate in front of dev-user completion. This check does
+    // not depend on that variable's value at all, so it holds even if the
+    // config regresses. isLocalRequest / hasValidOAuthKeySession are the same
+    // primitives the requireKeyForOauth branch above already uses.
+    const googleIdentityForGate = getGoogleVerifiedIdentity(req);
+    if (!isLocalRequest(req) && !googleIdentityForGate && !hasValidOAuthKeySession(req)) {
+      logger.warn(
+        "[MCP OAuth] local-login refused: non-loopback request with no verified session",
+        {
+          host: req.header("host") ?? null,
+        }
+      );
+      const nextPath = normalizeOauthNextPath(req.originalUrl);
+      return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
+    }
+
     // If this browser session was admitted via Google sign-in (see
     // /mcp/oauth/google/callback), complete authorization as THAT verified
     // user's own user_id instead of the shared dev user. Every other path
     // (no Google session on this cookie — the default, and the only
     // possibility when the Google feature flag is off) is unchanged.
-    const googleUserId = getGoogleVerifiedUserId(req);
-    const resolvedUserId = googleUserId ?? (await ensureLocalDevUser()).id;
+    // #2228: the session carries BOTH the graph scope and, under shared-graph
+    // mode, the verified identity of the signer. `resolvedUserId` stays the
+    // graph scope — it is what the connection row scopes data access to, and
+    // what every read and write continues to use. The identity rides alongside
+    // it onto the row so `/me` can report who is signed in without changing
+    // whose graph is operated on.
+    const googleIdentity = googleIdentityForGate;
+    const resolvedUserId = googleIdentity?.graphUserId ?? (await ensureLocalDevUser()).id;
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
-    const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
+    const { connectionId, code, redirectUri, clientState } = await completeLocalAuthorization(
       state,
-      resolvedUserId
+      resolvedUserId,
+      undefined,
+      {
+        authenticatedUserId: googleIdentity?.authenticatedUserId,
+        authenticatedEmail: googleIdentity?.authenticatedEmail,
+      }
     );
     const frontendBase =
       process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
     const frontendOauth = `${frontendBase}/oauth`;
     if (redirectUri) {
       if (!clientState && redirectUri.startsWith(frontendOauth)) {
+        // The bundled web frontend's own success page — not an OAuth `code`
+        // redemption target, so the stable connection_id (for display) is
+        // fine here and intentionally different from the `code` param below.
         const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
         return res.redirect(successUrl);
       }
+      // `code` is the single-use authorization code (see completeLocalAuthorization);
+      // it must never be connectionId, which is a stable, reusable handle.
       const params = new URLSearchParams({
-        code: connectionId,
+        code,
         state: clientState ?? "",
       });
       return res.redirect(`${redirectUri}?${params.toString()}`);
@@ -3289,11 +3657,13 @@ app.post(
     try {
       const grant_type = req.body?.grant_type;
       const code = req.body?.code;
+      const code_verifier = req.body?.code_verifier;
       const refresh_token = req.body?.refresh_token;
       logger.info("[MCP OAuth] Token request received", {
         grant_type: grant_type ?? null,
         has_code: typeof code === "string" && code.length > 0,
         code_hint: typeof code === "string" ? code.slice(0, 8) : null,
+        has_code_verifier: typeof code_verifier === "string" && code_verifier.length > 0,
         has_refresh_token: typeof refresh_token === "string" && refresh_token.length > 0,
         host: req.header("host") ?? null,
       });
@@ -3330,9 +3700,11 @@ app.post(
           .status(400)
           .json({ error: "invalid_request", error_description: "code is required" });
       }
-
       const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
-      const token = await getTokenResponseForConnection(code);
+      const token = await getTokenResponseForConnection(
+        code,
+        typeof code_verifier === "string" && code_verifier.length > 0 ? code_verifier : undefined
+      );
       logger.info("[MCP OAuth] Token issued", {
         code_hint: code.slice(0, 8),
         has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),
@@ -3879,6 +4251,75 @@ export async function resolveGuestUserId(
   );
 }
 
+/**
+ * Subscription and event-stream routes are guest-capable (`routeAcceptsGuestPrincipal`),
+ * but a guest access token is only ever minted scoped to specific `entity_ids`
+ * (the issue thread it opened, the rendered page it was handed — see
+ * `generateGuestAccessToken` call sites). `resolveGuestUserId` resolves the
+ * TOKEN OWNER's account id so the subscription/event services can query by
+ * `user_id`, but that account id is not itself a permission — a guest must
+ * still be confined to the entity_ids its own token names, not the rest of
+ * that account's subscriptions and events.
+ *
+ * Returns the resolved owner `userId` plus the guest's granted `entity_ids`
+ * (`null` for a non-guest principal, or for the local-dev fallback where
+ * there is no real token grant to narrow — those callers already run with
+ * full local trust). Throws if a guest principal has no entity-scoped grant:
+ * there is nothing to scope to, so the safe default is to refuse rather than
+ * silently fall back to the owner's whole graph.
+ */
+async function resolveGuestSubscriptionScope(
+  req: express.Request,
+  principal: RoutePrincipal
+): Promise<{ userId: string; entityIds: string[] | null }> {
+  if (principal.kind !== "guest") {
+    const userId = await getAuthenticatedUserId(
+      req,
+      ((req.body as { user_id?: string } | undefined)?.user_id ??
+        (req.query.user_id as string | undefined)) as string | undefined
+    );
+    return { userId, entityIds: null };
+  }
+
+  const authenticatedUserId = (req as any).authenticatedUserId;
+  if (authenticatedUserId) {
+    // Resolved via verified AAuth admission, not a per-entity guest token —
+    // treat as the local trust boundary already vetted upstream.
+    return { userId: authenticatedUserId, entityIds: null };
+  }
+
+  if (principal.guestId.accessToken) {
+    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+    const tokenGrant = await validateGuestAccessToken(principal.guestId.accessToken);
+    if (!tokenGrant) {
+      throw new Error("Not authenticated - invalid guest access token");
+    }
+    const userId = await resolveGuestUserId(req, principal);
+    if (!userId) {
+      throw new Error("Not authenticated - guest access token did not resolve an owner");
+    }
+    if (!tokenGrant.entity_ids.length) {
+      throw new Error(
+        "Guest access token grants no entity scope; subscription and event routes require a token minted with entity_ids"
+      );
+    }
+    return { userId, entityIds: tokenGrant.entity_ids };
+  }
+
+  const headerAuth = (req.headers.authorization || "") as string;
+  if (isLocalRequest(req) && !headerAuth.startsWith("Bearer ")) {
+    const userId = await resolveGuestUserId(req, principal);
+    if (!userId) {
+      throw new Error("Not authenticated - local guest fallback did not resolve an owner");
+    }
+    return { userId, entityIds: null };
+  }
+
+  throw new Error(
+    "Not authenticated - guest principal cannot resolve a subscription scope: no valid token grant and not a local request"
+  );
+}
+
 async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
   const accessToken = principal.guestId.accessToken;
   if (!accessToken) return;
@@ -3929,10 +4370,12 @@ async function resolveGuestScopedEntityAccess(
       }
       if (entity.entity_type === "issue") {
         const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
+        // Only the entity owner's own rows count as submitter evidence.
         const { data: issueObservations } = await db
           .from("observations")
           .select("fields")
-          .eq("entity_id", entityId);
+          .eq("entity_id", entityId)
+          .eq("user_id", entity.user_id);
         for (const observation of issueObservations ?? []) {
           const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
           const fields =
@@ -3952,7 +4395,8 @@ async function resolveGuestScopedEntityAccess(
           .from("relationship_snapshots")
           .select("target_entity_id")
           .eq("source_entity_id", entityId)
-          .eq("relationship_type", "REFERS_TO");
+          .eq("relationship_type", "REFERS_TO")
+          .eq("user_id", entity.user_id);
         for (const relationship of issueRelationships ?? []) {
           const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
           if (
@@ -3968,7 +4412,8 @@ async function resolveGuestScopedEntityAccess(
     const { data: observations } = await db
       .from("observations")
       .select("id, agent_thumbprint")
-      .eq("entity_id", entityId);
+      .eq("entity_id", entityId)
+      .eq("user_id", entity.user_id);
     const hasMatch = observations?.some((obs: { agent_thumbprint?: string }) => {
       return Boolean(
         principal.guestId.thumbprint && obs.agent_thumbprint === principal.guestId.thumbprint
@@ -4216,6 +4661,12 @@ app.use(async (req, res, next) => {
   //      userId (getUserIdFromBearerToken) is a real principal; a bare
   //      auto-registered key resolves to `undefined` and must fall through to the
   //      reject path — never to a caller-supplied `user_id` in getAuthenticatedUserId.
+  // #2240: the signed-in person behind a session bearer, for write
+  // attribution. Set ONLY from a verified sign-in recorded on the connection
+  // row; every other auth path above (static tokens, key-derived token, local
+  // no-auth, AAuth grant, sandbox) leaves it unset, so their writes carry no
+  // person rather than defaulting to one.
+  let sessionActorId: string | undefined;
   const registered = ensurePublicKeyRegistered(bearerToken);
   const registeredUserId = registered ? getUserIdFromBearerToken(bearerToken) : undefined;
   const { signature: ed25519Signature } = parseAuthHeader(headerAuth);
@@ -4244,10 +4695,17 @@ app.use(async (req, res, next) => {
     try {
       const { validateSessionToken } = await import("./services/mcp_auth.js");
       const validated = await validateSessionToken(bearerToken);
-      // Attach user_id and email to request for user-scoped queries and /me
+      // Attach user_id and email to request for user-scoped queries and /me.
+      // The stamped principal remains the GRAPH SCOPE user_id — data scoping
+      // must not move to the per-email identity (#2228). The identity fields
+      // are carried separately, for /me to report, and are never read by
+      // getAuthenticatedUserId.
       stampUserPrincipal(req, validated.userId);
       (req as any).authenticatedUserEmail = validated.email;
+      (req as any).signedInUserId = validated.authenticatedUserId;
+      (req as any).signedInSharedGraph = validated.sharedGraph === true;
       (req as any).bearerToken = bearerToken;
+      sessionActorId = validated.actorId;
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
@@ -4284,11 +4742,33 @@ app.use(async (req, res, next) => {
     }
   }
 
+  if (sessionActorId) {
+    // Carry the person into the request-scoped attribution context so every
+    // write-path service stamps it into provenance as `authenticated_actor_id`
+    // (#2240). Provenance only: the stamped graph principal above still
+    // decides which graph is read and written.
+    return runWithAuthenticatedPrincipal({ actorId: sessionActorId }, () => next());
+  }
   return next();
 });
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+
+// #2240: member write-attribution (`provenance.authenticated_actor_id`) is for
+// members of the graph, not for a guest holding an entity-scoped token. Wrap
+// res.json for every request and redact at send time when the principal is a
+// guest — decided at send time because some routes stamp the guest principal
+// inside the handler (resolveRoutePrincipal), after this middleware runs.
+// Registered after encryptResponseMiddleware so it runs first on send.
+app.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = ((body?: unknown) =>
+    sendJson(
+      requestPrincipal(req)?.kind === "guest" ? redactMemberAttribution(body) : body
+    )) as typeof res.json;
+  next();
+});
 
 // Sandbox-mode write gate: destructive routes blocked + tighter per-IP rate
 // limit on all write methods. No-op outside sandbox.
@@ -4322,11 +4802,24 @@ app.get("/me", async (req, res) => {
     // startHTTPServer()).
     const sandboxMode: NeotomaSandboxModeName | null =
       _resolvedServerMode ?? (_localSandboxActive ? "local_sandbox" : null);
+    // #2228: report identity and scope as two things, not one.
+    //   user_id               — the graph being operated on (unchanged meaning)
+    //   email                 — WHO is signed in when known; may be absent on a
+    //                           pre-migration shared-graph residual (unknown,
+    //                           not owner-fabricated)
+    //   shared_graph          — true whenever this session is on a shared graph,
+    //                           including the degraded residual with no recorded
+    //                           signer (must not require authenticated_user_id)
+    //   authenticated_user_id — present only when the remapped signer id is set
+    const signedInUserId = (req as any).signedInUserId as string | undefined;
+    const sharedGraph = (req as any).signedInSharedGraph === true;
     return res.json({
       user_id: userId,
       email: email ?? undefined,
       storage,
       ...(sandboxMode ? { sandbox_mode: sandboxMode } : {}),
+      ...(sharedGraph ? { shared_graph: true } : {}),
+      ...(signedInUserId ? { authenticated_user_id: signedInUserId } : {}),
     });
   } catch (error: any) {
     logError("GetMe", req, error);
@@ -4406,6 +4899,19 @@ export async function getAuthenticatedUserId(
 /**
  * Helper to handle errors in API endpoints, including authentication errors
  */
+/**
+ * `AgentGrantPinConflictError` from `services/agent_grants.ts`, matched by
+ * its stable code so this module need not import the grants service
+ * eagerly.
+ */
+function isGrantPinConflict(
+  error: unknown
+): error is Error & { code: "agent_grant_pin_conflict"; field: string } {
+  return (
+    error instanceof Error && (error as { code?: unknown }).code === "agent_grant_pin_conflict"
+  );
+}
+
 function handleApiError(
   req: express.Request,
   res: express.Response,
@@ -4440,6 +4946,14 @@ function handleApiError(
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (isGrantPinConflict(error)) {
+    logWarn(logContext || "AgentGrantPinConflict", req, { code: error.code });
+    return res
+      .status(409)
+      .json(
+        buildErrorEnvelope(error.code, error.message, { code: error.code, field: error.field })
+      );
+  }
   if (error instanceof AccessPolicyError) {
     logWarn(logContext || "AccessPolicyRejection", req, error.toErrorEnvelope());
     return res
@@ -4452,11 +4966,27 @@ function handleApiError(
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof EntityOwnerConflictError) {
+    // Writes resolve only to entities the writer owns (tenant isolation).
+    // Never leaks the other owner's identity or fields — see the error's
+    // own doc comment.
+    logWarn(logContext || "EntityOwnerConflictRejection", req, error.toErrorEnvelope());
+    return res
+      .status(error.statusCode)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   if (error instanceof CursorError) {
     logWarn(logContext || "CursorRejection", req, error.toErrorEnvelope());
     return res
       .status(error.statusCode)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof StorePolicyDeniedError) {
+    logWarn(logContext || "StorePolicyDenied", req, {
+      denied_count: error.denied.length,
+      reason_codes: [...new Set(error.denied.map((denial) => denial.reason_code))].sort(),
+    });
+    return res.status(400).json({ error: error.toErrorEnvelope() });
   }
   if (error instanceof StorePolicyUnavailableError) {
     // 503, not 400: the write was refused because the instance could not read
@@ -4490,6 +5020,27 @@ function handleApiError(
     return res
       .status(error.status)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelopeDetails()));
+  }
+  // A raw store/store_structured/correct targeting entity_type: "agent_grant"
+  // that fails assertAgentGrantFieldValid's pre-persist shape check (invalid
+  // capabilities, status, or label) is a client input error, not a server
+  // fault — surface it as 400 rather than masking it as a 500
+  // DB_QUERY_FAILED, matching the ergonomic /agents/grants routes'
+  // errorEnvelopeFromGrantError. Matched by name (not `instanceof`) to avoid
+  // a static import cycle: agent_grants.ts lazy-imports actions.js for the
+  // same reason (writeGrantEntity's comment).
+  if (error instanceof Error && error.name === "AgentGrantValidationError") {
+    const e = error as Error & { code?: string; statusCode?: number; field?: string };
+    logWarn(logContext || "AgentGrantValidationError", req, {
+      code: e.code,
+      field: e.field,
+      detail: e.message,
+    });
+    return res
+      .status(e.statusCode ?? 400)
+      .json(
+        buildErrorEnvelope(e.code ?? "agent_grant_invalid", e.message, { field: e.field ?? null })
+      );
   }
   // SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): a rejected
   // snapshot field name (sort_by / snapshot_filters) or an unsafe column
@@ -4576,8 +5127,13 @@ async function runEntitiesQuery(
       snapshot_filters,
       exclude_bookkeeping,
     } = parsed.data;
-    const { entities, total, applied_search_strategies, search_mode, next_cursor } =
+    const { entities, total, applied_search_strategies, search_mode, next_cursor, read_contract } =
       await queryEntitiesWithCount({
+        readRequest: {
+          raw: (req.method === "GET" ? req.query : rawInput) as Record<string, unknown>,
+          surface: req.method === "GET" ? "http_get" : "http_post",
+          consumed: [...Object.keys(parsed.data), "query", "search_query"],
+        },
         userId,
         entityType: entity_type,
         entityTypes: entity_types,
@@ -4604,6 +5160,7 @@ async function runEntitiesQuery(
       total,
       limit,
       offset,
+      read_contract,
       ...(applied_search_strategies ? { applied_search_strategies } : {}),
       search_mode,
       ...(next_cursor ? { next_cursor } : {}),
@@ -5292,12 +5849,20 @@ app.get("/schemas", async (req, res) => {
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
-    // Get schemas - listEntityTypes will return global + user-specific schemas
-    // The service should filter by user_id, but for now we'll filter in the endpoint
-    const allSchemas = await schemaRegistry.listEntityTypes(keyword);
+    // Get schemas — scoped to this principal so the version each row reports is
+    // the one this caller's reads and writes actually resolve.
+    //
+    // #2356: this passed no userId. `listEntityTypes` then had no way to apply
+    // the user-overrides-global precedence, so the version it reported for a
+    // type with an active user-scoped override was decided by row order — and
+    // disagreed with `GET /schemas/:entity_type`, `describe_entity_type` and the
+    // write path, all of which resolve scoped. The post-filter below only ever
+    // restricted WHICH entity types appear; it never corrected the version, so
+    // it could not compensate. `userId` is already required above, so scoping
+    // here changes no caller's authorization, only the accuracy of the version.
+    const allSchemas = await schemaRegistry.listEntityTypes(keyword, userId);
 
     // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
-    // Note: listEntityTypes doesn't currently filter by user_id, so we need to query directly
     // Also fetch metadata (including icons) for each schema
     const { data: dbSchemas, error: dbError } = await db
       .from("schema_registry")
@@ -5977,7 +6542,7 @@ app.post("/agents/grants", async (req, res) => {
       (req.body?.user_id as string | undefined) ?? undefined
     );
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { createGrant } = await import("./services/agent_grants.js");
+    const { createGrant, grantAdmissionWarnings } = await import("./services/agent_grants.js");
     const grant = await createGrant(userId, {
       label: typeof body.label === "string" ? body.label : "",
       capabilities: Array.isArray(body.capabilities) ? (body.capabilities as any) : [],
@@ -5987,7 +6552,8 @@ app.post("/agents/grants", async (req, res) => {
       match_thumbprint: typeof body.match_thumbprint === "string" ? body.match_thumbprint : null,
       notes: typeof body.notes === "string" ? body.notes : null,
     });
-    return res.status(201).json({ grant });
+    const warnings = grantAdmissionWarnings(grant);
+    return res.status(201).json(warnings.length > 0 ? { grant, warnings } : { grant });
   } catch (error) {
     const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
     if (mapped) {
@@ -6011,7 +6577,8 @@ app.patch("/agents/grants/:id", async (req, res) => {
       (req.body?.user_id as string | undefined) ?? undefined
     );
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { updateGrantFields } = await import("./services/agent_grants.js");
+    const { updateGrantFields, grantAdmissionWarnings } =
+      await import("./services/agent_grants.js");
     const updates: Record<string, unknown> = {};
     if (typeof body.label === "string") updates.label = body.label;
     if (Array.isArray(body.capabilities)) updates.capabilities = body.capabilities;
@@ -6024,7 +6591,8 @@ app.patch("/agents/grants/:id", async (req, res) => {
       updates.match_thumbprint = body.match_thumbprint;
     }
     const grant = await updateGrantFields(userId, req.params.id, updates as any);
-    return res.json({ grant });
+    const warnings = grantAdmissionWarnings(grant);
+    return res.json(warnings.length > 0 ? { grant, warnings } : { grant });
   } catch (error) {
     const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
     if (mapped) {
@@ -6831,14 +7399,13 @@ app.post("/interpretations/create", async (req, res) => {
       config: normalizeInterpretationConfig(parsed.data.interpretation_config) as any,
     });
 
-    const relationshipsCreated: Array<{
-      relationship_type: string;
-      source_entity_id: string;
-      target_entity_id: string;
-    }> = [];
+    const relationshipsCreated: StoreRelationshipCreated[] = [];
+    const relationshipsRefused: StoreRelationshipRefused[] = [];
     if (parsed.data.relationships?.length) {
       const { relationshipsService } = await import("./services/relationships.js");
-      for (const rel of parsed.data.relationships as StoreRelationshipRef[]) {
+      for (const [relIndex, rel] of (
+        parsed.data.relationships as StoreRelationshipRef[]
+      ).entries()) {
         const sourceEntityId =
           typeof rel.source_entity_id === "string"
             ? rel.source_entity_id
@@ -6851,11 +7418,19 @@ app.post("/interpretations/create", async (req, res) => {
             : typeof rel.target_index === "number"
               ? interpretationResult.entities[rel.target_index]?.entityId
               : undefined;
-        if (!sourceEntityId || !targetEntityId) continue;
+        if (!sourceEntityId || !targetEntityId) {
+          relationshipsRefused.push(
+            unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
+          continue;
+        }
         if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(sourceEntityId)) {
           logger.warn(
             `[interpretations/create] Skipping relationship: invalid source_entity_id ` +
               `(expected ent_ + 24 hex): ${String(rel.source_entity_id)}`
+          );
+          relationshipsRefused.push(
+            invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
           );
           continue;
         }
@@ -6864,21 +7439,32 @@ app.post("/interpretations/create", async (req, res) => {
             `[interpretations/create] Skipping relationship: invalid target_entity_id ` +
               `(expected ent_ + 24 hex): ${String(rel.target_entity_id)}`
           );
+          relationshipsRefused.push(
+            invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+          );
           continue;
         }
-        await relationshipsService.createRelationship({
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          relationship_type: rel.relationship_type as never,
-          source_id: parsed.data.source_id,
-          metadata: rel.metadata ?? {},
-          user_id: userId,
-        });
-        relationshipsCreated.push({
-          relationship_type: rel.relationship_type,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-        });
+        // The interpretation's entities are already written, so a relationship
+        // that cannot be created is reported rather than failing the call.
+        try {
+          await relationshipsService.createRelationship({
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+            relationship_type: rel.relationship_type as never,
+            source_id: parsed.data.source_id,
+            metadata: rel.metadata ?? {},
+            user_id: userId,
+          });
+          relationshipsCreated.push({
+            relationship_type: rel.relationship_type,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+          });
+        } catch (relErr) {
+          relationshipsRefused.push(
+            relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relErr)
+          );
+        }
       }
     }
 
@@ -6896,6 +7482,7 @@ app.post("/interpretations/create", async (req, res) => {
       unknown_fields: interpretationResult.unknownFieldNames,
       ...(interpretationResult.hint ? { hint: interpretationResult.hint } : {}),
       relationships_created: relationshipsCreated,
+      ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
       ...(interpretationResult.noSchemaEntityTypes &&
       interpretationResult.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: interpretationResult.noSchemaEntityTypes }
@@ -7034,9 +7621,9 @@ app.post("/observations/create", async (req, res) => {
     entity_identifier: z.string(),
     fields: z.record(z.unknown()),
     source_priority: z.number().optional().default(100),
-    observation_source: z
-      .enum(["sensor", "llm_summary", "workflow_state", "human", "import", "sync"])
-      .optional(),
+    // Shared enum (#2241): an inline copy here had drifted from the store
+    // schema's once already; reuse the single source instead.
+    observation_source: ObservationSourceSchema.optional(),
     source_peer_id: z.string().min(1).optional(),
     user_id: z.string().uuid(),
   });
@@ -7110,15 +7697,6 @@ app.post("/observations/create", async (req, res) => {
   }
 });
 
-type StoreRelationshipRef = {
-  relationship_type: string;
-  source_index?: number;
-  target_index?: number;
-  source_entity_id?: string;
-  target_entity_id?: string;
-  metadata?: Record<string, unknown>;
-};
-
 function normalizeInterpretationConfig(
   configInput?: Record<string, unknown>
 ): Record<string, unknown> {
@@ -7172,21 +7750,26 @@ async function completeInterpretationRun(params: {
     .eq("id", params.interpretationId);
 }
 
-export async function storeStructuredForApi(params: {
-  userId: string;
-  entities: Record<string, unknown>[];
-  sourcePriority: number;
-  observationSource?: import("./shared/action_schemas.js").ObservationSource;
-  /** When set, written observations carry this peer id for sync loop prevention. */
-  sourcePeerId?: string | null;
-  idempotencyKey: string;
-  originalFilename?: string;
-  relationships?: StoreRelationshipRef[];
-  interpretation?: StoreInterpretationInput;
-  interpretationSourceId?: string;
-  commit?: boolean;
-  strict?: boolean;
-}) {
+/**
+ * Structured store entry point.
+ *
+ * A committing store is a write: once it starts it runs to completion and is
+ * not cancelled by the caller's abort signal, and a second call for the same
+ * idempotency key waits for the first (#2144). See `runKeyedStoreWrite`.
+ * Plan mode (`commit: false`) writes nothing and the conditional path is its
+ * own atomic transaction, so both run as before.
+ */
+export async function storeStructuredForApi(params: StructuredStoreApiParams) {
+  if (params.commit === false || params.expectedEntityAbsent === true) {
+    return storeStructuredForApiUnguarded(params);
+  }
+  const { runKeyedStoreWrite } = await import("./services/store_write_state.js");
+  return runKeyedStoreWrite(params.userId, params.idempotencyKey, () =>
+    storeStructuredForApiUnguarded(params)
+  );
+}
+
+async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) {
   const {
     userId,
     entities,
@@ -7200,100 +7783,13 @@ export async function storeStructuredForApi(params: {
     interpretationSourceId,
     commit: commitInput,
     strict: strictInput,
+    dataOrigins,
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
-
-  // Access policy: when the caller is a guest (AAuth-verified but not admitted
-  // via a grant), check per-entity-type access policies. If the policy allows
-  // guest writes, the request proceeds without requiring an agent_grant.
-  const requestContext = getRequestContext();
-  const agentIdentity = getCurrentAgentIdentity();
-  const admission = getCurrentAAuthAdmission();
-  const isAAuthVerified = agentIdentity?.thumbprint != null;
-  const isGuest = isAAuthVerified && (!admission || !admission.admitted);
-
-  if (isGuest && !requestContext?.bypassGuestStoreAccessPolicy) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    const guestId: GuestIdentity = {
-      thumbprint: agentIdentity.thumbprint,
-      sub: agentIdentity.sub,
-      iss: agentIdentity.iss,
-    };
-    await assertGuestWriteAllowed(entityTypes, guestId);
-  }
-
-  // usage_digest store-seam redaction guard (server-side backstop).
-  // Scope: strictly usage_digest entities only — no impact on any other entity type.
-  // For each incoming usage_digest entity, scan free-text fields `notes` and
-  // `friction_notes` via the pure redactUsageDigestEntity helper, and write the
-  // redacted copies back onto the entity object so the raw input is never persisted.
-  // This is a redact-and-store (scan) approach, not hard-reject, so a digest is
-  // never silently dropped on a client-side redaction miss.
-  //
-  // NOTE: Single telemetry sink today — entity_type === "usage_digest" is the only
-  // branch. If a second redacted-free-text entity_type appears, lift these field
-  // names into schema metadata (redact_free_text_fields) rather than adding another
-  // branch here.
-  {
-    const hasUsageDigest = entities.some(
-      (e) => (e as Record<string, unknown>)?.entity_type === "usage_digest"
-    );
-    if (hasUsageDigest) {
-      const { redactUsageDigestEntity } =
-        await import("./services/feedback/usage_digest_redaction.js");
-      for (const entityData of entities) {
-        const ed = entityData as Record<string, unknown>;
-        if (ed.entity_type !== "usage_digest") continue;
-        const result = redactUsageDigestEntity(ed as Parameters<typeof redactUsageDigestEntity>[0]);
-        if (result.applied) {
-          logger.warn(
-            `[STORE] usage_digest server-side redaction applied: ${result.hits} hit(s) in free-text fields.`
-          );
-        }
-      }
-    }
-  }
-
-  // Capability scoping: when the caller is an AAuth-verified agent covered
-  // by the capability registry, gate store_structured by entity_type here
-  // before any writes touch the DB. Guests who passed access policy above
-  // skip grant-based capability enforcement. Unknown / anonymous callers
-  // fall through (attribution_policy still gates their writes downstream).
-  const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
-  if (capabilityCtx && !isGuest) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    enforceAgentCapability("store", entityTypes, capabilityCtx);
-    const relationshipOp = Array.isArray(relationships) && relationships.length > 0;
-    if (relationshipOp) {
-      enforceAgentCapability("create_relationship", entityTypes, capabilityCtx);
-    }
-  }
-
-  // Protected-entity-types guard: governance state (`agent_grant`, etc.)
-  // is gated by an explicit capability on the admitted grant. Mirrors
-  // the same check made deep in `createObservation` so callers see a
-  // structured `capability_denied` envelope before any writes.
-  {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    assertCanWriteProtectedBatch({
-      entity_types: entityTypes,
-      op: "store",
-      identity: getCurrentAgentIdentity(),
-      admission: getCurrentAAuthAdmission(),
-    });
-  }
-
+  await preflightStructuredStoreAdmission(params);
   const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
     await import("./services/entity_resolution.js");
-  const { detectFlatPackedRows, FlatPackedRowsError } =
-    await import("./services/flat_packed_detection.js");
   // R4: lazy import so the structured-store handler can attach required
   // identity-field hints when resolving fails under a reject policy.
   const registryModule = await import("./services/schema_registry.js");
@@ -7302,20 +7798,28 @@ export async function storeStructuredForApi(params: {
     Awaited<ReturnType<typeof deriveRequiredIdentityFields>>
   >;
 
-  // Reject flat-packed rows (whole tables smuggled into a single entity as
-  // `<prefix>_<index>_<suffix>` keys). These cannot produce per-row snapshots
-  // and are almost always a caller bug. The caller should split into one
-  // entity per row and retry.
-  for (const entityData of entities) {
-    const detection = detectFlatPackedRows(entityData as Record<string, unknown>);
-    if (detection.detected) {
-      throw new FlatPackedRowsError(detection);
-    }
+  if (params.expectedEntityAbsent === true) {
+    const { storeConditionalStructured } = await import("./services/store_conditional.js");
+    return storeConditionalStructured({
+      userId,
+      entities,
+      sourcePriority,
+      observationSource,
+      idempotencyKey,
+      originalFilename,
+      strict,
+      dataOrigin: dataOrigins?.[0],
+    });
   }
 
   // Compute hash of incoming content before querying so we can detect
-  // idempotency-key reuse with different content (issue #186).
-  const incomingJsonContent = JSON.stringify(entities, (key, value) => {
+  // idempotency-key reuse with different content (issue #186). Each entity's
+  // effective data_origin (#2242) is part of the stored payload, so a replay
+  // with a different origin is a mismatch rather than a silent drop; with no
+  // origin the stored JSON is unchanged.
+  const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
+  const storedEntities = entitiesWithStoredDataOrigins(entities, dataOrigins);
+  const incomingJsonContent = JSON.stringify(storedEntities, (key, value) => {
     if (typeof value === "bigint") {
       return Number(value);
     }
@@ -7324,9 +7828,15 @@ export async function storeStructuredForApi(params: {
   const { computeContentHash: _computeContentHash } = await import("./services/raw_storage.js");
   const incomingContentHash = _computeContentHash(Buffer.from(incomingJsonContent, "utf-8"));
 
+  if (commit) {
+    const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
+    const { getDb } = await import("./repositories/db/connection.js");
+    await assertLegacyStoreKeyMode(await getDb(), userId, idempotencyKey);
+  }
+
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
-    .select("id, content_hash")
+    .select("id, content_hash, provenance")
     .eq("user_id", userId)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
@@ -7350,7 +7860,57 @@ export async function storeStructuredForApi(params: {
         "To update an entity, omit the idempotency_key or use a new one.";
       throw mismatchErr;
     }
+  }
 
+  // A recorded key is not a finished write (#2144): the source row is created
+  // before any observation, so a loop that stopped part way leaves a key that
+  // looks done. `resumeIncompleteWrite` is true when the earlier attempt did
+  // not finish; the replay branch below is then skipped and the ordinary write
+  // path runs again over the same source. That is safe because observation ids
+  // are deterministic (source, entity, fields), so entities already written
+  // resolve to their existing observation and only the missing ones are added.
+  let resumeIncompleteWrite = false;
+  if (existingSource && commit) {
+    const storeWriteState = await import("./services/store_write_state.js");
+    const recordedState = storeWriteState.readStoreWriteState(existingSource.provenance);
+    const incomplete =
+      recordedState === "in_progress" ||
+      (recordedState === undefined &&
+        storeWriteState.legacyWriteLooksIncomplete({
+          entities,
+          observationCount: (
+            await (
+              await import("./services/observation_storage.js")
+            ).listObservationsForSource(existingSource.id, userId)
+          ).length,
+          observationsOnKeyedSource: !interpretation?.source_id && !interpretationSourceId,
+        }));
+    if (incomplete) {
+      if (interpretation) {
+        // A resumed write would open a fresh interpretation run, whose id is
+        // part of each observation id, so the entities already written would
+        // be written a second time. Report the incomplete write instead.
+        const summary = await storeWriteState.summarizeUnfinishedStore({
+          userId,
+          sourceId: existingSource.id,
+          entities: entities as Array<Record<string, unknown>>,
+        });
+        const incompleteErr = new Error(
+          `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
+            `that did not finish writing (${summary.entities_written} of ` +
+            `${summary.entities_requested} entities have an observation). It cannot be resumed ` +
+            "under the same key because the request carries an interpretation."
+        ) as Error & { code: string; hint: string; details: Record<string, unknown> };
+        incompleteErr.code = "ERR_STORE_WRITE_INCOMPLETE";
+        incompleteErr.hint = storeWriteState.incompleteStoreHint(summary);
+        incompleteErr.details = { ...summary };
+        throw incompleteErr;
+      }
+      resumeIncompleteWrite = true;
+    }
+  }
+
+  if (existingSource && !resumeIncompleteWrite) {
     const { listObservationsForSource } = await import("./services/observation_storage.js");
     const existingObs = await listObservationsForSource(existingSource.id, userId);
 
@@ -7437,28 +7997,44 @@ export async function storeStructuredForApi(params: {
     });
   }
 
+  const { preflightStructuredStoreOwnership } =
+    await import("./services/store_ownership_admission.js");
+  if (commit) await preflightStructuredStoreOwnership(params);
+
   const { createObservation } = await import("./services/observation_storage.js");
 
   const jsonContent = incomingJsonContent;
   const filenameForStorage = originalFilename?.trim() || undefined;
 
-  const storageResult = await storeRawContent({
-    userId,
-    fileBuffer: Buffer.from(jsonContent, "utf-8"),
-    mimeType: "application/json",
-    originalFilename: filenameForStorage,
-    idempotencyKey,
-    provenance: {
-      upload_method: "api_store",
-      client: "api",
-      source_priority: sourcePriority,
-    },
-  });
+  // Plan mode (`commit: false`, CLI `--plan`/`--dry-run`) must be genuinely
+  // side-effect-free: no `sources` row, no raw-storage upload. storeRawContent
+  // persists both, so it must not run at all when not committing. Everything
+  // storageResult feeds below — resolvedInterpretationSourceId,
+  // observationSourceId, and interpretationId — is consumed exclusively
+  // inside `if (commit)` blocks further down (observation creation, event
+  // emission, auto-linking), so a null placeholder here is never written to
+  // a row; pass 1 entity resolution (resolveEntityWithTrace, below) takes no
+  // source id at all.
+  const storageResult = commit
+    ? await storeRawContent({
+        userId,
+        fileBuffer: Buffer.from(jsonContent, "utf-8"),
+        mimeType: "application/json",
+        originalFilename: filenameForStorage,
+        idempotencyKey,
+        provenance: {
+          upload_method: "api_store",
+          client: "api",
+          source_priority: sourcePriority,
+          ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
+        },
+      })
+    : null;
 
   const resolvedInterpretationSourceId =
     interpretation?.source_id ??
     interpretationSourceId ??
-    (interpretation?.source_ref === "structured" ? storageResult.sourceId : undefined);
+    (interpretation?.source_ref === "structured" ? storageResult?.sourceId : undefined);
   const interpretationId =
     commit && interpretation && resolvedInterpretationSourceId
       ? await createInterpretationRunForSource({
@@ -7467,7 +8043,7 @@ export async function storeStructuredForApi(params: {
           interpretationConfig: interpretation.interpretation_config,
         })
       : null;
-  const observationSourceId = resolvedInterpretationSourceId ?? storageResult.sourceId;
+  const observationSourceId = resolvedInterpretationSourceId ?? storageResult?.sourceId;
 
   // Two-pass: first resolve every entity with trace (so CanonicalNameUnresolvedError
   // / MergeRefusedError land per-observation before any writes), then commit
@@ -7518,7 +8094,8 @@ export async function storeStructuredForApi(params: {
     code:
       | "ERR_CANONICAL_NAME_UNRESOLVED"
       | "ERR_MERGE_REFUSED"
-      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT";
+      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
+      | "entity_owner_conflict";
     message: string;
     details: Record<string, unknown>;
     /**
@@ -7551,6 +8128,11 @@ export async function storeStructuredForApi(params: {
 
   const resolved: ResolvedEntity[] = [];
   const issues: ResolutionIssue[] = [];
+  // One fresh set per resolution pass when resuming (#2144): an entity an
+  // earlier payload of this request already resolved to is a collision between
+  // two payloads, not this write's own row, so a later payload landing on it is
+  // judged by the ordinary strict / collision rules.
+  const resumeClaimedEntityIds = resumeIncompleteWrite ? new Set<string>() : undefined;
 
   for (let observation_index = 0; observation_index < entities.length; observation_index++) {
     const entityData = entities[observation_index];
@@ -7614,7 +8196,12 @@ export async function storeStructuredForApi(params: {
         commit,
         strict: effectiveStrict,
         targetId,
+        // Resuming this key's own interrupted write: entity rows it created
+        // are not merge targets (#2144).
+        resumeSourceId: resumeIncompleteWrite ? existingSource?.id : undefined,
+        resumeClaimedEntityIds,
       });
+      resumeClaimedEntityIds?.add(result.entityId);
       resolved.push({
         observation_index,
         entity_type,
@@ -7716,6 +8303,25 @@ export async function storeStructuredForApi(params: {
             ...(err.policy ? { policy: err.policy } : {}),
           },
           ...(hint ? { hint } : {}),
+        });
+      } else if (err instanceof EntityOwnerConflictError) {
+        // Tenant-isolation refusal: surfaced as a structured per-observation
+        // issue like its siblings above, never silently downgraded to a 500
+        // and never mixed into `resolved` as if the write had happened. This
+        // batch's aggregate wrapper (ERR_STORE_RESOLUTION_FAILED, below)
+        // answers with a flat 400 for every issue code including this one —
+        // consistent with every sibling resolution refusal on this endpoint.
+        // The single-target, non-batch entrance (`/correct`, via
+        // handleApiError) answers this same `entity_owner_conflict` code with
+        // a true top-level 409, matching the ruled REST contract there.
+        issues.push({
+          observation_index,
+          entity_type,
+          code: err.code,
+          message: err.message,
+          details: {
+            entity_id: err.entityId,
+          },
         });
       } else {
         throw err;
@@ -7921,6 +8527,18 @@ export async function storeStructuredForApi(params: {
     let snapshotAfter: Record<string, unknown> | null = null;
 
     if (commit) {
+      // Invariant: storageResult is only ever null when `commit` is false
+      // (plan mode skips storeRawContent entirely — see above). Reaching this
+      // branch with a null observationSourceId would mean an observation is
+      // about to be written with no traceable source, which is worse than
+      // failing loudly here.
+      if (observationSourceId === undefined) {
+        throw new Error(
+          "Internal invariant violated: commit=true but no source id was resolved " +
+            "(storeRawContent should have run under commit mode)."
+        );
+      }
+
       const { data: priorSnapRow } = await db
         .from("entity_snapshots")
         .select("snapshot")
@@ -7946,6 +8564,7 @@ export async function storeStructuredForApi(params: {
         user_id: userId,
         identity_basis: r.trace.identity_basis,
         identity_rule: r.trace.identity_rule,
+        data_origin: dataOrigins?.[r.observation_index],
       });
       observation_id = obsData.id;
 
@@ -7963,7 +8582,7 @@ export async function storeStructuredForApi(params: {
       const emitTs = obsRow.observed_at ?? new Date().toISOString();
       const obsSourceLabel =
         observationSource === undefined || observationSource === null
-          ? "llm_summary"
+          ? DEFAULT_OBSERVATION_SOURCE
           : String(observationSource);
       emitObservationCreated({
         user_id: userId,
@@ -8084,14 +8703,13 @@ export async function storeStructuredForApi(params: {
 
   // Relationships (parity with MCP store_structured). Indices are resolved
   // against the observation order; commit=false skips creation.
-  const relationshipsCreated: Array<{
-    relationship_type: string;
-    source_entity_id: string;
-    target_entity_id: string;
-  }> = [];
+  // Each relationship is created independently: one that cannot be created
+  // is reported in relationships_refused and the rest proceed.
+  const relationshipsCreated: StoreRelationshipCreated[] = [];
+  const relationshipsRefused: StoreRelationshipRefused[] = [];
   if (commit && relationships && relationships.length > 0) {
     const { relationshipsService } = await import("./services/relationships.js");
-    for (const rel of relationships) {
+    for (const [relIndex, rel] of relationships.entries()) {
       const sourceEntityId =
         typeof rel.source_entity_id === "string"
           ? rel.source_entity_id
@@ -8111,6 +8729,9 @@ export async function storeStructuredForApi(params: {
             `or target reference (target_index=${rel.target_index}, ` +
             `target_entity_id=${rel.target_entity_id}); have ${resolved.length} entities.`
         );
+        relationshipsRefused.push(
+          unresolvedRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+        );
         continue;
       }
       if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(sourceEntityId)) {
@@ -8118,12 +8739,18 @@ export async function storeStructuredForApi(params: {
           `[STORE] Skipping relationship: source_entity_id is not a valid Neotoma id ` +
             `(expected ent_ + 24 hex): ${String(rel.source_entity_id)}`
         );
+        relationshipsRefused.push(
+          invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
+        );
         continue;
       }
       if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(targetEntityId)) {
         logger.warn(
           `[STORE] Skipping relationship: target_entity_id is not a valid Neotoma id ` +
             `(expected ent_ + 24 hex): ${String(rel.target_entity_id)}`
+        );
+        relationshipsRefused.push(
+          invalidEntityIdRelationshipRefusal(relIndex, rel, sourceEntityId, targetEntityId)
         );
         continue;
       }
@@ -8148,8 +8775,20 @@ export async function storeStructuredForApi(params: {
               relErr instanceof Error ? relErr.message : String(relErr)
             }`
         );
+        relationshipsRefused.push(
+          relationshipRefusalFromError(relIndex, rel, sourceEntityId, targetEntityId, relErr)
+        );
       }
     }
+  }
+
+  // Every observation (and the request's relationships) is written. Record
+  // that on the keyed source so a replay of this key knows the write finished
+  // (#2144). Before this point a replay resumes the write instead of reporting
+  // whatever happened to land.
+  if (commit && storageResult) {
+    const { markStoreWriteComplete } = await import("./services/store_write_state.js");
+    await markStoreWriteComplete(storageResult.sourceId, userId);
   }
 
   // R3: aggregate non-fatal resolver warnings across the batch so callers
@@ -8418,6 +9057,21 @@ export async function storeStructuredForApi(params: {
     }
   }
 
+  // #2241: OBSERVATION_SOURCE_OMITTED — the request did not say what kind of
+  // write this was, so every observation was stored as `unspecified`. Judged
+  // on the raw request value (an explicit `unspecified` does not warn) and
+  // emitted once per request, because observation_source is request-scoped.
+  {
+    const { buildObservationSourceOmittedWarning } =
+      await import("./services/observation_source_warning.js");
+    const firstStored = [...resolved].sort((a, b) => a.observation_index - b.observation_index)[0];
+    const obsSourceWarn = buildObservationSourceOmittedWarning({
+      rawObservationSource: observationSource,
+      firstStored,
+    });
+    if (obsSourceWarn) schemaStoreWarnings.push(obsSourceWarn);
+  }
+
   // #1963: surface auto-link edge retractions on the store response so a
   // retraction — and especially a retraction *failure* — is never silent. A
   // failure means a stale reference-field edge may still be live despite the
@@ -8557,7 +9211,7 @@ export async function storeStructuredForApi(params: {
     success: true,
     replayed: false,
     commit,
-    source_id: commit ? storageResult.sourceId : null,
+    source_id: commit && storageResult ? storageResult.sourceId : null,
     ...(interpretationId
       ? { interpretation_id: interpretationId, interpretation_source_id: observationSourceId }
       : {}),
@@ -8567,6 +9221,7 @@ export async function storeStructuredForApi(params: {
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
     relationships_created: relationshipsCreated,
+    ...(relationshipsRefused.length > 0 ? { relationships_refused: relationshipsRefused } : {}),
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     ...(unknownFieldNames.length > 0
@@ -8592,7 +9247,7 @@ export async function storeStructuredForApi(params: {
 // target here today. An instance with enforcement: "enforced" still accepts
 // arbitrary raw file content through this path. See the "Known scope
 // boundary" section in src/services/instance_policy.ts's docblock.
-async function storeUnstructuredForApi(params: {
+export async function storeUnstructuredForApi(params: {
   userId: string;
   fileContent?: string;
   fileBuffer?: Buffer;
@@ -8602,6 +9257,16 @@ async function storeUnstructuredForApi(params: {
   originalFilename?: string;
   sourceType?: string;
   storageMode?: "inline" | "reference";
+  /**
+   * Plan mode (CLI `--plan`/`--dry-run`, request `commit: false`): must be
+   * genuinely side-effect-free. Defaults to true (commit) so every existing
+   * caller that never passed this field keeps writing exactly as before.
+   * When false, neither storeRawContent nor storeRawReference runs — no
+   * `sources` row, no raw-storage upload, no reference row — and the
+   * response reports `commit: false` with source-derived fields nulled,
+   * mirroring storeStructuredForApi's plan-mode response shape.
+   */
+  commit?: boolean;
 }) {
   const {
     fileContent,
@@ -8613,6 +9278,7 @@ async function storeUnstructuredForApi(params: {
     sourceType,
     userId,
     storageMode = "inline",
+    commit = true,
   } = params;
   // decodeFileContent rejects non-base64 instead of letting Node discard the
   // invalid characters and store corrupted bytes (#2325).
@@ -8620,6 +9286,35 @@ async function storeUnstructuredForApi(params: {
     fileBuffer ?? (fileContent !== undefined ? decodeFileContent(fileContent) : undefined);
   if (!resolvedFileBuffer && storageMode !== "reference") {
     throw new Error("fileContent or fileBuffer is required for inline storage");
+  }
+
+  if (!commit) {
+    // Nothing to persist in plan mode: no bytes uploaded, no `sources` row,
+    // no reference row. `content_hash` is still safe (and useful) to report
+    // since it's a pure function of the caller's own bytes/path, computed
+    // without touching storage or the database.
+    if (storageMode === "reference") {
+      if (!filePath) {
+        throw new Error("filePath is required for reference storage mode");
+      }
+      return {
+        commit: false,
+        source_id: null,
+        storage_mode: "reference",
+        reference_path: filePath,
+        mime_type: mimeType,
+      };
+    }
+    const { computeContentHash } = await import("./services/raw_storage.js");
+    return {
+      commit: false,
+      source_id: null,
+      content_hash: computeContentHash(resolvedFileBuffer!),
+      file_size: resolvedFileBuffer!.length,
+      deduplicated: false,
+      entities_created: 0,
+      observations_created: 0,
+    };
   }
 
   if (storageMode === "reference") {
@@ -8692,12 +9387,46 @@ async function handleStorePost(
     return sendStoreValidationError(res, parsed.error.issues);
   }
 
+  let storeDataOrigins: StructuredStoreApiParams["dataOrigins"];
+  // #2242: peel the reserved per-entity `data_origin` key off every entity and
+  // resolve each entity's effective origin (entity → request → none) before
+  // anything else reads the entities, so no downstream path sees it as a field.
+  if (parsed.data.entities?.length) {
+    const { splitEntityDataOrigins } = await import("./services/provenance_data_origin.js");
+    const split = splitEntityDataOrigins(parsed.data.entities, parsed.data.data_origin);
+    parsed.data.entities = split.entities;
+    storeDataOrigins = split.origins;
+  }
+
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
+    assertConditionalStoreRequest(parsed.data);
     const hasEntities = Boolean(parsed.data.entities?.length);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
     const hasUnstructured = hasFileContent || hasFilePath;
+
+    if (hasEntities && hasUnstructured && parsed.data.commit !== false) {
+      const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
+      await claimCombinedStoreKeys(
+        {
+          userId,
+          entities: parsed.data.entities!,
+          sourcePriority: parsed.data.source_priority,
+          idempotencyKey: parsed.data.idempotency_key!,
+          relationships: parsed.data.relationships,
+          interpretation: parsed.data.interpretation,
+          sourcePeerId: parsed.data.source_peer_id,
+          strict: parsed.data.strict,
+        },
+        {
+          key: parsed.data.file_idempotency_key,
+          content: parsed.data.file_content,
+          filePath: parsed.data.file_path,
+        }
+      );
+    }
 
     let structuredResult: Record<string, unknown> | undefined;
     let unstructuredResult: Record<string, unknown> | undefined;
@@ -8773,6 +9502,7 @@ async function handleStorePost(
         originalFilename,
         sourceType: (parsed.data as Record<string, unknown>).source_type as string | undefined,
         storageMode: parsed.data.source_storage,
+        commit: parsed.data.commit,
       });
     };
 
@@ -8797,6 +9527,7 @@ async function handleStorePost(
         storeStructuredForApi({
           userId,
           entities: parsed.data.entities as Record<string, unknown>[],
+          expectedEntityAbsent: parsed.data.expected_entity_absent,
           sourcePriority: parsed.data.source_priority ?? 100,
           observationSource: parsed.data.observation_source,
           sourcePeerId: parsed.data.source_peer_id,
@@ -8812,9 +9543,14 @@ async function handleStorePost(
               : undefined,
           commit: (parsed.data as { commit?: boolean }).commit,
           strict: (parsed.data as { strict?: boolean }).strict,
+          dataOrigins: storeDataOrigins,
         });
 
-      const bodyActor = parsed.data.external_actor as ExternalActor | undefined;
+      // A request body can only claim an external actor; verified tiers are
+      // assigned by server-side verification paths, never taken from input.
+      const bodyActor: ExternalActor | undefined = parsed.data.external_actor
+        ? externalActorFromCallerInput(parsed.data.external_actor)
+        : undefined;
       const existingActor = getCurrentExternalActor();
       if (bodyActor && !existingActor) {
         structuredResult = (await runWithExternalActor(bodyActor, doStore)) as Record<
@@ -8857,6 +9593,20 @@ async function handleStorePost(
     }
     const errCode =
       error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+    const { StoreConditionError } = await import("./services/store_condition_keys.js");
+    if (error instanceof StoreConditionError) {
+      const status =
+        error.code === "VALIDATION_ERROR"
+          ? 400
+          : error.code === "STORE_RECEIPT_UNCERTAIN" || error.code === "STORE_CONDITIONAL_FAILED"
+            ? 503
+            : 409;
+      return res.status(status).json({ error: error.toErrorEnvelope() });
+    }
+    if (isGrantPinConflict(error)) {
+      logWarn("AgentGrantPinConflict:store", req, { code: error.code });
+      return sendError(res, 409, error.code, error.message, { field: error.field });
+    }
     if (errCode === "ERR_FORBIDDEN_ENTITY_TYPE" || errCode === "ERR_PLURAL_ENTITY_TYPE") {
       const message = error instanceof Error ? error.message : String(error);
       logWarn("EntityTypeGuardError:store", req, { code: errCode, message });
@@ -8878,6 +9628,16 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       logWarn("IdempotencyCollision:store", req, { message });
       return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
+    }
+    if (error && typeof error === "object" && errCode === "ERR_STORE_WRITE_INCOMPLETE") {
+      const message = error instanceof Error ? error.message : String(error);
+      const hint = (error as { hint?: string }).hint;
+      logWarn("StoreWriteIncomplete:store", req, { message });
+      const incompleteDetails = (error as { details?: Record<string, unknown> }).details;
+      return sendError(res, 409, "ERR_STORE_WRITE_INCOMPLETE", message, {
+        ...(hint ? { hint } : {}),
+        ...(incompleteDetails ?? {}),
+      });
     }
     if (error && typeof error === "object" && errCode === "ERR_STORE_POLICY_DENIED") {
       const err = error as {
@@ -8994,6 +9754,22 @@ async function handleStorePost(
           suggested_entities: err.detection.suggestedEntities ?? [],
         },
       });
+    }
+    if (error instanceof UnregisteredRelationshipTypeError) {
+      return sendError(res, error.statusCode, error.code, error.message, {
+        relationship_type: error.relationshipType,
+        hint: error.hint,
+      });
+    }
+    // A capability refusal is the caller's authorization, not a server fault:
+    // 403 with the same envelope `handleApiError` gives every other route.
+    // Falling through made a denied edge (or entity type) read as a retryable
+    // 500 DB_QUERY_FAILED.
+    if (error instanceof AgentCapabilityError) {
+      logWarn("AgentCapabilityRejection:store", req, error.toErrorEnvelope());
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
     }
     logError("APIError:store", req, error);
     const message = error instanceof Error ? error.message : "Failed to store payload";
@@ -9494,6 +10270,12 @@ app.post("/entities/split", async (req, res) => {
     if (error instanceof IdempotencyMismatchError) {
       return sendError(res, 400, "ERR_IDEMPOTENCY_MISMATCH", error.message);
     }
+    if (error instanceof EntityOwnerConflictError) {
+      logWarn("EntityOwnerConflictRejection", req, error.toErrorEnvelope());
+      return res
+        .status(error.statusCode)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
     logError("APIError:entities_split", req, error);
     const message = error instanceof Error ? error.message : "Failed to split entity";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -9512,38 +10294,63 @@ app.post("/get_entity_snapshot", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, at, at_ingested } = parsed.data;
+  const { entity_id, at, at_ingested, include_cleared_fields } = parsed.data;
+
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req);
+  } catch (err) {
+    return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
 
   // When at/at_ingested cutoffs are requested, use the shared observation-replay
   // helper so the offline path honours them with the same semantics as the MCP
   // path in server.ts. Without cutoffs, fall through to the fast materialized
-  // entity_snapshots table read (unchanged behaviour).
-  if (at || at_ingested) {
-    let userId: string;
+  // entity_snapshots table read.
+  if (at || at_ingested || include_cleared_fields) {
     try {
-      userId = await getAuthenticatedUserId(req);
-    } catch (err) {
-      return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
-    }
-
-    try {
-      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested);
+      const result = await computeEntitySnapshotAtTime(entity_id, userId, at, at_ingested, {
+        includeClearedFields: include_cleared_fields,
+      });
+      if (include_cleared_fields && !at && !at_ingested) {
+        const { isEntityDeleted } = await import("./services/deletion.js");
+        if (result && (await isEntityDeleted(result.entity_id, userId)))
+          return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
       if (result === null) {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
       logDebug("Success:get_entity_snapshot:at_time", req, { entity_id, at, at_ingested });
-      return res.json(result);
+      return res.json(await withSnapshotDataOrigins(result, userId));
     } catch (err) {
       logError("Error:get_entity_snapshot:at_time", req, err);
       return sendError(res, 500, "DB_QUERY_FAILED", (err as Error).message);
     }
   }
 
-  // Fast path: no cutoffs — read the materialized snapshot directly.
+  // Materialization is derived state. Validate owned current authority before
+  // serving its row, including restrictive corruption acquisition failures.
+  try {
+    const { isEntityDeleted } = await import("./services/deletion.js");
+    const { hasRecordedEntityLifecycleCutover } =
+      await import("./services/entity_lifecycle_storage.js");
+    const { getDb } = await import("./repositories/db/connection.js");
+    if (
+      (await hasRecordedEntityLifecycleCutover(await getDb())) &&
+      (await isEntityDeleted(entity_id, userId))
+    )
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+  } catch (err) {
+    logError("Error:get_entity_snapshot:authority", req, err);
+    return sendError(res, 500, "DB_QUERY_FAILED", "Entity lifecycle authority acquisition failed");
+  }
+
+  // No cutoffs: return the existing owned materialized factual snapshot.
   const { data, error } = await db
     .from("entity_snapshots")
     .select("*")
     .eq("entity_id", entity_id)
+    .eq("user_id", userId)
     .single();
 
   if (error) {
@@ -9555,8 +10362,25 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
-  return res.json(data);
+  return res.json(await withSnapshotDataOrigins(data, userId));
 });
+
+/**
+ * #2242: attach `data_origins` (observation_id → caller-claimed origin) for the
+ * observations a snapshot's field provenance cites. The key is omitted when no
+ * cited observation carries an origin, so pre-#2242 responses are unchanged.
+ * Mirrors MCP `retrieve_entity_snapshot`.
+ */
+async function withSnapshotDataOrigins<T extends { provenance?: unknown } | null>(
+  snapshot: T,
+  userId: string
+): Promise<T> {
+  if (!snapshot || typeof snapshot !== "object") return snapshot;
+  const { collectSnapshotDataOrigins } = await import("./services/provenance_data_origin.js");
+  const dataOrigins = await collectSnapshotDataOrigins(snapshot.provenance, userId);
+  if (Object.keys(dataOrigins).length === 0) return snapshot;
+  return { ...snapshot, data_origins: dataOrigins };
+}
 
 // List observations for entity
 app.post("/list_observations", async (req, res) => {
@@ -9570,7 +10394,14 @@ app.post("/list_observations", async (req, res) => {
 
   const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
 
-  let query = db.from("observations").select("*").eq("entity_id", entity_id);
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req);
+  } catch (err) {
+    return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
+  let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
 
   if (updated_since) {
     query = query.gte("observed_at", updated_since);
@@ -9607,11 +10438,21 @@ app.post("/get_field_provenance", async (req, res) => {
 
   const { entity_id, field } = parsed.data;
 
-  // Get snapshot to find observation ID for this field
+  let userId: string;
+  try {
+    userId = await getAuthenticatedUserId(req);
+  } catch (err) {
+    return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
+  }
+
+  // Get snapshot to find observation ID for this field. Every read below is
+  // scoped to the authenticated user; an entity outside that scope resolves
+  // exactly like one that does not exist.
   const { data: snapshot } = await db
     .from("entity_snapshots")
     .select("provenance")
     .eq("entity_id", entity_id)
+    .eq("user_id", userId)
     .single();
 
   if (!snapshot || !snapshot.provenance) {
@@ -9631,7 +10472,8 @@ app.post("/get_field_provenance", async (req, res) => {
   const { data: observations, error: obsError } = await db
     .from("observations")
     .select("*, source_id")
-    .in("id", observationIds);
+    .in("id", observationIds)
+    .eq("user_id", userId);
 
   if (obsError) {
     logError("DbError:get_field_provenance", req, obsError);
@@ -9645,8 +10487,9 @@ app.post("/get_field_provenance", async (req, res) => {
 
   const { data: sources, error: sourceError } = await db
     .from("sources")
-    .select("id, content_hash, mime_type, storage_url, file_name, created_at")
-    .in("id", sourceIds);
+    .select("id, content_hash, mime_type, storage_url, original_filename, created_at")
+    .in("id", sourceIds)
+    .eq("user_id", userId);
 
   if (sourceError) {
     logError("DbError:get_field_provenance:sources", req, sourceError);
@@ -9693,6 +10536,28 @@ app.post("/create_relationship", async (req, res) => {
     });
     return res.json(relationship);
   } catch (error) {
+    if (error instanceof UnregisteredRelationshipTypeError) {
+      return sendError(res, error.statusCode, error.code, error.message, {
+        relationship_type: error.relationshipType,
+        hint: error.hint,
+      });
+    }
+    if (error instanceof OwnedEntityNotFoundError) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message, {
+        entity_id: error.entityId,
+        hint:
+          "Both endpoints must be entities you own. Store the entity first, or in the " +
+          "same store call referenced by index, then link it.",
+      });
+    }
+    // Relationship-type + endpoint-type capability refusal, raised inside
+    // relationshipsService.createRelationship (the shared edge-write gate).
+    if (error instanceof AgentCapabilityError) {
+      logWarn("AgentCapabilityRejection:create_relationship", req, error.toErrorEnvelope());
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
     logError("RelationshipCreationError:create_relationship", req, error);
     return sendError(
       res,
@@ -9735,11 +10600,19 @@ app.post("/create_relationships", async (req, res) => {
           ...snapshot,
         });
       } catch (error) {
-        errors.push({
+        const item: Record<string, unknown> = {
           index,
           relationship,
           error: error instanceof Error ? error.message : String(error),
-        });
+        };
+        // Batch semantics stay HTTP 200 so successful siblings are retained,
+        // but a capability denial must keep the same machine-actionable repair
+        // contract as the single-item endpoint. Agents rely on code/op/hint;
+        // reducing this to error.message turns a recoverable refusal opaque.
+        if (error instanceof AgentCapabilityError) {
+          Object.assign(item, error.toErrorEnvelope());
+        }
+        errors.push(item);
       }
     }
 
@@ -9918,9 +10791,32 @@ app.get("/get_file_url", async (req, res) => {
   }
   const { file_path, expires_in } = parsed.data;
 
-  const parts = file_path.split("/");
-  const bucket = parts[0];
-  const path = parts.slice(1).join("/");
+  // Only sign a path that belongs to one of the caller's own sources. A path
+  // owned by another user gets the same response as one that does not exist.
+  // What gets signed is the matched row's stored location in the sources
+  // bucket, never the caller's string.
+  let ownedStorageKey: string;
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const { getOwnedSourceByStoragePath } = await import("./services/scoped_reads.js");
+    const owned = await getOwnedSourceByStoragePath(file_path, userId);
+    if (!owned) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "File not found");
+    }
+    ownedStorageKey = owned.storage_url;
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to create signed URL",
+      "DB_QUERY_FAILED",
+      "APIError:get_file_url"
+    );
+  }
+
+  const bucket = SOURCES_STORAGE_BUCKET;
+  const path = ownedStorageKey;
 
   const { data, error } = await db.storage.from(bucket).createSignedUrl(path, expires_in || 3600);
   if (error || !data?.signedUrl) {
@@ -10653,9 +11549,13 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
         since: parsed.data.since,
         state: parsed.data.state,
         labels: parsed.data.labels,
+        repo: parsed.data.repo,
         push: parsed.data.push,
+        commit: parsed.data.commit,
       });
       logDebug("Success:issues_sync", req, {
+        repo: result.repo,
+        dry_run: result.dry_run,
         issues_synced: result.issues_synced,
         messages_synced: result.messages_synced,
         issues_pushed: result.issues_pushed,
@@ -10698,6 +11598,10 @@ app.post("/restore_entity", async (req, res) => {
     const result = await restoreEntity(entity_id, entity_type, userId, reason);
 
     if (!result.success) {
+      if (result.not_found) {
+        // Same response for a missing entity and another user's entity.
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", result.error || "Entity not found");
+      }
       return sendError(res, 500, "RESTORE_FAILED", result.error || "Failed to restore entity");
     }
 
@@ -10760,6 +11664,17 @@ app.post("/delete_relationship", async (req, res) => {
         }
       );
     }
+
+    // Tombstoning a live edge changes the same relationship state that the
+    // create/restore capability governs. Enforce the admitted grant after the
+    // discovery guard (so a missing edge stays not-found) and before writing
+    // the deletion observation.
+    const { enforceCurrentAgentRelationshipWrites } =
+      await import("./services/relationship_write_capability.js");
+    await enforceCurrentAgentRelationshipWrites({
+      userId,
+      relationships: [{ relationship_type, source_entity_id, target_entity_id }],
+    });
 
     const { softDeleteRelationship } = await import("./services/deletion.js");
 
@@ -10826,6 +11741,11 @@ app.post("/restore_relationship", async (req, res) => {
     );
 
     if (!result.success) {
+      if (result.not_found) {
+        // Restore only revives a relationship the caller already holds. A
+        // missing relationship and another user's get the same response.
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", result.error || "Relationship not found");
+      }
       return sendError(
         res,
         500,
@@ -10841,6 +11761,12 @@ app.post("/restore_relationship", async (req, res) => {
     });
     return res.json({ success: true, observation_id: result.observation_id });
   } catch (error) {
+    if (error instanceof UnregisteredRelationshipTypeError) {
+      return sendError(res, error.statusCode, error.code, error.message, {
+        relationship_type: error.relationshipType,
+        hint: error.hint,
+      });
+    }
     return handleApiError(
       req,
       res,
@@ -11048,13 +11974,82 @@ app.post("/update_schema_incremental", async (req, res) => {
       fields_to_remove,
       canonical_name_fields,
       schema_version,
-      user_specific = false,
+      // #2374: no local `= false` default. `user_specific` stays
+      // `undefined` when the caller omitted it, so `updateSchemaIncremental`
+      // can defer to whichever scope its own read resolved instead of being
+      // told "global" by a default this route manufactured.
+      user_specific,
       activate = true,
       migrate_existing = false,
       force = false,
     } = parsed.data;
 
-    const { schemaRegistry } = await import("./services/schema_registry.js");
+    const { schemaRegistry, loadCodeDefinedSchemaEntry } =
+      await import("./services/schema_registry.js");
+
+    // #2454 / #2374 REST parity with the MCP handler: the existence guard
+    // resolves the SAME row `updateSchemaIncremental` will read —
+    // user-scope-preferred when `user_specific` is omitted or true,
+    // global-only when the caller explicitly passed `user_specific: false`.
+    // When the global-only lookup misses but a schema is active in the
+    // caller's user scope, return ERR_SCHEMA_SCOPE_MISMATCH — never
+    // ERR_NO_SCHEMA_FOR_ENTITY_TYPE with a register_schema hint.
+    const registeredSchema = await schemaRegistry.loadActiveSchema(
+      entity_type,
+      user_specific === false ? undefined : userId
+    );
+    if (!registeredSchema) {
+      const codeDefinedSchema = await loadCodeDefinedSchemaEntry(entity_type);
+      if (!codeDefinedSchema) {
+        const anyScopeSchema = await schemaRegistry.loadActiveSchema(entity_type, userId);
+        if (anyScopeSchema) {
+          const guardScope = user_specific === false ? "global" : "user";
+          const foundScope = anyScopeSchema.scope ?? "global";
+          return res.status(200).json({
+            error: {
+              error_code: "ERR_SCHEMA_SCOPE_MISMATCH",
+              message:
+                `An active schema for entity_type "${entity_type}" exists in ` +
+                `"${foundScope}" scope, but this call resolved schemas in "${guardScope}" scope ` +
+                "and found none there.",
+              hint:
+                `The existing SchemaDefinition for "${entity_type}" lives in ` +
+                `"${foundScope}" scope. This call did not check that scope because ` +
+                `user_specific was ${user_specific === false ? "false" : "true"}. ` +
+                "This entity_type already has an active schema — creating a second one for it " +
+                "risks leaving two active schema_registry rows for the same entity_type (see " +
+                "#2374/#2378), after which the next incremental update can merge onto stale " +
+                "state and drop fields. Instead, retry update_schema_incremental without " +
+                "user_specific (the call then writes to whichever scope your schema resolves " +
+                `to), or with user_specific: ${foundScope === "user"}.`,
+              details: {
+                entity_type,
+                guard_scope: guardScope,
+                found_scope: foundScope,
+              },
+            },
+          });
+        }
+
+        return res.status(200).json({
+          error: {
+            error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+            message: `No schema is registered for entity_type "${entity_type}".`,
+            hint:
+              "No schema is registered for this entity_type. " +
+              "update_schema_incremental requires an existing SchemaDefinition to extend. " +
+              "Call register_schema first with a full schema_definition that includes " +
+              "canonical_name_fields (or identity_opt_out), then optionally call " +
+              "update_schema_incremental to add more fields. " +
+              "Use analyze_schema_candidates to get field suggestions before registering.",
+            details: {
+              entity_type,
+              no_schema_for_entity_type: true,
+            },
+          },
+        });
+      }
+    }
 
     let newSchema;
     try {
@@ -11071,9 +12066,20 @@ app.post("/update_schema_incremental", async (req, res) => {
         canonical_name_fields,
         schema_version,
         user_specific,
+        // #2374: pass userId unconditionally — same reasoning as the MCP
+        // handler. The service resolves scope from its own read, not from
+        // whether this route pre-gated userId on user_specific.
         user_id: userId,
         activate,
         migrate_existing,
+        // migrate_existing must scope to the authenticated caller so
+        // raw_fragments stored by this user are promoted, matching the MCP
+        // handler's migrate_user_id wiring (#2379 note: REST previously
+        // relied solely on the service's `migrate_user_id ?? user_id`
+        // fallback, which happened to cover this route, but stating it
+        // explicitly here keeps the two surfaces in parity rather than
+        // coincidentally agreeing).
+        migrate_user_id: migrate_existing ? userId : undefined,
         force,
       });
     } catch (err) {
@@ -11084,22 +12090,40 @@ app.post("/update_schema_incremental", async (req, res) => {
       throw err;
     }
 
+    // #2379: derive migrated_existing from the ACTUAL result, never from
+    // the `migrate_existing` request flag.
+    const migrationResult = newSchema.migration_result;
+    // #2374: report the scope actually written, read off the persisted row.
+    const scopeWritten = newSchema.scope === "user" ? "user" : "global";
+
     logDebug("Success:update_schema_incremental", req, {
       entity_type,
       fields_added: (fields_to_add || []).length,
       fields_removed: (fields_to_remove || []).length,
       migrate_existing,
+      migrated_existing: (migrationResult?.migrated_count ?? 0) > 0,
+      scope: scopeWritten,
     });
     return res.json({
       success: true,
       schema: newSchema,
       schema_version: newSchema.schema_version,
+      fields_added: (fields_to_add || []).map((f) => f.field_name),
       fields_removed: fields_to_remove || [],
       // Echo the resolved identity rule so CLI/HTTP callers can confirm the
       // re-key without a second describe_entity_type round trip (#2020 ux).
       canonical_name_fields:
         (newSchema.schema_definition as { canonical_name_fields?: unknown })
           .canonical_name_fields ?? null,
+      activated: activate,
+      // #2379: true only when the migration actually promoted something.
+      migrated_existing: (migrationResult?.migrated_count ?? 0) > 0,
+      // Present only when migrate_existing was requested this call.
+      ...(migrationResult ? { migration_result: migrationResult } : {}),
+      // #2374: the scope this call actually wrote to, read off the
+      // persisted row rather than re-derived from the request.
+      scope: scopeWritten,
+      ...(scopeWritten === "user" ? { user_id: newSchema.user_id ?? null } : {}),
     });
   } catch (error) {
     return handleApiError(
@@ -11119,6 +12143,168 @@ app.post("/update_schema_incremental", async (req, res) => {
 // reducer_config are validated consistently across CLI, MCP and HTTP, and
 // schema-level declarations (canonical_name_fields, temporal_fields,
 // reference_fields, aliases) are rejected early when malformed.
+/**
+ * Relationship-type registry over REST (#1972 / G25).
+ *
+ * The census: types this instance PERMITS, not types that have edges. Mirrors
+ * the MCP `list_relationship_types` handler so both surfaces read one registry.
+ */
+app.post("/list_relationship_types", async (req, res) => {
+  const parsed = z
+    .object({
+      keyword: z.string().optional(),
+      scope: z.enum(["user", "global"]).optional(),
+      include_deactivated: z.boolean().optional(),
+      include_edge_counts: z.boolean().optional(),
+      user_id: z.string().optional(),
+    })
+    .safeParse(req.body ?? {});
+  if (!parsed.success) {
+    logWarn("ValidationError:list_relationship_types", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { relationshipTypeRegistry } = await import("./services/relationship_types/registry.js");
+
+    const registrations = await relationshipTypeRegistry.list({
+      user_id: userId,
+      keyword: parsed.data.keyword,
+      scope: parsed.data.scope,
+      include_deactivated: parsed.data.include_deactivated,
+    });
+
+    // edge_count means "rows written" and is never evidence of registration —
+    // conflating the two is the confusion this endpoint exists to end.
+    const edgeCounts = new Map<string, number>();
+    if (parsed.data.include_edge_counts) {
+      const { data } = await db
+        .from("relationship_snapshots")
+        .select("relationship_type")
+        .eq("user_id", userId);
+      for (const row of (data ?? []) as Array<{ relationship_type: string }>) {
+        edgeCounts.set(row.relationship_type, (edgeCounts.get(row.relationship_type) ?? 0) + 1);
+      }
+    }
+
+    // #2482: mirror the MCP handler — never a bare `{ relationship_types: [],
+    // total: 0 }`. See `RelationshipTypeRegistryService.describeEmpty`.
+    const emptyReason =
+      registrations.length === 0
+        ? await relationshipTypeRegistry.describeEmpty({
+            user_id: userId,
+            keyword: parsed.data.keyword,
+            scope: parsed.data.scope,
+            include_deactivated: parsed.data.include_deactivated,
+          })
+        : null;
+
+    return res.json({
+      relationship_types: registrations.map((r) => ({
+        ...r,
+        ...(parsed.data.include_edge_counts
+          ? { edge_count: edgeCounts.get(r.relationship_type) ?? 0 }
+          : {}),
+      })),
+      total: registrations.length,
+      ...(emptyReason ? { empty_reason: emptyReason.empty_reason, hint: emptyReason.hint } : {}),
+    });
+  } catch (err) {
+    return handleApiError(
+      req,
+      res,
+      err,
+      "Failed to list relationship types",
+      "DB_QUERY_FAILED",
+      "list_relationship_types"
+    );
+  }
+});
+
+/**
+ * Register a relationship type over REST (#1972 / G25).
+ *
+ * Authorization runs in the service layer before any state mutation, so this
+ * surface and the MCP one inherit the same check rather than each carrying
+ * their own.
+ */
+app.post("/register_relationship_type", async (req, res) => {
+  const parsed = z
+    .object({
+      relationship_type: z.string(),
+      description: z.string().optional(),
+      // Defaults to "user" — the safe branch, inverting register_schema.
+      scope: z.enum(["user", "global"]).default("user"),
+      source_entity_types: z.array(z.string()).optional(),
+      target_entity_types: z.array(z.string()).optional(),
+      inverse: z.string().optional(),
+      symmetric: z.boolean().optional(),
+      acyclic: z.boolean().optional(),
+      user_id: z.string().optional(),
+    })
+    .safeParse(req.body ?? {});
+  if (!parsed.success) {
+    logWarn("ValidationError:register_relationship_type", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const { user_id: requestedUserId, ...registration } = parsed.data;
+    const userId = await getAuthenticatedUserId(req, requestedUserId);
+
+    {
+      const { enforceRelationshipTypeCapabilityWithHint, contextFromAgentIdentity } =
+        await import("./services/agent_capabilities.js");
+      const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
+      await enforceRelationshipTypeCapabilityWithHint(
+        registration.relationship_type,
+        registration.scope,
+        ctx
+      );
+    }
+
+    const { relationshipTypeRegistry, RelationshipTypeRegistrationError } =
+      await import("./services/relationship_types/registry.js");
+
+    try {
+      const result = await relationshipTypeRegistry.register({
+        ...registration,
+        // Recorded on global rows too, unlike register_schema.
+        created_by: userId,
+        user_id: userId,
+      });
+      logDebug("Success:register_relationship_type", req, {
+        relationship_type: result.relationship_type,
+        scope: result.scope,
+      });
+      return res.json({
+        success: true,
+        relationship_type: result.relationship_type,
+        scope: result.scope,
+        state: result.state,
+        registry_version: result.registry_version,
+        registered_at: result.registered_at,
+      });
+    } catch (err) {
+      if (err instanceof RelationshipTypeRegistrationError) {
+        logWarn("ValidationError:register_relationship_type", req, { error: err.message });
+        return sendError(res, err.statusCode, err.code, err.message, { hint: err.hint });
+      }
+      throw err;
+    }
+  } catch (err) {
+    return handleApiError(
+      req,
+      res,
+      err,
+      "Failed to register relationship type",
+      "DB_QUERY_FAILED",
+      "register_relationship_type"
+    );
+  }
+});
+
 app.post("/register_schema", async (req, res) => {
   const parsed = RegisterSchemaRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -11185,7 +12371,14 @@ app.post("/register_schema", async (req, res) => {
 
     if (activate) {
       try {
-        await schemaRegistry.activate(entity_type, newSchema.schema_version);
+        // #2356: name the principal when the registration was user-scoped, so
+        // activation lands on that user's row rather than resolving scope from
+        // an unscoped (entity_type, version) lookup that can match either row.
+        await schemaRegistry.activate(
+          entity_type,
+          newSchema.schema_version,
+          user_specific ? userId : undefined
+        );
       } catch (err) {
         logWarn("ActivateError:register_schema", req, {
           error: err instanceof Error ? err.message : String(err),
@@ -11212,6 +12405,28 @@ app.post("/register_schema", async (req, res) => {
 });
 
 // POST /correct - Create correction observation to override field value
+app.post("/corrections/transaction", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.body?.user_id as string | undefined);
+    const { applyCorrectionTransaction, CorrectionTransactionError } =
+      await import("./services/correction_transaction.js");
+    try {
+      return res.json(await applyCorrectionTransaction({ ...req.body, user_id: userId }));
+    } catch (error) {
+      if (error instanceof CorrectionTransactionError) {
+        const status =
+          error.code === "VALIDATION_ERROR" ? 400 : error.code === "RESOURCE_NOT_FOUND" ? 404 : 409;
+        return sendError(res, status, error.code, error.message, {
+          hint: "Read current entity snapshots and resolve conflicts; retry an uncertain request with exactly the original payload and key.",
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    return handleApiError(req, res, error, "Correction transaction failed and was rolled back.");
+  }
+});
+
 app.post("/correct", async (req, res) => {
   const parsed = CorrectEntityRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -11223,7 +12438,8 @@ app.post("/correct", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
+    const { entity_id, entity_type, field, value, idempotency_key, expected_version, overwrite } =
+      parsed.data;
 
     const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
     if (correctCtx) {
@@ -11242,13 +12458,17 @@ app.post("/correct", async (req, res) => {
     // propagates (it is NOT coerced to "declared field" — product principle
     // 10.2); a missing schema throws CorrectionSchemaNotFoundError, surfaced as
     // ERR_NO_SCHEMA_FOR_ENTITY_TYPE. Both reach the catch below.
-    const { createCorrection, resolveCorrectionSchema, buildCorrectionResponse } =
-      await import("./services/correction.js");
+    const {
+      createCorrection,
+      createCorrectionWithVersionPrecondition,
+      resolveCorrectionSchema,
+      buildCorrectionResponse,
+    } = await import("./services/correction.js");
 
     const { schemaVersion: correctionSchemaVersion, isUnknownField } =
       await resolveCorrectionSchema(entity_type, field, userId);
 
-    const result = await createCorrection({
+    const correctionParams = {
       entity_id,
       entity_type,
       field,
@@ -11256,7 +12476,15 @@ app.post("/correct", async (req, res) => {
       schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
-    });
+    };
+    const result =
+      typeof expected_version === "string"
+        ? await createCorrectionWithVersionPrecondition({
+            ...correctionParams,
+            expected_version,
+            overwrite,
+          })
+        : await createCorrection(correctionParams);
 
     if (isUnknownField) {
       try {
@@ -11292,8 +12520,10 @@ app.post("/correct", async (req, res) => {
         entity_id,
         entity_type,
         field,
-        value,
+        value: result.value,
         isUnknownField,
+        replayed: result.replayed,
+        entity_version: result.entity_version,
       }),
     });
   } catch (error) {
@@ -11301,12 +12531,53 @@ app.post("/correct", async (req, res) => {
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500
     // handler below instead of being coerced into a "declared field" outcome.
-    const { CorrectionSchemaNotFoundError } = await import("./services/correction.js");
+    const {
+      CorrectionSchemaNotFoundError,
+      CorrectionEntityTypeMismatchError,
+      CorrectionIdempotencyMismatchError,
+      FieldVersionConflictError,
+    } = await import("./services/correction.js");
     if (error instanceof CorrectionSchemaNotFoundError) {
       logWarn("ValidationError:correct", req, { code: error.code });
       return res
         .status(400)
         .json(buildErrorEnvelope(error.code, error.message, { entity_type: error.entityType }));
+    }
+    if (error instanceof CorrectionEntityTypeMismatchError) {
+      logWarn("ValidationError:correct", req, { code: error.code });
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          entity_id: error.entityId,
+          supplied_entity_type: error.suppliedEntityType,
+          stored_entity_type: error.storedEntityType,
+        })
+      );
+    }
+    if (error instanceof CorrectionIdempotencyMismatchError) {
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          idempotency_key: error.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct correction payload.",
+        })
+      );
+    }
+    // Waxwing ADR: stale expected_version on /correct. Nothing was written —
+    // the precondition check runs before createCorrection. Flat standard
+    // envelope (error_code/message/details), matching the OpenAPI contract
+    // and the sibling ERR_ARRAY_ITEM_CONFLICT 409 on /patch_array_item — NOT
+    // wrapped under an `error` key (that shape is reserved for envelopes
+    // like entity_owner_conflict that predate the standard envelope).
+    if (error instanceof FieldVersionConflictError) {
+      logWarn("VersionConflict:correct", req, { code: error.code, field: error.field });
+      return res.status(409).json(
+        buildErrorEnvelope(error.code, error.message, {
+          entity_id: error.entityId,
+          field: error.field,
+          stored_version: error.storedVersion,
+          expected_version: error.expectedVersion,
+          hint: "Re-read the entity snapshot and retry with its current entity_version as expected_version.",
+        })
+      );
     }
     // Instance store-policy denial (#1975) — same envelope as /store, so a
     // caller handling one handles both.
@@ -11325,6 +12596,167 @@ app.post("/correct", async (req, res) => {
       "Failed to create correction",
       "DB_QUERY_FAILED",
       "APIError:correct"
+    );
+  }
+});
+
+// POST /patch_array_item - Atomically patch one item of a structured array
+// field by key (Waxwing ADR, ent_4b41bb83a4faf4428a73bfc8). Sibling of
+// /correct; see openapi.yaml for the full contract.
+app.post("/patch_array_item", writeRateLimit, async (req, res) => {
+  const parsed = PatchArrayItemRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:patch_array_item", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const {
+      entity_id,
+      entity_type,
+      field,
+      key_field,
+      key_value,
+      item,
+      expected_item_version,
+      expected_item_absent,
+    } = parsed.data;
+
+    // Resolve the authoritative entity type under the authenticated user
+    // before capability/protected-type checks. The request's entity_type is a
+    // consistency assertion, never an authorization input.
+    const { loadArrayItemPatchTarget } = await import("./services/array_item_patch.js");
+    const target = await loadArrayItemPatchTarget({
+      entityId: entity_id,
+      userId,
+      suppliedEntityType: entity_type,
+    });
+
+    const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+    if (correctCtx) {
+      enforceAgentCapability("correct", [target.entity_type], correctCtx);
+    }
+    assertCanWriteProtectedBatch({
+      entity_types: [target.entity_type],
+      op: "correct",
+      identity: getCurrentAgentIdentity(),
+      admission: getCurrentAAuthAdmission(),
+    });
+
+    const { patchArrayItem } = await import("./services/array_item_patch.js");
+    const result = await patchArrayItem({
+      entity_id,
+      entity_type,
+      user_id: userId,
+      field,
+      key_field,
+      key_value,
+      item,
+      expected_item_version,
+      expected_item_absent,
+      idempotency_key: parsed.data.idempotency_key,
+    });
+
+    if (result.status === "conflict") {
+      logWarn("VersionConflict:patch_array_item", req, { entity_id, field, key_field });
+      return res.status(409).json(
+        buildErrorEnvelope(
+          "ERR_ARRAY_ITEM_CONFLICT",
+          `Stale expected_item_version for ${entity_type}.${field}[${key_field}=${JSON.stringify(key_value)}]`,
+          {
+            entity_id,
+            entity_type,
+            field,
+            key_field,
+            key_value,
+            current_item: result.conflict?.current_item ?? null,
+            current_item_version: result.conflict?.current_item_version ?? null,
+            expected_item_version: result.conflict?.expected_item_version ?? null,
+            expected_item_absent: expected_item_absent ?? false,
+            hint: "Re-apply the intended change to current_item and retry with current_item_version as expected_item_version.",
+          }
+        )
+      );
+    }
+
+    return res.json({
+      success: true,
+      entity_id: result.entity_id,
+      entity_type: result.entity_type,
+      field: result.field,
+      key_field: result.key_field,
+      key_value: result.key_value,
+      observation_id: result.observation_id,
+      item: result.item,
+      item_version: result.item_version,
+      array_length: result.array_length,
+      snapshot: result.snapshot,
+      replayed: result.replayed ?? false,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Entity not found")) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
+    }
+    const { CorrectionIdempotencyMismatchError } = await import("./services/correction.js");
+    if (error instanceof CorrectionIdempotencyMismatchError) {
+      return res.status(400).json(
+        buildErrorEnvelope(error.code, error.message, {
+          idempotency_key: error.idempotencyKey,
+          hint: "Use a new idempotency_key for a distinct patch payload.",
+        })
+      );
+    }
+    if (error instanceof EntityOwnerConflictError) {
+      return res.status(409).json({ error: error.toErrorEnvelope() });
+    }
+    {
+      const {
+        ArrayItemKeyFieldMismatchError,
+        ArrayItemPolicyRequiredError,
+        ArrayItemEntityTypeMismatchError,
+      } = await import("./services/array_item_patch.js");
+      if (
+        error instanceof ArrayItemKeyFieldMismatchError ||
+        error instanceof ArrayItemPolicyRequiredError ||
+        error instanceof ArrayItemEntityTypeMismatchError
+      ) {
+        logWarn("KeyFieldMismatch:patch_array_item", req, {
+          code: error.code,
+        });
+        return res
+          .status(error.statusCode)
+          .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+      }
+    }
+    // Instance store-policy denial (#1975) — patchArrayItem() writes through
+    // createCorrection exactly like /correct, so it can be refused by the
+    // same instance-level write policy. Same envelope shape as /correct and
+    // /store, so a caller handling one handles all three.
+    const { StorePolicyDeniedError } = await import("./services/instance_policy.js");
+    if (error instanceof StorePolicyDeniedError) {
+      logWarn("StorePolicyDenied:patch_array_item", req, {
+        denied_count: error.denied.length,
+        reason_codes: [...new Set(error.denied.map((d) => d.reason_code))].sort(),
+      });
+      return res.status(400).json({ error: error.toErrorEnvelope() });
+    }
+    if (error instanceof StorePolicyUnavailableError) {
+      logError("StorePolicyUnavailable:patch_array_item", req, error, {
+        code: error.code,
+        cause: error.cause_message,
+      });
+      return res
+        .status(503)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to patch array item",
+      "DB_QUERY_FAILED",
+      "APIError:patch_array_item"
     );
   }
 });
@@ -11492,9 +12924,45 @@ app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
+    if (guestScope !== null) {
+      // A scoped guest may only subscribe to entity_ids its own token names —
+      // never a type-/event-only firehose over the owner's whole graph, and
+      // never an entity_id outside its grant (issue: guest-capable
+      // subscription routes must scope to the token owner's own subscriptions
+      // and event feed).
+      const requested = parsed.data.entity_ids ?? [];
+      const granted = new Set(guestScope);
+      const withinScope = requested.length > 0 && requested.every((id) => granted.has(id));
+      if (!withinScope) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access token does not grant entity_ids for this subscription"
+        );
+      }
+      // Guest delivery must stay bound to the guest credential's lifetime.
+      // Only SSE delivery revalidates the token on every event; webhook and
+      // peer-sync delivery run server-side with no credential attached, so a
+      // guest may not create them.
+      if (parsed.data.delivery_method !== "sse") {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access tokens may only create subscriptions with delivery_method sse"
+        );
+      }
+      if (parsed.data.sync_peer_id !== undefined) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access tokens may not attach a subscription to a sync peer"
+        );
+      }
+    }
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     const result = await subscribeUser({
       userId,
@@ -11534,10 +13002,23 @@ app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
-    const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
+    const { unsubscribeUser, getSubscriptionStatus } =
+      await import("./services/subscriptions/subscription_actions.js");
+    if (guestScope !== null) {
+      const target = await getSubscriptionStatus({
+        userId,
+        subscription_id: parsed.data.subscription_id,
+      });
+      if (!target || !subscriptionWithinGuestScope(guestScope, target.watch_entity_ids)) {
+        return sendError(
+          res,
+          403,
+          "FORBIDDEN",
+          "Guest access token does not grant access to this subscription"
+        );
+      }
+    }
     await unsubscribeUser({ userId, subscription_id: parsed.data.subscription_id });
     return res.json({ success: true });
   } catch (error) {
@@ -11561,13 +13042,15 @@ app.post("/list_subscriptions", async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
     const { listSubscriptionsForUser, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const rows = await listSubscriptionsForUser(userId);
-    return res.json({ subscriptions: rows.map(redactSubscriptionForClient) });
+    const scoped =
+      guestScope === null
+        ? rows
+        : rows.filter((row) => subscriptionWithinGuestScope(guestScope, row.watch_entity_ids));
+    return res.json({ subscriptions: scoped.map(redactSubscriptionForClient) });
   } catch (error) {
     return handleApiError(
       req,
@@ -11592,16 +13075,17 @@ app.post("/get_subscription_status", async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, parsed.data.user_id));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
     const { getSubscriptionStatus, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const row = await getSubscriptionStatus({
       userId,
       subscription_id: parsed.data.subscription_id,
     });
-    if (!row) {
+    if (
+      !row ||
+      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, row.watch_entity_ids))
+    ) {
       return res.json({ subscription: null });
     }
     return res.json({ subscription: redactSubscriptionForClient(row) });
@@ -11741,9 +13225,7 @@ app.get("/events/stream", async (req, res) => {
   }
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
-    const userId =
-      (await resolveGuestUserId(req, principal)) ??
-      (await getAuthenticatedUserId(req, req.query.user_id as string | undefined));
+    const { userId, entityIds: guestScope } = await resolveGuestSubscriptionScope(req, principal);
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
     const { registerSseClient, getRingEntriesAfter, ringHasId } =
@@ -11754,7 +13236,10 @@ app.get("/events/stream", async (req, res) => {
       await import("./services/subscriptions/event_log.js");
 
     const sub = await getSubscriptionStatus({ userId, subscription_id });
-    if (!sub) {
+    if (
+      !sub ||
+      (guestScope !== null && !subscriptionWithinGuestScope(guestScope, sub.watch_entity_ids))
+    ) {
       return sendError(res, 404, "NOT_FOUND", "subscription not found");
     }
     if (!sub.active) {
@@ -11768,6 +13253,19 @@ app.get("/events/stream", async (req, res) => {
         "subscription must use delivery_method sse for this endpoint"
       );
     }
+
+    const guestAccessToken = principal.kind === "guest" ? principal.guestId.accessToken : undefined;
+    const authorize = guestAccessToken
+      ? async (): Promise<boolean> => {
+          const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+          const grant = await validateGuestAccessToken(guestAccessToken);
+          return (
+            grant !== null &&
+            grant.entity_ids.length > 0 &&
+            subscriptionWithinGuestScope(grant.entity_ids, sub.watch_entity_ids)
+          );
+        }
+      : undefined;
 
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -11790,7 +13288,9 @@ app.get("/events/stream", async (req, res) => {
     const writeEvent = (id: string, ev: SubstrateEvent): void => {
       res.write(`id: ${id}\n`);
       res.write(`event: ${ev.event_type}\n`);
-      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      // #2240: a guest stream never carries member write-attribution.
+      const payload = principal.kind === "guest" ? redactMemberAttribution(ev) : ev;
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
     if (lastEventId !== undefined && !ringHasId(lastEventId)) {
@@ -11850,16 +13350,26 @@ app.get("/events/stream", async (req, res) => {
       subscription: sub,
       res,
       lastEventId: lastEventId ?? undefined,
+      ...(authorize ? { authorize } : {}),
     };
     const unregister = registerSseClient(client);
 
     const heartbeat = setInterval(() => {
-      try {
-        res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
-      } catch {
-        clearInterval(heartbeat);
-        unregister();
-      }
+      void (async () => {
+        try {
+          if (authorize && !(await authorize())) {
+            clearInterval(heartbeat);
+            unregister();
+            res.end();
+            return;
+          }
+          res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
+        } catch {
+          clearInterval(heartbeat);
+          unregister();
+          res.end();
+        }
+      })();
     }, 25_000);
 
     req.on("close", () => {
@@ -11893,12 +13403,15 @@ app.post("/health_check_snapshots", async (req, res) => {
 
   try {
     const { auto_fix } = parsed.data;
+    // Scoped to the authenticated user, matching the MCP handler.
+    const userId = await getAuthenticatedUserId(req, undefined);
 
     // Query for stale snapshots (observation_count=0 but observations exist)
     const { data: staleSnapshots, error } = await db
       .from("entity_snapshots")
       .select("entity_id, entity_type, observation_count")
-      .eq("observation_count", 0);
+      .eq("observation_count", 0)
+      .eq("user_id", userId);
 
     if (error) {
       logError("DbError:health_check_snapshots", req, error);
@@ -11912,6 +13425,7 @@ app.post("/health_check_snapshots", async (req, res) => {
         .from("observations")
         .select("id")
         .eq("entity_id", snapshot.entity_id)
+        .eq("user_id", userId)
         .limit(1);
 
       if (!obsError && observations && observations.length > 0) {
@@ -11932,11 +13446,8 @@ app.post("/health_check_snapshots", async (req, res) => {
           // the declared layer, and null when the id is redirected — a
           // tombstone owns no snapshot, so auto-fix must skip it rather than
           // upsert the survivor's snapshot under the tombstone's id.
-          // `null` scope, deliberately: this endpoint's observation fetch was
-          // unscoped before #2343, and adding a user_id filter here would
-          // change which rows the reducer sees. Routing the fetch through the
-          // seam is this PR's job; tightening this endpoint's tenancy is not.
-          const observations = await resolveOwnedObservations(entity.entity_id, null);
+          // Scoped to the caller, as the MCP handler is.
+          const observations = await resolveOwnedObservations(entity.entity_id, userId);
           if (observations === null) {
             redirectedCount++;
             continue;
@@ -12248,13 +13759,66 @@ function assertRouteTableIsReachable(): void {
   assertNoShadowedRoutes(app);
 }
 
-/** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
-function tryListen(
-  port: number
+/**
+ * Resolve the host the HTTP listener should bind to.
+ *
+ * Defaults to loopback-only (`127.0.0.1`) so a self-hosted instance is never
+ * reachable from the LAN unless the operator explicitly opts in. Set
+ * `NEOTOMA_HTTP_HOST` (e.g. `0.0.0.0` for a Fly/Docker deployment fronted by
+ * its own auth, or a tunnel client) to bind elsewhere. This is the single
+ * source of truth for the bind host — `tryListen` passes this value straight
+ * to `app.listen`, and the boot-time sandbox-mode resolver below derives its
+ * `loopbackBindOnly` signal from the same value, so the two can no longer
+ * diverge the way they did prior to #<security-fix> (posture reported
+ * loopback while the socket was actually open on all interfaces).
+ */
+export function resolveHttpBindHost(env: NodeJS.ProcessEnv = process.env): string {
+  return resolveBindHostFromEnv("NEOTOMA_HTTP_HOST", env);
+}
+
+// Re-exported so existing importers of `isLoopbackHost` from this module keep
+// working; the implementation lives in `./shared/bind_host.ts`, which the
+// standalone MCP WebSocket bridge also uses.
+export { isLoopbackHost };
+
+/**
+ * Try to bind on a port/host; resolves with server and port, or rejects on
+ * error (e.g. EADDRINUSE).
+ *
+ * This is the actual sink that opens the listening socket, and it is an
+ * exported entry point in its own right (not merely an internal helper of
+ * `startHTTPServer` below) — so the loopback-only default must live HERE,
+ * not only in the sibling caller. Before this fix, `startHTTPServer` was the
+ * only thing applying `resolveHttpBindHost()`'s safe default; a caller that
+ * invoked `tryListen` directly with a missing/empty host (or `undefined`
+ * coming through a loosely-typed call site) fell straight through to
+ * `app.listen`, which binds all interfaces when `host` is falsy. That
+ * reopened the exact all-interfaces exposure the loopback default exists to
+ * close, just via a different entry point. See #<security-fix>.
+ */
+export function tryListen(
+  port: number,
+  host?: string | null
 ): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
+    const trimmedHost = typeof host === "string" ? host.trim() : "";
+    const effectiveHost = trimmedHost.length > 0 ? trimmedHost : resolveHttpBindHost();
+    if (effectiveHost.length === 0) {
+      // resolveHttpBindHost() itself defaults to "127.0.0.1" and can only
+      // return "" if that invariant is broken elsewhere — refuse rather than
+      // handing `app.listen` an empty host, which Node treats as "all
+      // interfaces" (the same failure mode this whole fix closes).
+      reject(
+        new Error(
+          "tryListen: refusing to bind with an unresolved host (resolveHttpBindHost() " +
+            "returned an empty string). Refusing rather than falling through to an " +
+            "all-interfaces bind."
+        )
+      );
+      return;
+    }
     assertRouteTableIsReachable();
-    const server = app.listen(port, () => {
+    const server = app.listen(port, effectiveHost, () => {
       // When `port === 0` the OS assigns an ephemeral port. We must report
       // the actually-bound port back to callers (the eval harness's
       // isolated server fixture writes it to NEOTOMA_SESSION_PORT_FILE so
@@ -12346,6 +13910,41 @@ export async function startHTTPServer() {
   } catch (err) {
     // Never block boot — a briefly-unavailable DB must not stop the server.
     logger.warn(`[SchemaRegistry] failed to seed built-in schemas: ${(err as Error).message}`);
+  }
+
+  // Seed the built-in relationship-type vocabulary (#1972 / G25).
+  //
+  // Runs immediately after the entity-schema seeder and BEFORE any request can
+  // be served, because `relationshipsService.createRelationship` now validates
+  // against this registry: an unseeded instance would refuse every edge,
+  // including PART_OF. Strictly additive — a type with any existing effective
+  // registration is left untouched, so an operator's deliberate registration
+  // or deregistration survives a redeploy.
+  try {
+    const { seedBuiltInRelationshipTypes } =
+      await import("./services/relationship_types/seed_registry.js");
+    const summary = await seedBuiltInRelationshipTypes();
+    if (summary.registered.length > 0) {
+      logger.info(
+        `[RelationshipTypes] seeded ${summary.registered.length} built-in type(s): ` +
+          `${summary.registered.join(", ")} (preserved ${summary.preserved.length} existing)`
+      );
+    } else {
+      logger.info(
+        `[RelationshipTypes] all ${summary.preserved.length} built-in relationship type(s) ` +
+          `already registered; nothing to seed`
+      );
+    }
+    if (summary.failed.length > 0) {
+      logger.warn(
+        `[RelationshipTypes] ${summary.failed.length} type(s) failed to seed: ` +
+          summary.failed.map((f) => `${f.relationship_type} (${f.error})`).join("; ")
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      `[RelationshipTypes] failed to seed built-in relationship types: ${(err as Error).message}`
+    );
   }
 
   // Seed `issue` schema for the GitHub Issues integration.
@@ -12442,19 +14041,21 @@ export async function startHTTPServer() {
   // (NEOTOMA_REQUIRE_AUTH=1). Future operator-config integration can
   // extend this without changing the resolver shape.
   //
-  // The bind topology is interpreted from the host the listener will use.
-  // express's app.listen(port) with no host binds to 0.0.0.0/::, which is
-  // explicitly non-loopback — that's the v0.11.1 advisory shape when no
-  // auth is configured. Operators on loopback-only deployments should set
-  // NEOTOMA_HTTP_HOST=127.0.0.1.
+  // The bind topology is interpreted from the host the listener will actually
+  // use. `resolveHttpBindHost()` defaults to `127.0.0.1` and is the SAME
+  // function `tryListen` below passes to `app.listen` — so this posture
+  // check can no longer drift from the real socket the way it did when this
+  // env var was read here but never forwarded to `listen()`. Operators who
+  // need LAN/tunnel reachability set NEOTOMA_HTTP_HOST=0.0.0.0 (or another
+  // explicit non-loopback host) as a deliberate opt-in; the actual bound
+  // address is re-verified against this value right after bind (see the
+  // `tryListen` call site below) and a mismatch is logged loudly rather than
+  // trusted silently.
   // ----------------------------------------------------------------------
   try {
-    const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
-    const loopbackBindOnly =
-      hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
-    const productionEnv =
-      (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
-      (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
+    const intendedHost = resolveHttpBindHost();
+    const loopbackBindOnly = isLoopbackHost(intendedHost);
+    const productionEnv = isProductionEnvironment();
     const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
     const refusePolicy = resolveRefusePolicy();
     const forceMode = resolveForceMode();
@@ -12514,8 +14115,28 @@ export async function startHTTPServer() {
       }
     }
   } catch (err) {
-    // Banner emission must never block boot in warn mode.
-    logger.warn(`[sandbox_mode] banner emission failed: ${(err as Error).message}`);
+    // This catch spans the WHOLE pre-bind sandbox-mode resolution, not just
+    // banner emission (the comment used to say only "banner emission" — the
+    // try-block above actually resolves the posture, decides shouldRefuseBoot,
+    // and can process.exit(1)). If resolution itself throws, the posture was
+    // NEVER determined at all: `_resolvedServerMode` is still whatever it was
+    // before this boot (typically `null`), so proceeding here means starting
+    // a listener with an unknown safety posture. Fail closed on that under
+    // `enforce`, since "we could not tell" carries the same risk as "refuse".
+    // Under `warn` (default), stay loud but non-fatal like every other
+    // refuse+warn path in this file — untested self-host configs must not be
+    // locked out by an unrelated resolution error.
+    logger.warn(
+      `[sandbox_mode] pre-bind posture resolution failed (mode is UNRESOLVED, not assumed safe): ${(err as Error).message}`
+    );
+    if (resolveRefusePolicy() === "enforce") {
+      process.stderr.write(
+        `\n[neotoma] FATAL: sandbox-mode posture could not be resolved before bind ` +
+          `(${(err as Error).message}) and NEOTOMA_REFUSE_MODE=enforce. Refusing to start ` +
+          `with an unknown safety posture. Exit code 1.\n\n`
+      );
+      process.exit(1);
+    }
   }
 
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
@@ -12527,10 +14148,80 @@ export async function startHTTPServer() {
   // ephemeral ports to avoid colliding with the operator's dev server.
   const triesLimit = basePort === 0 ? 1 : maxTries;
 
+  const bindHost = resolveHttpBindHost();
+
   for (let offset = 0; offset < triesLimit; offset++) {
     const port = basePort + offset;
     try {
-      const { server, port: boundPort } = await tryListen(port);
+      const { server, port: boundPort } = await tryListen(port, bindHost);
+
+      // Re-derive the sandbox-mode posture from the ACTUAL bound address
+      // rather than trusting the pre-bind intent above. `server.address()`
+      // is only available after `listen` resolves, which is why the earlier
+      // banner emission (needed pre-bind so `refuse`+`enforce` can abort
+      // before the socket opens) uses `resolveHttpBindHost()` intent instead.
+      // Both now read the same source of truth, so they should always agree;
+      // this check exists to catch the rare case where Node's own address
+      // normalization (e.g. IPv6 mapping) makes the bound address disagree
+      // with the requested host, so the reported posture never silently
+      // outlives the reality it describes.
+      //
+      // Unlike the pre-bind check, the socket is ALREADY OPEN here. A
+      // `refuse`+`enforce` verdict discovered at this point must still stop
+      // the process from serving — the fix is not "log it", it is "close the
+      // socket, then exit" so nothing else in this function can proceed to
+      // register the port file / log "listening" / accept a connection.
+      let refuseAfterBind: { reason: string } | null = null;
+      try {
+        const boundHost = extractBoundHost(server.address());
+        const decision = decidePostureReconciliation({
+          boundHost,
+          intendedHost: bindHost,
+          refusePolicy: resolveRefusePolicy(),
+          isLoopbackHost,
+          resolve: (loopbackBindOnly) =>
+            resolveSandboxMode({
+              authConfigured: (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1",
+              loopbackBindOnly,
+              productionEnv:
+                (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
+                (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod",
+              hostedSandboxEnabled: isSandboxMode(),
+              refusePolicy: resolveRefusePolicy(),
+              forceMode: resolveForceMode(),
+            }),
+        });
+        if (decision.verdict) {
+          _resolvedServerMode = decision.verdict.mode;
+        }
+        if (decision.shouldRefuseAndClose) {
+          logger.error(`[sandbox_mode] ${decision.reason}`);
+          refuseAfterBind = { reason: decision.reason };
+        } else if (decision.reason !== "bound host matches intended posture") {
+          logger.warn(`[sandbox_mode] ${decision.reason}`);
+        }
+      } catch (err) {
+        // The posture could not be re-derived AT ALL after bind — this is
+        // "unknown", not "safe". Under `enforce`, unknown must not be
+        // allowed to keep serving on an already-open socket; under `warn`,
+        // stay loud but non-fatal like the resolver's own refuse+warn path.
+        const message = `post-bind posture reconciliation failed (posture is UNKNOWN, not assumed safe): ${(err as Error).message}`;
+        logger.error(`[sandbox_mode] ${message}`);
+        if (resolveRefusePolicy() === "enforce") {
+          refuseAfterBind = { reason: message };
+        }
+      }
+
+      if (refuseAfterBind) {
+        process.stderr.write(
+          `\n[neotoma] FATAL: ${refuseAfterBind.reason}\n` +
+            `[neotoma] NEOTOMA_REFUSE_MODE=enforce — closing the listening socket and exiting. ` +
+            `Exit code 1.\n\n`
+        );
+        await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+        process.exit(1);
+      }
+
       if (portFile) {
         fs.writeFileSync(portFile, String(boundPort), "utf-8");
       }
@@ -12559,9 +14250,133 @@ export async function startHTTPServer() {
   }
 }
 
+/**
+ * Structured, best-effort snapshot of the reader pool for the abandoned-abort
+ * diagnostic below (#2483). `peekCachedDb()` never opens a connection and
+ * `readerPoolStats()` is an `@internal` method that only the worker-hosted
+ * (`libsql`) backend implements — duck-typed rather than imported by type, so
+ * a backend without it (or not yet opened) degrades to `null` instead of
+ * throwing from inside a crash handler.
+ */
+function readerPoolSnapshotForDiagnostics(): unknown {
+  try {
+    const current = peekCachedDb() as { readerPoolStats?: () => unknown } | null;
+    if (current && typeof current.readerPoolStats === "function") {
+      return current.readerPoolStats();
+    }
+  } catch {
+    // Diagnostics must never themselves throw or mask the original error.
+  }
+  return null;
+}
+
+/**
+ * Handle an unhandled promise rejection, narrowly for the abandoned-read abort
+ * that crash-looped hosted Neotoma on 2026-09-23 (#2483).
+ *
+ * `guardAbandonedRead` (worker_file_database.ts) attaches a no-op `.catch()`
+ * to every read on the reader pool so a caller who is still listening keeps
+ * getting the real rejection while an abandoned one cannot become unhandled.
+ * That guard is provably complete for every read reachable through
+ * `WorkerStatement` — the prior investigation on #2483 traced every read path
+ * to it and found no fire-and-forget read outside the pattern — but the
+ * production trace shows an unhandled `WorkerDbAbortError` reaching here
+ * anyway, so some path derives a promise the guard never sees (`dispatchRead`,
+ * added by #2338, is the leading suspect per that investigation).
+ *
+ * Because the leaking path is unknown, this contains the SYMPTOM rather than
+ * the cause: log everything needed to find it, and let the process live,
+ * WITHOUT widening the class of error this applies to. `instanceof` (not a
+ * message-substring match) keeps the scope to exactly the one error type this
+ * incident is about — any other unhandled rejection falls through to `handler`
+ * unchanged and exits exactly as it does today. This is deliberately NOT a
+ * general `unhandledRejection` policy: a corrupt migration or an OOM must
+ * still crash the process, as the guard's own doc comment says.
+ *
+ * Returns true when it handled (and thus suppressed) the rejection, so the
+ * caller can decide whether to fall through to prior behavior — kept as a
+ * plain function, rather than registering its own `process.on` listener, so
+ * it composes with whatever the process already does for every other
+ * rejection instead of racing a second competing handler.
+ */
+export function handleAbandonedAbortRejection(reason: unknown): boolean {
+  if (!(reason instanceof WorkerDbAbortError)) return false;
+  try {
+    logger.error("[neotoma] unhandled WorkerDbAbortError contained (#2483)", {
+      name: reason.name,
+      message: reason.message,
+      stack: reason.stack,
+      cause: (reason as { cause?: unknown }).cause,
+      readerPoolStats: readerPoolSnapshotForDiagnostics(),
+      uptimeSeconds: process.uptime(),
+    });
+  } catch {
+    // A diagnostics failure must never re-throw and must never prevent
+    // suppressing the rejection below — that would recreate the exact crash
+    // this handler exists to contain.
+  }
+  return true;
+}
+
+/**
+ * Registers the process-wide containment for the #2483 abandoned-abort
+ * crash: the `unhandledRejection` listener that suppresses an unhandled
+ * `WorkerDbAbortError` (delegating to `handleAbandonedAbortRejection`) and
+ * exits exactly as before for anything else, plus the raised stack trace
+ * limit that makes the resulting diagnostic useful.
+ *
+ * Pulled into its own exported function, called from exactly one production
+ * call site below, so a regression test can prove that call site is load
+ * bearing: deleting it (while leaving this function's body untouched) must
+ * turn the regression suite red, because nothing would register the
+ * listener a real boot of this module performs. A test that instead called
+ * this function directly would keep passing even if the production call
+ * site were deleted, which is the exact gap #2483's QA review found.
+ */
+export function installAbandonedAbortContainment(): void {
+  // Raised early, before anything can reject, so the NEXT occurrence of the
+  // #2483 abort (or any other unhandled rejection) carries async frames past
+  // the immediate `onAbort` callsite instead of the default 10. `onAbort`
+  // (worker_file_database.ts) fires from an AbortSignal listener, which is
+  // itself an async boundary — Node's default limit reliably truncates the
+  // trace right at the point that matters, i.e. what SCHEDULED the abort.
+  // 100 is generous relative to the default without being unbounded: V8
+  // captures the stack only when an Error is actually constructed, so the
+  // steady-state cost of a higher ceiling is paid exclusively on the rare
+  // path that already logs a full event, not on every request.
+  Error.stackTraceLimit = 100;
+
+  // Node's default since v15 is `--unhandled-rejections=throw`: an unhandled
+  // rejection is thrown as an uncaught exception, which crashes the process
+  // exactly like the SIGABRT paths above. Nothing in this repo's Dockerfile,
+  // fly.toml, or package.json start scripts overrides that flag, so
+  // production runs under the default — this handler has to actually
+  // suppress the crash for the one error type it targets, not merely observe
+  // it, or the #2483 crash-loop continues unabated under this exact
+  // configuration. Registered before `beforeExit`/`exit`/signal diagnostics
+  // below so it is the first listener the event reaches; Node invokes every
+  // `unhandledRejection` listener the same way regardless of order, but
+  // ordering it first keeps the two related diagnostics adjacent in the
+  // module's control flow.
+  process.on("unhandledRejection", (reason) => {
+    if (handleAbandonedAbortRejection(reason)) return;
+    // Not the guarded error type: preserve today's behavior exactly. Node has
+    // no supported way to "re-throw" an unhandled rejection from inside a
+    // listener — once ANY listener is registered, Node considers the event
+    // handled and will not also invoke its default `--unhandled-rejections`
+    // behavior — so the equivalent is done explicitly: log it the way the
+    // default handler would and exit non-zero, matching the crash this
+    // process would otherwise have had.
+    console.error("[neotoma] unhandled rejection (not contained):", reason);
+    process.exit(1);
+  });
+}
+
 // Only auto-start if not disabled AND if this is the main module
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+  installAbandonedAbortContainment();
+
   // Exit diagnostics. A long-running server should never reach `beforeExit`:
   // that event only fires when the event loop has drained, i.e. nothing is
   // left holding the process open. In production this happened silently and
@@ -12601,8 +14416,98 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
     });
   }
 
-  startHTTPServer().catch((err) => {
-    console.error("Failed to start HTTP server:", err);
-    process.exit(1);
-  });
+  // Test-only escape hatch, inert in production: both env vars are never set
+  // outside tests/integration/unhandled_abandoned_abort_containment.test.ts.
+  // That suite needs to run THIS module as the real entrypoint — so
+  // `installAbandonedAbortContainment()` above is invoked from the actual
+  // production call site rather than called directly by the test — without
+  // paying for a full HTTP/DB/migration boot on every case. Everything above
+  // this line (containment install, stack trace limit, exit diagnostics,
+  // signal handlers) runs identically to production; only the HTTP server
+  // boot itself is skipped, and control is handed to a test-owned module
+  // (never a repo file — the test writes it to a temp dir) that drives the
+  // rest of the scenario. `actions.ts` itself stays test-agnostic: it knows
+  // only "run whatever module I was pointed at", not anything about faults
+  // or DB checks.
+  //
+  // Security review (Falco, PLAUSIBLE code_injection/test_escape_hatch,
+  // #2484): an ungated `import()` of an env-supplied path at boot is a real
+  // surface if an attacker can influence env vars — often already a stronger
+  // position, but not one to widen further. Narrowed here rather than left
+  // open: refuses when `NODE_ENV === "production"`, and the imported path
+  // must resolve inside this repo's `node_modules/` under the exact prefix
+  // the test's `entryDir` uses, so only a file the test itself just wrote
+  // can be loaded — not an arbitrary path an attacker-controlled env could
+  // otherwise point at.
+  //
+  // Follow-up hardening (Falco security run 1, #2484 CONFIRMED [BLOCKING]
+  // path_traversal/guard_bypass): the containment checks below used to run
+  // on `path.resolve(testModule)`, a lexical filesystem path, while the
+  // actual load used `import(resolved)`, which the ESM loader parses as a
+  // URL. A percent-encoded `..` segment, or a `?`/`#` delimiter, survives
+  // `path.resolve()` unchanged but is interpreted differently by the URL
+  // parser — so a crafted string could pass both checks yet load a
+  // different file than the one checked. Fixed by resolving through
+  // `fs.realpathSync` BEFORE either check (which also collapses a symlink
+  // to its real target — Falco security run 2, [NON-BLOCKING]
+  // test_escape_hatch symlink bypass) and then importing via
+  // `pathToFileURL(realResolved).href`, so the loader receives the exact
+  // canonical path the guard just checked — not a second, independently
+  // parsed interpretation of the original string.
+  if (process.env.NEOTOMA_ACTIONS_SKIP_HTTP_SERVER_FOR_TEST === "1") {
+    const testModule = process.env.NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE;
+    const allowedTestModuleDir = path.join(process.cwd(), "node_modules");
+    const allowedTestModulePrefix = ".neotoma-abort-contain-test-";
+    if (testModule && process.env.NODE_ENV === "production") {
+      console.error(
+        "[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE is set but NODE_ENV=production; refusing to import it."
+      );
+      process.exit(1);
+    } else if (testModule) {
+      let realResolved: string;
+      let realAllowedTestModuleDir: string;
+      try {
+        // realpathSync resolves symlinks AND collapses any `..`/`.`
+        // segments, encoded or not, to their actual filesystem target —
+        // this is what makes the check below canonical rather than
+        // lexical. It throws if the path (or the allowed dir) doesn't
+        // exist, which is itself a legitimate refusal: a module that
+        // isn't really there under the allowed prefix cannot be the
+        // test's own freshly-written file.
+        realResolved = fs.realpathSync(path.resolve(testModule));
+        realAllowedTestModuleDir = fs.realpathSync(allowedTestModuleDir);
+      } catch (err) {
+        console.error(
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${testModule}) could not be resolved ` +
+            `to a real path; refusing to import it. (${err instanceof Error ? err.message : String(err)})`
+        );
+        process.exit(1);
+        throw err;
+      }
+      const relative = path.relative(realAllowedTestModuleDir, realResolved);
+      const isUnderAllowedDir = !relative.startsWith("..") && !path.isAbsolute(relative);
+      const dirName = path.basename(path.dirname(realResolved));
+      const isAllowedPrefix = dirName.startsWith(allowedTestModulePrefix);
+      if (!isUnderAllowedDir || !isAllowedPrefix) {
+        console.error(
+          `[neotoma] NEOTOMA_ACTIONS_TEST_FOLLOWUP_MODULE (${realResolved}) is outside the ` +
+            `allowed test entry directory (${realAllowedTestModuleDir}/${allowedTestModulePrefix}*); refusing to import it.`
+        );
+        process.exit(1);
+      } else {
+        // Import the SAME canonical path that was just checked, as a file
+        // URL rather than a second, independently-parsed string — this is
+        // what closes the percent-encoding / `?` / `#` bypass above.
+        import(pathToFileURL(realResolved).href).catch((err) => {
+          console.error("[neotoma] test follow-up module failed:", err);
+          process.exit(1);
+        });
+      }
+    }
+  } else {
+    startHTTPServer().catch((err) => {
+      console.error("Failed to start HTTP server:", err);
+      process.exit(1);
+    });
+  }
 }

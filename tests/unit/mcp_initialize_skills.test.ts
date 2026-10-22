@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -46,9 +46,24 @@ describe("MCP initialize — skills discovery", () => {
     const names = readdirSync(skillsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
-    const required = ["store-data", "query-memory", "ensure-neotoma"];
+    const required = ["ensure-neotoma", "recover-sqlite-database", "remember-codebase"];
     for (const skill of required) {
       expect(names, `Expected skill "${skill}" to be present`).toContain(skill);
+    }
+  });
+
+  it("retired primitive-wrapper skills stay on disk but are marked deprecated", () => {
+    const root = resolveNeotomaPackageRoot();
+    const skillsDir = join(root, "skills");
+    for (const skill of ["store-data", "query-memory"]) {
+      const skillMdPath = join(skillsDir, skill, "SKILL.md");
+      expect(existsSync(skillMdPath), `Expected retired skill "${skill}" to still be on disk`).toBe(
+        true
+      );
+      const raw = readFileSync(skillMdPath, "utf-8");
+      expect(raw, `Expected "${skill}" SKILL.md to declare deprecated: true`).toMatch(
+        /^deprecated:\s*true\s*$/m
+      );
     }
   });
 });
@@ -84,6 +99,19 @@ describe("MCP instructions — [INITIALIZATION] section", () => {
     const body = extractFirstFencedCodeBlock(raw!);
     expect(body).toContain("serverInfo._neotoma.available_skills");
     expect(body).toMatch(/available.?skills/i);
+  });
+
+  it("keeps direct MCP storage and retrieval guidance after retiring the wrapper skills", () => {
+    const root = resolveNeotomaPackageRoot();
+    const raw = readMcpInstructionsMarkdown(root);
+    const body = extractFirstFencedCodeBlock(raw!);
+    expect(body).toContain("[STORE RECIPES]");
+    expect(body).toContain("[RETRIEVAL]");
+    expect(body).toMatch(/Ordinary storage and retrieval need no skill/i);
+    expect(body).toContain("retrieve_entities");
+    expect(body).toContain("store");
+    expect(body).toContain("remember-codebase");
+    expect(body).toMatch(/query-memory[\s\S]*store-data[\s\S]*excluded from this list by design/);
   });
 
   it("[INITIALIZATION] appears after [ERRORS & RECOVERY] and before [ONBOARDING]", () => {

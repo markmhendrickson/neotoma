@@ -12,11 +12,38 @@ import {
   type ObservationSourceRankValue,
   DEFAULT_OBSERVATION_SOURCE_PRIORITY,
 } from "../services/schema_registry.js";
+import { buildObservationSourceRankMap } from "../services/observation_source_rank.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
+import { canonicalizePortableScalarKey, stableSerialize } from "../services/stable_serialize.js";
+
+/** Per-observation bound that prevents one full-array write from exploding reducer work. */
+export const MAX_MERGE_ARRAY_BY_KEY_ITEMS = 10_000;
+
+export class MergeArrayByKeyLimitError extends Error {
+  readonly code = "ERR_MERGE_ARRAY_BY_KEY_LIMIT";
+  constructor(field: string) {
+    super(
+      `merge_array_by_key field "${field}" exceeds the ${MAX_MERGE_ARRAY_BY_KEY_ITEMS}-item ` +
+        "per-observation limit. Use patch_array_item instead of full-array writes."
+    );
+    this.name = "MergeArrayByKeyLimitError";
+  }
+}
+
+import {
+  selectEntityLifecycleVisibility,
+  type EntityLifecycleContext,
+  type EntityLifecycleKind,
+} from "../services/entity_lifecycle_authority.js";
+import { acquireEntityLifecycleContext } from "../services/entity_lifecycle_storage.js";
+import { getDb } from "../repositories/db/connection.js";
 
 export interface Observation {
+  entity_lifecycle_kind?: EntityLifecycleKind | null;
+  entity_lifecycle_sequence?: number | null;
+  entity_lifecycle_target_id?: string | null;
   id: string;
   entity_id: string;
   entity_type: string;
@@ -42,15 +69,13 @@ export interface Observation {
  * the shipped default) into a rank lookup where lower numbers win.
  * Unknown or missing values fall to `Number.MAX_SAFE_INTEGER` so they
  * sort last within their `source_priority` bucket without bypassing the
- * normal observed_at / id tie-break downstream.
+ * normal observed_at / id tie-break downstream. An unlisted `unspecified`
+ * shares `llm_summary`'s rank (#2241, see buildObservationSourceRankMap).
  */
 function buildObservationSourceRank(reducerConfig?: ReducerConfig): Map<string, number> {
-  const order = reducerConfig?.observation_source_priority ?? DEFAULT_OBSERVATION_SOURCE_PRIORITY;
-  const rank = new Map<string, number>();
-  order.forEach((value, index) => {
-    rank.set(value, index);
-  });
-  return rank;
+  return buildObservationSourceRankMap(
+    reducerConfig?.observation_source_priority ?? DEFAULT_OBSERVATION_SOURCE_PRIORITY
+  );
 }
 
 function rankForObservationSource(
@@ -81,7 +106,57 @@ function compareObservationRecencyThenId(a: Observation, b: Observation): number
   return a.id.localeCompare(b.id);
 }
 
+/**
+ * The reducer's own observation ordering, as a comparator.
+ *
+ * Observations are ordered by `observed_at` descending (most recent first),
+ * then by `id` ascending as a stable tie-breaker. This is the order every
+ * snapshot computation sorts into, so "the first observation" of an entity
+ * means the first in THIS order. It is intentionally different from
+ * `compareObservationRecencyThenId` above, which also consults `created_at`:
+ * code that must agree with the reducer about which observation is current
+ * (for example a conditional write comparing against the entity's current
+ * winner) must use this function rather than copying the ordering or using the
+ * recency comparator.
+ *
+ * Exported so there is one definition of the order; the reducer's own sort
+ * calls it.
+ *
+ * Inherited behaviour, unchanged by the extraction (the body is the reducer's
+ * previous private comparator verbatim): the id tie-break uses `localeCompare`,
+ * which is locale-dependent rather than byte order, and an unparseable
+ * `observed_at` makes the time subtraction NaN, which is not a consistent
+ * comparator result. Callers that need either guarantee must validate
+ * `observed_at` and choose an ordinal id comparison deliberately rather than
+ * rely on this function for it.
+ */
+export function compareObservationsByReducerOrder(
+  a: Pick<Observation, "observed_at" | "id">,
+  b: Pick<Observation, "observed_at" | "id">
+): number {
+  // Primary: observed_at DESC (most recent first)
+  const timeA = new Date(a.observed_at).getTime();
+  const timeB = new Date(b.observed_at).getTime();
+  if (timeB !== timeA) {
+    return timeB - timeA;
+  }
+  // Secondary: id ASC (stable tie-breaker)
+  return a.id.localeCompare(b.id);
+}
+
+/** Sort a copy of `observations` into {@link compareObservationsByReducerOrder} order. */
+export function sortObservationsInReducerOrder<T extends Pick<Observation, "observed_at" | "id">>(
+  observations: readonly T[]
+): T[] {
+  return [...observations].sort(compareObservationsByReducerOrder);
+}
+
+export interface SnapshotProjectionOptions {
+  includeClearedFields?: boolean;
+}
+
 export interface EntitySnapshot {
+  cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
   schema_version: string;
@@ -93,7 +168,12 @@ export interface EntitySnapshot {
   user_id: string;
 }
 
-type MergeStrategy = "last_write" | "highest_priority" | "most_specific" | "merge_array";
+type MergeStrategy =
+  | "last_write"
+  | "highest_priority"
+  | "most_specific"
+  | "merge_array"
+  | "merge_array_by_key";
 
 export class ObservationReducer {
   /**
@@ -103,48 +183,42 @@ export class ObservationReducer {
    */
   async computeSnapshot(
     entityId: string,
-    observations: Observation[]
+    observations: Observation[],
+    pinnedSchema?: SchemaRegistryEntry,
+    lifecycleContext?: EntityLifecycleContext,
+    projection: SnapshotProjectionOptions = {}
   ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
     }
 
-    // Sort observations first to check for deletion
+    const auditObservations = observations;
+    const context =
+      lifecycleContext ??
+      (await acquireEntityLifecycleContext(
+        await getDb(),
+        {
+          id: entityId,
+          user_id: observations[0].user_id,
+          entity_type: observations[0].entity_type,
+        },
+        observations
+      ));
+    const visibility = selectEntityLifecycleVisibility(observations, context);
+    if (visibility.hidden) return null;
+    observations = visibility.factual_observations as Observation[];
+    if (!observations.length) return null; // authority/baseline-only is not factual data
     const sortedObservations = this.sortObservations(observations);
-
-    // Pre-compute observation_source ranking from the schema (or default
-    // order) so deletion / highest-priority / most-specific comparisons
-    // all use the same tie-break axis without re-reading the schema.
-    const deletionRank = buildObservationSourceRank();
-
-    // Check if entity is deleted (highest priority observation with _deleted: true)
-    const highestPriorityObs = [...sortedObservations].sort((a, b) => {
-      // Primary: source_priority DESC
-      if (b.source_priority !== a.source_priority) {
-        return b.source_priority - a.source_priority;
-      }
-      // Secondary: observation_source ranking (ASC — lower rank wins)
-      const rankA = rankForObservationSource(a, deletionRank);
-      const rankB = rankForObservationSource(b, deletionRank);
-      if (rankA !== rankB) return rankA - rankB;
-      // Tertiary: observed_at DESC
-      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-    })[0];
-
-    if (highestPriorityObs.fields._deleted === true) {
-      // Entity is deleted - return null instead of snapshot
-      return null;
-    }
-
     // Get entity type and user from first observation
     const entityType = observations[0].entity_type;
     const userId = observations[0].user_id;
 
     // Load schema and merge policies (pass userId to support user-specific schemas)
-    let schemaEntry: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(
-      entityType,
-      userId
-    );
+    let schemaEntry: SchemaRegistryEntry | null =
+      pinnedSchema ?? (await schemaRegistry.loadActiveSchema(entityType, userId));
+    if (!schemaEntry && projection.includeClearedFields) {
+      throw new Error("Nullable winning projection requires an active schema");
+    }
     if (!schemaEntry) {
       const codeSchema = getSchemaDefinition(entityType);
       if (codeSchema) {
@@ -162,7 +236,18 @@ export class ObservationReducer {
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
       console.warn(`No active entity schema found for entity type ${entityType}, using defaults`);
-      return this.computeSnapshotWithDefaults(entityId, observations);
+      const computed = await this.computeSnapshotWithDefaults(entityId, observations);
+      if (computed)
+        computed.observation_count =
+          context.mode === "historical"
+            ? auditObservations.filter(
+                (o) =>
+                  (!context.at || Date.parse(o.observed_at) <= Date.parse(context.at)) &&
+                  (!context.at_ingested ||
+                    Date.parse(o.created_at) <= Date.parse(context.at_ingested))
+              ).length
+            : auditObservations.length;
+      return computed;
     }
 
     // Use the active schema version (the one used for computation), not the observation's schema_version
@@ -201,10 +286,14 @@ export class ObservationReducer {
         strategy,
         tieBreaker,
         fieldDef,
-        observationSourceRank
+        observationSourceRank,
+        policy?.key_field
       );
 
-      if (result && result.value !== undefined && result.value !== null) {
+      const selectedClear =
+        projection.includeClearedFields &&
+        ["last_write", "highest_priority", "most_specific"].includes(strategy);
+      if (result && result.value !== undefined && (result.value !== null || selectedClear)) {
         snapshot[field] = result.value;
         provenance[field] = result.source_observation_id;
       }
@@ -214,12 +303,21 @@ export class ObservationReducer {
     const lastObservationAt = sortedObservations[0].observed_at;
 
     return {
+      ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
       entity_id: entityId,
       entity_type: entityType,
       schema_version: schemaVersion,
       snapshot,
       computed_at: lastObservationAt,
-      observation_count: observations.length,
+      observation_count:
+        context.mode === "historical"
+          ? auditObservations.filter(
+              (o) =>
+                (!context.at || Date.parse(o.observed_at) <= Date.parse(context.at)) &&
+                (!context.at_ingested ||
+                  Date.parse(o.created_at) <= Date.parse(context.at_ingested))
+            ).length
+          : auditObservations.length,
       last_observation_at: lastObservationAt,
       provenance,
       user_id: userId,
@@ -227,19 +325,11 @@ export class ObservationReducer {
   }
 
   /**
-   * Sort observations deterministically
+   * Sort observations deterministically, in the reducer's own order
+   * (see {@link compareObservationsByReducerOrder}).
    */
   private sortObservations(observations: Observation[]): Observation[] {
-    return [...observations].sort((a, b) => {
-      // Primary: observed_at DESC (most recent first)
-      const timeA = new Date(a.observed_at).getTime();
-      const timeB = new Date(b.observed_at).getTime();
-      if (timeB !== timeA) {
-        return timeB - timeA;
-      }
-      // Secondary: id ASC (stable tie-breaker)
-      return a.id.localeCompare(b.id);
-    });
+    return sortObservationsInReducerOrder(observations);
   }
 
   /**
@@ -254,7 +344,8 @@ export class ObservationReducer {
     strategy: MergeStrategy,
     tieBreaker: "observed_at" | "source_priority",
     fieldDef?: FieldDefinition,
-    observationSourceRank: Map<string, number> = buildObservationSourceRank()
+    observationSourceRank: Map<string, number> = buildObservationSourceRank(),
+    keyField?: string
   ): { value: unknown; source_observation_id: string } | null {
     // Treat null as an explicit clear. Only undefined means the observation did
     // not carry this field and should be ignored by the reducer.
@@ -295,6 +386,10 @@ export class ObservationReducer {
 
       case "merge_array":
         mergedResult = this.mergeArray(field, relevantObservations, fieldDef);
+        break;
+
+      case "merge_array_by_key":
+        mergedResult = this.mergeArrayByKey(field, relevantObservations, keyField);
         break;
 
       default:
@@ -502,6 +597,128 @@ export class ObservationReducer {
   }
 
   /**
+   * Merge Array By Key strategy
+   *
+   * Sibling of `merge_array` for structured collection fields whose items
+   * carry a stable identity (e.g. `session_digest.tasks_claimed` rows keyed
+   * by `claim_id`). Same priority-gating as `merge_array` (a correction, or
+   * any strictly higher-priority write, fully replaces the lower-priority
+   * array — see reducer.md §3.4), but within the top-priority tier, items
+   * reconcile by `keyField` instead of Set-union: the item with the latest
+   * `observed_at` (ties broken by observation id, ASC) wins per key, and
+   * every distinct key present across the top-priority observations
+   * survives. This is what lets two writers patch disjoint rows of the same
+   * array concurrently without one write silently discarding the other's
+   * row (the `session_digest.tasks_claimed` lost-update reproduction this
+   * strategy exists to fix).
+   *
+   * A malformed `merge_array_by_key` policy without `key_field` is rejected;
+   * silently degrading to Set-union would change the configured conflict
+   * semantics. Items that lack a usable declared key remain preserved as
+   * unkeyed rows so malformed historical data cannot silently vanish.
+   */
+  private mergeArrayByKey(
+    field: string,
+    observations: Observation[],
+    keyField: string | undefined
+  ): { value: unknown; source_observation_id: string } {
+    if (!keyField) {
+      throw new Error(
+        `merge_array_by_key policy for field "${field}" is missing required key_field`
+      );
+    }
+
+    const maxPriority = observations.reduce(
+      (max, obs) => (obs.source_priority > max ? obs.source_priority : max),
+      Number.NEGATIVE_INFINITY
+    );
+    const topPriorityObservations = observations.filter(
+      (obs) => obs.source_priority === maxPriority
+    );
+
+    // Per key: track the winning item plus the (observed_at, id) of the
+    // observation that contributed it, so a later top-priority observation
+    // with the same key can be compared and only replace the winner when it
+    // is strictly newer. Items without a usable key are carried through
+    // unkeyed (by array index within their observation) so malformed rows
+    // are preserved rather than silently dropped.
+    const byKey = new Map<string, { item: unknown; observedAt: string; observationId: string }>();
+    const unkeyed = new Map<string, { item: unknown; observedAt: string; observationId: string }>();
+    const contributingObservationIds = new Set<string>();
+    for (const obs of topPriorityObservations) {
+      const rawValue = recoverJsonArrayString(obs.fields[field]) ?? obs.fields[field];
+      if (rawValue === undefined || rawValue === null) continue;
+      const items = Array.isArray(rawValue) ? rawValue : [rawValue];
+      if (items.length > MAX_MERGE_ARRAY_BY_KEY_ITEMS) {
+        throw new MergeArrayByKeyLimitError(field);
+      }
+      let contributed = false;
+
+      for (const item of items) {
+        const keyValue =
+          item !== null && typeof item === "object" && !Array.isArray(item)
+            ? (item as Record<string, unknown>)[keyField]
+            : undefined;
+
+        const key = canonicalizePortableScalarKey(keyValue);
+        if (key === null) {
+          const serialized = stableSerialize(item);
+          if (!unkeyed.has(serialized)) {
+            unkeyed.set(serialized, {
+              item,
+              observedAt: obs.observed_at,
+              observationId: obs.id,
+            });
+          }
+          contributed = true;
+          continue;
+        }
+
+        // The portable scalar canonicalizer is shared with patch_array_item;
+        // historical object/array or unsafe-number keys stay preserved as
+        // unkeyed legacy rows instead of creating a public/reducer mismatch.
+        const existing = byKey.get(key);
+        if (!existing) {
+          byKey.set(key, { item, observedAt: obs.observed_at, observationId: obs.id });
+          contributed = true;
+          continue;
+        }
+
+        // Latest observed_at wins per key; ties broken by observation id
+        // (ASC) for determinism, matching compareObservationRecencyThenId's
+        // tie-break axis used elsewhere in this reducer.
+        const existingMs = timestampMs(existing.observedAt);
+        const candidateMs = timestampMs(obs.observed_at);
+        const candidateWins =
+          candidateMs > existingMs ||
+          (candidateMs === existingMs && obs.id.localeCompare(existing.observationId) < 0);
+        if (candidateWins) {
+          byKey.set(key, { item, observedAt: obs.observed_at, observationId: obs.id });
+        }
+        contributed = true;
+      }
+
+      if (contributed) contributingObservationIds.add(obs.id);
+    }
+
+    const mergedItems = [...byKey.values(), ...unkeyed.values()]
+      // Deterministic output order: by observed_at ASC then observation id,
+      // so repeated computation over the same observation set is stable
+      // regardless of Map/array insertion order.
+      .sort((a, b) => {
+        const ms = timestampMs(a.observedAt) - timestampMs(b.observedAt);
+        if (ms !== 0) return ms;
+        return a.observationId.localeCompare(b.observationId);
+      })
+      .map((entry) => entry.item);
+
+    return {
+      value: mergedItems,
+      source_observation_id: Array.from(contributingObservationIds).sort().join(","),
+    };
+  }
+
+  /**
    * Compute snapshot with default merge policies (when no schema exists)
    *
    * Returns null if entity is deleted.
@@ -516,30 +733,6 @@ export class ObservationReducer {
 
     // Sort observations deterministically
     const sortedObservations = this.sortObservations(observations);
-
-    // Unseeded-type path: use the default observation_source ranking
-    // so sensors / workflow emissions still outrank LLM summaries when
-    // `source_priority` ties, matching the seeded-type behavior.
-    const defaultRank = buildObservationSourceRank();
-
-    // Check if entity is deleted (highest priority observation with _deleted: true)
-    const highestPriorityObs = [...sortedObservations].sort((a, b) => {
-      // Primary: source_priority DESC
-      if (b.source_priority !== a.source_priority) {
-        return b.source_priority - a.source_priority;
-      }
-      // Secondary: observation_source rank ASC
-      const rankA = rankForObservationSource(a, defaultRank);
-      const rankB = rankForObservationSource(b, defaultRank);
-      if (rankA !== rankB) return rankA - rankB;
-      // Tertiary: observed_at DESC
-      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
-    })[0];
-
-    if (highestPriorityObs.fields._deleted === true) {
-      // Entity is deleted - return null instead of snapshot
-      return null;
-    }
 
     const entityType = observations[0].entity_type;
     const schemaVersion = observations[0].schema_version || "1.0";

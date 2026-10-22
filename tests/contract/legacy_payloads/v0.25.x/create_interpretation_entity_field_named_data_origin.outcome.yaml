@@ -1,0 +1,18 @@
+endpoint: "POST /interpretations/create"
+outcome: rejected
+error_code: VALIDATION_INVALID_FORMAT
+hint_match: "/does not accept a per-entity data_origin.*rename that field/i"
+notes: |
+  Through v0.25.x, `create_interpretation` accepted any key inside an
+  `entities[]` item, so an entity could carry a free-form field named
+  `data_origin` (here a string), which landed in raw_fragments as an unknown
+  field.
+
+  #2242 reserves `data_origin` inside each `store` entity as the per-entity
+  origin override. `create_interpretation` does not apply that override yet, so
+  it now refuses the key with `400 VALIDATION_INVALID_FORMAT` at
+  `entities[0].data_origin` rather than storing it under a name `store` can
+  never write. The structured `details.hint` points at `store` with
+  `data_origin`, or at renaming the caller's own field (e.g. to
+  `origin_label`). Validation runs before the source lookup, so the source id
+  here need not exist.

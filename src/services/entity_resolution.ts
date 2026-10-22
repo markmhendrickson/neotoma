@@ -851,6 +851,30 @@ export interface ResolveEntityOptions {
    * `intent: "create_new"`.
    */
   strict?: boolean;
+  /**
+   * Set only when a keyed store is resuming its own unfinished write (#2144).
+   * An entity row that resolution finds is then one the interrupted attempt
+   * created, not a pre-existing entity this write would merge into, so the
+   * strict refusal and the `reject`/`warn` collision handling are skipped for
+   * it. The skip applies only while every observation on that entity belongs
+   * to `resumeSourceId` (or there are none): an entity that also carries an
+   * observation from another source is a real merge target and is judged as
+   * usual. If that check cannot be made, the entity is judged as usual.
+   *
+   * The skip is a property of this one write, not of an entity row, so it also
+   * requires that the row was created by this write's interrupted attempt:
+   * not merged away, and created at or after the keyed source.
+   */
+  resumeSourceId?: string;
+  /**
+   * Entity ids already resolved earlier in THIS request's pass, for a resume.
+   * A row claimed by an earlier payload of the same request is a collision
+   * between two payloads, which the first attempt refuses, so a second payload
+   * landing on it is never "this write's own entity". The caller creates one
+   * fresh Set per pass and adds every successfully resolved entity id to it.
+   * Internal: not part of any public schema.
+   */
+  resumeClaimedEntityIds?: Set<string>;
 }
 
 export interface ResolveEntityResult {
@@ -942,6 +966,154 @@ export class MergeRefusedError extends Error {
 }
 
 /**
+ * Thrown whenever a write would land on an entity row already owned by a
+ * DIFFERENT, non-null `user_id`. This is the fail-closed guard for the
+ * global-entity-id collision: without a tenant salt (see
+ * {@link entityIdTenantSalt}), `entity_id` is `sha256(entity_type:canonical_name)`
+ * with no user component, so two users' same-canonical-name writes hash to
+ * the SAME row. Before this guard, resolution silently matched the other
+ * user's entity and the caller's observation landed on it — the "existing
+ * entity already has user_id X, but resolution requested with user_id Y"
+ * warning was logged and the write proceeded anyway.
+ *
+ * Deliberately conflates "row belongs to another user" with no further
+ * detail in the thrown message beyond the two opaque ids — never the other
+ * user's canonical_name or fields — so a refusal cannot be used to probe
+ * another tenant's data.
+ *
+ * A row whose `user_id` is `null` or the legacy default-test UUID
+ * (`00000000-0000-0000-0000-000000000000`) is treated as unowned, not as
+ * owned by "no one" in a way that conflicts with everyone: the existing
+ * adopt-on-first-real-write behavior in {@link resolveEntityWithTrace} is
+ * preserved, and only a genuine mismatch between two real, different,
+ * non-null user ids throws.
+ *
+ * REST maps this to `409 entity_owner_conflict`; MCP maps it to
+ * `InvalidRequest` with `data.code: "entity_owner_conflict"` — see
+ * `toErrorEnvelope()` and the shared `handleApiError` / MCP dispatcher wiring
+ * in `src/actions.ts` / `src/server.ts`.
+ */
+export class EntityOwnerConflictError extends Error {
+  readonly code = "entity_owner_conflict" as const;
+  readonly statusCode = 409;
+  readonly entityId: string;
+  readonly entityType: string;
+
+  constructor(params: { entityId: string; entityType: string }) {
+    super(
+      `Refusing to write entity ${params.entityId} (${params.entityType}): ` +
+        `this entity is owned by a different user than the writer.`
+    );
+    this.name = "EntityOwnerConflictError";
+    this.entityId = params.entityId;
+    this.entityType = params.entityType;
+  }
+
+  toErrorEnvelope(): {
+    code: string;
+    message: string;
+    entity_id: string;
+    entity_type: string;
+  } {
+    return {
+      code: this.code,
+      message: this.message,
+      entity_id: this.entityId,
+      entity_type: this.entityType,
+    };
+  }
+}
+
+/**
+ * Default test/legacy user id stamped on rows created before per-request
+ * user scoping existed. Treated as "unowned" by {@link assertNoOwnerConflict}
+ * and by the adopt-on-write logic in {@link resolveEntityWithTrace}, exactly
+ * like `null` — a real, distinct `user_id` is required before a row counts
+ * as owned for the purpose of refusing a cross-owner write.
+ */
+export const LEGACY_UNOWNED_USER_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Fail-closed ownership guard shared by every write entrance that can land
+ * an observation on an existing entity row: {@link resolveEntityWithTrace}
+ * itself (the `target_id` extend path and the heuristic/schema match path),
+ * and the two ultimate observation-insert choke points
+ * (`createObservation` in `observation_storage.ts`, `createCorrection` in
+ * `correction.ts`) so a caller that supplies an `entity_id`/`target_id`
+ * directly — bypassing resolution entirely — is checked too.
+ *
+ * `existingOwnerUserId` is the row's current `user_id` as read from the
+ * `entities` table (or `null`/undefined when the row does not exist yet, in
+ * which case there is nothing to conflict with). Throws
+ * {@link EntityOwnerConflictError} when it is a real user id and differs
+ * from `writerUserId`. A `null` or {@link LEGACY_UNOWNED_USER_ID} existing
+ * owner never conflicts — those rows are adoptable by the first real writer,
+ * matching pre-existing behavior.
+ */
+export function assertNoOwnerConflict(params: {
+  entityId: string;
+  entityType: string;
+  existingOwnerUserId: string | null | undefined;
+  writerUserId: string | null | undefined;
+}): void {
+  const { entityId, entityType, existingOwnerUserId, writerUserId } = params;
+  if (!existingOwnerUserId) return; // unowned row — nothing to conflict with
+  if (existingOwnerUserId === LEGACY_UNOWNED_USER_ID) return; // legacy default — adoptable
+  if (!writerUserId) return; // no user_id on write context — pre-auth/local caller, unchanged
+  if (existingOwnerUserId === writerUserId) return; // same owner — normal merge path
+  throw new EntityOwnerConflictError({ entityId, entityType });
+}
+
+/**
+ * True when `entityId` has at least one observation that does not belong to
+ * `sourceId`. Fails closed: a read error counts as "yes", so a resume never
+ * skips the identity refusals on evidence it could not read.
+ */
+async function entityHasObservationFromOtherSource(
+  entityId: string,
+  sourceId: string
+): Promise<boolean> {
+  const { data, error } = await db
+    .from("observations")
+    .select("id")
+    .eq("entity_id", entityId)
+    .or(`source_id.neq.${sourceId},source_id.is.null`)
+    .limit(1);
+  if (error) return true;
+  return Array.isArray(data) && data.length > 0;
+}
+
+/**
+ * True when the entity row `existing` was created by the interrupted write that
+ * keyed source `sourceId` records (#2144). Three things must hold, and every
+ * one fails closed (an unreadable or unparsable value means "not its own"):
+ *
+ *   - the row is not merged away (a merged-away row has had its observations
+ *     moved, so "no observation from another source" is vacuous for it);
+ *   - the row was created at or after the keyed source, because the source row
+ *     is stored before any entity row of that write; an older row is a
+ *     pre-existing entity, however few observations it carries;
+ *   - no observation on it comes from another source.
+ */
+async function resumeOwnsExistingEntity(
+  existing: { id: string; created_at?: string | null; merged_to_entity_id?: string | null },
+  sourceId: string
+): Promise<boolean> {
+  if (existing.merged_to_entity_id) return false;
+  const entityCreated = Date.parse(existing.created_at ?? "");
+  if (Number.isNaN(entityCreated)) return false;
+  const { data: sourceRow, error: sourceError } = await db
+    .from("sources")
+    .select("created_at")
+    .eq("id", sourceId)
+    .maybeSingle();
+  if (sourceError || !sourceRow) return false;
+  const sourceCreated = Date.parse((sourceRow as { created_at?: string | null }).created_at ?? "");
+  if (Number.isNaN(sourceCreated) || entityCreated < sourceCreated) return false;
+  return !(await entityHasObservationFromOtherSource(existing.id, sourceId));
+}
+
+/**
  * Resolve entity (get or create) and return a rich trace describing which
  * rule produced the canonical_name and whether the entity was created or
  * matched.
@@ -949,12 +1121,24 @@ export class MergeRefusedError extends Error {
  * Throws {@link CanonicalNameUnresolvedError} when derivation cannot settle
  * on a safe canonical_name. Throws {@link MergeRefusedError} when
  * `strict: true` lands on an existing entity without a deterministic
- * identity rule.
+ * identity rule. Throws {@link EntityOwnerConflictError} when resolution
+ * (heuristic/schema match, or an explicit `target_id`) would land on an
+ * entity owned by a different, non-null user — see
+ * {@link assertNoOwnerConflict}.
  */
 export async function resolveEntityWithTrace(
   options: ResolveEntityOptions
 ): Promise<ResolveEntityResult> {
-  const { entityType, userId, fields, commit = true, targetId, strict } = options;
+  const {
+    entityType,
+    userId,
+    fields,
+    commit = true,
+    targetId,
+    strict,
+    resumeSourceId,
+    resumeClaimedEntityIds,
+  } = options;
 
   let schema = options.schema;
   if (schema === undefined) {
@@ -1029,6 +1213,25 @@ export async function resolveEntityWithTrace(
       }
     }
 
+    // Fail-closed ownership guard: target_id lets a caller name an entity_id
+    // directly, bypassing derivation entirely — so it must be checked here
+    // even though the heuristic-match path below also checks. Without this,
+    // `target_id: <another user's entity id>` would append an observation to
+    // a row this writer does not own.
+    const { data: targetEntity } = await db
+      .from("entities")
+      .select("user_id")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (targetEntity) {
+      assertNoOwnerConflict({
+        entityId: targetId,
+        entityType,
+        existingOwnerUserId: (targetEntity as { user_id: string | null }).user_id,
+        writerUserId: userId,
+      });
+    }
+
     return {
       entityId: targetId,
       trace: {
@@ -1053,6 +1256,18 @@ export async function resolveEntityWithTrace(
   const { data: existing } = await db.from("entities").select("*").eq("id", entityId).maybeSingle();
 
   if (existing) {
+    // Fail-closed ownership guard. Must run before strict/collision-policy
+    // checks and before any side effect: those are about identity-rule
+    // quality, this is about tenant isolation, and a caller must never
+    // observe the difference between "would have been a heuristic merge"
+    // and "landed on someone else's entity" by getting further than this.
+    assertNoOwnerConflict({
+      entityId,
+      entityType,
+      existingOwnerUserId: (existing as { user_id: string | null }).user_id,
+      writerUserId: userId,
+    });
+
     // Strict mode refuses to merge into an existing entity unless the
     // resolution came from a schema-declared canonical_name_fields rule OR a
     // deterministic "natural key" match:
@@ -1076,7 +1291,24 @@ export async function resolveEntityWithTrace(
           step === "name_key:email" ||
           step.startsWith("id_key:")
       );
-    if (strict && !schemaDeterministic && !naturalKeyMatch) {
+    const collisionPolicy =
+      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ?? "merge";
+    // Resuming this write's own interrupted attempt (#2144): the row found
+    // here was created by that attempt, so it is not a merge into a
+    // pre-existing entity and the identity refusals below do not apply to it.
+    // Only looked up when a refusal would otherwise fire.
+    const refusalPossible =
+      !schemaDeterministic &&
+      ((strict && !naturalKeyMatch) || collisionPolicy === "reject" || collisionPolicy === "warn");
+    const resumingOwnEntity =
+      refusalPossible &&
+      resumeSourceId !== undefined &&
+      !resumeClaimedEntityIds?.has(entityId) &&
+      (await resumeOwnsExistingEntity(
+        existing as { id: string; created_at?: string | null; merged_to_entity_id?: string | null },
+        resumeSourceId
+      ));
+    if (strict && !schemaDeterministic && !naturalKeyMatch && !resumingOwnEntity) {
       throw new MergeRefusedError({
         entityType,
         entityId,
@@ -1089,10 +1321,8 @@ export async function resolveEntityWithTrace(
     // heuristic merges without needing per-call `strict`. `warn` lets the
     // merge proceed but attaches a non-fatal warning to the trace. `merge`
     // (default) preserves legacy behavior.
-    const collisionPolicy =
-      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ?? "merge";
     const warnings: ResolverWarning[] = [];
-    if (!schemaDeterministic) {
+    if (!schemaDeterministic && !resumingOwnEntity) {
       if (collisionPolicy === "reject") {
         throw new MergeRefusedError({
           entityType,
@@ -1115,10 +1345,13 @@ export async function resolveEntityWithTrace(
     }
 
     if (commit) {
-      // Default test user ID that should be updated to actual user_id
-      const defaultTestUserId = "00000000-0000-0000-0000-000000000000";
+      // Adopt an unowned row (null or the legacy default-test UUID) on the
+      // first real writer. assertNoOwnerConflict above has already refused
+      // any row owned by a DIFFERENT real user_id, so reaching here means
+      // existing.user_id is either unowned or already equal to userId — there
+      // is no third case left to log a warning for.
       const shouldUpdateUserId =
-        userId && (existing.user_id === null || existing.user_id === defaultTestUserId);
+        userId && (existing.user_id === null || existing.user_id === LEGACY_UNOWNED_USER_ID);
 
       if (shouldUpdateUserId) {
         const { error: updateError } = await db
@@ -1136,13 +1369,6 @@ export async function resolveEntityWithTrace(
             `Updated user_id for entity ${entityId} from ${existing.user_id} to ${userId}`
           );
         }
-      } else if (existing.user_id && userId && existing.user_id !== userId) {
-        // Entity already has a different user_id - log warning but don't change it
-        // This preserves data integrity (entity belongs to another user)
-        logger.warn(
-          `Entity ${entityId} already has user_id ${existing.user_id}, ` +
-            `but resolution requested with user_id ${userId}. Keeping existing user_id.`
-        );
       }
     }
 

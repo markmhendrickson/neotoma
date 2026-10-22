@@ -26,8 +26,7 @@ Clinical decision-making depends on understanding what was known about a patient
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured clinical entities and authorization states |
-| `query-memory` | Reconstructs clinical state at any decision point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

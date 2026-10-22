@@ -146,6 +146,7 @@ export const OBSERVATION_SOURCE_CLI_VALUES = [
   "human",
   "import",
   "sync",
+  "unspecified",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
@@ -159,6 +160,28 @@ export function normalizeObservationSourceFlag(raw: string): ObservationSourceFl
     );
   }
   return normalized as ObservationSourceFlag;
+}
+
+/**
+ * Parse `store --data-origin <json>` (#2242). Only checks that the value is a
+ * JSON object; the server validates the shape (kind enum, locator rules) with
+ * the same schema on every transport, so the CLI does not fork that contract.
+ */
+export function parseDataOriginFlag(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"file","locator":"report.xlsx"}\'.'
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"url","locator":"https://example.com/page"}\'.'
+    );
+  }
+  return parsed as Record<string, unknown>;
 }
 
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
@@ -1405,6 +1428,61 @@ export function hintOf(error: unknown): string | undefined {
   return undefined;
 }
 
+/** Preserve a REST ErrorEnvelope when a CLI command crosses the API boundary. */
+function cliApiError(error: unknown): Error {
+  const detail = formatApiError(error);
+  const serverCode = errorCodeOf(error);
+  if (!serverCode) return new Error(detail);
+  return new CliHintError(detail, {
+    code: serverCode,
+    message: detail,
+    ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+  });
+}
+
+/**
+ * #2228: the `/me` payload separates "who you are" (`email`) from "whose
+ * graph you operate on" (`user_id`). Under shared-graph mode those describe
+ * different people, so the CLI must not let a bare `user_id` read as the
+ * signer's own identity. Pure formatting logic pulled out of the `auth login`
+ * already-signed-in branch so it is covered without driving the network/
+ * filesystem side effects the rest of that command performs.
+ */
+export function formatAlreadySignedIn(
+  me: {
+    user_id?: string;
+    email?: string;
+    authenticated_user_id?: string;
+    shared_graph?: boolean;
+  },
+  outputMode: "json" | "text"
+): { json: Record<string, unknown> } | { text: string } {
+  if (outputMode === "json") {
+    return {
+      json: {
+        message: "Already signed in",
+        user_id: me.user_id,
+        email: me.email,
+        ...(me.shared_graph
+          ? {
+              shared_graph: true,
+              ...(me.authenticated_user_id
+                ? { authenticated_user_id: me.authenticated_user_id }
+                : {}),
+            }
+          : {}),
+      },
+    };
+  }
+  let text = "Already signed in";
+  if (me.user_id ?? me.email) {
+    const scope = me.shared_graph ? `shared graph ${me.user_id}` : me.user_id;
+    text += ` (${[me.email, scope].filter(Boolean).join(", ")})`;
+  }
+  text += ".\n";
+  return { text };
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -1418,6 +1496,30 @@ function formatApiError(error: unknown): string {
     }
   }
   return String(error);
+}
+
+function formatRequestError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const envelope = error as {
+      error_code?: unknown;
+      code?: unknown;
+      message?: unknown;
+      hint?: unknown;
+      error?: unknown;
+    };
+    if (typeof envelope.error_code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      return `${envelope.error_code}${message}`;
+    }
+    if (typeof envelope.code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      const hint = typeof envelope.hint === "string" ? ` ${envelope.hint}` : "";
+      return `${envelope.code}${message}${hint}`;
+    }
+    if (envelope.error && typeof envelope.error === "object")
+      return formatRequestError(envelope.error);
+  }
+  return formatApiError(error);
 }
 
 function parseOptionalJson(value?: string): unknown {
@@ -1522,15 +1624,18 @@ async function startOAuthCallbackServer(): Promise<{
 
 async function exchangeToken(
   baseUrl: string,
-  code: string
+  code: string,
+  codeVerifier: string
 ): Promise<{
   access_token: string;
   token_type?: string;
   expires_in?: number;
+  connection_id?: string;
 }> {
   const body = new URLSearchParams();
   body.set("grant_type", "authorization_code");
   body.set("code", code);
+  body.set("code_verifier", codeVerifier);
 
   const response = await fetch(`${baseUrl}/mcp/oauth/token`, {
     method: "POST",
@@ -1547,6 +1652,7 @@ async function exchangeToken(
     access_token: string;
     token_type?: string;
     expires_in?: number;
+    connection_id?: string;
   };
 }
 
@@ -1576,16 +1682,25 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   if (returnedState !== state) {
     throw new Error("OAuth state mismatch");
   }
-  const token = await exchangeToken(baseUrl, code);
+  const token = await exchangeToken(baseUrl, code, verifier);
   const expiresAt = token.expires_in
     ? new Date(Date.now() + token.expires_in * 1000).toISOString()
     : undefined;
+  if (!token.connection_id) {
+    // Every server new enough to check code_verifier also returns
+    // connection_id in the token response (see getTokenResponseForConnection).
+    // `code` itself is now a single-use secret, never the connection_id — do
+    // not fall back to it for X-Connection-Id.
+    throw new Error(
+      "Token response did not include connection_id; server may be running an outdated OAuth token endpoint."
+    );
+  }
   await writeConfig({
     base_url: baseUrl,
     access_token: token.access_token,
     token_type: token.token_type,
     expires_at: expiresAt,
-    connection_id: code,
+    connection_id: token.connection_id,
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {
@@ -2935,11 +3050,15 @@ async function mergeSqliteDatabase(
   };
   try {
     sourceDb = new AsyncSqliteDatabase(sourceDbPath);
+    const { assertOrdinaryLifecycleImport, assertOrdinaryLifecycleImportTarget } =
+      await import("../services/entity_lifecycle_ingress.js");
+    await assertOrdinaryLifecycleImport(sourceDb);
     targetDb = new AsyncSqliteDatabase(targetDbPath);
     await checkpointWal(sourceDb);
     await checkpointWal(targetDb);
     await targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
     attached = true;
+    await assertOrdinaryLifecycleImportTarget(targetDb);
 
     const targetTables = (await targetDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
@@ -3156,112 +3275,130 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     const observationReducer = new ObservationReducer();
     const relationshipReducer = new RelationshipReducer();
 
-    const entityIds = (
-      (await db
-        .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
-        .all()) as Array<{
-        entity_id: string;
-      }>
-    ).map((row) => row.entity_id);
-    const relationshipKeys = (
-      (await db
-        .prepare(
-          "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
-        )
-        .all()) as Array<{ relationship_key: string }>
-    ).map((row) => row.relationship_key);
-
-    await db.prepare("DELETE FROM entity_snapshots").run();
-    await db.prepare("DELETE FROM relationship_snapshots").run();
-
-    // #2343: the merge-import rebuild runs against an ARBITRARY target
-    // database opened by path, so it cannot use the service-layer seam (which
-    // resolves against the process's configured db). It shares the RULES via
-    // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
-    // cycle guard, same depth bound.
-    const { resolveAttachmentTargetSqlite } =
-      await import("../services/attachment_resolution_sqlite.js");
-
-    for (const entityId of entityIds) {
-      // A redirected id owns no snapshot of its own: skip it rather than
-      // writing the survivor's snapshot under a merge tombstone.
-      const target = await resolveAttachmentTargetSqlite(db, entityId);
-      if (target.resolvedEntityId !== entityId) continue;
-
-      const observations = (
-        await db
+    const { EntityLifecycleAcquisitionError } =
+      await import("../services/entity_lifecycle_authority.js");
+    await db.transaction(async (tx) => {
+      const entityIds = (
+        (await tx
+          .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
+          .all()) as Array<{
+          entity_id: string;
+        }>
+      ).map((row) => row.entity_id);
+      const relationshipKeys = (
+        (await tx
           .prepare(
-            "SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC"
+            "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
           )
-          .all(entityId)
-      ).map((row) => {
-        const observation = row as Record<string, unknown>;
-        if ("fields" in observation) {
-          observation.fields = parseJsonLike(observation.fields);
+          .all()) as Array<{ relationship_key: string }>
+      ).map((row) => row.relationship_key);
+
+      await tx.prepare("DELETE FROM entity_snapshots").run();
+      await tx.prepare("DELETE FROM relationship_snapshots").run();
+
+      // #2343: the merge-import rebuild runs against an ARBITRARY target
+      // database opened by path, so it cannot use the service-layer seam (which
+      // resolves against the process's configured db). It shares the RULES via
+      // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
+      // cycle guard, same depth bound.
+      const { resolveAttachmentTargetSqlite } =
+        await import("../services/attachment_resolution_sqlite.js");
+
+      for (const entityId of entityIds) {
+        // A redirected id owns no snapshot of its own: skip it rather than
+        // writing the survivor's snapshot under a merge tombstone.
+        const target = await resolveAttachmentTargetSqlite(tx, entityId);
+        if (target.truncated) throw new EntityLifecycleAcquisitionError();
+        if (target.resolvedEntityId !== entityId) continue;
+
+        const observations = (
+          await tx
+            .prepare(
+              "SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC"
+            )
+            .all(entityId)
+        ).map((row) => {
+          const observation = row as Record<string, unknown>;
+          if ("fields" in observation) {
+            observation.fields = parseJsonLike(observation.fields);
+          }
+          return observation;
+        });
+        if (observations.length === 0) continue;
+        try {
+          const { acquireEntityLifecycleContext } =
+            await import("../services/entity_lifecycle_storage.js");
+          const first = observations[0] as any;
+          const context = await acquireEntityLifecycleContext(
+            tx,
+            { id: entityId, user_id: first.user_id, entity_type: first.entity_type },
+            observations as any[]
+          );
+          const snapshot = (await observationReducer.computeSnapshot(
+            entityId,
+            observations as unknown as any[],
+            undefined,
+            context
+          )) as Record<string, unknown> | null;
+          if (!snapshot) continue;
+          const payload: Record<string, unknown> = { ...snapshot };
+          if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+          if ("provenance" in payload)
+            payload.provenance = JSON.stringify(payload.provenance ?? {});
+          const cols = Object.keys(payload);
+          const placeholders = cols.map(() => "?").join(", ");
+          const vals = cols.map((k) => payload[k]);
+          await tx
+            .prepare(
+              `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+            )
+            .run(vals);
+          stats.entity_snapshots_recomputed += 1;
+        } catch (err) {
+          if (err instanceof EntityLifecycleAcquisitionError) throw err;
+          stats.entity_snapshot_recompute_errors += 1;
         }
-        return observation;
-      });
-      if (observations.length === 0) continue;
-      try {
-        const snapshot = (await observationReducer.computeSnapshot(
-          entityId,
-          observations as unknown as any[]
-        )) as Record<string, unknown> | null;
-        if (!snapshot) continue;
-        const payload: Record<string, unknown> = { ...snapshot };
-        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
-        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
-        const cols = Object.keys(payload);
-        const placeholders = cols.map(() => "?").join(", ");
-        const vals = cols.map((k) => payload[k]);
-        await db
-          .prepare(
-            `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-          )
-          .run(vals);
-        stats.entity_snapshots_recomputed += 1;
-      } catch {
-        stats.entity_snapshot_recompute_errors += 1;
       }
-    }
 
-    for (const relationshipKey of relationshipKeys) {
-      const relationshipObservations = (
-        await db
-          .prepare(
-            "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
-          )
-          .all(relationshipKey)
-      ).map((row) => {
-        const observation = row as Record<string, unknown>;
-        if ("metadata" in observation) {
-          observation.metadata = parseJsonLike(observation.metadata);
+      for (const relationshipKey of relationshipKeys) {
+        const relationshipObservations = (
+          await tx
+            .prepare(
+              "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
+            )
+            .all(relationshipKey)
+        ).map((row) => {
+          const observation = row as Record<string, unknown>;
+          if ("metadata" in observation) {
+            observation.metadata = parseJsonLike(observation.metadata);
+          }
+          return observation;
+        });
+        if (relationshipObservations.length === 0) continue;
+        try {
+          const snapshot = (await relationshipReducer.computeSnapshot(
+            relationshipKey,
+            relationshipObservations as unknown as any[]
+          )) as unknown as Record<string, unknown> | null;
+          if (!snapshot) continue;
+          const payload: Record<string, unknown> = { ...snapshot };
+          if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+          if ("provenance" in payload)
+            payload.provenance = JSON.stringify(payload.provenance ?? {});
+          const cols = Object.keys(payload);
+          const placeholders = cols.map(() => "?").join(", ");
+          const vals = cols.map((k) => payload[k]);
+          await tx
+            .prepare(
+              `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+            )
+            .run(vals);
+          stats.relationship_snapshots_recomputed += 1;
+        } catch {
+          stats.relationship_snapshot_recompute_errors += 1;
         }
-        return observation;
-      });
-      if (relationshipObservations.length === 0) continue;
-      try {
-        const snapshot = (await relationshipReducer.computeSnapshot(
-          relationshipKey,
-          relationshipObservations as unknown as any[]
-        )) as unknown as Record<string, unknown> | null;
-        if (!snapshot) continue;
-        const payload: Record<string, unknown> = { ...snapshot };
-        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
-        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
-        const cols = Object.keys(payload);
-        const placeholders = cols.map(() => "?").join(", ");
-        const vals = cols.map((k) => payload[k]);
-        await db
-          .prepare(
-            `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-          )
-          .run(vals);
-        stats.relationship_snapshots_recomputed += 1;
-      } catch {
-        stats.relationship_snapshot_recompute_errors += 1;
       }
-    }
+    });
   } finally {
     await db.close();
   }
@@ -7396,23 +7533,21 @@ const authLoginCommand = authCommand
       try {
         const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
-          const me = (await res.json()) as { user_id?: string; email?: string };
-          if (outputMode === "json") {
-            writeOutput(
-              {
-                message: "Already signed in",
-                base_url: baseUrl,
-                user_id: me.user_id,
-                email: me.email,
-              },
-              outputMode
-            );
+          // #2228: `email` is who is signed in; `user_id` is the graph being
+          // operated on. Under shared-graph mode they describe different
+          // people, so print the scope rather than letting the id read as the
+          // signer's own.
+          const me = (await res.json()) as {
+            user_id?: string;
+            email?: string;
+            authenticated_user_id?: string;
+            shared_graph?: boolean;
+          };
+          const formatted = formatAlreadySignedIn(me, outputMode === "json" ? "json" : "text");
+          if ("json" in formatted) {
+            writeOutput({ ...formatted.json, base_url: baseUrl }, outputMode);
           } else {
-            process.stdout.write("Already signed in");
-            if (me.user_id ?? me.email) {
-              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
-            }
-            process.stdout.write(".\n");
+            process.stdout.write(formatted.text);
           }
           return;
         }
@@ -9699,6 +9834,19 @@ issuesCommand
   .option("--since <date>", "Only sync issues updated after this ISO date")
   .option("--state <state>", "Filter by state: open, closed, all", "all")
   .option("--labels <labels>", "Comma-separated label filter (passed to GitHub list)")
+  .option(
+    "--repo <owner/name>",
+    "GitHub repo to mirror for this run (default: the server-configured repo)"
+  )
+  .option(
+    "--push",
+    "Run the push leg (local public issues -> GitHub). Default: on for the configured repo, off for any other --repo"
+  )
+  .option("--no-push", "Skip the push leg (pull-only)")
+  .option(
+    "--dry-run",
+    "Report what would be created, updated and pushed; write nothing locally or on GitHub"
+  )
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
@@ -12549,6 +12697,62 @@ devCommand
 const entitiesCommand = program.command("entities").description("Entity commands");
 const sourcesCommand = program.command("sources").description("Source commands");
 const observationsCommand = program.command("observations").description("Observation commands");
+const relationshipTypesCommand = program
+  .command("relationship-types")
+  .description("Discover and register relationship types");
+relationshipTypesCommand
+  .command("list")
+  .option("--keyword <text>", "Filter names and descriptions")
+  .option("--scope <scope>", "Filter user or global scope")
+  .option("--include-edge-count", "Include counts of written edge rows")
+  .action(async (opts) => {
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/list_relationship_types", {
+      body: {
+        keyword: opts.keyword,
+        scope: opts.scope,
+        include_edge_counts: opts.includeEdgeCount,
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
+relationshipTypesCommand
+  .command("register")
+  .requiredOption("--relationship-type <type>", "Type to register")
+  .option("--description <text>", "Meaning of the edge")
+  .option("--scope <scope>", "user or global (global requires explicit permission)", "user")
+  .option("--acyclic", "Refuse cycles for this type")
+  .option("--inverse <type>", "Advisory inverse type")
+  .option("--symmetric", "Advisory symmetry")
+  .option("--source-entity-types <types>", "Comma-separated advisory source types")
+  .option("--target-entity-types <types>", "Comma-separated advisory target types")
+  .action(async (opts) => {
+    if (!["user", "global"].includes(opts.scope)) throw new Error("--scope must be user or global");
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/register_relationship_type", {
+      body: {
+        relationship_type: opts.relationshipType,
+        description: opts.description,
+        scope: opts.scope,
+        acyclic: opts.acyclic,
+        inverse: opts.inverse,
+        symmetric: opts.symmetric,
+        source_entity_types: opts.sourceEntityTypes?.split(","),
+        target_entity_types: opts.targetEntityTypes?.split(","),
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
 const relationshipsCommand = program.command("relationships").description("Relationship commands");
 const timelineCommand = program.command("timeline").description("Timeline commands");
 const schemasCommand = program.command("schemas").description("Schema commands");
@@ -13753,15 +13957,7 @@ relationshipsCommand
       const effectiveUserId = resolveEffectiveUserId(opts.userId);
       const { data, error } = await api.POST("/relationships/snapshot", {
         body: {
-          relationship_type: relationshipType as
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS",
+          relationship_type: relationshipType,
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
@@ -14174,7 +14370,26 @@ schemasCommand
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
   .option("--schema-version <version>", "New schema version (auto-increments if not provided)")
-  .option("--user-specific", "Create user-specific schema variant", false)
+  // #2374: no default. Omitted, the request carries no user_specific and the
+  // server writes to whichever scope your schema resolves to (your user
+  // override if you have one, else global). A `false` default here sent an
+  // explicit "global" on every CLI call, so the CLI never got that behavior.
+  .option(
+    "--user-specific",
+    "Write to your user-specific schema variant (omit to write to the scope your schema resolves to)"
+  )
+  .option(
+    "--no-user-specific",
+    "Write to the global schema, even if you have a user-specific variant"
+  )
+  // #2197: `force` bypasses the entity-type naming lints (test-artifact
+  // pattern, plural heuristic) only. It is declared on MCP and REST; the CLI
+  // is the surface a user is on when the guard's error says "pass force".
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -14188,6 +14403,7 @@ schemasCommand
         migrateExisting?: boolean;
         schemaVersion?: string;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -14226,6 +14442,7 @@ schemasCommand
             field_type: def.type ?? "string",
             required: def.required ?? false,
             reducer_strategy: def.reducer,
+            reducer_key_field: def.reducer_key_field,
           }));
         }
       }
@@ -14283,6 +14500,7 @@ schemasCommand
             activate: true,
             user_id: opts.userId,
             user_specific: opts.userSpecific,
+            force: opts.force,
           },
         });
         if (error) throw new Error("Failed to update schema");
@@ -14311,6 +14529,7 @@ schemasCommand
         migrate_existing: opts.migrateExisting,
         schema_version: opts.schemaVersion,
         user_specific: opts.userSpecific,
+        force: opts.force,
       };
       if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
@@ -14352,6 +14571,11 @@ schemasCommand
   .option("--activate", "Activate schema immediately", false)
   .option("--migrate-existing", "Migrate existing data", false)
   .option("--user-specific", "Create user-specific schema", false)
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -14364,6 +14588,7 @@ schemasCommand
         activate?: boolean;
         migrateExisting?: boolean;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -14392,6 +14617,7 @@ schemasCommand
           activate: opts.activate,
           user_id: opts.userId,
           user_specific: opts.userSpecific,
+          force: opts.force,
         },
       });
       if (error) throw new Error("Failed to register schema");
@@ -14864,9 +15090,14 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
+  .option(
+    "--data-origin <json>",
+    'Where the entities came from (#2242), e.g. \'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}\'. ' +
+      "Applies to every entity; an entity's own data_origin key overrides it. A claim, not proof."
+  )
   .option(
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
@@ -14901,6 +15132,7 @@ program
     let entities: unknown;
     let fileRelationships: unknown[] | undefined;
     let fileIdempotencyKey: string | undefined;
+    let fileDataOrigin: unknown;
     if (opts.entities) {
       entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
@@ -14913,6 +15145,9 @@ program
         }
         if (typeof envelope.idempotency_key === "string") {
           fileIdempotencyKey = envelope.idempotency_key;
+        }
+        if (envelope.data_origin !== undefined) {
+          fileDataOrigin = envelope.data_origin;
         }
         if (Array.isArray(envelope.entities)) {
           entities = envelope.entities;
@@ -14994,6 +15229,13 @@ program
         structuredBody.observation_source = normalizeObservationSourceFlag(
           opts.observationSource as string
         );
+      }
+      const dataOrigin =
+        opts.dataOrigin !== undefined
+          ? parseDataOriginFlag(opts.dataOrigin as string)
+          : fileDataOrigin;
+      if (dataOrigin !== undefined) {
+        structuredBody.data_origin = dataOrigin;
       }
       if (opts.file && !hasUnstructured) {
         const resolvedFile = path.isAbsolute(opts.file)
@@ -15117,7 +15359,7 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option(
     "--source-upload",
@@ -15341,7 +15583,7 @@ program
     ];
 
     const relationships: Array<{
-      relationship_type: "PART_OF" | "REFERS_TO";
+      relationship_type: string;
       source_index: number;
       target_index: number;
     }> = [
@@ -15753,6 +15995,8 @@ correctionsCommand
   .option("--corrected-value <value>", "Corrected value (required)")
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .option("--expected-version <version>", "Entity version read from the current snapshot")
+  .option("--overwrite", "Apply even when --expected-version is stale")
   .action(
     async (
       entityIdArg: string | undefined,
@@ -15763,6 +16007,8 @@ correctionsCommand
         correctedValue?: string;
         userId?: string;
         idempotencyKey?: string;
+        expectedVersion?: string;
+        overwrite?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -15777,26 +16023,257 @@ correctionsCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
+      let entityType = opts.entityType;
+      if (!entityType) {
+        const {
+          data: entityData,
+          error: entityError,
+          response: entityResponse,
+        } = await api.GET("/entities/{id}", {
+          params: { path: { id: entityId }, query: { user_id: opts.userId } } as any,
+        });
+        if (entityError) {
+          throw new Error(
+            `Failed to resolve entity type: ${entityResponse?.status ?? ""} ${formatApiError(entityError)}`
+          );
+        }
+        entityType = (entityData as { entity_type?: string } | undefined)?.entity_type;
+        if (!entityType) throw new Error("Entity response did not include entity_type");
+      }
       const idempotencyKey =
         opts.idempotencyKey ||
         createIdempotencyKey({ entityId, field: opts.fieldName, value: parsedCorrectedValue });
-      const { data, error } = await api.POST("/correct", {
+      const { data, error, response } = await api.POST("/correct", {
         body: {
           entity_id: entityId,
-          entity_type: opts.entityType ?? "unknown",
+          entity_type: entityType,
           field: opts.fieldName,
           value: parsedCorrectedValue,
           idempotency_key: idempotencyKey,
           user_id: opts.userId,
+          expected_version: opts.expectedVersion,
+          overwrite: opts.overwrite,
         },
       });
-      if (error) throw new Error("Failed to create correction");
+      if (error) {
+        const envelope = error as unknown as {
+          error_code?: string;
+          message?: string;
+          details?: Record<string, unknown>;
+        };
+        if (response?.status === 409) {
+          writeOutput(
+            {
+              success: false,
+              status: "conflict",
+              error_code: envelope.error_code ?? "ERR_FIELD_VERSION_CONFLICT",
+              entity_id: entityId,
+              field: opts.fieldName,
+              stored_version: envelope.details?.stored_version ?? null,
+              expected_version: envelope.details?.expected_version ?? opts.expectedVersion ?? null,
+              hint: envelope.details?.hint ?? null,
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        if (envelope.error_code === "ERR_IDEMPOTENCY_MISMATCH") {
+          writeOutput(
+            {
+              success: false,
+              status: "error",
+              error_code: envelope.error_code,
+              message: envelope.message,
+              details: envelope.details ?? {},
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        throw new Error(
+          `Failed to create correction: ${response?.status ?? ""} ${formatApiError(error)}`
+        );
+      }
       const result = data as any;
-      const correctionId = result?.observation?.id ?? result?.correction_id ?? idempotencyKey;
       writeOutput(
-        { correction_id: correctionId, entity_id: entityId, success: result?.success ?? true },
+        {
+          success: result?.success ?? true,
+          status: "applied",
+          observation_id: result?.observation_id,
+          correction_id: result?.observation_id ?? result?.correction_id ?? idempotencyKey,
+          entity_id: entityId,
+          entity_type: entityType,
+          field: opts.fieldName,
+          value: result?.value,
+          entity_version: result?.entity_version,
+          replayed: result?.replayed ?? false,
+        },
         outputMode
       );
+    }
+  );
+
+// ---------------------------------------------------------------------------
+// neotoma array-item patch
+//
+// Atomic keyed-item patch for structured array fields (Waxwing ADR,
+// ent_4b41bb83a4faf4428a73bfc8). Replaces the read-modify-full-array-write
+// anti-pattern: instead of fetching the entity, editing one row of an array
+// field locally, and writing the whole array back (which can silently
+// discard a concurrent writer's disjoint row), this patches one row
+// server-side atomically.
+// ---------------------------------------------------------------------------
+const arrayItemCommand = program
+  .command("array-item")
+  .description("Structured array field commands");
+
+arrayItemCommand
+  .command("patch")
+  .description(
+    "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write"
+  )
+  .argument("<entityId>", "Entity ID to patch")
+  .argument("<entityType>", "Entity type")
+  .argument("<field>", "Name of the array field to patch")
+  .argument("<keyField>", "Name of the field on each item that identifies it")
+  .argument("<keyValue>", "Value of keyField identifying the item to patch")
+  .option(
+    "--item-json <json>",
+    "JSON object of fields to set on the item (merged onto the existing item, or used to create it)"
+  )
+  .option(
+    "--expected-item-version <version>",
+    "Content-hash version of the item as last observed (from a prior patch's item_version). Stale value refuses with a conflict instead of overwriting."
+  )
+  .option(
+    "--expected-item-absent",
+    "Create only when no item with this key exists; concurrent creators yield one conflict"
+  )
+  .option("--user-id <userId>", "User ID")
+  .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .action(
+    async (
+      entityId: string,
+      entityType: string,
+      field: string,
+      keyField: string,
+      keyValueArg: string,
+      opts: {
+        itemJson?: string;
+        expectedItemVersion?: string;
+        expectedItemAbsent?: boolean;
+        userId?: string;
+        idempotencyKey?: string;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const parsedKeyValue = parseCliCorrectedValue(keyValueArg);
+      if (
+        typeof parsedKeyValue !== "string" &&
+        typeof parsedKeyValue !== "number" &&
+        typeof parsedKeyValue !== "boolean"
+      ) {
+        throw new Error("keyValue must be a non-null JSON scalar (string, number, or boolean)");
+      }
+      const keyValue = parsedKeyValue;
+      let item: Record<string, unknown> = {};
+      if (opts.itemJson) {
+        try {
+          const parsed = JSON.parse(opts.itemJson);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("must be a JSON object");
+          }
+          item = parsed as Record<string, unknown>;
+        } catch (err) {
+          throw new Error(
+            `Invalid --item-json: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const idempotencyKey =
+        opts.idempotencyKey || createIdempotencyKey({ entityId, field, keyField, keyValue, item });
+
+      const { data, error, response } = await api.POST("/patch_array_item", {
+        body: {
+          entity_id: entityId,
+          entity_type: entityType,
+          field,
+          key_field: keyField,
+          key_value: keyValue,
+          item,
+          expected_item_version: opts.expectedItemVersion,
+          expected_item_absent: opts.expectedItemAbsent,
+          idempotency_key: idempotencyKey,
+          user_id: opts.userId,
+        },
+      });
+
+      if (error) {
+        const status = response?.status;
+        const envelope = error as unknown as {
+          error_code?: string;
+          message?: string;
+          details?: Record<string, unknown>;
+        };
+        if (status === 409) {
+          // Standard envelope shape (buildErrorEnvelope): { error_code,
+          // message, details, trace_id, timestamp } at the top level — NOT
+          // nested under an `error` key. See docs/subsystems/errors.md
+          // "Standard envelope".
+          const body = error as unknown as { details?: Record<string, unknown> };
+          const details = body?.details ?? {};
+          writeOutput(
+            {
+              success: false,
+              status: "conflict",
+              entity_id: entityId,
+              field,
+              key_field: keyField,
+              key_value: keyValue,
+              current_item: details.current_item ?? null,
+              current_item_version: details.current_item_version ?? null,
+              expected_item_version: details.expected_item_version ?? null,
+            },
+            outputMode
+          );
+          if (outputMode !== "json") {
+            process.stderr.write(
+              warn(
+                `Conflict: item ${keyField}=${JSON.stringify(keyValue)} changed since expected_item_version was read. ` +
+                  `Re-read current_item, re-apply your change, and retry with the new item_version.\n`
+              )
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+        if (envelope.error_code === "ERR_IDEMPOTENCY_MISMATCH") {
+          writeOutput(
+            {
+              success: false,
+              status: "error",
+              error_code: envelope.error_code,
+              message: envelope.message,
+              details: envelope.details ?? {},
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        throw new Error(`Failed to patch array item: ${status ?? ""} ${formatApiError(error)}`);
+      }
+
+      writeOutput({ success: true, status: "applied", ...data }, outputMode);
     }
   );
 
@@ -16341,7 +16818,7 @@ snapshotsCommand
   )
   .option(
     "--observation-source <kind>",
-    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync (custom v0.17 values → use data_source)"
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync | unspecified (custom v0.17 values → use data_source)"
   )
   .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
   .option("--limit <n>", "Cap on returned entities (default: 500)")
@@ -16476,6 +16953,10 @@ program
   .option("--body <json>", "JSON body override")
   .option("--query <json>", "JSON query override")
   .option("--path <json>", "JSON path override")
+  .option(
+    "--guest-access-token <token>",
+    "Authenticate this request with an entity-scoped guest access token instead of the configured credential"
+  )
   .option("--skip-auth", "Skip auth token for public endpoints")
   .option(
     "--aauth",
@@ -16493,6 +16974,9 @@ program
     }
 
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    if (opts.guestAccessToken && (opts.skipAuth || opts.aauth)) {
+      throw new Error("--guest-access-token cannot be combined with --skip-auth or --aauth");
+    }
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
@@ -16506,7 +16990,8 @@ program
         );
       }
     }
-    const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
+    const token =
+      opts.skipAuth || opts.aauth ? undefined : opts.guestAccessToken || (await getCliToken());
     const api = createApiClient({
       baseUrl,
       token,
@@ -16541,6 +17026,48 @@ program
       };
     }
 
+    if (operation.path === "/events/stream") {
+      if (opts.aauth) {
+        throw new Error("eventsStream does not support --aauth; use bearer authentication");
+      }
+      const url = new URL(operation.path, baseUrl);
+      const queryParams = (requestParams.params as { query?: Record<string, unknown> } | undefined)
+        ?.query;
+      for (const [key, value] of Object.entries(queryParams ?? {})) {
+        if (Array.isArray(value)) {
+          for (const item of value) url.searchParams.append(key, String(item));
+        } else if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/event-stream",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        const error = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+        throw new Error("Request failed: " + formatRequestError(error));
+      }
+      if (!response.body) {
+        throw new Error("eventsStream response did not include a stream body");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        process.stdout.write(decoder.decode(value, { stream: true }));
+      }
+      const trailing = decoder.decode();
+      if (trailing) process.stdout.write(trailing);
+      return;
+    }
+
     const method = operation.method.toUpperCase();
     const handler = (api as unknown as Record<string, unknown>)[method] as
       | ((
@@ -16558,7 +17085,7 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      throw new Error("Request failed: " + formatApiError(error));
+      throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);
   });
