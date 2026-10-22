@@ -237,7 +237,7 @@ if (englishHomeSentinelHits === 0) {
 const HOME_REQUIRED = [
   "A record, not recall.",
   "the system of record for AI agents",
-  "06 · Deeper material",
+  "05 · References",
 ] as const;
 const HOME_FORBIDDEN = [
   "Your agents forget",
@@ -265,7 +265,7 @@ let homeFailures = 0;
 }
 if (homeFailures === 0) {
   pass(
-    "Home page is the one-pager: current category, deeper material, no old header, footer or title blocks"
+    "Home page is the one-pager: current category, references, no old header, footer or title blocks"
   );
 }
 
@@ -428,18 +428,26 @@ for (const route of LIVE_ROUTES) {
   const keywords = /<meta name="keywords" content="([^"]*)"/.exec(html)?.[1] ?? "";
   for (const phrase of RETIRED_META_PHRASES) {
     if (jsonLd.includes(phrase) || keywords.toLowerCase().includes(phrase.toLowerCase())) {
-      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html carries retired phrase "${phrase}" in JSON-LD or meta keywords`);
+      fail(
+        `site_pages${route === "/" ? "/" : route + "/"}index.html carries retired phrase "${phrase}" in JSON-LD or meta keywords`
+      );
       liveClaimFailures++;
     }
   }
   if (!keywords.includes("system of record")) {
-    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html meta keywords do not name the category: "${keywords}"`);
+    fail(
+      `site_pages${route === "/" ? "/" : route + "/"}index.html meta keywords do not name the category: "${keywords}"`
+    );
     liveClaimFailures++;
   }
-  for (const m of html.matchAll(/<meta (?:property|name)="(?:og|twitter):image" content="([^"]*)"/g)) {
+  for (const m of html.matchAll(
+    /<meta (?:property|name)="(?:og|twitter):image" content="([^"]*)"/g
+  )) {
     const imgPath = new URL(m[1], "https://neotoma.io").pathname;
     if (!fs.existsSync(path.join(siteDir, imgPath))) {
-      fail(`site_pages${route === "/" ? "/" : route + "/"}index.html names a social image that is not in the build: ${imgPath}`);
+      fail(
+        `site_pages${route === "/" ? "/" : route + "/"}index.html names a social image that is not in the build: ${imgPath}`
+      );
       liveClaimFailures++;
     }
   }
@@ -450,28 +458,55 @@ for (const route of LIVE_ROUTES) {
   // headline copy, so the old lede, the developer-preview label and the install-time claim are checked there too.
   const headFindings = findClaimProblems(headMetaText(html), [
     ...OLD_LEDE,
-    { id: "retired-frame", name: "dev-preview", re: DEVELOPER_PREVIEW, label: "developer-preview label" },
-    { id: "omitted-claim", name: "install-time", re: UNMEASURED_INSTALL_TIME, label: "unmeasured install-time claim" },
+    {
+      id: "retired-frame",
+      name: "dev-preview",
+      re: DEVELOPER_PREVIEW,
+      label: "developer-preview label",
+    },
+    {
+      id: "omitted-claim",
+      name: "install-time",
+      re: UNMEASURED_INSTALL_TIME,
+      label: "unmeasured install-time claim",
+    },
   ]);
   for (const label of new Set(headFindings.map((f) => `"${f.match}" (${f.label})`))) {
-    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html title, meta tags or JSON-LD carry ${label}`);
+    fail(
+      `site_pages${route === "/" ? "/" : route + "/"}index.html title, meta tags or JSON-LD carry ${label}`
+    );
     liveClaimFailures++;
   }
   // The fragment list is shared with the docs viewer lint (scripts/docs_viewer/claim_patterns.ts).
   for (const t of telemetryProblems(wholeText)) {
-    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html says "${t.match}" without the npm update-check qualification (missing: ${t.missing.join(", ")})`);
+    fail(
+      `site_pages${route === "/" ? "/" : route + "/"}index.html says "${t.match}" without the npm update-check qualification (missing: ${t.missing.join(", ")})`
+    );
     liveClaimFailures++;
   }
   // The docs list plus the named live-page extras: a superset of what a docs page is checked for.
-  const omitted = findClaimProblems(text, LIVE_PAGE_CLAIM_PATTERNS).filter((f) => f.id !== "telemetry");
+  const omitted = findClaimProblems(text, LIVE_PAGE_CLAIM_PATTERNS).filter(
+    (f) => f.id !== "telemetry"
+  );
   for (const label of new Set(omitted.map((f) => `${f.label} ("${f.match}")`))) {
-    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`);
+    fail(
+      `site_pages${route === "/" ? "/" : route + "/"}index.html makes an omitted claim: ${label}`
+    );
     liveClaimFailures++;
   }
 }
 // Held pages keep their old shell but must not offer navigation entries that only land on redirect stubs.
 const STUB_NAV_LABELS = ["Memory guarantees", "Memory models", "Hosted Neotoma"];
-for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox", "/meet", "/skills", "/privacy", "/terms", "/skills/ensure-neotoma"]) {
+for (const heldRoute of [
+  "/evaluate",
+  "/evaluate/agent-instructions",
+  "/sandbox",
+  "/meet",
+  "/skills",
+  "/privacy",
+  "/terms",
+  "/skills/ensure-neotoma",
+]) {
   const heldPath = path.join(siteDir, heldRoute.slice(1), "index.html");
   if (!fs.existsSync(heldPath)) continue;
   const heldText = pageText(fs.readFileSync(heldPath, "utf-8"));
@@ -487,7 +522,9 @@ for (const heldRoute of ["/evaluate", "/evaluate/agent-instructions", "/sandbox"
   for (const label of STUB_NAV_LABELS) {
     // The footer entry is gone too, so no held page offers any of these labels.
     if (heldText.includes(label)) {
-      fail(`site_pages${heldRoute}/index.html still offers the navigation entry "${label}", which only lands on a redirect stub`);
+      fail(
+        `site_pages${heldRoute}/index.html still offers the navigation entry "${label}", which only lands on a redirect stub`
+      );
       liveClaimFailures++;
     }
   }
@@ -501,7 +538,9 @@ for (const route of ["/", "/install", "/evaluate", "/markdown/neotoma-with-curso
   const served = pageText(servedHtml) + "\n" + headMetaText(servedHtml);
   const hit = UNMEASURED_INSTALL_TIME.exec(served);
   if (hit) {
-    fail(`site_pages${route === "/" ? "/" : route + "/"}index.html still says "${hit[0]}" (text, meta or JSON-LD)`);
+    fail(
+      `site_pages${route === "/" ? "/" : route + "/"}index.html still says "${hit[0]}" (text, meta or JSON-LD)`
+    );
     liveClaimFailures++;
   }
 }
@@ -522,12 +561,19 @@ if (fs.existsSync(evaluatePath)) {
   const bodyText = pageText(html);
   const endAt = bodyText.indexOf(EVALUATE_FIRST_SCREEN_END);
   if (endAt === -1) {
-    fail(`site_pages/evaluate/index.html no longer has the "${EVALUATE_FIRST_SCREEN_END}" heading that bounds the first-screen check`);
+    fail(
+      `site_pages/evaluate/index.html no longer has the "${EVALUATE_FIRST_SCREEN_END}" heading that bounds the first-screen check`
+    );
     liveClaimFailures++;
   } else {
     const firstScreen = headline + "\n" + bodyText.slice(0, endAt);
-    if (!/system of record/i.test(headline) || !/system of record for AI agents/i.test(bodyText.slice(0, endAt))) {
-      fail("site_pages/evaluate/index.html headline and first screen do not name the category (system of record for AI agents)");
+    if (
+      !/system of record/i.test(headline) ||
+      !/system of record for AI agents/i.test(bodyText.slice(0, endAt))
+    ) {
+      fail(
+        "site_pages/evaluate/index.html headline and first screen do not name the category (system of record for AI agents)"
+      );
       liveClaimFailures++;
     }
     for (const [re, label] of EVALUATE_RETIRED_PHRASES) {
@@ -568,7 +614,10 @@ const servedText = (html: string): string => pageText(html) + "\n" + headMetaTex
 let servedPageFailures = 0;
 const servedPages = collectServedPages(siteDir);
 const isRealPageAt = (route: string): boolean => {
-  const file = route === "/" ? path.join(siteDir, "index.html") : path.join(siteDir, route.slice(1), "index.html");
+  const file =
+    route === "/"
+      ? path.join(siteDir, "index.html")
+      : path.join(siteDir, route.slice(1), "index.html");
   return fs.existsSync(file) && !isStubPage(fs.readFileSync(file, "utf-8"));
 };
 for (const file of servedPages) {
@@ -578,7 +627,9 @@ for (const file of servedPages) {
   const route = "/" + rel.replace(/(^|\/)index\.html$/, "").replace(/404\.html$/, "404");
   const shown = rel;
   const text = servedText(html);
-  const stated = findClaimProblems(text, SERVED_PAGE_STATEMENTS).filter((f) => f.id !== "telemetry");
+  const stated = findClaimProblems(text, SERVED_PAGE_STATEMENTS).filter(
+    (f) => f.id !== "telemetry"
+  );
   for (const f of new Map(stated.map((x) => [x.name + x.match, x])).values()) {
     fail(`site_pages/${shown} carries "${f.match}" (${f.label})`);
     servedPageFailures++;
@@ -609,7 +660,9 @@ for (const file of servedPages) {
   if (/^\/markdown\/./.test(route)) {
     const source = route.slice("/markdown".length).replace(/\/$/, "");
     if (!isRealPageAt(source)) {
-      fail(`site_pages/${shown} is a markdown mirror whose source page ${source} is a redirect stub; the mirror must be a stub too`);
+      fail(
+        `site_pages/${shown} is a markdown mirror whose source page ${source} is a redirect stub; the mirror must be a stub too`
+      );
       servedPageFailures++;
     }
   }
@@ -617,44 +670,65 @@ for (const file of servedPages) {
 // The /install HowTo carries the same three steps as the visible install block.
 const installHtmlForHowTo = path.join(siteDir, "install", "index.html");
 if (fs.existsSync(installHtmlForHowTo)) {
-  const howTo = jsonLdBlocks(fs.readFileSync(installHtmlForHowTo, "utf-8")).find((b) => b.includes('"HowTo"'));
+  const howTo = jsonLdBlocks(fs.readFileSync(installHtmlForHowTo, "utf-8")).find((b) =>
+    b.includes('"HowTo"')
+  );
   const steps = howTo ? (JSON.parse(howTo).step as { text: string }[]) : [];
   const joined = steps.map((st) => st.text).join(" ");
-  if (steps.length !== 3 || !joined.includes("neotoma init") || !joined.includes("--tool claude-code") || joined.includes("--tool cursor")) {
-    fail("site_pages/install/index.html HowTo does not match the visible three install lines (npm install, neotoma init, neotoma setup --tool claude-code --yes)");
+  if (
+    steps.length !== 3 ||
+    !joined.includes("npm install -g neotoma") ||
+    !joined.includes("neotoma init") ||
+    !joined.includes("neotoma setup --tool claude-code") ||
+    joined.includes("--yes") ||
+    joined.includes("--tool cursor")
+  ) {
+    fail(
+      "site_pages/install/index.html HowTo does not match the visible three human install lines (npm install, neotoma init, neotoma setup --tool claude-code)"
+    );
     servedPageFailures++;
   }
 }
-// The limits section states the four gaps in plain words, and one operator per instance as scope.
+// The direction section separates current boundaries from planned governance.
 const homeForLimits = path.join(siteDir, "index.html");
 if (fs.existsSync(homeForLimits)) {
   const homeText = servedText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
   for (const needle of [
-    "What to expect",
-    "Not built yet",
-    "Reading the whole record as it stood at a past date.",
-    "Moving a record between instances with its history.",
-    "Corrections that always hold.",
-    "Verified authorship for every write.",
-    "A local install serves one operator; there are no organizations, workspaces, or rules for who may correct what.",
+    "Where this is going",
+    "Current boundaries: one local operator",
+    "later ordinary writes can replace corrections",
+    "export contains current values without observation history",
+    "authorship is verified only for signed requests, and some paths record no writer",
+    "One entity can be read as of a past time; the whole record cannot",
+    "Planned work includes domain-scoped correction rights, explicit disputes and official positions",
+    "Those governance features are direction, not current capabilities or a timeline promise",
+    "known limitations",
   ]) {
     if (!homeText.includes(needle)) {
       fail(`site_pages/index.html limits section no longer says "${needle}"`);
       servedPageFailures++;
     }
   }
-  if (/Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants/i.test(homeText)) {
+  if (
+    /Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants|corrections always win|export (with|including) (full )?history/i.test(
+      homeText
+    )
+  ) {
     fail("site_pages/index.html limits section still carries the retired authority limit");
     servedPageFailures++;
   }
 }
 liveClaimFailures += servedPageFailures;
 if (servedPageFailures === 0) {
-  pass(`Served pages: ${servedPages.length} files checked for retired statements, duplicate JSON-LD, orphan markdown mirrors and the /install HowTo`);
+  pass(
+    `Served pages: ${servedPages.length} files checked for retired statements, duplicate JSON-LD, orphan markdown mirrors and the /install HowTo`
+  );
 }
 
 if (liveClaimFailures === 0) {
-  pass("Live pages: no retired phrase in JSON-LD or meta keywords, and no omitted claim in the text");
+  pass(
+    "Live pages: no retired phrase in JSON-LD or meta keywords, and no omitted claim in the text"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -680,7 +754,9 @@ if (!fs.existsSync(notFoundPath)) {
   const { problems, checked } = validateDocsViewerExport(siteDir);
   for (const problem of problems) fail(problem);
   if (problems.length === 0) {
-    pass(`Docs viewer: ${checked} included page(s) are real, script-free and claim-safe; stubs and sitemap point at them`);
+    pass(
+      `Docs viewer: ${checked} included page(s) are real, script-free and claim-safe; stubs and sitemap point at them`
+    );
   }
 }
 

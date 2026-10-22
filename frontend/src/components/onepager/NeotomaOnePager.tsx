@@ -226,8 +226,9 @@ export function NeotomaOnePager() {
             )}
             <p className="plan-body">
               Neotoma runs as a local service. Connected agents use the Model Context Protocol
-              (MCP), REST API or CLI to read and write the same instance. The bundled Inspector lets
-              you examine the record.
+              (MCP), REST API or CLI to read and write a configured instance. Point each tool at the
+              same instance and data profile or MCP entry to share a record; separate entries can
+              use separate databases. The bundled Inspector lets you examine the record.
             </p>
           </div>
           <label className="plan-host-label" htmlFor="plan-host">

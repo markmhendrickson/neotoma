@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import {
-  isRetiredRoute,
-  resolveDestination,
-} from "../../frontend/src/site/route_retirement";
+import { NeotomaOnePager } from "../../frontend/src/components/onepager/NeotomaOnePager";
+import { isRetiredRoute, resolveDestination } from "../../frontend/src/site/route_retirement";
 import { DOCS_VIEWER_INDEX } from "../../frontend/src/site/docs_viewer_manifest";
 import { dedupeJsonLd, headMetaText, jsonLdBlocks } from "../../scripts/site_html";
 import { pageText } from "../../scripts/docs_viewer/validate_export";
@@ -30,29 +31,47 @@ const root = join(__dirname, "..", "..");
 const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
 
 describe("one-pager sheets 02 to 04", () => {
-  const page = read("frontend", "src", "components", "onepager", "NeotomaOnePager.tsx");
-  const copy = read("frontend", "src", "components", "onepager", "onepager_copy.ts");
-  it("prints the sheet 03 commands with the dev prefix and does not claim ids from one run", () => {
-    for (const cmd of ["neotoma dev store", "neotoma dev corrections create", "neotoma dev entities get", "neotoma dev observations list"]) {
-      expect(copy, cmd).toContain(cmd);
+  const markup = renderToStaticMarkup(
+    createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+  );
+  const text = pageText(markup).replace(/\s+/g, " ");
+  const examples = read("frontend", "src", "components", "onepager", "InterfaceExplorer.tsx");
+  it("renders illustrative calls with dev-profile CLI commands and variable IDs", () => {
+    for (const cmd of [
+      "neotoma dev store",
+      "neotoma dev corrections create",
+      "neotoma dev entities get",
+      "neotoma dev observations list",
+    ]) {
+      expect(text, cmd).toContain(cmd);
     }
-    // Not anchored to a line start: the first transcript line follows the opening backtick.
-    expect(copy).not.toMatch(/\$ neotoma (store|corrections|entities|observations)\b/);
-    expect(copy).toMatch(/`\$ neotoma dev store/);
-    expect(page).toContain("Store observation ids differ");
-    expect(page).not.toMatch(/ids are from one run/i);
+    expect(text).toContain("Read the store response for the actual entity ID");
+    expect(text).toContain("$INVOICE_ID");
+    expect(text).not.toMatch(
+      /ids are from one run|\$ neotoma (store|corrections|entities|observations)\b/i
+    );
+    expect(examples).toContain('store({entities:[{entity_type:"invoice"');
+    expect(examples).toContain('correct({entity_id:"$INVOICE_ID"');
+    expect(examples).toContain('retrieve_entity_snapshot({entity_id:"$INVOICE_ID"');
+    expect(examples).toContain('"$NEOTOMA_URL/store"');
+    expect(examples).toContain('"$NEOTOMA_URL/correct"');
+    expect(examples).toContain("Authorization: Bearer $NEOTOMA_TOKEN");
   });
-  it("limits the shared record to agents on the same MCP entry", () => {
-    expect(page.replace(/\s+/g, " ")).toContain("Agents connected to the same MCP entry");
-    expect(copy).toContain("when it is connected to the same MCP entry");
-    expect(page + copy).not.toMatch(/what one agent stored is what the next one reads/i);
-    expect(page + copy).not.toMatch(/same instance/i);
+  it("limits shared reads to a configured instance and matching entry or profile", () => {
+    expect(text).toContain("same instance and data profile or MCP entry");
+    expect(text).toContain("separate entries can use separate databases");
+    expect(text).not.toMatch(
+      /what one agent stored is what the next one reads|agents connected to the same instance read the same record/i
+    );
   });
 });
 
 describe("/install", () => {
   const strings = read("frontend", "src", "i18n", "locales", "install_page_strings.ts");
-  const en = strings.slice(strings.indexOf("export const INSTALL_PAGE_EN"), strings.indexOf("export const INSTALL_PAGE_ES"));
+  const en = strings.slice(
+    strings.indexOf("export const INSTALL_PAGE_EN"),
+    strings.indexOf("export const INSTALL_PAGE_ES")
+  );
   it("describes what init and setup write, and the npm_check_update tool", () => {
     expect(en).not.toMatch(/Optional prompts/i);
     expect(en).toContain("two local SQLite databases");
@@ -77,7 +96,9 @@ describe("/install", () => {
     expect(strings).not.toMatch(/pre-flight block above|activation sequence linked below/i);
   });
   it("keeps the HowTo to the three visible install lines", () => {
-    const steps = resolveSeoMetadata("/install").jsonLd.flatMap((e) => (e["@type"] === "HowTo" ? (e["step"] as { text: string }[]) : []));
+    const steps = resolveSeoMetadata("/install").jsonLd.flatMap((e) =>
+      e["@type"] === "HowTo" ? (e["step"] as { text: string }[]) : []
+    );
     expect(steps).toHaveLength(3);
     const joined = steps.map((s) => s.text).join(" ");
     expect(joined).toContain("neotoma init");
@@ -90,7 +111,10 @@ describe("/evaluate below the first screen and the agent instructions page", () 
   const retired =
     /reconstruct|state layer|replay|conflict detection|deterministic state evolution|audit trail|inference variance|log archaeology|context janitor|shadow-mode|non-destructive|memory guarantees/i;
   it("carries none of the retired comparison, facets or reconstruct wording in either locale", () => {
-    for (const [name, pack] of [["EN", EVALUATE_SUBPAGE_EN], ["ES", EVALUATE_SUBPAGE_ES]] as const) {
+    for (const [name, pack] of [
+      ["EN", EVALUATE_SUBPAGE_EN],
+      ["ES", EVALUATE_SUBPAGE_ES],
+    ] as const) {
       // The scorecard template stays English in both packs and is checked as text like the rest.
       expect(JSON.stringify(pack), name).not.toMatch(retired);
       expect("taxHeading" in pack, name).toBe(false);
@@ -99,18 +123,34 @@ describe("/evaluate below the first screen and the agent instructions page", () 
   });
   it("renders no comparison, tax or memory-guarantees section", () => {
     const page = read("frontend", "src", "components", "subpages", "EvaluatePage.tsx");
-    expect(page).not.toMatch(/taxHeading|comparesHeading|memory-guarantees|non-destructive-testing/);
+    expect(page).not.toMatch(
+      /taxHeading|comparesHeading|memory-guarantees|non-destructive-testing/
+    );
   });
   it("sends agents to the README and known limitations, not to retired pages", () => {
-    const page = read("frontend", "src", "components", "subpages", "EvaluateAgentInstructionsPage.tsx");
-    expect(page).not.toMatch(/reconstruct|memory-guarantees|non-destructive-testing|shadow-mode|shadow mode/i);
+    const page = read(
+      "frontend",
+      "src",
+      "components",
+      "subpages",
+      "EvaluateAgentInstructionsPage.tsx"
+    );
+    expect(page).not.toMatch(
+      /reconstruct|memory-guarantees|non-destructive-testing|shadow-mode|shadow mode/i
+    );
     expect(page).toContain("docs/known_limitations.md");
     // /architecture is a retired redirect stub; link the GitHub file directly.
     expect(page).not.toContain('href="/architecture"');
     expect(page).toContain("docs/architecture/architecture.md");
-    expect(read("frontend", "src", "components", "subpages", "EvaluatePage.tsx")).not.toMatch(/localizePath\("\/architecture"/);
-    expect(read("frontend", "src", "components", "SiteTailpiece.tsx")).not.toMatch(/href: "\/(architecture|faq|docs|api|mcp|cli)"/);
-    const nav = read("frontend", "src", "site", "site_data.ts") + read("src", "services", "root_landing", "site_nav.ts");
+    expect(read("frontend", "src", "components", "subpages", "EvaluatePage.tsx")).not.toMatch(
+      /localizePath\("\/architecture"/
+    );
+    expect(read("frontend", "src", "components", "SiteTailpiece.tsx")).not.toMatch(
+      /href: "\/(architecture|faq|docs|api|mcp|cli)"/
+    );
+    const nav =
+      read("frontend", "src", "site", "site_data.ts") +
+      read("src", "services", "root_landing", "site_nav.ts");
     expect(nav).not.toContain("Where the tax shows up");
     expect(read("frontend", "src", "site", "site_data.ts")).not.toContain("ingest -> reconstruct");
   });
@@ -120,7 +160,9 @@ describe("404 page and the old shell footer", () => {
   it("do not offer the memory guarantees page", () => {
     const notFound = read("frontend", "src", "components", "NotFound.tsx");
     expect(notFound).not.toMatch(/Memory guarantees|state guarantees|memory-guarantees/i);
-    expect(read("frontend", "src", "components", "SiteTailpiece.tsx")).not.toMatch(/MemoryGuarantees|memory-guarantees/);
+    expect(read("frontend", "src", "components", "SiteTailpiece.tsx")).not.toMatch(
+      /MemoryGuarantees|memory-guarantees/
+    );
   });
 });
 
@@ -137,67 +179,95 @@ describe("skills and sandbox", () => {
     expect(index).not.toMatch(/markNZed|teach your agent to remember|Neotoma memory/);
     expect(index).toContain("github.com/markmhendrickson/neotoma/tree/main/skills");
     // The page every skill links to as a related skill is generated, so the internal link resolves.
-    expect(resolveSeoMetadata("/skills/recover-sqlite-database").title).toContain("Recover SQLite Database");
-    expect(read("frontend", "src", "components", "subpages", "SandboxLandingPage.tsx")).not.toContain("your memory to persist");
+    expect(resolveSeoMetadata("/skills/recover-sqlite-database").title).toContain(
+      "Recover SQLite Database"
+    );
+    expect(
+      read("frontend", "src", "components", "subpages", "SandboxLandingPage.tsx")
+    ).not.toContain("your memory to persist");
   });
 });
 
 describe("markdown mirrors of retired pages", () => {
   it("are redirect stubs that go where the source page goes", () => {
-    for (const source of ["/auditable-change-log", "/replayable-timeline", "/deterministic-memory", "/memory-guarantees"]) {
+    for (const source of [
+      "/auditable-change-log",
+      "/replayable-timeline",
+      "/deterministic-memory",
+      "/memory-guarantees",
+    ]) {
       expect(isRetiredRoute(source), source).toBe(true);
       expect(isRetiredRoute(`/markdown${source}`), `/markdown${source}`).toBe(true);
       expect(resolveDestination(`/markdown${source}`).url).toBe(resolveDestination(source).url);
     }
   });
   it("stay served while the source page is served", () => {
-    for (const route of ["/markdown", "/markdown/install", "/markdown/evaluate", "/markdown/evaluate/agent-instructions", "/markdown/skills", "/markdown/skills/ensure-neotoma", "/markdown/privacy", "/markdown/terms", "/markdown/sandbox", "/markdown/meet"]) {
+    for (const route of [
+      "/markdown",
+      "/markdown/install",
+      "/markdown/evaluate",
+      "/markdown/evaluate/agent-instructions",
+      "/markdown/skills",
+      "/markdown/skills/ensure-neotoma",
+      "/markdown/privacy",
+      "/markdown/terms",
+      "/markdown/sandbox",
+      "/markdown/meet",
+    ]) {
       expect(isRetiredRoute(route), route).toBe(false);
     }
   });
 });
 
 describe("sheet 06 limits", () => {
-  const copy = read("frontend", "src", "components", "onepager", "onepager_copy.ts");
-  const expect_ = copy.slice(copy.indexOf("export const EXPECTATIONS"), copy.indexOf("export const NOT_BUILT_YET"));
-  const gaps = copy.slice(copy.indexOf("export const NOT_BUILT_YET"), copy.indexOf("/** Scope, stated"));
   const page = read("frontend", "src", "components", "onepager", "NeotomaOnePager.tsx");
-  it("keeps what Neotoma is and how it is used apart from the gaps", () => {
-    for (const title of ["A record is a working commitment.", "Provenance is a trail, not a verdict.", "Not a chat log or a vector store."]) {
-      expect(expect_, title).toContain(title);
-      expect(gaps, title).not.toContain(title);
+  const markup = renderToStaticMarkup(
+    createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+  );
+  const text = pageText(markup).replace(/\s+/g, " ");
+  const direction = text.slice(
+    text.indexOf("Where this is going"),
+    text.indexOf("Explore the source")
+  );
+  it("separates the current record from planned governance", () => {
+    expect(direction).toContain("Today, Neotoma stores observations, computes current fields");
+    expect(direction).toContain(
+      "Planned work includes domain-scoped correction rights, explicit disputes and official positions"
+    );
+    expect(direction).toContain(
+      "Those governance features are direction, not current capabilities or a timeline promise"
+    );
+    expect(direction.indexOf("Today, Neotoma")).toBeLessThan(direction.indexOf("Planned work"));
+    expect(direction).not.toMatch(
+      /correction rights (ship|are available)|disputes (ship|are available)/i
+    );
+  });
+  it("names all four current limits in the served direction section", () => {
+    for (const statement of [
+      "later ordinary writes can replace corrections",
+      "export contains current values without observation history",
+      "authorship is verified only for signed requests, and some paths record no writer",
+      "One entity can be read as of a past time; the whole record cannot",
+    ]) {
+      expect(direction, statement).toContain(statement);
     }
-    expect(page).toContain("What to expect");
-    expect(page).toContain("Not built yet");
   });
-  it("names the four gaps in the essay's order, with their substance", () => {
-    const order = [
-      "Reading the whole record as it stood at a past date.",
-      "Moving a record between instances with its history.",
-      "Corrections that always hold.",
-      "Verified authorship for every write.",
-    ].map((title) => gaps.indexOf(title));
-    expect(order.every((i) => i >= 0)).toBe(true);
-    expect([...order].sort((x, y) => x - y)).toEqual(order);
-    expect(gaps).toContain("One entity can be read as of a past time today.");
-    expect(gaps).toContain("Observation history stays in the instance it was recorded in.");
-    expect(gaps).toContain("A later ordinary write can replace a correction.");
-    expect(gaps).toContain("Attribution is verified only for signed requests.");
-    expect(gaps).toContain("the name is the writer's own report");
-    expect(gaps).toContain("some write paths, such as the CLI, record no writer");
-  });
-  it("states one operator per instance as scope, not as a gap, and carries no issue numbers", () => {
-    expect(copy).toContain("A local install serves one operator; there are no organizations, workspaces, or rules for who may correct what.");
-    expect(copy).not.toMatch(/One operator per instance|users are separate tenants/);
-    expect(gaps).not.toMatch(/one operator|organizations, workspaces|rules for who may correct|Authority over the record/i);
+  it("states local operator scope and links full limitations without issue numbers", () => {
+    expect(direction).toContain("Current boundaries: one local operator");
+    expect(markup).toContain("docs/known_limitations.md");
+    expect(direction).not.toMatch(
+      /One operator per instance|users are separate tenants|#\d{3,}|issue \d{3,}/i
+    );
     expect(page).toContain("known_limitations.md");
-    expect(expect_ + gaps).not.toMatch(/#\d{3,}|issue \d{3,}/i);
   });
 });
 
 describe("/install intro and table", () => {
   const strings = read("frontend", "src", "i18n", "locales", "install_page_strings.ts");
-  const en = strings.slice(strings.indexOf("export const INSTALL_PAGE_EN"), strings.indexOf("export const INSTALL_PAGE_ES"));
+  const en = strings.slice(
+    strings.indexOf("export const INSTALL_PAGE_EN"),
+    strings.indexOf("export const INSTALL_PAGE_ES")
+  );
   it("splits the intro into what init does, what setup writes and what is sent over the network", () => {
     const start = en.indexOf("whatChangesIntroParagraphs: [");
     const end = en.indexOf("whatChangesFootnoteSegments", start);
@@ -237,7 +307,12 @@ describe("served-page statement list", () => {
     for (const text of examples) {
       expect(findClaimProblems(text, SERVED_PAGE_STATEMENTS).length, text).toBeGreaterThan(0);
     }
-    expect(findClaimProblems("Agents connected to the same MCP entry read the same record.", SERVED_PAGE_STATEMENTS)).toEqual([]);
+    expect(
+      findClaimProblems(
+        "Agents connected to the same MCP entry read the same record.",
+        SERVED_PAGE_STATEMENTS
+      )
+    ).toEqual([]);
   });
 });
 
@@ -246,7 +321,9 @@ describe("telemetry wording on the shared list", () => {
     const qualified =
       "No telemetry. The interactive CLI checks the npm registry (off with NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts. Agents can also call the npm_check_update tool. The registry sees ordinary connection metadata.";
     expect(findClaimProblems(qualified, [])).toEqual([]);
-    expect(findClaimProblems(qualified.replace("npm_check_update", "update tool"), []).map((f) => f.id)).toContain("telemetry");
+    expect(
+      findClaimProblems(qualified.replace("npm_check_update", "update tool"), []).map((f) => f.id)
+    ).toContain("telemetry");
   });
 });
 
@@ -261,7 +338,8 @@ describe("markdown mirror of a docs viewer page", () => {
 });
 
 describe("linear HTML helpers", () => {
-  const block = (n: number) => `<script type="application/ld+json" data-rh="true">{"n":${n}}</script>`;
+  const block = (n: number) =>
+    `<script type="application/ld+json" data-rh="true">{"n":${n}}</script>`;
   it("remove a duplicated JSON-LD block and keep distinct ones", () => {
     const html = `<head>${block(1)}\n${block(2)}\n</head><body>x</body><script type="application/ld+json">{"n":1}</script>\n${block(3)}`;
     const out = dedupeJsonLd(html);
@@ -272,7 +350,12 @@ describe("linear HTML helpers", () => {
     expect(dedupeJsonLd(clean)).toBe(clean);
   });
   it("stay fast on unterminated markup (the lazy script and style strip took seconds)", () => {
-    const hostile = "<script>".repeat(8000) + "<style>".repeat(8000) + "<a href=\"x".repeat(4000) + "<title>" + "x".repeat(40000);
+    const hostile =
+      "<script>".repeat(8000) +
+      "<style>".repeat(8000) +
+      '<a href="x'.repeat(4000) +
+      "<title>" +
+      "x".repeat(40000);
     expect(hostile.length).toBeGreaterThan(150000);
     const t0 = performance.now();
     pageText(hostile);

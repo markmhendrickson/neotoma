@@ -7,10 +7,10 @@ Neotoma is the system of record for AI agents. Without one, an agent works from 
 ```bash
 npm install -g neotoma
 neotoma init
-neotoma setup --tool claude-code --yes
+neotoma setup --tool claude-code
 ```
 
-`neotoma setup --tool claude-code --yes` connects Claude Code: it writes MCP entries, CLI instruction files, and an allow rule that lets Claude Code run any `neotoma` command; [Install](#install) lists everything it writes.
+`neotoma setup --tool claude-code` connects Claude Code: it writes MCP entries, CLI instruction files, and an allow rule that lets Claude Code run any `neotoma` command; [Install](#install) lists everything it writes. Human-run setup omits `--yes`; automated setup may add it after the operator authorizes those changes. Omission does not prevent every setup write.
 
 After a plain npm install, CLI data commands such as `neotoma store` return `AUTH_REQUIRED`, because the CLI uses the production profile, which needs a token. Run them as `neotoma dev ...` or with `NEOTOMA_ENV=development`.
 
@@ -108,10 +108,10 @@ The Inspector is a single-page web app bundled into the build and served by the 
 ```bash
 npm install -g neotoma
 neotoma init
-neotoma setup --tool claude-code --yes
+neotoma setup --tool claude-code
 ```
 
-In v0.26.0, `neotoma setup --tool claude-code --yes` writes the MCP entries and more:
+In v0.26.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
 
 - Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
 - CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.
@@ -142,11 +142,11 @@ Neotoma works across MCP-capable hosts. Most are a single setup command; some ad
 
 | Host | Modes | Install |
 | --- | --- | --- |
-| Cursor | MCP + hooks | `neotoma setup --tool cursor --yes` |
-| Claude Code | MCP + hooks | `neotoma setup --tool claude-code --yes` |
-| Claude Desktop | MCP (local + remote) | `neotoma setup --tool claude-desktop --yes` |
-| Codex CLI | MCP + hooks | `neotoma setup --tool codex --yes` |
-| OpenClaw | Native plugin + MCP | `neotoma setup --tool openclaw --yes` |
+| Cursor | MCP + hooks | `neotoma setup --tool cursor` |
+| Claude Code | MCP + hooks | `neotoma setup --tool claude-code` |
+| Claude Desktop | MCP (local + remote) | `neotoma setup --tool claude-desktop` |
+| Codex CLI | MCP + hooks | `neotoma setup --tool codex` |
+| OpenClaw | Native plugin + MCP | `neotoma setup --tool openclaw` |
 | ChatGPT | MCP App + Custom GPT Actions | Manual HTTPS + OAuth |
 | Windsurf, Continue, VS Code (Copilot) | MCP | Manual MCP config; see the per-host guides in the [Integrations](docs/integrations/matrix.md) matrix (`neotoma setup --help` lists only the five hosts above) |
 | OpenCode | hooks | plugin install |

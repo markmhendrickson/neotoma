@@ -61,7 +61,7 @@ export const RECALL_VS_RECORD: readonly {
   {
     question: "What does a second agent read?",
     recall: "Whatever that tool retained.",
-    record: "The same record, when it is connected to the same MCP entry.",
+    record: "The same record, when it uses the same instance and MCP entry or data profile.",
   },
 ];
 

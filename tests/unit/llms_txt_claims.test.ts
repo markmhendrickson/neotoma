@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NEOTOMA_TOOL_NAMES } from "../../src/tool_definitions.js";
 import { listInstallableSkillNames } from "../../src/cli/skills_mirror.js";
+import { INSTALL_COMMANDS } from "../../frontend/src/components/onepager/onepager_copy";
+import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
 
 /**
  * Text guards for the agent-facing llms.txt body and the README's checkable claims.
@@ -301,9 +303,7 @@ describe("README checkable claims", () => {
   });
 
   it("explains what setup writes for Claude Code and Cursor permissions", () => {
-    expect(readme).toMatch(
-      /`neotoma setup --tool claude-code --yes` writes the MCP entries and more/
-    );
+    expect(readme).toMatch(/`neotoma setup --tool claude-code` writes the MCP entries and more/);
     expect(readme).toContain(".claude/settings.local.json");
     expect(readme).toContain(".cursor/allowlist.json");
     expect(readme).toContain("`--skip-permissions`");
@@ -393,20 +393,21 @@ describe("README checkable claims", () => {
   it("opens with the same three-line install block as the one-pager, then the permissions note", () => {
     const block = /```bash\n([\s\S]*?)```/.exec(readme);
     expect(block).not.toBeNull();
-    const onepager = readFileSync(
-      join(root, "frontend/src/components/onepager/onepager_copy.ts"),
-      "utf-8"
-    );
-    const m = /export const INSTALL_COMMANDS = `([^`]*)`/.exec(onepager);
-    expect(m).not.toBeNull();
-    expect(block![1].trim()).toBe(m![1].trim());
+    expect(block![1].trim()).toBe(INSTALL_COMMANDS.trim());
     expect(block![1]).not.toContain("neotoma mcp config");
+    expect(block![1]).not.toContain("--yes");
     const after = readme.slice(block!.index + block![0].length).trimStart();
     expect(
       after.startsWith(
-        "`neotoma setup --tool claude-code --yes` connects Claude Code: it writes MCP entries, CLI instruction files, and an allow rule that lets Claude Code run any `neotoma` command; [Install](#install) lists everything it writes."
+        "`neotoma setup --tool claude-code` connects Claude Code: it writes MCP entries, CLI instruction files, and an allow rule that lets Claude Code run any `neotoma` command; [Install](#install) lists everything it writes."
       )
     ).toBe(true);
+    expect(after).toContain("Omission does not prevent every setup write.");
+    const steps = resolveSeoMetadata("/install").jsonLd.flatMap((entry) =>
+      entry["@type"] === "HowTo" ? (entry.step as { text: string }[]) : []
+    );
+    expect(steps.map((step) => step.text).join(" ")).toContain("neotoma setup --tool claude-code");
+    expect(steps.map((step) => step.text).join(" ")).not.toContain("--yes");
   });
 
   it("keeps the note under the install block to one setup sentence plus the token workaround", () => {
@@ -417,6 +418,9 @@ describe("README checkable claims", () => {
     expect(paragraphs[1]).toContain("return `AUTH_REQUIRED`");
     expect(paragraphs[1]).toContain("`neotoma dev ...`");
     expect(paragraphs[1]).toContain("`NEOTOMA_ENV=development`");
+    expect(paragraphs[0]).toContain(
+      "automated setup may add it after the operator authorizes those changes"
+    );
     expect(note).not.toContain("`.codex/neotoma_cli.md`");
   });
 
@@ -526,7 +530,9 @@ describe("claims true for this package", () => {
       // The promise is limited to keys started on this release: a key left over from an earlier
       // version (no completion marker) replays what landed, so an unqualified claim is false.
       expect(text).toContain("started on v0.26.0");
-      expect(text).toContain("keys left over from earlier versions behave differently over MCP and HTTP");
+      expect(text).toContain(
+        "keys left over from earlier versions behave differently over MCP and HTTP"
+      );
       expect(text).toContain("ERR_STORE_WRITE_INCOMPLETE");
       expect(text).not.toContain("reports success without finishing it");
     }
@@ -596,7 +602,9 @@ describe("docs/known_limitations.md", () => {
     const partialStore = entries.find((e) => e.startsWith("A store that fails partway"))!;
     expect(partialStore).toContain("a same-key retry finishes missing observations");
     expect(partialStore).toContain("ERR_STORE_WRITE_INCOMPLETE");
-    expect(partialStore).toContain("MCP does not repair keys stranded before the completion marker");
+    expect(partialStore).toContain(
+      "MCP does not repair keys stranded before the completion marker"
+    );
     expect(partialStore).toContain("create_relationships` takes no idempotency key");
     const attribution = entries.find((e) => e.startsWith("Who wrote or corrected"))!;
     expect(attribution).toContain("records `unspecified`");
