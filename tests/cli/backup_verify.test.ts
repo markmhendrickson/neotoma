@@ -85,7 +85,7 @@ async function runNeotomaCli(
   process.exitCode = undefined;
 
   const saved: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(env)) {
+  for (const [k, v] of Object.entries({ NEOTOMA_ENV: "development", ...env })) {
     saved[k] = process.env[k];
     if (v === undefined) {
       delete process.env[k];
@@ -153,7 +153,11 @@ describe("CLI backup verify (smoke)", () => {
       const run = spawnSync(process.execPath, argv, {
         cwd: process.cwd(),
         encoding: "utf8",
-        env: { ...process.env, NEOTOMA_DATA_DIR: path.join(parent, "data") },
+        env: {
+          ...process.env,
+          NEOTOMA_ENV: "development",
+          NEOTOMA_DATA_DIR: path.join(parent, "data"),
+        },
       });
       expect(run.status, run.stderr).toBe(1);
       expect(run.stderr).toContain("Backup operation failed");
@@ -189,7 +193,11 @@ describe("CLI backup verify (smoke)", () => {
       const run = spawnSync(process.execPath, argv, {
         cwd: process.cwd(),
         encoding: "utf8",
-        env: { ...process.env, NEOTOMA_DATA_DIR: path.join(parent, "data") },
+        env: {
+          ...process.env,
+          NEOTOMA_ENV: "development",
+          NEOTOMA_DATA_DIR: path.join(parent, "data"),
+        },
       });
       expect(run.status, run.stderr).toBe(1);
       expect(run.stderr).toContain("Backup operation failed");
@@ -200,6 +208,88 @@ describe("CLI backup verify (smoke)", () => {
         const envelope = JSON.parse(run.stderr) as { error: string; hint?: unknown };
         expect(envelope.hint).toBeUndefined();
       }
+    }
+  });
+
+  it.each(["missing", "malformed", "unreadable", "invalid"] as const)(
+    "exits unsuccessfully when restore manifest is %s",
+    async (manifestState) => {
+      const parent = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-restore-manifest-"));
+      backupRoots.push(parent);
+      const source = path.join(parent, "source");
+      const target = path.join(parent, "target");
+      await fs.mkdir(source);
+      const manifestPath = path.join(source, "manifest.json");
+      if (manifestState === "malformed") await fs.writeFile(manifestPath, "{not-json");
+      if (manifestState === "unreadable") await fs.mkdir(manifestPath);
+      if (manifestState === "invalid") {
+        await fs.writeFile(manifestPath, JSON.stringify({ contents: null }));
+      }
+
+      const run = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli/bootstrap.ts",
+          "--json",
+          "backup",
+          "restore",
+          "--from",
+          source,
+          "--target",
+          target,
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, NEOTOMA_ENV: "development" },
+        }
+      );
+      expect(run.status, run.stderr + run.stdout).toBe(1);
+      expect(JSON.parse(run.stderr)).toHaveProperty("error");
+      expect(run.stdout).not.toContain('"status":"restored"');
+      await expect(fs.stat(target)).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  );
+
+  it("exits successfully after restoring a healthy manifest and database", async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-restore-healthy-"));
+    backupRoots.push(parent);
+    const source = path.join(parent, "source");
+    const target = path.join(parent, "target");
+    await fs.mkdir(source);
+    const db = createFixtureSqliteDatabase(path.join(source, "neotoma.db"));
+    db.exec("create table test_data(value text); insert into test_data values ('ready');");
+    db.close();
+    await fs.writeFile(
+      path.join(source, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+    );
+
+    const run = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "src/cli/bootstrap.ts",
+        "--json",
+        "backup",
+        "restore",
+        "--from",
+        source,
+        "--target",
+        target,
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env: { ...process.env, NEOTOMA_ENV: "development" } }
+    );
+    expect(run.status, run.stderr + run.stdout).toBe(0);
+    expect(JSON.parse(run.stdout)).toHaveProperty("status", "restored");
+    const restored = createFixtureSqliteDatabase(path.join(target, "neotoma.db"));
+    try {
+      expect(restored.prepare("select value from test_data").get()).toEqual({ value: "ready" });
+    } finally {
+      restored.close();
     }
   });
 

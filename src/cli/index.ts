@@ -11708,6 +11708,7 @@ backupCommand
       writeCliError("No manifest.json found in backup directory: " + opts.from, {
         suppressRecoveryHint: true,
       });
+      process.exitCode = 1;
       return;
     }
 
