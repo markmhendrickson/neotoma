@@ -1,0 +1,113 @@
+/* The public-site snippet surface follows the accepted paper, navy and rust identity.
+   Local .plan tokens win; defaults also cover shared snippets on documentation routes. */
+.site-snippet {
+  --snippet-paper: var(--paper, #faf8f3);
+  --snippet-ink: var(--ink, #172b39);
+  --snippet-line: var(--line, #d6d0c4);
+  --snippet-band: var(--band, #f1ece2);
+  --snippet-rust: var(--rust, #a14624);
+  --snippet-muted: var(--slate, #52616a);
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 1.5rem;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  border: 1px solid var(--snippet-line);
+  border-radius: 4px;
+  background: var(--snippet-paper);
+  color: var(--snippet-ink);
+  text-align: left;
+  font-family: var(--sans, "Instrument Sans Onepager", system-ui, sans-serif);
+}
+.dark .site-snippet {
+  --snippet-paper: var(--paper, #1d272c);
+  --snippet-ink: var(--ink, #eeeae0);
+  --snippet-line: var(--line, #4b5050);
+  --snippet-band: var(--band, #303333);
+  --snippet-rust: var(--rust, #e5a17c);
+  --snippet-muted: var(--slate, #b7c4ca);
+}
+.site-snippet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.site-snippet-heading {
+  min-width: 0;
+}
+.site-snippet-title {
+  margin: 0;
+  color: var(--snippet-rust);
+  font: 600 0.72rem/1.5 var(--sans, system-ui, sans-serif);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.site-snippet-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--snippet-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.site-snippet-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  min-width: 5.8rem;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--snippet-ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--snippet-ink);
+  font: 600 0.82rem/1.2 var(--sans, system-ui, sans-serif);
+  cursor: pointer;
+  box-shadow: none;
+}
+.site-snippet-copy:hover {
+  background: var(--snippet-ink);
+  color: var(--snippet-paper);
+}
+.site-snippet-copy:focus-visible,
+.site-snippet-code:focus-visible {
+  outline: 3px solid var(--snippet-rust);
+  outline-offset: 3px;
+}
+.site-snippet .site-snippet-code {
+  margin: 0;
+  padding: 1rem;
+  border: 0;
+  border-radius: 0;
+  background: var(--snippet-band);
+  color: var(--snippet-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-x: visible;
+  tab-size: 2;
+  font: 0.8rem/1.7 var(--mono, ui-monospace, monospace);
+}
+.site-snippet-code code {
+  font: inherit;
+  white-space: inherit;
+  overflow-wrap: inherit;
+}
+.site-snippet-prose {
+  margin: 0;
+  max-width: 75ch;
+  font-size: 1rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.site-snippet-status.site-snippet-error {
+  margin: 0 0 1rem;
+  color: var(--snippet-rust);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+/* Legacy diagram labels retain their wording but no ornamental status dot. */
+.site-snippet-title > span[aria-hidden] {
+  display: none;
+}
