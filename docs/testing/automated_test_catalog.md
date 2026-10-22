@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **749**
-- Backend and repo Vitest files: **713**
+- Total automated test files: **750**
+- Backend and repo Vitest files: **714**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 209 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 227 |
+| Vitest integration tests | 228 |
 | Vitest CLI tests | 88 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -468,7 +468,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (227):**
+**Files (228):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -534,6 +534,7 @@ flowchart TD
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
+- `tests/integration/field_provenance_contract_parity.test.ts`
 - `tests/integration/field_provenance_corrected_and_merged.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/gdpr_deletion.test.ts`
