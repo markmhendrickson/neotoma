@@ -16,6 +16,12 @@
 #   - restates: Document restates information from upstream
 
 # Foundation Layer (root dependencies)
+docs/site/release_docs_manifest.json:
+  downstream:
+    - path: docs/coverage_manifest.md
+      type: implicit
+      reason: Public page allowlist defines the bounded release export coverage
+
 docs/NEOTOMA_MANIFEST.md:
   downstream:
     - path: docs/specs/*.md
