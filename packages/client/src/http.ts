@@ -11,6 +11,7 @@
  */
 
 import {
+  CorrectInput,
   CreateRelationshipsInput,
   CreateRelationshipInput,
   ListObservationsInput,
@@ -150,10 +151,7 @@ export class HttpTransport implements NeotomaTransport {
     return this.post("/create_relationships", input);
   }
 
-  async correct(input: {
-    entity_id: string;
-    corrections: Record<string, unknown>;
-  }): Promise<unknown> {
+  async correct(input: CorrectInput): Promise<unknown> {
     return this.post("/correct", input);
   }
 

@@ -12,6 +12,7 @@
  */
 
 import {
+  CorrectInput,
   CreateRelationshipsInput,
   CreateRelationshipInput,
   ListObservationsInput,
@@ -60,7 +61,7 @@ export interface LocalOperations {
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  correct(input: CorrectInput): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
   executeTool(name: string, args: unknown): Promise<unknown>;
@@ -147,10 +148,7 @@ export class LocalTransport implements NeotomaTransport {
     return ops.createRelationships(input);
   }
 
-  async correct(input: {
-    entity_id: string;
-    corrections: Record<string, unknown>;
-  }): Promise<unknown> {
+  async correct(input: CorrectInput): Promise<unknown> {
     const ops = await this.resolveOperations();
     return ops.correct(input);
   }

@@ -343,6 +343,8 @@ describe("snapshotOnUpdate", () => {
 
     const result = await snapshotOnUpdate(transport, {
       entityId: "ent-1",
+      entityType: "task",
+      idempotencyKey: "caller-operation",
       corrections: { status: "new" },
     });
 
@@ -359,6 +361,8 @@ describe("snapshotOnUpdate", () => {
 
     const result = await snapshotOnUpdate(transport, {
       entityId: "ent-1",
+      entityType: "task",
+      idempotencyKey: "caller-operation",
       corrections: { status: "already-set" },
       review: (snapshot) =>
         (snapshot as { status?: string }).status === "already-set" ? false : true,
@@ -372,14 +376,16 @@ describe("snapshotOnUpdate", () => {
     let capturedCorrections: unknown;
     const transport = makeStubTransport({
       retrieveEntitySnapshot: vi.fn(async () => ({ status: "stale" })),
-      correct: vi.fn(async (input: { entity_id: string; corrections: Record<string, unknown> }) => {
-        capturedCorrections = input.corrections;
+      correct: vi.fn(async (input: { field: string; value: unknown }) => {
+        capturedCorrections = { [input.field]: input.value };
         return {};
       }),
     });
 
     await snapshotOnUpdate(transport, {
       entityId: "ent-1",
+      entityType: "task",
+      idempotencyKey: "caller-operation",
       corrections: { status: "new" },
       review: () => ({ status: "reconciled" }),
     });

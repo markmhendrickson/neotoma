@@ -145,6 +145,11 @@ jobs:
       - name: Build server (integration tests boot the in-process Actions server)
         run: npm run build:server
 
+      - name: Build and effect-test SDK correction contract (#2722)
+        run: |
+          npm run build --prefix packages/client
+          npx vitest run --no-file-parallelism tests/integration/sdk_client_correction_contract.test.ts
+
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
