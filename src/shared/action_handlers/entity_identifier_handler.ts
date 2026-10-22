@@ -1,6 +1,7 @@
 import { db } from "../../db.js";
 import { acquireDatabase as getDb } from "../../repositories/db/acquisition.js";
 import { assertIdentityResolutionAvailable } from "../../services/entity_identity_admission.js";
+import { EntityIdentityContractError } from "../../services/entity_identity_contract.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import { queryEntities } from "../../services/entity_queries.js";
 import {
@@ -189,30 +190,26 @@ export async function retrieveEntityByIdentifierWithFallback(
   // A typed exact lookup cannot enter lowercase/alias/fuzzy legacy passes.
   if (params.entityType)
     await assertIdentityResolutionAvailable(database, params.entityType, params.userId);
-  const result = await retrieveLegacyEntityByIdentifier(params);
-  // A legacy entity can carry independently materialized snapshot metadata.
-  // Guard both authoritative type columns before returning any candidate; never
-  // interpret a user field named entity_type inside snapshot JSON as metadata.
-  const candidateTypes = new Set(result.entities.map((entity) => entity.entity_type));
-  if (result.entities.length > 0) {
-    const { data: snapshots, error } = await db
-      .from("entity_snapshots")
-      .select("entity_type")
-      .eq("user_id", params.userId)
-      .in(
-        "entity_id",
-        result.entities.map((entity) => entity.id)
+  // Private per-call authority sidecar: capture physical metadata alongside
+  // each acquired payload, never re-read mutable metadata to certify old data.
+  const acquiredIdentityTypes = new Set<unknown>();
+  const result = await retrieveLegacyEntityByIdentifier(params, acquiredIdentityTypes);
+  for (const entityType of new Set([
+    ...result.entities.map((entity) => entity.entity_type),
+    ...acquiredIdentityTypes,
+  ])) {
+    if (typeof entityType !== "string" || !entityType.length)
+      throw new EntityIdentityContractError(
+        "Identifier acquisition authority is unavailable or invalid."
       );
-    if (error) throw new Error(`Failed to validate identifier snapshot metadata: ${error.message}`);
-    for (const snapshot of snapshots || []) candidateTypes.add(snapshot.entity_type);
-  }
-  for (const entityType of candidateTypes)
     await assertIdentityResolutionAvailable(database, entityType, params.userId);
+  }
   return result;
 }
 
 async function retrieveLegacyEntityByIdentifier(
-  params: RetrieveEntityByIdentifierParams
+  params: RetrieveEntityByIdentifierParams,
+  acquiredIdentityTypes: Set<unknown>
 ): Promise<RetrieveEntityByIdentifierResult> {
   const {
     identifier,
@@ -241,12 +238,15 @@ async function retrieveLegacyEntityByIdentifier(
       throw new Error(`Failed to look up entity by id: ${byIdError.message}`);
     }
     if (byId) {
-      const { data: snap } = await db
+      const { data: snap, error: snapshotError } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("user_id", userId)
         .eq("entity_id", (byId as { id: string }).id)
         .maybeSingle();
+      if (snapshotError)
+        throw new Error(`Failed to acquire identifier snapshot: ${snapshotError.message}`);
+      if (snap) acquiredIdentityTypes.add(snap.entity_type);
       const mapped: RetrievedEntity = {
         id: (byId as { id: string }).id,
         entity_type: (byId as { entity_type: string }).entity_type,
@@ -412,6 +412,7 @@ async function retrieveLegacyEntityByIdentifier(
         for (const row of (exactRows as SnapshotRow[] | null) || []) {
           if (exactMatchIds.has(row.entity_id)) continue;
           exactMatchIds.add(row.entity_id);
+          acquiredIdentityTypes.add(row.entity_type);
           snapshotMatches.push(row);
         }
       }
@@ -434,6 +435,7 @@ async function retrieveLegacyEntityByIdentifier(
         for (const row of (exactRows as SnapshotRow[] | null) || []) {
           if (exactMatchIds.has(row.entity_id)) continue;
           exactMatchIds.add(row.entity_id);
+          acquiredIdentityTypes.add(row.entity_type);
           snapshotMatches.push(row);
         }
       }
@@ -452,6 +454,7 @@ async function retrieveLegacyEntityByIdentifier(
         for (const row of (exactRows as SnapshotRow[] | null) || []) {
           if (exactMatchIds.has(row.entity_id)) continue;
           exactMatchIds.add(row.entity_id);
+          acquiredIdentityTypes.add(row.entity_type);
           snapshotMatches.push(row);
         }
       }
@@ -472,18 +475,22 @@ async function retrieveLegacyEntityByIdentifier(
       if (exactMatchIds.has(row.entity_id)) continue;
       const fields = await snapshotFieldsForType(row.entity_type);
       if (snapshotFieldsMatch(row.snapshot, needleLower, fields)) {
+        acquiredIdentityTypes.add(row.entity_type);
         snapshotMatches.push(row);
       }
     }
     if (snapshotMatches.length > 0) {
       const matchedIds = snapshotMatches.map((r) => r.entity_id);
-      const snapshotEntities = await queryEntities({
-        userId,
-        includeMerged: false,
-        entityIds: matchedIds,
-        limit,
-        offset: 0,
-      });
+      const snapshotEntities = await queryEntities(
+        {
+          userId,
+          includeMerged: false,
+          entityIds: matchedIds,
+          limit,
+          offset: 0,
+        },
+        acquiredIdentityTypes
+      );
       if (snapshotEntities.length > 0) {
         const mapped: RetrievedEntity[] = snapshotEntities.map((entity) => ({
           id: entity.entity_id,
@@ -515,13 +522,16 @@ async function retrieveLegacyEntityByIdentifier(
       return { entities: [], total: 0, match_mode: "none" };
     }
 
-    const semanticEntities = await queryEntities({
-      userId,
-      includeMerged: false,
-      entityIds,
-      limit,
-      offset: 0,
-    });
+    const semanticEntities = await queryEntities(
+      {
+        userId,
+        includeMerged: false,
+        entityIds,
+        limit,
+        offset: 0,
+      },
+      acquiredIdentityTypes
+    );
 
     const semanticMapped: RetrievedEntity[] = semanticEntities.map((entity) => ({
       id: entity.entity_id,
@@ -541,12 +551,15 @@ async function retrieveLegacyEntityByIdentifier(
   }
 
   const entityIds = directEntities.map((entity: { id: string }) => entity.id);
-  const { data: snapshots } = await db
+  const { data: snapshots, error: snapshotsError } = await db
     .from("entity_snapshots")
     .select("*")
     .eq("user_id", userId)
     .in("entity_id", entityIds);
 
+  if (snapshotsError)
+    throw new Error(`Failed to acquire identifier snapshots: ${snapshotsError.message}`);
+  for (const snapshot of snapshots || []) acquiredIdentityTypes.add(snapshot.entity_type);
   const snapshotMap = new Map(
     (snapshots || []).map((snapshot: { entity_id: string }) => [snapshot.entity_id, snapshot])
   );

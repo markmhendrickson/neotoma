@@ -323,7 +323,10 @@ export async function filterCurrentLifecycleRecords<T extends { entity_id: strin
  * Query entities with merged entity exclusion
  */
 export async function queryEntities(
-  options: EntityQueryOptions = {}
+  options: EntityQueryOptions = {},
+  // Internal per-call sidecar for consumers that validate acquisition authority.
+  // It never enters the returned JSON or reads similarly named domain fields.
+  acquiredIdentityTypes?: Set<unknown>
 ): Promise<EntityWithProvenance[]> {
   const readTrace = options.readTrace;
   const {
@@ -908,6 +911,8 @@ export async function queryEntities(
 
   return entities.map((entity: any) => {
     const snapshot = snapshotMap.get(entity.id);
+    acquiredIdentityTypes?.add(entity.entity_type);
+    if (snapshot) acquiredIdentityTypes?.add(snapshot.entity_type);
     if (
       snapshot?.snapshot != null &&
       (typeof snapshot.snapshot !== "object" || Array.isArray(snapshot.snapshot))

@@ -542,6 +542,7 @@ describe("immutable exact-identity admission in the existing registry", () => {
               expectedIds
             );
             expect(result.total).toBe(expectedIds.length);
+            expect(result).not.toHaveProperty("acquiredIdentityTypes");
             expect(JSON.stringify(result)).not.toContain(privateMarker);
           }
         }
@@ -556,6 +557,371 @@ describe("immutable exact-identity admission in the existing registry", () => {
       }
     }
   );
+
+  it.each(["replace_type", "delete", "ordinary_replacement"])(
+    "refuses previously acquired reserved metadata after deterministic %s interposition",
+    async (mutation) => {
+      const reservedType = type(`window_${mutation}`);
+      const ordinaryType = type(`window_ordinary_${mutation}`);
+      await schemaRegistry.register(config(reservedType));
+      const entityId = `ent_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
+      const name = `synthetic-window-${mutation}-${suffix}`;
+      const code = `synthetic-window-code-${mutation}-${suffix}`;
+      const marker = `synthetic-acquired-reserved-${mutation}-${suffix}`;
+      expect(
+        (
+          await db.from("entities").insert({
+            id: entityId,
+            entity_type: ordinaryType,
+            canonical_name: name,
+            user_id: PARITY_USER_ID,
+          })
+        ).error
+      ).toBeNull();
+      const snapshot = {
+        entity_id: entityId,
+        entity_type: reservedType,
+        schema_version: "1",
+        canonical_name: name,
+        snapshot: { code, marker },
+        provenance: {},
+        observation_count: 0,
+        computed_at: "2026-10-22T00:00:00Z",
+        last_observation_at: "2026-10-22T00:00:00Z",
+        user_id: PARITY_USER_ID,
+      };
+      const database = await getDb();
+      const server = await startOfflineServer();
+      try {
+        for (const scenario of ["raw_id", "raw_decoy", "direct_name", "snapshot_field"]) {
+          for (const surface of ["http", "mcp", "cli"]) {
+            expect((await db.from("entity_snapshots").upsert(snapshot)).error).toBeNull();
+            let interpositions = 0;
+            const from = db.from.bind(db);
+            // Deterministic owned-DB interposition after the physical payload
+            // row has been acquired but before its awaiting caller can validate
+            // or return it. No timing sleep, guard removal or activation.
+            const spy = vi.spyOn(db, "from").mockImplementation((table) => {
+              const query = from(table);
+              if (table === "entity_snapshots") {
+                const execute = query.execute.bind(query);
+                query.execute = async () => {
+                  const result = await execute();
+                  const rows = Array.isArray(result.data) ? result.data : [result.data];
+                  if (
+                    !interpositions &&
+                    rows.some(
+                      (row) =>
+                        row?.entity_id === entityId &&
+                        row.entity_type === reservedType &&
+                        row.snapshot != null
+                    )
+                  ) {
+                    interpositions++;
+                    if (mutation === "delete")
+                      await database
+                        .prepare("DELETE FROM entity_snapshots WHERE entity_id = ?")
+                        .run(entityId);
+                    else if (mutation === "replace_type")
+                      await database
+                        .prepare("UPDATE entity_snapshots SET entity_type = ? WHERE entity_id = ?")
+                        .run(ordinaryType, entityId);
+                    else
+                      await database
+                        .prepare(
+                          "UPDATE entity_snapshots SET entity_type = ?, snapshot = ? WHERE entity_id = ?"
+                        )
+                        .run(ordinaryType, '{"code":"synthetic-ordinary-replacement"}', entityId);
+                  }
+                  return result;
+                };
+              }
+              return query;
+            });
+            const request: Record<string, unknown> =
+              scenario === "snapshot_field"
+                ? { identifier: code, by: "code", include_observations: true }
+                : {
+                    identifier: scenario === "direct_name" ? name : entityId,
+                    include_observations: true,
+                    ...(scenario === "raw_decoy" ? { entity_type: ordinaryType } : {}),
+                  };
+            try {
+              if (surface === "http") {
+                const result = await callHttp(
+                  server.base,
+                  "/retrieve_entity_by_identifier",
+                  request
+                );
+                expect(interpositions).toBe(1);
+                expect(result.status).toBe(400);
+                expect(result.json).toMatchObject({ error_code: "VALIDATION_INVALID_FORMAT" });
+                expect(JSON.stringify(result.json)).not.toContain(marker);
+              } else if (surface === "mcp") {
+                const error = (await callRegisteredMcp(
+                  request,
+                  "retrieve_entity_by_identifier"
+                ).catch((failure: unknown) => failure)) as {
+                  code: number;
+                  data: Record<string, unknown>;
+                };
+                expect(interpositions).toBe(1);
+                expect(error.code).toBe(-32602);
+                expect(error.data).toMatchObject({ error_code: "VALIDATION_INVALID_FORMAT" });
+                expect(JSON.stringify(error.data ?? null)).not.toContain(marker);
+              } else {
+                const failure = (await cliRequest(
+                  server.base,
+                  request,
+                  "retrieveEntityByIdentifier"
+                ).catch((error: unknown) => error)) as { code: number; stderr: string };
+                expect(interpositions).toBe(1);
+                expect(failure.code).toBe(1);
+                expect(failure.stderr).toContain("VALIDATION_INVALID_FORMAT");
+                expect(failure.stderr).not.toContain(marker);
+              }
+              const current = (await database
+                .prepare("SELECT entity_type,snapshot FROM entity_snapshots WHERE entity_id = ?")
+                .get(entityId)) as { entity_type: string; snapshot: string } | undefined;
+              if (mutation === "delete") expect(current).toBeUndefined();
+              else {
+                expect(current?.entity_type).toBe(ordinaryType);
+                if (mutation === "ordinary_replacement")
+                  expect(current?.snapshot).not.toContain(marker);
+              }
+            } finally {
+              spy.mockRestore();
+            }
+          }
+        }
+      } finally {
+        await stopServer(server.server);
+      }
+    }
+  );
+
+  it("validates the same physical snapshot used for hydration after an ordinary matching row changes twice", async () => {
+    const reservedType = type("hydration_window");
+    const ordinaryType = type("hydration_ordinary");
+    await schemaRegistry.register(config(reservedType));
+    const entityId = `ent_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    const code = `synthetic-hydration-code-${suffix}`;
+    const marker = `synthetic-hydration-reserved-${suffix}`;
+    expect(
+      (
+        await db.from("entities").insert({
+          id: entityId,
+          entity_type: ordinaryType,
+          canonical_name: `unrelated-hydration-name-${suffix}`,
+          user_id: PARITY_USER_ID,
+        })
+      ).error
+    ).toBeNull();
+    const snapshot = {
+      entity_id: entityId,
+      entity_type: ordinaryType,
+      schema_version: "1",
+      canonical_name: "synthetic-hydration",
+      snapshot: { code },
+      provenance: {},
+      observation_count: 0,
+      computed_at: "2026-10-22T00:00:00Z",
+      last_observation_at: "2026-10-22T00:00:00Z",
+      user_id: PARITY_USER_ID,
+    };
+    const database = await getDb();
+    const server = await startOfflineServer();
+    try {
+      for (const surface of ["http", "mcp", "cli"]) {
+        expect((await db.from("entity_snapshots").upsert(snapshot)).error).toBeNull();
+        let interpositions = 0;
+        const from = db.from.bind(db);
+        const spy = vi.spyOn(db, "from").mockImplementation((table) => {
+          const query = from(table);
+          if (table === "entity_snapshots") {
+            const execute = query.execute.bind(query);
+            const select = query.select.bind(query);
+            let fullSelection = false;
+            query.select = (columns, options) => {
+              fullSelection = columns === "*";
+              return select(columns, options);
+            };
+            query.execute = async () => {
+              const result = await execute();
+              const rows = Array.isArray(result.data) ? result.data : [result.data];
+              if (rows.some((row) => row?.entity_id === entityId && row.snapshot != null)) {
+                if (interpositions === 0 && rows.some((row) => row?.entity_type === ordinaryType)) {
+                  interpositions++;
+                  await database
+                    .prepare(
+                      "UPDATE entity_snapshots SET entity_type = ?, snapshot = ? WHERE entity_id = ?"
+                    )
+                    .run(reservedType, JSON.stringify({ code, marker }), entityId);
+                } else if (
+                  interpositions === 1 &&
+                  fullSelection &&
+                  rows.some((row) => row?.entity_type === reservedType)
+                ) {
+                  interpositions++;
+                  await database
+                    .prepare(
+                      "UPDATE entity_snapshots SET entity_type = ?, snapshot = ? WHERE entity_id = ?"
+                    )
+                    .run(ordinaryType, JSON.stringify({ code }), entityId);
+                }
+              }
+              return result;
+            };
+          }
+          return query;
+        });
+        try {
+          const request = { identifier: code, by: "code", include_observations: true };
+          if (surface === "http") {
+            const result = await callHttp(server.base, "/retrieve_entity_by_identifier", request);
+            expect(interpositions).toBe(2);
+            expect(result.status).toBe(400);
+            expect(result.json).toMatchObject({ error_code: "VALIDATION_INVALID_FORMAT" });
+            expect(JSON.stringify(result.json)).not.toContain(marker);
+          } else if (surface === "mcp") {
+            const error = (await callRegisteredMcp(request, "retrieve_entity_by_identifier").catch(
+              (failure: unknown) => failure
+            )) as { code: number; data: Record<string, unknown> };
+            expect(interpositions).toBe(2);
+            expect(error.code).toBe(-32602);
+            expect(error.data).toMatchObject({ error_code: "VALIDATION_INVALID_FORMAT" });
+            expect(JSON.stringify(error.data ?? null)).not.toContain(marker);
+          } else {
+            const failure = (await cliRequest(
+              server.base,
+              request,
+              "retrieveEntityByIdentifier"
+            ).catch((error: unknown) => error)) as { code: number; stderr: string };
+            expect(interpositions).toBe(2);
+            expect(failure.code).toBe(1);
+            expect(failure.stderr).toContain("VALIDATION_INVALID_FORMAT");
+            expect(failure.stderr).not.toContain(marker);
+          }
+          const current = (await database
+            .prepare("SELECT entity_type,snapshot FROM entity_snapshots WHERE entity_id = ?")
+            .get(entityId)) as { entity_type: string; snapshot: string };
+          expect(current.entity_type).toBe(ordinaryType);
+          expect(current.snapshot).not.toContain(marker);
+        } finally {
+          spy.mockRestore();
+        }
+      }
+    } finally {
+      await stopServer(server.server);
+    }
+  });
+
+  it("refuses malformed or failed physical snapshot acquisition instead of returning unverified content", async () => {
+    const ordinaryType = type("unavailable_authority");
+    const entityId = `ent_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    const name = `synthetic-authority-${suffix}`;
+    const marker = `synthetic-unverified-authority-${suffix}`;
+    expect(
+      (
+        await db
+          .from("entities")
+          .insert({
+            id: entityId,
+            entity_type: ordinaryType,
+            canonical_name: name,
+            user_id: PARITY_USER_ID,
+          })
+      ).error
+    ).toBeNull();
+    expect(
+      (
+        await db
+          .from("entity_snapshots")
+          .insert({
+            entity_id: entityId,
+            entity_type: ordinaryType,
+            schema_version: "1",
+            canonical_name: name,
+            snapshot: { marker },
+            provenance: {},
+            observation_count: 0,
+            user_id: PARITY_USER_ID,
+          })
+      ).error
+    ).toBeNull();
+    const server = await startOfflineServer();
+    try {
+      for (const fault of ["missing_type", "read_error"]) {
+        for (const identifier of [entityId, name]) {
+          for (const surface of ["http", "mcp", "cli"]) {
+            let interpositions = 0;
+            const from = db.from.bind(db);
+            const spy = vi.spyOn(db, "from").mockImplementation((table) => {
+              const query = from(table);
+              if (table === "entity_snapshots") {
+                const execute = query.execute.bind(query);
+                query.execute = async () => {
+                  const result = await execute();
+                  const rows = Array.isArray(result.data) ? result.data : [result.data];
+                  if (
+                    !interpositions &&
+                    rows.some((row) => row?.entity_id === entityId && row.snapshot != null)
+                  ) {
+                    interpositions++;
+                    if (fault === "read_error")
+                      return {
+                        data: null,
+                        error: {
+                          message: "Synthetic required snapshot read failure",
+                          code: "DB_QUERY_FAILED",
+                        },
+                      };
+                    for (const row of rows) if (row?.entity_id === entityId) delete row.entity_type;
+                  }
+                  return result;
+                };
+              }
+              return query;
+            });
+            try {
+              const request = { identifier, include_observations: true };
+              if (surface === "http") {
+                const result = await callHttp(
+                  server.base,
+                  "/retrieve_entity_by_identifier",
+                  request
+                );
+                expect(interpositions).toBe(1);
+                expect(result.status).toBe(fault === "missing_type" ? 400 : 500);
+                expect(JSON.stringify(result.json)).not.toContain(marker);
+              } else if (surface === "mcp") {
+                const error = (await callRegisteredMcp(
+                  request,
+                  "retrieve_entity_by_identifier"
+                ).catch((failure: unknown) => failure)) as { code: number; data?: unknown };
+                expect(interpositions).toBe(1);
+                expect(error.code).toBe(fault === "missing_type" ? -32602 : -32603);
+                expect(JSON.stringify(error.data ?? null)).not.toContain(marker);
+              } else {
+                const failure = (await cliRequest(
+                  server.base,
+                  request,
+                  "retrieveEntityByIdentifier"
+                ).catch((error: unknown) => error)) as { code: number; stderr: string };
+                expect(interpositions).toBe(1);
+                expect(failure.code).toBe(1);
+                expect(failure.stderr).not.toContain(marker);
+              }
+            } finally {
+              spy.mockRestore();
+            }
+          }
+        }
+      }
+    } finally {
+      await stopServer(server.server);
+    }
+  });
 
   it("blocks native reclassification into a reserved identity namespace before changing either row", async () => {
     const entityType = type("reclassification");

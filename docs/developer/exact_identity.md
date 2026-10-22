@@ -79,9 +79,11 @@ unconverted API has canonical errors or rolls back earlier side effects. Exact
 activation remains unavailable until all supported consumers are converted or
 explicitly refused and natural-interface acceptance covers their effects.
 
-Returned-candidate validation reads authoritative snapshot metadata for the owned
-candidate IDs. An ordinary entity row cannot carry a reserved snapshot type
-through a raw-ID, direct-name or snapshot-field legacy result. User data named
-`entity_type` inside snapshot JSON supplies no metadata authority. Negative
+Returned-candidate validation retains physical type metadata alongside each
+acquired payload in a private per-call sidecar. It does not re-read current
+metadata to certify older content. Raw-ID, direct-name and snapshot-field reads
+retain the actual acquired types even if a materialization is replaced or deleted
+before validation. User data named `entity_type` inside snapshot JSON supplies no
+metadata authority; the sidecar is absent from public responses. Negative
 fault-injection fixtures exercise this boundary without activating a namespace
 or creating an exact entity.
