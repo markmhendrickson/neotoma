@@ -187,9 +187,14 @@ describe("October visual variant", () => {
     }
     expect(page).toContain('loading="eager"');
     expect(page).toContain('fetchPriority="high"');
-    const cards = page.slice(page.indexOf('className="plan-contrast"'), page.indexOf('className="plan-table-wrap"'));
+    const cards = page.slice(
+      page.indexOf('className="plan-contrast"'),
+      page.indexOf('className="plan-table-wrap"')
+    );
     expect(cards).not.toContain("RECALL_VS_RECORD.map");
-    expect(page.slice(page.indexOf('className="plan-table-wrap"'))).toContain("RECALL_VS_RECORD.map");
+    expect(page.slice(page.indexOf('className="plan-table-wrap"'))).toContain(
+      "RECALL_VS_RECORD.map"
+    );
     expect(page).toContain("<SolidLockup />");
     expect(page).not.toContain("<TitleBlock");
     expect(page).not.toContain("<ServicePlan");
