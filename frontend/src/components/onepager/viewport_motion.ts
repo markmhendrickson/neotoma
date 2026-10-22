@@ -79,46 +79,91 @@ export function playLogo(target: HTMLElement): Animation[] {
   );
 }
 
+/** Sample the displacement of a damped spring, with a modest initial velocity toward rest. */
+export function springFrames(x: number, y: number, rotation: number): Keyframe[] {
+  const frequency = 14,
+    damping = 0.78,
+    duration = 1.15;
+  const decay = damping * frequency;
+  const angular = frequency * Math.sqrt(1 - damping * damping);
+  return Array.from({ length: 73 }, (_, index) => {
+    const t = (index / 72) * duration;
+    const remaining =
+      index === 72
+        ? 0
+        : Math.exp(-decay * t) *
+          (Math.cos(angular * t) + ((decay - 5) / angular) * Math.sin(angular * t));
+    return {
+      offset: index / 72,
+      transform: `translate(${x * remaining}px, ${y * remaining}px) rotate(${rotation * remaining}deg)`,
+    };
+  });
+}
+
+export function playPaperScene(target: HTMLElement): Animation[] {
+  const objects = [...target.querySelectorAll<SVGElement>("[data-paper-object]")];
+  const duration = 1150;
+  let settledAt = duration;
+  const arrivals = objects.map((object) => {
+    const delay = Number(object.dataset.enterDelay || 0);
+    settledAt = Math.max(settledAt, delay + duration);
+    return object.animate(
+      springFrames(
+        Number(object.dataset.enterX),
+        Number(object.dataset.enterY),
+        Number(object.dataset.enterRotation)
+      ),
+      { duration, delay, easing: "linear", fill: "both" }
+    );
+  });
+  const connections = [
+    ...target.querySelectorAll<SVGGeometryElement>("[data-paper-connection]"),
+  ].map((path, index) =>
+    path.animate(
+      [
+        { strokeDasharray: "1", strokeDashoffset: "1" },
+        { strokeDasharray: "1", strokeDashoffset: "0" },
+      ],
+      { duration: 600, delay: settledAt + 80 + index * 70, easing: "ease-out", fill: "both" }
+    )
+  );
+  return [...arrivals, ...connections];
+}
+
 export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
   useEffect(() => {
     if (!ref.current) return;
     return observeViewportMotion(
-      [...ref.current.querySelectorAll<HTMLElement>("img, .plan-inspector, .plan-vision-diagram")],
+      [...ref.current.querySelectorAll<HTMLElement>("[data-paper-scene], .plan-vision-diagram")],
       (target) => {
-        if (target.matches(".plan-vision-diagram")) {
-          const records = [...target.querySelectorAll<SVGElement>("[data-vision-record]")].map(
-            (record, index) =>
-              record.animate(
-                [
-                  { transform: `translate(${index % 2 ? 24 : -24}px, 12px)`, opacity: 0.1 },
-                  { transform: "translate(0, 0)", opacity: 1 },
-                ],
-                { ...timing, delay: index * 90 }
-              )
-          );
-          const connections = [
-            ...target.querySelectorAll<SVGGeometryElement>("[data-vision-connection]"),
-          ].map((path) =>
-            path.animate(
-              [
-                { strokeDasharray: "1", strokeDashoffset: "1" },
-                { strokeDasharray: "1", strokeDashoffset: "0" },
-              ],
-              { ...timing, delay: 280, duration: 700 }
-            )
-          );
-          return [...records, ...connections];
-        }
-        // Existing photographs are flat assets: reveal the complete scene, not invented layers.
-        return [
-          target.animate(
+        if (target.matches("[data-paper-scene]")) return playPaperScene(target);
+        // Existing vision illustrations are already layered; preserve their authored arrangement.
+        const records = [...target.querySelectorAll<SVGElement>("[data-vision-record]")];
+        const arrivals = records.map((record, index) =>
+          record.animate(springFrames(index % 2 ? 400 : -400, 20, index % 2 ? 3 : -3), {
+            duration: 1150,
+            delay: index * 90,
+            easing: "linear",
+            fill: "both",
+          })
+        );
+        const connections = [
+          ...target.querySelectorAll<SVGGeometryElement>("[data-vision-connection]"),
+        ].map((path) =>
+          path.animate(
             [
-              { transform: "translateY(18px)", opacity: 0.35 },
-              { transform: "translateY(0)", opacity: 1 },
+              { strokeDasharray: "1", strokeDashoffset: "1" },
+              { strokeDasharray: "1", strokeDashoffset: "0" },
             ],
-            timing
-          ),
-        ];
+            {
+              duration: 600,
+              delay: 1150 + Math.max(0, records.length - 1) * 90 + 80,
+              easing: "ease-out",
+              fill: "both",
+            }
+          )
+        );
+        return [...arrivals, ...connections];
       }
     );
   }, [ref]);

@@ -3,6 +3,7 @@ import { Braces, Cable, HardDrive, Scale, Terminal } from "lucide-react";
 import { SiteSnippet } from "../SiteSnippet";
 import { usePageVisualMotion } from "./viewport_motion";
 import { VisionGallery } from "./VisionGallery";
+import { PaperScene } from "./PaperScene";
 import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO, neotomaGithubBlobUrl } from "@/site/neotoma_repo";
 import { CodeBlock } from "@/components/InstallCodeBlock";
@@ -102,7 +103,7 @@ export function NeotomaOnePager() {
             </div>
           </div>
           <figure className="plan-scene plan-hero-scene">
-            <img {...OCTOBER_RENDERS.hero} loading="eager" fetchPriority="high" />
+            <PaperScene scene="hero" />
             <figcaption>Sources, observations and a current record.</figcaption>
           </figure>
         </section>
