@@ -8,7 +8,7 @@
 
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
-import { getDb } from "../repositories/db/connection.js";
+import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
 import {
   appendEntityLifecycleAction,
   acquireEntityLifecycleContext,
@@ -16,7 +16,6 @@ import {
 } from "./entity_lifecycle_storage.js";
 import { selectEntityLifecycleVisibility } from "./entity_lifecycle_authority.js";
 import { resolveAttachmentTarget, resolveAttachedObservations } from "./attachment_resolution.js";
-import { recomputeSnapshot } from "./snapshot_computation.js";
 
 async function authoritativeEntityAction(
   entityId: string,
@@ -87,6 +86,7 @@ async function authoritativeEntityAction(
               ...(reason ? { restoration_reason: reason } : {}),
             };
       const observationId = await appendEntityLifecycleAction(tx, target, kind, fields, observedAt);
+      const { recomputeSnapshot } = await import("./snapshot_computation.js");
       await recomputeSnapshot(target.id, userId, true);
       committed = { id: target.id, type: target.entity_type, observationId };
       return { success: true, entity_id: entityId, observation_id: observationId };

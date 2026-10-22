@@ -151,11 +151,11 @@ jobs:
       - name: Run natural CLI correction durability and reserved-authority effects (#2033)
         run: npx vitest run --no-file-parallelism tests/cli/cli_correction_durability.test.ts
 
-      # Internal shared history kernel: the built child proves the explicit read
+      # Internal shared read kernels: the built child proves the explicit read
       # closure excludes transport/provider/initializer imports; the real HTTP,
       # MCP and internal scenarios must keep matching. No continue-on-error.
-      - name: Run shared history kernel and transport parity regressions
-        run: npx vitest run --no-file-parallelism tests/unit/read_kernel.test.ts tests/unit/read_kernel_import.test.ts tests/integration/read_kernel_transport_parity.test.ts tests/cli/cli_observation_history.test.ts
+      - name: Run shared read kernels and transport parity regressions
+        run: npx vitest run --no-file-parallelism tests/unit/read_kernel.test.ts tests/unit/read_kernel_import.test.ts tests/unit/read_kernel_entities_import.test.ts tests/integration/read_kernel_entities_parity.test.ts tests/integration/read_kernel_transport_parity.test.ts tests/cli/cli_observation_history.test.ts
 
       - name: Run exact-identity admission surface and native-guard regressions
         run: npx vitest run --no-file-parallelism tests/integration/entity_identity_admission.test.ts

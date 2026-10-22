@@ -1,15 +1,16 @@
 import { db } from "../../db.js";
-import { getDb } from "../../repositories/db/connection.js";
+import { EntityIdentityContractError } from "../../services/entity_identity_contract.js";
+import { assertIdentityResolutionAvailable } from "../../services/entity_identity_admission.js";
+import { acquireDatabase as getDb } from "../../repositories/db/acquisition.js";
 import {
   queryEntities,
   normalizeEntityTypeFilter,
   computeNextCursor,
   filterCurrentLifecycleRecords,
 } from "../../services/entity_queries.js";
-import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
+import { BOOKKEEPING_ENTITY_TYPES } from "../bookkeeping_entity_types.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
-import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import {
   loadConceptTypeSynonyms,
   schemaRegistry,
@@ -1169,6 +1170,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   // Union of singular + plural type filters, honored across all retrieval
   // paths (#1562). Empty when no type filter is requested.
   const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
+  for (const type of typeFilter)
+    await assertIdentityResolutionAvailable(await getDb(), type, userId);
 
   let entities: EntityWithProvenance[];
   let total: number;
@@ -1229,6 +1232,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       logger.info(
         `[queryEntitiesWithCount] semantic search path: userId=${userId} search=${trimmedSearch.slice(0, 50)} entityType=${entityType ?? "(any)"}`
       );
+      const { semanticSearchEntities } = await import("../../services/entity_semantic_search.js");
       const {
         entityIds,
         total: semanticTotal,
@@ -1501,3 +1505,109 @@ export function filterEntitiesBySearch<T extends { canonical_name: string }>(
   const normalized = search.toLowerCase();
   return entities.filter((entity) => entity.canonical_name.toLowerCase().includes(normalized));
 }
+
+/** Private structured plain-list admission. Transports and this entrance reuse
+ * queryEntitiesWithCount; this adds no SQL, authentication or identity owner. */
+export async function queryPlainEntitiesForUser(userId: string, input: unknown) {
+  const { RetrieveEntitiesRequestSchema } = await import("../action_schemas.js");
+  const { OperationError } = await import("../../core/operation_error.js");
+  const raw =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  const supported = new Set([
+    "entity_type",
+    "entity_types",
+    "user_id",
+    "limit",
+    "offset",
+    "cursor",
+    "sort_by",
+    "sort_order",
+    "published",
+    "published_after",
+    "published_before",
+    "include_snapshots",
+    "include_merged",
+    "updated_since",
+    "created_since",
+    "identity_basis",
+    "snapshot_filters",
+  ]);
+  const unavailable = Object.keys(raw).find((key) => !supported.has(key));
+  if (unavailable)
+    throw new OperationError(
+      "FEATURE_UNAVAILABLE",
+      "This private plain-list selector is not converted",
+      {
+        statusCode: 400,
+        details: {
+          hint: "Use only the converted structured plain-list selectors; search, collapse and temporal views remain unavailable.",
+        },
+      }
+    );
+  const parsed = RetrieveEntitiesRequestSchema.safeParse(input);
+  if (!parsed.success)
+    throw new OperationError("VALIDATION_INVALID_FORMAT", "Invalid entity-list request", {
+      statusCode: 400,
+      details: { issues: parsed.error.issues },
+    });
+  const v = parsed.data;
+  if (!normalizeEntityTypeFilter(v.entity_type, v.entity_types).length)
+    throw new OperationError(
+      "FEATURE_UNAVAILABLE",
+      "Untyped private entity listing is not converted",
+      {
+        statusCode: 400,
+        details: {
+          hint: "Supply a nonempty entity_type or entity_types; whole-scope namespace acquisition remains unavailable.",
+        },
+      }
+    );
+  try {
+    const params = {
+      userId,
+      entityType: v.entity_type,
+      entityTypes: v.entity_types,
+      includeMerged: v.include_merged,
+      includeSnapshots: v.include_snapshots,
+      sortBy: v.sort_by,
+      sortOrder: v.sort_order,
+      published: v.published,
+      publishedAfter: v.published_after,
+      publishedBefore: v.published_before,
+      limit: v.limit,
+      offset: v.offset,
+      cursor: v.cursor,
+      updatedSince: v.updated_since,
+      createdSince: v.created_since,
+      identityBasis: v.identity_basis,
+      snapshotFilters: v.snapshot_filters,
+    };
+    return await queryEntitiesWithCount({
+      ...params,
+      readRequest: serviceEntityReadRequest(params),
+    });
+  } catch (error) {
+    // Existing canonical identity errors keep their code/hint; legacy query
+    // details must not escape through the new neutral private entrance.
+    if (error instanceof EntityIdentityContractError) throw error;
+    if (error instanceof Error && error.name === "CursorError") {
+      const detail = error as Error & { code?: string; hint?: string };
+      throw new OperationError(detail.code ?? "VALIDATION_INVALID_FORMAT", detail.message, {
+        statusCode: 400,
+        details: {
+          hint: detail.hint ?? "Use a cursor returned by this same entity-list ordering.",
+        },
+      });
+    }
+    if (error instanceof OperationError) throw error;
+    throw new OperationError("DB_QUERY_FAILED", "Failed to acquire the owned entity listing", {
+      statusCode: 500,
+      details: {
+        hint: "Retry after complete owned entity, snapshot and lifecycle evidence is available.",
+      },
+    });
+  }
+}
+export type PrivateEntityListResult = Awaited<ReturnType<typeof queryEntitiesWithCount>>;

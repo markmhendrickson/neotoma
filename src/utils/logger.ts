@@ -15,10 +15,19 @@
  * - debug: 🔍
  */
 
-const isMCPMode = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
-const enableLogging = process.env.NEOTOMA_MCP_ENABLE_LOGGING === "1";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 
-const shouldLog = !isMCPMode || enableLogging;
+function legacyLoggingSelection(): boolean {
+  return (
+    process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" ||
+    process.env.NEOTOMA_MCP_ENABLE_LOGGING === "1"
+  );
+}
+let legacyShouldLog = getEmbeddedRuntimeContext() ? undefined : legacyLoggingSelection();
+function shouldLog(): boolean {
+  if (getEmbeddedRuntimeContext()) return false;
+  return (legacyShouldLog ??= legacyLoggingSelection());
+}
 
 const PREFIX = {
   error: "❌ ",
@@ -46,7 +55,7 @@ export const logger = {
    * In HTTP mode: written to stderr with ❌ prefix
    */
   error(...args: unknown[]): void {
-    if (shouldLog) {
+    if (shouldLog()) {
       console.error(...formatArgs("error", args));
     }
   },
@@ -57,7 +66,7 @@ export const logger = {
    * In HTTP mode: written to stderr with ⚠️ prefix
    */
   warn(...args: unknown[]): void {
-    if (shouldLog) {
+    if (shouldLog()) {
       console.warn(...formatArgs("warn", args));
     }
   },
@@ -67,7 +76,7 @@ export const logger = {
    * In MCP stdio mode: must use stderr (stdout is JSON-RPC). Uses stderr for all levels.
    */
   info(...args: unknown[]): void {
-    if (shouldLog) {
+    if (shouldLog()) {
       console.error(...formatArgs("info", args));
     }
   },
@@ -77,7 +86,7 @@ export const logger = {
    * Uses stderr to avoid polluting stdout (JSON-RPC in MCP mode).
    */
   debug(...args: unknown[]): void {
-    if (shouldLog) {
+    if (shouldLog()) {
       console.error(...formatArgs("debug", args));
     }
   },
@@ -87,7 +96,7 @@ export const logger = {
    * Uses stderr to avoid polluting stdout (JSON-RPC in MCP mode).
    */
   log(...args: unknown[]): void {
-    if (shouldLog) {
+    if (shouldLog()) {
       console.error(...formatArgs("info", args));
     }
   },

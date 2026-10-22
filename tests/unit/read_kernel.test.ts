@@ -96,13 +96,7 @@ describe("bounded internal shared read kernel", () => {
           (await kernel.execute("list_observations", { entity_id: id, [name]: recent }))
             .observations
         ).toHaveLength(1);
-      for (const name of [
-        "retrieve_entities",
-        "retrieve_entity_snapshot",
-        "register_schema",
-        "store",
-        "unknown",
-      ]) {
+      for (const name of ["retrieve_entity_snapshot", "register_schema", "store", "unknown"]) {
         await expect(kernel.execute(name, { entity_id: id })).rejects.toMatchObject({
           name: "OperationError",
         });

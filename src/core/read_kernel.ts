@@ -6,12 +6,31 @@ import type {
 import type { FieldProvenanceResponse } from "../services/field_provenance.js";
 import type { z } from "zod";
 import type { FieldProvenanceRequestSchema } from "../shared/action_schemas.js";
+import type { PrivateEntityListResult } from "../shared/action_handlers/entity_handlers.js";
+import type { RetrieveEntitiesRequestSchema } from "../shared/action_schemas.js";
 import { OperationError } from "./operation_error.js";
 
+type PlainOptions = Partial<
+  Omit<
+    z.output<typeof RetrieveEntitiesRequestSchema>,
+    "search" | "similarity_threshold" | "collapse_by" | "exclude_bookkeeping" | "user_id"
+  >
+>;
+export type PrivateEntityListInput = PlainOptions &
+  ({ entity_type: string } | { entity_types: [string, ...string[]] });
+
 export type FieldProvenanceInput = z.input<typeof FieldProvenanceRequestSchema>;
-export type InternalReadResult = ObservationHistoryPage | FieldProvenanceResponse;
+export type InternalReadResult =
+  | ObservationHistoryPage
+  | FieldProvenanceResponse
+  | PrivateEntityListResult;
 
 const CONVERTED_READS = {
+  async retrieve_entities(userId: string, input: unknown) {
+    const { queryPlainEntitiesForUser } =
+      await import("../shared/action_handlers/entity_handlers.js");
+    return queryPlainEntitiesForUser(userId, input);
+  },
   async list_observations(userId: string, input: unknown) {
     const { listObservationHistoryForUser } = await import("../services/observation_history.js");
     return listObservationHistoryForUser(userId, input);
@@ -30,8 +49,10 @@ const CONVERTED_READS = {
 };
 
 export interface InternalReadKernel {
+  retrieveEntities(input: PrivateEntityListInput): Promise<PrivateEntityListResult>;
   listObservations(input: ListObservationsInput): Promise<ObservationHistoryPage>;
   retrieveFieldProvenance(input: FieldProvenanceInput): Promise<FieldProvenanceResponse>;
+  execute(operation: "retrieve_entities", input: unknown): Promise<PrivateEntityListResult>;
   execute(operation: "list_observations", input: unknown): Promise<ObservationHistoryPage>;
   execute(operation: "retrieve_field_provenance", input: unknown): Promise<FieldProvenanceResponse>;
   execute(operation: string, input: unknown): Promise<InternalReadResult>;
@@ -60,6 +81,10 @@ export function createInternalReadKernel(options: {
   let closing = false;
   let disposal: Promise<void> | undefined;
   const active = new Set<Promise<unknown>>();
+  function execute(
+    operation: "retrieve_entities",
+    input: unknown
+  ): Promise<PrivateEntityListResult>;
   function execute(operation: "list_observations", input: unknown): Promise<ObservationHistoryPage>;
   function execute(
     operation: "retrieve_field_provenance",
@@ -80,7 +105,7 @@ export function createInternalReadKernel(options: {
         new OperationError(code, "This operation is not available in the internal read kernel", {
           statusCode: 400,
           details: {
-            hint: "Use only converted list_observations or retrieve_field_provenance operations; other operations remain unavailable.",
+            hint: "Use only converted typed plain retrieve_entities, list_observations or retrieve_field_provenance operations; other operations remain unavailable.",
           },
         })
       );
@@ -94,6 +119,9 @@ export function createInternalReadKernel(options: {
     return pending;
   }
   return {
+    retrieveEntities(input) {
+      return execute("retrieve_entities", input);
+    },
     listObservations(input) {
       return execute("list_observations", input);
     },

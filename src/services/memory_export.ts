@@ -81,14 +81,8 @@ export interface MemoryExportResult {
  * replayable. Excluded from MEMORY.md by default. Keep aligned with the
  * "chat bookkeeping" definition in the Neotoma display rule.
  */
-export const BOOKKEEPING_ENTITY_TYPES: ReadonlySet<string> = new Set([
-  "conversation",
-  "conversation_message",
-  // `agent_message` is the pre-Phase-2 canonical name for `conversation_message`
-  // and is kept here so historical rows stored under the old entity_type are
-  // still treated as chat bookkeeping.
-  "agent_message",
-]);
+export { BOOKKEEPING_ENTITY_TYPES } from "../shared/bookkeeping_entity_types.js";
+import { BOOKKEEPING_ENTITY_TYPES } from "../shared/bookkeeping_entity_types.js";
 
 /**
  * Per-type weights used by the `importance` ranker. Tier-1 (3x) = primary

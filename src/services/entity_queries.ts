@@ -3,6 +3,8 @@ import type { EntityReadTrace } from "../shared/entity_read_contract.js";
 // Provenance chain, merged entity exclusion
 
 import { db } from "../db.js";
+import { acquireDatabase } from "../repositories/db/acquisition.js";
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import {
   decodeCursor,
   encodeCursor,
@@ -272,7 +274,7 @@ async function getDeletedEntityIds(
   userId?: string
 ): Promise<Set<string>> {
   const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
-  const { getDb } = await import("../repositories/db/connection.js");
+  const { acquireDatabase: getDb } = await import("../repositories/db/acquisition.js");
   if (!(await hasRecordedEntityLifecycleCutover(await getDb())))
     return getLegacyDeletedEntityIds(candidates, userId);
   const deletedEntityIds = new Set<string>();
@@ -310,7 +312,7 @@ export async function filterCurrentLifecycleRecords<T extends { entity_id: strin
   userId?: string
 ): Promise<T[]> {
   const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
-  const { getDb } = await import("../repositories/db/connection.js");
+  const { acquireDatabase: getDb } = await import("../repositories/db/acquisition.js");
   if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) return [...records];
   const deleted = await getDeletedEntityIds(
     records.map((r) => ({ id: r.entity_id })),
@@ -732,14 +734,27 @@ export async function queryEntities(
   // returned row shape identical across the Postgres and SQLite backends.
   const snapshotSelect = includeSnapshots
     ? "*"
-    : "entity_id, schema_version, observation_count, last_observation_at, computed_at, snapshot";
-  const { data: snapshots, error: snapshotsError } = await db
+    : "entity_id, entity_type, user_id, schema_version, observation_count, last_observation_at, computed_at, snapshot";
+  let snapshotsQuery = db
     .from("entity_snapshots")
     .select(snapshotSelect)
     .in("entity_id", entityIds);
+  if (userId) snapshotsQuery = snapshotsQuery.eq("user_id", userId);
+  const { data: snapshots, error: snapshotsError } = await snapshotsQuery;
 
   if (snapshotsError) {
     throw new Error(`Failed to query snapshots: ${snapshotsError.message}`);
+  }
+
+  // Reuse the same I admission over physical metadata already acquired by this
+  // query. Snapshot JSON is user data, never identity admission authority.
+  const acquiredTypes = new Set<string>(
+    [...entities, ...(snapshots ?? [])].map((row: any) => row.entity_type)
+  );
+  for (const type of acquiredTypes) {
+    if (typeof type !== "string" || !type)
+      throw new Error("Entity listing physical type is unavailable");
+    await assertIdentityResolutionAvailable(await acquireDatabase(), type, userId);
   }
 
   const snapshotMap = new Map<string, EntitySnapshotRow>(
@@ -753,12 +768,14 @@ export async function queryEntities(
     user_id: string | null;
   }> = [];
   if (includeSnapshots) {
-    const { data, error: observationError } = await db
+    let observationsQuery = db
       .from("observations")
       .select("entity_id, source_id, user_id")
       .in("entity_id", filteredEntityIds)
       .not("source_id", "is", null)
       .limit(1000); // Reasonable limit for batch
+    if (userId) observationsQuery = observationsQuery.eq("user_id", userId);
+    const { data, error: observationError } = await observationsQuery;
     if (observationError) readTrace?.reasons.add("raw_fragment_sources_unavailable");
     if ((data?.length ?? 0) >= 1000) readTrace?.reasons.add("raw_fragment_source_cap");
     allObservations =
@@ -833,11 +850,13 @@ export async function queryEntities(
           fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
-        const { data: observationsForSources, error: sourceLinkError } = await db
+        let sourceLinksQuery = db
           .from("observations")
           .select("entity_id, source_id")
           .eq("entity_type", entityType)
           .in("source_id", Array.from(sourceIdsForType));
+        if (userId) sourceLinksQuery = sourceLinksQuery.eq("user_id", userId);
+        const { data: observationsForSources, error: sourceLinkError } = await sourceLinksQuery;
         if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
         const legacyEntityCountsBySource = new Map<string, Set<string>>();
         for (const obs of observationsForSources || []) {

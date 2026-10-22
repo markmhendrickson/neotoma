@@ -23,10 +23,6 @@ import {
   enforceEntityTypeGuards,
   suggestSingular,
 } from "./entity_type_guard.js";
-import {
-  prepareEntitySnapshotWithEmbedding,
-  upsertEntitySnapshotWithEmbedding,
-} from "./entity_snapshot_embedding.js";
 import { spawn } from "child_process";
 import { WIN_SHELL } from "../shared/spawn_platform.js";
 import { fileURLToPath } from "url";
@@ -2286,6 +2282,8 @@ export class SchemaRegistryService {
                     continue;
                   }
 
+                  const { prepareEntitySnapshotWithEmbedding, upsertEntitySnapshotWithEmbedding } =
+                    await import("./entity_snapshot_embedding.js");
                   const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
                     entity_id: snapshot.entity_id,
                     entity_type: snapshot.entity_type,
