@@ -737,3 +737,20 @@ Load when:
 - Retrying non-retryable errors
 - Ignoring error codes in error handling
 - Using generic errors when specific code exists
+
+## Field provenance integrity
+
+`getFieldProvenance` (`retrieve_field_provenance` on MCP) returns complete chains.
+`PROVENANCE_INTEGRITY_ERROR` is HTTP 500 / MCP InternalError when a snapshot's
+contributor or a contributor's non-null source cannot be resolved in the current
+owner scope. `details` names the requested `entity_id`, `field`, reference kind
+and ID plus a repair hint. No partial observations or sources are returned.
+A legal null source is successful provenance, not an integrity error.
+`DB_QUERY_FAILED` distinguishes a database query failure from missing evidence.
+
+Missing or foreign entities and absent snapshot fields share HTTP 404 /
+MCP InvalidParams with `error_code: RESOURCE_NOT_FOUND` and the same message
+pattern naming only the caller's entity/field arguments. Both transports carry
+the same ErrorEnvelope (MCP in `data`). See
+[field provenance](../developer/field_provenance.md) for response projection and
+compatibility details.

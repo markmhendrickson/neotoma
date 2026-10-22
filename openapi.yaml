@@ -2059,7 +2059,7 @@ components:
         observation_source:
           type: string
           nullable: true
-          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified, correction]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified, correction, null]
         idempotency_key:
           type: string
           nullable: true
@@ -2134,9 +2134,11 @@ components:
         source_observation:
           $ref: "#/components/schemas/FieldProvenanceObservation"
         source:
-          nullable: true
-          allOf:
+          anyOf:
             - $ref: "#/components/schemas/FieldProvenanceSource"
+            - type: object
+              nullable: true
+              enum: [null]
         observed_at:
           type: string
           format: date-time
