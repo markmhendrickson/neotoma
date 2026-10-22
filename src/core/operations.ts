@@ -21,11 +21,11 @@
  * agents follow when storing and retrieving through these operations.
  */
 
-import { NeotomaServer } from "../server.js";
+import type { NeotomaServer } from "../server.js";
 
 export interface CreateOperationsOptions {
   userId: string;
-  /** Optional pre-constructed server instance. If omitted, a new one is created lazily. */
+  /** Optional pre-constructed server. Otherwise the legacy runtime loads on the first operation. */
   server?: NeotomaServer;
 }
 
@@ -206,11 +206,33 @@ function parseToolResult(raw: { content: Array<{ type: string; text: string }> }
  */
 export function createOperations(options: CreateOperationsOptions): Operations {
   const ownsServer = !options.server;
-  const server = options.server ?? new NeotomaServer();
+  let server = options.server;
+  let loadingServer: Promise<NeotomaServer> | undefined;
   const userId = options.userId;
 
+  // Keep importing this facade and constructing an unused client free of the
+  // legacy runtime's ambient configuration and optional provider initialization.
+  // Every real operation still uses the existing guarded dispatcher. This is
+  // an import boundary, not an explicit/config-isolated runtime implementation.
+  async function getServer(): Promise<NeotomaServer> {
+    if (server) return server;
+    if (!loadingServer) {
+      loadingServer = import("../server.js")
+        .then(({ NeotomaServer }) => {
+          server = new NeotomaServer();
+          return server;
+        })
+        .catch((error: unknown) => {
+          loadingServer = undefined;
+          throw error;
+        });
+    }
+    return loadingServer;
+  }
+
   async function call<T = unknown>(name: string, args: unknown = {}): Promise<T> {
-    const raw = await server.executeToolForCli(name, args, userId);
+    const dispatcher = await getServer();
+    const raw = await dispatcher.executeToolForCli(name, args, userId);
     return parseToolResult(raw) as T;
   }
 
@@ -265,6 +287,7 @@ export function createOperations(options: CreateOperationsOptions): Operations {
         // NeotomaServer currently has no explicit shutdown hook beyond stdio lifecycle;
         // the server instance will be garbage collected. This method exists to give the
         // client library a stable lifecycle point to hook into as that changes.
+        // Do not initialize an unused client merely to dispose it.
       }
     },
   };
