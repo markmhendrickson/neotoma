@@ -425,6 +425,9 @@ export const config = {
   },
 };
 
+/** Shared shape for explicit runtime configuration; a type-only import has no load effects. */
+export type NeotomaConfiguration = typeof config;
+
 /**
  * Log configuration after it's loaded
  * Call this after importing config to see what was configured

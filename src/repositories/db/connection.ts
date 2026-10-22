@@ -19,6 +19,7 @@ import {
 } from "../sqlite/sqlite_client.js";
 import { AsyncSqliteDatabase } from "../sqlite/sqlite_driver.js";
 import type { DbDatabase } from "./driver.js";
+import { getEmbeddedRuntimeContext } from "../../core/runtime_context.js";
 
 let cachedDb: DbDatabase | null = null;
 let opening: Promise<DbDatabase> | null = null;
@@ -30,6 +31,7 @@ export async function withExistingLifecycleDatabase<T>(
   database: DbDatabase,
   operation: () => Promise<T>
 ): Promise<T> {
+  if (getEmbeddedRuntimeContext()) throw new Error("LIFECYCLE_DATABASE_BINDING_UNAVAILABLE");
   if (cachedDb || opening || lifecycleBindingActive || lifecycleDatabase.getStore())
     throw new Error("LIFECYCLE_DATABASE_BINDING_UNAVAILABLE");
   lifecycleBindingActive = true;
@@ -128,6 +130,16 @@ async function openDb(): Promise<DbDatabase> {
  * Concurrent first calls share one open — no double-initialization race.
  */
 export function getDb(): Promise<DbDatabase> {
+  try {
+    const runtime = getEmbeddedRuntimeContext();
+    if (runtime) {
+      if (lifecycleDatabase.getStore())
+        return Promise.reject(new Error("EXPLICIT_RUNTIME_DATABASE_BINDING_CONFLICT"));
+      return Promise.resolve(runtime.database);
+    }
+  } catch (error) {
+    return Promise.reject(error);
+  }
   const bound = lifecycleDatabase.getStore();
   if (bound) {
     if (!bound.active) return Promise.reject(new Error("LIFECYCLE_DATABASE_BINDING_EXPIRED"));
@@ -167,6 +179,7 @@ export function peekCachedDb(): DbDatabase | null {
  * while the server was running).
  */
 export function clearDbCache(): void {
+  if (getEmbeddedRuntimeContext()) throw new Error("EXPLICIT_RUNTIME_AMBIENT_CACHE_FORBIDDEN");
   if (lifecycleBindingActive) throw new Error("LIFECYCLE_DATABASE_BINDING_UNAVAILABLE");
   if (cachedDb) {
     const stale = cachedDb;
