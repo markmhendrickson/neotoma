@@ -136,7 +136,14 @@ try {
       }),
     (error) => error.body?.error_code === "ERR_CLIENT_CORRECTION_INPUT"
   );
-  for (const invalid of [{ idempotencyKey: "" }, { entityType: "" }]) {
+  for (const invalid of [
+    { idempotencyKey: "" },
+    { entityType: "" },
+    { idempotencyKey: 42 },
+    { idempotencyKey: null },
+    { entityType: 42 },
+    { entityType: null },
+  ]) {
     await assert.rejects(
       () => snapshotOnUpdate(client, { ...helperInput, ...invalid, review: undefined }),
       (error) => error.body?.error_code === "ERR_CLIENT_CORRECTION_INPUT"

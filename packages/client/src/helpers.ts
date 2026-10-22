@@ -322,7 +322,11 @@ export async function snapshotOnUpdate(
     corrections && typeof corrections === "object" && !Array.isArray(corrections)
       ? Object.entries(corrections)
       : [];
-  if (entries.length !== 1 || !input.entityType?.trim() || !input.idempotencyKey?.trim()) {
+  if (
+    entries.length !== 1 ||
+    typeof input.entityType !== "string" || !input.entityType.trim() ||
+    typeof input.idempotencyKey !== "string" || !input.idempotencyKey.trim()
+  ) {
     throw new NeotomaClientError("snapshotOnUpdate requires one field, entityType and idempotencyKey.", {
       body: {
         error_code: "ERR_CLIENT_CORRECTION_INPUT",
