@@ -1166,6 +1166,7 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
   - `--guest-access-token <token>`: Use an entity-scoped guest bearer token instead of the configured owner token. It cannot be combined with `--skip-auth` or `--aauth`.
   - `--skip-auth`: Skip auth token for public endpoints.
   - `--aauth`: Sign the request with the configured AAuth key instead of a bearer token.
+  - Failed requests exit nonzero. With `--json`, the error is a JSON line on stderr; its text preserves the server's domain code, message, and recovery hint when supplied.
   - `eventsStream` writes raw SSE frames to stdout until the server closes the stream. Example: `neotoma request --operation eventsStream --guest-access-token <token> --query '{"subscription_id":"<id>"}'`.
 
 ## Configuration and storage paths

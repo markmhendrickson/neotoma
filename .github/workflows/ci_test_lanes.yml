@@ -226,9 +226,9 @@ jobs:
       # #2026 field provenance on corrected and merge_array fields. Lives under
       # tests/integration, which test:unit excludes, so without this step the
       # regression would gate nothing. Drives store -> correct -> provenance
-      # read over both MCP and HTTP.
+      # read over MCP and HTTP, plus built generic CLI offline/API effects (#2649).
       - name: Run field-provenance regression for corrected and merged fields (#2026)
-        run: npx vitest run --no-file-parallelism tests/integration/field_provenance_corrected_and_merged.test.ts
+        run: npx vitest run --no-file-parallelism tests/integration/field_provenance_corrected_and_merged.test.ts tests/integration/field_provenance_contract_parity.test.ts tests/cli/cli_field_provenance.test.ts
 
       # #2356 schema-scope parity. Surface parity alone stays green when
       # last-arrival wins, because that file inserts the user row second.

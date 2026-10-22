@@ -1,3 +1,4 @@
+import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
 import {
   preflightStructuredStoreAdmission,
   type StructuredStoreApiParams,
@@ -10478,64 +10479,14 @@ app.post("/get_field_provenance", async (req, res) => {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
   }
 
-  // Get snapshot to find observation ID for this field. Every read below is
-  // scoped to the authenticated user; an entity outside that scope resolves
-  // exactly like one that does not exist.
-  const { data: snapshot } = await db
-    .from("entity_snapshots")
-    .select("provenance")
-    .eq("entity_id", entity_id)
-    .eq("user_id", userId)
-    .single();
-
-  if (!snapshot || !snapshot.provenance) {
-    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity or field not found");
+  try {
+    return res.json(await getFieldProvenance(entity_id, field, userId));
+  } catch (error) {
+    if (error instanceof FieldProvenanceError) {
+      return res.status(error.statusCode).json(error.toErrorEnvelope());
+    }
+    return sendError(res, 500, "DB_QUERY_FAILED", "Failed to query field provenance");
   }
-
-  const provenance = snapshot.provenance as Record<string, string>;
-  const observationId = provenance[field];
-
-  if (!observationId) {
-    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Field not found in provenance");
-  }
-
-  // Get observation(s) - may be comma-separated for merge_array
-  const observationIds = observationId.split(",");
-
-  const { data: observations, error: obsError } = await db
-    .from("observations")
-    .select("*, source_id")
-    .in("id", observationIds)
-    .eq("user_id", userId);
-
-  if (obsError) {
-    logError("DbError:get_field_provenance", req, obsError);
-    return sendError(res, 500, "DB_QUERY_FAILED", obsError.message);
-  }
-
-  // Get sources for provenance
-  const sourceIds = (observations || [])
-    .map((obs: { source_id?: string }) => obs.source_id)
-    .filter((sourceId: string | undefined): sourceId is string => Boolean(sourceId));
-
-  const { data: sources, error: sourceError } = await db
-    .from("sources")
-    .select("id, content_hash, mime_type, storage_url, original_filename, created_at")
-    .in("id", sourceIds)
-    .eq("user_id", userId);
-
-  if (sourceError) {
-    logError("DbError:get_field_provenance:sources", req, sourceError);
-  }
-
-  logDebug("Success:get_field_provenance", req, { entity_id, field });
-  return res.json({
-    field,
-    entity_id,
-    observation_ids: observationIds,
-    observations: observations || [],
-    sources: sources || [],
-  });
 });
 
 // Create relationship

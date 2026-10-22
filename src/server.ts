@@ -1,3 +1,4 @@
+import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -3819,126 +3820,20 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-
-    // Get the snapshot to extract provenance. Every read below is scoped to
-    // the authenticated user; an entity outside that scope resolves exactly
-    // like one that does not exist.
-    const { data: snapshot, error: snapshotError } = await db
-      .from("entity_snapshots")
-      .select("*")
-      .eq("entity_id", parsed.entity_id)
-      .eq("user_id", userId)
-      .single();
-
-    if (snapshotError || !snapshot) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Entity snapshot not found for ID: ${parsed.entity_id}`
+    try {
+      return this.buildTextResponse(
+        await getFieldProvenance(parsed.entity_id, parsed.field, userId)
       );
-    }
-
-    const provenance = snapshot.provenance as Record<string, string>;
-    const observationId = provenance[parsed.field];
-
-    if (!observationId) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Field '${parsed.field}' not found in entity snapshot`
-      );
-    }
-
-    // A merge_array / merge_array_by_key field records every contributing
-    // observation as a comma-joined id list (observation_reducer.ts); a scalar
-    // field records exactly one. Same split as HTTP /get_field_provenance.
-    const observationIds = observationId
-      .split(",")
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0);
-
-    const { data: observationRows, error: obsError } = await db
-      .from("observations")
-      .select("*")
-      .in("id", observationIds)
-      .eq("user_id", userId);
-
-    if (obsError || !observationRows || observationRows.length === 0) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get observation: ${obsError?.message ?? "Observation not found"}`
-      );
-    }
-
-    // The observation reported as `source_observation` is the most recent
-    // contributor (latest observed_at, then id, so the pick is deterministic).
-    // For a scalar field it is the single winning observation. A merged field
-    // has no single winner, so this is a presentation choice, not a winner.
-    const observations = [...(observationRows as Array<Record<string, any>>)].sort((a, b) => {
-      const byTime = String(b.observed_at ?? "").localeCompare(String(a.observed_at ?? ""));
-      return byTime !== 0 ? byTime : String(a.id).localeCompare(String(b.id));
-    });
-    const observation = observations[0];
-
-    // `source_id` is nullable on `observations`, and NULL is a legal state:
-    // correct() and deletion observations are written without a source
-    // document. Report that as `source: null` instead of failing (#2026). A
-    // non-NULL source_id that does not resolve is an integrity violation and
-    // still errors.
-    let source: {
-      id: string;
-      mime_type: string | null;
-      file_urls: string[];
-      created_at: string | null;
-    } | null = null;
-
-    if (observation.source_id) {
-      const { data: sourceData, error: sourceError } = await db
-        .from("sources")
-        .select("id, mime_type, file_size, original_filename, created_at")
-        .eq("id", observation.source_id)
-        .eq("user_id", userId)
-        .single();
-
-      if (sourceError || !sourceData) {
+    } catch (error) {
+      if (error instanceof FieldProvenanceError) {
         throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to get source: ${sourceError?.message || "Source not found"}`
+          error.statusCode === 404 ? ErrorCode.InvalidParams : ErrorCode.InternalError,
+          error.message,
+          error.toErrorEnvelope()
         );
       }
-
-      source = {
-        id: sourceData.id,
-        mime_type: sourceData.mime_type,
-        file_urls: [], // Sources table doesn't have file_urls directly
-        created_at: sourceData.created_at,
-      };
+      throw error;
     }
-
-    // #2242: the caller-claimed data origin of the reported observation, when
-    // one was supplied. Absent (not null) when the observation carries none.
-    const { readDataOriginFromProvenance } = await import("./services/provenance_data_origin.js");
-    const winningDataOrigin = readDataOriginFromProvenance(observation.provenance);
-
-    // Response shape is unchanged from before #2026: one source_observation
-    // and its source. Aligning this with the HTTP response of the same
-    // operation (observation_ids, every contributing observation, per-
-    // contributor sources) is deliberately left to a follow-up that declares
-    // one schema for both surfaces in openapi.yaml.
-    const provenanceChain = {
-      field: parsed.field,
-      value: (snapshot.snapshot as Record<string, unknown>)[parsed.field],
-      source_observation: {
-        id: observation.id,
-        source_id: observation.source_id ?? null,
-        observed_at: observation.observed_at,
-        specificity_score: observation.specificity_score,
-        source_priority: observation.source_priority,
-        ...(winningDataOrigin ? { data_origin: winningDataOrigin } : {}),
-      },
-      source: source,
-      observed_at: observation.observed_at,
-    };
-
-    return this.buildTextResponse(provenanceChain);
   }
 
   private async createRelationship(
