@@ -13,6 +13,10 @@ import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
 import { LIVE_ROUTES } from "../../frontend/src/site/route_retirement";
 import { OLD_LEDE, UNMEASURED_INSTALL_TIME } from "../../scripts/docs_viewer/claim_patterns";
 import { RecordPlate } from "../../frontend/src/components/onepager/onepager_plate";
+import {
+  OCTOBER_RENDERS,
+  RECORD_RENDERS,
+} from "../../frontend/src/components/onepager/october_renders";
 
 /**
  * Guards for the neotoma.io developer one-pager (home route).
@@ -51,8 +55,14 @@ describe("neotoma.io one-pager copy", () => {
       [/multi-operator/i, "multi-operator authority"],
       [/corrections? always win/i, "corrections always win"],
       [/append-only/i, "database-enforced append-only"],
-      [/(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i, "as-of read across the whole record"],
-      [/no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i, "denies the per-entity as-of read"],
+      [
+        /(whole|entire|every entity|all entities)[^.]{0,60}(as[- ]of|point[- ]in[- ]time)/i,
+        "as-of read across the whole record",
+      ],
+      [
+        /no (point[- ]in[- ]time|as[- ]of)|(cannot|can't|not) (read|query) (a )?past state/i,
+        "denies the per-entity as-of read",
+      ],
       [/follows? a changed objective/i, "Ateles follows a changed objective"],
     ];
     for (const [re, label] of forbidden) {
@@ -162,28 +172,32 @@ describe("October visual variant", () => {
     const page = files[0];
     const brand = join(root, "frontend", "public", "brand", "october");
     const provenance = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8"));
-    for (const name of [
-      "N-hero", "N-before", "N-after", "N-capture", "N-structure", "N-change",
-      "N-current", "N-basis", "N-self-host",
-    ]) {
-      if (["N-hero", "N-before", "N-after", "N-self-host"].includes(name)) {
-        expect(page, name).toContain(`${name}.webp`);
-      } else {
-        expect(page).toContain("N-${RECORD_IMAGES[i]}.webp");
-        expect(page).toContain(name.slice(2));
-      }
+    const renders = Object.values(OCTOBER_RENDERS).filter((render) => render !== null);
+    expect(RECORD_RENDERS).toHaveLength(5);
+    expect(OCTOBER_RENDERS.invoiceExample).toBeNull();
+    expect(OCTOBER_RENDERS.localService).toBeNull();
+    for (const render of renders) {
+      const name = render.src.split("/").at(-1)!.replace(".webp", "");
+      expect(render.alt, name).not.toBe("");
       const info = provenance.files[`${name}.webp`];
       expect(info.source_sha256, name).toMatch(/^[a-f0-9]{64}$/);
       const image = await sharp(join(brand, `${name}.webp`)).metadata();
       expect(image.format, name).toBe("webp");
-      expect(image.width, name).toBeLessThanOrEqual(1536);
+      expect([image.width, image.height], name).toEqual([render.width, render.height]);
     }
+    expect(page).toContain('loading="eager"');
+    expect(page).toContain('fetchPriority="high"');
+    const cards = page.slice(page.indexOf('className="plan-contrast"'), page.indexOf('className="plan-table-wrap"'));
+    expect(cards).not.toContain("RECALL_VS_RECORD.map");
+    expect(page.slice(page.indexOf('className="plan-table-wrap"'))).toContain("RECALL_VS_RECORD.map");
     expect(page).toContain("<SolidLockup />");
     expect(page).not.toContain("<TitleBlock");
     expect(page).not.toContain("<ServicePlan");
     expect(page).not.toMatch(/N-(cloud|managed)/i);
     const css = readFileSync(join(dir, "onepager.css"), "utf-8");
     expect(css).toMatch(/\.plan-sheet::before \{\s*display: none;/);
+    expect(css).toMatch(/\.plan-hero-copy \{[^}]*align-items: start;/);
+    expect(css).toMatch(/\.plan-section-cut img \{[^}]*aspect-ratio: 3\/2;/);
   });
 });
 
@@ -365,8 +379,12 @@ describe("/install polish", () => {
     expect(css).toMatch(
       /span\.rounded-full\[class\*="emerald"\] \{\s*background-color: var\(--rust\) !important;/
     );
-    expect(css).toMatch(/\.plan-install-sheet \.code-block-palette \{[^}]*background: var\(--paper\) !important;/);
-    expect(css).toMatch(/\.plan-install-sheet \.code-block-palette,[\s\S]*?background-color: var\(--band\) !important;/);
+    expect(css).toMatch(
+      /\.plan-install-sheet \.code-block-palette \{[^}]*background: var\(--paper\) !important;/
+    );
+    expect(css).toMatch(
+      /\.plan-install-sheet \.code-block-palette,[\s\S]*?background-color: var\(--band\) !important;/
+    );
   });
 
   it("has no stale 280 px drafting-logo comment", () => {
@@ -384,7 +402,9 @@ describe("/install polish", () => {
         "Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing."
       );
       expect(lede).not.toMatch(/last told|recalls only/i);
-      expect(lede).toContain("With one, it reads what was stored, from which source, and what is current now");
+      expect(lede).toContain(
+        "With one, it reads what was stored, from which source, and what is current now"
+      );
       expect(lede).not.toMatch(/corrected/i);
       expect(lede).not.toMatch(/for example/i);
     });
@@ -436,8 +456,14 @@ describe("/install polish", () => {
           const after = text.slice(m.index!, m.index! + 600);
           expect(/npm registry|npm update checks/i.test(after), `${rel}: ${m[0]}`).toBe(true);
           expect(/NO_UPDATE_NOTIFIER=1/.test(after), `${rel}: ${m[0]}`).toBe(true);
-          expect(/when a session starts/i.test(after), `${rel}: ${m[0]} names only part of the update checks`).toBe(true);
-          expect(/connection metadata/i.test(after), `${rel}: ${m[0]} omits what the registry sees`).toBe(true);
+          expect(
+            /when a session starts/i.test(after),
+            `${rel}: ${m[0]} names only part of the update checks`
+          ).toBe(true);
+          expect(
+            /connection metadata/i.test(after),
+            `${rel}: ${m[0]} omits what the registry sees`
+          ).toBe(true);
         }
       }
       expect(seen).toBeGreaterThanOrEqual(4);
@@ -458,7 +484,10 @@ describe("/install polish", () => {
 
     it("install page: no unevidenced reversibility, 5-minute, or telemetry-absolute claims", () => {
       const strings = readSrc("frontend/src/i18n/locales/install_page_strings.ts");
-      const en = strings.slice(strings.indexOf("export const INSTALL_PAGE_EN"), strings.indexOf("export const INSTALL_PAGE_ES"));
+      const en = strings.slice(
+        strings.indexOf("export const INSTALL_PAGE_EN"),
+        strings.indexOf("export const INSTALL_PAGE_ES")
+      );
       expect(en.length).toBeGreaterThan(500);
       expect(en).not.toContain("5-minute integration");
       expect(en).not.toContain("phone-home");
@@ -616,13 +645,18 @@ describe("sheet 01 plate (FIG. A-1)", () => {
       if (outside > 0) return outside;
       return Math.min(px - b.x, b.x + b.w - px, py - b.y, b.y + b.h - py);
     };
-    const toPolyline = ([px, py]: readonly [number, number], pts: readonly (readonly [number, number])[]) => {
+    const toPolyline = (
+      [px, py]: readonly [number, number],
+      pts: readonly (readonly [number, number])[]
+    ) => {
       let best = Infinity;
       for (let i = 1; i < pts.length; i++) {
         const [ax, ay] = pts[i - 1];
         const [bx, by] = pts[i];
         const L2 = (bx - ax) ** 2 + (by - ay) ** 2;
-        const t = L2 ? Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L2)) : 0;
+        const t = L2
+          ? Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L2))
+          : 0;
         best = Math.min(best, Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay))));
       }
       return best;
@@ -655,7 +689,10 @@ describe("sheet 01 plate (FIG. A-1)", () => {
             : kind === "leader"
               ? f.leaders[i].points
               : f.connectors[i].points;
-        expect(toPolyline(k.at, line), `${f.width} key ${k.n} sits on its line`).toBeLessThanOrEqual(r + 1);
+        expect(
+          toPolyline(k.at, line),
+          `${f.width} key ${k.n} sits on its line`
+        ).toBeLessThanOrEqual(r + 1);
       }
     }
   });
@@ -769,7 +806,9 @@ describe("sheet 01 plate (FIG. A-1)", () => {
       }
       for (const c of arrows) {
         const [x, y] = c.points[c.points.length - 1];
-        expect(Math.min(x, f.width - x, y, f.height - y), "arrow tip room").toBeGreaterThanOrEqual(margin);
+        expect(Math.min(x, f.width - x, y, f.height - y), "arrow tip room").toBeGreaterThanOrEqual(
+          margin
+        );
       }
       for (let i = 0; i < f.keys.length; i++) {
         for (let j = i + 1; j < f.keys.length; j++) {
@@ -811,7 +850,10 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     const page = files[0];
     expect(page).not.toContain("<RecordPlate />");
     expect(page).toContain("FIGURE_LEGEND.map");
-    expect(page).toContain("N-hero.webp");
+    expect(page).toContain("OCTOBER_RENDERS.hero");
+    expect(read("frontend/src/components/onepager/october_renders.ts")).toContain(
+      'render("N-hero"'
+    );
     expect(page).not.toContain("RecordPlan");
     expect(files[2]).not.toContain("RecordPlan");
     expect(page).toContain("FIGURE_LEGEND.map");
@@ -823,7 +865,9 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     expect(items[3]).toBe(
       "The amount still comes from the first observation. Both observations stay on record."
     );
-    expect(items[2]).toBe("The due date now reads 29 October. The changed field points to the later observation.");
+    expect(items[2]).toBe(
+      "The due date now reads 29 October. The changed field points to the later observation."
+    );
     expect(items[4]).toBe(
       "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports."
     );
@@ -855,7 +899,7 @@ describe("/install code blocks (round 3)", () => {
 
   it("gives every pre on the install sheet the drawing palette, not the global teal gradient", () => {
     expect(css).toMatch(
-      /\.plan-install-sheet pre \{[^}]*background: var\(--paper\) !important;[^}]*background-image: none !important;[^}]*border-color: var\(--line\) !important;/,
+      /\.plan-install-sheet pre \{[^}]*background: var\(--paper\) !important;[^}]*background-image: none !important;[^}]*border-color: var\(--line\) !important;/
     );
   });
 
@@ -863,7 +907,9 @@ describe("/install code blocks (round 3)", () => {
     expect(css).toMatch(/\.plan-install-preflight pre \{[^}]*white-space: pre !important;/);
     expect(body).toContain('className="plan-install-preflight');
     const pf = read("frontend/src/components/PermissionsPreflight.tsx");
-    expect(pf).toMatch(/<pre\s+tabIndex=\{0\}\s+role="region"\s+aria-label="Permissions pre-flight snippet/);
+    expect(pf).toMatch(
+      /<pre\s+tabIndex=\{0\}\s+role="region"\s+aria-label="Permissions pre-flight snippet/
+    );
   });
 
   it("makes the clipped install block a labelled, focusable region with an edge cue", () => {
@@ -873,8 +919,6 @@ describe("/install code blocks (round 3)", () => {
     expect(css).toMatch(/background-attachment: local, local, scroll, scroll !important;/);
   });
 });
-
-
 
 /**
  * The held /evaluate page: /install sends agents there, so its headline (title, description) and the
@@ -886,12 +930,20 @@ describe("/install code blocks (round 3)", () => {
 describe("/evaluate headline and first screen", () => {
   const meta = resolveSeoMetadata("/evaluate");
   const en = EVALUATE_SUBPAGE_EN;
-  const firstScreen = (e: typeof en) => [e.introP1, e.introP2BeforeLink, e.whatNeotomaP1, e.whatNeotomaP2];
+  const firstScreen = (e: typeof en) => [
+    e.introP1,
+    e.introP2BeforeLink,
+    e.whatNeotomaP1,
+    e.whatNeotomaP2,
+  ];
   const retired: [RegExp, string][] = [
     [/deterministic state|state layer|memory layer/i, "retired category noun"],
     [/replay/i, "replay"],
     [/pick up where|retomen donde/i, "pick up where they left off"],
-    [/corrections? (always|will always) wins?|correction sticks everywhere/i, "corrections always win"],
+    [
+      /corrections? (always|will always) wins?|correction sticks everywhere/i,
+      "corrections always win",
+    ],
     [/append-only/i, "database-enforced append-only"],
     [/export(s|ed)? (with|including) (full )?history/i, "export with history"],
   ];
@@ -899,12 +951,19 @@ describe("/evaluate headline and first screen", () => {
   it("names the category and the lede line in the title, description and lede", () => {
     expect(meta.title).toContain("system of record for AI agents");
     expect(meta.description).toContain("A record, not recall.");
-    expect(en.introP1.startsWith("A record, not recall. Neotoma is the system of record for AI agents.")).toBe(true);
+    expect(
+      en.introP1.startsWith("A record, not recall. Neotoma is the system of record for AI agents.")
+    ).toBe(true);
     expect(EVALUATE_SUBPAGE_ES.introP1).toContain("sistema de registro para agentes de IA");
   });
 
   it("carries no retired phrase or omitted claim in the headline or first screen, in either locale", () => {
-    const texts = [meta.title, meta.description, ...firstScreen(en), ...firstScreen(EVALUATE_SUBPAGE_ES)];
+    const texts = [
+      meta.title,
+      meta.description,
+      ...firstScreen(en),
+      ...firstScreen(EVALUATE_SUBPAGE_ES),
+    ];
     for (const [re, label] of retired) {
       for (const text of texts) {
         expect(re.test(text), `${label}: ${text.slice(0, 80)}`).toBe(false);
@@ -930,7 +989,9 @@ describe("no developer-preview label", () => {
       "faq_preview.ts": read("inspector", "src", "lib", "faq_preview.ts"),
     };
     for (const [name, text] of Object.entries(sources)) {
-      expect(text, name).not.toMatch(/developer preview|developerPreview|vista previa para desarrolladores/i);
+      expect(text, name).not.toMatch(
+        /developer preview|developerPreview|vista previa para desarrolladores/i
+      );
     }
   });
   it("is absent from the JSON-LD and metadata of the live routes", () => {
@@ -952,13 +1013,20 @@ describe("no unmeasured install-time claim", () => {
   const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
   const claim = UNMEASURED_INSTALL_TIME;
   /** Packs store non-Latin text as \u escapes; compare the decoded text. */
-  const decode = (t: string) => t.replace(/\\u([0-9a-f]{4})/gi, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
+  const decode = (t: string) =>
+    t.replace(/\\u([0-9a-f]{4})/gi, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
   it("is gone from the install CTAs, install descriptions, FAQ answers and integration metadata", () => {
     const sources: Record<string, string> = {
       "home_body_en.ts": read("frontend", "src", "i18n", "locales", "home_body_en.ts"),
       "home_body_es.ts": read("frontend", "src", "i18n", "locales", "home_body_es.ts"),
       "static_packs.ts": read("frontend", "src", "i18n", "locales", "static_packs.ts"),
-      "install_page_strings.ts": read("frontend", "src", "i18n", "locales", "install_page_strings.ts"),
+      "install_page_strings.ts": read(
+        "frontend",
+        "src",
+        "i18n",
+        "locales",
+        "install_page_strings.ts"
+      ),
       "subpage_packs.ts": read("frontend", "src", "i18n", "locales", "subpage_packs.ts"),
       "IcpDetailPage.tsx": read("frontend", "src", "components", "subpages", "IcpDetailPage.tsx"),
       "faq_items_en.ts": read("frontend", "src", "site", "faq_items_en.ts"),
@@ -1001,9 +1069,15 @@ describe("no unmeasured install-time claim", () => {
 describe("old lede guard", () => {
   const sameLede = (text: string) => OLD_LEDE.filter((p) => p.re.test(text)).map((p) => p.name);
   it("matches the old sentences in both languages", () => {
-    expect(sameLede("Without one, an agent recalls only what it was last told.")).toContain("live-old-lede-en");
-    expect(sameLede("An agent's recall holds what it was last told.")).toContain("live-old-lede-en");
-    expect(sameLede("Sin uno, un agente solo recuerda lo último que se le dijo.")).toContain("live-old-lede-es");
+    expect(sameLede("Without one, an agent recalls only what it was last told.")).toContain(
+      "live-old-lede-en"
+    );
+    expect(sameLede("An agent's recall holds what it was last told.")).toContain(
+      "live-old-lede-en"
+    );
+    expect(sameLede("Sin uno, un agente solo recuerda lo último que se le dijo.")).toContain(
+      "live-old-lede-es"
+    );
     expect(sameLede("Without one, an agent works from whatever it happens to recall")).toEqual([]);
   });
   it("is absent from the one-pager, the /evaluate lede strings and the route metadata", () => {
@@ -1016,7 +1090,12 @@ describe("old lede guard", () => {
     };
     for (const route of ["/", "/install", "/evaluate"]) {
       const meta = resolveSeoMetadata(route);
-      texts[`${route} metadata`] = JSON.stringify([meta.title, meta.description, meta.ogImageAlt, meta.jsonLd]);
+      texts[`${route} metadata`] = JSON.stringify([
+        meta.title,
+        meta.description,
+        meta.ogImageAlt,
+        meta.jsonLd,
+      ]);
     }
     for (const [name, text] of Object.entries(texts)) {
       expect(sameLede(text), name).toEqual([]);

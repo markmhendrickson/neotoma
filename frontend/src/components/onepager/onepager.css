@@ -1024,7 +1024,7 @@
 .plan-sheet {
   max-width: 1400px;
   margin: 0 auto;
-  padding: clamp(3.5rem, 7vw, 7rem) clamp(1.35rem, 5vw, 5rem);
+  padding: clamp(2.5rem, 4vw, 4.5rem) clamp(1.35rem, 5vw, 5rem);
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
@@ -1047,7 +1047,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
   gap: clamp(2rem, 6vw, 6rem);
-  align-items: end;
+  align-items: start;
 }
 .plan-hero-aside {
   padding-bottom: 0.3rem;
@@ -1133,7 +1133,7 @@
   color: var(--muted);
 }
 .plan-sheet-head {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 .plan-sheet-head .plan-label {
   margin-bottom: 0.85rem;
@@ -1147,7 +1147,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(1rem, 3vw, 3rem);
-  margin: 2.5rem 0 3rem;
+  margin: 1.75rem 0 2rem;
 }
 .plan-contrast article {
   min-width: 0;
@@ -1159,34 +1159,7 @@
   margin: 1.2rem 0 1.5rem;
 }
 .plan-contrast h3 {
-  margin: 0.5rem 0 1.2rem;
-}
-.plan-contrast ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  color: var(--muted);
-}
-.plan-contrast li {
-  position: relative;
-  padding: 0.25rem 0 0.55rem 1.65rem;
-}
-.plan-contrast li::before {
-  position: absolute;
-  left: 0;
-  top: 0.15rem;
-  font: 700 1.15rem var(--sans);
-}
-.plan-contrast article:first-child li::before {
-  content: "×";
-  color: #a14624;
-}
-.plan-contrast article:last-child li::before {
-  content: "✓";
-  color: #276d4e;
-}
-.dark .plan-contrast article:last-child li::before {
-  color: #8cc8a7;
+  margin: 0.5rem 0 0.4rem;
 }
 .plan-table {
   border: 0;
@@ -1208,15 +1181,15 @@
 .plan-section-cut {
   display: block;
   border: 0;
-  margin: 1.5rem 0 3rem;
+  margin: 1rem 0 2rem;
 }
 .plan-section-cut li,
 .plan-section-cut li:first-child {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: clamp(1.5rem, 5vw, 5rem);
-  padding: clamp(2.5rem, 5vw, 5rem) 0;
+  padding: clamp(1.5rem, 2.5vw, 2.75rem) 0;
   border: 0;
   border-top: 1px solid var(--line);
 }
@@ -1235,14 +1208,17 @@
   max-width: 36ch;
 }
 .plan-section-cut img {
+  width: 100%;
+  height: auto;
   aspect-ratio: 3/2;
+  object-fit: cover;
   border-radius: 12px;
   background: var(--band);
 }
 .plan-example {
   background: var(--band);
   padding: clamp(1.5rem, 4vw, 3rem);
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.75rem;
   border-radius: 12px;
 }
 .plan-example .plan-legend {
@@ -1258,6 +1234,9 @@
 }
 .plan-split {
   grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+}
+.plan-split-text-only {
+  display: block;
 }
 .plan-notes li::before {
   border-color: var(--line);

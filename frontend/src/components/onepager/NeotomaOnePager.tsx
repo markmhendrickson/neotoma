@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
+import { OCTOBER_RENDERS, RECORD_RENDERS } from "./october_renders";
 import {
   CLI_TRANSCRIPT,
   DEEPER_MATERIAL,
@@ -17,8 +18,6 @@ import {
   PLATE_CAPTION,
 } from "./onepager_copy";
 import "./onepager.css";
-
-const RECORD_IMAGES = ["capture", "structure", "change", "current", "basis"] as const;
 
 function SheetHead({ id, mark, title }: { id: string; mark: string; title: string }) {
   return (
@@ -80,13 +79,7 @@ export function NeotomaOnePager() {
             </div>
           </div>
           <figure className="plan-scene plan-hero-scene">
-            <img
-              src="/brand/october/N-hero.webp"
-              width="1536"
-              height="1024"
-              alt="Paper source cards linked to a current record card"
-              fetchPriority="high"
-            />
+            <img {...OCTOBER_RENDERS.hero} loading="eager" fetchPriority="high" />
             <figcaption>Sources, observations and a current record.</figcaption>
           </figure>
         </section>
@@ -105,36 +98,14 @@ export function NeotomaOnePager() {
           </p>
           <div className="plan-contrast">
             <article>
-              <img
-                src="/brand/october/N-before.webp"
-                width="1200"
-                height="800"
-                loading="lazy"
-                alt="Scattered paper fragments"
-              />
+              <img {...OCTOBER_RENDERS.before} loading="lazy" />
               <p className="plan-label">Without one</p>
               <h3>What an agent happens to recall</h3>
-              <ul>
-                {RECALL_VS_RECORD.map((row) => (
-                  <li key={row.question}>{row.recall}</li>
-                ))}
-              </ul>
             </article>
             <article>
-              <img
-                src="/brand/october/N-after.webp"
-                width="1200"
-                height="800"
-                loading="lazy"
-                alt="Paper fragments filed into one record"
-              />
+              <img {...OCTOBER_RENDERS.after} loading="lazy" />
               <p className="plan-label">With one</p>
               <h3>The current record</h3>
-              <ul>
-                {RECALL_VS_RECORD.map((row) => (
-                  <li key={row.question}>{row.record}</li>
-                ))}
-              </ul>
             </article>
           </div>
           <div className="plan-table-wrap">
@@ -174,18 +145,15 @@ export function NeotomaOnePager() {
                   <h3>{step.name}</h3>
                   <p>{step.text}</p>
                 </div>
-                <img
-                  src={`/brand/october/N-${RECORD_IMAGES[i]}.webp`}
-                  width="1200"
-                  height="800"
-                  loading="lazy"
-                  alt={`${step.name} represented with connected paper records`}
-                />
+                <img {...RECORD_RENDERS[i]} loading="lazy" />
               </li>
             ))}
           </ol>
           <aside className="plan-example" aria-label="Synthetic invoice example">
             <p className="plan-label">Synthetic example · one invoice</p>
+            {OCTOBER_RENDERS.invoiceExample && (
+              <img {...OCTOBER_RENDERS.invoiceExample} loading="lazy" />
+            )}
             <ol className="plan-legend">
               {FIGURE_LEGEND.map((item, i) => (
                 <li key={item}>
@@ -218,17 +186,15 @@ export function NeotomaOnePager() {
             mark="03 · Connect"
             title="One local service, read by the tools you connect"
           />
-          <div className="plan-split">
-            <figure className="plan-scene plan-local-scene">
-              <img
-                src="/brand/october/N-self-host.webp"
-                width="960"
-                height="640"
-                loading="lazy"
-                alt="Local server connected to a computer"
-              />
-              <figcaption>Run the service locally and connect the tools you use.</figcaption>
-            </figure>
+          <div
+            className={`plan-split${OCTOBER_RENDERS.localService ? "" : " plan-split-text-only"}`}
+          >
+            {OCTOBER_RENDERS.localService && (
+              <figure className="plan-scene plan-local-scene">
+                <img {...OCTOBER_RENDERS.localService} loading="lazy" />
+                <figcaption>Run the service locally and connect the tools you use.</figcaption>
+              </figure>
+            )}
             <p className="plan-body">
               Neotoma runs as a local service. Agents reach it through an MCP server, a REST API or
               the CLI, and you inspect it in a bundled web app. Agents connected to the same MCP
