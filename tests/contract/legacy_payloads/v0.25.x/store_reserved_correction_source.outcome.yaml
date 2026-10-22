@@ -1,0 +1,10 @@
+endpoint: "POST /store"
+outcome: rejected
+error_code: RESERVED_OBSERVATION_SOURCE
+hint_match: "correct({ entity_id, field, value })"
+notes: |
+  Generic store accepted a client-supplied `observation_source` from the
+  shipped enum. `correction` is reserved for observations stamped by
+  `correct()` (#2033), so the generic store path rejects it with
+  RESERVED_OBSERVATION_SOURCE instead of stripping it, and persists nothing.
+  The structured `details.hint` names the `correct()` call to use instead.

@@ -13,16 +13,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  ObservationReducer,
-  type Observation,
-} from "../../src/reducers/observation_reducer.js";
+import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 import { DEFAULT_OBSERVATION_SOURCE_PRIORITY } from "../../src/services/schema_registry.js";
 
 vi.mock("../../src/services/schema_registry.js", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../src/services/schema_registry.js")
-  >("../../src/services/schema_registry.js");
+  const actual = await vi.importActual<typeof import("../../src/services/schema_registry.js")>(
+    "../../src/services/schema_registry.js"
+  );
   return {
     ...actual,
     schemaRegistry: {
@@ -36,13 +33,11 @@ vi.mock("../../src/services/schema_definitions.js", () => ({
 }));
 
 vi.mock("../../src/services/field_validation.js", () => ({
-  validateFieldWithConverters: vi
-    .fn()
-    .mockImplementation((_field: string, value: unknown) => ({
-      isValid: true,
-      value,
-      shouldRouteToRawFragments: false,
-    })),
+  validateFieldWithConverters: vi.fn().mockImplementation((_field: string, value: unknown) => ({
+    isValid: true,
+    value,
+    shouldRouteToRawFragments: false,
+  })),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,7 +48,7 @@ function makeObs(
     id: string;
     fields: Record<string, unknown>;
     observed_at: string;
-  },
+  }
 ): Observation {
   return {
     entity_id: "ent_test",
@@ -106,6 +101,7 @@ describe("ObservationReducer - observation_source tie-break", () => {
     // order. Changing this ordering requires a deliberate schema-level
     // override and a changelog entry.
     expect([...DEFAULT_OBSERVATION_SOURCE_PRIORITY]).toEqual([
+      "correction",
       "sensor",
       "workflow_state",
       "llm_summary",

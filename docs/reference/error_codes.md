@@ -532,7 +532,7 @@ Treat an **unrecognized `reason_code`** as a hard denial and surface
 extensible by design.
 
 No PII appears in this envelope: interpolated values are schema-declared field
-*names* and configured policy values, never any fragment of the submitted
+_names_ and configured policy values, never any fragment of the submitted
 payload.
 
 ## ERR_STORE_POLICY_UNAVAILABLE
@@ -571,11 +571,37 @@ refused either way; only the explanation differs.
 | `VALIDATION_INVALID_TYPE`   | 400  | No     | Field has invalid type               |
 | `VALIDATION_INVALID_FORMAT` | 400  | No     | Field format is invalid (e.g., date) |
 | `VALIDATION_OUT_OF_RANGE`   | 400  | No     | Field value out of allowed range     |
+| `RESERVED_OBSERVATION_SOURCE` | 400  | No     | Generic `store`/`store_structured` asserted reserved correction authority (`observation_source: "correction"` and/or `source_priority: 1000`). No observation row is persisted. |
+
+### RESERVED_OBSERVATION_SOURCE
+
+Returned when a client claims correction authority on the generic write path
+instead of calling `correct()`. Since #2033 this is reject-not-strip: the
+request fails with HTTP 400 and nothing is written.
+
+```json
+{
+  "error_code": "RESERVED_OBSERVATION_SOURCE",
+  "message": "observation_source: 'correction' is reserved — only the correct() operation may set it. Use correct() instead of store() to make an authoritative field change.",
+  "details": {
+    "hint": "Call correct({ entity_id, field, value }). Since #2033, store()/store_structured() reject reserved correction authority instead of silently accepting it.",
+    "field": "observation_source",
+    "rejected_value": "correction"
+  },
+  "timestamp": "2026-09-08T12:00:00.000Z"
+}
+```
+
+**Remediation:**
+
+- Use `correct({ entity_id, field, value })` (MCP/REST/CLI) for authoritative field changes.
+- For ordinary writes, omit `observation_source` (defaults to `llm_summary`) or use `sensor` / `workflow_state` / `human` / `import` / `sync`, and keep `source_priority` below 1000.
 
 **Common Causes:**
 
 - `VALIDATION_MISSING_FIELD`: Missing required `type` or `properties`
 - `VALIDATION_INVALID_FORMAT`: Invalid date format or JSON structure
+- `RESERVED_OBSERVATION_SOURCE`: Client sent `observation_source: "correction"` or `source_priority: 1000` on `/store`
 
 ## Idempotency Errors
 

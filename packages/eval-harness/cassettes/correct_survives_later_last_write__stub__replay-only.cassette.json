@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "correct_survives_later_last_write",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-09-08T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Mark the task \"Correction durability last-write target\" as done with\ncorrect(). Then re-store that same task with status todo via ordinary\nstore (not correct) — a later routine write that must not overwrite the\ncorrection.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user asks you to change a field on an existing entity, use the correct tool with the entity_id, entity_type, field, and value. Persist the conversation and user message via the store tool with PART_OF relationships. If later asked to re-store the same task at an older status via ordinary store (not correct), do that as a generic store of the task entity.\n",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "conv-correct-durability-001",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-correct-durability-001" },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-correct-durability-001:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Mark the task \"Correction durability last-write target\" as done with correct(). Then re-store that same task with status todo via ordinary store (not correct)."
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+        ]
+      },
+      "sequence": 0
+    },
+    {
+      "name": "correct",
+      "input": {
+        "entity_id": "ent_ae3bbf3e156ba6da9ade66b2",
+        "entity_type": "task",
+        "field": "status",
+        "value": "done",
+        "idempotency_key": "correct-task-status-durability-001"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store-task-reingest-todo-001",
+        "entities": [
+          {
+            "entity_type": "task",
+            "title": "Correction durability last-write target",
+            "status": "todo",
+            "notes": "re-imported by routine sync"
+          }
+        ]
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "Done — I corrected the task to done, then re-stored it with status todo via ordinary store. The correction should remain durable."
+}

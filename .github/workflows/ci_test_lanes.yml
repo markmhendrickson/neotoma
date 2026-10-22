@@ -153,6 +153,9 @@ jobs:
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
+      - name: Run natural CLI correction durability and reserved-authority effects (#2033)
+        run: npx vitest run --no-file-parallelism tests/cli/cli_correction_durability.test.ts
+
       # #2046 instance-skill MCP initialize effect regression. The service has
       # unit coverage, but that can mock away backend-driver SQL mistakes. This
       # integration test seeds real rows and drives MCP initialize through the

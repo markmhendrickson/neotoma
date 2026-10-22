@@ -9,6 +9,11 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 - `v0.25.x/store_entity_field_named_data_origin` seeded as `rejected` (#2242). `data_origin` inside an `entities[]` item is now a reserved per-entity origin override (an object with at least `kind`), peeled off before field validation like `target_id` / `intent`. An entity whose own free-form field was named `data_origin` now gets `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, with a structured `details.hint` to rename the field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this. Request-level `data_origin` is additive.
 - `v0.25.x/create_interpretation_entity_field_named_data_origin` seeded as `rejected` (#2242). `create_interpretation` does not apply a per-entity origin yet, so it now refuses a `data_origin` key inside an `entities[]` item with `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, instead of storing it as an unknown field. The structured `details.hint` points the caller at `store` with `data_origin`, or at renaming its own field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this too.
 
+## Next release after v0.25.0 (#2033)
+
+- `v0.25.x/store_reserved_correction_source` and `v0.25.x/store_reserved_correction_priority` seeded as `rejected`. Generic `POST /store` (and MCP `store`) previously accepted a client-supplied `observation_source: "correction"` or `source_priority: 1000`. Both are now reserved for observations stamped by `correct()`, which makes corrections durable under the default `last_write` merge policy. Such requests return `400 RESERVED_OBSERVATION_SOURCE` with a structured `details.hint` naming `correct({ entity_id, field, value })`, and nothing is persisted. This is a validation tightening and belongs in the release supplement's Breaking changes section.
+- `v0.25.x/observations_create_reserved_priority` seeded as `rejected`. `POST /observations/create` previously accepted `source_priority: 1000`; it now returns `400 RESERVED_OBSERVATION_SOURCE` with the same `details.hint`, and writes nothing. Same tightening, second client write entrance.
+
 ## v0.25.0
 
 - `tests/contract/fixtures/legacy_relationship_grant_without_scope.json` records an authorization-seam tightening for pre-`relationship_types` `create_relationship` grants. The grant record remains accepted, but its edge-write outcome changes from admitted by `op` + `entity_types` to `capability_denied` unless one entry also covers the relationship type and both endpoint entity types. Missing or empty `relationship_types` denies the write, and the structured hint names the complete replacement entry. This is an authorization outcome change rather than an HTTP payload-validation flip, so the fixture is exercised by `tests/contract/relationship_write_grant_contract.test.ts` instead of the unauthenticated legacy-payload replay runner.
@@ -37,7 +42,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 ## v0.12.0
 
-- `v0.12.x/store_relationship_non_ent_entity_id` flipped from valid to rejected: store relationship ids now require ent_ prefix.
+- `v0.12.x/store_relationship_non_ent_entity_id` flipped from valid to rejected: store relationship ids now require ent\_ prefix.
 - `v0.12.x/issues_submit_without_reporter_env` seeded as `rejected`. `submit_issue` now requires at least one of `reporter_git_sha` or `reporter_app_version`; submissions missing both fail with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED` and a structured `details.acceptable_field_groups` envelope listing the alternatives. Release supplement: `docs/releases/in_progress/v0.12.0/github_release_supplement.md` § Breaking changes.
 
 ## v0.13.0
