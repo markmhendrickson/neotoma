@@ -81,9 +81,9 @@ export function playLogo(target: HTMLElement): Animation[] {
 
 /** Sample the displacement of a damped spring, with a modest initial velocity toward rest. */
 export function springFrames(x: number, y: number, rotation: number): Keyframe[] {
-  const frequency = 14,
-    damping = 0.78,
-    duration = 1.15;
+  const frequency = 12,
+    damping = 0.8,
+    duration = 0.82;
   const decay = damping * frequency;
   const angular = frequency * Math.sqrt(1 - damping * damping);
   return Array.from({ length: 73 }, (_, index) => {
@@ -102,7 +102,7 @@ export function springFrames(x: number, y: number, rotation: number): Keyframe[]
 
 export function playPaperScene(target: HTMLElement): Animation[] {
   const objects = [...target.querySelectorAll<SVGElement>("[data-paper-object]")];
-  const duration = 1150;
+  const duration = 820;
   let settledAt = duration;
   const arrivals = objects.map((object) => {
     const delay = Number(object.dataset.enterDelay || 0);
@@ -124,7 +124,7 @@ export function playPaperScene(target: HTMLElement): Animation[] {
         { strokeDasharray: "1", strokeDashoffset: "1" },
         { strokeDasharray: "1", strokeDashoffset: "0" },
       ],
-      { duration: 600, delay: settledAt + 80 + index * 70, easing: "ease-out", fill: "both" }
+      { duration: 600, delay: settledAt + 40 + index * 70, easing: "ease-out", fill: "both" }
     )
   );
   return [...arrivals, ...connections];
@@ -141,7 +141,7 @@ export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
         const records = [...target.querySelectorAll<SVGElement>("[data-vision-record]")];
         const arrivals = records.map((record, index) =>
           record.animate(springFrames(index % 2 ? 400 : -400, 20, index % 2 ? 3 : -3), {
-            duration: 1150,
+            duration: 820,
             delay: index * 90,
             easing: "linear",
             fill: "both",
@@ -157,7 +157,7 @@ export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
             ],
             {
               duration: 600,
-              delay: 1150 + Math.max(0, records.length - 1) * 90 + 80,
+              delay: 820 + Math.max(0, records.length - 1) * 90 + 40,
               easing: "ease-out",
               fill: "both",
             }

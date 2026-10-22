@@ -12,7 +12,9 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { runInNewContext } from "node:vm";
 import { execFileSync } from "node:child_process";
-import { observeViewportMotion } from "./viewport_motion";
+import { observeViewportMotion, playPaperScene, springFrames } from "./viewport_motion";
+import { PaperScene, type PaperSceneKind } from "./PaperScene";
+import { OCTOBER_RENDERS } from "./october_renders";
 import { ENTITY_SCHEMAS } from "../../../../src/services/schema_definitions";
 import { InterfaceExplorer } from "./InterfaceExplorer";
 import { CodeBlock } from "../InstallCodeBlock";
@@ -271,5 +273,108 @@ describe("viewport entrance lifecycle", () => {
     expect(target.textContent).toBe("Record");
     expect(target.getAttribute("style")).toBeNull();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("layered paper illustration motion", () => {
+  it("serves ten distinct object scenes instead of translating images or the Inspector", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <NeotomaOnePager />
+      </MemoryRouter>
+    );
+    const scenes = [...container.querySelectorAll("[data-paper-scene]")];
+    expect(scenes).toHaveLength(10);
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(new Set(scenes.map((scene) => scene.getAttribute("data-paper-scene")))).toHaveProperty(
+      "size",
+      10
+    );
+    const compositions = scenes.map((scene) =>
+      [...scene.querySelectorAll("[data-paper-object] path")]
+        .map((path) => path.getAttribute("d"))
+        .join("|")
+    );
+    expect(new Set(compositions).size).toBe(10);
+    expect(container.querySelector(".plan-inspector")?.hasAttribute("data-paper-scene")).toBe(
+      false
+    );
+  });
+
+  it("animates actual child objects from outside the frame and draws links only after all settle", () => {
+    const calls: { target: Element; frames: Keyframe[]; options: KeyframeAnimationOptions }[] = [];
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: function (this: Element, frames: Keyframe[], options: KeyframeAnimationOptions) {
+        calls.push({ target: this, frames, options });
+        return { cancel: vi.fn(), finished: new Promise(() => {}), playState: "running" };
+      },
+    });
+    for (const scene of Object.keys(OCTOBER_RENDERS) as PaperSceneKind[]) {
+      calls.length = 0;
+      const { container, unmount } = render(<PaperScene scene={scene} />);
+      const svg = container.querySelector("svg")!;
+      expect(
+        screen.getByRole("img", { name: new RegExp(OCTOBER_RENDERS[scene].alt) })
+      ).toBeInTheDocument();
+      expect(svg.querySelector("image")).toBeNull();
+      expect(svg.querySelector("feTurbulence")).not.toBeNull();
+      playPaperScene(svg as unknown as HTMLElement);
+      const arrivals = calls.filter((call) => call.target.hasAttribute("data-paper-object"));
+      const links = calls.filter((call) => call.target.hasAttribute("data-paper-connection"));
+      expect(arrivals.length).toBeGreaterThanOrEqual(3);
+      expect(links.length).toBeGreaterThan(0);
+      expect(calls.some((call) => call.target === svg)).toBe(false);
+      expect(calls).toHaveLength(arrivals.length + links.length);
+      for (const arrival of arrivals) {
+        const target = arrival.target as SVGElement;
+        const x = Number(target.dataset.enterX),
+          y = Number(target.dataset.enterY);
+        expect(Math.abs(x) >= 1050 || Math.abs(y) >= 760).toBe(true);
+        expect(Math.abs(Number(target.dataset.enterRotation))).toBeLessThanOrEqual(5);
+        expect(arrival.frames[0].transform).toContain(`translate(${x}px, ${y}px)`);
+        expect(arrival.frames.slice(-1)[0]?.transform).toBe("translate(0px, 0px) rotate(0deg)");
+        expect(arrival.frames.every((frame) => frame.opacity === undefined)).toBe(true);
+        expect(arrival.options.easing).toBe("linear");
+      }
+      const settledAt = Math.max(
+        ...arrivals.map(({ options }) => Number(options.delay) + Number(options.duration))
+      );
+      for (const link of links) {
+        expect(Number(link.options.delay)).toBeGreaterThanOrEqual(settledAt + 40);
+        expect(link.frames[0].strokeDashoffset).toBe("1");
+        expect(link.frames.slice(-1)[0]?.strokeDashoffset).toBe("0");
+      }
+      unmount();
+    }
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("samples momentum and limited damped overshoot into a stable final pose", () => {
+    const frames = springFrames(1000, 20, 5);
+    const displacements = frames.map((frame) =>
+      Number(String(frame.transform).match(/translate\(([-\d.e]+)/)?.[1])
+    );
+    expect(displacements[0]).toBe(1000);
+    expect(displacements[0] - displacements[18]).toBeGreaterThan(800);
+    expect(Math.min(...displacements)).toBeLessThan(-1);
+    expect(Math.min(...displacements)).toBeGreaterThan(-40);
+    expect(Math.max(...displacements.slice(-8).map(Math.abs))).toBeLessThan(1);
+    expect(displacements.slice(-1)[0]).toBe(0);
+  });
+
+  it("uses unique material and accessibility IDs when scenes repeat", () => {
+    const { container } = render(
+      <>
+        <PaperScene scene="hero" />
+        <PaperScene scene="hero" />
+      </>
+    );
+    const ids = [...container.querySelectorAll("[id]")].map((element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const svg of container.querySelectorAll("svg")) {
+      for (const id of (svg.getAttribute("aria-labelledby") ?? "").split(" "))
+        expect(document.getElementById(id)).not.toBeNull();
+    }
   });
 });

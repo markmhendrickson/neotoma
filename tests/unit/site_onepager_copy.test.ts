@@ -37,6 +37,7 @@ const files = [
   "InterfaceExplorer.tsx",
   "InspectorPreview.tsx",
   "VisionGallery.tsx",
+  "PaperScene.tsx",
 ].map((f) => readFileSync(join(dir, f), "utf-8"));
 // Doc comments list what is deliberately not claimed; only shipped copy is checked.
 const all = [...files, readFileSync(join(dir, "onepager_plate.tsx"), "utf-8")]
@@ -939,7 +940,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     const page = files[0];
     expect(page).not.toContain("<RecordPlate />");
     expect(page).toContain("FIGURE_LEGEND.map");
-    expect(page).toContain("OCTOBER_RENDERS.hero");
+    expect(page).toContain('<PaperScene scene="hero"');
     expect(read("frontend/src/components/onepager/october_renders.ts")).toContain(
       'render("N-hero"'
     );

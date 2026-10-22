@@ -10,7 +10,7 @@ import { CodeBlock } from "@/components/InstallCodeBlock";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
 import { AnimatedLockup } from "./AnimatedLockup";
-import { OCTOBER_RENDERS, RECORD_RENDERS } from "./october_renders";
+
 import {
   DEEPER_MATERIAL,
   CONNECTIONS_OTHER,
@@ -127,12 +127,12 @@ export function NeotomaOnePager() {
           </p>
           <div className="plan-contrast">
             <article>
-              <img {...OCTOBER_RENDERS.before} loading="lazy" />
+              <PaperScene scene="before" />
               <p className="plan-label">Without one</p>
               <h3>What an agent happens to recall</h3>
             </article>
             <article>
-              <img {...OCTOBER_RENDERS.after} loading="lazy" />
+              <PaperScene scene="after" />
               <p className="plan-label">With one</p>
               <h3>The current record</h3>
             </article>
@@ -188,16 +188,16 @@ export function NeotomaOnePager() {
                     Read the {step.name.toLowerCase()} reference
                   </a>
                 </div>
-                <img {...RECORD_RENDERS[i]} loading="lazy" />
+                <PaperScene
+                  scene={(["source", "observation", "entity", "reducer", "snapshot"] as const)[i]}
+                />
               </li>
             ))}
           </ol>
           <aside className="plan-example" aria-label="Synthetic invoice example">
             <p className="plan-label">One invoice, five parts</p>
             <div className="plan-example-content">
-              {OCTOBER_RENDERS.invoiceExample && (
-                <img {...OCTOBER_RENDERS.invoiceExample} loading="lazy" />
-              )}
+              <PaperScene scene="invoiceExample" />
               <ol className="plan-legend">
                 {FIGURE_LEGEND.map((item, i) => (
                   <li key={item}>
@@ -227,15 +227,11 @@ export function NeotomaOnePager() {
 
         <section className="plan-sheet" aria-labelledby="s4" id="connect">
           <SheetHead id="s4" mark="03 · Connect" title="Start in your favorite AI tool" />
-          <div
-            className={`plan-split${OCTOBER_RENDERS.localService ? "" : " plan-split-text-only"}`}
-          >
-            {OCTOBER_RENDERS.localService && (
-              <figure className="plan-scene plan-local-scene">
-                <img {...OCTOBER_RENDERS.localService} loading="lazy" />
-                <figcaption>Run the service locally and connect the tools you use.</figcaption>
-              </figure>
-            )}
+          <div className="plan-split">
+            <figure className="plan-scene plan-local-scene">
+              <PaperScene scene="localService" />
+              <figcaption>Run the service locally and connect the tools you use.</figcaption>
+            </figure>
             <p className="plan-body">
               Neotoma runs as a local service. Connected agents use the Model Context Protocol
               (MCP), REST API or CLI to read and write a configured instance. Point each tool at the

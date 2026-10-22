@@ -77,3 +77,19 @@
     order: initial;
   }
 }
+.paper-bracket {
+  fill: none;
+  stroke: var(--paper-rust);
+  stroke-width: 2.6;
+}
+.paper-table {
+  fill: none;
+  stroke: var(--paper-navy);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.paper-clip {
+  fill: none;
+  stroke: #646359;
+  stroke-width: 2;
+}
