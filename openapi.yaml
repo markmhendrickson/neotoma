@@ -2020,6 +2020,126 @@ components:
               $ref: "#/components/schemas/DataOrigin"
           allOf:
             - $ref: "#/components/schemas/AgentAttribution"
+    FieldProvenanceObservation:
+      type: object
+      additionalProperties: false
+      description: |
+        One contributing observation projected to the requested field only, not
+        the complete immutable row. Other fields, internal operation receipts and
+        unrecognised provenance keys are withheld. Metadata is recorded evidence,
+        not a credibility score. Nullable metadata remains unknown for legacy rows.
+      required: [id, entity_id, entity_type, schema_version, source_id, interpretation_id, observed_at, created_at, specificity_score, source_priority, observation_source, idempotency_key, fields]
+      properties:
+        id:
+          type: string
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        source_id:
+          type: string
+          nullable: true
+        interpretation_id:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          nullable: true
+          format: date-time
+        specificity_score:
+          type: number
+          nullable: true
+        source_priority:
+          type: number
+        observation_source:
+          type: string
+          nullable: true
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified, correction]
+        idempotency_key:
+          type: string
+          nullable: true
+        fields:
+          type: object
+          minProperties: 1
+          maxProperties: 1
+          additionalProperties: true
+          description: Only the requested field and its value on this contributor.
+        provenance:
+          type: object
+          additionalProperties: true
+          description: Recorded agent-attribution and data_origin keys only; no internal receipts or unrelated payload metadata. Existing guest redaction still applies.
+        data_origin:
+          $ref: "#/components/schemas/DataOrigin"
+    FieldProvenanceSource:
+      type: object
+      additionalProperties: false
+      description: Safe source metadata projection. No filesystem/storage paths or fabricated file_urls; use retrieve_file_url for file access.
+      required: [id, mime_type, content_hash, file_size, created_at]
+      properties:
+        id:
+          type: string
+        mime_type:
+          type: string
+          nullable: true
+        content_hash:
+          type: string
+          nullable: true
+        file_size:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+          format: date-time
+    FieldProvenanceResponse:
+      type: object
+      additionalProperties: false
+      description: |
+        Complete provenance for one visible snapshot field. observations and
+        observation_ids contain every contributor, ordered by observed_at DESC
+        then id ASC; sources are distinct and ordered by id ASC. Each observation
+        exposes only the requested field. Singular aliases are retained for MCP
+        compatibility and returned on HTTP too: source_observation/observed_at
+        select the most recent contributor, not a single winner of a merged field.
+        source is that contributor's source or null, a legal source-less state.
+        Any unresolved contributor or non-null source refuses the entire chain.
+      required: [field, entity_id, value, observation_ids, observations, sources, source_observation, source, observed_at]
+      properties:
+        field:
+          type: string
+        entity_id:
+          type: string
+        value:
+          description: The current snapshot value; not recomputed from the representative alias.
+        observation_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        observations:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/FieldProvenanceObservation"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldProvenanceSource"
+        source_observation:
+          $ref: "#/components/schemas/FieldProvenanceObservation"
+        source:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/FieldProvenanceSource"
+        observed_at:
+          type: string
+          format: date-time
     RelationshipSnapshot:
       type: object
       properties:
@@ -6501,12 +6621,23 @@ paths:
                   type: string
       responses:
         "200":
-          description: Provenance
+          description: Complete field provenance, with declared compatibility aliases.
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: "#/components/schemas/FieldProvenanceResponse"
+        "404":
+          description: Entity or field unavailable, including a cross-owner miss.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: PROVENANCE_INTEGRITY_ERROR for unavailable contributor/source references; DB_QUERY_FAILED for query failures. No partial chain is returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /create_relationship:
     post:

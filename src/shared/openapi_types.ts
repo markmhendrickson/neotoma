@@ -3856,6 +3856,79 @@ export interface components {
       }) &
         components["schemas"]["AgentAttribution"];
     };
+    /**
+     * @description One contributing observation projected to the requested field only, not
+     *     the complete immutable row. Other fields, internal operation receipts and
+     *     unrecognised provenance keys are withheld. Metadata is recorded evidence,
+     *     not a credibility score. Nullable metadata remains unknown for legacy rows.
+     */
+    FieldProvenanceObservation: {
+      id: string;
+      entity_id: string;
+      entity_type: string;
+      schema_version: string;
+      source_id: string | null;
+      interpretation_id: string | null;
+      /** Format: date-time */
+      observed_at: string;
+      /** Format: date-time */
+      created_at: string | null;
+      specificity_score: number | null;
+      source_priority: number;
+      /** @enum {string|null} */
+      observation_source:
+        | "sensor"
+        | "llm_summary"
+        | "workflow_state"
+        | "human"
+        | "import"
+        | "sync"
+        | "unspecified"
+        | "correction"
+        | null;
+      idempotency_key: string | null;
+      /** @description Only the requested field and its value on this contributor. */
+      fields: {
+        [key: string]: unknown;
+      };
+      /** @description Recorded agent-attribution and data_origin keys only; no internal receipts or unrelated payload metadata. Existing guest redaction still applies. */
+      provenance?: {
+        [key: string]: unknown;
+      };
+      data_origin?: components["schemas"]["DataOrigin"];
+    };
+    /** @description Safe source metadata projection. No filesystem/storage paths or fabricated file_urls; use retrieve_file_url for file access. */
+    FieldProvenanceSource: {
+      id: string;
+      mime_type: string | null;
+      content_hash: string | null;
+      file_size: number | null;
+      /** Format: date-time */
+      created_at: string | null;
+    };
+    /**
+     * @description Complete provenance for one visible snapshot field. observations and
+     *     observation_ids contain every contributor, ordered by observed_at DESC
+     *     then id ASC; sources are distinct and ordered by id ASC. Each observation
+     *     exposes only the requested field. Singular aliases are retained for MCP
+     *     compatibility and returned on HTTP too: source_observation/observed_at
+     *     select the most recent contributor, not a single winner of a merged field.
+     *     source is that contributor's source or null, a legal source-less state.
+     *     Any unresolved contributor or non-null source refuses the entire chain.
+     */
+    FieldProvenanceResponse: {
+      field: string;
+      entity_id: string;
+      /** @description The current snapshot value; not recomputed from the representative alias. */
+      value: unknown;
+      observation_ids: string[];
+      observations: components["schemas"]["FieldProvenanceObservation"][];
+      sources: components["schemas"]["FieldProvenanceSource"][];
+      source_observation: components["schemas"]["FieldProvenanceObservation"];
+      source: components["schemas"]["FieldProvenanceSource"] | null;
+      /** Format: date-time */
+      observed_at: string;
+    };
     RelationshipSnapshot: {
       relationship_key?: string;
       relationship_type?: string;
@@ -7591,15 +7664,31 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Provenance */
+      /** @description Complete field provenance, with declared compatibility aliases. */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": components["schemas"]["FieldProvenanceResponse"];
+        };
+      };
+      /** @description Entity or field unavailable, including a cross-owner miss. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description PROVENANCE_INTEGRITY_ERROR for unavailable contributor/source references; DB_QUERY_FAILED for query failures. No partial chain is returned. */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
