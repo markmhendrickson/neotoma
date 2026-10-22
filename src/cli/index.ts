@@ -11360,6 +11360,27 @@ async function inspectBackupDirectory(dir: string): Promise<BackupInspection> {
     return result;
   }
 
+  if (Object.hasOwn(result.contents, "wal")) {
+    if (result.manifest.db_snapshot_method === "vacuum_into") {
+      result.issues.push(
+        "vacuum_into snapshots are self-contained and must not declare contents.wal; " +
+          "repair the manifest only after confirming the database contains the committed data"
+      );
+      return result;
+    }
+    if (
+      result.paths.neotoma_db &&
+      result.paths.wal &&
+      result.paths.wal !== `${result.paths.neotoma_db}-wal`
+    ) {
+      result.issues.push(
+        "manifest contents.wal must reference the database path plus '-wal'; " +
+          "repair the manifest and ensure the paired WAL file exists"
+      );
+      return result;
+    }
+  }
+
   const dbName = result.contents.neotoma_db;
   if (typeof dbName !== "string" || dbName.length === 0) {
     result.issues.push("manifest does not reference a database file");
