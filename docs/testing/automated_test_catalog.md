@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **756**
-- Backend and repo Vitest files: **720**
+- Total automated test files: **757**
+- Backend and repo Vitest files: **721**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -73,7 +73,7 @@ flowchart TD
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 228 |
-| Vitest CLI tests | 89 |
+| Vitest CLI tests | 90 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -708,7 +708,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (89):**
+**Files (90):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -730,6 +730,7 @@ flowchart TD
 - `tests/cli/cli_entity_commands.test.ts`
 - `tests/cli/cli_entity_subcommands.test.ts`
 - `tests/cli/cli_error_envelope_preservation.test.ts`
+- `tests/cli/cli_field_provenance.test.ts`
 - `tests/cli/cli_infra_commands.test.ts`
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`
