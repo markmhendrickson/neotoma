@@ -25,7 +25,7 @@ import { getRequestContext, runWithRequestContext } from "../services/request_co
 import type { AAuthAdmissionContext } from "../services/protected_entity_types.js";
 
 /** Skip admission lookups on cheap public discovery endpoints. */
-const PUBLIC_DISCOVERY_PREFIXES: ReadonlyArray<string> = ["/.well-known/", "/health"];
+const PUBLIC_DISCOVERY_PREFIXES: ReadonlyArray<string> = ["/.well-known/", "/health", "/ready"];
 
 function isPublicDiscovery(req: Request): boolean {
   const path = req.path || req.url || "";

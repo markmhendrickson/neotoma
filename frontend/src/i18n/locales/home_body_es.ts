@@ -70,7 +70,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
     },
     {
       q: "¿Está listo para producción?",
-      a: "Neotoma está en vista previa para desarrolladores — usado a diario en flujos reales. Las garantías núcleo (memoria determinista, historial versionado, registro solo anexado) son estables. Instala en 5 minutos y deja que tu agente evalúe el encaje.",
+      a: "Neotoma se usa a diario en flujos reales de agentes. El proyecto avanza rápido y las API o los formatos de almacenamiento pueden cambiar entre versiones. Instálalo y deja que tu agente evalúe el encaje.",
     },
     {
       q: "¿Neotoma sustituye la memoria de Claude o la de ChatGPT?",
@@ -302,7 +302,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
   proof: {
     kicker: "Cómo se usa",
     blockquote:
-      "En producción diaria más de 5 meses entre Claude Code, Cursor, ChatGPT y CLI. El mismo grafo de estado desde el día uno: cada versión conservada, cada corrección trazable. Los contactos evolucionan, los contratos se enmiendan, las tareas se cierran y se reabren. Pregunto a mis agentes qué cambió en un acuerdo desde octubre o qué dije originalmente a un inversor hace tres meses. La memoria se acumula; nada deriva en silencio.",
+      "En producción diaria más de un año entre Claude Code, Cursor, ChatGPT y CLI. El mismo grafo de estado desde el día uno: cada versión conservada, cada corrección trazable. Los contactos evolucionan, los contratos se enmiendan, las tareas se cierran y se reabren. Pregunto a mis agentes qué cambió en un acuerdo desde octubre o qué dije originalmente a un inversor hace tres meses. La memoria se acumula; nada deriva en silencio.",
     founderPhotoAlt: "Mark Hendrickson",
     founderName: "Mark Hendrickson",
     founderRole: "Creador de Neotoma",
@@ -385,7 +385,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
     },
     chatPlaceholder: "Pregunta lo que quieras\u2026",
     playPause: { pauseLabel: "Pausar demo", playLabel: "Reproducir demo" },
-    installCta: "Instalar en 5 minutos",
+    installCta: "Instalar en unos minutos",
     chatScenarios: CLI_DEMO_CHAT_SCENARIOS_ES,
     cliScenarios: CLI_DEMO_CLI_SCENARIOS_ES,
     agenticScenarios: CLI_DEMO_AGENTIC_SCENARIOS_ES,

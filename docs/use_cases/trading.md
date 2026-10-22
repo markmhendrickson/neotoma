@@ -28,8 +28,7 @@ Multi-agent trading systems make thousands of decisions per day — including de
 
 | Skill | Role |
 |-------|------|
-| `store-data` | Persists structured trade/pass decisions, analyses, and risk states |
-| `query-memory` | Reconstructs multi-agent decision context at any point |
+| `ensure-neotoma` | Ordinary storage and retrieval need no skill: covered directly by the live MCP tool instructions |
 
 ## External tools
 

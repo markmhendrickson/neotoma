@@ -53,6 +53,26 @@ describe("permissions.patchClaudeCodeProject", () => {
     expect(second.changed).toBe(false);
   });
 
+  it("does not rewrite a file whose content is equal but formatted differently (#1906)", async () => {
+    // A settings.local.json that already contains all required entries but is
+    // formatted compactly (no pretty-print / trailing newline, different key
+    // order). Running setup to diagnose must NOT reformat it.
+    const target = path.join(cwd, ".claude", "settings.local.json");
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    const compact = JSON.stringify({
+      permissions: { deny: [], allow: ["Bash(neotoma:*)", "Bash(npm install -g neotoma:*)"] },
+    });
+    await fs.writeFile(target, compact, "utf8");
+    const mtimeBefore = (await fs.stat(target)).mtimeMs;
+
+    const patch = await patchClaudeCodeProject(cwd);
+
+    expect(patch.changed).toBe(false);
+    // File bytes are untouched (no whitespace-only reformat).
+    expect(await fs.readFile(target, "utf8")).toBe(compact);
+    expect((await fs.stat(target)).mtimeMs).toBe(mtimeBefore);
+  });
+
   it("merges entries without clobbering existing allow list", async () => {
     const target = path.join(cwd, ".claude", "settings.local.json");
     await fs.mkdir(path.dirname(target), { recursive: true });

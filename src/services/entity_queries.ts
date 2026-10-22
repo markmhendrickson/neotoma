@@ -1,14 +1,70 @@
+import type { EntityReadTrace } from "../shared/entity_read_contract.js";
 // FU-134: Query Updates
 // Provenance chain, merged entity exclusion
 
 import { db } from "../db.js";
+import {
+  decodeCursor,
+  encodeCursor,
+  isCursorEligibleSort,
+  type CursorPayload,
+} from "./entity_cursor.js";
+import { computeEntityVersion } from "./entity_version.js";
 
 export interface SnapshotFilter {
-  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+  op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
   value?: unknown;
 }
 
+/**
+ * Escape LIKE metacharacters so user-supplied terms are matched literally.
+ *
+ * Pairs with `ESCAPE '\'` in the generated SQL. Backslash is escaped first so
+ * the escape character itself cannot be smuggled in.
+ *
+ * Note for `contains_word`: separator characters (including `%` and `_`) are
+ * normalized to spaces in BOTH the haystack and the term (see
+ * `normalizeWordBoundaryTerm` in the sqlite adapter), so a term containing
+ * punctuation — "O'Brien", "R&D", "100%" — matches its stored value rather than
+ * silently returning nothing. Escaping here still prevents `%`/`_` from acting
+ * as LIKE wildcards; the adapter's normalization then rewrites those (now
+ * literal) separators to spaces to line up with the haystack.
+ */
+export function escapeLikeTerm(term: string): string {
+  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/**
+ * A snapshot JSON field name that is safe to splice into a `snapshot->>${field}`
+ * column expression.
+ *
+ * SECURITY (advisory 2026-08-07-sort-by-order-by-sql-injection): both the
+ * `sort_by=snapshot.<field>` path and every `snapshot_filters` key are built
+ * into `snapshot->>${field}` and interpolated into generated SQL (ORDER BY and
+ * WHERE). The sqlite adapter only rewrites a column when it matches a strict
+ * `identifier->>identifier` pattern and otherwise passes it through UNCHANGED,
+ * so a non-identifier field name (e.g. a `(CASE WHEN … )` expression) reaches
+ * SQLite verbatim. Constrain field names to bare identifiers at the source, so
+ * an attacker cannot smuggle an expression through this seam.
+ */
+const SNAPSHOT_FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function isValidSnapshotFieldName(field: string): boolean {
+  return typeof field === "string" && SNAPSHOT_FIELD_NAME.test(field);
+}
+
+export class InvalidSnapshotFieldError extends Error {
+  constructor(field: string, context: "sort_by" | "snapshot_filters") {
+    super(
+      `Invalid ${context} field name: ${JSON.stringify(field)}. ` +
+        `Snapshot field names must match ${SNAPSHOT_FIELD_NAME.source}.`
+    );
+    this.name = "InvalidSnapshotFieldError";
+  }
+}
+
 export interface EntityQueryOptions {
+  readTrace?: EntityReadTrace;
   userId?: string;
   entityType?: string;
   /**
@@ -28,6 +84,18 @@ export interface EntityQueryOptions {
   publishedBefore?: string;
   limit?: number;
   offset?: number;
+  /**
+   * #1943: Opaque keyset cursor. When set, pagination seeks directly past the
+   * cursor's last row (`entity_id > :cursor`) instead of scanning+discarding
+   * `offset` rows, so cost is O(page size) at any depth.
+   *
+   * Honored ONLY for the default `entity_id` sort — the one ordering with a
+   * unique, index-backed key (see {@link isCursorEligibleSort}). Every other
+   * sort, and any `search`, keeps bounded offset. A cursor paired with a
+   * non-default sort, with `search`, or with a non-zero `offset` is rejected at
+   * the request-schema layer rather than silently resolved.
+   */
+  cursor?: string;
   /** When provided, fetch only these entity IDs (e.g. from semantic search) */
   entityIds?: string[];
   /** ISO 8601 timestamp; return entities whose updated_at is >= this value. */
@@ -55,6 +123,7 @@ export interface EntityQueryOptions {
 }
 
 export interface EntityWithProvenance {
+  cleared_fields_included?: true;
   entity_id: string;
   entity_type: string;
   canonical_name: string;
@@ -63,6 +132,8 @@ export interface EntityWithProvenance {
   raw_fragments?: Record<string, unknown>; // Unvalidated fields not yet in schema
   observation_count: number;
   last_observation_at: string;
+  /** Opaque CAS token that advances for every committed observation. */
+  entity_version: string;
   provenance: Record<string, unknown>;
   computed_at?: string;
   merged_to_entity_id?: string | null;
@@ -98,6 +169,11 @@ interface EntitySnapshotRow {
   [key: string]: unknown;
 }
 
+// #1943: pagination bounds live in a dependency-free module so the request
+// schema can import them without pulling in `db`. Re-exported here for callers
+// that already import from entity_queries.
+export { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "./entity_query_limits.js";
+
 const ENTITY_BASE_SELECT =
   "id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at";
 
@@ -122,38 +198,125 @@ export function normalizeEntityTypeFilter(entityType?: string, entityTypes?: str
   return [...types].sort();
 }
 
-async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
+/**
+ * Snapshot presence is derived state. Validate each canonical candidate through
+ * the shared owned lifecycle selector, retaining empty/merged compatibility.
+ * This reads the attached observation log; it is not the old snapshot-only
+ * indexed shortcut and must not certify visibility from stale materialization.
+ */
+async function getLegacyDeletedEntityIds(
+  candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
+  userId?: string
+): Promise<Set<string>> {
   const deletedEntityIds = new Set<string>();
-  if (entityIds.length === 0) {
+  if (candidates.length === 0) {
     return deletedEntityIds;
   }
 
-  const { data: deletionObservations } = await db
-    .from("observations")
-    .select("entity_id, source_priority, observed_at, fields")
-    .in("entity_id", entityIds)
-    .order("source_priority", { ascending: false })
-    .order("observed_at", { ascending: false });
+  const entityIds = candidates.map((row) => row.id);
 
-  if (!deletionObservations || deletionObservations.length === 0) {
+  // Tenant scoping: `entity_snapshots` and `observations` are user-owned tables,
+  // so both reads below are scoped to the requesting user per change-guardrail
+  // MUST #5 (GHSA-wrr4-782v-jhwh regression class). `userId` is optional only
+  // because queryEntities itself treats it as optional; when absent no scoping
+  // filter can be applied and the caller has already opted out of it.
+  let snapshotQuery = db.from("entity_snapshots").select("entity_id").in("entity_id", entityIds);
+  if (userId) {
+    snapshotQuery = snapshotQuery.eq("user_id", userId);
+  }
+  const { data: rows, error } = await snapshotQuery;
+
+  if (error) {
+    throw new Error(`Failed to resolve deleted entities: ${error.message}`);
+  }
+
+  const alive = new Set<string>((rows || []).map((row: { entity_id: string }) => row.entity_id));
+
+  // Snapshot-less candidates that are merged-away are not deleted; drop them
+  // from consideration here and let the caller's `include_merged` filter decide.
+  const unresolved = candidates.filter((row) => !alive.has(row.id) && !row.merged_to_entity_id);
+  if (unresolved.length === 0) {
     return deletedEntityIds;
   }
 
-  // Result set is already sorted by priority and recency.
-  const highestByEntity = new Map<string, any>();
-  for (const obs of deletionObservations) {
-    if (!highestByEntity.has(obs.entity_id)) {
-      highestByEntity.set(obs.entity_id, obs);
-    }
+  // Remaining snapshot-less candidates are either genuinely deleted (a
+  // `_deleted` observation drove the reducer to null) or never observed at all.
+  // One bounded, indexed probe over `observations` separates them: an id with
+  // NO observation row was never observed, so it is live.
+  const unresolvedIds = unresolved.map((row) => row.id);
+  let observationQuery = db.from("observations").select("entity_id").in("entity_id", unresolvedIds);
+  if (userId) {
+    observationQuery = observationQuery.eq("user_id", userId);
+  }
+  const { data: observedRows, error: observedError } = await observationQuery;
+
+  if (observedError) {
+    throw new Error(`Failed to resolve deleted entities: ${observedError.message}`);
   }
 
-  for (const [entityId, obs] of highestByEntity.entries()) {
-    if (obs.fields?._deleted === true) {
-      deletedEntityIds.add(entityId);
+  const observed = new Set<string>(
+    (observedRows || []).map((row: { entity_id: string }) => row.entity_id)
+  );
+
+  for (const id of unresolvedIds) {
+    if (observed.has(id)) {
+      deletedEntityIds.add(id);
     }
   }
 
   return deletedEntityIds;
+}
+
+async function getDeletedEntityIds(
+  candidates: Array<{ id: string; merged_to_entity_id?: string | null }>,
+  userId?: string
+): Promise<Set<string>> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb())))
+    return getLegacyDeletedEntityIds(candidates, userId);
+  const deletedEntityIds = new Set<string>();
+  if (candidates.length === 0) {
+    return deletedEntityIds;
+  }
+
+  // Snapshot presence is derived state, not lifecycle authority. In particular
+  // an empty entity may own only its compatibility baseline and no fact snapshot.
+  const { isEntityDeleted } = await import("./deletion.js");
+  for (const candidate of candidates) {
+    if (candidate.merged_to_entity_id) continue;
+    let owner = userId;
+    if (!owner) {
+      const { data, error } = await db
+        .from("entities")
+        .select("user_id")
+        .eq("id", candidate.id)
+        .single();
+      if (error || typeof data?.user_id !== "string")
+        throw new Error("Entity lifecycle authority acquisition is incomplete or inconsistent");
+      owner = data.user_id;
+    }
+    if (await isEntityDeleted(candidate.id, owner!)) deletedEntityIds.add(candidate.id);
+  }
+
+  return deletedEntityIds;
+}
+
+/** Reuse the current visibility acquisition for derived snapshot consumers.
+ * Before explicit cutover their existing materialized-read behavior is retained.
+ */
+export async function filterCurrentLifecycleRecords<T extends { entity_id: string }>(
+  records: readonly T[],
+  userId?: string
+): Promise<T[]> {
+  const { hasRecordedEntityLifecycleCutover } = await import("./entity_lifecycle_storage.js");
+  const { getDb } = await import("../repositories/db/connection.js");
+  if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) return [...records];
+  const deleted = await getDeletedEntityIds(
+    records.map((r) => ({ id: r.entity_id })),
+    userId
+  );
+  return records.filter((r) => !deleted.has(r.entity_id));
 }
 
 /**
@@ -162,6 +325,7 @@ async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
 export async function queryEntities(
   options: EntityQueryOptions = {}
 ): Promise<EntityWithProvenance[]> {
+  const readTrace = options.readTrace;
   const {
     userId,
     entityType,
@@ -176,12 +340,25 @@ export async function queryEntities(
     publishedBefore,
     limit = 100,
     offset = 0,
+    cursor,
     entityIds: filterEntityIds,
     updatedSince,
     createdSince,
     identityBasis,
     snapshotFilters,
   } = options;
+
+  // #1943: keyset seek. Only the default `entity_id` sort has a unique,
+  // SQL-comparable key, so a cursor is honored only there; on any other sort a
+  // supplied cursor is ignored and bounded offset is used instead (the request
+  // schema rejects cursor + non-default sort before we get here, so in practice
+  // `cursorEligible` is true whenever a cursor is present). Decoding validates
+  // the cursor against the request's sort_order and throws CursorError
+  // (surfaced as a 400 / InvalidParams) on a stale/malformed token. A cursor and
+  // a non-zero offset are mutually exclusive (also enforced at the schema layer).
+  const cursorEligible = isCursorEligibleSort(sortBy);
+  const decodedCursor: CursorPayload | null =
+    cursor && cursorEligible ? decodeCursor(cursor, { sortOrder }) : null;
 
   // Union of singular + plural type filters. Empty → no type filter.
   const typeFilter = normalizeEntityTypeFilter(entityType, entityTypes);
@@ -273,6 +450,18 @@ export async function queryEntities(
     entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
   }
 
+  // #1943: apply the keyset seek to the base entity query. For ascending order
+  // the next page starts strictly after the cursor's id (`id > :id`); for
+  // descending, strictly before (`id < :id`). This is what makes deep pages
+  // O(page) — the DB seeks past prior rows on the primary key instead of the
+  // scan-and-discard loop below re-reading them. Only reachable for the
+  // entity_id sort (cursor is entity_id-only; see decode above).
+  if (decodedCursor) {
+    entityQuery = ascending
+      ? entityQuery.gt("id", decodedCursor.entity_id)
+      : entityQuery.lt("id", decodedCursor.entity_id);
+  }
+
   const isSnapshotFieldSort = typeof sortBy === "string" && sortBy.startsWith("snapshot.");
   const hasSnapshotFilters = snapshotFilters && Object.keys(snapshotFilters).length > 0;
 
@@ -285,6 +474,29 @@ export async function queryEntities(
     published !== undefined ||
     Boolean(publishedAfter) ||
     Boolean(publishedBefore);
+  if (readTrace) {
+    const snapshotOrdering =
+      sortBy === "observation_count" ||
+      sortBy === "last_observation_at" ||
+      sortBy === "submitted_at" ||
+      isSnapshotFieldSort;
+    const field =
+      shouldUseSnapshotDrivenScan && !snapshotOrdering
+        ? "entity_id"
+        : sortBy === "canonical_name" || sortBy === "entity_id" || snapshotOrdering
+          ? sortBy
+          : "entity_id";
+    const direction =
+      shouldUseSnapshotDrivenScan && !snapshotOrdering
+        ? "asc"
+        : field === sortBy
+          ? sortOrder
+          : "asc";
+    readTrace.ordering = { field, direction, tie_breaker: "entity_id" };
+    readTrace.continuation_supported = !shouldUseSnapshotDrivenScan && sortBy === "entity_id";
+    if (field !== sortBy || direction !== sortOrder)
+      readTrace.reasons.add("requested_ordering_unapplied");
+  }
 
   const fetchEntitiesByIds = async (ids: string[]) => {
     if (ids.length === 0) return [];
@@ -337,6 +549,9 @@ export async function queryEntities(
 
       if (snapshotFilters) {
         for (const [field, filter] of Object.entries(snapshotFilters)) {
+          if (!isValidSnapshotFieldName(field)) {
+            throw new InvalidSnapshotFieldError(field, "snapshot_filters");
+          }
           const col = `snapshot->>${field}`;
           switch (filter.op) {
             case "eq":
@@ -362,6 +577,16 @@ export async function queryEntities(
             case "contains":
               snapshotQuery = snapshotQuery.ilike(col, `%${String(filter.value)}%`);
               break;
+            case "contains_word": {
+              // #1966: whole-word containment. `contains` is a raw substring
+              // match, so `title contains "CTO"` also matches "director" and
+              // "doctor". Escape LIKE metacharacters so `%`/`_` in the term are
+              // literal; the term itself is bound as a parameter, never
+              // interpolated into SQL.
+              const term = escapeLikeTerm(String(filter.value));
+              snapshotQuery = snapshotQuery.ilikeWord(col, term);
+              break;
+            }
           }
         }
       }
@@ -374,6 +599,9 @@ export async function queryEntities(
         snapshotQuery = snapshotQuery.order("snapshot->>created_at", { ascending });
       } else if (isSnapshotFieldSort) {
         const snapshotField = sortBy.replace("snapshot.", "");
+        if (!isValidSnapshotFieldName(snapshotField)) {
+          throw new InvalidSnapshotFieldError(snapshotField, "sort_by");
+        }
         snapshotQuery = snapshotQuery.order(`snapshot->>${snapshotField}`, { ascending });
       } else {
         snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });
@@ -403,7 +631,7 @@ export async function queryEntities(
         .filter((row): row is any => Boolean(row));
       const deletedIds = includeDeleted
         ? new Set<string>()
-        : await getDeletedEntityIds(candidateRows.map((row: any) => row.id));
+        : await getDeletedEntityIds(candidateRows, userId);
 
       for (const row of candidateRows) {
         if (deletedIds.has(row.id)) {
@@ -424,18 +652,21 @@ export async function queryEntities(
       }
     }
   } else if (includeDeleted) {
+    // #1943: with an entity_id cursor the keyset seek is already applied to
+    // entityQuery, and cursor is mutually exclusive with offset, so range from 0.
+    const rangeStart = decodedCursor ? 0 : offset;
     const { data: pagedEntities, error: entitiesError } = await entityQuery.range(
-      offset,
-      offset + limit - 1
+      rangeStart,
+      rangeStart + limit - 1
     );
     if (entitiesError) {
       throw new Error(`Failed to query entities: ${entitiesError.message}`);
     }
     entities = pagedEntities || [];
   } else {
-    // Deleted-state visibility is resolved from highest-priority observations. To keep
-    // payloads bounded, scan deterministically in chunks and stop once the requested page
-    // of non-deleted entities is filled.
+    // Deleted-state visibility is resolved from entity_snapshots row presence
+    // (see getDeletedEntityIds). To keep payloads bounded, scan deterministically
+    // in chunks and stop once the requested page of non-deleted entities is filled.
     const scanChunkSize = Math.max(200, Math.min(limit * 4, 1000));
     let scanOffset = 0;
     let visibleSkipped = 0;
@@ -457,12 +688,15 @@ export async function queryEntities(
       }
 
       scanOffset += rows.length;
-      const chunkDeletedEntityIds = await getDeletedEntityIds(rows.map((row: any) => row.id));
+      const chunkDeletedEntityIds = await getDeletedEntityIds(rows, userId);
 
       for (const row of rows) {
         if (chunkDeletedEntityIds.has(row.id)) {
           continue;
         }
+        // #1943: with an entity_id cursor the keyset seek already positioned the
+        // scan and offset is 0 (mutually exclusive), so this skip naturally
+        // no-ops; it still applies the legacy offset when no cursor is present.
         if (visibleSkipped < offset) {
           visibleSkipped += 1;
           continue;
@@ -516,12 +750,14 @@ export async function queryEntities(
     user_id: string | null;
   }> = [];
   if (includeSnapshots) {
-    const { data } = await db
+    const { data, error: observationError } = await db
       .from("observations")
       .select("entity_id, source_id, user_id")
       .in("entity_id", filteredEntityIds)
       .not("source_id", "is", null)
       .limit(1000); // Reasonable limit for batch
+    if (observationError) readTrace?.reasons.add("raw_fragment_sources_unavailable");
+    if ((data?.length ?? 0) >= 1000) readTrace?.reasons.add("raw_fragment_source_cap");
     allObservations =
       (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) ||
       [];
@@ -594,11 +830,12 @@ export async function queryEntities(
           fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
-        const { data: observationsForSources } = await db
+        const { data: observationsForSources, error: sourceLinkError } = await db
           .from("observations")
           .select("entity_id, source_id")
           .eq("entity_type", entityType)
           .in("source_id", Array.from(sourceIdsForType));
+        if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
         const legacyEntityCountsBySource = new Map<string, Set<string>>();
         for (const obs of observationsForSources || []) {
           if (!obs.source_id || !obs.entity_id) continue;
@@ -608,7 +845,8 @@ export async function queryEntities(
           legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
         }
 
-        const { data: fragments } = await fragmentQuery;
+        const { data: fragments, error: fragmentError } = await fragmentQuery;
+        if (fragmentError) readTrace?.reasons.add("raw_fragments_unavailable");
 
         if (fragments && fragments.length > 0) {
           // Group fragments by entity (via source_id -> entity_id mapping)
@@ -670,9 +908,16 @@ export async function queryEntities(
 
   return entities.map((entity: any) => {
     const snapshot = snapshotMap.get(entity.id);
+    if (
+      snapshot?.snapshot != null &&
+      (typeof snapshot.snapshot !== "object" || Array.isArray(snapshot.snapshot))
+    )
+      readTrace?.reasons.add("snapshot_decode_partial");
     const rawFragments = rawFragmentsByEntity.get(entity.id);
     const snapshotData = (snapshot?.snapshot ?? {}) as Record<string, unknown>;
     const lightweightStatus = snapshotData["status"];
+    const observationCount = snapshot?.observation_count || 0;
+    const lastObservationAt = snapshot?.last_observation_at || entity.created_at;
     return {
       entity_id: entity.id,
       entity_type: entity.entity_type,
@@ -687,13 +932,49 @@ export async function queryEntities(
         includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
           ? rawFragments
           : undefined,
-      observation_count: snapshot?.observation_count || 0,
-      last_observation_at: snapshot?.last_observation_at || entity.created_at,
+      observation_count: observationCount,
+      last_observation_at: lastObservationAt,
+      entity_version: computeEntityVersion({
+        entity_id: entity.id,
+        observation_count: observationCount,
+        last_observation_at: lastObservationAt,
+      }),
       provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,
       merged_at: entity.merged_at,
     };
+  });
+}
+
+/**
+ * #1943: derive the opaque `next_cursor` for a returned page, or `null` when
+ * there is no next page or the query is not cursor-eligible.
+ *
+ * A cursor is minted only for the default `entity_id` sort (the only ordering
+ * whose keyset seek is sound — see {@link isCursorEligibleSort}) and only when
+ * the page came back full (`entities.length >= limit`), the signal that more
+ * rows may follow. A partial page means the listing is exhausted, so no cursor
+ * is returned. Callers pass the token back as `cursor` to fetch the next page in
+ * O(page) time regardless of depth.
+ *
+ * Note: a full final page yields a non-null cursor whose next fetch returns zero
+ * rows (and no further cursor) — the standard keyset terminal condition.
+ */
+export function computeNextCursor(
+  entities: EntityWithProvenance[],
+  opts: { sortBy?: string; sortOrder?: "asc" | "desc"; limit?: number }
+): string | null {
+  const limit = opts.limit ?? 100;
+  if (!isCursorEligibleSort(opts.sortBy)) return null;
+  if (entities.length < limit) return null;
+  const last = entities[entities.length - 1];
+  if (!last) return null;
+  return encodeCursor({
+    v: 1,
+    sort_by: "entity_id",
+    sort_order: opts.sortOrder === "desc" ? "desc" : "asc",
+    entity_id: last.entity_id,
   });
 }
 
@@ -705,8 +986,12 @@ export async function queryEntities(
 export async function getEntityWithProvenance(
   entityId: string,
   includeDeleted: boolean = false,
-  userId?: string
+  userId?: string,
+  projection: { includeClearedFields?: boolean } = {}
 ): Promise<EntityWithProvenance | null> {
+  if (projection.includeClearedFields && !userId) {
+    throw new Error("Nullable winning projection requires an explicit owner");
+  }
   // Get entity. When a userId is supplied, scope by it so a cross-user
   // entity_id cannot be read by id alone (the HTTP callers precheck ownership;
   // the MCP retrieve_entity_snapshot path historically did not).
@@ -722,30 +1007,12 @@ export async function getEntityWithProvenance(
 
   // Check if entity is merged - redirect to target
   if (entity.merged_to_entity_id) {
-    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId);
+    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId, projection);
   }
 
-  // Check if entity is deleted (unless explicitly requested)
   if (!includeDeleted) {
-    let deletedCheckQuery = db
-      .from("observations")
-      .select("source_priority, observed_at, fields")
-      .eq("entity_id", entityId);
-    if (userId) {
-      deletedCheckQuery = deletedCheckQuery.eq("user_id", userId);
-    }
-    const { data: observations } = await deletedCheckQuery
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false })
-      .limit(1);
-
-    if (observations && observations.length > 0) {
-      const highestPriorityObs = observations[0];
-      if (highestPriorityObs.fields?._deleted === true) {
-        // Entity is deleted - return null
-        return null;
-      }
-    }
+    const { isEntityDeleted } = await import("./deletion.js");
+    if (await isEntityDeleted(entityId, entity.user_id as string)) return null;
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
@@ -761,6 +1028,19 @@ export async function getEntityWithProvenance(
       `Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`
     );
     effectiveSnapshot = null;
+  }
+
+  if (projection.includeClearedFields) {
+    const { computeEntitySnapshotAtTime } = await import("./entity_snapshot_at_time.js");
+    const selected = await computeEntitySnapshotAtTime(
+      entityId,
+      userId!,
+      undefined,
+      undefined,
+      projection
+    );
+    if (!selected) return null;
+    effectiveSnapshot = { ...selected, user_id: userId! } as EntitySnapshotRow;
   }
 
   // Get raw_fragments for this entity
@@ -893,15 +1173,23 @@ export async function getEntityWithProvenance(
     );
   }
 
+  const observationCount = effectiveSnapshot?.observation_count || 0;
+  const lastObservationAt = effectiveSnapshot?.last_observation_at || entity.created_at;
   return {
+    ...(projection.includeClearedFields ? { cleared_fields_included: true as const } : {}),
     entity_id: entity.id,
     entity_type: entity.entity_type,
     canonical_name: entity.canonical_name,
     schema_version: effectiveSnapshot?.schema_version || "1.0",
     snapshot: effectiveSnapshot?.snapshot || {},
     raw_fragments: Object.keys(rawFragments).length > 0 ? rawFragments : undefined,
-    observation_count: effectiveSnapshot?.observation_count || 0,
-    last_observation_at: effectiveSnapshot?.last_observation_at || entity.created_at,
+    observation_count: observationCount,
+    last_observation_at: lastObservationAt,
+    entity_version: computeEntityVersion({
+      entity_id: entity.id,
+      observation_count: observationCount,
+      last_observation_at: lastObservationAt,
+    }),
     provenance: effectiveSnapshot?.provenance || {},
     computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,

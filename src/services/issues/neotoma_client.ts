@@ -76,6 +76,11 @@ export async function submitIssueToRemote(params: {
   authorGithubType?: string;
   local_issue_id?: string;
   submission_timestamp?: string;
+  reporterGitSha?: string;
+  reporterAppVersion?: string;
+  reporterGitRef?: string;
+  reporterChannel?: string;
+  reporterCiRunId?: string;
 }): Promise<RemoteSubmitResult> {
   const config = await loadIssuesConfig();
   if (!config.target_url?.trim()) {
@@ -118,7 +123,25 @@ export async function submitIssueToRemote(params: {
   if (localId) {
     guestBody.local_issue_id = localId;
   }
+  if (params.reporterGitSha?.trim()) {
+    guestBody.reporter_git_sha = params.reporterGitSha.trim();
+  }
+  if (params.reporterAppVersion?.trim()) {
+    guestBody.reporter_app_version = params.reporterAppVersion.trim();
+  }
+  if (params.reporterGitRef?.trim()) {
+    guestBody.reporter_git_ref = params.reporterGitRef.trim();
+  }
+  if (params.reporterChannel?.trim()) {
+    guestBody.reporter_channel = params.reporterChannel.trim();
+  }
+  if (params.reporterCiRunId?.trim()) {
+    guestBody.reporter_ci_run_id = params.reporterCiRunId.trim();
+  }
 
+  // The unsigned-guest retry below (AUTH_REQUIRED branch) reuses this same
+  // `guestBody` object by reference, so the reporter fields set above are
+  // inherited automatically — no separate assignment needed there.
   type SubmitResponse = {
     data?: {
       entity_ids?: string[];
@@ -134,11 +157,16 @@ export async function submitIssueToRemote(params: {
   })) as SubmitResponse;
 
   if (error) {
-    // The remote `/issues/submit` handler accepts unsigned guest submissions for
-    // payloads carrying `local_issue_id` or `submission_timestamp` (both
-    // present here). When AAuth signing produces a signature the remote cannot
-    // verify (e.g. no agent grant), retry once as an unsigned guest before
-    // surfacing AUTH_REQUIRED. (closes #936)
+    // The remote `/issues/submit` handler accepts unsigned guest submissions.
+    // When AAuth signing produces a signature the remote cannot verify (e.g. no
+    // agent grant), retry once as an unsigned guest before surfacing
+    // AUTH_REQUIRED. (closes #936)
+    //
+    // Since #1953 the unsigned retry also works against a remote that has never
+    // seen this caller: anonymous submission no longer depends on the payload
+    // carrying `local_issue_id`/`submission_timestamp`, and the remote mints the
+    // guest access token in its response. A remote whose operator set
+    // NEOTOMA_ACCESS_POLICY_ISSUE=closed still rejects, which is intended.
     const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
     if (errObj?.["error_code"] === "AUTH_REQUIRED") {
       const signingDisabled = process.env.NEOTOMA_CLI_AAUTH_DISABLE === "1";

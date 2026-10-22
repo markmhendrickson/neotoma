@@ -96,8 +96,46 @@ NODE
         break
       fi
     done
+    # Self-heal: when no port file yields a reachable port, DISCOVER the port the
+    # server is actually listening on rather than trusting a stale hardcoded
+    # fallback. A port file last written weeks ago (e.g. 3180) while the server
+    # binds elsewhere (e.g. 9180) otherwise produces a silent, confusing
+    # "Could not attach to MCP server" with no indication the port was wrong.
+    # Probes the canonical ports for each profile, then rewrites the port file
+    # so the next start resolves on the fast path.
     if [ "$_resolved" != "1" ]; then
-      echo "[${_label}] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: no reachable port from port files (profile=${_profile:-legacy}); falling back to ${_fallback}" >&2
+      _candidates=""
+      case "$_profile" in
+        prod) _candidates="9180 3180" ;;
+        dev)  _candidates="9080 3080" ;;
+        *)    _candidates="3080 3180 9080 9180" ;;
+      esac
+      for _port in $_candidates; do
+        if _NEOTOMA_SHIM_PROBE_HOST=127.0.0.1 \
+          _NEOTOMA_SHIM_PROBE_PORT="$_port" \
+          node -e '
+const net=require("node:net");
+const port=Number(process.env._NEOTOMA_SHIM_PROBE_PORT);
+const s=net.createConnection({host:"127.0.0.1",port},()=>{s.end();process.exit(0)});
+s.setTimeout(1200);
+s.on("timeout",()=>{try{s.destroy()}catch{};process.exit(1)});
+s.on("error",()=>process.exit(1));
+'
+        then
+          export MCP_PROXY_DOWNSTREAM_URL="http://127.0.0.1:${_port}/mcp"
+          echo "[${_label}] port files stale/unreachable; DISCOVERED live port ${_port} by probe" >&2
+          _resolved=1
+          _pf="$(echo $_port_files | awk '{print $1}')"
+          if [ -n "$_pf" ] && [ -w "$(dirname "$_pf")" ]; then
+            printf '%s' "$_port" > "$_pf" 2>/dev/null \
+              && echo "[${_label}] self-healed ${_pf} -> ${_port}" >&2
+          fi
+          break
+        fi
+      done
+    fi
+    if [ "$_resolved" != "1" ]; then
+      echo "[${_label}] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: no reachable port from port files or discovery (profile=${_profile:-legacy}); falling back to ${_fallback}" >&2
       export MCP_PROXY_DOWNSTREAM_URL="$_fallback"
     fi
   else

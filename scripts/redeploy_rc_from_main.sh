@@ -130,6 +130,24 @@ if ! npm run build:inspector:prod-target; then
 fi
 log "build:inspector complete."
 
+# Seed the schema_registry from the freshly-built dist (issue #1968).
+#
+# `schemaRegistry.loadActiveSchema` is DB-only with no code fallback, so an
+# unseeded registry silently disables store-time auto-linking. The server also
+# seeds idempotently at boot (src/services/schema_registry_bootstrap.ts), so
+# this step is belt-and-braces — but running it here surfaces a seeding failure
+# in the deploy log instead of a single warn line in the server log.
+#
+# Non-fatal by design: seeding only ADDS schemas for entity types that have
+# none, and the server will retry at boot, so a transient failure must not
+# block shipping the new build.
+log "seeding schema_registry…"
+if node dist/seed_schemas_entry.js; then
+  log "schema seeding complete."
+else
+  log "WARNING: schema seeding failed; continuing (server re-seeds idempotently at boot)."
+fi
+
 # HARD restart: kickstart -k kills the existing job instance and relaunches it,
 # forcing tsx/node --watch to re-import modules from the updated source.
 log "hard-restarting $PROD_LABEL…"

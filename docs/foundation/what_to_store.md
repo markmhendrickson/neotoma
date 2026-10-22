@@ -89,7 +89,7 @@ These before/after examples show what storage looks like in practice. "Before" i
 
 **Meeting from calendar:**
 - Before: Calendar events are siloed in Google Calendar. Your agent has no access to meeting context from last week.
-- After: Agent stores `{ entity_type: "event", title: "Q2 Planning with Nick", date: "2026-03-25", attendees: ["Nick Talwar", "Matt Kirk"] }` with REFERS_TO links to contact entities. When preparing for the next meeting, agent retrieves prior meeting context automatically.
+- After: Agent stores `{ entity_type: "event", title: "Q2 Planning with Alex", date: "2026-03-25", attendees: ["Alex Rivera", "Sam Chen"] }` with REFERS_TO links to contact entities. When preparing for the next meeting, agent retrieves prior meeting context automatically.
 
 ### Priority 3 — OS maturation (weeks 2-4)
 

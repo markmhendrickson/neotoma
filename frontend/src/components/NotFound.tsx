@@ -1,5 +1,6 @@
+import type React from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, HelpCircle, Home, Search, ShieldCheck, Terminal } from "lucide-react";
+import { BookOpen, Github, Home, Search, Terminal } from "lucide-react";
 import { SeoHead } from "@/components/SeoHead";
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
@@ -16,23 +17,48 @@ const QUICK_LINKS = [
   },
   {
     label: "Documentation",
-    desc: "Browse setup, integrations, schemas, and reference pages.",
-    href: "/docs",
+    desc: "Browse setup, integrations, and reference pages on GitHub.",
+    href: "https://github.com/markmhendrickson/neotoma/tree/main/docs",
     Icon: BookOpen,
   },
   {
-    label: "Memory guarantees",
-    desc: "Review the state guarantees Neotoma enforces.",
-    href: "/memory-guarantees",
-    Icon: ShieldCheck,
+    label: "GitHub",
+    desc: "Source code, releases, issues, and discussions.",
+    href: "https://github.com/markmhendrickson/neotoma",
+    Icon: Github,
   },
   {
-    label: "FAQ",
-    desc: "Find answers to common setup and product questions.",
-    href: "/faq",
-    Icon: HelpCircle,
+    label: "neotoma.io",
+    desc: "A record, not recall: the system of record for AI agents.",
+    href: "/",
+    Icon: Home,
   },
 ] as const;
+
+function QuickLink({
+  href,
+  locale,
+  className,
+  children,
+}: {
+  href: string;
+  locale: Parameters<typeof localizePath>[1];
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (href.startsWith("http")) {
+    return (
+      <a href={href} className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link to={localizePath(href, locale)} className={className}>
+      {children}
+    </Link>
+  );
+}
 
 export function NotFound() {
   const { locale, dict } = useLocale();
@@ -52,8 +78,7 @@ export function NotFound() {
           </h1>
 
           <p className="max-w-2xl text-[16px] leading-7 text-muted-foreground mb-6">
-            {dict.notFoundDescription} The page may have moved, or the URL may be mistyped.
-            Use the main pages below to get back into the Neotoma docs.
+            {dict.notFoundDescription} Use the main pages below to get back to Neotoma.
           </p>
 
           <div className="mb-10 flex flex-wrap gap-2">
@@ -64,12 +89,12 @@ export function NotFound() {
               <Home className="mr-2 h-4 w-4" aria-hidden />
               {dict.goHome}
             </Link>
-            <Link
-              to={localizePath("/docs", locale)}
+            <a
+              href="https://github.com/markmhendrickson/neotoma/tree/main/docs"
               className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline transition-colors hover:bg-muted hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               Browse docs
-            </Link>
+            </a>
           </div>
 
           <section>
@@ -80,7 +105,7 @@ export function NotFound() {
             <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3">
               {QUICK_LINKS.map(({ label, desc, href, Icon }) => (
                 <li key={href}>
-                  <Link to={localizePath(href, locale)} className={linkClass}>
+                  <QuickLink href={href} locale={locale} className={linkClass}>
                     <div className="flex items-start gap-3">
                       <span
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
@@ -97,7 +122,7 @@ export function NotFound() {
                         </span>
                       </span>
                     </div>
-                  </Link>
+                  </QuickLink>
                 </li>
               ))}
             </ul>

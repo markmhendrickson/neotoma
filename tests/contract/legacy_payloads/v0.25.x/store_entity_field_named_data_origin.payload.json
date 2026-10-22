@@ -1,0 +1,11 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "idempotency_key": "legacy-v0.25.x-entity-field-named-data-origin",
+  "entities": [
+    {
+      "entity_type": "company",
+      "name": "Legacy Origin Field Co",
+      "data_origin": "crm export and comment"
+    }
+  ]
+}

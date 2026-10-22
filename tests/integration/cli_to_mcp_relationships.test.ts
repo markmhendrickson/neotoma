@@ -5,7 +5,7 @@
  * REST → MCP → Database, verifying DB state after each operation.
  */
 
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import {
   verifyRelationshipExists,
@@ -21,6 +21,10 @@ const TEST_USER_ID = "test-cross-layer-rel";
 
 describe("Cross-layer: CLI relationship commands → Database", () => {
   const tracker = new TestIdTracker();
+  // The shared endpoints outlive each test, so they are cleaned up once at the
+  // end rather than by the per-test tracker: a relationship endpoint must be
+  // an existing entity the caller owns.
+  const sharedTracker = new TestIdTracker();
   let sourceEntityId: string;
   let targetEntityId: string;
 
@@ -30,18 +34,22 @@ describe("Cross-layer: CLI relationship commands → Database", () => {
       canonical_name: "Cross Layer Source Person",
       user_id: TEST_USER_ID,
     });
-    tracker.trackEntity(sourceEntityId);
+    sharedTracker.trackEntity(sourceEntityId);
 
     targetEntityId = await createTestEntity({
       entity_type: "company",
       canonical_name: "Cross Layer Target Company",
       user_id: TEST_USER_ID,
     });
-    tracker.trackEntity(targetEntityId);
+    sharedTracker.trackEntity(targetEntityId);
   });
 
   afterEach(async () => {
     await tracker.cleanup();
+  });
+
+  afterAll(async () => {
+    await sharedTracker.cleanup();
   });
 
   describe("relationships create → relationship_snapshots table", () => {

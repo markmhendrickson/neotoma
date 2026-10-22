@@ -91,3 +91,91 @@ describe("update_schema_incremental canonical error envelope (#370)", () => {
     expect(body.error_code).toBeUndefined();
   });
 });
+
+describe("update_schema_incremental canonical_name_fields response echo (#2018 / PR #2020 qa review)", () => {
+  let server: NeotomaServer;
+  const replaceType = `canonical_echo_replace_${Date.now()}`;
+  const preserveType = `canonical_echo_preserve_${Date.now()}`;
+
+  beforeAll(async () => {
+    server = new NeotomaServer();
+  });
+
+  afterAll(async () => {
+    await db.from("schema_registry").delete().eq("entity_type", replaceType);
+    await db.from("schema_registry").delete().eq("entity_type", preserveType);
+  });
+
+  it("echoes the newly-supplied canonical_name_fields on an explicit replace", async () => {
+    const { error: insertError } = await db.from("schema_registry").insert({
+      entity_type: replaceType,
+      schema_version: "1.0.0",
+      schema_definition: {
+        fields: {
+          name: { type: "string" },
+          email: { type: "string" },
+        },
+        canonical_name_fields: ["name"],
+      },
+      reducer_config: {
+        merge_policies: {
+          name: { strategy: "last_write" },
+          email: { strategy: "last_write" },
+        },
+      },
+      active: true,
+      scope: "global",
+    });
+    expect(insertError).toBeFalsy();
+
+    const result = await server.executeToolForCli(
+      "update_schema_incremental",
+      {
+        entity_type: replaceType,
+        canonical_name_fields: ["email"],
+      },
+      TEST_USER_ID
+    );
+
+    const body = parseEnvelope(result);
+    expect(body.canonical_name_fields).toEqual(["email"]);
+  });
+
+  it("echoes the preserved prior canonical_name_fields when omitted from the request", async () => {
+    const { error: insertError } = await db.from("schema_registry").insert({
+      entity_type: preserveType,
+      schema_version: "1.0.0",
+      schema_definition: {
+        fields: {
+          name: { type: "string" },
+          email: { type: "string" },
+        },
+        canonical_name_fields: ["name"],
+      },
+      reducer_config: {
+        merge_policies: {
+          name: { strategy: "last_write" },
+          email: { strategy: "last_write" },
+        },
+      },
+      active: true,
+      scope: "global",
+    });
+    expect(insertError).toBeFalsy();
+
+    const result = await server.executeToolForCli(
+      "update_schema_incremental",
+      {
+        entity_type: preserveType,
+        fields_to_add: [{ field_name: "phone", field_type: "string" }],
+      },
+      TEST_USER_ID
+    );
+
+    const body = parseEnvelope(result);
+    // Must be the preserved prior value, not null — a `null` here would mean
+    // the field silently reverted instead of carrying over from the prior
+    // schema version.
+    expect(body.canonical_name_fields).toEqual(["name"]);
+  });
+});

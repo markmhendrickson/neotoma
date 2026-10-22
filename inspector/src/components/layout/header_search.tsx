@@ -13,6 +13,7 @@ import { sourceDisplayTitle, sourceKindLabel } from "@/lib/source_display";
 import { isNeotomaEntityId } from "@/lib/neotoma_entity_id";
 import { buildSearchLocation, isSearchPath, resolveSearchQuery } from "@/lib/search_route";
 import { cn, truncateId } from "@/lib/utils";
+import { entityDisplayName } from "@/lib/entity_display_name";
 import type { EntitySnapshot } from "@/types/api";
 import type { HeaderSearchContextValue, HeaderSearchSuggestion } from "./page_title_context";
 
@@ -77,13 +78,7 @@ function entityId(entity: EntitySnapshot): string {
 }
 
 function entityLabel(entity: EntitySnapshot): string {
-  const snapshotName =
-    typeof entity.snapshot?.name === "string"
-      ? entity.snapshot.name
-      : typeof entity.snapshot?.title === "string"
-        ? entity.snapshot.title
-        : null;
-  return entity.canonical_name || snapshotName || truncateId(entityId(entity), 16);
+  return entityDisplayName(entity, truncateId(entityId(entity), 16));
 }
 
 function SuggestionLink({
@@ -101,18 +96,14 @@ function SuggestionLink({
       className="block rounded-sm px-3 py-2 hover:bg-accent hover:text-accent-foreground"
     >
       <div className="truncate text-sm font-medium">{suggestion.label}</div>
-      {suggestion.meta ? <div className="mt-1 flex items-center gap-2">{suggestion.meta}</div> : null}
+      {suggestion.meta ? (
+        <div className="mt-1 flex items-center gap-2">{suggestion.meta}</div>
+      ) : null}
     </Link>
   );
 }
 
-function SuggestionSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function SuggestionSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Fragment>
       <div className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -162,7 +153,9 @@ export function HeaderSearch({
     }
 
     const params = new URLSearchParams(location.search);
-    setGlobalSearch(isSearchPath(location.pathname) ? resolveSearchQuery(location.pathname, params) : "");
+    setGlobalSearch(
+      isSearchPath(location.pathname) ? resolveSearchQuery(location.pathname, params) : ""
+    );
   }, [location.pathname, location.search, pageSearch]);
 
   useEffect(() => {
@@ -190,15 +183,21 @@ export function HeaderSearch({
     queryFn: async ({ signal }) => {
       const fetch = { signal };
       const [entities, sources] = await Promise.all([
-        queryEntities({
-          search: debouncedSearch,
-          limit: ENTITY_SUGGESTION_LIMIT,
-          include_snapshots: true,
-        }, fetch),
-        listSources({
-          search: debouncedSearch,
-          limit: SOURCE_SUGGESTION_LIMIT,
-        }, fetch),
+        queryEntities(
+          {
+            search: debouncedSearch,
+            limit: ENTITY_SUGGESTION_LIMIT,
+            include_snapshots: true,
+          },
+          fetch
+        ),
+        listSources(
+          {
+            search: debouncedSearch,
+            limit: SOURCE_SUGGESTION_LIMIT,
+          },
+          fetch
+        ),
       ]);
       return {
         entities: entities.entities,
@@ -208,9 +207,10 @@ export function HeaderSearch({
     enabled: isApiUrlConfigured() && debouncedSearch.length > 0,
   });
 
-  const docSuggestions = debouncedSearch.length > 0 && docsIndexQuery.data
-    ? searchDocs(flattenDocs(docsIndexQuery.data), debouncedSearch, DOC_SUGGESTION_LIMIT)
-    : [];
+  const docSuggestions =
+    debouncedSearch.length > 0 && docsIndexQuery.data
+      ? searchDocs(flattenDocs(docsIndexQuery.data), debouncedSearch, DOC_SUGGESTION_LIMIT)
+      : [];
 
   function setSearchValue(nextSearch: string) {
     if (pageSearch) {
@@ -259,7 +259,10 @@ export function HeaderSearch({
   const sourceSuggestions = suggestionsQuery.data?.sources ?? [];
   const pageSuggestions = pageSearch?.suggestions ?? [];
   const hasSuggestions =
-    pageSuggestions.length > 0 || entitySuggestions.length > 0 || sourceSuggestions.length > 0 || docSuggestions.length > 0;
+    pageSuggestions.length > 0 ||
+    entitySuggestions.length > 0 ||
+    sourceSuggestions.length > 0 ||
+    docSuggestions.length > 0;
   const showSuggestions = isFocused && trimmedSearch.length > 0;
   const isSearchExpanded = isFocused || showSuggestions;
   const isResolvingSuggestions =
@@ -279,8 +282,8 @@ export function HeaderSearch({
           : cn(
               "w-52 transition-[width] duration-200 ease-out",
               "max-w-[calc(100vw-12rem)]",
-              isSearchExpanded && "w-[min(32rem,calc(100vw-12rem))]",
-            ),
+              isSearchExpanded && "w-[min(32rem,calc(100vw-12rem))]"
+            )
       )}
       onBlurCapture={handleSearchContainerBlur}
     >
@@ -335,7 +338,11 @@ export function HeaderSearch({
                           to: `/entities/${encodeURIComponent(entityId(entity))}`,
                           meta: (
                             <>
-                              <TypeBadge type={entity.entity_type} humanize className="max-w-[9rem] truncate" />
+                              <TypeBadge
+                                type={entity.entity_type}
+                                humanize
+                                className="max-w-[9rem] truncate"
+                              />
                               <span className="truncate font-mono text-[11px] text-muted-foreground">
                                 {truncateId(entityId(entity), 12)}
                               </span>
@@ -380,7 +387,9 @@ export function HeaderSearch({
                           meta: (
                             <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
                               <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{doc.frontmatter.category || doc.slug}</span>
+                              <span className="truncate">
+                                {doc.frontmatter.category || doc.slug}
+                              </span>
                             </span>
                           ),
                         }}
@@ -414,9 +423,7 @@ export function HeaderSearch({
               </div>
             </>
           ) : (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              No matching results
-            </div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">No matching results</div>
           )}
         </div>
       ) : null}

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command, Option } from "commander";
+import { isUtf8 } from "node:buffer";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { exec, execFileSync, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -19,7 +20,7 @@ import {
   type Stats,
 } from "node:fs";
 import * as readline from "node:readline";
-import Database, { type SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
+import { AsyncSqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
@@ -145,6 +146,7 @@ export const OBSERVATION_SOURCE_CLI_VALUES = [
   "human",
   "import",
   "sync",
+  "unspecified",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
@@ -158,6 +160,28 @@ export function normalizeObservationSourceFlag(raw: string): ObservationSourceFl
     );
   }
   return normalized as ObservationSourceFlag;
+}
+
+/**
+ * Parse `store --data-origin <json>` (#2242). Only checks that the value is a
+ * JSON object; the server validates the shape (kind enum, locator rules) with
+ * the same schema on every transport, so the CLI does not fork that contract.
+ */
+export function parseDataOriginFlag(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"file","locator":"report.xlsx"}\'.'
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"url","locator":"https://example.com/page"}\'.'
+    );
+  }
+  return parsed as Record<string, unknown>;
 }
 
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
@@ -1371,6 +1395,94 @@ export function writeCliError(err: unknown): void {
   if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
 }
 
+/**
+ * #1943: extract the server's `error_code` from a standard ErrorEnvelope so the
+ * CLI can re-surface it as a machine-readable `hint.code` in `--json` output.
+ * Returns undefined for non-envelope errors (network, parse), which keep the
+ * plain-Error path.
+ */
+export function errorCodeOf(error: unknown): string | undefined {
+  if (error && typeof error === "object") {
+    const code = (error as { error_code?: unknown }).error_code;
+    if (typeof code === "string" && code.length > 0) return code;
+  }
+  return undefined;
+}
+
+/**
+ * #1943: extract the flat `details.hint` an ErrorEnvelope carries (the caller-
+ * facing recovery path — see docs/subsystems/errors.md § Tightening-change hint
+ * obligation). String-shaped hints only; the R4 structured `{text, …}` form is
+ * reduced to its text.
+ */
+export function hintOf(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const details = (error as { details?: unknown }).details;
+  if (!details || typeof details !== "object") return undefined;
+  const hint = (details as { hint?: unknown }).hint;
+  if (typeof hint === "string" && hint.length > 0) return hint;
+  if (hint && typeof hint === "object") {
+    const text = (hint as { text?: unknown }).text;
+    if (typeof text === "string" && text.length > 0) return text;
+  }
+  return undefined;
+}
+
+/** Preserve a REST ErrorEnvelope when a CLI command crosses the API boundary. */
+function cliApiError(error: unknown): Error {
+  const detail = formatApiError(error);
+  const serverCode = errorCodeOf(error);
+  if (!serverCode) return new Error(detail);
+  return new CliHintError(detail, {
+    code: serverCode,
+    message: detail,
+    ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+  });
+}
+
+/**
+ * #2228: the `/me` payload separates "who you are" (`email`) from "whose
+ * graph you operate on" (`user_id`). Under shared-graph mode those describe
+ * different people, so the CLI must not let a bare `user_id` read as the
+ * signer's own identity. Pure formatting logic pulled out of the `auth login`
+ * already-signed-in branch so it is covered without driving the network/
+ * filesystem side effects the rest of that command performs.
+ */
+export function formatAlreadySignedIn(
+  me: {
+    user_id?: string;
+    email?: string;
+    authenticated_user_id?: string;
+    shared_graph?: boolean;
+  },
+  outputMode: "json" | "text"
+): { json: Record<string, unknown> } | { text: string } {
+  if (outputMode === "json") {
+    return {
+      json: {
+        message: "Already signed in",
+        user_id: me.user_id,
+        email: me.email,
+        ...(me.shared_graph
+          ? {
+              shared_graph: true,
+              ...(me.authenticated_user_id
+                ? { authenticated_user_id: me.authenticated_user_id }
+                : {}),
+            }
+          : {}),
+      },
+    };
+  }
+  let text = "Already signed in";
+  if (me.user_id ?? me.email) {
+    const scope = me.shared_graph ? `shared graph ${me.user_id}` : me.user_id;
+    text += ` (${[me.email, scope].filter(Boolean).join(", ")})`;
+  }
+  text += ".\n";
+  return { text };
+}
+
 function formatApiError(error: unknown): string {
   if (error && typeof error === "object") {
     const o = error as Record<string, unknown>;
@@ -1384,6 +1496,30 @@ function formatApiError(error: unknown): string {
     }
   }
   return String(error);
+}
+
+function formatRequestError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const envelope = error as {
+      error_code?: unknown;
+      code?: unknown;
+      message?: unknown;
+      hint?: unknown;
+      error?: unknown;
+    };
+    if (typeof envelope.error_code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      return `${envelope.error_code}${message}`;
+    }
+    if (typeof envelope.code === "string") {
+      const message = typeof envelope.message === "string" ? `: ${envelope.message}` : "";
+      const hint = typeof envelope.hint === "string" ? ` ${envelope.hint}` : "";
+      return `${envelope.code}${message}${hint}`;
+    }
+    if (envelope.error && typeof envelope.error === "object")
+      return formatRequestError(envelope.error);
+  }
+  return formatApiError(error);
 }
 
 function parseOptionalJson(value?: string): unknown {
@@ -1488,15 +1624,18 @@ async function startOAuthCallbackServer(): Promise<{
 
 async function exchangeToken(
   baseUrl: string,
-  code: string
+  code: string,
+  codeVerifier: string
 ): Promise<{
   access_token: string;
   token_type?: string;
   expires_in?: number;
+  connection_id?: string;
 }> {
   const body = new URLSearchParams();
   body.set("grant_type", "authorization_code");
   body.set("code", code);
+  body.set("code_verifier", codeVerifier);
 
   const response = await fetch(`${baseUrl}/mcp/oauth/token`, {
     method: "POST",
@@ -1513,6 +1652,7 @@ async function exchangeToken(
     access_token: string;
     token_type?: string;
     expires_in?: number;
+    connection_id?: string;
   };
 }
 
@@ -1542,16 +1682,25 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
   if (returnedState !== state) {
     throw new Error("OAuth state mismatch");
   }
-  const token = await exchangeToken(baseUrl, code);
+  const token = await exchangeToken(baseUrl, code, verifier);
   const expiresAt = token.expires_in
     ? new Date(Date.now() + token.expires_in * 1000).toISOString()
     : undefined;
+  if (!token.connection_id) {
+    // Every server new enough to check code_verifier also returns
+    // connection_id in the token response (see getTokenResponseForConnection).
+    // `code` itself is now a single-use secret, never the connection_id — do
+    // not fall back to it for X-Connection-Id.
+    throw new Error(
+      "Token response did not include connection_id; server may be running an outdated OAuth token endpoint."
+    );
+  }
   await writeConfig({
     base_url: baseUrl,
     access_token: token.access_token,
     token_type: token.token_type,
     expires_at: expiresAt,
-    connection_id: code,
+    connection_id: token.connection_id,
   });
   let me: { user_id?: string; email?: string } | null = null;
   try {
@@ -2853,9 +3002,18 @@ async function backupFilesWithTimestamp(filePaths: string[], ts: string): Promis
   return backups;
 }
 
-function checkpointWal(db: SqliteDatabase): void {
+/**
+ * Quote a value as a SQLite string literal (single quotes, doubling any embedded
+ * single quote). Needed for statements like `VACUUM INTO` that take a literal
+ * path and cannot be parameterised.
+ */
+function quoteSqliteStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function checkpointWal(db: AsyncSqliteDatabase): Promise<void> {
   try {
-    db.pragma("wal_checkpoint(FULL)");
+    await db.pragma("wal_checkpoint(FULL)");
   } catch {
     // Ignore checkpoint failures for non-WAL or read-only databases.
   }
@@ -2868,15 +3026,15 @@ function stableValueSignature(value: unknown): string {
   return `${typeof value}:${String(value)}`;
 }
 
-function mergeSqliteDatabase(
+async function mergeSqliteDatabase(
   sourceDbPath: string,
   targetDbPath: string,
   options?: DbMergeOptions
-): DbMergeStats {
+): Promise<DbMergeStats> {
   const mode: DbMergeMode = options?.mode ?? "keep-target";
   const dryRun = options?.dryRun === true;
-  let sourceDb: SqliteDatabase | null = null;
-  let targetDb: SqliteDatabase | null = null;
+  let sourceDb: AsyncSqliteDatabase | null = null;
+  let targetDb: AsyncSqliteDatabase | null = null;
   let attached = false;
   const stats: DbMergeStats = {
     source_db: sourceDbPath,
@@ -2891,23 +3049,27 @@ function mergeSqliteDatabase(
     conflict_samples: [],
   };
   try {
-    sourceDb = new Database(sourceDbPath);
-    targetDb = new Database(targetDbPath);
-    checkpointWal(sourceDb);
-    checkpointWal(targetDb);
-    targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
+    sourceDb = new AsyncSqliteDatabase(sourceDbPath);
+    const { assertOrdinaryLifecycleImport, assertOrdinaryLifecycleImportTarget } =
+      await import("../services/entity_lifecycle_ingress.js");
+    await assertOrdinaryLifecycleImport(sourceDb);
+    targetDb = new AsyncSqliteDatabase(targetDbPath);
+    await checkpointWal(sourceDb);
+    await checkpointWal(targetDb);
+    await targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
     attached = true;
+    await assertOrdinaryLifecycleImportTarget(targetDb);
 
-    const targetTables = targetDb
+    const targetTables = (await targetDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all() as Array<{ name: string }>;
+      .all()) as Array<{ name: string }>;
     const sourceTableSet = new Set(
       (
-        targetDb
+        (await targetDb
           .prepare(
             "SELECT name FROM src.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
           )
-          .all() as Array<{ name: string }>
+          .all()) as Array<{ name: string }>
       ).map((row) => row.name)
     );
 
@@ -2929,16 +3091,18 @@ function mergeSqliteDatabase(
       const tableName = table.name;
       if (!sourceTableSet.has(tableName)) continue;
 
-      const targetCols = targetDb
+      const targetCols = (await targetDb
         .prepare(`PRAGMA table_info(${quoteSqlIdent(tableName)})`)
-        .all() as Array<{
+        .all()) as Array<{
         name: string;
         pk?: number;
       }>;
       const targetColNames = targetCols.map((row) => row.name);
       const sourceCols = new Set(
         (
-          targetDb.prepare(`PRAGMA src.table_info(${quoteSqlIdent(tableName)})`).all() as Array<{
+          (await targetDb
+            .prepare(`PRAGMA src.table_info(${quoteSqlIdent(tableName)})`)
+            .all()) as Array<{
             name: string;
           }>
         ).map((row) => row.name)
@@ -2948,9 +3112,9 @@ function mergeSqliteDatabase(
 
       const quotedCols = sharedCols.map((name) => quoteSqlIdent(name)).join(", ");
       const quotedTable = quoteSqlIdent(tableName);
-      const sourceCountRow = targetDb
+      const sourceCountRow = (await targetDb
         .prepare(`SELECT COUNT(*) as count FROM src.${quotedTable}`)
-        .get() as { count?: number };
+        .get()) as { count?: number };
       const sourceCount = Number(sourceCountRow?.count ?? 0);
 
       let conflictCount = 0;
@@ -2972,11 +3136,11 @@ function mergeSqliteDatabase(
           const diffCond = nonPkSharedCols
             .map((col) => `NOT (t.${quoteSqlIdent(col)} IS s.${quoteSqlIdent(col)})`)
             .join(" OR ");
-          const conflictCountRow = targetDb
+          const conflictCountRow = (await targetDb
             .prepare(
               `SELECT COUNT(*) as count FROM src.${quotedTable} s JOIN ${quotedTable} t ON ${joinCond} WHERE ${diffCond}`
             )
-            .get() as { count?: number };
+            .get()) as { count?: number };
           conflictCount = Number(conflictCountRow?.count ?? 0);
           if (conflictCount > 0) {
             const selectPk = pkCols
@@ -2988,11 +3152,11 @@ function mergeSqliteDatabase(
                   `s.${quoteSqlIdent(col)} AS s_${col.replace(/"/g, "_")}, t.${quoteSqlIdent(col)} AS t_${col.replace(/"/g, "_")}`
               )
               .join(", ");
-            const sampleRows = targetDb
+            const sampleRows = (await targetDb
               .prepare(
                 `SELECT ${selectPk}, ${selectVals} FROM src.${quotedTable} s JOIN ${quotedTable} t ON ${joinCond} WHERE ${diffCond} LIMIT 25`
               )
-              .all() as Array<Record<string, unknown>>;
+              .all()) as Array<Record<string, unknown>>;
             for (const row of sampleRows) {
               const differingColumns = nonPkSharedCols.filter((col) => {
                 const sKey = `s_${col.replace(/"/g, "_")}`;
@@ -3034,9 +3198,9 @@ function mergeSqliteDatabase(
 
     if (!dryRun) {
       const insertPrefix = mode === "keep-source" ? "INSERT OR REPLACE" : "INSERT OR IGNORE";
-      const writeTx = targetDb.transaction((mergePlans: TablePlan[]) => {
-        for (const plan of mergePlans) {
-          const insertResult = targetDb!
+      await targetDb.transaction(async (tx) => {
+        for (const plan of plans) {
+          const insertResult = await tx
             .prepare(
               `${insertPrefix} INTO ${plan.quotedTable} (${plan.quotedCols}) SELECT ${plan.quotedCols} FROM src.${plan.quotedTable}`
             )
@@ -3050,18 +3214,17 @@ function mergeSqliteDatabase(
           }
         }
       });
-      writeTx(plans);
     }
   } finally {
     if (targetDb) {
       try {
-        if (attached) targetDb.prepare("DETACH DATABASE src").run();
+        if (attached) await targetDb.prepare("DETACH DATABASE src").run();
       } catch {
         // ignore detach failures
       }
-      targetDb.close();
+      await targetDb.close();
     }
-    if (sourceDb) sourceDb.close();
+    if (sourceDb) await sourceDb.close();
   }
   return stats;
 }
@@ -3089,18 +3252,21 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     entity_snapshot_recompute_errors: 0,
     relationship_snapshot_recompute_errors: 0,
   };
-  const db = new Database(targetDbPath);
+  const db = new AsyncSqliteDatabase(targetDbPath);
   try {
-    const tableExists = (tableName: string): boolean => {
-      const row = db
+    const tableExists = async (tableName: string): Promise<boolean> => {
+      const row = (await db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
-        .get(tableName) as { name?: string } | undefined;
+        .get(tableName)) as { name?: string } | undefined;
       return row?.name === tableName;
     };
-    if (!tableExists("entity_snapshots") || !tableExists("relationship_snapshots")) {
+    if (
+      !(await tableExists("entity_snapshots")) ||
+      !(await tableExists("relationship_snapshots"))
+    ) {
       return stats;
     }
-    if (!tableExists("observations") || !tableExists("relationship_observations")) {
+    if (!(await tableExists("observations")) || !(await tableExists("relationship_observations"))) {
       return stats;
     }
 
@@ -3109,93 +3275,132 @@ async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnaps
     const observationReducer = new ObservationReducer();
     const relationshipReducer = new RelationshipReducer();
 
-    const entityIds = (
-      db
-        .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
-        .all() as Array<{
-        entity_id: string;
-      }>
-    ).map((row) => row.entity_id);
-    const relationshipKeys = (
-      db
-        .prepare(
-          "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
-        )
-        .all() as Array<{ relationship_key: string }>
-    ).map((row) => row.relationship_key);
+    const { EntityLifecycleAcquisitionError } =
+      await import("../services/entity_lifecycle_authority.js");
+    await db.transaction(async (tx) => {
+      const entityIds = (
+        (await tx
+          .prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL")
+          .all()) as Array<{
+          entity_id: string;
+        }>
+      ).map((row) => row.entity_id);
+      const relationshipKeys = (
+        (await tx
+          .prepare(
+            "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
+          )
+          .all()) as Array<{ relationship_key: string }>
+      ).map((row) => row.relationship_key);
 
-    db.prepare("DELETE FROM entity_snapshots").run();
-    db.prepare("DELETE FROM relationship_snapshots").run();
+      await tx.prepare("DELETE FROM entity_snapshots").run();
+      await tx.prepare("DELETE FROM relationship_snapshots").run();
 
-    for (const entityId of entityIds) {
-      const observations = db
-        .prepare("SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC")
-        .all(entityId)
-        .map((row) => {
+      // #2343: the merge-import rebuild runs against an ARBITRARY target
+      // database opened by path, so it cannot use the service-layer seam (which
+      // resolves against the process's configured db). It shares the RULES via
+      // attachment_resolution_sqlite.ts instead — same merge-alias follow, same
+      // cycle guard, same depth bound.
+      const { resolveAttachmentTargetSqlite } =
+        await import("../services/attachment_resolution_sqlite.js");
+
+      for (const entityId of entityIds) {
+        // A redirected id owns no snapshot of its own: skip it rather than
+        // writing the survivor's snapshot under a merge tombstone.
+        const target = await resolveAttachmentTargetSqlite(tx, entityId);
+        if (target.truncated) throw new EntityLifecycleAcquisitionError();
+        if (target.resolvedEntityId !== entityId) continue;
+
+        const observations = (
+          await tx
+            .prepare(
+              "SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC"
+            )
+            .all(entityId)
+        ).map((row) => {
           const observation = row as Record<string, unknown>;
           if ("fields" in observation) {
             observation.fields = parseJsonLike(observation.fields);
           }
           return observation;
         });
-      if (observations.length === 0) continue;
-      try {
-        const snapshot = (await observationReducer.computeSnapshot(
-          entityId,
-          observations as unknown as any[]
-        )) as Record<string, unknown> | null;
-        if (!snapshot) continue;
-        const payload: Record<string, unknown> = { ...snapshot };
-        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
-        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
-        const cols = Object.keys(payload);
-        const placeholders = cols.map(() => "?").join(", ");
-        const vals = cols.map((k) => payload[k]);
-        db.prepare(
-          `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-        ).run(vals);
-        stats.entity_snapshots_recomputed += 1;
-      } catch {
-        stats.entity_snapshot_recompute_errors += 1;
+        if (observations.length === 0) continue;
+        try {
+          const { acquireEntityLifecycleContext } =
+            await import("../services/entity_lifecycle_storage.js");
+          const first = observations[0] as any;
+          const context = await acquireEntityLifecycleContext(
+            tx,
+            { id: entityId, user_id: first.user_id, entity_type: first.entity_type },
+            observations as any[]
+          );
+          const snapshot = (await observationReducer.computeSnapshot(
+            entityId,
+            observations as unknown as any[],
+            undefined,
+            context
+          )) as Record<string, unknown> | null;
+          if (!snapshot) continue;
+          const payload: Record<string, unknown> = { ...snapshot };
+          if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+          if ("provenance" in payload)
+            payload.provenance = JSON.stringify(payload.provenance ?? {});
+          const cols = Object.keys(payload);
+          const placeholders = cols.map(() => "?").join(", ");
+          const vals = cols.map((k) => payload[k]);
+          await tx
+            .prepare(
+              `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+            )
+            .run(vals);
+          stats.entity_snapshots_recomputed += 1;
+        } catch (err) {
+          if (err instanceof EntityLifecycleAcquisitionError) throw err;
+          stats.entity_snapshot_recompute_errors += 1;
+        }
       }
-    }
 
-    for (const relationshipKey of relationshipKeys) {
-      const relationshipObservations = db
-        .prepare(
-          "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
-        )
-        .all(relationshipKey)
-        .map((row) => {
+      for (const relationshipKey of relationshipKeys) {
+        const relationshipObservations = (
+          await tx
+            .prepare(
+              "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
+            )
+            .all(relationshipKey)
+        ).map((row) => {
           const observation = row as Record<string, unknown>;
           if ("metadata" in observation) {
             observation.metadata = parseJsonLike(observation.metadata);
           }
           return observation;
         });
-      if (relationshipObservations.length === 0) continue;
-      try {
-        const snapshot = (await relationshipReducer.computeSnapshot(
-          relationshipKey,
-          relationshipObservations as unknown as any[]
-        )) as unknown as Record<string, unknown> | null;
-        if (!snapshot) continue;
-        const payload: Record<string, unknown> = { ...snapshot };
-        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
-        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
-        const cols = Object.keys(payload);
-        const placeholders = cols.map(() => "?").join(", ");
-        const vals = cols.map((k) => payload[k]);
-        db.prepare(
-          `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
-        ).run(vals);
-        stats.relationship_snapshots_recomputed += 1;
-      } catch {
-        stats.relationship_snapshot_recompute_errors += 1;
+        if (relationshipObservations.length === 0) continue;
+        try {
+          const snapshot = (await relationshipReducer.computeSnapshot(
+            relationshipKey,
+            relationshipObservations as unknown as any[]
+          )) as unknown as Record<string, unknown> | null;
+          if (!snapshot) continue;
+          const payload: Record<string, unknown> = { ...snapshot };
+          if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+          if ("provenance" in payload)
+            payload.provenance = JSON.stringify(payload.provenance ?? {});
+          const cols = Object.keys(payload);
+          const placeholders = cols.map(() => "?").join(", ");
+          const vals = cols.map((k) => payload[k]);
+          await tx
+            .prepare(
+              `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+            )
+            .run(vals);
+          stats.relationship_snapshots_recomputed += 1;
+        } catch {
+          stats.relationship_snapshot_recompute_errors += 1;
+        }
       }
-    }
+    });
   } finally {
-    db.close();
+    await db.close();
   }
   return stats;
 }
@@ -3768,19 +3973,21 @@ async function startSessionWatch(
     }
   }
   type DbInstance = {
-    close: () => void;
-    prepare: (sql: string) => { all: (...args: unknown[]) => unknown[] };
-    pragma: (s: string) => void;
+    close: () => Promise<void>;
+    prepare: (sql: string) => { all: (...args: unknown[]) => Promise<unknown[]> };
+    pragma: (s: string) => Promise<unknown[]>;
   };
   const sqlite3Mod = await import("../repositories/sqlite/sqlite_driver.js");
-  const Database = (sqlite3Mod as unknown as { default: new (path: string) => DbInstance }).default;
+  const Database = (
+    sqlite3Mod as unknown as { AsyncSqliteDatabase: new (path: string) => DbInstance }
+  ).AsyncSqliteDatabase;
   const dbs: { path: string; label: string; db: DbInstance; cursors: Record<string, string> }[] =
     [];
   const nowIso = new Date().toISOString();
   try {
     await fs.access(dbPath);
     const db = new Database(dbPath);
-    db.pragma("busy_timeout = 2000");
+    await db.pragma("busy_timeout = 2000");
     const cursors: Record<string, string> = {};
     for (const { table } of WATCH_TABLE_DEFS) cursors[table] = nowIso;
     dbs.push({ path: dbPath, label: preferredEnv, db, cursors });
@@ -3789,11 +3996,11 @@ async function startSessionWatch(
   }
   if (dbs.length === 0) return () => {};
 
-  function fetchEntityNames(
+  async function fetchEntityNames(
     db: DbInstance,
     entityIds: Set<string>,
     forUserId: string
-  ): Map<string, string> {
+  ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     if (entityIds.size === 0 || !forUserId) return map;
     try {
@@ -3803,7 +4010,7 @@ async function startSessionWatch(
       const stmt = db.prepare(
         `SELECT id, canonical_name, entity_type FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
       );
-      const rows = stmt.all(...entityIds, forUserId) as {
+      const rows = (await stmt.all(...entityIds, forUserId)) as {
         id: string;
         canonical_name: string;
         entity_type?: string;
@@ -3816,11 +4023,11 @@ async function startSessionWatch(
   }
 
   /** Entity id -> entity_type for Type column and entity_merges. */
-  function fetchEntityTypes(
+  async function fetchEntityTypes(
     db: DbInstance,
     entityIds: Set<string>,
     forUserId: string
-  ): Map<string, string> {
+  ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     if (entityIds.size === 0 || !forUserId) return map;
     try {
@@ -3830,7 +4037,10 @@ async function startSessionWatch(
       const stmt = db.prepare(
         `SELECT id, entity_type FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
       );
-      const rows = stmt.all(...entityIds, forUserId) as { id: string; entity_type: string }[];
+      const rows = (await stmt.all(...entityIds, forUserId)) as {
+        id: string;
+        entity_type: string;
+      }[];
       for (const r of rows) if (r.entity_type) map.set(r.id, r.entity_type);
     } catch {
       // ignore
@@ -3895,7 +4105,7 @@ async function startSessionWatch(
   const ENTITY_SNAPSHOT_EMIT_WINDOW_MS = 2000;
   const lastEmittedEntitySnapshot: Record<string, number> = {};
 
-  function pollOne(db: DbInstance, cursors: Record<string, string>): void {
+  async function pollOne(db: DbInstance, cursors: Record<string, string>): Promise<void> {
     for (const { table, idCol, tsCol, userFilter } of WATCH_TABLE_DEFS) {
       try {
         const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
@@ -3906,10 +4116,10 @@ async function startSessionWatch(
         const stmt = db.prepare(
           `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
         );
-        const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
+        const rows = (await stmt.all(cursor, userId)) as Record<string, unknown>[];
         const entityIds = collectEntityIds(table, rows);
-        const entityNames = fetchEntityNames(db, entityIds, userId);
-        const entityTypes = fetchEntityTypes(db, entityIds, userId);
+        const entityNames = await fetchEntityNames(db, entityIds, userId);
+        const entityTypes = await fetchEntityTypes(db, entityIds, userId);
         for (const row of rows) {
           const ts = String(row[tsCol] ?? "");
           if (ts && (!cursors[table] || ts > cursors[table])) cursors[table] = ts;
@@ -3946,11 +4156,13 @@ async function startSessionWatch(
 
   const intervalMs = 400;
   const id = setInterval(() => {
-    for (const { db, cursors } of dbs) pollOne(db, cursors);
+    void (async () => {
+      for (const { db, cursors } of dbs) await pollOne(db, cursors);
+    })();
   }, intervalMs);
   return () => {
     clearInterval(id);
-    for (const { db } of dbs) db.close();
+    for (const { db } of dbs) void db.close();
   };
 }
 
@@ -5632,8 +5844,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         }
         const dbFiles = ["neotoma.db", "neotoma.prod.db"] as const;
         if (!opts.skipDb) {
-          const { ensureSqliteDbInitialized } =
-            await import("../repositories/sqlite/sqlite_client.js");
+          const { ensureDbInitialized } = await import("../repositories/db/connection.js");
           const recoverSqliteSidecars = async (dbPath: string): Promise<void> => {
             const suffix = `.stale-${Date.now()}`;
             const sidecars = [`${dbPath}-wal`, `${dbPath}-shm`];
@@ -5652,14 +5863,14 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           };
           const ensureSqliteDbInitializedWithRetry = async (dbPath: string): Promise<void> => {
             try {
-              ensureSqliteDbInitialized(dbPath);
+              await ensureDbInitialized(dbPath);
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               if (!/disk i\/o error/i.test(message)) {
                 throw error;
               }
               await recoverSqliteSidecars(dbPath);
-              ensureSqliteDbInitialized(dbPath);
+              await ensureDbInitialized(dbPath);
             }
           };
           for (const dbFile of dbFiles) {
@@ -7322,23 +7533,21 @@ const authLoginCommand = authCommand
       try {
         const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
-          const me = (await res.json()) as { user_id?: string; email?: string };
-          if (outputMode === "json") {
-            writeOutput(
-              {
-                message: "Already signed in",
-                base_url: baseUrl,
-                user_id: me.user_id,
-                email: me.email,
-              },
-              outputMode
-            );
+          // #2228: `email` is who is signed in; `user_id` is the graph being
+          // operated on. Under shared-graph mode they describe different
+          // people, so print the scope rather than letting the id read as the
+          // signer's own.
+          const me = (await res.json()) as {
+            user_id?: string;
+            email?: string;
+            authenticated_user_id?: string;
+            shared_graph?: boolean;
+          };
+          const formatted = formatAlreadySignedIn(me, outputMode === "json" ? "json" : "text");
+          if ("json" in formatted) {
+            writeOutput({ ...formatted.json, base_url: baseUrl }, outputMode);
           } else {
-            process.stdout.write("Already signed in");
-            if (me.user_id ?? me.email) {
-              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
-            }
-            process.stdout.write(".\n");
+            process.stdout.write(formatted.text);
           }
           return;
         }
@@ -7672,7 +7881,7 @@ instructionsCommand
     "Print the first fenced code block from docs/developer/mcp/instructions.md bundled with this package"
   )
   .option("--format <fmt>", "plain (default) or md (wrap in a markdown fence)", "plain")
-  .action((opts: { format?: string }) => {
+  .action(async (opts: { format?: string }) => {
     const outputMode = resolveOutputMode();
     const pkgRoot = resolveNeotomaPackageRoot();
     const docPath = mcpInstructionsPath(pkgRoot);
@@ -7704,20 +7913,210 @@ instructionsCommand
       process.exitCode = 1;
       return;
     }
+    // Append the configured instance's data policy (#1974) so this surface
+    // matches the MCP handshake and the REST endpoint. Unlike those two, the
+    // CLI reads the instruction doc from local disk, so the policy has to be
+    // fetched from the instance the CLI is pointed at — printing a local file
+    // alone would silently omit the policy that actually governs writes there.
+    // Best-effort: an unreachable or unauthenticated instance degrades to the
+    // global instructions rather than failing the command.
+    let composed = body;
+    try {
+      const { composeClientInstructions } = await import("../mcp_instruction_doc.js");
+      const cliConfig = await readConfig();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+        token: await getCliToken(),
+      });
+      const { data } = await api.GET("/instance-policy", {});
+      const policy = (data as { policy?: unknown } | undefined)?.policy;
+      if (policy) {
+        const { renderInstancePolicyInstructions } = await import("../services/instance_policy.js");
+        composed = composeClientInstructions(
+          body,
+          renderInstancePolicyInstructions(policy as never)
+        );
+      }
+    } catch {
+      // Leave `composed` as the global instructions.
+    }
+
     if (outputMode === "json") {
-      writeOutput({ path: docPath, body, format: opts.format ?? "plain" }, outputMode);
+      writeOutput({ path: docPath, body: composed, format: opts.format ?? "plain" }, outputMode);
       return;
     }
     const fmt = (opts.format ?? "plain").toLowerCase();
     if (fmt === "md") {
-      process.stdout.write("```\n" + body + "\n```\n");
+      process.stdout.write("```\n" + composed + "\n```\n");
     } else if (fmt === "plain") {
-      process.stdout.write(body + "\n");
+      process.stdout.write(composed + "\n");
     } else {
       process.stderr.write(_errorStyle(`Unknown --format ${opts.format}; use plain or md`) + nl());
       process.exitCode = 1;
     }
   });
+
+const instancePolicyCommand = program
+  .command("instance-policy")
+  .description("Inspect this instance's data policy (what it is for, what it will hold)");
+
+instancePolicyCommand
+  .command("show")
+  .description("Show the instance data policy, or report that none is configured")
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    try {
+      const cliConfig = await readConfig();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+        token: await getCliToken(),
+      });
+      const { data, error } = await api.GET("/instance-policy", {});
+      if (error) {
+        writeOutput({ error: "instance_policy_unavailable" }, outputMode);
+        process.exitCode = 1;
+        return;
+      }
+      const envelope = data as { policy?: unknown; entity_id?: string | null } | undefined;
+      const policy = envelope?.policy ?? null;
+      // Mirror HTTP GET /instance-policy / MCP describe_instance_policy —
+      // entity_id is the opaque id to pass to correct() when updating remotely.
+      // Text-mode output stays policy-only (human-readable, not a machine contract).
+      const entity_id = envelope?.entity_id ?? null;
+      if (outputMode === "json") {
+        writeOutput({ policy, entity_id }, outputMode);
+        return;
+      }
+      if (!policy) {
+        process.stdout.write(
+          "No instance policy configured. This instance declares no data policy; " +
+            "writes are not policy-restricted.\n"
+        );
+        return;
+      }
+      process.stdout.write(JSON.stringify(policy, null, 2) + "\n");
+    } catch (err) {
+      process.stderr.write(_errorStyle((err as Error).message) + nl());
+      process.exitCode = 1;
+    }
+  });
+
+instancePolicyCommand
+  .command("set")
+  .description("Create or update this instance's data policy from a JSON file")
+  .requiredOption("--file <path>", "JSON file containing the policy fields")
+  .option("--enforce", "Set enforcement to 'enforced' (reject violating writes)")
+  .option("--advisory", "Set enforcement to 'advisory' (declare only, do not reject)")
+  .option("--dry-run", "Show what would be written without writing it")
+  .action(
+    async (opts: { file: string; enforce?: boolean; advisory?: boolean; dryRun?: boolean }) => {
+      const outputMode = resolveOutputMode();
+      try {
+        if (opts.enforce && opts.advisory) {
+          throw new Error("--enforce and --advisory are mutually exclusive.");
+        }
+
+        const raw = await fs.readFile(opts.file, "utf-8");
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+        // Enforcement is a flag rather than a JSON field so that turning
+        // rejection on is a deliberate keystroke, not something that rides along
+        // unnoticed in an edited file.
+        const enforcement = opts.enforce ? "enforced" : opts.advisory ? "advisory" : undefined;
+
+        const cliConfig = await readConfig();
+        const api = createApiClient({
+          baseUrl: await resolveBaseUrl(program.opts().baseUrl, cliConfig),
+          token: await getCliToken(),
+        });
+
+        // Read first. `instance_policy` uses name_collision_policy: "reject", so
+        // re-storing over an existing policy fails by design — the update route
+        // is a correction against the existing entity. Discovering that by
+        // hitting the collision is the trial-and-error this command removes.
+        //
+        // Mirrors `instance-policy show`: read entity_id off the
+        // `--base-url`-resolved remote instance over HTTP, not off a local
+        // database connection. This command runs against whatever instance
+        // `--base-url` points to, which is not necessarily the machine
+        // running the CLI — `getInstancePolicyEntityId()` reads the local
+        // process's own DB connection and would silently target the wrong
+        // instance whenever `--base-url` points elsewhere.
+        const { data: policyReadData, error: policyReadError } = await api.GET(
+          "/instance-policy",
+          {}
+        );
+        if (policyReadError) {
+          throw new Error(`Failed to read instance policy: ${JSON.stringify(policyReadError)}`);
+        }
+        const policyReadEnvelope = policyReadData as { entity_id?: string | null } | undefined;
+        const existingId = policyReadEnvelope?.entity_id ?? null;
+
+        const fields: Record<string, unknown> = { ...parsed };
+        if (enforcement) fields.enforcement = enforcement;
+        fields.updated_at = new Date().toISOString();
+
+        if (opts.dryRun) {
+          writeOutput(
+            {
+              mode: existingId ? "update" : "create",
+              entity_id: existingId,
+              fields,
+              dry_run: true,
+            },
+            outputMode
+          );
+          return;
+        }
+
+        if (!existingId) {
+          if (!fields.policy_id) {
+            throw new Error(
+              "policy_id is required when creating a policy. Add it to the JSON file."
+            );
+          }
+          const { error } = await api.POST("/store", {
+            body: {
+              entities: [{ entity_type: "instance_policy", ...fields }],
+              idempotency_key: `instance-policy-create-${String(fields.policy_id)}`,
+            } as never,
+          });
+          if (error) throw new Error(`Failed to create policy: ${JSON.stringify(error)}`);
+          writeOutput({ mode: "create", policy_id: fields.policy_id, success: true }, outputMode);
+          return;
+        }
+
+        // Update: one correction per changed field, so per-field provenance
+        // records which edit changed what rather than attributing the whole
+        // policy to the last writer.
+        const stamp = new Date().toISOString().slice(0, 10);
+        const applied: string[] = [];
+        for (const [field, value] of Object.entries(fields)) {
+          const { error } = await api.POST("/correct", {
+            body: {
+              entity_id: existingId,
+              entity_type: "instance_policy",
+              field,
+              value,
+              idempotency_key: `instance-policy-set-${field}-${stamp}`,
+            } as never,
+          });
+          if (error) {
+            throw new Error(`Failed to update '${field}': ${JSON.stringify(error)}`);
+          }
+          applied.push(field);
+        }
+
+        writeOutput(
+          { mode: "update", entity_id: existingId, fields_updated: applied, success: true },
+          outputMode
+        );
+      } catch (err) {
+        process.stderr.write(_errorStyle((err as Error).message) + nl());
+        process.exitCode = 1;
+      }
+    }
+  );
 
 const mcpCommand = program.command("mcp").description("MCP server configuration");
 
@@ -8759,9 +9158,9 @@ program
 
       // Open read-write so we can attach to WAL/shm; we only run SELECT. Opening readonly
       // while the API has the DB in WAL mode often causes "disk I/O error" (readers need shm access).
-      const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-      const db = new Database(resolvedPath);
-      db.pragma("busy_timeout = 2000");
+      const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+      const db = new AsyncSqliteDatabase(resolvedPath);
+      await db.pragma("busy_timeout = 2000");
 
       type TableDef = {
         table: string;
@@ -8795,7 +9194,10 @@ program
         relationship_snapshots: "🔗",
       };
 
-      function fetchEntityNames(entityIds: Set<string>, forUserId: string): Map<string, string> {
+      async function fetchEntityNames(
+        entityIds: Set<string>,
+        forUserId: string
+      ): Promise<Map<string, string>> {
         const map = new Map<string, string>();
         if (entityIds.size === 0) return map;
         try {
@@ -8805,7 +9207,7 @@ program
           const stmt = db.prepare(
             `SELECT id, canonical_name FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
           );
-          const rows = stmt.all(...entityIds, forUserId) as {
+          const rows = (await stmt.all(...entityIds, forUserId)) as {
             id: string;
             canonical_name: string;
           }[];
@@ -8930,7 +9332,7 @@ program
         return ids;
       }
 
-      function poll(): void {
+      async function poll(): Promise<void> {
         for (const { table, idCol, tsCol, userFilter } of tableDefs) {
           try {
             const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
@@ -8941,8 +9343,8 @@ program
             const stmt = db.prepare(
               `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
             );
-            const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
-            const entityNames = fetchEntityNames(collectEntityIds(table, rows), userId);
+            const rows = (await stmt.all(cursor, userId)) as Record<string, unknown>[];
+            const entityNames = await fetchEntityNames(collectEntityIds(table, rows), userId);
 
             for (const row of rows) {
               const ts = String(row[tsCol] ?? "");
@@ -8984,11 +9386,13 @@ program
         }
       }
 
-      poll();
-      const interval = setInterval(poll, intervalMs);
+      await poll();
+      const interval = setInterval(() => {
+        void poll();
+      }, intervalMs);
       const onExit = () => {
         clearInterval(interval);
-        db.close();
+        void db.close();
         process.exit(0);
       };
       process.on("SIGINT", onExit);
@@ -9009,6 +9413,29 @@ skillsCommand
       "Creates and populates the skills directory for any harness whose base directory exists."
   )
   .option("--scope <scope>", "Mirror at user or project level", "user")
+  .option(
+    "--include-instance-skills",
+    "Also fetch `enabled` skill entities from the connected instance and materialize them " +
+      "under ~/.neotoma/instance-skills/<host>/, linked into harnesses alongside package skills " +
+      "(package skills win on name collision). See docs/skills/skill_strategy.md.",
+    false
+  )
+  .option(
+    "--include-instance-scripts",
+    "Also fetch script attachments (file_asset entities EMBEDS'd by instance skills), verify " +
+      "their content_hash, and write them to <skill>/scripts/ — gated by the hash-pin consent " +
+      "manifest (~/.neotoma/instance-skills/approvals.json). Implies --include-instance-skills.",
+    false
+  )
+  .option(
+    "--approve-scripts",
+    "Trust these specific instance-script hashes to be written to disk and pin them as " +
+      "approved for future syncs (a hash-pinned execution-trust decision, not a generic sync " +
+      "confirmation). Without this flag, unapproved or changed-hash scripts are reported as " +
+      "blocked and not written.",
+    false
+  )
+  .addOption(new Option("--approve", "Deprecated alias for --approve-scripts").hideHelp())
   .action(async (opts) => {
     const { mirrorSkillsToAllHarnesses } = await import("./skills_mirror.js");
     const scope = opts.scope === "project" ? "project" : "user";
@@ -9020,9 +9447,47 @@ skillsCommand
       scope,
       onLog: json ? undefined : (msg) => console.log(`  ${msg}`),
     });
+
+    const includeInstanceScripts = Boolean(opts.includeInstanceScripts);
+    const includeInstanceSkills = Boolean(opts.includeInstanceSkills) || includeInstanceScripts;
+    // --approve is a hidden, deprecated alias for --approve-scripts (Commander gives each
+    // flag its own camelCase key, so both are read and OR'd rather than unified upstream).
+    const approveScripts = Boolean(opts.approveScripts) || Boolean(opts.approve);
+
+    let instanceReport: Awaited<
+      ReturnType<typeof import("./instance_skills_sync.js").runInstanceSkillsSync>
+    > | null = null;
+    if (includeInstanceSkills) {
+      const { runInstanceSkillsSync } = await import("./instance_skills_sync.js");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+      const api = createApiClient({ baseUrl, token });
+      instanceReport = await runInstanceSkillsSync(api, {
+        includeInstanceSkills,
+        includeInstanceScripts,
+        approve: approveScripts,
+        baseUrl,
+        scope,
+      });
+    }
+
     if (json) {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-      if (!report.source_present || report.has_errors) process.exitCode = 1;
+      process.stdout.write(JSON.stringify({ ...report, instance: instanceReport }, null, 2) + "\n");
+      // Integrity failures must fail the exit code in JSON mode too: a CI
+      // pipeline scripting off `$?` (rather than parsing the body) would
+      // otherwise treat a content_hash mismatch or a rejected filename as a
+      // clean sync. Consent-blocked scripts are deliberately NOT counted —
+      // they are the expected, recoverable state, matching the `⚠` vs `✗`
+      // severity split the console renderer uses below.
+      const instanceIntegrityFailure = Boolean(
+        instanceReport?.scripts &&
+        (instanceReport.scripts.hashMismatches.length > 0 ||
+          instanceReport.scripts.rejectedFilenames.length > 0)
+      );
+      if (!report.source_present || report.has_errors || instanceIntegrityFailure) {
+        process.exitCode = 1;
+      }
       return;
     }
     if (!report.source_present) {
@@ -9048,6 +9513,57 @@ skillsCommand
     if (report.has_errors) {
       console.error("Some skills failed to link; see warnings above.");
       process.exitCode = 1;
+    }
+
+    if (instanceReport?.ran) {
+      console.log(
+        `Instance skills: ${instanceReport.skillsFetched} fetched → ${instanceReport.root}`
+      );
+      for (const c of instanceReport.skippedCollisions) {
+        console.log(`  ⚠ skipped '${c.name}': ${c.reason}`);
+      }
+      if (instanceReport.written.length > 0) {
+        console.log(`  updated: ${instanceReport.written.join(", ")}`);
+      }
+      if (instanceReport.pruned.length > 0) {
+        console.log(`  pruned: ${instanceReport.pruned.join(", ")}`);
+      }
+      for (const r of instanceReport.harnessResults) {
+        if (r.skipped) continue;
+        console.log(`  ${r.tool}: ${r.linked.length} instance skill link(s) → ${r.target}`);
+      }
+      if (instanceReport.scripts) {
+        const s = instanceReport.scripts;
+        for (const w of s.written) {
+          const suffix = w.newlyApproved ? " (hash approved and recorded)" : "";
+          console.log(`  script written: ${w.skill}/scripts/${w.filename}${suffix}`);
+        }
+        for (const b of s.blockedUnapproved) {
+          console.log(
+            `  ⚠ script not written (unapproved): ${b.skill}/${b.filename} (sha256:${b.hash.slice(0, 12)}) — ` +
+              `review with \`neotoma sources content ${b.sourceId}\`, then re-run with --approve-scripts`
+          );
+        }
+        for (const b of s.blockedHashChanged) {
+          console.log(
+            `  ⚠ script not written (hash changed since approval): ${b.skill}/${b.filename} ` +
+              `(approved sha256:${b.approvedHash.slice(0, 12)}, new sha256:${b.newHash.slice(0, 12)}) — ` +
+              `review with \`neotoma sources content ${b.sourceId}\`, then re-run with --approve-scripts`
+          );
+        }
+        for (const m of s.hashMismatches) {
+          console.error(
+            `  ✗ content_hash mismatch for ${m.skill}/${m.filename}: expected ${m.expected}, got ${m.actual} — refusing to write`
+          );
+          process.exitCode = 1;
+        }
+        for (const r of s.rejectedFilenames) {
+          console.error(
+            `  ✗ script filename rejected for ${r.skill}: ${JSON.stringify(r.filename)} — ${r.reason}`
+          );
+          process.exitCode = 1;
+        }
+      }
     }
   });
 
@@ -9318,13 +9834,51 @@ issuesCommand
   .option("--since <date>", "Only sync issues updated after this ISO date")
   .option("--state <state>", "Filter by state: open, closed, all", "all")
   .option("--labels <labels>", "Comma-separated label filter (passed to GitHub list)")
+  .option(
+    "--repo <owner/name>",
+    "GitHub repo to mirror for this run (default: the server-configured repo)"
+  )
+  .option(
+    "--push",
+    "Run the push leg (local public issues -> GitHub). Default: on for the configured repo, off for any other --repo"
+  )
+  .option("--no-push", "Skip the push leg (pull-only)")
+  .option(
+    "--dry-run",
+    "Report what would be created, updated and pushed; write nothing locally or on GitHub"
+  )
   .action(async (opts) => {
     const { issuesSync } = await import("./issues.js");
     const config = await readConfig();
-    const token = await getCliToken();
+    // Prefer per-agent AAuth signing when a CLI AAuth key is configured via env
+    // (NEOTOMA_AAUTH_PRIVATE_JWK_PATH). This lets the issues-sync LaunchAgent /
+    // neotoma-agent daemon authenticate with a signed request instead of a
+    // bearer token (bearer-token retirement). Drop the bearer so the signature
+    // is the sole credential, and force the HTTP transport — the in-process
+    // local transport bypasses signing (and also avoids the dev/prod local
+    // transport env-mismatch). Falls back to bearer when AAuth is not configured.
+    // When the env gate is set, fail loud if the key is missing/unusable —
+    // silent unsigned fallback would leave the unattended daemon syncing as
+    // anonymous (REQUEST_CHANGES on #1764 / phoenicurus).
+    const useAAuth = Boolean(process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH);
+    if (useAAuth) {
+      const { loadCliSignerConfig } = await import("./aauth_signer.js");
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          `NEOTOMA_AAUTH_PRIVATE_JWK_PATH is set (${process.env.NEOTOMA_AAUTH_PRIVATE_JWK_PATH}) ` +
+            "but no usable AAuth CLI keypair was found there. Fix the path or run `neotoma auth keygen`. " +
+            "Unattended issues sync must not fall back to an unsigned request."
+        );
+      }
+    }
+    const token = useAAuth ? undefined : await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
+      ...(useAAuth
+        ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
+        : {}),
     });
     await issuesSync({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
   });
@@ -10321,7 +10875,7 @@ storageCommand
             const sourceDbPath = path.join(currentDataDir, baseName);
             const targetDbPath = path.join(targetDataDir, baseName);
             if (!(await pathExists(sourceDbPath)) || !(await pathExists(targetDbPath))) continue;
-            const stats = mergeSqliteDatabase(sourceDbPath, targetDbPath);
+            const stats = await mergeSqliteDatabase(sourceDbPath, targetDbPath);
             mergeStats.push(stats);
           }
         }
@@ -10425,7 +10979,7 @@ storageCommand
         throw new Error("Invalid --mode value. Expected one of: safe, keep-target, keep-source.");
       }
 
-      const mergeStats = mergeSqliteDatabase(sourcePath, targetPath, {
+      const mergeStats = await mergeSqliteDatabase(sourcePath, targetPath, {
         mode,
         dryRun: opts.dryRun === true,
       });
@@ -10614,6 +11168,10 @@ backupCommand
     const manifest: Record<string, unknown> = {
       version: "1.0",
       created_at: new Date().toISOString(),
+      // How the DB was captured. "vacuum_into" snapshots are atomic and carry no
+      // separate -wal; older "file_copy" backups (pre-#2075) may include one and
+      // are still restorable by the restore command.
+      db_snapshot_method: "vacuum_into",
       contents: {} as Record<string, string>,
       checksums: {} as Record<string, string>,
       encrypted: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",
@@ -10623,19 +11181,60 @@ backupCommand
     const contents = manifest.contents as Record<string, string>;
     const checksums = manifest.checksums as Record<string, string>;
 
-    // Copy SQLite DB using file copy (better-sqlite3 backup API requires the DB instance)
+    // Snapshot the SQLite DB with VACUUM INTO — an ATOMIC, transaction-consistent
+    // copy taken through the database engine.
+    //
+    // This MUST NOT go back to copying the DB and its -wal as two separate
+    // fs.copyFile calls (#2075). Those two files are a matched pair describing one
+    // logical state; copying them at different instants captures two different
+    // states, and any write committing in between leaves the WAL's frame checksums
+    // invalid against the main file's header. Restoring such a pair fails with
+    // SQLITE_CORRUPT ("database disk image is malformed") — not stale data, an
+    // unopenable file. On a live server, writes between the two copies are the
+    // normal case, so the old path silently produced unrestorable backups and
+    // still reported verified: true.
+    //
+    // VACUUM INTO emits a single self-contained file with the WAL already applied,
+    // so there is no -wal (or -shm) to copy and no checkpoint to remember.
     let dbCopied = false;
     try {
       await fs.access(sqlitePath);
       const destDb = path.join(backupDir, path.basename(sqlitePath));
-      await fs.copyFile(sqlitePath, destDb);
 
-      // Verify the copy: file must exist and be > 1KB (minimum viable SQLite)
-      const destStat = await fs.stat(destDb);
-      if (destStat.size < 1024) {
+      let sourceDb: AsyncSqliteDatabase | null = null;
+      try {
+        sourceDb = new AsyncSqliteDatabase(sqlitePath);
+        // VACUUM INTO refuses to overwrite, so the destination must not exist.
+        await fs.rm(destDb, { force: true });
+        await sourceDb.exec(`VACUUM INTO ${quoteSqliteStringLiteral(destDb)}`);
+      } finally {
+        await sourceDb?.close().catch(() => {});
+      }
+
+      // Verify the snapshot is a usable database, not merely a plausible-sized file.
+      // The old >1KB check passed happily on corrupt output, which is what made the
+      // #2075 failure silent.
+      let integrityOk = false;
+      let integrityDetail = "unknown";
+      let verifyDb: AsyncSqliteDatabase | null = null;
+      try {
+        verifyDb = new AsyncSqliteDatabase(destDb);
+        const rows = (await verifyDb.pragma("integrity_check")) as Array<Record<string, unknown>>;
+        const first = rows?.[0];
+        const value = first ? String(Object.values(first)[0] ?? "") : "";
+        integrityOk = value === "ok";
+        integrityDetail = value || "no result";
+      } catch (err) {
+        integrityDetail = err instanceof Error ? err.message : String(err);
+      } finally {
+        await verifyDb?.close().catch(() => {});
+      }
+
+      if (!integrityOk) {
         writeCliError(
-          `Backup verification failed: copied DB is only ${destStat.size} bytes (expected > 1024). ` +
-            "The source DB may be locked or empty."
+          `Backup verification failed: integrity_check on the snapshot returned "${integrityDetail}" ` +
+            '(expected "ok"). The backup is NOT usable and has been left in place for inspection at ' +
+            destDb
         );
         process.exitCode = 1;
         return;
@@ -10648,19 +11247,14 @@ backupCommand
       const dbBuf = await fs.readFile(destDb);
       checksums[path.basename(sqlitePath)] =
         "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-
-      // WAL file
-      const walPath = sqlitePath + "-wal";
-      try {
-        await fs.access(walPath);
-        await fs.copyFile(walPath, path.join(backupDir, path.basename(walPath)));
-        contents.wal = path.basename(walPath);
-      } catch {
-        // No WAL file — acceptable
-      }
-    } catch {
+    } catch (err) {
       if (!dbCopied) {
-        writeCliError("SQLite database not found or not readable at " + sqlitePath);
+        const detail = err instanceof Error ? `: ${err.message}` : "";
+        writeCliError(
+          "SQLite database not found, not readable, or could not be snapshotted at " +
+            sqlitePath +
+            detail
+        );
         process.exitCode = 1;
         return;
       }
@@ -12103,6 +12697,62 @@ devCommand
 const entitiesCommand = program.command("entities").description("Entity commands");
 const sourcesCommand = program.command("sources").description("Source commands");
 const observationsCommand = program.command("observations").description("Observation commands");
+const relationshipTypesCommand = program
+  .command("relationship-types")
+  .description("Discover and register relationship types");
+relationshipTypesCommand
+  .command("list")
+  .option("--keyword <text>", "Filter names and descriptions")
+  .option("--scope <scope>", "Filter user or global scope")
+  .option("--include-edge-count", "Include counts of written edge rows")
+  .action(async (opts) => {
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/list_relationship_types", {
+      body: {
+        keyword: opts.keyword,
+        scope: opts.scope,
+        include_edge_counts: opts.includeEdgeCount,
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
+relationshipTypesCommand
+  .command("register")
+  .requiredOption("--relationship-type <type>", "Type to register")
+  .option("--description <text>", "Meaning of the edge")
+  .option("--scope <scope>", "user or global (global requires explicit permission)", "user")
+  .option("--acyclic", "Refuse cycles for this type")
+  .option("--inverse <type>", "Advisory inverse type")
+  .option("--symmetric", "Advisory symmetry")
+  .option("--source-entity-types <types>", "Comma-separated advisory source types")
+  .option("--target-entity-types <types>", "Comma-separated advisory target types")
+  .action(async (opts) => {
+    if (!["user", "global"].includes(opts.scope)) throw new Error("--scope must be user or global");
+    const config = await readConfig();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token: await getCliToken(),
+    });
+    const { data, error } = await api.POST("/register_relationship_type", {
+      body: {
+        relationship_type: opts.relationshipType,
+        description: opts.description,
+        scope: opts.scope,
+        acyclic: opts.acyclic,
+        inverse: opts.inverse,
+        symmetric: opts.symmetric,
+        source_entity_types: opts.sourceEntityTypes?.split(","),
+        target_entity_types: opts.targetEntityTypes?.split(","),
+      },
+    });
+    if (error) throw cliApiError(error);
+    writeOutput(data, resolveOutputMode());
+  });
 const relationshipsCommand = program.command("relationships").description("Relationship commands");
 const timelineCommand = program.command("timeline").description("Timeline commands");
 const schemasCommand = program.command("schemas").description("Schema commands");
@@ -12116,7 +12766,15 @@ entitiesCommand
   .option("--search <query>", "Search by canonical name")
   .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
-  .option("--offset <n>", "Offset", "0")
+  .option(
+    "--offset <n>",
+    "Deprecated in favor of --cursor: offset paging re-scans every prior row, so deep pages are slow. Rejected above 2000. Cannot be combined with --cursor.",
+    "0"
+  )
+  .option(
+    "--cursor <token>",
+    "Opaque pagination cursor from a previous response's next_cursor. Pages in constant time regardless of depth. Only valid with the default entity_id sort; cannot be combined with --offset or --search."
+  )
   .option("--include-merged", "Include merged entities")
   .option(
     "--since <iso>",
@@ -12148,6 +12806,7 @@ entitiesCommand
       userId?: string;
       limit?: string;
       offset?: string;
+      cursor?: string;
       includeMerged?: boolean;
       since?: string;
       updatedSince?: string;
@@ -12208,13 +12867,39 @@ entitiesCommand
     const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
     const updatedSince = opts.updatedSince ?? opts.since;
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
+
+    // #1943: cursor and offset are mutually exclusive. `--offset` carries a "0"
+    // default, so "was it supplied?" has to come from Commander's option source
+    // rather than the value — otherwise the default would look like a real offset
+    // on every cursor call. Reject the combination here rather than silently
+    // dropping one: quietly ignoring an explicit --offset would hand back a page
+    // the caller didn't ask for, which is the mistake the server-side rule exists
+    // to surface.
+    const offsetWasSupplied = cmd.getOptionValueSource("offset") === "cli";
+    if (opts.cursor && offsetWasSupplied) {
+      // Structured, not a bare Error: every other rejection this feature adds
+      // (INVALID_CURSOR, the offset-depth and snapshot-page caps, the server-side
+      // cursor+offset check) carries a machine-readable `code`. An agent driving
+      // `--json` and branching on `hint.code` — which the MCP/REST docs teach it
+      // to do — must get the same contract here rather than prose on stderr.
+      throw new CliHintError(
+        "--cursor and --offset cannot be combined; use one or the other. " +
+          "Prefer --cursor: it pages in constant time at any depth.",
+        {
+          code: "CURSOR_OFFSET_CONFLICT",
+          message: "cursor and offset are mutually exclusive ways to say where to start",
+          hint: "Drop --offset and page with --cursor: read next_cursor from the previous response and pass it back.",
+        }
+      );
+    }
+
     const { data, error, response } = await api.POST("/entities/query", {
       body: {
         entity_type: entityType,
         search: opts.search,
         user_id: effectiveUserId,
         limit: Number(opts.limit ?? "100"),
-        offset: Number(opts.offset ?? "0"),
+        ...(opts.cursor ? { cursor: opts.cursor } : { offset: Number(opts.offset ?? "0") }),
         include_merged: Boolean(opts.includeMerged),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
         ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
@@ -12230,6 +12915,20 @@ entitiesCommand
         ? `Failed to list entities: ${status} ${detail}`
         : `Failed to list entities: ${detail}`;
       if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+      // #1943: preserve the server's structured error rather than flattening it
+      // to prose. The server sends `error_code` + `details.hint` (e.g.
+      // INVALID_CURSOR); throwing a bare Error drops both, so an agent paging
+      // with --json sees no `hint.code` AND no `next_cursor` — and a recovery
+      // loop that branches on those reads a REJECTED cursor as a COMPLETED
+      // walk, silently processing a partial dataset and reporting success.
+      const serverCode = errorCodeOf(error);
+      if (serverCode) {
+        throw new CliHintError(msg, {
+          code: serverCode,
+          message: detail,
+          ...(hintOf(error) ? { hint: hintOf(error) } : {}),
+        });
+      }
       throw new Error(msg);
     }
     writeOutput(data, outputMode);
@@ -12895,6 +13594,58 @@ sourcesCommand
   });
 
 sourcesCommand
+  .command("content")
+  .description(
+    "Print a source's raw byte content to stdout. `sources get` returns only the entity's " +
+      "metadata (hash, filename, mime type) — this command downloads and prints the actual " +
+      "bytes via GET /sources/:id/content, e.g. to review a script attachment before " +
+      "`neotoma skills sync --approve-scripts`."
+  )
+  .argument("[id]", "Source ID (or use --source-id)")
+  .option("--source-id <id>", "Source ID (alternative to positional argument)")
+  .action(async (idArg: string | undefined, opts: { sourceId?: string }) => {
+    const id = opts.sourceId ?? idArg;
+    if (!id) throw new Error("Source ID is required (positional argument or --source-id)");
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { downloadSourceBytes } = await import("./instance_skills_client.js");
+    let bytes: Buffer;
+    try {
+      bytes = await downloadSourceBytes(api, id);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to get source content: ${detail}`);
+    }
+    if (outputMode === "json") {
+      process.stdout.write(
+        JSON.stringify({
+          id,
+          size: bytes.length,
+          is_utf8: isUtf8(bytes),
+          content_base64: bytes.toString("base64"),
+        }) + "\n"
+      );
+      return;
+    }
+    // These are meant to be text (scripts, docs), but content is graph-supplied and
+    // therefore untrusted — warn on stderr rather than spewing raw control bytes to a
+    // tty if it isn't valid UTF-8. Bytes are still written to stdout either way so
+    // piping to a file or pager (`neotoma sources content <id> > out.bin`) always works.
+    if (!isUtf8(bytes)) {
+      process.stderr.write(
+        `neotoma: warning: source ${id} content is not valid UTF-8 text; ` +
+          `writing raw bytes to stdout anyway (redirect to a file if your terminal misbehaves)\n`
+      );
+    }
+    process.stdout.write(bytes);
+  });
+
+sourcesCommand
   .command("list")
   .description("List sources")
   .option("--search <query>", "Search by filename or ID")
@@ -13206,15 +13957,7 @@ relationshipsCommand
       const effectiveUserId = resolveEffectiveUserId(opts.userId);
       const { data, error } = await api.POST("/relationships/snapshot", {
         body: {
-          relationship_type: relationshipType as
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS",
+          relationship_type: relationshipType,
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
@@ -13619,11 +14362,34 @@ schemasCommand
     "--remove-fields <json>",
     "JSON array of field names to remove (triggers major version bump; data preserved in observations)"
   )
+  .option(
+    "--canonical-name-fields <json>",
+    'JSON array replacing the identity rule, e.g. \'[{"composite":["linkedin_url"]},"email","name"]\' (triggers major version bump; existing reducer_config preserved; governs new writes only)'
+  )
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
   .option("--schema-version <version>", "New schema version (auto-increments if not provided)")
-  .option("--user-specific", "Create user-specific schema variant", false)
+  // #2374: no default. Omitted, the request carries no user_specific and the
+  // server writes to whichever scope your schema resolves to (your user
+  // override if you have one, else global). A `false` default here sent an
+  // explicit "global" on every CLI call, so the CLI never got that behavior.
+  .option(
+    "--user-specific",
+    "Write to your user-specific schema variant (omit to write to the scope your schema resolves to)"
+  )
+  .option(
+    "--no-user-specific",
+    "Write to the global schema, even if you have a user-specific variant"
+  )
+  // #2197: `force` bypasses the entity-type naming lints (test-artifact
+  // pattern, plural heuristic) only. It is declared on MCP and REST; the CLI
+  // is the surface a user is on when the guard's error says "pass force".
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -13631,11 +14397,13 @@ schemasCommand
         entityType?: string;
         fields?: string;
         removeFields?: string;
+        canonicalNameFields?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
         schemaVersion?: string;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -13648,8 +14416,20 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields && !opts.removeFields) {
-        throw new Error("at least one of --fields or --remove-fields is required");
+      if (!opts.fields && !opts.removeFields && !opts.canonicalNameFields) {
+        throw new Error(
+          "at least one of --fields, --remove-fields, or --canonical-name-fields is required"
+        );
+      }
+      let canonicalNameFields: unknown[] | undefined;
+      if (opts.canonicalNameFields) {
+        const parsed = JSON.parse(opts.canonicalNameFields);
+        if (!Array.isArray(parsed)) {
+          throw new Error(
+            '--canonical-name-fields must be a JSON array, e.g. \'[{"composite":["linkedin_url"]},"name"]\''
+          );
+        }
+        canonicalNameFields = parsed;
       }
       let fieldsToAdd: any[] | undefined;
       if (opts.fields) {
@@ -13662,6 +14442,7 @@ schemasCommand
             field_type: def.type ?? "string",
             required: def.required ?? false,
             reducer_strategy: def.reducer,
+            reducer_key_field: def.reducer_key_field,
           }));
         }
       }
@@ -13719,6 +14500,7 @@ schemasCommand
             activate: true,
             user_id: opts.userId,
             user_specific: opts.userSpecific,
+            force: opts.force,
           },
         });
         if (error) throw new Error("Failed to update schema");
@@ -13747,10 +14529,12 @@ schemasCommand
         migrate_existing: opts.migrateExisting,
         schema_version: opts.schemaVersion,
         user_specific: opts.userSpecific,
+        force: opts.force,
       };
       if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
+      if (canonicalNameFields) body.canonical_name_fields = canonicalNameFields;
       const { data, error } = await api.POST("/update_schema_incremental", {
         body: body as any,
       });
@@ -13787,6 +14571,11 @@ schemasCommand
   .option("--activate", "Activate schema immediately", false)
   .option("--migrate-existing", "Migrate existing data", false)
   .option("--user-specific", "Create user-specific schema", false)
+  .option(
+    "--force",
+    "Bypass the entity-type naming guards (test-artifact pattern, plural heuristic)",
+    false
+  )
   .action(
     async (
       entityTypeArg: string | undefined,
@@ -13799,6 +14588,7 @@ schemasCommand
         activate?: boolean;
         migrateExisting?: boolean;
         userSpecific?: boolean;
+        force?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -13827,6 +14617,7 @@ schemasCommand
           activate: opts.activate,
           user_id: opts.userId,
           user_specific: opts.userSpecific,
+          force: opts.force,
         },
       });
       if (error) throw new Error("Failed to register schema");
@@ -14299,9 +15090,14 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
+  .option(
+    "--data-origin <json>",
+    'Where the entities came from (#2242), e.g. \'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}\'. ' +
+      "Applies to every entity; an entity's own data_origin key overrides it. A claim, not proof."
+  )
   .option(
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
@@ -14336,6 +15132,7 @@ program
     let entities: unknown;
     let fileRelationships: unknown[] | undefined;
     let fileIdempotencyKey: string | undefined;
+    let fileDataOrigin: unknown;
     if (opts.entities) {
       entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
@@ -14348,6 +15145,9 @@ program
         }
         if (typeof envelope.idempotency_key === "string") {
           fileIdempotencyKey = envelope.idempotency_key;
+        }
+        if (envelope.data_origin !== undefined) {
+          fileDataOrigin = envelope.data_origin;
         }
         if (Array.isArray(envelope.entities)) {
           entities = envelope.entities;
@@ -14429,6 +15229,13 @@ program
         structuredBody.observation_source = normalizeObservationSourceFlag(
           opts.observationSource as string
         );
+      }
+      const dataOrigin =
+        opts.dataOrigin !== undefined
+          ? parseDataOriginFlag(opts.dataOrigin as string)
+          : fileDataOrigin;
+      if (dataOrigin !== undefined) {
+        structuredBody.data_origin = dataOrigin;
       }
       if (opts.file && !hasUnstructured) {
         const resolvedFile = path.isAbsolute(opts.file)
@@ -14552,7 +15359,7 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option(
     "--source-upload",
@@ -14776,7 +15583,7 @@ program
     ];
 
     const relationships: Array<{
-      relationship_type: "PART_OF" | "REFERS_TO";
+      relationship_type: string;
       source_index: number;
       target_index: number;
     }> = [
@@ -14838,7 +15645,7 @@ program
           const { storeRawContent } = await import("../services/raw_storage.js");
           const { ensureLocalDevUser } = await import("../services/local_auth.js");
 
-          const userRow = ensureLocalDevUser();
+          const userRow = await ensureLocalDevUser();
           const userId = userRow.id;
 
           const idempotencyKey =
@@ -15188,6 +15995,8 @@ correctionsCommand
   .option("--corrected-value <value>", "Corrected value (required)")
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .option("--expected-version <version>", "Entity version read from the current snapshot")
+  .option("--overwrite", "Apply even when --expected-version is stale")
   .action(
     async (
       entityIdArg: string | undefined,
@@ -15198,6 +16007,8 @@ correctionsCommand
         correctedValue?: string;
         userId?: string;
         idempotencyKey?: string;
+        expectedVersion?: string;
+        overwrite?: boolean;
       }
     ) => {
       const outputMode = resolveOutputMode();
@@ -15212,26 +16023,257 @@ correctionsCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
+      let entityType = opts.entityType;
+      if (!entityType) {
+        const {
+          data: entityData,
+          error: entityError,
+          response: entityResponse,
+        } = await api.GET("/entities/{id}", {
+          params: { path: { id: entityId }, query: { user_id: opts.userId } } as any,
+        });
+        if (entityError) {
+          throw new Error(
+            `Failed to resolve entity type: ${entityResponse?.status ?? ""} ${formatApiError(entityError)}`
+          );
+        }
+        entityType = (entityData as { entity_type?: string } | undefined)?.entity_type;
+        if (!entityType) throw new Error("Entity response did not include entity_type");
+      }
       const idempotencyKey =
         opts.idempotencyKey ||
         createIdempotencyKey({ entityId, field: opts.fieldName, value: parsedCorrectedValue });
-      const { data, error } = await api.POST("/correct", {
+      const { data, error, response } = await api.POST("/correct", {
         body: {
           entity_id: entityId,
-          entity_type: opts.entityType ?? "unknown",
+          entity_type: entityType,
           field: opts.fieldName,
           value: parsedCorrectedValue,
           idempotency_key: idempotencyKey,
           user_id: opts.userId,
+          expected_version: opts.expectedVersion,
+          overwrite: opts.overwrite,
         },
       });
-      if (error) throw new Error("Failed to create correction");
+      if (error) {
+        const envelope = error as unknown as {
+          error_code?: string;
+          message?: string;
+          details?: Record<string, unknown>;
+        };
+        if (response?.status === 409) {
+          writeOutput(
+            {
+              success: false,
+              status: "conflict",
+              error_code: envelope.error_code ?? "ERR_FIELD_VERSION_CONFLICT",
+              entity_id: entityId,
+              field: opts.fieldName,
+              stored_version: envelope.details?.stored_version ?? null,
+              expected_version: envelope.details?.expected_version ?? opts.expectedVersion ?? null,
+              hint: envelope.details?.hint ?? null,
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        if (envelope.error_code === "ERR_IDEMPOTENCY_MISMATCH") {
+          writeOutput(
+            {
+              success: false,
+              status: "error",
+              error_code: envelope.error_code,
+              message: envelope.message,
+              details: envelope.details ?? {},
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        throw new Error(
+          `Failed to create correction: ${response?.status ?? ""} ${formatApiError(error)}`
+        );
+      }
       const result = data as any;
-      const correctionId = result?.observation?.id ?? result?.correction_id ?? idempotencyKey;
       writeOutput(
-        { correction_id: correctionId, entity_id: entityId, success: result?.success ?? true },
+        {
+          success: result?.success ?? true,
+          status: "applied",
+          observation_id: result?.observation_id,
+          correction_id: result?.observation_id ?? result?.correction_id ?? idempotencyKey,
+          entity_id: entityId,
+          entity_type: entityType,
+          field: opts.fieldName,
+          value: result?.value,
+          entity_version: result?.entity_version,
+          replayed: result?.replayed ?? false,
+        },
         outputMode
       );
+    }
+  );
+
+// ---------------------------------------------------------------------------
+// neotoma array-item patch
+//
+// Atomic keyed-item patch for structured array fields (Waxwing ADR,
+// ent_4b41bb83a4faf4428a73bfc8). Replaces the read-modify-full-array-write
+// anti-pattern: instead of fetching the entity, editing one row of an array
+// field locally, and writing the whole array back (which can silently
+// discard a concurrent writer's disjoint row), this patches one row
+// server-side atomically.
+// ---------------------------------------------------------------------------
+const arrayItemCommand = program
+  .command("array-item")
+  .description("Structured array field commands");
+
+arrayItemCommand
+  .command("patch")
+  .description(
+    "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write"
+  )
+  .argument("<entityId>", "Entity ID to patch")
+  .argument("<entityType>", "Entity type")
+  .argument("<field>", "Name of the array field to patch")
+  .argument("<keyField>", "Name of the field on each item that identifies it")
+  .argument("<keyValue>", "Value of keyField identifying the item to patch")
+  .option(
+    "--item-json <json>",
+    "JSON object of fields to set on the item (merged onto the existing item, or used to create it)"
+  )
+  .option(
+    "--expected-item-version <version>",
+    "Content-hash version of the item as last observed (from a prior patch's item_version). Stale value refuses with a conflict instead of overwriting."
+  )
+  .option(
+    "--expected-item-absent",
+    "Create only when no item with this key exists; concurrent creators yield one conflict"
+  )
+  .option("--user-id <userId>", "User ID")
+  .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
+  .action(
+    async (
+      entityId: string,
+      entityType: string,
+      field: string,
+      keyField: string,
+      keyValueArg: string,
+      opts: {
+        itemJson?: string;
+        expectedItemVersion?: string;
+        expectedItemAbsent?: boolean;
+        userId?: string;
+        idempotencyKey?: string;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const parsedKeyValue = parseCliCorrectedValue(keyValueArg);
+      if (
+        typeof parsedKeyValue !== "string" &&
+        typeof parsedKeyValue !== "number" &&
+        typeof parsedKeyValue !== "boolean"
+      ) {
+        throw new Error("keyValue must be a non-null JSON scalar (string, number, or boolean)");
+      }
+      const keyValue = parsedKeyValue;
+      let item: Record<string, unknown> = {};
+      if (opts.itemJson) {
+        try {
+          const parsed = JSON.parse(opts.itemJson);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("must be a JSON object");
+          }
+          item = parsed as Record<string, unknown>;
+        } catch (err) {
+          throw new Error(
+            `Invalid --item-json: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const idempotencyKey =
+        opts.idempotencyKey || createIdempotencyKey({ entityId, field, keyField, keyValue, item });
+
+      const { data, error, response } = await api.POST("/patch_array_item", {
+        body: {
+          entity_id: entityId,
+          entity_type: entityType,
+          field,
+          key_field: keyField,
+          key_value: keyValue,
+          item,
+          expected_item_version: opts.expectedItemVersion,
+          expected_item_absent: opts.expectedItemAbsent,
+          idempotency_key: idempotencyKey,
+          user_id: opts.userId,
+        },
+      });
+
+      if (error) {
+        const status = response?.status;
+        const envelope = error as unknown as {
+          error_code?: string;
+          message?: string;
+          details?: Record<string, unknown>;
+        };
+        if (status === 409) {
+          // Standard envelope shape (buildErrorEnvelope): { error_code,
+          // message, details, trace_id, timestamp } at the top level — NOT
+          // nested under an `error` key. See docs/subsystems/errors.md
+          // "Standard envelope".
+          const body = error as unknown as { details?: Record<string, unknown> };
+          const details = body?.details ?? {};
+          writeOutput(
+            {
+              success: false,
+              status: "conflict",
+              entity_id: entityId,
+              field,
+              key_field: keyField,
+              key_value: keyValue,
+              current_item: details.current_item ?? null,
+              current_item_version: details.current_item_version ?? null,
+              expected_item_version: details.expected_item_version ?? null,
+            },
+            outputMode
+          );
+          if (outputMode !== "json") {
+            process.stderr.write(
+              warn(
+                `Conflict: item ${keyField}=${JSON.stringify(keyValue)} changed since expected_item_version was read. ` +
+                  `Re-read current_item, re-apply your change, and retry with the new item_version.\n`
+              )
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+        if (envelope.error_code === "ERR_IDEMPOTENCY_MISMATCH") {
+          writeOutput(
+            {
+              success: false,
+              status: "error",
+              error_code: envelope.error_code,
+              message: envelope.message,
+              details: envelope.details ?? {},
+            },
+            outputMode
+          );
+          process.exitCode = 1;
+          return;
+        }
+        throw new Error(`Failed to patch array item: ${status ?? ""} ${formatApiError(error)}`);
+      }
+
+      writeOutput({ success: true, status: "applied", ...data }, outputMode);
     }
   );
 
@@ -15776,7 +16818,7 @@ snapshotsCommand
   )
   .option(
     "--observation-source <kind>",
-    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync (custom v0.17 values → use data_source)"
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync | unspecified (custom v0.17 values → use data_source)"
   )
   .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
   .option("--limit <n>", "Cap on returned entities (default: 500)")
@@ -15911,6 +16953,10 @@ program
   .option("--body <json>", "JSON body override")
   .option("--query <json>", "JSON query override")
   .option("--path <json>", "JSON path override")
+  .option(
+    "--guest-access-token <token>",
+    "Authenticate this request with an entity-scoped guest access token instead of the configured credential"
+  )
   .option("--skip-auth", "Skip auth token for public endpoints")
   .option(
     "--aauth",
@@ -15928,16 +16974,32 @@ program
     }
 
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    if (opts.guestAccessToken && (opts.skipAuth || opts.aauth)) {
+      throw new Error("--guest-access-token cannot be combined with --skip-auth or --aauth");
+    }
     // --aauth: drop the bearer so the AAuth request signature is the sole
     // credential. A bearer Authorization header otherwise takes precedence and
     // the request lands under the bearer's identity rather than the agent's.
-    const token = opts.skipAuth || opts.aauth ? undefined : await getCliToken();
+    if (opts.aauth) {
+      const { loadCliSignerConfig } = await import("./aauth_signer.js");
+      const signerConfig = await loadCliSignerConfig();
+      if (!signerConfig) {
+        throw new Error(
+          "No AAuth CLI keypair found (~/.neotoma/aauth/private.jwk or NEOTOMA_AAUTH_PRIVATE_JWK_PATH). " +
+            "Run `neotoma auth keygen` once, then retry. `--aauth` must not fall back to an unsigned request."
+        );
+      }
+    }
+    const token =
+      opts.skipAuth || opts.aauth ? undefined : opts.guestAccessToken || (await getCliToken());
     const api = createApiClient({
       baseUrl,
       token,
       // AAuth signing rides the HTTP transport, so force it over the in-process
       // local transport (which would bypass the signature).
-      ...(opts.aauth ? { signWithCliAAuth: true, forceHttpTransport: true } : {}),
+      ...(opts.aauth
+        ? { signWithCliAAuth: true, forceHttpTransport: true, requireCliAAuth: true }
+        : {}),
     });
 
     const params = parseOptionalJson(opts.params);
@@ -15964,6 +17026,48 @@ program
       };
     }
 
+    if (operation.path === "/events/stream") {
+      if (opts.aauth) {
+        throw new Error("eventsStream does not support --aauth; use bearer authentication");
+      }
+      const url = new URL(operation.path, baseUrl);
+      const queryParams = (requestParams.params as { query?: Record<string, unknown> } | undefined)
+        ?.query;
+      for (const [key, value] of Object.entries(queryParams ?? {})) {
+        if (Array.isArray(value)) {
+          for (const item of value) url.searchParams.append(key, String(item));
+        } else if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/event-stream",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        const error = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+        throw new Error("Request failed: " + formatRequestError(error));
+      }
+      if (!response.body) {
+        throw new Error("eventsStream response did not include a stream body");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        process.stdout.write(decoder.decode(value, { stream: true }));
+      }
+      const trailing = decoder.decode();
+      if (trailing) process.stdout.write(trailing);
+      return;
+    }
+
     const method = operation.method.toUpperCase();
     const handler = (api as unknown as Record<string, unknown>)[method] as
       | ((
@@ -15981,7 +17085,7 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      throw new Error("Request failed: " + formatApiError(error));
+      throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);
   });
@@ -16364,43 +17468,45 @@ async function getLocalIntroStats(
     return null;
   }
   type DbInstance = {
-    close: () => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => { "count(*)": number } | undefined };
-    pragma: (s: string) => void;
+    close: () => Promise<void>;
+    prepare: (sql: string) => {
+      get: (...args: unknown[]) => Promise<{ "count(*)": number } | undefined>;
+    };
+    pragma: (s: string) => Promise<unknown[]>;
   };
   try {
-    const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-    const db = new Database(dbPath) as unknown as DbInstance;
-    db.pragma("busy_timeout = 2000");
-    const getCount = (sql: string, ...args: unknown[]): number => {
-      const row = db.prepare(sql).get(...args) as { "count(*)": number } | undefined;
+    const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+    const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+    await db.pragma("busy_timeout = 2000");
+    const getCount = async (sql: string, ...args: unknown[]): Promise<number> => {
+      const row = (await db.prepare(sql).get(...args)) as { "count(*)": number } | undefined;
       return row != null && typeof row["count(*)"] === "number" ? row["count(*)"] : 0;
     };
-    const entities = getCount(
+    const entities = await getCount(
       "SELECT count(*) FROM entities WHERE user_id = ? AND merged_to_entity_id IS NULL",
       userId
     );
-    const relationships = getCount(
+    const relationships = await getCount(
       "SELECT count(*) FROM relationship_snapshots WHERE user_id = ?",
       userId
     );
-    const sources = getCount("SELECT count(*) FROM sources WHERE user_id = ?", userId);
-    const events = getCount(
+    const sources = await getCount("SELECT count(*) FROM sources WHERE user_id = ?", userId);
+    const events = await getCount(
       "SELECT count(*) FROM timeline_events WHERE source_id IN (SELECT id FROM sources WHERE user_id = ?)",
       userId
     );
     let observations = 0;
     let interpretations = 0;
     try {
-      observations = getCount("SELECT count(*) FROM observations WHERE user_id = ?", userId);
-      interpretations = getCount(
+      observations = await getCount("SELECT count(*) FROM observations WHERE user_id = ?", userId);
+      interpretations = await getCount(
         "SELECT count(*) FROM interpretations WHERE source_id IN (SELECT id FROM sources WHERE user_id = ?)",
         userId
       );
     } catch {
       // observations or interpretations table may not exist in older DBs
     }
-    db.close();
+    await db.close();
     return {
       total_entities: entities,
       total_relationships: relationships,
@@ -16434,29 +17540,29 @@ async function getEntityFromLocalDb(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    pragma: (sql: string) => void;
+    close: () => Promise<void>;
+    pragma: (sql: string) => Promise<unknown[]>;
     prepare: (sql: string) => {
-      get: (...args: unknown[]) => Row | undefined;
-      all: (...args: unknown[]) => Row[];
+      get: (...args: unknown[]) => Promise<Row | undefined>;
+      all: (...args: unknown[]) => Promise<Row[]>;
     };
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   try {
-    const entity = db
+    const entity = (await db
       .prepare(
         "SELECT id, entity_type, canonical_name, merged_to_entity_id FROM entities WHERE id = ? AND user_id = ?"
       )
-      .get(entityId, userId) as Row | undefined;
+      .get(entityId, userId)) as Row | undefined;
     if (!entity) return null;
     const resolvedId = (entity.merged_to_entity_id as string) || entityId;
     let snapshot: Record<string, unknown> | null = null;
     try {
-      const snap = db
+      const snap = (await db
         .prepare("SELECT snapshot FROM entity_snapshots WHERE entity_id = ? AND user_id = ?")
-        .get(resolvedId, userId) as { snapshot?: unknown } | undefined;
+        .get(resolvedId, userId)) as { snapshot?: unknown } | undefined;
       if (snap?.snapshot && typeof snap.snapshot === "object" && !Array.isArray(snap.snapshot)) {
         snapshot = snap.snapshot as Record<string, unknown>;
       }
@@ -16470,7 +17576,7 @@ async function getEntityFromLocalDb(
       ...(snapshot ? { snapshot } : {}),
     };
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
@@ -16494,20 +17600,20 @@ async function getSourceFromLocalDb(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    pragma: (sql: string) => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => Row | undefined };
+    close: () => Promise<void>;
+    pragma: (sql: string) => Promise<unknown[]>;
+    prepare: (sql: string) => { get: (...args: unknown[]) => Promise<Row | undefined> };
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   try {
-    const source = db
+    const source = (await db
       .prepare("SELECT * FROM sources WHERE id = ? AND user_id = ?")
-      .get(sourceId, userId) as Row | undefined;
+      .get(sourceId, userId)) as Row | undefined;
     return source ?? null;
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
@@ -16531,27 +17637,27 @@ async function getRelationshipFromLocalDb(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    pragma: (sql: string) => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => Row | undefined };
+    close: () => Promise<void>;
+    pragma: (sql: string) => Promise<unknown[]>;
+    prepare: (sql: string) => { get: (...args: unknown[]) => Promise<Row | undefined> };
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   try {
-    const snapshot = db
+    const snapshot = (await db
       .prepare("SELECT * FROM relationship_snapshots WHERE relationship_key = ? AND user_id = ?")
-      .get(relationshipKey, userId) as Row | undefined;
+      .get(relationshipKey, userId)) as Row | undefined;
     if (snapshot) return snapshot;
 
-    const lastObservation = db
+    const lastObservation = (await db
       .prepare(
         "SELECT relationship_key, relationship_type, source_entity_id, target_entity_id, observed_at, created_at, source_id, interpretation_id, user_id FROM relationship_observations WHERE relationship_key = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1"
       )
-      .get(relationshipKey, userId) as Row | undefined;
+      .get(relationshipKey, userId)) as Row | undefined;
     return lastObservation ?? null;
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
@@ -16580,13 +17686,13 @@ async function getLastNWatchEntries(
   }
   type Row = Record<string, unknown>;
   type DbInstance = {
-    close: () => void;
-    prepare: (sql: string) => { all: (...args: unknown[]) => Row[] };
-    pragma: (s: string) => void;
+    close: () => Promise<void>;
+    prepare: (sql: string) => { all: (...args: unknown[]) => Promise<Row[]> };
+    pragma: (s: string) => Promise<unknown[]>;
   };
-  const { default: Database } = await import("../repositories/sqlite/sqlite_driver.js");
-  const db = new Database(dbPath) as unknown as DbInstance;
-  db.pragma("busy_timeout = 2000");
+  const { AsyncSqliteDatabase } = await import("../repositories/sqlite/sqlite_driver.js");
+  const db = new AsyncSqliteDatabase(dbPath) as unknown as DbInstance;
+  await db.pragma("busy_timeout = 2000");
   const merged: { table: string; ts: string; id: string; row: Row }[] = [];
   try {
     for (const { table, idCol, tsCol, userFilter } of WATCH_ENTRY_TABLE_DEFS) {
@@ -16597,7 +17703,7 @@ async function getLastNWatchEntries(
             : "user_id = ?";
         const perTable = Math.max(5, Math.ceil(limit / WATCH_ENTRY_TABLE_DEFS.length) + 2);
         const sql = `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${userClause} ORDER BY ${tsCol} DESC LIMIT ${perTable}`;
-        const rows = db.prepare(sql).all(userId) as Row[];
+        const rows = (await db.prepare(sql).all(userId)) as Row[];
         for (const row of rows) {
           const ts = String(row[tsCol] ?? "");
           const id = String(row[idCol] ?? "");
@@ -16631,20 +17737,24 @@ async function getLastNWatchEntries(
       const ph = Array.from(entityIds)
         .map(() => "?")
         .join(",");
-      const entityRows = db
+      const entityRows = (await db
         .prepare(
           `SELECT id, entity_type, canonical_name FROM entities WHERE id IN (${ph}) AND user_id = ?`
         )
-        .all(...entityIds, userId) as { id: string; entity_type: string; canonical_name: string }[];
+        .all(...entityIds, userId)) as {
+        id: string;
+        entity_type: string;
+        canonical_name: string;
+      }[];
       for (const r of entityRows) {
         entityMeta.set(r.id, { entity_type: r.entity_type, canonical_name: r.canonical_name });
       }
       try {
-        const snapshotRows = db
+        const snapshotRows = (await db
           .prepare(
             `SELECT entity_id, snapshot FROM entity_snapshots WHERE entity_id IN (${ph}) AND user_id = ?`
           )
-          .all(...entityIds, userId) as { entity_id: string; snapshot: unknown }[];
+          .all(...entityIds, userId)) as { entity_id: string; snapshot: unknown }[];
         for (const r of snapshotRows) {
           if (r.snapshot && typeof r.snapshot === "object" && !Array.isArray(r.snapshot)) {
             entitySnapshot.set(r.entity_id, r.snapshot as Record<string, unknown>);
@@ -16716,7 +17826,7 @@ async function getLastNWatchEntries(
       return out;
     });
   } finally {
-    db.close();
+    await db.close();
   }
 }
 

@@ -494,7 +494,7 @@ Snapshot (merged):       metadata: { amount: 1500, currency: "USD", payment_meth
         id: "core-types",
         heading: "Core relationship types",
         body:
-          "PART_OF (hierarchical containment, e.g. invoice_line_item PART_OF invoice). CORRECTS (corrections supersede originals). REFERS_TO (mentions / references). SETTLES (payment settles invoice). DUPLICATE_OF (entity dedupe). DEPENDS_ON (task ordering). SUPERSEDES (versioning). EMBEDS (container embeds reusable asset, e.g. blog post EMBEDS image).",
+          "The relationship-type vocabulary is a runtime registry, not a fixed list: call list_relationship_types to read what an instance accepts, and register_relationship_type to add to it. PART_OF (hierarchical containment, e.g. invoice_line_item PART_OF invoice) and EMBEDS (container embeds reusable asset, e.g. blog post EMBEDS image) are two of the built-ins.",
       },
       {
         id: "open-ontology",
@@ -518,7 +518,7 @@ Snapshot (merged):       metadata: { amount: 1500, currency: "USD", payment_meth
     mustList: [
       "Be stored as immutable observations + a deterministically computed snapshot",
       "Carry full provenance, every metadata field traces to the observation that set it",
-      "Be typed (PART_OF / CORRECTS / REFERS_TO / SETTLES / DUPLICATE_OF / DEPENDS_ON / SUPERSEDES / EMBEDS, …)",
+      "Be typed (any type registered on the instance — read them via list_relationship_types)",
       "Respect source-ownership RLS on every read path",
     ],
     mustNotList: [

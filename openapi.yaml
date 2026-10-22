@@ -23,6 +23,446 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
+    EntityReadContract:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - surface
+        - mode
+        - applied_scope
+        - request_options
+        - coverage
+        - coherence
+        - diagnostics
+      properties:
+        version:
+          type: string
+          enum:
+            - "1"
+        surface:
+          type: string
+          enum:
+            - entity_collection
+        mode:
+          type: object
+          additionalProperties: false
+          required:
+            - actual
+            - fallback_reason
+          properties:
+            actual:
+              type: string
+              enum:
+                - structured
+                - semantic
+                - lexical_typed
+                - lexical_fallback
+            fallback_reason:
+              type: string
+              nullable: true
+              enum:
+                - not_configured
+                - embedding_unavailable
+                - no_usable_candidates
+                - filtered_candidates_exhausted
+                - unknown
+                - null
+        applied_scope:
+          type: object
+          additionalProperties: false
+          required:
+            - owner
+            - entity_types
+            - include_merged
+            - include_deleted
+            - include_snapshots
+            - predicates
+            - ordering
+            - pagination
+          properties:
+            owner:
+              type: string
+              enum:
+                - authenticated
+            entity_types:
+              type: array
+              items:
+                type: string
+            include_merged:
+              type: boolean
+            include_deleted:
+              type: boolean
+              enum:
+                - false
+            include_snapshots:
+              type: boolean
+            predicates:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - field
+                  - op
+                  - value
+                properties:
+                  field:
+                    type: string
+                  op:
+                    type: string
+                  value:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - kind
+                      - value
+                    properties:
+                      kind:
+                        type: string
+                        enum:
+                          - sha256
+                      value:
+                        type: string
+                        pattern: ^[0-9a-f]{64}$
+            ordering:
+              type: object
+              additionalProperties: false
+              required:
+                - field
+                - direction
+                - tie_breaker
+              properties:
+                field:
+                  type: string
+                direction:
+                  type: string
+                  enum:
+                    - asc
+                    - desc
+                tie_breaker:
+                  type: string
+                  nullable: true
+            pagination:
+              type: object
+              additionalProperties: false
+              required:
+                - kind
+                - limit
+                - offset
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - keyset
+                    - offset
+                limit:
+                  type: integer
+                  minimum: 1
+                offset:
+                  type: integer
+                  minimum: 0
+        request_options:
+          type: object
+          additionalProperties: false
+          required:
+            - applied
+            - normalized
+            - ignored
+          properties:
+            applied:
+              type: array
+              items:
+                type: string
+            normalized:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - name
+                  - canonical_name
+                  - reason
+                properties:
+                  name:
+                    type: string
+                  canonical_name:
+                    type: string
+                  reason:
+                    type: string
+            ignored:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - name
+                  - reason
+                properties:
+                  name:
+                    type: string
+                  reason:
+                    type: string
+        coverage:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - state
+            - reasons
+            - returned_count
+            - total
+            - page_exhausted
+            - scope_exhausted
+            - continuation
+          properties:
+            kind:
+              type: string
+              enum:
+                - predicate_population
+                - semantic_candidates
+                - lexical_candidates
+                - synthesized_groups
+            state:
+              type: string
+              enum:
+                - complete
+                - paginated
+                - truncated
+                - partial
+                - unknown
+            reasons:
+              description: Safe executing-path cause codes only. Includes semantic_backend_unavailable for an unusable vector backend and semantic_global_candidate_cap for a bounded global KNN pool; never includes provider exceptions, query text or credential values.
+              type: array
+              items:
+                type: string
+            returned_count:
+              type: integer
+              minimum: 0
+            total:
+              type: object
+              additionalProperties: false
+              required:
+                - value
+                - relation
+                - unit
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                relation:
+                  type: string
+                  enum:
+                    - exact
+                    - lower_bound
+                    - candidate_count
+                    - unknown
+                unit:
+                  type: string
+                  enum:
+                    - entities
+                    - candidates
+                    - groups
+            page_exhausted:
+              type: boolean
+            scope_exhausted:
+              type: boolean
+              nullable: true
+            continuation:
+              type: object
+              additionalProperties: false
+              required:
+                - kind
+                - next_cursor
+                - next_offset
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - cursor
+                    - none
+                    - unsupported
+                next_cursor:
+                  type: string
+                  nullable: true
+                next_offset:
+                  type: integer
+                  nullable: true
+                  minimum: 0
+        coherence:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - started_at
+            - completed_at
+            - common_view
+            - collection_and_total
+          properties:
+            kind:
+              type: string
+              enum:
+                - read_interval
+            started_at:
+              type: string
+              format: date-time
+            completed_at:
+              type: string
+              format: date-time
+            common_view:
+              type: boolean
+              enum: [false]
+            collection_and_total:
+              type: string
+              enum: [separate_acquisitions, candidate_derived]
+        diagnostics:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - code
+              - reason
+            properties:
+              code:
+                type: string
+              reason:
+                type: string
+              field:
+                type: string
+              entity_type:
+                type: string
+              suggestions:
+                type: array
+                items:
+                  type: string
+                maxItems: 3
+      description: >-
+        Additive acquisition evidence from the executing entity collection path. Ranked candidate zero,
+        ignored scope, acquisition caps or degradation cannot establish predicate-population absence.
+        Existing legacy fields retain their meaning. The read interval is not a write fence, revision
+        lease or common database view. See query_convergence and issue #2597.
+    IssuesSyncPlanIssue:
+      type: object
+      description: A GitHub issue a `/issues/sync` dry run would create or update locally.
+      additionalProperties: false
+      required: [github_number, title]
+      properties:
+        github_number:
+          type: integer
+        title:
+          type: string
+    McpRequestMeta:
+      type: object
+      description: |
+        Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+        (#2070). Operational metadata only: never persisted, never logged in full.
+      additionalProperties: true
+      properties:
+        io.modelcontextprotocol/protocolVersion:
+          type: string
+          description: Protocol version for this request. Required on the modern path.
+          example: "2026-07-28"
+        io.modelcontextprotocol/clientCapabilities:
+          type: object
+          additionalProperties: true
+          description: Client capabilities relevant to this request. Required on the modern path.
+        io.modelcontextprotocol/clientInfo:
+          type: object
+          additionalProperties: true
+          description: Self-reported client name and version (unverified; attribution fallback only).
+          properties:
+            name: { type: string }
+            version: { type: string }
+    McpJsonRpcRequest:
+      type: object
+      required: [jsonrpc, method]
+      additionalProperties: true
+      properties:
+        jsonrpc: { type: string, enum: ["2.0"] }
+        id:
+          oneOf:
+            - { type: string }
+            - { type: integer }
+        method:
+          type: string
+          description: JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy).
+        params:
+          type: object
+          additionalProperties: true
+          properties:
+            _meta: { $ref: "#/components/schemas/McpRequestMeta" }
+    McpJsonRpcResponse:
+      type: object
+      required: [jsonrpc]
+      additionalProperties: true
+      properties:
+        jsonrpc: { type: string, enum: ["2.0"] }
+        id:
+          oneOf:
+            - { type: string }
+            - { type: integer }
+            - { type: "null" }
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: integer }
+            message: { type: string }
+            data: {}
+    McpServerDiscoverResult:
+      type: object
+      description: |
+        Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+        protocol versions, this server's declared capabilities, its identity and its
+        instructions: no tenant data, no caller identity, no instance topology.
+      required: [resultType, supportedVersions, capabilities]
+      properties:
+        resultType: { type: string, enum: [complete] }
+        supportedVersions:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: object
+          additionalProperties: true
+        instructions:
+          type: string
+          description: Agent-facing MCP instructions plus this instance's declared data policy.
+        ttlMs: { type: integer }
+        cacheScope: { type: string, enum: [public, private] }
+        _meta:
+          type: object
+          additionalProperties: true
+          properties:
+            io.modelcontextprotocol/serverInfo:
+              type: object
+              properties:
+                name: { type: string }
+                version: { type: string }
+    ReadinessResult:
+      type: object
+      description: Result of the /ready database probe.
+      properties:
+        ok:
+          type: boolean
+          description: True only when the database completed the probe read.
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, failed]
+        latency_ms:
+          type: integer
+          description: >-
+            Probe duration, reported on success and failure alike. Degradation
+            is progressive, so the trend matters as much as the verdict.
+        error:
+          type: string
+          description: Failure reason. Present only when ok is false.
     FileUrlResponse:
       type: object
       properties:
@@ -49,6 +489,108 @@ components:
         timestamp:
           type: string
           format: date-time
+    RelationshipBatchErrorItem:
+      type: object
+      additionalProperties: false
+      required: [index, relationship, error]
+      description: |
+        One failed item from `create_relationships`. Batch creation retains
+        successful siblings and therefore reports item failures inside the
+        HTTP 200 response. When `code` is `capability_denied`, `op` and `hint`
+        preserve the same structured grant-repair contract as the single-item
+        endpoint and MCP adapter.
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        relationship:
+          type: object
+          additionalProperties: false
+          required: [relationship_type, source_entity_id, target_entity_id]
+          properties:
+            relationship_type:
+              type: string
+            source_entity_id:
+              type: string
+            target_entity_id:
+              type: string
+            source_id:
+              type: string
+            metadata:
+              type: object
+              additionalProperties: true
+        error:
+          type: string
+          description: Human-readable per-item failure message.
+        code:
+          type: string
+          description: Machine-readable failure code; `capability_denied` for grant refusals.
+        message:
+          type: string
+          description: Canonical structured error message when a typed error is available.
+        op:
+          type: string
+          description: Capability operation that was refused.
+        entity_type:
+          type: string
+          description: Primary endpoint entity type named by the capability denial.
+        agent_label:
+          type: string
+          description: Public-safe label for the admitted agent grant.
+        hint:
+          type: string
+          description: Actionable instructions for repairing the grant scope.
+    SchemaRegistryToolErrorResponse:
+      type: object
+      description: |
+        Nested canonical error envelope returned by schema-registry tools
+        (`update_schema_incremental`, and matching MCP tool responses) on HTTP 200
+        when the call cannot proceed. Distinct from the flat `ErrorEnvelope` used
+        by most REST routes — callers must read `error.error_code`.
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - error_code
+            - message
+          properties:
+            error_code:
+              type: string
+              enum:
+                - ERR_SCHEMA_SCOPE_MISMATCH
+                - ERR_NO_SCHEMA_FOR_ENTITY_TYPE
+                - ERR_SCHEMA_MISSING_IDENTITY_CONFIG
+              description: |
+                `ERR_SCHEMA_SCOPE_MISMATCH` — an active schema exists for the
+                entity_type, but in a different scope than this call checked
+                (`details.guard_scope` vs `details.found_scope`). Hint directs
+                the caller to retry with the correct `user_specific` and MUST
+                NOT recommend `register_schema`.
+                `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` — no schema in any scope; hint
+                recommends `register_schema`.
+            message:
+              type: string
+            hint:
+              type: string
+            details:
+              type: object
+              properties:
+                entity_type:
+                  type: string
+                guard_scope:
+                  type: string
+                  description: Scope the existence guard checked (`global` or `user`).
+                  enum: [global, user]
+                found_scope:
+                  type: string
+                  description: Scope where an active schema was found (scope-mismatch only).
+                  enum: [global, user]
+                no_schema_for_entity_type:
+                  type: boolean
+                  description: Present on genuine cold-start (`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`).
+              additionalProperties: true
     RecentConversationRelatedEntity:
       type: object
       properties:
@@ -153,6 +695,7 @@ components:
             - ERR_MERGE_REFUSED
             - ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT
             - ERR_RELATIONSHIP_ENTITY_ID_FORMAT
+            - entity_owner_conflict
         message:
           type: string
         details:
@@ -244,6 +787,44 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/StoreResolutionIssue"
+    OAuthProtectedResourceMetadata:
+      type: object
+      description: |
+        RFC 9728 §3 protected-resource metadata. Public by design — this document
+        is the unauthenticated entry point a client reads to discover where to
+        authenticate, so it contains only public server metadata and never
+        user, tenant, or credential data (#2049).
+      required:
+        - resource
+        - authorization_servers
+      properties:
+        resource:
+          type: string
+          description: |
+            The protected resource identifier clients bind their token request to
+            (the MCP endpoint, e.g. `https://host/mcp`).
+        authorization_servers:
+          type: array
+          minItems: 1
+          description: |
+            Issuers whose RFC 8414 metadata describes how to obtain a token. Never
+            empty: an empty array leaves a bootstrapping client unable to proceed,
+            which is the same dead end as a 401, one hop later.
+          items:
+            type: string
+    OAuthInvalidTokenEnvelope:
+      type: object
+      description: |
+        401 shape for an asserted-but-stale credential on a discovery endpoint.
+        Does not echo the submitted `X-Connection-Id` value. Any
+        `resource_metadata` URL named in the accompanying `WWW-Authenticate`
+        header must itself resolve 200 unauthenticated.
+      properties:
+        error:
+          type: string
+          enum: [invalid_token]
+        error_description:
+          type: string
     ConstraintViolationErrorEnvelope:
       type: object
       description: |
@@ -281,6 +862,246 @@ components:
                   message:
                     type: string
                     description: Human-readable description of the constraint violation.
+    InstancePolicy:
+      type: object
+      description: |
+        Instance-level data policy (#1974/#1975). Declares what this instance is
+        *for* and what it is allowed to hold. Instance-wide by design: a single
+        policy governs every write on the instance regardless of which
+        authenticated user issued it — the predicate evaluates the write's
+        content against the instance's stated purpose, not the caller's
+        identity. This is a deliberate, documented exception to per-user
+        scoping (`docs/subsystems/auth.md`), because an instance shared by
+        several operators must not enforce silently different rules per
+        operator.
+
+        Two layers consume this record. The advisory layer (#1974) renders it
+        into the client instructions served at connect time so a cooperating
+        agent can self-comply. The enforcement layer (#1975) evaluates it
+        server-side on every write, so a non-cooperating agent is rejected
+        regardless. Declaration improves the happy path; enforcement is the
+        guarantee.
+      properties:
+        purpose:
+          type: string
+          description: |
+            Free text: what this instance is for. Rendered verbatim into the
+            served client instructions. Operator-authored and broadcast to every
+            connecting agent, so it MUST NOT contain secrets or PII.
+        in_scope_entity_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Allow-list. When non-empty, ONLY these entity types may be written;
+            every other type is denied with `entity_type_denied`. When absent or
+            empty, no allow-list constraint applies (all types permitted subject
+            to the deny-list). An empty array is therefore NOT "deny all" — see
+            `enforcement` for how an unset policy is distinguished from an empty
+            one.
+        out_of_scope_entity_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Deny-list, evaluated after the allow-list. A type present here is
+            denied even if it also appears in `in_scope_entity_types`
+            (deny wins, so a mistaken overlap fails closed).
+        sensitivity_rules:
+          type: array
+          items:
+            type: string
+          description: |
+            Free-text minimization/lawful-basis statements rendered into the
+            served instructions. Advisory only — these strings are not parsed or
+            enforced. Machine-enforced predicates are the typed fields above
+            plus `require_lawful_basis` / `max_sensitivity_class`.
+        require_lawful_basis:
+          type: boolean
+          description: |
+            When true, a write of an entity whose schema declares
+            `person_data: true` must carry a non-empty lawful-basis field, or it
+            is denied with `pii_gate_missing_basis`. A present-but-blank value
+            is treated as missing (fails closed).
+        require_provenance:
+          type: boolean
+          description: |
+            When true, a write of a `person_data` entity must carry attribution/
+            consent metadata, or it is denied with `provenance_required`.
+        max_sensitivity_class:
+          type: string
+          nullable: true
+          enum:
+            - public
+            - internal
+            - sensitive
+            - restricted
+          description: |
+            Highest field-level `sensitivity_class` this instance will hold. A
+            field whose schema declares a class above this threshold is denied
+            with `field_sensitivity_exceeded`. Read from the schema declaration,
+            never from a hardcoded per-type list.
+        enforcement:
+          type: string
+          enum:
+            - advisory
+            - enforced
+          description: |
+            `advisory` (#1974 only): the policy is declared in the served client
+            instructions but violating writes are still accepted. `enforced`
+            (#1975): violating writes are rejected with
+            `ERR_STORE_POLICY_DENIED`. Defaults to `advisory` so that adding a
+            policy record is not itself a breaking change for existing callers;
+            an operator opts into rejection explicitly.
+        policy_id:
+          type: string
+          description: |
+            Opaque short identifier (e.g. `pol_9f2a`) echoed in denial envelopes
+            so an operator can correlate a rejection with the policy revision
+            that caused it. Deliberately opaque: it describes no policy content.
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          type: string
+          description: Opaque actor identifier. Never an email address or name.
+    InstancePolicyResponse:
+      type: object
+      required:
+        - policy
+      description: |
+        Response shape for `describe_instance_policy`. `policy` is explicitly
+        `null` when no policy is configured — never a 404 and never `{}`, so a
+        caller can distinguish "this instance has no policy" from "this instance
+        denies everything". Read-only; the call creates no observations.
+      properties:
+        policy:
+          oneOf:
+            - $ref: "#/components/schemas/InstancePolicy"
+            - type: "null"
+          description: The configured instance policy, or `null` when unset.
+        entity_id:
+          type: string
+          nullable: true
+          description: |
+            The underlying entity id of the configured policy record, or `null`
+            when no policy is configured. Exists so a remote client (e.g. the
+            CLI's `instance-policy set`) can resolve the id needed to `correct`
+            an existing policy over HTTP, without a local database connection.
+            Opaque; do not parse.
+    StorePolicyDenial:
+      type: object
+      description: |
+        A single per-entity policy denial inside an `ERR_STORE_POLICY_DENIED`
+        response. Sibling to `StoreResolutionIssue`: that type means "malformed",
+        this one means "well-formed but not allowed here".
+      required:
+        - entity_index
+        - reason_code
+        - hint
+      properties:
+        entity_index:
+          type: integer
+          description: Zero-based index of the denied entity in the request `entities[]` array.
+        entity_type:
+          type: string
+        reason_code:
+          type: string
+          enum:
+            - entity_type_denied
+            - pii_gate_missing_basis
+            - field_sensitivity_exceeded
+            - provenance_required
+          description: |
+            Machine-readable denial reason. Clients MUST treat an unrecognized
+            value as a hard denial and surface `hint` verbatim rather than
+            failing to parse — the enum is extensible by design.
+        hint:
+          type: string
+          description: |
+            Actionable next step, naming the tool to call or the field to fix.
+            PII-free by construction: interpolated values are schema-declared
+            field *names* and configured policy values, never any fragment of the
+            submitted payload (guardrails MUST NOT 11).
+        policy_id:
+          type: string
+          description: Opaque identifier of the policy revision that produced this denial.
+    StorePolicyDeniedErrorEnvelope:
+      type: object
+      description: |
+        400 response shape for `ERR_STORE_POLICY_DENIED`. Returned by `/store`
+        and `/correct` when a well-formed write is refused by the instance's
+        configured data policy.
+
+        Whole-request reject: NO entity in the request is persisted, even if only
+        one violated. `denied[]` enumerates every violating entity in the batch —
+        not just the first — so a caller discovers all violations in one round
+        trip. There is deliberately no `accepted[]` field: partial persistence
+        would introduce a mixed-commit state the ingestion path does not
+        otherwise have to reason about. If bulk-import callers need it later, an
+        opt-in `allow_partial: true` request flag is a backward-compatible
+        addition.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - ERR_STORE_POLICY_DENIED
+            message:
+              type: string
+              description: |
+                States how many entities were denied and that zero were
+                persisted. Carries no upgrade text — actionable guidance belongs
+                in each denial's structured `hint` (guardrails MUST NOT 7).
+            denied:
+              type: array
+              items:
+                $ref: "#/components/schemas/StorePolicyDenial"
+    StorePolicyUnavailableErrorEnvelope:
+      type: object
+      description: |
+        503 response shape for `ERR_STORE_POLICY_UNAVAILABLE`. Returned by
+        `/store` and `/correct` when the instance policy could not be READ, so
+        the write could not be checked against it. Nothing is persisted.
+
+        Deliberately distinct from `ERR_STORE_POLICY_DENIED`, and the
+        distinction is the point: DENIED means the policy was read and forbids
+        the write (fix the payload, do not retry); UNAVAILABLE means permission
+        is unknown (retry unchanged, do NOT rewrite). An agent that applies
+        DENIED remediation here — narrowing or dropping data — responds to an
+        infrastructure fault by silently storing less, which is the failure mode
+        this split exists to prevent.
+
+        503 rather than 400 because the fault is server-side and transient: a
+        400 would blame the payload for a condition the caller cannot fix.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - ERR_STORE_POLICY_UNAVAILABLE
+            message:
+              type: string
+              description: |
+                States that the policy could not be read, that zero entities
+                were persisted, and that this is an infrastructure failure
+                rather than a policy decision.
+            retryable:
+              type: boolean
+              enum:
+                - true
+              description: |
+                Always true. The same payload should be retried unmodified.
+            hint:
+              type: string
+              description: |
+                Actionable guidance: retry the same payload; if the condition
+                persists the instance operator must check database health — it
+                is not resolvable by changing what the caller stores.
     SplitPredicate:
       type: object
       description: |
@@ -387,11 +1208,14 @@ components:
     AgentAttribution:
       type: object
       description: |
-        Agent-identity provenance recorded on every durable write-path record
+        Write-attribution provenance recorded on durable write-path records
         (observations, relationships, sources, interpretations, timeline
-        events). Fields are stamped additively into the existing provenance
-        JSON blob on each record so no schema migration was required; the
-        shape below documents the keys consumers can rely on.
+        events). Most keys describe the software that wrote the record (the
+        AAuth agent and MCP client); `authenticated_actor_id` instead
+        identifies the signed-in member whose session made the write. Fields
+        are stamped additively into the existing provenance JSON blob on each
+        record so no schema migration was required; the shape below documents
+        the keys consumers can rely on.
 
         When AAuth is active the `agent_*` keys carry the cryptographically
         verified identity; `client_name`/`client_version` come from the MCP
@@ -436,6 +1260,24 @@ components:
           type: string
           format: date-time
           description: ISO-8601 timestamp when the attribution block was stamped.
+        authenticated_actor_id:
+          type: string
+          description: |
+            The signed-in member whose session made this write, as their
+            write-attribution id: a random UUID minted on this instance the
+            first time the member's session is resolved. It is pseudonymous —
+            not derived from the email address or the member's `user_id`, so it
+            cannot be recomputed from a list of addresses, and the same person
+            has a different id on every instance. Only this instance's
+            `member_attribution_ids` table maps it back to a member; no API
+            exposes that mapping yet. It is not the same value as `/me`'s
+            `authenticated_user_id` and does not join to it. Provenance only —
+            it never affects which graph is read or written. Absent when no
+            verified sign-in stands behind the request (static bearer token,
+            key-derived MCP token, local no-auth, AAuth grant, or a connection
+            that predates identity recording); consumers MUST read absence as
+            "unknown", never as the graph owner. Withheld from responses to
+            guest (entity-scoped token) readers.
     AttributionPolicySnapshot:
       type: object
       description: |
@@ -533,10 +1375,14 @@ components:
           type: string
           description: |
             Set when the operator allowlist promoted the request to
-            `operator_attested`. `"issuer"` means a hit on
+            `operator_attested`. The tier is bound to the verified signing
+            key. `"thumbprint"` means the key's thumbprint is listed in
+            `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`; `"issuer"` means the
+            `match_iss` of the active grant pinning the key is listed in
             `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-            a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
-          enum: [issuer, issuer_subject]
+            that grant's `match_iss:match_sub` is listed in
+            `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+          enum: [thumbprint, issuer, issuer_subject]
     SessionInfo:
       type: object
       description: |
@@ -587,7 +1433,14 @@ components:
             that signature to one of this user's `agent_grant` entities
             and is treating the caller as authenticated. The two are
             independent: a verified-but-unmatched signature stays
-            attribution-only and `admitted` is `false`.
+            attribution-only and `admitted` is `false`. Admission is
+            key-bound: a grant admits only when its `match_thumbprint`
+            equals the signing key's thumbprint. `grant_key_unbound`
+            means a grant matched sub/iss but pins no key; capability-gated
+            writes carrying that signature are refused until the grant is
+            pinned, whatever authenticated the request. Pin
+            `match_thumbprint` to admit the agent (see
+            docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
           required:
             - verified
             - admitted
@@ -608,8 +1461,10 @@ components:
                 - admitted
                 - no_grants_for_user
                 - no_match
+                - grant_key_unbound
                 - grant_revoked
                 - grant_suspended
+                - grant_pin_conflict
                 - strict_rejected
                 - aauth_disabled
                 - not_signed
@@ -757,6 +1612,17 @@ components:
             strings. The single string `*` wildcards any repo. Only
             meaningful for `github_harness:*` ops; ignored for
             Neotoma-native ops.
+        relationship_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Relationship types this entry may write. Required for
+            `create_relationship` edge writes: one entry must cover the
+            relationship type AND both endpoint entity types
+            (`entity_types`). Absent or empty grants no edge writes. The
+            single string `*` wildcards any relationship type. Also the
+            scope for `register_relationship_type`.
     AgentGrant:
       type: object
       description: |
@@ -934,6 +1800,10 @@ components:
     EntitySnapshot:
       type: object
       properties:
+        cleared_fields_included:
+          type: boolean
+          enum: [true]
+          description: Present only for an accepted nullable winning projection.
         entity_id:
           type: string
         entity_type:
@@ -955,6 +1825,18 @@ components:
             NOT agent-identity attribution; see `AgentAttribution` and the
             `provenance` field on the contributing `Observation` rows for
             the agent that wrote each observation.
+        data_origins:
+          type: object
+          description: |
+            Caller-claimed data origins (#2242) of the observations this
+            snapshot's `provenance` cites: `observation_id → DataOrigin`.
+            Join a field through `provenance` to its observation id, then
+            here, to see where that value came from. Returned by
+            `get_entity_snapshot` / MCP `retrieve_entity_snapshot`. Omitted
+            entirely when no cited observation carries an origin; withheld
+            from guest-token reads.
+          additionalProperties:
+            $ref: "#/components/schemas/DataOrigin"
         computed_at:
           type: string
           format: date-time
@@ -963,6 +1845,10 @@ components:
         last_observation_at:
           type: string
           format: date-time
+        entity_version:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: Opaque CAS token that changes for every committed observation.
         canonical_name:
           type: string
           nullable: true
@@ -1068,7 +1954,7 @@ components:
         observation_source:
           type: string
           nullable: true
-          enum: [sensor, llm_summary, workflow_state, human, import, sync]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified]
           description: |
             Classifies the *kind* of write that produced this observation,
             orthogonal to `source_priority` (numeric ranking) and to
@@ -1085,10 +1971,22 @@ components:
               Inspector edit, `entities correct`, manual annotation).
             - `import` — batch ingestion / ETL / scheduled imports.
             - `sync` — cross-instance replication from a configured Neotoma peer.
+            - `unspecified` — the caller did not say what kind of write this
+              was. Applied by the write path when a store request omits
+              `observation_source` (and accepted when sent explicitly). It is
+              a lineage sentinel, not a provenance class: it makes no claim
+              about origin, and it is distinct from an explicit
+              `llm_summary`. A store that omits the field also returns an
+              `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. In the
+              reducer tie-break it shares `llm_summary`'s rank unless the
+              schema's `observation_source_priority` names it, so recency
+              decides between the two.
 
             Null / missing for legacy rows written before the field
-            existed; writes default to `llm_summary` when unspecified
-            because MCP callers are LLM-driven by construction.
+            existed. Rows written before `unspecified` was introduced carry
+            `llm_summary` when their caller omitted the field, so a legacy
+            `llm_summary` is not by itself evidence that a language model
+            produced the value; only explicit values written since are.
         fields:
           type: object
           additionalProperties: true
@@ -1104,8 +2002,15 @@ components:
             Write-time agent attribution for this observation. Carries the
             `AgentAttribution` keys stamped by the AAuth middleware and
             MCP `initialize.clientInfo` fallback. Coexists with any
-            free-form provenance keys supplied at write time.
+            free-form provenance keys supplied at write time, including
+            `data_origin` (#2242): the caller-claimed origin of the data
+            (file, URL, message, API), present only when the store request
+            supplied one. `data_origin` is never merged into the attribution
+            keys and is withheld from guest-token reads.
           additionalProperties: true
+          properties:
+            data_origin:
+              $ref: "#/components/schemas/DataOrigin"
           allOf:
             - $ref: "#/components/schemas/AgentAttribution"
     RelationshipSnapshot:
@@ -1172,6 +2077,64 @@ components:
         target_entity_type_label:
           type: string
           nullable: true
+    RelationshipCreated:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was
+        written. Shared by `StoreStructuredResponse.relationships_created`
+        and `CreateInterpretationResponse.relationships_created`. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_type
+        - source_entity_id
+        - target_entity_id
+      properties:
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+    RelationshipRefusal:
+      type: object
+      description: |
+        A relationship from a request's `relationships` array that was not
+        written. The entities in the call are still stored. Shared by
+        `StoreStructuredResponse.relationships_refused` and
+        `CreateInterpretationResponse.relationships_refused`. An endpoint
+        that does not exist and one owned by another user are both reported
+        as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+        docs/subsystems/relationships.md § 6.1.
+      required:
+        - relationship_index
+        - relationship_type
+        - code
+        - reason
+      properties:
+        relationship_index:
+          type: integer
+          description: Position of the relationship in the request's `relationships` array.
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+        source_index:
+          type: integer
+        target_index:
+          type: integer
+        code:
+          type: string
+          description: |
+            One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+            `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+            `RELATIONSHIP_INVALID_ENTITY_ID`,
+            `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+        reason:
+          type: string
+        hint:
+          type: string
     TimelineEvent:
       type: object
       properties:
@@ -1372,9 +2335,20 @@ components:
             data.
         relationships_created:
           type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. See
+            docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
     UsageStats:
       type: object
       description: Aggregate usage statistics computed from local data only.
@@ -1467,37 +2441,11 @@ components:
           properties:
             relationship_type:
               type: string
-              enum:
-                [
-                  PART_OF,
-                  CORRECTS,
-                  REFERS_TO,
-                  SETTLES,
-                  DUPLICATE_OF,
-                  DEPENDS_ON,
-                  SUPERSEDES,
-                  EMBEDS,
-                  works_at,
-                  owns,
-                  manages,
-                  part_of,
-                  related_to,
-                  depends_on,
-                  references,
-                  transacted_with,
-                  member_of,
-                  reports_to,
-                  located_at,
-                  created_by,
-                  funded_by,
-                  acquired_by,
-                  subsidiary_of,
-                  partner_of,
-                  competitor_of,
-                  supplies_to,
-                  contracted_with,
-                  invested_in,
-                ]
+              description: >-
+                Relationship type. The vocabulary is a runtime registry, not a closed
+                enum: call list_relationship_types to read what this instance accepts, and
+                register_relationship_type to add to it. Names are identifier-shaped and
+                casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
             source_index:
               type: integer
               minimum: 0
@@ -1515,37 +2463,11 @@ components:
           properties:
             relationship_type:
               type: string
-              enum:
-                [
-                  PART_OF,
-                  CORRECTS,
-                  REFERS_TO,
-                  SETTLES,
-                  DUPLICATE_OF,
-                  DEPENDS_ON,
-                  SUPERSEDES,
-                  EMBEDS,
-                  works_at,
-                  owns,
-                  manages,
-                  part_of,
-                  related_to,
-                  depends_on,
-                  references,
-                  transacted_with,
-                  member_of,
-                  reports_to,
-                  located_at,
-                  created_by,
-                  funded_by,
-                  acquired_by,
-                  subsidiary_of,
-                  partner_of,
-                  competitor_of,
-                  supplies_to,
-                  contracted_with,
-                  invested_in,
-                ]
+              description: >-
+                Relationship type. The vocabulary is a runtime registry, not a closed
+                enum: call list_relationship_types to read what this instance accepts, and
+                register_relationship_type to add to it. Names are identifier-shaped and
+                casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
             source_index:
               type: integer
               minimum: 0
@@ -1562,37 +2484,11 @@ components:
           properties:
             relationship_type:
               type: string
-              enum:
-                [
-                  PART_OF,
-                  CORRECTS,
-                  REFERS_TO,
-                  SETTLES,
-                  DUPLICATE_OF,
-                  DEPENDS_ON,
-                  SUPERSEDES,
-                  EMBEDS,
-                  works_at,
-                  owns,
-                  manages,
-                  part_of,
-                  related_to,
-                  depends_on,
-                  references,
-                  transacted_with,
-                  member_of,
-                  reports_to,
-                  located_at,
-                  created_by,
-                  funded_by,
-                  acquired_by,
-                  subsidiary_of,
-                  partner_of,
-                  competitor_of,
-                  supplies_to,
-                  contracted_with,
-                  invested_in,
-                ]
+              description: >-
+                Relationship type. The vocabulary is a runtime registry, not a closed
+                enum: call list_relationship_types to read what this instance accepts, and
+                register_relationship_type to add to it. Names are identifier-shaped and
+                casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
             source_entity_id:
               type: string
               description: Existing source entity ID.
@@ -1609,37 +2505,11 @@ components:
           properties:
             relationship_type:
               type: string
-              enum:
-                [
-                  PART_OF,
-                  CORRECTS,
-                  REFERS_TO,
-                  SETTLES,
-                  DUPLICATE_OF,
-                  DEPENDS_ON,
-                  SUPERSEDES,
-                  EMBEDS,
-                  works_at,
-                  owns,
-                  manages,
-                  part_of,
-                  related_to,
-                  depends_on,
-                  references,
-                  transacted_with,
-                  member_of,
-                  reports_to,
-                  located_at,
-                  created_by,
-                  funded_by,
-                  acquired_by,
-                  subsidiary_of,
-                  partner_of,
-                  competitor_of,
-                  supplies_to,
-                  contracted_with,
-                  invested_in,
-                ]
+              description: >-
+                Relationship type. The vocabulary is a runtime registry, not a closed
+                enum: call list_relationship_types to read what this instance accepts, and
+                register_relationship_type to add to it. Names are identifier-shaped and
+                casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
             source_entity_id:
               type: string
               description: Existing source entity ID.
@@ -1649,6 +2519,56 @@ components:
             metadata:
               type: object
               additionalProperties: true
+    DataOrigin:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: |
+        Where stored data came from (#2242) — the file, sheet row, URL,
+        message, or API endpoint — as opposed to who wrote it (attribution,
+        `external_actor`). A caller claim, never verified: the server does not
+        fetch, open, or validate `locator` or `url`. Persisted on each created
+        observation as `provenance.data_origin`. `locator` is required unless
+        `kind` is `manual`. Every text field is single-line: control
+        characters, including newlines, are refused. Strip credentials,
+        signatures, and auth query parameters from `locator` and `url` before
+        sending; a `url` with embedded `user:pass@` is refused.
+      properties:
+        kind:
+          type: string
+          enum: [file, url, email, message, api, manual, other]
+          description: Category of origin. `manual` = typed or confirmed by a person.
+        locator:
+          type: string
+          maxLength: 2048
+          description: |
+            Primary pointer to the origin: a file path or name, URL, email or
+            chat message id, or API endpoint. Required unless `kind` is `manual`.
+        part:
+          type: string
+          maxLength: 512
+          description: Position within the locator, e.g. `sheet=Tickets;row=97`, `page=3`, `attachment=2`.
+        system:
+          type: string
+          maxLength: 256
+          description: System that holds the origin, e.g. `gmail`, `google_sheets`, `stripe`, `local_fs`.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Absolute http(s) link to the original, when `locator` is not itself a URL. Must not embed credentials (`user:pass@`).
+        producer:
+          type: string
+          maxLength: 512
+          description: Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`.
+        retrieved_at:
+          type: string
+          format: date-time
+          description: When the data was read from the origin (ISO 8601).
+        notes:
+          type: string
+          maxLength: 2000
+          description: Short free-text note about the derivation.
     ExternalActorInput:
       type: object
       additionalProperties: false
@@ -1676,8 +2596,16 @@ components:
           type: string
           enum: [claim, linked_attestation, oauth_link, webhook_signature]
           default: claim
+          description: |
+            Accepted for compatibility, but a request body can only assert an
+            external actor: the stored value is always `claim`. The stronger
+            tiers are assigned by server-side verification paths (the signed
+            GitHub webhook route, AAuth token claims, grant linkage).
         delivery_id:
           type: string
+          description: |
+            Not carried over from a request body; set only by the signed
+            GitHub webhook route.
         event_type:
           type: string
         repository:
@@ -1696,6 +2624,15 @@ components:
         `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
         remain intentionally open so schema-driven fields flow through.
       properties:
+        expected_entity_absent:
+          type: boolean
+          description: |
+            When true, atomically create exactly one structured entity only if
+            its complete schema-declared physical identity is absent. Requires
+            commit=true and a nonempty idempotency_key; file, relationship,
+            interpretation, intake, target and sync combinations are refused.
+            Omitted or false preserves ordinary upsert behavior. Exact retries
+            return the original immutable operation receipt without new effects.
         entities:
           type: array
           items:
@@ -1707,7 +2644,12 @@ components:
               intentionally open. Put entity fields at the top level of this
               object; nesting under `attributes` (or any other wrapper) is
               not supported and returns `ERR_STORE_RESOLUTION_FAILED` with a
-              structured `hint` guiding callers to flatten.
+              structured `hint` guiding callers to flatten. Reserved control
+              keys are peeled off before field validation: `entity_type`,
+              `target_id`, `intent`, and `data_origin` (#2242) — a per-entity
+              `DataOrigin` that overrides the request-level `data_origin` for
+              this entity only. An invalid `data_origin` is rejected with
+              `VALIDATION_INVALID_FORMAT` at path `entities[i].data_origin`, with a structured `details.hint` naming the reserved key.
         relationships:
           type: array
           description: |
@@ -1728,19 +2670,34 @@ components:
             strategy it is stored but ignored.
         observation_source:
           type: string
-          enum: [sensor, llm_summary, workflow_state, human, import, sync]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified]
           description: |
             Classifies the *kind* of write being performed, orthogonal to
             `source_priority`. See `Observation.observation_source` for
-            the full semantic contract. Defaults to `llm_summary` when
-            unspecified. Applies to every observation created by this
-            request.
+            the full semantic contract. When omitted, observations are
+            stored with `unspecified` and the response carries one
+            `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
+            field explicitly (for example `llm_summary` for model-authored
+            content, `import` for ETL) to record lineage. Applies to every
+            observation created by this request.
         external_actor:
           $ref: "#/components/schemas/ExternalActorInput"
           description: |
             Optional upstream author (e.g. GitHub user for issue submission).
             Stamped into observation provenance; must align with
             `ExternalActorInputSchema` (strict — no extra keys).
+        data_origin:
+          $ref: "#/components/schemas/DataOrigin"
+          description: |
+            Optional (#2242). Where the entities in this request came from.
+            Applies to every entity; an entity's own `data_origin` key
+            overrides it (precedence: entity → request → none). Stamped on
+            each created observation as `provenance.data_origin` and included
+            in the request's stored payload, so reusing an `idempotency_key`
+            with a different origin is `ERR_IDEMPOTENCY_MISMATCH`. Requires
+            `entities` (a file-only store is refused: the stored file is its
+            own origin record). A claim, not proof; separate from attribution
+            and from `observation_source`.
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only path.
@@ -1807,6 +2764,15 @@ components:
         fields inside `entities[]` remain intentionally open so
         schema-driven fields flow through (see description on `entities[]`).
       properties:
+        expected_entity_absent:
+          type: boolean
+          description: |
+            When true, atomically create exactly one structured entity only if
+            its complete schema-declared physical identity is absent. Requires
+            commit=true and a nonempty idempotency_key; file, relationship,
+            interpretation, intake, target and sync combinations are refused.
+            Omitted or false preserves ordinary upsert behavior. Exact retries
+            return the original immutable operation receipt without new effects.
         entities:
           type: array
           items:
@@ -1838,13 +2804,16 @@ components:
             strategy it is stored but ignored.
         observation_source:
           type: string
-          enum: [sensor, llm_summary, workflow_state, human, import, sync]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync, unspecified]
           description: |
             Classifies the *kind* of write being performed, orthogonal to
             `source_priority`. See `Observation.observation_source` for
-            the full semantic contract. Defaults to `llm_summary` when
-            unspecified. Applies to every observation created by this
-            request.
+            the full semantic contract. When omitted, observations are
+            stored with `unspecified` and the response carries one
+            `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
+            field explicitly (for example `llm_summary` for model-authored
+            content, `import` for ETL) to record lineage. Applies to every
+            observation created by this request.
         idempotency_key:
           type: string
         user_id:
@@ -1873,11 +2842,117 @@ components:
         source_peer_id:
           type: string
           description: Optional peer id stamped on observations for sync loop prevention.
+    ConditionalStoreReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          version,
+          status,
+          request_fingerprint,
+          source_id,
+          entity_id,
+          entity_type,
+          observation_id,
+          schema_identity_digest,
+          unknown_fields_count,
+          diagnostics,
+          original_observation_fields,
+        ]
+      description: |
+        Original committed operation facts, verified against the immutable native
+        observation and owner/source linkage. Current snapshots are separate.
+      properties:
+        version: { type: integer, enum: [1] }
+        status: { type: string, enum: [applied, replayed] }
+        request_fingerprint: { type: string }
+        source_id: { type: string }
+        entity_id: { type: string }
+        entity_type: { type: string }
+        observation_id: { type: string }
+        schema_identity_digest: { type: string }
+        unknown_fields_count: { type: integer, minimum: 0 }
+        original_observation_fields:
+          type: object
+          additionalProperties: true
+          description: Original declared observation fields, never a current snapshot substitute.
+        diagnostics:
+          type: object
+          additionalProperties: false
+          required: [fields_sha256, schema_version, unknown_fields, constraint_warnings]
+          properties:
+            fields_sha256: { type: string }
+            schema_version: { type: string }
+            unknown_fields: { type: array, items: { type: string } }
+            constraint_warnings:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [field, constraint]
+                properties:
+                  field: { type: string }
+                  constraint: { type: string }
+    ConditionalStoreError:
+      type: object
+      additionalProperties: false
+      required: [code, message, hint]
+      properties:
+        code:
+          type: string
+          enum:
+            [
+              VALIDATION_ERROR,
+              CONFLICT,
+              IDEMPOTENCY_CONFLICT,
+              STORE_KEY_MODE_CONFLICT,
+              STORE_RECEIPT_UNCERTAIN,
+              STORE_CONDITIONAL_FAILED,
+            ]
+        message: { type: string }
+        hint: { type: string }
+        committed:
+          oneOf:
+            - { type: boolean, enum: [false] }
+            - { type: string, enum: [unknown] }
+        private_storage_residue_possible: { type: boolean }
     StoreStructuredResponse:
       type: object
       properties:
+        operation_receipt:
+          $ref: "#/components/schemas/ConditionalStoreReceipt"
+        current_snapshot_status:
+          type: string
+          enum: [available, absent, unavailable]
+          description: Current snapshot availability, separate from the retained original receipt.
+        postcommit_notifications:
+          type: object
+          additionalProperties: false
+          required: [attempted, failed, status]
+          properties:
+            attempted: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+            status:
+              type: string
+              enum: [completed, uncertain, not_repeated]
+          description: |
+            Notification attempts run after commit. An uncertain notification
+            outcome does not mean the applied transaction was rolled back.
         success:
           type: boolean
+        commit:
+          type: boolean
+          description: |
+            Echoes the request's `commit` flag. `false` means this response
+            describes a plan/dry-run preview: no source, observation or entity
+            was persisted and `source_id` is `null`.
+        source_id:
+          type: string
+          nullable: true
+          description: |
+            Id of the raw `sources` row written for this store. `null` in
+            plan/dry-run mode (`commit: false`), where no source row is
+            written.
         replayed:
           type: boolean
           description: |
@@ -1899,6 +2974,11 @@ components:
                 type: string
               observation_id:
                 type: string
+                nullable: true
+                description: |
+                  Id of the observation written for this entity. `null` in
+                  plan/dry-run mode (`commit: false`), where no observation is
+                  written.
               canonical_name:
                 type: string
               resolver_path:
@@ -1968,6 +3048,23 @@ components:
                     type: integer
                   entity_id:
                     type: string
+        relationships_created:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            written. See docs/subsystems/relationships.md § 6.1.
+          items:
+            $ref: "#/components/schemas/RelationshipCreated"
+        relationships_refused:
+          type: array
+          description: |
+            Relationships from the request's `relationships` array that were
+            not written. The entities in the call are still stored. Present
+            only when at least one relationship was refused. An endpoint that
+            does not exist and one owned by another user are both reported as
+            `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+          items:
+            $ref: "#/components/schemas/RelationshipRefusal"
         store_warnings:
           type: array
           description: |
@@ -2011,7 +3108,15 @@ components:
                   non-default `source_priority` but no field on the entity type
                   uses a merge strategy that honours it — all fields effectively
                   use `last_write`, so the priority value has no effect on the
-                  stored snapshot).
+                  stored snapshot), and `OBSERVATION_SOURCE_OMITTED` (fired
+                  once per store request that omits `observation_source`;
+                  every observation in the request was stored as
+                  `unspecified`. `observation_index`/`entity_id` name the
+                  first stored entity only as a nominal pointer: the warning
+                  is request-scoped, not about that entity. Not fired when
+                  the caller sends any value explicitly, including
+                  `unspecified`, which a caller that cannot classify the
+                  write should send to suppress it).
               message:
                 type: string
                 description: Human-readable description from the schema rule.
@@ -2210,11 +3315,23 @@ components:
         user_id:
           type: string
           format: uuid
+        commit:
+          type: boolean
+          default: true
+          description: |
+            When false, runs in plan/dry-run mode: computes the content hash
+            without persisting a source row or uploading raw content. Useful
+            for previewing an unstructured store before committing.
     StoreUnstructuredResponse:
       type: object
       properties:
         source_id:
           type: string
+          nullable: true
+          description: |
+            Id of the persisted source row. `null` when the request ran in
+            plan/dry-run mode (`commit: false`): nothing was persisted, so
+            there is no source to point at.
         content_hash:
           type: string
         file_size:
@@ -2228,6 +3345,49 @@ components:
           type: array
           items:
             type: string
+        commit:
+          type: boolean
+          description: |
+            Echoes the request's `commit` flag. `false` means this response
+            describes a plan/dry-run preview: no source row was persisted and
+            no raw content was uploaded. `source_id` is `null` in that case.
+        storage_mode:
+          type: string
+          enum: [reference]
+          description: |
+            Present when the request used reference storage
+            (`source_storage: "reference"`), for both a committed store and a
+            plan-mode (`commit: false`) preview. A reference-mode response
+            carries `storage_mode`, `reference_path` and `mime_type`; a
+            committed one also carries `content_hash` and `file_size`, while a
+            plan-mode preview carries neither. Inline-mode responses omit
+            `storage_mode` and carry `content_hash`, `file_size`,
+            `deduplicated`, `entities_created` and `observations_created`
+            (plan mode: `source_id` is `null`).
+        reference_path:
+          type: string
+          description: |
+            Reference-storage only: the file path this store referenced
+            (committed) or would reference if committed (plan mode).
+        mime_type:
+          type: string
+          description: |
+            Reference-storage only: the MIME type resolved for the file
+            (echoes the request's `mime_type`, or the value inferred from
+            the file extension when omitted). Present for both a committed
+            store and a plan-mode preview.
+        entities_created:
+          type: integer
+          description: |
+            Inline-storage only. Always `0` today: unstructured store never
+            creates entities directly, in either commit or plan mode. Not a
+            placeholder for a future non-zero value under commit — if that
+            changes, this description will change with it.
+        observations_created:
+          type: integer
+          description: |
+            Inline-storage only: always `0`, for the same reason as
+            `entities_created`.
     TurnSummaryRequest:
       type: object
       additionalProperties: false
@@ -2406,37 +3566,11 @@ components:
       properties:
         relationship_type:
           type: string
-          enum:
-            [
-              PART_OF,
-              CORRECTS,
-              REFERS_TO,
-              SETTLES,
-              DUPLICATE_OF,
-              DEPENDS_ON,
-              SUPERSEDES,
-              EMBEDS,
-              works_at,
-              owns,
-              manages,
-              part_of,
-              related_to,
-              depends_on,
-              references,
-              transacted_with,
-              member_of,
-              reports_to,
-              located_at,
-              created_by,
-              funded_by,
-              acquired_by,
-              subsidiary_of,
-              partner_of,
-              competitor_of,
-              supplies_to,
-              contracted_with,
-              invested_in,
-            ]
+          description: >-
+            Relationship type. The vocabulary is a runtime registry, not a closed
+            enum: call list_relationship_types to read what this instance accepts, and
+            register_relationship_type to add to it. Names are identifier-shaped and
+            casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
         source_entity_id:
           type: string
         target_entity_id:
@@ -2524,12 +3658,17 @@ paths:
 
   /health:
     get:
-      summary: Health check
+      summary: Liveness check
+      description: >-
+        Reports that the process is running. Does NOT touch the database — it
+        returns 200 throughout a total read outage, so it must not be used as a
+        health check or as evidence the server can serve requests. Use /ready
+        for that.
       operationId: healthCheck
       security: []
       responses:
         "200":
-          description: Server is healthy
+          description: Process is running
           content:
             application/json:
               schema:
@@ -2537,6 +3676,31 @@ paths:
                 properties:
                   ok:
                     type: boolean
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: >-
+        Runs a bounded real read against the database. Returns 503 when that
+        read errors or exceeds NEOTOMA_READY_DB_TIMEOUT_MS (default 20s). This
+        is the endpoint Fly health checks target. A 200 means the process is up
+        and the database completed a trivial indexed read within the bound; it
+        does not prove that heavier queries or writes succeed.
+      operationId: readinessCheck
+      security: []
+      responses:
+        "200":
+          description: Server is ready to serve reads
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResult"
+        "503":
+          description: Database read failed or timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResult"
 
   /openapi.yaml:
     get:
@@ -2567,6 +3731,103 @@ paths:
                   neotoma_env:
                     type: string
                     description: Resolved NEOTOMA_ENV for this process (development or production).
+
+  /mcp:
+    post:
+      summary: MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+      description: |
+        Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+        protocol eras on the same route (#2070):
+
+        - **Modern (2026-07-28, stateless).** Selected when the request carries no
+          `Mcp-Session-Id`, is not an `initialize` request, and its
+          `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+          request is resolved on its own: protocol version and client capabilities
+          come from `_meta`, and the caller's identity comes only from the
+          credentials on that request. No session is minted and no server state is
+          retained, so any API instance can serve any request behind a plain
+          round-robin load balancer. `server/discover` is served on this path.
+          `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+          `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+          the body.
+        - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+          request carrying `Mcp-Session-Id`, is served by the session transport
+          exactly as before (session mint on initialize, recover-in-place for a
+          stale session id, `404` for an unknown session on GET/DELETE).
+
+        `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+        tool/resource/prompt name. A value shaped like a credential or personal
+        data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+        `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+        and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+        sessions; those are not modelled here.
+      operationId: mcpStreamableHttpPost
+      parameters:
+        - in: header
+          name: MCP-Protocol-Version
+          required: false
+          description: Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`.
+          schema: { type: string, example: "2026-07-28" }
+        - in: header
+          name: Mcp-Method
+          required: false
+          description: Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data.
+          schema: { type: string, maxLength: 256 }
+        - in: header
+          name: Mcp-Name
+          required: false
+          description: |
+            Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+            `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+            sentinel. Never a credential or personal data.
+          schema: { type: string, maxLength: 2048 }
+        - in: header
+          name: Mcp-Session-Id
+          required: false
+          description: Legacy-era session id. Its presence selects the legacy session path.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/McpJsonRpcRequest" }
+      responses:
+        "200":
+          description: |
+            JSON-RPC response. On the modern path every result carries
+            `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+            a `server/discover` result has the `McpServerDiscoverResult` shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+            text/event-stream:
+              schema: { type: string }
+        "202":
+          description: JSON-RPC notification accepted (no body).
+        "400":
+          description: |
+            `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+            `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+            `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "401":
+          description: |
+            Authentication required or credential invalid (`-32001`). On the
+            2026-07-28 path this includes a credential that passed the gate but
+            resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+            or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
+        "404":
+          description: |
+            Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+            (`-32001`, re-initialize).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpJsonRpcResponse" }
 
   /mcp/oauth/initiate:
     post:
@@ -2620,7 +3881,36 @@ paths:
           schema: { type: string }
       responses:
         "302":
-          description: Redirect to authorization URL
+          description: |
+            Redirect to the authorization URL, or to /mcp/oauth/key-auth when
+            NEOTOMA_REQUIRE_KEY_FOR_OAUTH is set and the request carries no valid
+            key session.
+        "400":
+          description: |
+            Authorization refused before any redirect. The body is a plain-text
+            sentence addressed to the human in the browser, NOT an ErrorEnvelope:
+            this endpoint is reached by a user-agent mid-OAuth-redirect, so the
+            response is rendered directly in the address bar. A JSON envelope
+            would be read by nobody at this point in the flow. Machine clients
+            MUST treat any 400 here as a terminal refusal of the authorization
+            request and MUST NOT parse the body; the reason is carried by the
+            server's structured warn log, not by this response.
+
+            Emitted for: a missing `redirect_uri`; a missing `state`; a missing
+            or non-S256 PKCE challenge on a non-OpenAI redirect; a `dev_stub`
+            request while dev_stub is disabled; and a `redirect_uri` that is not
+            on the tunnel allowlist (built-in entries plus any exact callback
+            URLs configured in NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS).
+          content:
+            text/plain:
+              schema: { type: string }
+        "500":
+          description: |
+            Authorization failed unexpectedly. Plain-text body, for the same
+            browser-facing reason as the 400 above.
+          content:
+            text/plain:
+              schema: { type: string }
 
   /mcp/oauth/token:
     post:
@@ -2636,6 +3926,15 @@ paths:
                 grant_type:
                   type: string
                 code:
+                  type: string
+                code_verifier:
+                  type: string
+                  description: >-
+                    PKCE verifier (RFC 7636). Required with grant_type=
+                    authorization_code; the server rejects a code redemption
+                    whose SHA-256/base64url digest does not match the
+                    code_challenge presented at /mcp/oauth/authorize.
+                refresh_token:
                   type: string
       responses:
         "200":
@@ -2673,8 +3972,34 @@ paths:
                 properties:
                   user_id:
                     type: string
+                    description: >-
+                      Graph scope: the user_id all reads and writes are scoped
+                      to. Under shared-graph mode this is the shared graph
+                      owner, not the signed-in user.
                   email:
                     type: string
+                    description: >-
+                      Email of the signed-in user when known. Under shared-graph
+                      mode this is the verified address of the teammate who
+                      signed in, not the graph owner's. May be absent when the
+                      signed-in identity was never recorded (pre-migration
+                      shared-graph residual); consumers must treat absence as
+                      unknown, not as the graph owner.
+                  authenticated_user_id:
+                    type: string
+                    description: >-
+                      Per-email user_id of the signed-in user. Present only when
+                      it differs from user_id (fully remapped shared-graph
+                      session). Omitted on non-shared-graph sessions and on
+                      degraded shared-graph residuals that have no recorded
+                      signer (shared_graph may still be true).
+                  shared_graph:
+                    type: boolean
+                    description: >-
+                      True when this session operates on a shared graph. May be
+                      true without authenticated_user_id when the connection row
+                      predates identity columns (degraded residual until
+                      re-auth). Omitted on non-shared-graph sessions.
                   storage:
                     type: object
                     properties:
@@ -2759,6 +4084,8 @@ paths:
     get:
       summary: OAuth 2.0 Authorization Server Metadata (RFC 8414)
       operationId: oauthServerMetadata
+      # Public by RFC 8414: authorization-server metadata is unauthenticated by design.
+      security: []
       responses:
         "200":
           description: Authorization server metadata
@@ -2769,15 +4096,84 @@ paths:
 
   /.well-known/oauth-protected-resource:
     get:
-      summary: OAuth 2.0 Protected Resource Metadata
+      summary: OAuth 2.0 Protected Resource Metadata (RFC 9728)
+      description: |
+        Public, unauthenticated bootstrap document (RFC 9728 §3). Its only job is
+        to tell a caller holding no credentials where to obtain them, so it MUST
+        NOT require authentication — gating it deadlocks the handshake, since the
+        `WWW-Authenticate` challenge on a protected resource points here (#2049).
+
+        A stale `X-Connection-Id` (with no `Authorization`) still yields 401
+        `invalid_token`, because that caller asserted a credential.
       operationId: oauthProtectedResource
+      # Public by RFC 9728 §3: the unauthenticated bootstrap document (#2049).
+      security: []
       responses:
         "200":
-          description: Protected resource metadata
+          description: Protected resource metadata (served without credentials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthProtectedResourceMetadata"
+        "401":
+          description: |
+            Asserted `X-Connection-Id` is expired or unrecognized. Never returned
+            for a caller supplying no credentials at all.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthInvalidTokenEnvelope"
+
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      summary: OAuth 2.0 Protected Resource Metadata for the /mcp resource (RFC 9728)
+      description: |
+        RFC 9728 §3.1 locates a resource's metadata by appending the resource's
+        own path, so a client whose resource is `/mcp` probes this form. Same
+        handler and same contract as the bare path; registered explicitly because
+        Express does not match it against the bare route (#2049).
+      operationId: oauthProtectedResourceForMcp
+      # Public by RFC 9728 §3.1: same contract as the bare path (#2049).
+      security: []
+      responses:
+        "200":
+          description: Protected resource metadata (served without credentials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthProtectedResourceMetadata"
+        "401":
+          description: Asserted `X-Connection-Id` is expired or unrecognized.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthInvalidTokenEnvelope"
+
+  /.well-known/openid-configuration:
+    get:
+      summary: OpenID Connect discovery — not offered (RFC 9728 companion decision)
+      description: |
+        Neotoma does not implement OIDC discovery; clients use RFC 8414
+        `/.well-known/oauth-authorization-server`. This route exists solely to
+        return an explicit 404 rather than falling through to the catch-all auth
+        guard, which would answer 401 — telling an OIDC-first client "this exists
+        but you are unauthenticated" and sending it down the same dead-end the
+        #2049 deadlock created. A 404 correctly makes such a client fall back.
+      operationId: openidConfigurationNotOffered
+      # Public: must answer 404, not a 401 from the catch-all guard (#2049).
+      security: []
+      responses:
+        "404":
+          description: OIDC discovery is not offered by this server
           content:
             application/json:
               schema:
                 type: object
+                properties:
+                  error:
+                    type: string
+                  error_description:
+                    type: string
 
   /mcp/oauth/callback:
     get:
@@ -2932,7 +4328,27 @@ paths:
         - in: query
           name: offset
           required: false
+          deprecated: true
+          description: |
+            Deprecated in favor of `cursor`. Still accepted for back-compat but
+            internally bounded: values above 2000 are rejected with a structured
+            hint pointing to `cursor`. Supplying a non-zero `offset` together
+            with `cursor` is rejected as a validation error; use one or the other.
           schema: { type: integer }
+        - in: query
+          name: cursor
+          required: false
+          description: |
+            Opaque keyset pagination cursor from a previous response's
+            `next_cursor`. Returns the next page in O(page size) time regardless
+            of position, unlike `offset` which is bounded and deprecated. Only
+            supported with the default `sort_by=entity_id`; cannot be combined
+            with `search` or a non-zero `offset`. Reusing a cursor after changing
+            `sort_order` returns a structured error — so if you set `sort_order`
+            explicitly on the first call of a walk, pass the same value on every
+            page (omitting it after having set it explicitly counts as changing
+            it).
+          schema: { type: string }
         - in: query
           name: sort_by
           required: false
@@ -3024,12 +4440,22 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/EntitySnapshot"
+                  read_contract:
+                    $ref: "#/components/schemas/EntityReadContract"
                   total:
                     type: integer
                   limit:
                     type: integer
                   offset:
                     type: integer
+                  next_cursor:
+                    type: string
+                    nullable: true
+                    description: |
+                      Opaque keyset cursor for the next page, or `null`/omitted
+                      when this page returned fewer than `limit` rows. Pass back
+                      as the `cursor` query parameter to continue pagination in
+                      O(page size) time.
                   applied_search_strategies:
                     type: array
                     items:
@@ -3084,8 +4510,33 @@ paths:
                   description: Compatibility alias for `search`.
                 limit:
                   type: integer
+                  description: |
+                    Page size. Capped at 500 when `include_snapshots` is true
+                    (the default), since each snapshot is hydrated synchronously;
+                    lower the page size or set `include_snapshots=false` for
+                    larger pages.
                 offset:
                   type: integer
+                  deprecated: true
+                  description: |
+                    Deprecated in favor of `cursor`. Still accepted for back-compat
+                    but internally bounded: values above 2000 are rejected with a
+                    structured hint pointing to `cursor`. Supplying a non-zero
+                    `offset` together with `cursor` is rejected as a validation
+                    error; use one or the other.
+                cursor:
+                  type: string
+                  description: |
+                    Opaque keyset pagination cursor from a previous response's
+                    `next_cursor`. Returns the next page in O(page size) time
+                    regardless of position, unlike `offset` which is bounded and
+                    deprecated. Only supported with the default
+                    `sort_by=entity_id`; cannot be combined with `search` or a
+                    non-zero `offset`. Reusing a cursor after changing
+                    `sort_order` returns a structured error — so if you set
+                    `sort_order` explicitly on the first call of a walk, pass the
+                    same value on every page (omitting it after having set it
+                    explicitly counts as changing it).
                 sort_by:
                   type: string
                   description: |
@@ -3163,6 +4614,18 @@ paths:
                     extraction, so only entities whose snapshot contains a
                     matching value are returned. Example:
                     `{"status": {"op": "eq", "value": "active"}}`.
+
+                    `contains` is a raw case-insensitive SUBSTRING match, so
+                    `{"title": {"op": "contains", "value": "CTO"}}` also matches
+                    "director" and "doctor". Use `contains_word` for
+                    whole-word matching: it matches only when the value appears
+                    as a complete token delimited by punctuation or whitespace
+                    (matches "VP, CTO" and "CTO & Co-founder"; not "director",
+                    "coordinator", or "Careers"). Punctuation inside the term is
+                    handled: "O'Brien", "R&D", and "100%" match their stored
+                    values (separators in the term are normalized the same way as
+                    the stored value). Case-insensitivity for `contains_word` is
+                    ASCII-only.
                   additionalProperties:
                     type: object
                     required:
@@ -3178,6 +4641,7 @@ paths:
                           - gte
                           - lte
                           - contains
+                          - contains_word
                       value: {}
       responses:
         "200":
@@ -3191,12 +4655,22 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/EntitySnapshot"
+                  read_contract:
+                    $ref: "#/components/schemas/EntityReadContract"
                   total:
                     type: integer
                   limit:
                     type: integer
                   offset:
                     type: integer
+                  next_cursor:
+                    type: string
+                    nullable: true
+                    description: |
+                      Opaque keyset cursor for the next page, or `null`/omitted
+                      when this page returned fewer than `limit` rows. Pass back
+                      as the `cursor` request field to continue pagination in
+                      O(page size) time regardless of position.
                   applied_search_strategies:
                     type: array
                     description: |
@@ -3228,6 +4702,22 @@ paths:
                       matching answered instead. Lets callers detect a silent
                       semantic→lexical degradation (e.g. embedding provider
                       unavailable). See issue #1506.
+        "400":
+          description: |
+            Invalid request. Error codes:
+
+            - `INVALID_CURSOR` — the `cursor` is malformed, carries an
+              unsupported version, or was minted under a different `sort_order`
+              than this request (#1943). `details` carries `code`, `message`,
+              and a flat `hint`. Not retryable with the same token: drop the
+              cursor and restart the walk from the first page.
+            - `VALIDATION_INVALID_FORMAT` — the request violated a parameter
+              rule, e.g. `cursor` combined with `search`, a non-default
+              `sort_by`, or a non-zero `offset`; `offset` above 2000; or `limit`
+              above 500 while `include_snapshots` is true.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /entities/{id}:
     get:
@@ -3515,6 +5005,20 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           description: Source entity not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: |
+            `entity_owner_conflict` — `new_entity.target_entity_id` names an
+            existing entity owned by a different, non-null user than the
+            writer. No observations are re-pointed. The source entity's own
+            ownership is already covered by the `404` above (a source owned
+            by another user reads as not-found); this refusal is for the
+            split's OTHER caller-supplied id, the merge target. The envelope
+            details carry `entity_id` and `entity_type`; never the other
+            owner's identity or fields.
           content:
             application/json:
               schema:
@@ -3973,9 +5477,11 @@ paths:
       summary: Create an agent grant
       description: |
         Creates a new `agent_grant` for the authenticated user. At least
-        one of `match_sub` or `match_thumbprint` must be supplied. The
-        grant's `capabilities` follow the same shape used by the
-        admitted-request authorization check.
+        one of `match_sub` or `match_thumbprint` must be supplied. Only
+        `match_thumbprint` admits signed requests; a grant created without
+        it is accepted but inert, and the response carries a `warnings`
+        entry saying so. The grant's `capabilities` follow the same shape
+        used by the admitted-request authorization check.
       operationId: createAgentGrant
       requestBody:
         required: true
@@ -3993,6 +5499,14 @@ paths:
                 properties:
                   grant:
                     $ref: "#/components/schemas/AgentGrant"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Advisory messages about the stored grant. Present when
+                      the grant pins no `match_thumbprint` and therefore does
+                      not admit signed requests.
         "400":
           description: Validation error (e.g. `agent_grant_invalid`)
         "409":
@@ -4030,7 +5544,10 @@ paths:
       description: |
         Patches `label`, `capabilities`, `notes`, or any of the
         `match_*` identity fields. Status transitions go through the
-        dedicated `suspend`, `revoke`, and `restore` endpoints.
+        dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+        `match_thumbprint` is how a key is pinned to an existing grant;
+        the admission cache is cleared so the pin applies to the next
+        request.
       operationId: updateAgentGrant
       parameters:
         - in: path
@@ -4054,6 +5571,14 @@ paths:
                 properties:
                   grant:
                     $ref: "#/components/schemas/AgentGrant"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      Advisory messages about the stored grant. Present when
+                      the grant pins no `match_thumbprint` and therefore does
+                      not admit signed requests.
         "400":
           description: Validation error
         "404":
@@ -4361,6 +5886,13 @@ paths:
   /observations/create:
     post:
       summary: Create observation
+      description: |
+        Low-level single-observation write. Accepts the same
+        `observation_source` enum as `/store`. When the field is omitted
+        the observation is stored with `unspecified`, but unlike `/store`
+        this endpoint returns no `OBSERVATION_SOURCE_OMITTED` warning
+        (its response carries no `store_warnings`). Send
+        `observation_source` explicitly to record lineage.
       operationId: createObservation
       requestBody:
         required: true
@@ -4572,6 +6104,38 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EntitySchema" }
 
+  /instance-policy:
+    get:
+      summary: Describe this instance's data policy
+      description: |
+        Return the instance-level data policy (#1974/#1975): what this instance
+        is for, which entity types are in or out of scope, and which
+        person-data gates it enforces. Exposed over MCP as the
+        `describe_instance_policy` tool and over the CLI as
+        `neotoma instance-policy show`.
+
+        Call this before writing to an unfamiliar instance. Policy that is only
+        discoverable by being rejected is a worse experience than no policy at
+        all — this endpoint lets a cooperating client comply on the first
+        attempt rather than learning the rules through repeated denials.
+
+        Read-only: creates no sources, observations, or entities. Returns
+        `{"policy": null, "entity_id": null}` when no policy is configured —
+        never a 404, and never an empty object, so "unset" is never mistaken
+        for "denies everything". `entity_id` is opaque; pass it to `correct()`
+        when updating the policy remotely.
+
+        Requires a normal authenticated session. Policy shape can itself reveal
+        what kind of data an instance handles, so it is not exposed
+        unauthenticated.
+      operationId: describeInstancePolicy
+      responses:
+        "200":
+          description: The configured instance policy, or null when unset.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstancePolicyResponse" }
+
   /interpretations:
     get:
       summary: List interpretations
@@ -4716,13 +6280,21 @@ paths:
         "400":
           description: |
             Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-            `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+            `StoreResolutionErrorEnvelope` shape; one of its per-observation
+            `issues[].code` values is `entity_owner_conflict` — resolution
+            landed on an existing entity owned by a different, non-null
+            user, and the write was refused before anything was persisted
+            (see `StoreResolutionIssue.code`). `ERR_CONSTRAINT_VIOLATION` is
             returned when one or more observations fail a declarative write-time
             value constraint (constraint `policy: "reject"`); its envelope carries
             a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
             `ERR_IDEMPOTENCY_MISMATCH` is returned when the same `idempotency_key`
             is reused with materially different content — use a new key for a
-            different payload. Other validation errors fall back to the generic
+            different payload. `ERR_STORE_POLICY_DENIED` is returned when the
+            write is well-formed but refused by this instance's configured data
+            policy; the whole request is rejected and `denied[]` enumerates every
+            violating entity — call `describe_instance_policy` to read the policy
+            before retrying. Other validation errors fall back to the generic
             `ErrorEnvelope`.
           content:
             application/json:
@@ -4730,7 +6302,12 @@ paths:
                 oneOf:
                   - { $ref: "#/components/schemas/StoreResolutionErrorEnvelope" }
                   - { $ref: "#/components/schemas/ConstraintViolationErrorEnvelope" }
+                  - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
                   - { $ref: "#/components/schemas/ErrorEnvelope" }
+                  - {
+                      type: object,
+                      properties: { error: { $ref: "#/components/schemas/ConditionalStoreError" } },
+                    }
         "403":
           description: |
             Write rejected by policy. `OVERRIDE_POLICY_VIOLATION` is returned
@@ -4742,12 +6319,63 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
           description: |
-            Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+            Conditional physical presence, changed payload or mode conflict,
+            or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
             idempotency_key was already used for a store call with different
             content. Use a new idempotency_key to write the updated payload.
+
+            `ERR_STORE_WRITE_INCOMPLETE` (an `ErrorEnvelope` with
+            `error_code: ERR_STORE_WRITE_INCOMPLETE`): the idempotency_key
+            belongs to a store that did not finish writing, and the request
+            carries an `interpretation`, so it cannot be resumed under that
+            key. `details` carries `hint`, `source_id`, `entities_requested`,
+            `entities_written` and `missing_entity_indexes` (zero-based
+            positions in the request's `entities` array that have no
+            observation yet; when the list is empty every entity is stored
+            and only relationships may be missing). Resend ONLY those
+            entities under a new idempotency_key; resending the full payload
+            under a new key writes a second set of observations to the
+            entities already written. The original request's relationships
+            were not written: recreate them separately, referencing the
+            entities by entity id (the error does not return the ids; look
+            each one up by the entity's identifying fields). Not retryable
+            under the same key. A
+            replay without an `interpretation` never returns this: it
+            finishes the interrupted write, and a replay of a finished write
+            is unchanged (`replayed: true`).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
+                  - {
+                      type: object,
+                      properties: { error: { $ref: "#/components/schemas/ConditionalStoreError" } },
+                    }
+        "503":
+          description: |
+            Conditional failure/uncertain acknowledgment carries explicit database
+            commit and possible private storage residue details when applicable.
+            Exact request replay reconciles the original receipt. This is separate from
+            `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+            read, so the write could not be checked against it. Nothing was
+            persisted. Retry the request UNCHANGED; the envelope carries
+            `retryable: true`.
+
+            Do not treat this like the `400` `ERR_STORE_POLICY_DENIED` above.
+            DENIED means the policy was read and forbids this payload (fix the
+            payload). UNAVAILABLE means permission is unknown. An agent that
+            responds by narrowing or dropping entities answers an outage by
+            silently storing less — the failure this split exists to prevent.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+                  - {
+                      type: object,
+                      properties: { error: { $ref: "#/components/schemas/ConditionalStoreError" } },
+                    }
 
   /get_entity_snapshot:
     post:
@@ -4762,6 +6390,10 @@ paths:
               properties:
                 entity_id:
                   type: string
+                include_cleared_fields:
+                  type: boolean
+                  default: false
+                  description: Include only selected explicit-null fields with winning provenance; requires complete owned acquisition and an active schema.
                 at:
                   type: string
                   description: >-
@@ -4879,42 +6511,11 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  description: |
-                    Typed relationship category. Canonical structural types are
-                    `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
-                    `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
-                    types (e.g. `works_at`, `owns`, `manages`) are also accepted.
-                  enum:
-                    [
-                      PART_OF,
-                      CORRECTS,
-                      REFERS_TO,
-                      SETTLES,
-                      DUPLICATE_OF,
-                      DEPENDS_ON,
-                      SUPERSEDES,
-                      EMBEDS,
-                      works_at,
-                      owns,
-                      manages,
-                      part_of,
-                      related_to,
-                      depends_on,
-                      references,
-                      transacted_with,
-                      member_of,
-                      reports_to,
-                      located_at,
-                      created_by,
-                      funded_by,
-                      acquired_by,
-                      subsidiary_of,
-                      partner_of,
-                      competitor_of,
-                      supplies_to,
-                      contracted_with,
-                      invested_in,
-                    ]
+                  description: >-
+                    Relationship type. The vocabulary is a runtime registry, not a closed
+                    enum: call list_relationship_types to read what this instance accepts, and
+                    register_relationship_type to add to it. Names are identifier-shaped and
+                    casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
                 source_entity_id:
                   type: string
                   description: Existing entity id at the source end of the edge.
@@ -4943,6 +6544,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RelationshipSnapshot" }
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover
+            the relationship type and both endpoint entity types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /create_relationships:
     post:
@@ -4967,37 +6575,11 @@ paths:
                     properties:
                       relationship_type:
                         type: string
-                        enum:
-                          [
-                            PART_OF,
-                            CORRECTS,
-                            REFERS_TO,
-                            SETTLES,
-                            DUPLICATE_OF,
-                            DEPENDS_ON,
-                            SUPERSEDES,
-                            EMBEDS,
-                            works_at,
-                            owns,
-                            manages,
-                            part_of,
-                            related_to,
-                            depends_on,
-                            references,
-                            transacted_with,
-                            member_of,
-                            reports_to,
-                            located_at,
-                            created_by,
-                            funded_by,
-                            acquired_by,
-                            subsidiary_of,
-                            partner_of,
-                            competitor_of,
-                            supplies_to,
-                            contracted_with,
-                            invested_in,
-                          ]
+                        description: >-
+                          Relationship type. The vocabulary is a runtime registry, not a closed
+                          enum: call list_relationship_types to read what this instance accepts, and
+                          register_relationship_type to add to it. Names are identifier-shaped and
+                          casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
                       source_entity_id:
                         type: string
                       target_entity_id:
@@ -5034,8 +6616,7 @@ paths:
                   errors:
                     type: array
                     items:
-                      type: object
-                      additionalProperties: true
+                      $ref: "#/components/schemas/RelationshipBatchErrorItem"
 
   /list_relationships:
     post:
@@ -5097,41 +6678,11 @@ paths:
                     matches either side.
                 relationship_type:
                   type: string
-                  enum:
-                    [
-                      PART_OF,
-                      CORRECTS,
-                      REFERS_TO,
-                      SETTLES,
-                      DUPLICATE_OF,
-                      DEPENDS_ON,
-                      SUPERSEDES,
-                      EMBEDS,
-                      works_at,
-                      owns,
-                      manages,
-                      part_of,
-                      related_to,
-                      depends_on,
-                      references,
-                      transacted_with,
-                      member_of,
-                      reports_to,
-                      located_at,
-                      created_by,
-                      funded_by,
-                      acquired_by,
-                      subsidiary_of,
-                      partner_of,
-                      competitor_of,
-                      supplies_to,
-                      contracted_with,
-                      invested_in,
-                    ]
-                  description: |
-                    Optional relationship_type filter. Closed enum matching the handler's
-                    accepted values; spec-driven clients passing any other value will be
-                    rejected at runtime with a Zod validation error.
+                  description: >-
+                    Relationship type. The vocabulary is a runtime registry, not a closed
+                    enum: call list_relationship_types to read what this instance accepts, and
+                    register_relationship_type to add to it. Names are identifier-shaped and
+                    casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
                 limit:
                   type: integer
                   minimum: 1
@@ -5186,6 +6737,128 @@ paths:
                   offset:
                     type: integer
                     description: Echo of the requested `offset`.
+
+  /query_contacts_at_company:
+    post:
+      summary: Query contacts at a company
+      operationId: queryContactsAtCompany
+      description: |
+        Resolve a free-text company name to the canonical `company` entity
+        (exact-normalized match first, then a conservative fuzzy pass — the
+        same resolution order used at store time when a `contact`'s
+        `organization` field auto-links to a `company` via `works_at`, see
+        docs/foundation/entity_resolution.md#15.4-company-entity-resolution-leads-graph-join-key)
+        and return every contact linked to it via a live `works_at` edge.
+
+        Answers "who do we have connected at company X" for a leads/warm-intro
+        graph. Read-only: unlike the store-time resolver, this never creates a
+        company entity — when no company matches (exact or fuzzy), the
+        response reports `company: null` and an empty `contacts` list rather
+        than inventing one.
+
+        Optional `owner_user_id` scopes both the company resolution and the
+        works_at/contact lookup to one tenant's graph (which partner's
+        network to search); omit to search the caller's own graph via the
+        authenticated user. Mirrors the `user_id` override on
+        `/list_relationships`: today the server requires it to match the
+        authenticated caller (single-tenant admission), so this is
+        forward-compatible API surface rather than a live cross-tenant query
+        capability yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - company_name
+              properties:
+                company_name:
+                  type: string
+                  description: |
+                    Free-text company name to resolve, e.g. "Northgate" or
+                    "North Gate". Matched exact-normalized first, then fuzzy
+                    (see COMPANY_FUZZY_MATCH_THRESHOLD in
+                    src/services/company_resolution.ts).
+                owner_user_id:
+                  type: string
+                  description: |
+                    Optional user_id override scoping the query to a specific
+                    partner's network (which partner's contacts/company graph
+                    to search), matching the `user_id` override pattern on
+                    /list_relationships. Must equal the authenticated user's
+                    id today (the server has no cross-tenant admission yet);
+                    supplying a different value is rejected. When omitted,
+                    the authenticated user's own graph is searched.
+                limit:
+                  type: integer
+                  minimum: 1
+                  default: 100
+                  description: |
+                    Maximum number of linked contacts to return. Applied
+                    after the full works_at edge set is resolved, so
+                    `total_contacts` on the response reflects the true
+                    pre-limit count.
+      responses:
+        "200":
+          description: Resolved company (or none) and its linked contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queried_name:
+                    type: string
+                    description: The `company_name` as given by the caller, unmodified.
+                  company:
+                    type: object
+                    nullable: true
+                    description: |
+                      The resolved company entity, or `null` when no
+                      exact/fuzzy match exists. Never created by this
+                      read-only query.
+                    properties:
+                      entity_id:
+                        type: string
+                      canonical_name:
+                        type: string
+                      basis:
+                        type: string
+                        enum: [exact_normalized, fuzzy_match]
+                        description: Which resolution path matched.
+                      fuzzy_score:
+                        type: number
+                        description: Similarity score when `basis` is `fuzzy_match`.
+                  contacts:
+                    type: array
+                    description: |
+                      Contacts linked to the resolved company via a live
+                      `works_at` edge, ordered by entity_id ascending for
+                      deterministic pagination. Empty when `company` is null
+                      or no contacts are linked.
+                    items:
+                      type: object
+                      properties:
+                        entity_id:
+                          type: string
+                        canonical_name:
+                          type: string
+                        snapshot:
+                          type: object
+                          additionalProperties: true
+                        relationship_key:
+                          type: string
+                          description: The `works_at` relationship_key linking this contact to the company.
+                        last_observation_at:
+                          type: string
+                          description: When the works_at relationship was last observed.
+                  total_contacts:
+                    type: integer
+                    description: Total linked contacts before `limit` is applied.
+                  limit:
+                    type: integer
+                    description: Echo of the requested (or default) `limit`.
 
   /retrieve_entity_by_identifier:
     post:
@@ -5769,10 +7442,25 @@ paths:
       description: |
         Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
         to the configured operator instance (same flow as MCP submit_issue).
-        Authenticated users use the normal user scope. AAuth-signed guest
-        submitters may create operator-side issues when the `issue`,
-        `conversation`, and `conversation_message` guest access policies allow
-        writes; the response includes a guest read-back token.
+        Authenticated users use the normal user scope. Guest submitters may create
+        operator-side issues when the `issue`, `conversation`, and
+        `conversation_message` guest access policies allow writes; the response
+        includes a guest read-back token.
+
+        **No prior identity is required to submit.** A remote caller with no Bearer
+        token, no AAuth signature, and no guest access token may open an issue on
+        this route whenever the `issue` guest access policy permits guest writes
+        (`submit_only`, `submitter_scoped`, or `open`). This is deliberate: the
+        guest read-back token is an **output** of a successful submit, so requiring
+        one as input would make a third party's first contact impossible. AAuth
+        signing remains supported and, when present, partitions the submitter by
+        thumbprint. Operators can close the inbox with
+        `NEOTOMA_ACCESS_POLICY_ISSUE=closed`, which restores `AUTH_REQUIRED` for
+        unauthenticated callers.
+
+        Anonymous access is scoped to **this route only**: `POST /issues/add_message`
+        still requires authentication, since a reporter appending to a thread already
+        holds the token their submit returned.
 
         **Reporter environment is required.** Callers MUST supply at least
         one of `reporter_git_sha` or `reporter_app_version`. Submissions
@@ -5962,11 +7650,16 @@ paths:
     post:
       summary: Sync issues bidirectionally with GitHub
       description: >
-        Bidirectional sync between local Neotoma and the configured GitHub repo.
-        Push leg (default on): local public issues with no github_number are sanitized
-        (PII stripped) and created on GitHub, then updated locally with the returned number/url.
-        Pull leg: GitHub issues and their comments are pulled into local entities.
-        MCP sync_issues parity.
+        Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their
+        comments are pulled into local entities. Push leg: local public issues with no
+        github_number are sanitized (PII stripped) and created on GitHub, then updated locally
+        with the returned number/url. The target repo defaults to the server-configured repo
+        (`NEOTOMA_ISSUES_REPO` / `issues.repo`); `repo` overrides it for this call only. The
+        push leg is on by default only for the configured default repo and off for any other
+        `repo` unless `push: true` is passed. `commit: false` runs a dry run that reports what
+        would be created, updated and pushed and writes nothing. A GitHub token is required:
+        `NEOTOMA_ISSUES_GITHUB_TOKEN` in the server environment (or `gh auth login` on the
+        server host). MCP sync_issues parity.
       operationId: issuesSync
       requestBody:
         required: true
@@ -5985,26 +7678,56 @@ paths:
                   type: array
                   items:
                     type: string
+                repo:
+                  type: string
+                  description: >
+                    GitHub repository to mirror, `owner/name` (for example `acme/widgets`).
+                    Defaults to the server-configured repo. Must be the configured repo or be
+                    listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or
+                    `issues.allowed_repos`). A malformed value is rejected with a 400 and a repo
+                    that is not permitted with a 403, both before any GitHub request or write.
+                  pattern: "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\\.{1,2}$)[A-Za-z0-9._-]{1,100}$"
+                  example: acme/widgets
                 push:
                   type: boolean
-                  description: When false, skip the push leg (local public → GitHub). Default true.
+                  description: >
+                    Run the push leg (local public -> GitHub). Default true when `repo` is omitted
+                    or equals the configured default repo; default false for any other `repo`.
+                    Pass true to opt in for another repo.
+                commit:
+                  type: boolean
+                  description: >
+                    When false, dry run: report what would be created, updated and pushed in
+                    `plan` and write nothing locally or on GitHub. Default true.
                 user_id:
                   type: string
       responses:
         "200":
-          description: Sync counts and errors
+          description: Sync counts, errors and, for a dry run, the plan
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
                 required:
+                  - repo
+                  - dry_run
+                  - push_enabled
                   - issues_synced
                   - messages_synced
                   - errors
                   - issues_pushed
                   - push_errors
                 properties:
+                  repo:
+                    type: string
+                    description: Target GitHub repo (`owner/name`) this run mirrored.
+                  dry_run:
+                    type: boolean
+                    description: "True when the run was a dry run (`commit: false`); nothing was written."
+                  push_enabled:
+                    type: boolean
+                    description: Whether the push leg was enabled (resolved from `push` and `repo`).
                   issues_synced:
                     type: integer
                   messages_synced:
@@ -6019,6 +7742,55 @@ paths:
                     type: array
                     items:
                       type: string
+                  plan:
+                    type: object
+                    description: Present only on a dry run.
+                    additionalProperties: false
+                    required:
+                      - issues_to_create
+                      - issues_to_update
+                      - issues_unchanged
+                      - messages_to_sync
+                      - issues_to_push
+                      - warnings
+                    properties:
+                      issues_to_create:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IssuesSyncPlanIssue"
+                      issues_to_update:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IssuesSyncPlanIssue"
+                      issues_unchanged:
+                        type: integer
+                      messages_to_sync:
+                        type: integer
+                      issues_to_push:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [entity_id, title]
+                          properties:
+                            entity_id:
+                              type: string
+                            title:
+                              type: string
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+        "400":
+          description: Validation error (for example a malformed `repo`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /delete_entity:
     post:
@@ -6110,37 +7882,11 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  enum:
-                    [
-                      PART_OF,
-                      CORRECTS,
-                      REFERS_TO,
-                      SETTLES,
-                      DUPLICATE_OF,
-                      DEPENDS_ON,
-                      SUPERSEDES,
-                      EMBEDS,
-                      works_at,
-                      owns,
-                      manages,
-                      part_of,
-                      related_to,
-                      depends_on,
-                      references,
-                      transacted_with,
-                      member_of,
-                      reports_to,
-                      located_at,
-                      created_by,
-                      funded_by,
-                      acquired_by,
-                      subsidiary_of,
-                      partner_of,
-                      competitor_of,
-                      supplies_to,
-                      contracted_with,
-                      invested_in,
-                    ]
+                  description: >-
+                    Relationship type. The vocabulary is a runtime registry, not a closed
+                    enum: call list_relationship_types to read what this instance accepts, and
+                    register_relationship_type to add to it. Names are identifier-shaped and
+                    casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
                 source_entity_id:
                   type: string
                 target_entity_id:
@@ -6167,6 +7913,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover
+            the relationship type and both endpoint entity types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /restore_relationship:
     post:
@@ -6186,37 +7939,11 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  enum:
-                    [
-                      PART_OF,
-                      CORRECTS,
-                      REFERS_TO,
-                      SETTLES,
-                      DUPLICATE_OF,
-                      DEPENDS_ON,
-                      SUPERSEDES,
-                      EMBEDS,
-                      works_at,
-                      owns,
-                      manages,
-                      part_of,
-                      related_to,
-                      depends_on,
-                      references,
-                      transacted_with,
-                      member_of,
-                      reports_to,
-                      located_at,
-                      created_by,
-                      funded_by,
-                      acquired_by,
-                      subsidiary_of,
-                      partner_of,
-                      competitor_of,
-                      supplies_to,
-                      contracted_with,
-                      invested_in,
-                    ]
+                  description: >-
+                    Relationship type. The vocabulary is a runtime registry, not a closed
+                    enum: call list_relationship_types to read what this instance accepts, and
+                    register_relationship_type to add to it. Names are identifier-shaped and
+                    casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use).
                 source_entity_id:
                   type: string
                 target_entity_id:
@@ -6233,6 +7960,13 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover
+            the relationship type and both endpoint entity types.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /analyze_schema_candidates:
     post:
@@ -6388,7 +8122,6 @@ paths:
               type: object
               required:
                 - entity_type
-                - fields_to_add
               properties:
                 entity_type:
                   type: string
@@ -6410,12 +8143,63 @@ paths:
                         default: false
                       reducer_strategy:
                         type: string
-                        enum: [last_write, highest_priority, most_specific, merge_array]
+                        enum:
+                          [
+                            last_write,
+                            highest_priority,
+                            most_specific,
+                            merge_array,
+                            merge_array_by_key,
+                          ]
+                      reducer_key_field:
+                        type: string
+                        description: Required when reducer_strategy is merge_array_by_key; stable identity field on each array item.
+                fields_to_remove:
+                  type: array
+                  items:
+                    type: string
+                canonical_name_fields:
+                  type: array
+                  description: >-
+                    Replace the entity type's identity rule (how canonical_name /
+                    identity is derived). Each item is a single field name
+                    (string) or an all-required composite ({composite:[...]}).
+                    Rules are ordered precedence with fallback — the resolver
+                    uses the first rule whose fields are all present, not an
+                    unordered set. Example:
+                    [{"composite":["linkedin_url"]},"email","name"] keys on
+                    linkedin_url when present, else email, else name. Triggers a
+                    major version bump; existing reducer_config is preserved.
+                    Omit to keep the current rule. Passing [] clears the rule
+                    but only succeeds if the schema also declares
+                    identity_opt_out. Applies to new writes only — does not retroactively re-key existing
+                    entities.
+                  items:
+                    oneOf:
+                      - type: string
+                      - type: object
+                        required: [composite]
+                        properties:
+                          composite:
+                            type: array
+                            items:
+                              type: string
                 schema_version:
                   type: string
                 user_specific:
                   type: boolean
-                  default: false
+                  description: >-
+                    Explicit scope override, with no default. When omitted, the
+                    write goes to whichever scope the caller's own read of the
+                    schema resolved: the caller's user-scoped override if one
+                    exists, otherwise the global row. Pass true to create or
+                    extend a user-scoped override. Pass false to extend the
+                    global row: the new global version is built from the
+                    current global schema, never from the caller's override,
+                    and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type
+                    has no global registry row and no code-defined baseline
+                    (but has the caller's user-scoped schema). The response's
+                    `scope` reports the scope actually written.
                 user_id:
                   type: string
                 activate:
@@ -6424,14 +8208,330 @@ paths:
                 migrate_existing:
                   type: boolean
                   default: false
+                  description: >-
+                    Promote existing raw_fragments for the added fields into
+                    observations (historical backfill). A request with
+                    migrate_existing true can legitimately promote nothing; see
+                    `migrated_existing` and `migration_result` in the response.
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Bypass the entity-type naming guards (forbidden test-artifact
+                    patterns and the plural-name guard) for this call only. Use
+                    when entity_type is rejected with a message naming
+                    "force: true" as the remedy. Does not affect any other
+                    validation.
       responses:
         "200":
-          description: Schema updated
+          description: |
+            Schema updated on success. On a structured schema-registry client
+            error (`ERR_SCHEMA_SCOPE_MISMATCH` or `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`)
+            the same 200 response carries the nested canonical envelope
+            `{ error: { error_code, message, hint, details } }` — matching the
+            MCP tool response so CLI/HTTP/MCP handlers can pattern-match the
+            code uniformly (see docs/reference/error_codes.md Schema Registry).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    description: Successful incremental update
+                    properties:
+                      success:
+                        type: boolean
+                      entity_type:
+                        type: string
+                      schema_version:
+                        type: string
+                      fields_added:
+                        type: array
+                        items:
+                          type: string
+                      fields_removed:
+                        type: array
+                        items:
+                          type: string
+                      canonical_name_fields:
+                        description: >-
+                          The identity rule as resolved on the registered schema
+                          after this call — the value supplied if replaced, or the
+                          preserved prior rule otherwise; null when the schema
+                          declares none. Lets a caller confirm the rule without a
+                          second describe_entity_type round trip.
+                        type: array
+                        nullable: true
+                        items:
+                          oneOf:
+                            - type: string
+                            - type: object
+                              required: [composite]
+                              properties:
+                                composite:
+                                  type: array
+                                  items:
+                                    type: string
+                      activated:
+                        type: boolean
+                      migrated_existing:
+                        type: boolean
+                        description: >-
+                          True only when this call actually promoted at least one
+                          raw_fragment (`migration_result.migrated_count > 0`).
+                          Never an echo of the `migrate_existing` request flag.
+                      migration_result:
+                        type: object
+                        description: >-
+                          Present only when `migrate_existing` was requested. The
+                          actual migration outcome, including every fragment group
+                          that did not promote and why.
+                        required: [migrated_count, skipped]
+                        properties:
+                          migrated_count:
+                            type: integer
+                            minimum: 0
+                          skipped:
+                            type: array
+                            items:
+                              type: object
+                              required: [field_name, reason, count]
+                              properties:
+                                field_name:
+                                  type: string
+                                reason:
+                                  type: string
+                                  enum:
+                                    - no_entity_resolution
+                                    - no_active_schema
+                                    - observation_insert_failed
+                                    - already_promoted
+                                    - unexpected_error
+                                count:
+                                  type: integer
+                                  minimum: 0
+                      scope:
+                        type: string
+                        enum: [global, user]
+                        description: >-
+                          The scope this call actually wrote to, read from the
+                          persisted row rather than re-derived from the request.
+                      user_id:
+                        type: string
+                        nullable: true
+                        description: >-
+                          Present only when `scope` is `user`: which user's row
+                          was written.
+                    additionalProperties: true
+                  - $ref: "#/components/schemas/SchemaRegistryToolErrorResponse"
+
+  /register_relationship_type:
+    post:
+      summary: Register a relationship type
+      description: >-
+        Add a relationship type to this instance's vocabulary (#1972 / G25).
+        The vocabulary is a runtime registry rather than a closed enum, so a
+        caller needing an edge type the substrate does not already know
+        registers it here instead of bending an existing type or simulating
+        the edge as a field on an entity. Read the vocabulary back with
+        list_relationship_types.
+
+
+        Registration is APPEND-ONLY: re-registering a type inserts a newer row
+        that supersedes the prior one, and deregistering appends a
+        deactivated row. Nothing is updated in place and nothing is deleted,
+        so the history of what was registered when stays readable.
+
+
+        Scope defaults to "user". Registering at "global" scope changes the
+        vocabulary for every tenant on the instance and requires an explicit
+        register_relationship_type capability naming the type (or "*").
+
+
+        source_entity_types, target_entity_types, inverse and symmetric are
+        ADVISORY ONLY and are not enforced at write time, mirroring how entity
+        schemas treat unknown fields. acyclic is the one exception and IS
+        enforced.
+      operationId: registerRelationshipType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - relationship_type
+              properties:
+                relationship_type:
+                  type: string
+                  description: >-
+                    Identifier-shaped name, 1-64 characters, matching
+                    ^[A-Za-z][A-Za-z0-9_]*$. Casing-agnostic. A new name that
+                    differs from an existing active type only by case is
+                    rejected; the pre-existing PART_OF/part_of and
+                    DEPENDS_ON/depends_on pairs are grandfathered.
+                description:
+                  type: string
+                scope:
+                  type: string
+                  enum: [user, global]
+                  default: user
+                  description: >-
+                    Defaults to "user" — the safe branch. This deliberately
+                    inverts register_schema, whose user_specific defaults to
+                    false and whose default branch is therefore both the
+                    widest blast radius and the one that records no identity.
+                source_entity_types:
+                  type: array
+                  items:
+                    type: string
+                  description: Advisory only. Not enforced at write time.
+                target_entity_types:
+                  type: array
+                  items:
+                    type: string
+                  description: Advisory only. Not enforced at write time.
+                inverse:
+                  type: string
+                  description: Advisory only. Name of the inverse edge.
+                symmetric:
+                  type: boolean
+                  description: Advisory only. Whether the edge reads the same both ways.
+                acyclic:
+                  type: boolean
+                  description: >-
+                    ENFORCED. When true, create_relationship refuses an edge of
+                    this type that would close a loop among edges OF THIS TYPE
+                    within this tenant. Opt-in: a type whose semantics permit
+                    cycles should leave this unset.
+      responses:
+        "200":
+          description: Relationship type registered
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
+                required:
+                  - success
+                  - relationship_type
+                  - scope
+                  - state
+                properties:
+                  success:
+                    type: boolean
+                  relationship_type:
+                    type: string
+                  scope:
+                    type: string
+                  state:
+                    type: string
+                  registry_version:
+                    type: string
+                  registered_at:
+                    type: string
+
+  /list_relationship_types:
+    post:
+      summary: List registered relationship types
+      description: >-
+        The registry census: relationship types this instance PERMITS, which is
+        not the same as types that HAVE edges. A type registered a moment ago
+        with zero edges written appears here, which is exactly what a caller
+        discovering what it may write BEFORE writing it needs.
+
+
+        edge_count, when present, means "rows written" and is never evidence of
+        registration.
+      operationId: listRelationshipTypes
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                keyword:
+                  type: string
+                  description: Case-insensitive filter over name and description.
+                scope:
+                  type: string
+                  enum: [user, global]
+                include_deactivated:
+                  type: boolean
+                  default: false
+                include_edge_counts:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Include edge_count per type. Costs one aggregate query;
+                    "rows written", never evidence of registration.
+      responses:
+        "200":
+          description: Registered relationship types
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - relationship_types
+                  - total
+                properties:
+                  relationship_types:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        relationship_type:
+                          type: string
+                        scope:
+                          type: string
+                        state:
+                          type: string
+                        description:
+                          type: string
+                        registry_version:
+                          type: string
+                        registered_at:
+                          type: string
+                        source_entity_types:
+                          type: array
+                          items:
+                            type: string
+                        target_entity_types:
+                          type: array
+                          items:
+                            type: string
+                        inverse:
+                          type: string
+                        symmetric:
+                          type: boolean
+                        acyclic:
+                          type: boolean
+                        edge_count:
+                          type: integer
+                  total:
+                    type: integer
+                  empty_reason:
+                    type: string
+                    enum: [registry_unseeded, filtered_to_empty]
+                    description: >-
+                      Present only when relationship_types is empty. Never
+                      infer "no vocabulary exists" from an empty array alone.
+                      registry_unseeded means the instance's relationship-type
+                      registry (including the built-in vocabulary) failed to
+                      seed and is a registry/seed failure that self-repairs on
+                      a subsequent read, not a permanent state; call
+                      list_relationship_types again rather than concluding no
+                      types are available. filtered_to_empty means a supplied
+                      keyword matched nothing against an otherwise-populated
+                      registry; retry without keyword to see the full
+                      vocabulary. Absent when relationship_types is non-empty.
+                  hint:
+                    type: string
+                    description: >-
+                      Present only alongside empty_reason. Human/agent-readable
+                      elaboration of empty_reason and the recommended next
+                      call; never present when relationship_types is
+                      non-empty.
 
   /register_schema:
     post:
@@ -6468,6 +8568,15 @@ paths:
                 activate:
                   type: boolean
                   default: false
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Bypass the entity-type naming guards (forbidden test-artifact
+                    patterns and the plural-name guard) for this call only. Use
+                    when entity_type is rejected with a message naming
+                    "force: true" as the remedy. Does not affect any other
+                    validation.
       responses:
         "200":
           description: Schema registered
@@ -6503,6 +8612,133 @@ paths:
                     items:
                       type: string
                 additionalProperties: false
+
+  /corrections/transaction:
+    post:
+      summary: Atomically compare and correct multiple entities
+      description: |
+        Append declared-field corrections in one scoped database transaction.
+        Every entity's type, observation count and expected snapshot fields must
+        match inside the write transaction. Any validation, policy, write or
+        read-back failure rolls back all changes. Reuse the identical request
+        and idempotency key after uncertainty; changed payload reuse conflicts.
+        This primitive does not decide or authorize application-level approval.
+      operationId: correctTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idempotency_key, entities]
+              properties:
+                user_id:
+                  type: string
+                idempotency_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                entities:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      [
+                        entity_id,
+                        entity_type,
+                        expected_observation_count,
+                        expected_snapshot,
+                        changes,
+                      ]
+                    properties:
+                      entity_id:
+                        type: string
+                        minLength: 1
+                      entity_type:
+                        type: string
+                        minLength: 1
+                      expected_observation_count:
+                        type: integer
+                        minimum: 0
+                      expected_snapshot:
+                        type: object
+                        additionalProperties: true
+                        description: Declared expected values; missing differs from null. Observation count guards the whole entity.
+                      changes:
+                        type: array
+                        minItems: 1
+                        maxItems: 50
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [field, value]
+                          properties:
+                            field:
+                              type: string
+                              minLength: 1
+                            value: {}
+      responses:
+        "200":
+          description: Committed atomically, or identical request already committed. Snapshots reflect current stored state on replay.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, entities]
+                properties:
+                  status:
+                    type: string
+                    enum: [applied, replayed]
+                  entities:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                      description: Current entity snapshot and available provenance metadata.
+                      required: [entity_id, entity_type, snapshot, observation_count]
+                      properties:
+                        entity_id: { type: string }
+                        entity_type: { type: string }
+                        snapshot: { type: object, additionalProperties: true }
+                        observation_count: { type: integer }
+        "400":
+          description: Invalid transaction, undeclared fields or instance policy denial; nothing committed.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorEnvelope"
+                  - $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope"
+        "401":
+          description: Authentication required.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: Calling agent capability, attribution or protected-type policy disallows a correction.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: A transaction target is unavailable in the authenticated graph.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: Stale precondition, changed idempotency payload or snapshot mismatch; no new changes committed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "500":
+          description: Transaction failed and was rolled back.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /correct:
     post:
@@ -6544,6 +8780,22 @@ paths:
                   type: string
                 user_id:
                   type: string
+                expected_version:
+                  type: string
+                  description: |
+                    Optional entity-level optimistic-concurrency precondition.
+                    When supplied, the correction is refused with
+                    `409 ERR_FIELD_VERSION_CONFLICT` if the entity's current
+                    collision-safe `entity_version` no longer matches this value (unless
+                    `overwrite` is also true). Omitted: zero behavior change
+                    from the legacy unconditional-insert path. Entity-scoped
+                    (any field changing trips it) — use `/patch_array_item`
+                    for per-row concurrency on structured array fields.
+                overwrite:
+                  type: boolean
+                  description: |
+                    When true, proceed even if `expected_version` is stale.
+                    Ignored when `expected_version` is not supplied.
       responses:
         "200":
           description: Correction created
@@ -6568,6 +8820,13 @@ paths:
                   value: {}
                   message:
                     type: string
+                  replayed:
+                    type: boolean
+                    description: True when this is the exact result of an earlier committed request with the same idempotency key.
+                  entity_version:
+                    type: string
+                    pattern: "^[a-f0-9]{64}$"
+                    description: Fresh entity-level CAS token after the committed correction.
                   success:
                     type: boolean
                     description: |
@@ -6610,6 +8869,26 @@ paths:
                         type: string
                       field:
                         type: string
+        "400":
+          description: |
+            Correction rejected. `ERR_STORE_POLICY_DENIED` is returned when the
+            correction is well-formed but refused by this instance's configured
+            data policy — for example correcting a field whose schema-declared
+            `sensitivity_class` exceeds the instance's configured maximum. No
+            observation is written. Call `describe_instance_policy` to read the
+            policy before retrying. `ERR_ENTITY_TYPE_MISMATCH` is returned when
+            the caller-supplied `entity_type` differs from the target entity's
+            authoritative stored type; no observation is written. Other
+            validation errors use the generic `ErrorEnvelope`.
+            `ERR_IDEMPOTENCY_MISMATCH` means the key already committed a
+            different canonical correction payload; the original result is
+            unchanged and no new observation is written.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
         "403":
           description: |
             Correction rejected by policy. `OVERRIDE_POLICY_VIOLATION` is
@@ -6619,6 +8898,327 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            Two distinct conflict causes share this status:
+
+            `entity_owner_conflict` — `entity_id` resolves to an existing
+            entity owned by a different, non-null user than the writer. No
+            observation is written. `correct()` is the raw entity-store
+            surface: a caller names `entity_id` directly with no resolution
+            step in between, so this is the only refusal point for a
+            correction that would otherwise land on another user's entity.
+            The envelope details carry `entity_id` and `entity_type`; never
+            the other owner's identity or fields.
+
+            `ERR_FIELD_VERSION_CONFLICT` — the caller supplied
+            `expected_version` and it no longer matches the entity's current
+            collision-safe `entity_version`. No observation is written. The envelope
+            details carry `entity_id`, `field`, `stored_version`, and
+            `expected_version` so the caller can re-read and retry. Entity-
+            scoped (any field changing trips it); use `/patch_array_item` for
+            per-row concurrency on structured array fields instead of
+            widening `expected_version` retries.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "503":
+          description: |
+            `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+            read, so the correction could not be checked against it. No
+            observation was written. Retry the request UNCHANGED; the envelope
+            carries `retryable: true`.
+
+            Do not treat this like the `400` `ERR_STORE_POLICY_DENIED` above.
+            DENIED means the policy was read and forbids this correction (fix
+            the payload). UNAVAILABLE means permission is unknown, and dropping
+            the correction in response answers an outage by silently recording
+            less.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+
+  /patch_array_item:
+    post:
+      summary: Atomically patch one item of a structured array field by key
+      description: |
+        Sibling of `/correct` for structured collection fields whose items
+        carry a stable identity (e.g. a `session_digest.tasks_claimed` row
+        keyed by `claim_id`). Loads the current array fresh, finds the item
+        matching `key_field`/`key_value`, merges `item` onto it (or appends a
+        new item when the key is not yet present), and writes the whole
+        reconciled array as one new priority-1000 observation.
+
+        This exists to prevent the lost-update failure mode of full-array
+        read-modify-write: two callers patching DIFFERENT keys both succeed,
+        because each patch reads fresh state immediately before writing —
+        neither has to guess whether the other's row is still there. A caller
+        that instead reads the whole array, edits one row locally, and writes
+        the full array back can silently discard a concurrent writer's
+        disjoint row; `patch_array_item` is the replacement for that pattern.
+
+        Same-key races are resolved by the field's `merge_array_by_key`
+        reducer policy (latest `observed_at` wins per key) unless the caller
+        supplies `expected_item_version`, in which case a stale version is
+        refused with `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+      operationId: patchArrayItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_id
+                - entity_type
+                - field
+                - key_field
+                - key_value
+                - item
+                - idempotency_key
+              properties:
+                entity_id:
+                  type: string
+                entity_type:
+                  type: string
+                field:
+                  type: string
+                  description: Name of the array field to patch.
+                key_field:
+                  type: string
+                  description: |
+                    Name of the field on each array item that identifies it.
+                    Must match the field's declared `merge_array_by_key`
+                    `key_field` for the write to be reflected in the
+                    snapshot's reducer output.
+                key_value:
+                  description: |
+                    Portable non-null JSON scalar identifying the row. Numbers
+                    must be finite safe integers. The reducer preserves older
+                    rows with non-scalar or unsafe-number keys as unkeyed legacy
+                    rows, but new patches cannot create them.
+                  oneOf:
+                    - type: string
+                    - type: number
+                      minimum: -9007199254740991
+                      maximum: 9007199254740991
+                    - type: boolean
+                item:
+                  type: object
+                  additionalProperties: true
+                  description: |
+                    Fields to set on the item identified by `key_value`.
+                    Merged onto the existing item (shallow) when the key
+                    already exists; `key_field` is always set to `key_value`
+                    on the written item regardless of what `item` contains.
+                expected_item_version:
+                  type: string
+                  description: |
+                    Content-hash version of the item as last observed by the
+                    caller (returned as `item_version` by a prior patch, or
+                    computable client-side as SHA-256 over UTF-8 stable
+                    serialization: object keys sort lexicographically, arrays
+                    preserve order, and scalar values use JSON spellings).
+                    When supplied and stale, the patch is refused with
+                    `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+                    Omit to always last-write-win on this one row (still
+                    scoped — never touches other keys).
+                expected_item_absent:
+                  type: boolean
+                  description: |
+                    When true, create only if no item with `key_value` exists.
+                    Concurrent creators for the same key produce one success
+                    and one `409 ERR_ARRAY_ITEM_CONFLICT` with the committed item.
+                idempotency_key:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Patch applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  success:
+                    type: boolean
+                  entity_id:
+                    type: string
+                  entity_type:
+                    type: string
+                  field:
+                    type: string
+                  key_field:
+                    type: string
+                  key_value:
+                    oneOf:
+                      - type: string
+                      - type: number
+                      - type: boolean
+                  observation_id:
+                    type: string
+                  item:
+                    type: object
+                    additionalProperties: true
+                  item_version:
+                    type: string
+                    pattern: "^[a-f0-9]{64}$"
+                    description: Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races.
+                  array_length:
+                    type: integer
+                  snapshot:
+                    type: object
+                    additionalProperties: true
+                    description: Entity snapshot computed from the committed patch.
+                  replayed:
+                    type: boolean
+                    description: True when this response replays the exact prior committed result for the idempotency key.
+        "400":
+          description: |
+            Validation failed, the supplied entity type or key field does not
+            match the stored/schema-declared value, the field is not an array
+            with an active `merge_array_by_key` policy, or the instance store
+            policy denied the write. `ERR_IDEMPOTENCY_MISMATCH` means the key
+            already committed a different canonical request payload. No
+            observation is written.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/StorePolicyDeniedErrorEnvelope" }
+                  - { $ref: "#/components/schemas/ErrorEnvelope" }
+        "404":
+          description: Entity not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            `ERR_ARRAY_ITEM_CONFLICT` — the caller supplied
+            `expected_item_version` and the stored item's current content
+            hash no longer matches (or the item does not exist yet, when the
+            caller expected it to). No observation is written. The envelope
+            details carry `current_item`, `current_item_version`, and
+            `expected_item_version` so the caller can re-apply its change
+            against the current item and retry with a fresh version — no
+            second round-trip needed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429":
+          description: |
+            Shared authenticated write-rate limit exceeded. Keyed-item patches
+            use the same bounded write bucket as `/store` so
+            repeated full-array observations cannot grow without a time bound.
+          content:
+            text/plain:
+              schema:
+                type: string
+        "503":
+          description: |
+            `ERR_STORE_POLICY_UNAVAILABLE` — the instance could not read its
+            write policy and failed closed. No observation is written; retry
+            the unchanged request after the service recovers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorePolicyUnavailableErrorEnvelope" }
+
+  /entities/{id}/batch_correct:
+    post:
+      summary: Apply an atomic multi-field correction with optimistic concurrency
+      description: |
+        Atomic batch of single-field corrections against one entity, gated by
+        a whole-entity optimistic-concurrency check. Backs both the Inspector
+        Edit tab and the `neotoma edit` CLI one-shot editor; both surfaces
+        compute a field diff against a loaded snapshot and apply it through
+        this endpoint so the concurrency check and schema validation are
+        atomic across every field in the diff (unlike issuing one `/correct`
+        call per changed field).
+
+        Pre-existing endpoint being documented here for the first time
+        (contract gap identified alongside the Waxwing lost-update ADR,
+        ent_4b41bb83a4faf4428a73bfc8) — no behavior change.
+      operationId: batchCorrectEntity
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - changes
+              properties:
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [field, value]
+                    properties:
+                      field: { type: string }
+                      value: {}
+                expected_last_observation_at:
+                  type: string
+                  nullable: true
+                  description: |
+                    `last_observation_at` the caller saw when it loaded the
+                    snapshot. When supplied and stale (and `overwrite` is not
+                    true), the batch is refused as a conflict and nothing is
+                    written.
+                overwrite:
+                  type: boolean
+                  description: Proceed even if the snapshot has moved since `expected_last_observation_at` was read.
+                idempotency_prefix:
+                  type: string
+                  description: Base key used to build a deterministic per-field idempotency key for each applied change.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: |
+            Batch applied. Body shape matches `BatchCorrectionResult` with
+            `status: "applied"` (see `src/services/batch_correction.ts`).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: |
+            `status: "validation_error"` — one or more changes failed
+            schema validation. Nothing was written; `validation_errors[]`
+            carries `{ field, message }` per failing change.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "404":
+          description: Entity not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: |
+            `status: "conflict"` — `expected_last_observation_at` no longer
+            matches the stored value and `overwrite` was not set. Nothing was
+            written; the body carries `conflict.stored_last_observation_at`,
+            `conflict.expected_last_observation_at`, and
+            `conflict.conflicting_fields`.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 
   /conversations/{conversation_id}/turn-index:
     get:
@@ -6719,6 +9319,13 @@ paths:
                       storage_backend:
                         type: string
                         enum: [local]
+                      environment:
+                        type: string
+                        description: |
+                          Active NEOTOMA_ENV for the local backend
+                          (development vs production), so a caller can
+                          confirm which graph it resolved to before writing.
+                        enum: [development, production]
                       data_dir:
                         type: string
                       sqlite_db:
@@ -6854,6 +9461,16 @@ paths:
   /subscribe:
     post:
       summary: Create a substrate event subscription (webhook or SSE)
+      description: |
+        Authenticated owners may subscribe to filters within their own graph.
+        Entity-scoped guests must authenticate with their guest bearer token,
+        provide a non-empty `entity_ids` filter, and keep every requested entity
+        inside that token's current grant. Empty, mixed, or out-of-grant guest
+        filters are rejected without creating a subscription. Guests may only
+        use `delivery_method: sse`, which is revalidated against the guest
+        credential on every delivery; a guest request for `webhook` delivery or
+        with a `sync_peer_id` is rejected with 403 without creating a
+        subscription.
       operationId: subscribe
       requestBody:
         required: true
@@ -6909,10 +9526,26 @@ paths:
                     type: string
                   webhook_secret:
                     type: string
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /unsubscribe:
     post:
       summary: Deactivate a subscription
+      description: |
+        Owners may deactivate their own subscriptions. Guests may deactivate only
+        subscriptions whose complete `watch_entity_ids` set remains inside the
+        guest token's current entity grant; denial leaves the subscription active.
       operationId: unsubscribe
       requestBody:
         required: true
@@ -6934,10 +9567,26 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Subscription is not wholly inside the guest entity grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /list_subscriptions:
     post:
       summary: List active subscriptions for the current user
+      description: |
+        Owners receive their active subscriptions. Guests receive only subscriptions
+        whose complete `watch_entity_ids` set is inside the token's current entity
+        grant; subscriptions outside or spanning the grant are omitted.
       operationId: listSubscriptions
       requestBody:
         required: false
@@ -6954,10 +9603,20 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /get_subscription_status:
     post:
       summary: Get subscription delivery status
+      description: |
+        Owners may inspect their subscriptions. A guest receives the status only
+        when the subscription's complete `watch_entity_ids` set is inside its
+        current grant; an inaccessible subscription is returned as `null`.
       operationId: getSubscriptionStatus
       requestBody:
         required: true
@@ -6979,10 +9638,22 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /events/stream:
     get:
       summary: Server-sent events stream for a subscription
+      description: |
+        Opens the SSE stream for an active SSE subscription. Owners retain their
+        normal authenticated access. Guests may connect only when the subscription's
+        complete entity filter is inside the token grant. Guest credentials are
+        revalidated while the connection is established: expiry, revocation, or
+        grant narrowing closes the stream before another event is delivered.
       operationId: eventsStream
       parameters:
         - in: query
@@ -6993,6 +9664,22 @@ paths:
       responses:
         "200":
           description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: Guest credential is missing, invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Subscription does not exist or is outside the guest entity grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 
   /peers:
     get:

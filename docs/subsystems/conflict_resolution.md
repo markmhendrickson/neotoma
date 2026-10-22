@@ -53,8 +53,8 @@ obs_b: { status: "complete", observed_at: "2026-01-02T09:00:00Z" }
 
 - Primary sort: `source_priority DESC`.
 - Secondary sort (within the same priority tier): `observation_source` rank ASC (schema-configurable; sensors and workflow outputs rank above LLM summaries by default).
-- Tie-breaker: controlled by the field's optional `tie_breaker` key — `"observed_at"` (default; most recent wins) or `"source_priority"` (falls through to `id ASC`).
-- Implementation: `highestPriority()` at line 336 of `src/reducers/observation_reducer.ts`.
+- Same-priority ordering: after numeric priority and source-kind rank tie, the reducer chooses `observed_at DESC`, then `created_at DESC`, then `id ASC` as the final stable fallback. This applies even when the field declares `tie_breaker: "source_priority"`; source priority is already the primary trust axis, and same-tier scalar corrections still express replacement intent.
+- Implementation: `highestPriority()` in `src/reducers/observation_reducer.ts`.
 
 Use `highest_priority` when some sources are inherently more trustworthy than others —
 official documents over extracted receipts, sensor data over user text, corrections over
@@ -230,10 +230,15 @@ regardless of which was written more recently.
 
 ### `tie_breaker` options
 
-| Value                     | Behavior within the same `source_priority` tier    |
-| ------------------------- | -------------------------------------------------- |
-| `"observed_at"` (default) | Most recent observation wins                       |
-| `"source_priority"`       | Falls through to `id ASC` (stable, not time-based) |
+| Value                     | `highest_priority` behavior after the priority and source-kind tiers tie | `most_specific` behavior after specificity ties                      |
+| ------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `"observed_at"` (default) | Newest `observed_at`, then newest `created_at`, then `id ASC`            | Source-kind rank, then newest `observed_at`                          |
+| `"source_priority"`       | Same as `"observed_at"`; retained as a compatibility spelling            | Numeric source priority, source-kind rank, then newest `observed_at` |
+
+For `highest_priority`, numeric source priority is already the primary trust axis, so
+the two configured values intentionally converge once that tier ties. The distinction
+remains meaningful for `most_specific`, where `"source_priority"` adds numeric source
+priority between specificity and source-kind rank.
 
 ---
 

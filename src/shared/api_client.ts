@@ -15,6 +15,14 @@ export interface ApiClientOptions {
    */
   signWithCliAAuth?: boolean;
   /**
+   * When true with `signWithCliAAuth`, do not fall back to unsigned `fetch`
+   * on missing/unusable keys or signing errors. Intended for unattended
+   * paths (`issues sync` env-gated AAuth, `api --aauth`) where silent
+   * anonymous requests would mask misconfiguration. Optional interactive
+   * signing keeps the default silent fallback.
+   */
+  requireCliAAuth?: boolean;
+  /**
    * Force the HTTP transport even when `NEOTOMA_FORCE_LOCAL_TRANSPORT=true`.
    * The in-process local transport never makes an HTTP request, so RFC 9421
    * request signing has nothing to sign — AAuth-attributed calls MUST go over
@@ -31,12 +39,12 @@ export interface ApiClientOptions {
  * indirection keeps Node-only `fs`/`jose` imports out of the browser
  * bundle via a dynamic import.
  */
-function buildMaybeSignedFetch(enabled: boolean): typeof fetch {
+function buildMaybeSignedFetch(enabled: boolean, requireCliAAuth = false): typeof fetch {
   if (!enabled) return fetch;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : null;
     const url = request ? request.url : typeof input === "string" ? input : input.toString();
-    const { cliSignedFetch } = await import("../cli/aauth_signer.js");
+    const { cliSignedFetch, loadCliSignerConfig } = await import("../cli/aauth_signer.js");
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     const headers: Record<string, string> = {};
     const sourceHeaders = new Headers(request?.headers);
@@ -57,13 +65,23 @@ function buildMaybeSignedFetch(enabled: boolean): typeof fetch {
       body = await request.clone().text();
     }
     try {
+      if (requireCliAAuth) {
+        const signerConfig = await loadCliSignerConfig();
+        if (!signerConfig) {
+          throw new Error(
+            "AAuth signing is required but no usable CLI keypair was found. " +
+              "Set NEOTOMA_AAUTH_PRIVATE_JWK_PATH to a valid private JWK, or run `neotoma auth keygen`."
+          );
+        }
+      }
       return await cliSignedFetch(url, {
         method,
         headers,
         body,
         signal: init?.signal ?? undefined,
       });
-    } catch {
+    } catch (err) {
+      if (requireCliAAuth) throw err;
       // Never surface signing misconfiguration as a hard failure from the
       // API client — the caller should still reach the server and land
       // as `unverified_client` / `anonymous` tier.
@@ -85,7 +103,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     (process.env.NODE_ENV !== "test" &&
       process.env.NEOTOMA_CLI_AAUTH_DISABLE !== "1" &&
       process.env.NEOTOMA_CLI_AAUTH_ENABLE !== "0");
-  const fetchImpl = buildMaybeSignedFetch(signingEnabled);
+  const fetchImpl = buildMaybeSignedFetch(signingEnabled, Boolean(options.requireCliAAuth));
 
   const client = createClient<paths>({
     baseUrl: options.baseUrl,

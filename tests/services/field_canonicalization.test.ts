@@ -236,3 +236,39 @@ describe("canonicalizeArray — JSON-array-string recovery (#1595)", () => {
     expect(out.items).toEqual(["a", "b"]);
   });
 });
+
+describe("preserveWhitespace — exact retention vs default normalize (#2392)", () => {
+  const exactText = "  Exact Synthetic transcript.\r\nSecond  line.\n";
+
+  it("retains CRLF, leading/trailing, and doubled spaces when preserveWhitespace+preserveCase", () => {
+    const schema: SchemaDefinition = {
+      fields: {
+        transcription_text: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+          preserveWhitespace: true,
+        },
+      },
+    } as unknown as SchemaDefinition;
+
+    const out = canonicalizeFields({ transcription_text: exactText }, schema);
+    expect(out.transcription_text).toBe(exactText);
+  });
+
+  it("still collapses whitespace by default when preserveWhitespace is absent", () => {
+    const schema: SchemaDefinition = {
+      fields: {
+        transcription_text: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+        },
+      },
+    } as unknown as SchemaDefinition;
+
+    const out = canonicalizeFields({ transcription_text: exactText }, schema);
+    // Default path: trim + CRLF→LF + \\s+ collapse (newlines become spaces).
+    expect(out.transcription_text).toBe("Exact Synthetic transcript. Second line.");
+  });
+});

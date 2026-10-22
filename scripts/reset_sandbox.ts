@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Weekly reset for the `sandbox.neotoma.io` Fly deployment.
+ * Operator volume reset for the `sandbox.neotoma.io` Fly deployment.
  *
  * Strategy (keeps the express server up the whole time):
  *  1. Refuse to run unless `NEOTOMA_SANDBOX_MODE=1` — protects non-sandbox
@@ -11,7 +11,8 @@
  *     code path that visitors use repopulates entities, observations, and
  *     Agents-directory rows.
  *
- * Scheduled weekly: Sunday 00:00 UTC via Fly Machines. Safe to run manually.
+ * Safe to run manually (workflow_dispatch or `./scripts/schedule_sandbox_reset.sh`).
+ * Not scheduled — per-session expiry sweep handles normal visitor data.
  *
  * Usage:
  *   tsx scripts/reset_sandbox.ts [--base-url http://localhost:3180] [--dry-run]

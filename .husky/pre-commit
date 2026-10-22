@@ -1,3 +1,43 @@
+# --- Hook instrumentation (issue #2169) -------------------------------------
+# The hook has no time budget of its own: when it exceeds the harness limit it
+# is killed from outside, which is indistinguishable from a hang and is one of
+# the two ways this gate fails open. Log per-stage durations so the question
+# "is the hook getting slower?" is answerable from data instead of inferred
+# from how often people skip it. Append-only, gitignored, never blocks a commit.
+NEOTOMA_HOOK_LOG="${NEOTOMA_HOOK_LOG:-.git/neotoma-hook-timings.log}"
+NEOTOMA_HOOK_T0=$(date +%s)
+
+hook_log() {
+  # hook_log <event> <detail>  -- best-effort; a logging failure must never
+  # fail a commit, hence the `|| true`.
+  printf '%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)" \
+    "$1" "$2" >> "$NEOTOMA_HOOK_LOG" 2>/dev/null || true
+}
+
+# Run a named stage, recording its wall-clock duration. Preserves exit status.
+timed_stage() {
+  stage_name="$1"
+  shift
+  stage_start=$(date +%s)
+  "$@"
+  stage_rc=$?
+  hook_log "stage" "$stage_name=$(( $(date +%s) - stage_start ))s rc=$stage_rc"
+  return $stage_rc
+}
+
+# Total duration on every exit path, including the failure paths -- a hook that
+# only logs on success cannot show why it is being skipped.
+on_hook_exit() {
+  # Capture $? FIRST -- any command below (including arithmetic) overwrites it,
+  # which would silently log rc=0 for every failed hook run.
+  hook_rc=$?
+  hook_log "total" "$(( $(date +%s) - NEOTOMA_HOOK_T0 ))s rc=$hook_rc"
+}
+trap on_hook_exit EXIT
+# ---------------------------------------------------------------------------
+
 pick_free_port() {
   node scripts/pick-port.js "$1"
 }
@@ -20,40 +60,45 @@ run_playwright_suite() {
 
 # Type check (MANDATORY - catches type errors before tests)
 echo "Running type check..."
-npm run type-check || exit 1
+timed_stage type-check npm run type-check || exit 1
 
 # Lint check (MANDATORY - catches code style issues)
 echo "Running linter..."
-npm run lint || exit 1
+timed_stage lint npm run lint || exit 1
 
 # Format check (MANDATORY - rejects unformatted code; run `npm run format` to fix)
 echo "Running format check..."
-npm run format:check || {
+timed_stage format-check npm run format:check || {
   echo ""
   echo "❌ Prettier formatting drift detected. Fix with: npm run format"
   exit 1
 }
 
 echo "Running site copy style lint (writing_style_guide)..."
-npm run lint:site-copy || exit 1
+timed_stage lint-site-copy npm run lint:site-copy || exit 1
 
 if [ "$SKIP_TESTS" = "1" ] || [ "$NEOTOMA_SKIP_TESTS" = "1" ]; then
   echo "Skipping tests (SKIP_TESTS=1 or NEOTOMA_SKIP_TESTS=1)"
+  echo "   ^ recorded to $NEOTOMA_HOOK_LOG (issue #2169)."
+  if [ -z "$SKIP_TESTS_REASON" ]; then
+    echo "   Set SKIP_TESTS_REASON=\"...\" to record WHY; unstated skips are the ones that hide regressions."
+  fi
+  hook_log "bypass" "SKIP_TESTS reason=${SKIP_TESTS_REASON:-unstated}"
 else
   # Unit tests (MANDATORY - catches logic errors)
   echo "Running unit tests..."
-  run_vitest_suite 18080 npm test || exit 1
+  timed_stage unit-tests run_vitest_suite 18080 npm test || exit 1
 
   # Integration tests (if backend/DB files changed)
   if git diff --cached --name-only | grep -E "(src/|tests/integration)" > /dev/null; then
     echo "Running integration tests..."
-    run_vitest_suite 18120 npm run test:integration || exit 1
+    timed_stage integration-tests run_vitest_suite 18120 npm run test:integration || exit 1
   fi
 
   # E2E tests (if frontend/UI files changed)
   if git diff --cached --name-only | grep -E "(frontend/|playwright/)" > /dev/null; then
     echo "Running E2E tests..."
-    run_playwright_suite npm run test:e2e || exit 1
+    timed_stage e2e-tests run_playwright_suite npm run test:e2e || exit 1
   fi
 
   # Validate Playwright coverage map

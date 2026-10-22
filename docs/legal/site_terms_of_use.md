@@ -59,7 +59,8 @@ You agree not to:
 - Interfere with the integrity or performance of any service.
 - Submit personal data, credentials, internal business information,
   or anything confidential to the public sandbox — sandbox content
-  is public by design and is wiped weekly.
+  is public by design and is ephemeral per session (hard-deleted on expiry,
+  end, or reset).
 
 Violations may result in rate-limiting, IP blocks, or removal of
 submitted content. Abuse reports go to `contact@neotoma.io`; sandbox

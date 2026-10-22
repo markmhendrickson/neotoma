@@ -1,6 +1,6 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 import {
   getOrCreateInstallFingerprint,
   sandboxPrincipalIdFromFingerprint,
@@ -54,10 +54,10 @@ function hashEmailToUserId(email: string): string {
   return hashStringToUserId(email);
 }
 
-export function getLocalAuthUserByEmail(email: string): LocalAuthUser | null {
-  const db = getSqliteDb();
+export async function getLocalAuthUserByEmail(email: string): Promise<LocalAuthUser | null> {
+  const db = await getDb();
   const normalized = normalizeEmail(email);
-  const row = db
+  const row = await db
     .prepare(
       "SELECT id, email, created_at, updated_at, last_login_at FROM local_auth_users WHERE email = ?"
     )
@@ -65,9 +65,9 @@ export function getLocalAuthUserByEmail(email: string): LocalAuthUser | null {
   return row ? (row as LocalAuthUser) : null;
 }
 
-export function getLocalAuthUserById(userId: string): LocalAuthUser | null {
-  const db = getSqliteDb();
-  const row = db
+export async function getLocalAuthUserById(userId: string): Promise<LocalAuthUser | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id, email, created_at, updated_at, last_login_at FROM local_auth_users WHERE id = ?"
     )
@@ -75,18 +75,18 @@ export function getLocalAuthUserById(userId: string): LocalAuthUser | null {
   return row ? (row as LocalAuthUser) : null;
 }
 
-export function countLocalAuthUsers(): number {
-  const db = getSqliteDb();
-  const row = db.prepare("SELECT COUNT(*) as count FROM local_auth_users").get() as
+export async function countLocalAuthUsers(): Promise<number> {
+  const db = await getDb();
+  const row = (await db.prepare("SELECT COUNT(*) as count FROM local_auth_users").get()) as
     | { count: number }
     | undefined;
   return row?.count ? Number(row.count) : 0;
 }
 
-export function createLocalAuthUser(email: string, password: string): LocalAuthUser {
-  const db = getSqliteDb();
+export async function createLocalAuthUser(email: string, password: string): Promise<LocalAuthUser> {
+  const db = await getDb();
   const normalized = normalizeEmail(email);
-  const existing = getLocalAuthUserByEmail(normalized);
+  const existing = await getLocalAuthUserByEmail(normalized);
   if (existing) {
     return existing;
   }
@@ -95,9 +95,11 @@ export function createLocalAuthUser(email: string, password: string): LocalAuthU
   const userId = hashEmailToUserId(normalized);
   const { salt, hash } = hashPassword(password);
 
-  db.prepare(
-    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(userId, normalized, hash, salt, now, now, null);
+  await db
+    .prepare(
+      "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(userId, normalized, hash, salt, now, now, null);
 
   return {
     id: userId,
@@ -108,24 +110,24 @@ export function createLocalAuthUser(email: string, password: string): LocalAuthU
   };
 }
 
-export function authenticateLocalUser(
+export async function authenticateLocalUser(
   email: string,
   password: string,
   allowBootstrap: boolean
-): LocalAuthUser {
-  const db = getSqliteDb();
+): Promise<LocalAuthUser> {
+  const db = await getDb();
   const normalized = normalizeEmail(email);
 
-  const existing = db
+  const existing = (await db
     .prepare(
       "SELECT id, email, password_hash, password_salt, created_at, updated_at, last_login_at FROM local_auth_users WHERE email = ?"
     )
-    .get(normalized) as
+    .get(normalized)) as
     | (LocalAuthUser & { password_hash: string; password_salt: string })
     | undefined;
 
   if (!existing) {
-    const existingCount = countLocalAuthUsers();
+    const existingCount = await countLocalAuthUsers();
     if (!allowBootstrap || existingCount > 0) {
       throw new Error("Local user not found. Create a local user first.");
     }
@@ -137,11 +139,9 @@ export function authenticateLocalUser(
   }
 
   const now = new Date().toISOString();
-  db.prepare("UPDATE local_auth_users SET last_login_at = ?, updated_at = ? WHERE id = ?").run(
-    now,
-    now,
-    existing.id
-  );
+  await db
+    .prepare("UPDATE local_auth_users SET last_login_at = ?, updated_at = ? WHERE id = ?")
+    .run(now, now, existing.id);
 
   return {
     id: existing.id,
@@ -152,18 +152,20 @@ export function authenticateLocalUser(
   };
 }
 
-export function ensureLocalDevUser(): LocalAuthUser {
-  const db = getSqliteDb();
-  const existing = getLocalAuthUserById(LOCAL_DEV_USER_ID);
+export async function ensureLocalDevUser(): Promise<LocalAuthUser> {
+  const db = await getDb();
+  const existing = await getLocalAuthUserById(LOCAL_DEV_USER_ID);
   if (existing) {
     return existing;
   }
   const now = new Date().toISOString();
   const email = "local-dev@neotoma.local";
   const { salt, hash } = hashPassword("dev-only");
-  db.prepare(
-    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(LOCAL_DEV_USER_ID, email, hash, salt, now, now, null);
+  await db
+    .prepare(
+      "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(LOCAL_DEV_USER_ID, email, hash, salt, now, now, null);
   return {
     id: LOCAL_DEV_USER_ID,
     email,
@@ -188,20 +190,22 @@ export function ensureLocalDevUser(): LocalAuthUser {
  *
  * Idempotent. Safe to call on every boot.
  */
-export function ensureLocalSandboxUser(): LocalAuthUser {
-  const db = getSqliteDb();
+export async function ensureLocalSandboxUser(): Promise<LocalAuthUser> {
+  const db = await getDb();
   const fingerprint = getOrCreateInstallFingerprint(config.dataDir);
   const userId = sandboxPrincipalIdFromFingerprint(fingerprint);
-  const existing = getLocalAuthUserById(userId);
+  const existing = await getLocalAuthUserById(userId);
   if (existing) {
     return existing;
   }
   const now = new Date().toISOString();
   const email = `local-sandbox-${fingerprint.slice(0, 8)}@neotoma.local`;
   const { salt, hash } = hashPassword(`local-sandbox-no-password:${fingerprint}`);
-  db.prepare(
-    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(userId, email, hash, salt, now, now, null);
+  await db
+    .prepare(
+      "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(userId, email, hash, salt, now, now, null);
   return {
     id: userId,
     email,
@@ -216,18 +220,20 @@ export function ensureLocalSandboxUser(): LocalAuthUser {
  * bypass for unauthenticated writes on `sandbox.neotoma.io`. Idempotent; safe
  * to call on every request.
  */
-export function ensureSandboxPublicUser(): LocalAuthUser {
-  const db = getSqliteDb();
-  const existing = getLocalAuthUserById(SANDBOX_PUBLIC_USER_ID);
+export async function ensureSandboxPublicUser(): Promise<LocalAuthUser> {
+  const db = await getDb();
+  const existing = await getLocalAuthUserById(SANDBOX_PUBLIC_USER_ID);
   if (existing) {
     return existing;
   }
   const now = new Date().toISOString();
   const email = "sandbox-public@neotoma.local";
   const { salt, hash } = hashPassword("sandbox-public-no-password");
-  db.prepare(
-    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(SANDBOX_PUBLIC_USER_ID, email, hash, salt, now, now, null);
+  await db
+    .prepare(
+      "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(SANDBOX_PUBLIC_USER_ID, email, hash, salt, now, now, null);
   return {
     id: SANDBOX_PUBLIC_USER_ID,
     email,
@@ -249,13 +255,13 @@ export function ensureSandboxPublicUser(): LocalAuthUser {
  * `@sandbox.neotoma.local` email is not exposed to `authenticateLocalUser`
  * via any external surface. Idempotent; safe to call on every request.
  */
-export function ensureSandboxAauthUser(thumbprint: string): LocalAuthUser {
+export async function ensureSandboxAauthUser(thumbprint: string): Promise<LocalAuthUser> {
   if (!thumbprint || typeof thumbprint !== "string") {
     throw new Error("ensureSandboxAauthUser requires a non-empty thumbprint");
   }
-  const db = getSqliteDb();
+  const db = await getDb();
   const userId = hashStringToUserId(`aauth:${thumbprint}`);
-  const existing = getLocalAuthUserById(userId);
+  const existing = await getLocalAuthUserById(userId);
   if (existing) {
     return existing;
   }
@@ -266,9 +272,11 @@ export function ensureSandboxAauthUser(thumbprint: string): LocalAuthUser {
   const email = `aauth-${short}@sandbox.neotoma.local`;
   const now = new Date().toISOString();
   const { salt, hash } = hashPassword(`sandbox-aauth-no-password:${thumbprint}`);
-  db.prepare(
-    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(userId, email, hash, salt, now, now, null);
+  await db
+    .prepare(
+      "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(userId, email, hash, salt, now, now, null);
   return {
     id: userId,
     email,

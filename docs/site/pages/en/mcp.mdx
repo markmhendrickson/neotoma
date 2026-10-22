@@ -96,7 +96,7 @@ import {
 ## Relationship types
 
 <p className="text-[15px] leading-7 mb-4">
-  Supported relationship types for <code>create_relationship</code>: <code>PART_OF</code>, <code>CORRECTS</code>, <code>REFERS_TO</code>, <code>SETTLES</code>, <code>DUPLICATE_OF</code>, <code>DEPENDS_ON</code>, <code>SUPERSEDES</code>, <code>EMBEDS</code>. Use <code>EMBEDS</code> when a container (blog post, document) embeds an asset (image, attachment): source = container, target = asset.
+  The relationship-type vocabulary for <code>create_relationship</code> is a runtime registry, not a fixed list: call <code>list_relationship_types</code> to read what an instance accepts, and <code>register_relationship_type</code> to add to it. Use <code>EMBEDS</code> when a container (blog post, document) embeds an asset (image, attachment): source = container, target = asset.
 </p>
 
 ## What the server exposes at its root

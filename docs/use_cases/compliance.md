@@ -27,7 +27,6 @@ Vendor risk management demands knowing exactly what was assessed, when, and unde
 | Skill | Role |
 |-------|------|
 | `remember-email` | Captures vendor communications and approval chains |
-| `store-data` | Persists structured assessment data and screening results |
 
 ## External tools
 

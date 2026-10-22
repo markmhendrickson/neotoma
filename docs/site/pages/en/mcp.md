@@ -109,7 +109,7 @@ McpCommonActionPatternsSnippet,
 ## Relationship types
 
 
-  Supported relationship types for <code>create_relationship</code>: <code>PART_OF</code>, <code>CORRECTS</code>, <code>REFERS_TO</code>, <code>SETTLES</code>, <code>DUPLICATE_OF</code>, <code>DEPENDS_ON</code>, <code>SUPERSEDES</code>, <code>EMBEDS</code>. Use <code>EMBEDS</code> when a container (blog post, document) embeds an asset (image, attachment): source = container, target = asset.
+  The relationship-type vocabulary for <code>create_relationship</code> is a runtime registry, not a fixed list: call <code>list_relationship_types</code> to read what an instance accepts, and <code>register_relationship_type</code> to add to it. Use <code>EMBEDS</code> when a container (blog post, document) embeds an asset (image, attachment): source = container, target = asset.
 
 
 ## What the server exposes at its root
@@ -133,7 +133,7 @@ McpCommonActionPatternsSnippet,
     <code>GET /.well-known/mcp/server-card.json</code> — MCP server card (name, version, capabilities).
   </li>
   <li>
-    <code>GET /.well-known/oauth-authorization-server</code> and <code>/.well-known/oauth-protected-resource</code> — OAuth discovery documents.
+    <code>GET /.well-known/oauth-authorization-server</code> (RFC 8414) and <code>/.well-known/oauth-protected-resource</code> (RFC 9728, also served at <code>/.well-known/oauth-protected-resource/mcp</code>) — OAuth discovery documents. All three are <strong>public and return 200 without any credential</strong>: they are the bootstrap step a client reads to learn where to authenticate, so requiring auth on them would deadlock the handshake. <code>GET /.well-known/openid-configuration</code> returns <strong>404</strong> — this server does not offer OIDC discovery; use the RFC 8414 document instead.
   </li>
   <li>
     <code>GET /server-info</code> — runtime details (version, git sha, build timestamp).

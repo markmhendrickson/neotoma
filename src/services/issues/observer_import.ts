@@ -17,7 +17,7 @@
  * 5. `ERR_STORE_RESOLUTION_FAILED` anywhere → resolver bug
  * 6. `database disk image is malformed` anywhere → SQLite corruption
  * 7. `ERR_REPORTER_ENVIRONMENT_REQUIRED` anywhere → reporter env schema enforcement
- * 8. `503` status on `/mcp` → stale MCP session
+ * 8. `404` (current) or `503` (legacy, pre-neotoma#1923 servers) status on `/mcp` → stale MCP session
  *
  * Clean lines (`exit_code == 0`, no warnings) are skipped.
  */
@@ -104,8 +104,9 @@ export function classifyLine(line: ObserverLogLine): AnomalyClass | null {
   const statusCode = typeof line.status_code === "number" ? line.status_code : 0;
   const path = typeof line.path === "string" ? line.path : "";
 
-  // Predicate 8: 503 on /mcp → stale MCP session
-  if (statusCode === 503 && path.includes("/mcp")) return "stale_mcp_session";
+  // Predicate 8: 404 (current, neotoma#1923) or 503 (legacy) on /mcp → stale MCP session
+  if ((statusCode === 404 || statusCode === 503) && path.includes("/mcp"))
+    return "stale_mcp_session";
 
   // Predicate 6: SQLite corruption
   if (anyFieldContains(line, "database disk image is malformed")) return "sqlite_corruption";

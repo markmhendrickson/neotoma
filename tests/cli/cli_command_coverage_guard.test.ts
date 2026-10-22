@@ -9,6 +9,7 @@ describe("CLI command coverage guard", () => {
     const coveredBehavioral = new Set([
       "api",
       "access",
+      "array-item", // patch subcommand covered by tests/cli/cli_array_item_patch_commands.test.ts
       "auth",
       "backup",
       "cli",
@@ -33,10 +34,18 @@ describe("CLI command coverage guard", () => {
       "processes",
       "recent",
       "relationships",
+      "relationship-types", // relationship_types_cli.test.ts
       "schemas",
       "servers",
       "setup",
-      "skills", // `skills sync` reconciler covered by tests/cli/skills_mirror.test.ts
+      // `skills sync`: package-skill mirror reconciler covered by
+      // tests/cli/skills_mirror.test.ts; the `--include-instance-skills` /
+      // `--include-instance-scripts` / `--approve-scripts` (and its
+      // deprecated `--approve` alias) action-closure behavior
+      // (implies-boolean flag coercion, hash-mismatch/rejected-filename exit
+      // codes, blocked-vs-failed severity split, --json `instance` report
+      // key) covered by tests/cli/skills_sync_instance_cli.test.ts.
+      "skills",
       "snapshots",
       "sources",
       "stats",
@@ -54,6 +63,7 @@ describe("CLI command coverage guard", () => {
       "db", // subcommands covered by db_migrate_encryption.test.ts (migrate-encryption) and db_repair_schema_lag.test.ts (repair-schema-lag)
       "onboarding", // subcommands covered by onboarding_import_transcripts.test.ts (import-transcripts)
       "bundles", // list/info/install/enable/disable behavior covered by tests/unit/bundles_activation.test.ts + manage_bundles_tool.test.ts
+      "instance-policy", // `instance-policy show` read path covered by tests/unit/instance_policy.test.ts + instance_policy_write_path_coverage.test.ts
     ]);
 
     // Commands intentionally help-only due interactivity or generic dispatch.

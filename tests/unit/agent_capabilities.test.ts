@@ -20,8 +20,11 @@ import {
   AgentCapabilityError,
   LegacyAgentCapabilityEnvError,
   assertNoLegacyCapabilityEnv,
+  capabilityCeilingFromAdmission,
   contextFromAgentIdentity,
   enforceAgentCapability,
+  enforceAgentRelationshipCapability,
+  enforceRelationshipTypeCapability,
   isAgentDefaultDenyEnabled,
   getAgentCapabilitiesSource,
   type AgentCapabilityContext,
@@ -40,7 +43,7 @@ function admittedCtx(
   caps: AgentCapabilityContext["capabilities"] = [
     { op: "store_structured", entity_types: ["neotoma_feedback"] },
     { op: "correct", entity_types: ["neotoma_feedback"] },
-  ],
+  ]
 ): AgentCapabilityContext {
   return {
     sub: "agent-site@neotoma.io",
@@ -53,9 +56,7 @@ function admittedCtx(
   };
 }
 
-function unadmittedCtx(
-  overrides: Partial<AgentCapabilityContext> = {},
-): AgentCapabilityContext {
+function unadmittedCtx(overrides: Partial<AgentCapabilityContext> = {}): AgentCapabilityContext {
   return {
     sub: "unknown@example.com",
     tier: "software",
@@ -104,9 +105,7 @@ describe("agent_capabilities", () => {
         const legacy = err as LegacyAgentCapabilityEnvError;
         expect(legacy.code).toBe("legacy_agent_capabilities_env");
         expect(legacy.variables).toEqual(["NEOTOMA_AGENT_CAPABILITIES_JSON"]);
-        expect(legacy.migrationCommand).toContain(
-          "neotoma agents grants import",
-        );
+        expect(legacy.migrationCommand).toContain("neotoma agents grants import");
       }
     });
 
@@ -170,9 +169,7 @@ describe("agent_capabilities", () => {
         thumbprint: "thumb-xyz",
         tier: "software",
       } as AgentIdentity;
-      const caps = [
-        { op: "store_structured" as const, entity_types: ["task"] },
-      ];
+      const caps = [{ op: "store_structured" as const, entity_types: ["task"] }];
       const ctx = runWithRequestContext(
         {
           agentIdentity: ident,
@@ -185,7 +182,7 @@ describe("agent_capabilities", () => {
             reason: "admitted",
           },
         },
-        () => contextFromAgentIdentity(ident),
+        () => contextFromAgentIdentity(ident)
       ) as AgentCapabilityContext | null;
       expect(ctx).not.toBeNull();
       expect(ctx!.admitted).toBe(true);
@@ -209,21 +206,13 @@ describe("agent_capabilities", () => {
   describe("enforceAgentCapability (admitted)", () => {
     it("allows in-scope (op, entity_type) pairs", () => {
       expect(() =>
-        enforceAgentCapability(
-          "store_structured",
-          ["neotoma_feedback"],
-          admittedCtx(),
-        ),
+        enforceAgentCapability("store_structured", ["neotoma_feedback"], admittedCtx())
       ).not.toThrow();
     });
 
     it("rejects out-of-scope entity types", () => {
       try {
-        enforceAgentCapability(
-          "store_structured",
-          ["task"],
-          admittedCtx(),
-        );
+        enforceAgentCapability("store_structured", ["task"], admittedCtx());
         throw new Error("expected throw");
       } catch (err) {
         expect(err).toBeInstanceOf(AgentCapabilityError);
@@ -237,21 +226,13 @@ describe("agent_capabilities", () => {
 
     it("rejects an op that the grant does not include", () => {
       expect(() =>
-        enforceAgentCapability(
-          "create_relationship",
-          ["neotoma_feedback"],
-          admittedCtx(),
-        ),
+        enforceAgentCapability("create_relationship", ["neotoma_feedback"], admittedCtx())
       ).toThrow(AgentCapabilityError);
     });
 
     it("supports wildcard entity_types in the grant", () => {
-      const ctx = admittedCtx([
-        { op: "retrieve", entity_types: ["*"] },
-      ]);
-      expect(() =>
-        enforceAgentCapability("retrieve", ["any", "thing"], ctx),
-      ).not.toThrow();
+      const ctx = admittedCtx([{ op: "retrieve", entity_types: ["*"] }]);
+      expect(() => enforceAgentCapability("retrieve", ["any", "thing"], ctx)).not.toThrow();
     });
 
     it("dedupes entity_types before checking", () => {
@@ -259,15 +240,103 @@ describe("agent_capabilities", () => {
         enforceAgentCapability(
           "store_structured",
           ["neotoma_feedback", "neotoma_feedback"],
-          admittedCtx(),
-        ),
+          admittedCtx()
+        )
       ).not.toThrow();
     });
 
     it("no-ops on empty entity_types", () => {
+      expect(() => enforceAgentCapability("store_structured", [], admittedCtx())).not.toThrow();
+    });
+  });
+
+  describe("enforceAgentRelationshipCapability (admitted)", () => {
+    const checkpointCtx = () =>
+      admittedCtx([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: ["REFERS_TO"],
+        },
+      ]);
+
+    it("allows the scoped checkpoint REFERS_TO task edge", () => {
       expect(() =>
-        enforceAgentCapability("store_structured", [], admittedCtx()),
+        enforceAgentRelationshipCapability(
+          "REFERS_TO",
+          ["checkpoint_brief", "task"],
+          checkpointCtx()
+        )
       ).not.toThrow();
+    });
+
+    it("denies an unrelated relationship type", () => {
+      expect(() =>
+        enforceAgentRelationshipCapability("PART_OF", ["checkpoint_brief", "task"], checkpointCtx())
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it("denies an unrelated endpoint entity type", () => {
+      expect(() =>
+        enforceAgentRelationshipCapability(
+          "REFERS_TO",
+          ["checkpoint_brief", "issue"],
+          checkpointCtx()
+        )
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it.each([undefined, []] as const)(
+      "denies absent or empty relationship_types (%s)",
+      (relationshipTypes) => {
+        const capability = {
+          op: "create_relationship" as const,
+          entity_types: ["checkpoint_brief", "task"],
+          ...(relationshipTypes === undefined
+            ? {}
+            : { relationship_types: relationshipTypes as unknown as string[] }),
+        };
+        expect(() =>
+          enforceAgentRelationshipCapability(
+            "REFERS_TO",
+            ["checkpoint_brief", "task"],
+            admittedCtx([capability])
+          )
+        ).toThrow(AgentCapabilityError);
+      }
+    );
+
+    it("denies a malformed runtime relationship_types value", () => {
+      const ctx = admittedCtx([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief", "task"],
+          relationship_types: "REFERS_TO" as never,
+        },
+      ]);
+
+      expect(() =>
+        enforceAgentRelationshipCapability("REFERS_TO", ["checkpoint_brief", "task"], ctx)
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it("does not combine relationship and endpoint scopes from different entries", () => {
+      const ctx = admittedCtx([
+        {
+          op: "create_relationship",
+          entity_types: ["checkpoint_brief"],
+          relationship_types: ["REFERS_TO"],
+        },
+        {
+          op: "create_relationship",
+          entity_types: ["task"],
+          relationship_types: ["PART_OF"],
+        },
+      ]);
+
+      expect(() =>
+        enforceAgentRelationshipCapability("REFERS_TO", ["checkpoint_brief", "task"], ctx)
+      ).toThrow(AgentCapabilityError);
     });
   });
 
@@ -276,37 +345,299 @@ describe("agent_capabilities", () => {
       // Mirrors the v0.7 behaviour: unknown agents fall through to
       // attribution policy unless default_deny is set.
       expect(() =>
-        enforceAgentCapability(
-          "store_structured",
-          ["task"],
-          unadmittedCtx(),
-        ),
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx())
       ).not.toThrow();
     });
 
     it("denies when NEOTOMA_AGENT_DEFAULT_DENY is enabled and tier is verifying", () => {
       process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
       try {
-        enforceAgentCapability(
-          "store_structured",
-          ["task"],
-          unadmittedCtx(),
-        );
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx());
         throw new Error("expected throw");
       } catch (err) {
         expect(err).toBeInstanceOf(AgentCapabilityError);
-        expect((err as AgentCapabilityError).hint).toContain(
-          "No active agent_grant matches",
-        );
+        expect((err as AgentCapabilityError).hint).toContain("No active agent_grant matches");
       }
     });
 
     it("does NOT deny anonymous tier even with default_deny enabled", () => {
       process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
       const ctx = unadmittedCtx({ tier: "anonymous" });
+      expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).not.toThrow();
+    });
+  });
+
+  describe("capability ceiling (separate from authentication)", () => {
+    const unboundAdmission = { admitted: false, reason: "grant_key_unbound" as const };
+
+    it("maps admission records to ceilings", () => {
+      expect(
+        capabilityCeilingFromAdmission({
+          admitted: true,
+          reason: "admitted",
+          capabilities: [{ op: "store_structured", entity_types: ["a"] }],
+        })
+      ).toEqual({
+        kind: "grant",
+        capabilities: [{ op: "store_structured", entity_types: ["a"] }],
+      });
+      expect(capabilityCeilingFromAdmission(unboundAdmission)).toEqual({
+        kind: "deny",
+        reason: "grant_key_unbound",
+      });
+      expect(capabilityCeilingFromAdmission({ admitted: false, reason: "no_match" })).toEqual({
+        kind: "none",
+      });
+      expect(capabilityCeilingFromAdmission({ admitted: false, reason: "not_signed" })).toEqual({
+        kind: "none",
+      });
+      expect(capabilityCeilingFromAdmission(null)).toEqual({ kind: "none" });
+    });
+
+    it("grant_key_unbound denies capability-gated writes with default_deny unset", async () => {
+      expect(process.env.NEOTOMA_AGENT_DEFAULT_DENY).toBeUndefined();
+      const identity: AgentIdentity = {
+        sub: "worker@swarm.example",
+        iss: "https://issuer.example",
+        thumbprint: "tp-unpinned",
+        tier: "software",
+      } as AgentIdentity;
+      await runWithRequestContext(
+        { agentIdentity: identity, aauthAdmission: unboundAdmission },
+        async () => {
+          const ctx = contextFromAgentIdentity(identity)!;
+          expect(ctx.admitted).toBe(false);
+          expect(ctx.ceiling).toEqual({ kind: "deny", reason: "grant_key_unbound" });
+          for (const op of ["store_structured", "correct", "create_relationship"] as const) {
+            let caught: unknown;
+            try {
+              enforceAgentCapability(op, ["task"], ctx);
+            } catch (err) {
+              caught = err;
+            }
+            expect(caught).toBeInstanceOf(AgentCapabilityError);
+            expect((caught as AgentCapabilityError).hint).toContain(
+              "pin-a-key-to-an-existing-grant"
+            );
+          }
+          expect(() => enforceRelationshipTypeCapability("LEASE", "user", ctx)).toThrow(
+            AgentCapabilityError
+          );
+        }
+      );
+    });
+
+    it("grant_key_unbound denies whatever the signature's tier", () => {
+      const ctx = unadmittedCtx({
+        tier: "anonymous",
+        ceiling: { kind: "deny", reason: "grant_key_unbound" },
+      });
+      expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
+        AgentCapabilityError
+      );
+    });
+
+    it("hand-built contexts without a ceiling keep their previous behaviour", () => {
       expect(() =>
-        enforceAgentCapability("store_structured", ["task"], ctx),
+        enforceAgentCapability("store_structured", ["neotoma_feedback"], admittedCtx())
       ).not.toThrow();
+      expect(() => enforceAgentCapability("store_structured", ["task"], admittedCtx())).toThrow(
+        AgentCapabilityError
+      );
+      expect(() =>
+        enforceAgentCapability("store_structured", ["task"], unadmittedCtx())
+      ).not.toThrow();
+    });
+  });
+
+  /**
+   * Regression coverage for the gap Falco/Waxwing/Pavo found in PR #2506
+   * round 2 (ffcebdbc2): a caller whose key was pinned to a grant that is
+   * later revoked or suspended must NOT fall back to the same `none`
+   * ceiling as an unrecognized agent. `grant_revoked` / `grant_suspended`
+   * must map to `deny`, same as `grant_key_unbound`, independent of
+   * `NEOTOMA_AGENT_DEFAULT_DENY`.
+   */
+  describe("revoked/suspended key-bound grant (fail-closed, not fail-open)", () => {
+    it("maps grant_revoked and grant_suspended to the deny ceiling", () => {
+      expect(capabilityCeilingFromAdmission({ admitted: false, reason: "grant_revoked" })).toEqual({
+        kind: "deny",
+        reason: "grant_revoked",
+      });
+      expect(
+        capabilityCeilingFromAdmission({ admitted: false, reason: "grant_suspended" })
+      ).toEqual({ kind: "deny", reason: "grant_suspended" });
+    });
+
+    it.each(["grant_revoked", "grant_suspended"] as const)(
+      "%s denies capability-gated writes with NEOTOMA_AGENT_DEFAULT_DENY unset",
+      async (reason) => {
+        expect(process.env.NEOTOMA_AGENT_DEFAULT_DENY).toBeUndefined();
+        const identity: AgentIdentity = {
+          sub: "worker@swarm.example",
+          iss: "https://issuer.example",
+          thumbprint: "tp-was-pinned",
+          tier: "software",
+        } as AgentIdentity;
+        const admission = { admitted: false, reason } as const;
+        await runWithRequestContext(
+          { agentIdentity: identity, aauthAdmission: admission },
+          async () => {
+            const ctx = contextFromAgentIdentity(identity)!;
+            expect(ctx.admitted).toBe(false);
+            expect(ctx.ceiling).toEqual({ kind: "deny", reason });
+            for (const op of ["store_structured", "correct", "create_relationship"] as const) {
+              let caught: unknown;
+              try {
+                enforceAgentCapability(op, ["task"], ctx);
+              } catch (err) {
+                caught = err;
+              }
+              expect(caught).toBeInstanceOf(AgentCapabilityError);
+              expect((caught as AgentCapabilityError).code).toBe("capability_denied");
+            }
+            expect(() => enforceRelationshipTypeCapability("LEASE", "user", ctx)).toThrow(
+              AgentCapabilityError
+            );
+          }
+        );
+      }
+    );
+
+    it("denies whatever the signature's tier, same as grant_key_unbound", () => {
+      for (const reason of ["grant_revoked", "grant_suspended"] as const) {
+        const ctx = unadmittedCtx({
+          tier: "anonymous",
+          ceiling: { kind: "deny", reason },
+        });
+        expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
+          AgentCapabilityError
+        );
+      }
+    });
+
+    it("denies even when NEOTOMA_AGENT_DEFAULT_DENY is explicitly disabled", () => {
+      process.env.NEOTOMA_AGENT_DEFAULT_DENY = "false";
+      for (const reason of ["grant_revoked", "grant_suspended"] as const) {
+        const ctx = unadmittedCtx({ ceiling: { kind: "deny", reason } });
+        expect(() => enforceAgentCapability("store_structured", ["task"], ctx)).toThrow(
+          AgentCapabilityError
+        );
+      }
+    });
+
+    it("gives a reason-specific hint distinguishing revoked from suspended from unbound", () => {
+      const revoked = unadmittedCtx({ ceiling: { kind: "deny", reason: "grant_revoked" } });
+      const suspended = unadmittedCtx({ ceiling: { kind: "deny", reason: "grant_suspended" } });
+      const unbound = unadmittedCtx({ ceiling: { kind: "deny", reason: "grant_key_unbound" } });
+
+      let revokedErr: AgentCapabilityError | undefined;
+      let suspendedErr: AgentCapabilityError | undefined;
+      let unboundErr: AgentCapabilityError | undefined;
+      try {
+        enforceAgentCapability("store_structured", ["task"], revoked);
+      } catch (err) {
+        revokedErr = err as AgentCapabilityError;
+      }
+      try {
+        enforceAgentCapability("store_structured", ["task"], suspended);
+      } catch (err) {
+        suspendedErr = err as AgentCapabilityError;
+      }
+      try {
+        enforceAgentCapability("store_structured", ["task"], unbound);
+      } catch (err) {
+        unboundErr = err as AgentCapabilityError;
+      }
+
+      expect(revokedErr?.hint).toContain("revoked");
+      expect(suspendedErr?.hint).toContain("suspended");
+      expect(unboundErr?.hint).toContain("match_thumbprint");
+      // The three hints are genuinely distinct, not a shared generic string.
+      expect(revokedErr?.hint).not.toBe(suspendedErr?.hint);
+      expect(revokedErr?.hint).not.toBe(unboundErr?.hint);
+    });
+  });
+
+  /**
+   * The safety-vocabulary discipline itself: every `AAuthAdmissionReason`
+   * the admission layer can produce must be classified by
+   * `capabilityCeilingFromAdmission`, and any reason not obviously safe
+   * to allow must resolve to `deny`, never silently to `none`. This test
+   * iterates the reason vocabulary at runtime (a TS `Record` exhaustive
+   * check in the implementation catches a missing reason at compile
+   * time; this catches a reason wrongly classified as permissive).
+   */
+  describe("capabilityCeilingFromAdmission is exhaustive over AAuthAdmissionReason", () => {
+    const ALL_REASONS = [
+      "admitted",
+      "no_grants_for_user",
+      "no_match",
+      "grant_key_unbound",
+      "grant_revoked",
+      "grant_suspended",
+      "grant_invalid",
+      "grant_pin_conflict",
+      "strict_rejected",
+      "aauth_disabled",
+      "not_signed",
+    ] as const;
+
+    // Reasons that mean "no grant asserts anything about this identity" —
+    // the signature is unrecognized, not refused. NEOTOMA_AGENT_DEFAULT_DENY
+    // governs these. Every reason NOT in this list must map to deny.
+    const PERMISSIVE_REASONS = new Set([
+      "no_match",
+      "no_grants_for_user",
+      "strict_rejected",
+      "aauth_disabled",
+      "not_signed",
+    ]);
+
+    it("covers every known reason with an explicit, restrictive-by-default classification", () => {
+      for (const reason of ALL_REASONS) {
+        const ceiling =
+          reason === "admitted"
+            ? capabilityCeilingFromAdmission({
+                admitted: true,
+                reason,
+                capabilities: [],
+              })
+            : capabilityCeilingFromAdmission({ admitted: false, reason });
+
+        if (reason === "admitted") {
+          expect(ceiling.kind).toBe("grant");
+        } else if (PERMISSIVE_REASONS.has(reason)) {
+          expect(ceiling.kind).toBe("none");
+        } else {
+          // grant_key_unbound, grant_revoked, grant_suspended,
+          // grant_invalid, grant_pin_conflict — the
+          // fail-closed set. A reason added here in the future without a
+          // matching CEILING_REASON_MAP entry fails tsc, not this test;
+          // this test guards against a reason being wired to the WRONG
+          // (permissive) side of that map.
+          expect(ceiling.kind).toBe("deny");
+        }
+      }
+    });
+
+    it("unknown/malformed reason values do not fall through to a permissive ceiling", () => {
+      // Simulates a future reason value tsc did not catch (e.g. a cast,
+      // or data from an older server version). Must still fail closed.
+      const ceiling = capabilityCeilingFromAdmission({
+        admitted: false,
+        reason: "some_future_reason" as never,
+      });
+      expect(ceiling.kind).toBe("none");
+      // Documented limitation: an admission record with a genuinely
+      // unrecognized reason string degrades to `none` (governed by
+      // NEOTOMA_AGENT_DEFAULT_DENY), the same as `no_match`, because
+      // there is no way to distinguish "a reason nobody has invented
+      // yet" from "no reason at all" at runtime once TypeScript's
+      // exhaustiveness check has been bypassed with a cast. The
+      // compile-time check is what actually closes this gap: any real
+      // new AAuthAdmissionReason must be added to CEILING_REASON_MAP
+      // before the project builds.
     });
   });
 });

@@ -15,7 +15,7 @@ describe("#1820 parseSchemaFields: per-field reducer_config → top-level merge_
   // Form 1: object map { fieldName: { type, required?, reducer_config?, ... } }
   // ---------------------------------------------------------------------------
 
-  describe("object-map form (--fields '{\"x\":{\"type\":\"number\",\"reducer_config\":{...}}}')", () => {
+  describe('object-map form (--fields \'{"x":{"type":"number","reducer_config":{...}}}\')', () => {
     it("extracts strategy into mergePolicies for a single field", () => {
       const input = {
         x: { type: "number", required: false, reducer_config: { strategy: "highest_priority" } },
@@ -40,6 +40,21 @@ describe("#1820 parseSchemaFields: per-field reducer_config → top-level merge_
       expect(mergePolicies["score"]).toEqual({
         strategy: "highest_priority",
         tie_breaker: "observed_at",
+      });
+    });
+
+    it("preserves key_field for merge_array_by_key", () => {
+      const input = {
+        tasks: {
+          type: "array",
+          reducer_config: { strategy: "merge_array_by_key", key_field: "task_id" },
+        },
+      };
+      const { mergePolicies } = parseSchemaFields(input);
+
+      expect(mergePolicies["tasks"]).toEqual({
+        strategy: "merge_array_by_key",
+        key_field: "task_id",
       });
     });
 

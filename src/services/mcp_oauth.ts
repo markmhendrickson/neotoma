@@ -7,10 +7,12 @@
 import { randomBytes, createHash, createCipheriv, createDecipheriv, randomUUID } from "node:crypto";
 import { getServiceRoleClient, db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { connectionIdForLog } from "../utils/connection_id_log.js";
 import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
-import { clearSqliteCache, getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { clearDbCache, getDb } from "../repositories/db/connection.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
+import type { DbConnection } from "../repositories/db/driver.js";
 
 // Cached service role client instance
 let cachedServiceRoleClient: LocalDbClient | null = null;
@@ -53,6 +55,12 @@ interface OAuthTokenResponse {
   expires_in: number;
   refresh_token?: string;
   scope?: string;
+  /** Non-standard extension field (harmless per RFC 6749 §5.1, which allows
+   *  additional response parameters). Lets a first-party client (the CLI) that
+   *  needs the stable connection_id for X-Connection-Id resolve it from the
+   *  token response, now that `code` — the value the client redeemed — is a
+   *  single-use secret rather than the connection_id itself. */
+  connection_id?: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -79,6 +87,14 @@ const ENCRYPTION_KEY =
   config.mcpTokenEncryptionKey;
 const isLocalBackend = config.storageBackend === "local";
 
+export const OAUTH_CODE_PROVENANCE = {
+  CLIENT_PKCE: "client_pkce",
+  OPENAI_CUSTOM_GPT_NO_PKCE: "openai_custom_gpt_no_pkce",
+} as const;
+
+export type OAuthCodeProvenance =
+  (typeof OAUTH_CODE_PROVENANCE)[keyof typeof OAUTH_CODE_PROVENANCE];
+
 interface LocalOAuthStateRow {
   id: string;
   state: string;
@@ -90,10 +106,12 @@ interface LocalOAuthStateRow {
   created_at: string;
   expires_at: string;
   final_redirect_uri: string | null;
+  authorization_code_provenance: OAuthCodeProvenance;
 }
 
 interface LocalConnectionRow {
   id: string;
+  /** Graph scope: the user_id all data access on this connection is scoped to. */
   user_id: string;
   connection_id: string;
   refresh_token: string;
@@ -103,7 +121,16 @@ interface LocalConnectionRow {
   last_used_at: string | null;
   created_at: string;
   revoked_at: string | null;
+  /** Signed-in identity (#2228). NULL outside shared-graph mode and on rows
+   *  written before the migration, where identity comes from `user_id`. */
+  authenticated_user_id?: string | null;
+  authenticated_email?: string | null;
 }
+
+/** Columns every LocalConnectionRow SELECT reads. Kept in one place so adding a
+ *  column cannot silently miss one of the three lookup helpers. */
+const LOCAL_CONNECTION_COLUMNS =
+  "id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at, authenticated_user_id, authenticated_email";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -113,45 +140,47 @@ function generateLocalToken(prefix: string): string {
   return `${prefix}_${randomBytes(16).toString("hex")}`;
 }
 
-function getLocalOAuthState(state: string): LocalOAuthStateRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalOAuthState(state: string): Promise<LocalOAuthStateRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
-      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE state = ?"
+      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri, authorization_code_provenance FROM mcp_oauth_state WHERE state = ?"
     )
     .get(state);
   return row ? (row as LocalOAuthStateRow) : null;
 }
 
-function getLocalOAuthStateForConnection(connectionId: string): LocalOAuthStateRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalOAuthStateForConnection(
+  connectionId: string
+): Promise<LocalOAuthStateRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
-      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE connection_id = ?"
+      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri, authorization_code_provenance FROM mcp_oauth_state WHERE connection_id = ?"
     )
     .get(connectionId);
   return row ? (row as LocalOAuthStateRow) : null;
 }
 
-function deleteLocalOAuthState(state: string): void {
-  const db = getSqliteDb();
-  db.prepare("DELETE FROM mcp_oauth_state WHERE state = ?").run(state);
+async function deleteLocalOAuthState(state: string): Promise<void> {
+  const db = await getDb();
+  await db.prepare("DELETE FROM mcp_oauth_state WHERE state = ?").run(state);
 }
 
-function cleanupExpiredLocalStates(): void {
+async function cleanupExpiredLocalStates(): Promise<void> {
   try {
-    const db = getSqliteDb();
-    db.prepare("DELETE FROM mcp_oauth_state WHERE expires_at < ?").run(nowIso());
+    const db = await getDb();
+    await db.prepare("DELETE FROM mcp_oauth_state WHERE expires_at < ?").run(nowIso());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(
       `[MCP OAuth] Local state cleanup failed (sqlitePath=${config.sqlitePath}): ${msg}. Clearing DB cache so next use will recreate the file if missing.`
     );
-    clearSqliteCache();
+    clearDbCache();
   }
 }
 
-function insertLocalOAuthState(payload: {
+async function insertLocalOAuthState(payload: {
   state: string;
   codeVerifier: string;
   codeChallenge: string | null;
@@ -160,108 +189,267 @@ function insertLocalOAuthState(payload: {
   clientState?: string | null;
   finalRedirectUri?: string | null;
   expiresAt: string;
-}): void {
-  const db = getSqliteDb();
+  authorizationCodeProvenance?: OAuthCodeProvenance;
+}): Promise<void> {
+  const db = await getDb();
   const id = randomUUID();
-  db.prepare(
-    "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    id,
-    payload.state,
-    payload.codeVerifier,
-    payload.codeChallenge,
-    payload.connectionId,
-    payload.redirectUri,
-    payload.clientState ?? null,
-    nowIso(),
-    payload.expiresAt,
-    payload.finalRedirectUri ?? null
-  );
+  await db
+    .prepare(
+      "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri, authorization_code_provenance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      id,
+      payload.state,
+      payload.codeVerifier,
+      payload.codeChallenge,
+      payload.connectionId,
+      payload.redirectUri,
+      payload.clientState ?? null,
+      nowIso(),
+      payload.expiresAt,
+      payload.finalRedirectUri ?? null,
+      payload.authorizationCodeProvenance ?? OAUTH_CODE_PROVENANCE.CLIENT_PKCE
+    );
 }
 
-function getLocalConnectionById(connectionId: string): LocalConnectionRow | null {
-  const db = getSqliteDb();
-  const row = db
+interface LocalOAuthCodeRow {
+  id: string;
+  code: string;
+  code_challenge: string;
+  connection_id: string;
+  client_id: string | null;
+  created_at: string;
+  expires_at: string;
+  authorization_code_provenance: OAuthCodeProvenance;
+}
+
+/** Authorization codes are short-lived: they exist only for the time between
+ *  the authorize redirect completing and the client calling /mcp/oauth/token,
+ *  which in every real client happens within seconds. Kept short so a code
+ *  that is never redeemed does not remain a live secret for the full session
+ *  lifetime that STATE_TTL_MS covers for the (separate) pre-authorization
+ *  state row. */
+const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/** Mint a single-use authorization code bound to `codeChallenge` and
+ *  `connectionId`, distinct from both the state token and the connection id.
+ *  This is the value handed to the client as `code`; redeeming it is the only
+ *  way to reach a token, and `redeemLocalOAuthCode` deletes the row on first
+ *  use so a replayed code fails closed. */
+async function insertLocalOAuthCode(payload: {
+  connectionId: string;
+  codeChallenge: string;
+  clientId?: string | null;
+  authorizationCodeProvenance: OAuthCodeProvenance;
+}): Promise<string> {
+  const db = await getDb();
+  const id = randomUUID();
+  const code = generateLocalToken("mcp_auth_code");
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS).toISOString();
+  await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL"
+      "INSERT INTO mcp_oauth_codes (id, code, code_challenge, connection_id, client_id, created_at, expires_at, authorization_code_provenance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      id,
+      code,
+      payload.codeChallenge,
+      payload.connectionId,
+      payload.clientId ?? null,
+      nowIso(),
+      expiresAt,
+      payload.authorizationCodeProvenance
+    );
+  return code;
+}
+
+async function getLocalOAuthCode(
+  code: string,
+  conn?: DbConnection
+): Promise<LocalOAuthCodeRow | null> {
+  const db = conn ?? (await getDb());
+  const row = await db
+    .prepare(
+      "SELECT id, code, code_challenge, connection_id, client_id, created_at, expires_at, authorization_code_provenance FROM mcp_oauth_codes WHERE code = ?"
+    )
+    .get(code);
+  return row ? (row as LocalOAuthCodeRow) : null;
+}
+
+async function deleteLocalOAuthCode(code: string, conn?: DbConnection): Promise<number> {
+  const db = conn ?? (await getDb());
+  const result = await db.prepare("DELETE FROM mcp_oauth_codes WHERE code = ?").run(code);
+  return result.changes;
+}
+
+/**
+ * Redeem a single-use authorization code: atomically acquire and consume it,
+ * then verify that it is unexpired and SHA-256(codeVerifier)
+ * base64url-matches the code_challenge it was minted with. A second
+ * redemption of the same code — with either verifier — fails. Returns the
+ * connection_id the code was bound to.
+ *
+ * This is the fix for the code=connection_id defect: previously any caller
+ * who knew or guessed a connection_id could redeem it for a token directly,
+ * with no verifier check and no consumption (getAccessTokenForConnection just
+ * re-reads the connection row on every call). Now the value a client redeems
+ * is this code, never the connection_id, and redemption is destructive.
+ *
+ * Atomicity: the lookup and deletion run inside one db.transaction() call.
+ * Validation happens only after that transaction commits, so an acquired
+ * code remains consumed even when later validation fails.
+ * The deletion's affected-row count is the deciding single-use check, so
+ * exactly one redemption attempt may acquire a code.
+ */
+async function redeemLocalOAuthCode(code: string, codeVerifier?: string): Promise<string> {
+  const db = await getDb();
+  const row = await db.transaction(async (tx) => {
+    const row = await getLocalOAuthCode(code, tx);
+    if (!row) {
+      throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
+    }
+
+    // Consume before validating so a failed attempt cannot leave the code
+    // reusable. The affected-row count is the single-use decision point.
+    const deleted = await deleteLocalOAuthCode(code, tx);
+    if (deleted !== 1) {
+      throw createOAuthError.tokenExchangeFailed("Authorization code is invalid or already used");
+    }
+    return row;
+  });
+
+  // This code intentionally runs after the consuming transaction commits.
+  // Throwing here must not roll back the deletion.
+  if (new Date(row.expires_at) < new Date()) {
+    throw createOAuthError.tokenExchangeFailed("Authorization code has expired");
+  }
+  if (
+    !codeVerifier &&
+    row.authorization_code_provenance !== OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE
+  ) {
+    throw createOAuthError.tokenExchangeFailed("code_verifier is required");
+  }
+  if (codeVerifier) {
+    const computedChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    if (computedChallenge !== row.code_challenge) {
+      throw createOAuthError.tokenExchangeFailed("code_verifier does not match code_challenge");
+    }
+  }
+  return row.connection_id;
+}
+
+async function getLocalConnectionById(connectionId: string): Promise<LocalConnectionRow | null> {
+  const db = await getDb();
+  const row = await db
+    .prepare(
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL`
     )
     .get(connectionId);
   return row ? (row as LocalConnectionRow) : null;
 }
 
-function getLocalConnectionByAccessToken(accessToken: string): LocalConnectionRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalConnectionByAccessToken(
+  accessToken: string
+): Promise<LocalConnectionRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL`
     )
     .get(accessToken);
   return row ? (row as LocalConnectionRow) : null;
 }
 
-function getLocalConnectionByRefreshToken(refreshToken: string): LocalConnectionRow | null {
-  const db = getSqliteDb();
-  const row = db
+async function getLocalConnectionByRefreshToken(
+  refreshToken: string
+): Promise<LocalConnectionRow | null> {
+  const db = await getDb();
+  const row = await db
     .prepare(
-      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL"
+      `SELECT ${LOCAL_CONNECTION_COLUMNS} FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL`
     )
     .get(refreshToken);
   return row ? (row as LocalConnectionRow) : null;
 }
 
-function upsertLocalConnection(payload: {
+async function upsertLocalConnection(payload: {
   userId: string;
   connectionId: string;
   refreshToken: string;
   accessToken: string;
   accessTokenExpiresAt: string;
   clientName?: string | null;
-}): void {
-  const db = getSqliteDb();
-  const existing = getLocalConnectionById(payload.connectionId);
+  /** Signed-in identity to persist alongside the graph scope (#2228). Omitted
+   *  by callers with no separate identity (token refresh, non-Google paths),
+   *  where the row's existing identity is preserved rather than cleared. */
+  authenticatedUserId?: string | null;
+  authenticatedEmail?: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  const existing = await getLocalConnectionById(payload.connectionId);
   if (existing) {
-    db.prepare(
-      "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL WHERE connection_id = ?"
-    ).run(
+    // A refresh (which carries no identity) must not erase the identity a
+    // sign-in already recorded, or `/me` would silently revert to reporting the
+    // graph owner's email after the first token refresh.
+    const authenticatedUserId =
+      payload.authenticatedUserId !== undefined
+        ? payload.authenticatedUserId
+        : (existing.authenticated_user_id ?? null);
+    const authenticatedEmail =
+      payload.authenticatedEmail !== undefined
+        ? payload.authenticatedEmail
+        : (existing.authenticated_email ?? null);
+    await db
+      .prepare(
+        "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL, authenticated_user_id = ?, authenticated_email = ? WHERE connection_id = ?"
+      )
+      .run(
+        payload.userId,
+        payload.refreshToken,
+        payload.accessToken,
+        payload.accessTokenExpiresAt,
+        payload.clientName ?? null,
+        nowIso(),
+        authenticatedUserId,
+        authenticatedEmail,
+        payload.connectionId
+      );
+    return;
+  }
+  await db
+    .prepare(
+      "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at, authenticated_user_id, authenticated_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      randomUUID(),
       payload.userId,
+      payload.connectionId,
       payload.refreshToken,
       payload.accessToken,
       payload.accessTokenExpiresAt,
       payload.clientName ?? null,
       nowIso(),
-      payload.connectionId
+      nowIso(),
+      null,
+      payload.authenticatedUserId ?? null,
+      payload.authenticatedEmail ?? null
     );
-    return;
-  }
-  db.prepare(
-    "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    randomUUID(),
-    payload.userId,
-    payload.connectionId,
-    payload.refreshToken,
-    payload.accessToken,
-    payload.accessTokenExpiresAt,
-    payload.clientName ?? null,
-    nowIso(),
-    nowIso(),
-    null
-  );
 }
 
-function updateLocalConnectionLastUsed(connectionId: string): void {
-  const db = getSqliteDb();
-  db.prepare("UPDATE mcp_oauth_connections SET last_used_at = ? WHERE connection_id = ?").run(
-    nowIso(),
-    connectionId
-  );
+async function updateLocalConnectionLastUsed(connectionId: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare("UPDATE mcp_oauth_connections SET last_used_at = ? WHERE connection_id = ?")
+    .run(nowIso(), connectionId);
 }
 
-function revokeLocalConnection(connectionId: string, userId: string): void {
-  const db = getSqliteDb();
-  db.prepare(
-    "UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ? AND user_id = ?"
-  ).run(nowIso(), connectionId, userId);
+async function revokeLocalConnection(connectionId: string, userId: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare(
+      "UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ? AND user_id = ?"
+    )
+    .run(nowIso(), connectionId, userId);
 }
 
 /**
@@ -301,12 +489,88 @@ function validateRedirectUri(redirectUri: string): void {
   }
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Canonical form of a callback URL for exact comparison, or null if the URL is
+ * unparseable or not one we will ever honour.
+ *
+ * Normalisation is delegated to the WHATWG URL parser wherever the parser and a
+ * browser agree, because the browser is what will actually perform the redirect:
+ *   - backslashes are resolved as slashes, the way a browser resolves them;
+ *   - dot segments are resolved (`/auth/callback/../admin` becomes `/auth/admin`,
+ *     which then simply fails to match the configured `/auth/callback`);
+ *   - the host is lowercased; a default port (443/80) is dropped.
+ * On top of that we:
+ *   - compare protocol + host + port + pathname only, so a query string or
+ *     fragment on the request cannot smuggle a mismatch past the comparison and
+ *     equally cannot cause a legitimate callback carrying `?state=` to be refused;
+ *   - preserve pathname case, which is correctly case-SENSITIVE (unlike the host);
+ *   - treat a trailing slash as insignificant, since `/cb` and `/cb/` reach the
+ *     same handler in every server we care about and an operator should not be
+ *     punished for the difference;
+ *   - refuse any URL carrying userinfo. `https://evil.com@app.example.com/cb` is
+ *     harmless to the URL parser but is a well-worn way to make a URL read as one
+ *     host to a human reviewing config and resolve as another;
+ *   - refuse plaintext http: to anything but a loopback host, so an operator who
+ *     misconfigures `http://evil.com/cb` fails closed rather than silently
+ *     shipping authorization codes over the wire in cleartext.
+ */
+function canonicalCallbackUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const protocol = url.protocol.toLowerCase();
+  if (protocol !== "https:" && protocol !== "http:") return null;
+  // Credentials in a callback URL are never load-bearing and are a spoofing vector.
+  if (url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (!host) return null;
+  // Plaintext only to loopback, where there is no wire to sniff.
+  if (protocol === "http:" && !LOOPBACK_HOSTS.has(host)) return null;
+  const port = url.port ? `:${url.port}` : "";
+  // Trailing slash is insignificant; everything else about the path is significant.
+  const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
+  return `${protocol}//${host}${port}${path}`;
+}
+
+/**
+ * Exact-match check against the operator-configured trusted callback URLs
+ * (NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS). Empty by default.
+ *
+ * Deliberately matches a FULL callback URL rather than an origin: a configured
+ * `https://app.example.com/auth/callback` authorises that one path and NOT
+ * `https://app.example.com/anything-else`. Trusting a whole third-party origin is
+ * the defect reported in #2215; this does not add a second instance of it.
+ */
+export function isRedirectUriInConfiguredAllowlist(redirectUri: string): boolean {
+  if (config.oauthTrustedCallbackUrls.length === 0) return false;
+  const candidate = canonicalCallbackUrl(redirectUri);
+  if (!candidate) return false;
+  for (const configured of config.oauthTrustedCallbackUrls) {
+    const allowed = canonicalCallbackUrl(configured);
+    // `allowed` is non-null for every entry that survives config parsing:
+    // `parseTrustedCallbackUrls` in src/config.ts rejects the whole list at load
+    // if any entry is malformed, so a bad entry can never reach here to be
+    // silently skipped. The null-guard remains as a defence-in-depth belt on a
+    // helper that is exported and could be called with an unvalidated list.
+    if (allowed && allowed === candidate) return true;
+  }
+  return false;
+}
+
 /**
  * Redirect URIs allowed when the authorization request is from a tunnel (non-local Host).
  * Prevents sending the authorization code to a third-party site. Allows localhost, loopback,
- * known app schemes, and trusted hosted OAuth callbacks (OpenAI/Claude).
+ * known app schemes, trusted hosted OAuth callbacks (OpenAI/Claude), and any exact
+ * callback URLs the operator configured via NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS
+ * (empty by default, so this function's behaviour is unchanged unless an operator
+ * opts in).
  */
-export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
+export function isRedirectUriAllowedForTunnel(redirectUri: string, selfHost?: string): boolean {
   if (!redirectUri || typeof redirectUri !== "string") return false;
   try {
     const url = new URL(redirectUri);
@@ -316,7 +580,19 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
     if (protocol !== "http:" && protocol !== "https:") return false;
     if (host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1")
       return true;
+    // Same-origin callback: the Inspector SPA served by *this* instance registering
+    // its own `${origin}/oauth/callback`. The authorization code is handed back to
+    // the very server that issued it, so there is no third-party exfiltration risk
+    // (the exact threat this allowlist exists to prevent). Requires https to match
+    // how the instance is publicly served behind the tunnel.
+    if (selfHost && protocol === "https:") {
+      const self = selfHost.toLowerCase().replace(/:\d+$/, "");
+      if (host === self) return true;
+    }
     if (host === "chatgpt.com" || host === "chat.openai.com") return true;
+    // Operator-configured exact callback URLs. Additive: empty by default, and
+    // checked only after every pre-existing rule has already declined.
+    if (isRedirectUriInConfiguredAllowlist(redirectUri)) return true;
     if (
       (host === "claude.ai" || host === "www.claude.ai") &&
       (url.pathname === "/api/mcp/auth_callback" ||
@@ -327,6 +603,22 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
       return true;
     }
     return false;
+  } catch {
+    return false;
+  }
+}
+
+/** True only for the hosted callback origins used by OpenAI Custom GPT actions. */
+export function isOpenAiCustomGptRedirectUri(redirectUri: string): boolean {
+  try {
+    const url = new URL(redirectUri);
+    const host = url.hostname.toLowerCase();
+    return (
+      url.protocol.toLowerCase() === "https:" &&
+      url.port === "" &&
+      (host === "chatgpt.com" || host === "chat.openai.com") &&
+      /^\/aip\/g-[^/]+\/oauth\/callback\/?$/.test(url.pathname)
+    );
   } catch {
     return false;
   }
@@ -496,14 +788,16 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
     try {
       if (isLocalBackend) {
         const localClientId = "local_mcp_oauth_client";
-        const db = getSqliteDb();
-        const existing = db
+        const db = await getDb();
+        const existing = await db
           .prepare("SELECT id, client_id FROM mcp_oauth_client_state WHERE client_id = ?")
           .get(localClientId);
         if (!existing) {
-          db.prepare(
-            "INSERT INTO mcp_oauth_client_state (id, client_id, redirect_uri, created_at) VALUES (?, ?, ?, ?)"
-          ).run(randomUUID(), localClientId, redirectUri, nowIso());
+          await db
+            .prepare(
+              "INSERT INTO mcp_oauth_client_state (id, client_id, redirect_uri, created_at) VALUES (?, ?, ?, ?)"
+            )
+            .run(randomUUID(), localClientId, redirectUri, nowIso());
         }
         cachedClientId = localClientId;
         cachedRedirectUri = redirectUri;
@@ -766,7 +1060,7 @@ export async function createAuthUrl(
 async function cleanupExpiredStates(): Promise<void> {
   try {
     if (isLocalBackend) {
-      cleanupExpiredLocalStates();
+      await cleanupExpiredLocalStates();
       return;
     }
 
@@ -801,10 +1095,13 @@ function auditLog(
     [key: string]: any;
   }
 ): void {
+  // A connection id is a credential: audit lines carry its fingerprint only.
+  const { connectionId, ...rest } = context;
   const auditEntry = {
     event,
     timestamp: new Date().toISOString(),
-    ...context,
+    ...rest,
+    ...(connectionId !== undefined ? { connectionId: connectionIdForLog(connectionId) } : {}),
   };
 
   if (context.success) {
@@ -917,7 +1214,7 @@ export async function initiateOAuthFlow(
   const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
 
   if (isLocalBackend) {
-    insertLocalOAuthState({
+    await insertLocalOAuthState({
       state,
       codeVerifier,
       codeChallenge,
@@ -928,7 +1225,9 @@ export async function initiateOAuthFlow(
       expiresAt: expiresAt.toISOString(),
     });
     const authUrl = await createAuthUrl(state, codeChallenge, finalRedirectUri);
-    logger.info(`[MCP OAuth] Initiated local OAuth flow for connection: ${connectionId}`);
+    logger.info(
+      `[MCP OAuth] Initiated local OAuth flow for connection (${connectionIdForLog(connectionId)})`
+    );
     auditLog("oauth_flow_initiated", {
       connectionId,
       clientName,
@@ -981,7 +1280,9 @@ export async function initiateOAuthFlow(
 
   const authUrl = await createAuthUrl(state, codeChallenge, oauthRedirectUri);
 
-  logger.info(`[MCP OAuth] Initiated OAuth flow for connection: ${connectionId}`);
+  logger.info(
+    `[MCP OAuth] Initiated OAuth flow for connection (${connectionIdForLog(connectionId)})`
+  );
 
   // Audit log
   auditLog("oauth_flow_initiated", {
@@ -1004,6 +1305,7 @@ export async function createLocalAuthorizationRequest(params: {
   codeChallenge: string;
   /** When provided (e.g. Custom GPT flow without client PKCE), use instead of generating. Must match codeChallenge. */
   codeVerifier?: string;
+  authorizationCodeProvenance?: OAuthCodeProvenance;
 }): Promise<{ authUrl: string; connectionId: string; state: string; expiresAt: string }> {
   if (!isLocalBackend) {
     throw createOAuthError.stateInvalid(
@@ -1018,7 +1320,7 @@ export async function createLocalAuthorizationRequest(params: {
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
   const codeVerifier = params.codeVerifier ?? generatePKCE().codeVerifier;
 
-  insertLocalOAuthState({
+  await insertLocalOAuthState({
     state,
     codeVerifier,
     codeChallenge: params.codeChallenge,
@@ -1027,6 +1329,8 @@ export async function createLocalAuthorizationRequest(params: {
     finalRedirectUri: params.redirectUri,
     clientState: params.clientState ?? null,
     expiresAt: expiresAt.toISOString(),
+    authorizationCodeProvenance:
+      params.authorizationCodeProvenance ?? OAUTH_CODE_PROVENANCE.CLIENT_PKCE,
   });
 
   const authUrl = await createAuthUrl(state, params.codeChallenge, params.redirectUri);
@@ -1040,22 +1344,27 @@ export async function createLocalAuthorizationRequest(params: {
 
 export async function completeLocalAuthorization(
   state: string,
+  /** Graph scope — the user_id this connection's reads and writes are scoped to. */
   userId: string,
-  clientName?: string | null
-): Promise<{ connectionId: string; redirectUri?: string; clientState?: string }> {
+  clientName?: string | null,
+  /** Verified identity of the signer, when shared-graph mode made it distinct
+   *  from the graph scope (#2228). Recorded on the connection row so `/me` can
+   *  report who signed in; it never affects which graph is accessed. */
+  identity?: { authenticatedUserId?: string; authenticatedEmail?: string }
+): Promise<{ connectionId: string; code: string; redirectUri?: string; clientState?: string }> {
   if (!isLocalBackend) {
     throw createOAuthError.stateInvalid("Local authorization completion requires local backend");
   }
 
   validateState(state);
-  const stateData = getLocalOAuthState(state);
+  const stateData = await getLocalOAuthState(state);
   if (!stateData) {
     throw createOAuthError.stateInvalid(
       "This authorization link has expired or was already used. If you have not used it before, more than one server instance may be running and state was stored on a different instance. Use a single instance or enable sticky sessions for /mcp/oauth so the same instance handles the full flow. Otherwise, click Connect again in Cursor to start a new authorization."
     );
   }
 
-  deleteLocalOAuthState(state);
+  await deleteLocalOAuthState(state);
 
   if (new Date(stateData.expires_at) < new Date()) {
     throw createOAuthError.stateExpired(state);
@@ -1070,13 +1379,37 @@ export async function completeLocalAuthorization(
   const encryptedRefreshToken = encryptRefreshTokenForStorage(tokens.refreshToken);
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
-  upsertLocalConnection({
+  await upsertLocalConnection({
     userId,
     connectionId: stateData.connection_id,
     refreshToken: encryptedRefreshToken,
     accessToken: tokens.accessToken,
     accessTokenExpiresAt: expiresAt.toISOString(),
     clientName: clientName ?? null,
+    authenticatedUserId: identity?.authenticatedUserId ?? null,
+    authenticatedEmail: identity?.authenticatedEmail ?? null,
+  });
+
+  // Mint the single-use authorization code the client will redeem at
+  // /mcp/oauth/token, bound to the code_challenge presented at /authorize.
+  // This is the value returned as `code` — never stateData.connection_id,
+  // which is a long-lived, guessable-by-repetition handle and must not double
+  // as a bearer secret (see redeemLocalOAuthCode for the exchange side).
+  if (!stateData.code_challenge) {
+    // createLocalAuthorizationRequest always stores a non-null code_challenge
+    // (server-generated when the client sends none — see /mcp/oauth/authorize).
+    // A null value here means the state row was written by something else, or
+    // the schema regressed; refuse rather than mint a code no verifier can
+    // ever satisfy.
+    throw createOAuthError.stateInvalid("Authorization state is missing a code_challenge");
+  }
+  const code = await insertLocalOAuthCode({
+    connectionId: stateData.connection_id,
+    codeChallenge: stateData.code_challenge,
+    authorizationCodeProvenance:
+      stateData.authorization_code_provenance === OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE
+        ? OAUTH_CODE_PROVENANCE.OPENAI_CUSTOM_GPT_NO_PKCE
+        : OAUTH_CODE_PROVENANCE.CLIENT_PKCE,
   });
 
   auditLog("oauth_callback_success", {
@@ -1087,6 +1420,7 @@ export async function completeLocalAuthorization(
 
   return {
     connectionId: stateData.connection_id,
+    code,
     redirectUri: stateData.final_redirect_uri ?? stateData.redirect_uri ?? undefined,
     clientState: stateData.client_state ?? undefined,
   };
@@ -1346,7 +1680,9 @@ export async function handleOAuthCallback(
     throw createOAuthError.stateInvalid(`Failed to store connection: ${insertError.message}`);
   }
 
-  logger.info(`[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userId}`);
+  logger.info(
+    `[MCP OAuth] Connection created (${connectionIdForLog(stateData.connection_id)}) for user: ${userId}`
+  );
 
   // Audit log
   auditLog("oauth_callback_success", {
@@ -1376,17 +1712,25 @@ export async function handleOAuthCallback(
  * const { accessToken, userId } = await getAccessTokenForConnection("cursor-2025-01-27-abc123");
  * // Use accessToken for authenticated requests
  */
-export async function getAccessTokenForConnection(
-  connectionId: string
-): Promise<{ accessToken: string; userId: string }> {
+export async function getAccessTokenForConnection(connectionId: string): Promise<{
+  accessToken: string;
+  /** Graph scope — the user_id this connection's reads and writes use. */
+  userId: string;
+  /**
+   * The signed-in person a verified sign-in recorded on this connection
+   * (#2228 column), for write attribution (#2240). Absent when the row
+   * carries none; callers must not substitute `userId`.
+   */
+  authenticatedUserId?: string;
+}> {
   // Validate input
   validateConnectionId(connectionId);
 
   if (isLocalBackend) {
-    const connection = getLocalConnectionById(connectionId);
+    const connection = await getLocalConnectionById(connectionId);
     if (!connection) {
       logger.error(
-        `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+        `[MCP OAuth] Connection not found (${connectionIdForLog(connectionId)}) (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
       );
       throw createOAuthError.connectionNotFound(connectionId);
     }
@@ -1396,14 +1740,17 @@ export async function getAccessTokenForConnection(
       connection.access_token_expires_at &&
       new Date(connection.access_token_expires_at).getTime() - Date.now() > TOKEN_REFRESH_BUFFER_MS
     ) {
-      updateLocalConnectionLastUsed(connectionId);
+      await updateLocalConnectionLastUsed(connectionId);
       return {
         accessToken: connection.access_token,
         userId: connection.user_id,
+        ...principalOf(connection),
       };
     }
 
-    logger.info(`[MCP OAuth] Refreshing local access token for connection: ${connectionId}`);
+    logger.info(
+      `[MCP OAuth] Refreshing local access token for connection (${connectionIdForLog(connectionId)})`
+    );
     auditLog("token_refresh_initiated", {
       connectionId,
       userId: connection.user_id,
@@ -1412,7 +1759,7 @@ export async function getAccessTokenForConnection(
 
     const accessToken = generateLocalToken("local_access");
     const expiresAt = new Date(Date.now() + 3600 * 1000);
-    upsertLocalConnection({
+    await upsertLocalConnection({
       userId: connection.user_id,
       connectionId,
       refreshToken: connection.refresh_token,
@@ -1424,6 +1771,7 @@ export async function getAccessTokenForConnection(
     return {
       accessToken,
       userId: connection.user_id,
+      ...principalOf(connection),
     };
   }
 
@@ -1437,7 +1785,7 @@ export async function getAccessTokenForConnection(
 
   if (error || !connection) {
     logger.error(
-      `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+      `[MCP OAuth] Connection not found (${connectionIdForLog(connectionId)}) (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
     );
     throw createOAuthError.connectionNotFound(connectionId);
   }
@@ -1457,10 +1805,13 @@ export async function getAccessTokenForConnection(
     return {
       accessToken: connection.access_token,
       userId: connection.user_id,
+      ...principalOf(connection),
     };
   }
 
-  logger.info(`[MCP OAuth] Refreshing access token for connection: ${connectionId}`);
+  logger.info(
+    `[MCP OAuth] Refreshing access token for connection (${connectionIdForLog(connectionId)})`
+  );
   auditLog("token_refresh_initiated", {
     connectionId,
     userId: connection.user_id,
@@ -1495,7 +1846,16 @@ export async function getAccessTokenForConnection(
   return {
     accessToken: tokens.accessToken,
     userId: connection.user_id,
+    ...principalOf(connection),
   };
+}
+
+/** The recorded signer on a connection row, as an optional spread (#2240). */
+function principalOf(connection: { authenticated_user_id?: string | null }): {
+  authenticatedUserId?: string;
+} {
+  const id = connection.authenticated_user_id;
+  return typeof id === "string" && id.length > 0 ? { authenticatedUserId: id } : {};
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokenResponse> {
@@ -1504,13 +1864,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
   }
 
   if (isLocalBackend) {
-    const connection = getLocalConnectionByRefreshToken(refreshToken);
+    const connection = await getLocalConnectionByRefreshToken(refreshToken);
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for refresh token");
     }
 
     logger.info(
-      `[MCP OAuth] Refreshing local access token for connection: ${connection.connection_id}`
+      `[MCP OAuth] Refreshing local access token for connection (${connectionIdForLog(connection.connection_id)})`
     );
     auditLog("token_refresh_initiated", {
       connectionId: connection.connection_id,
@@ -1520,7 +1880,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
 
     const accessToken = generateLocalToken("local_access");
     const expiresAt = new Date(Date.now() + 3600 * 1000);
-    upsertLocalConnection({
+    await upsertLocalConnection({
       userId: connection.user_id,
       connectionId: connection.connection_id,
       refreshToken: connection.refresh_token,
@@ -1550,7 +1910,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
   }
 
   logger.info(
-    `[MCP OAuth] Refreshing access token via refresh_token for connection: ${connection.connection_id}`
+    `[MCP OAuth] Refreshing access token via refresh_token for connection (${connectionIdForLog(connection.connection_id)})`
   );
   auditLog("token_refresh_initiated", {
     connectionId: connection.connection_id,
@@ -1594,76 +1954,83 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
 }
 
 /**
- * Return OAuth token endpoint response for a connection (code=connection_id exchange)
+ * Redeem a single-use authorization code for an OAuth token endpoint response.
  *
- * Used by Cursor and other RFC 8414-compliant OAuth clients after redirect with code=connection_id.
- * Returns standard OAuth 2.0 token response format.
+ * Used by Cursor and other RFC 8414-compliant OAuth clients calling
+ * /mcp/oauth/token with grant_type=authorization_code. `code` is the
+ * single-use value minted by completeLocalAuthorization/handleOAuthCallback
+ * — never the connection_id. Except for a code minted through the explicit
+ * OpenAI Custom GPT no-PKCE authorization path, `codeVerifier` must hash
+ * (SHA-256, base64url) to the code_challenge presented at
+ * /mcp/oauth/authorize. Both checks and the code's deletion happen in
+ * redeemLocalOAuthCode/
+ * handleOAuthCallback before any token is looked up, so a request that
+ * reused a code or presented the wrong verifier never reaches a connection
+ * row. Returns standard OAuth 2.0 token response format.
  *
- * @param connectionId - MCP connection identifier (used as authorization code)
+ * @param code - Single-use authorization code from the authorize redirect
+ * @param codeVerifier - PKCE verifier matching the code_challenge at /authorize;
+ *   omitted only for a code carrying the OpenAI Custom GPT no-PKCE provenance
  * @returns OAuth token response with access_token, token_type, and expires_in
- * @throws {OAuthError} If connection not found or token retrieval fails
+ * @throws {OAuthError} If the code is invalid, expired, already redeemed, or
+ *   the verifier does not match
  * @example
- * const response = await getTokenResponseForConnection("cursor-2025-01-27-abc123");
+ * const response = await getTokenResponseForConnection(code, codeVerifier);
  * // response.access_token: "eyJ..."
  * // response.token_type: "Bearer"
  * // response.expires_in: 3600
  */
-export async function getTokenResponseForConnection(
+/**
+ * Build an OAuth token response for an already-established connection.
+ *
+ * Does not check any code or verifier — it trusts `connectionId` outright —
+ * so it must NEVER be wired to the public /mcp/oauth/token route with a
+ * caller-supplied connection id (that was exactly the code=connection_id
+ * defect this module fixes). Legitimate callers are internal: renewal/
+ * refresh paths that already resolved connectionId through a validated
+ * credential, and getTokenResponseForConnection itself, after
+ * redeemLocalOAuthCode has already proved the caller holds the right
+ * verifier for a single-use code.
+ */
+export async function getTokenResponseByConnectionId(
   connectionId: string
 ): Promise<OAuthTokenResponse> {
-  // Validate input
   validateConnectionId(connectionId);
-
   const { accessToken } = await getAccessTokenForConnection(connectionId);
-  if (isLocalBackend) {
-    const connection = getLocalConnectionById(connectionId);
-    const expiresAt = connection?.access_token_expires_at
-      ? new Date(connection.access_token_expires_at).getTime()
-      : Date.now() + 3600 * 1000;
-    const expires_in = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-    const response: {
-      access_token: string;
-      token_type: string;
-      expires_in: number;
-      refresh_token?: string;
-      scope?: string;
-    } = {
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in,
-      scope: "openid email",
-    };
-    if (connection?.refresh_token) {
-      response.refresh_token = connection.refresh_token;
-    }
-    return response;
-  }
-
-  const { data: row } = await db
-    .from("mcp_oauth_connections")
-    .select("access_token_expires_at, refresh_token")
-    .eq("connection_id", connectionId)
-    .single();
-  const expiresAt = row?.access_token_expires_at
-    ? new Date(row.access_token_expires_at).getTime()
+  const connection = await getLocalConnectionById(connectionId);
+  const expiresAt = connection?.access_token_expires_at
+    ? new Date(connection.access_token_expires_at).getTime()
     : Date.now() + 3600 * 1000;
   const expires_in = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-  const response: {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    refresh_token?: string;
-    scope?: string;
-  } = {
+  const response: OAuthTokenResponse = {
     access_token: accessToken,
     token_type: "Bearer",
     expires_in,
     scope: "openid email",
+    connection_id: connectionId,
   };
-  if (row?.refresh_token) {
-    response.refresh_token = row.refresh_token;
+  if (connection?.refresh_token) {
+    response.refresh_token = connection.refresh_token;
   }
   return response;
+}
+
+export async function getTokenResponseForConnection(
+  code: string,
+  codeVerifier?: string
+): Promise<OAuthTokenResponse> {
+  if (!isLocalBackend) {
+    // Dead today (storageBackend is hardcoded "local"), but kept fail-closed
+    // rather than silently falling through to the local path if that ever
+    // changes: the remote/Supabase exchange has its own PKCE-checked endpoint
+    // (exchangeCodeForTokens / handleOAuthCallback) and must not be bypassed.
+    throw createOAuthError.tokenExchangeFailed(
+      "Authorization code redemption requires local storage backend"
+    );
+  }
+
+  const connectionId = await redeemLocalOAuthCode(code, codeVerifier);
+  return getTokenResponseByConnectionId(connectionId);
 }
 
 /**
@@ -1682,7 +2049,7 @@ export async function validateTokenAndGetConnectionId(
   accessToken: string
 ): Promise<{ connectionId: string; userId: string }> {
   if (isLocalBackend) {
-    const connection = getLocalConnectionByAccessToken(accessToken);
+    const connection = await getLocalConnectionByAccessToken(accessToken);
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for access token");
     }
@@ -1740,11 +2107,11 @@ export async function getConnectionStatus(
   validateConnectionId(connectionId);
 
   if (isLocalBackend) {
-    const connection = getLocalConnectionById(connectionId);
+    const connection = await getLocalConnectionById(connectionId);
     if (connection) {
       return connection.revoked_at ? "expired" : "active";
     }
-    const state = getLocalOAuthStateForConnection(connectionId);
+    const state = await getLocalOAuthStateForConnection(connectionId);
     if (state) {
       return new Date(state.expires_at) > new Date() ? "pending" : "expired";
     }
@@ -1802,8 +2169,8 @@ export async function listConnections(userId: string): Promise<
   }>
 > {
   if (isLocalBackend) {
-    const db = getSqliteDb();
-    const rows = db
+    const db = await getDb();
+    const rows = await db
       .prepare(
         "SELECT connection_id, client_name, created_at, last_used_at FROM mcp_oauth_connections WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC"
       )
@@ -1861,8 +2228,8 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
   validateConnectionId(connectionId);
 
   if (isLocalBackend) {
-    revokeLocalConnection(connectionId, userId);
-    logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+    await revokeLocalConnection(connectionId, userId);
+    logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
     auditLog("connection_revoked", {
       connectionId,
       userId,
@@ -1882,7 +2249,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
     throw createOAuthError.connectionNotFound(`Failed to revoke connection: ${error.message}`);
   }
 
-  logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+  logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
 
   // Audit log
   auditLog("connection_revoked", {

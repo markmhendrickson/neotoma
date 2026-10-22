@@ -1,11 +1,5 @@
 import { isValidElement, type ReactNode } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { cn } from "@/lib/utils";
 import { ApiNotConfiguredState } from "./api_not_configured_state";
@@ -103,18 +97,13 @@ function renderDisabledNode(disabled: ListSurfaceDisabled): ReactNode {
     return (
       <EmptyState
         title="Sign in required"
-        description="This view requires an authenticated session. Open Settings to add a bearer token or start a sandbox session."
+        description="This view requires an authenticated session. Open Settings to sign in or start a sandbox session."
       />
     );
   }
   // kind === "custom" with no node — fall back to a neutral message so we
   // never render a blank body.
-  return (
-    <EmptyState
-      title="Unavailable"
-      description="This list cannot be displayed right now."
-    />
-  );
+  return <EmptyState title="Unavailable" description="This list cannot be displayed right now." />;
 }
 
 /**
@@ -147,13 +136,9 @@ export function ListSurface({
 
   let body: ReactNode;
   if (disabled) {
-    body = (
-      <div className={cn("p-4", bodyClassName)}>{renderDisabledNode(disabled)}</div>
-    );
+    body = <div className={cn("p-4", bodyClassName)}>{renderDisabledNode(disabled)}</div>;
   } else if (loading) {
-    body = (
-      <div className={cn("p-4", bodyClassName)}>{loadingNode ?? <ListSkeleton />}</div>
-    );
+    body = <div className={cn("p-4", bodyClassName)}>{loadingNode ?? <ListSkeleton />}</div>;
   } else if (error) {
     body = (
       <div className={cn("p-4", bodyClassName)}>
@@ -171,9 +156,7 @@ export function ListSurface({
       body = <div className={cn("p-4", bodyClassName)}>{empty}</div>;
     } else if (emptyMessage !== undefined && emptyMessage !== null) {
       body = (
-        <div className={cn("p-4 text-sm text-muted-foreground", bodyClassName)}>
-          {emptyMessage}
-        </div>
+        <div className={cn("p-4 text-sm text-muted-foreground", bodyClassName)}>{emptyMessage}</div>
       );
     } else {
       body = (

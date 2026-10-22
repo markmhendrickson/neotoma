@@ -39,3 +39,5 @@ The server resolves a sandbox mode at boot from auth, bind address, and environm
 ## Deploy targets
 
 The repository ships Docker and Fly configurations (`Dockerfile`, `fly.toml`, `fly.sandbox.toml`). Put TLS in front of the HTTP port for any networked deployment. See [Running the Server](running_the_server.md) and `developer/docker.md`.
+
+The HTTP listener binds loopback-only (`127.0.0.1`) by default. A networked deployment that needs the socket reachable from outside the host — Fly, Docker with a published port, a tunnel client — must set `NEOTOMA_HTTP_HOST` explicitly (for example `0.0.0.0`); see [Configuration Reference](configuration.md#server-and-ports). The Fly configs in this repository already set it.

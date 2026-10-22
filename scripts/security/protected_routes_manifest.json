@@ -7,26 +7,76 @@
       "path": "/.well-known/oauth-authorization-server",
       "method": "GET",
       "operation_id": "oauthServerMetadata",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
       "path": "/.well-known/oauth-protected-resource",
       "method": "GET",
       "operation_id": "oauthProtectedResource",
-      "requires_auth": true,
-      "sandbox_allowed": "none",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
       "expected_no_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
       ],
       "expected_invalid_auth_status": [
-        401
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "operation_id": "oauthProtectedResourceForMcp",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
+      "path": "/.well-known/openid-configuration",
+      "method": "GET",
+      "operation_id": "openidConfigurationNotOffered",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
       ]
     },
     {
@@ -251,6 +301,19 @@
       ]
     },
     {
+      "path": "/corrections/transaction",
+      "method": "POST",
+      "operation_id": "correctTransaction",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/create_relationship",
       "method": "POST",
       "operation_id": "createRelationship",
@@ -371,6 +434,19 @@
       "path": "/entities/{id}",
       "method": "GET",
       "operation_id": "getEntityById",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/{id}/batch_correct",
+      "method": "POST",
+      "operation_id": "batchCorrectEntity",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
@@ -543,6 +619,19 @@
       ]
     },
     {
+      "path": "/instance-policy",
+      "method": "GET",
+      "operation_id": "describeInstancePolicy",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/interpretations",
       "method": "GET",
       "operation_id": "listInterpretations",
@@ -660,6 +749,19 @@
       ]
     },
     {
+      "path": "/list_relationship_types",
+      "method": "POST",
+      "operation_id": "listRelationshipTypes",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/list_relationships",
       "method": "POST",
       "operation_id": "listRelationshipsForEntity",
@@ -676,6 +778,19 @@
       "path": "/list_subscriptions",
       "method": "POST",
       "operation_id": "listSubscriptions",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp",
+      "method": "POST",
+      "operation_id": "mcpStreamableHttpPost",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
@@ -913,6 +1028,19 @@
       ]
     },
     {
+      "path": "/patch_array_item",
+      "method": "POST",
+      "operation_id": "patchArrayItem",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/peers",
       "method": "GET",
       "operation_id": "listPeers",
@@ -991,6 +1119,35 @@
       ]
     },
     {
+      "path": "/query_contacts_at_company",
+      "method": "POST",
+      "operation_id": "queryContactsAtCompany",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/ready",
+      "method": "GET",
+      "operation_id": "readinessCheck",
+      "requires_auth": false,
+      "sandbox_allowed": "hosted_ok",
+      "expected_no_auth_status": [
+        200,
+        503
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        503
+      ],
+      "override_applied": true
+    },
+    {
       "path": "/recent_conversations",
       "method": "GET",
       "operation_id": "getRecentConversations",
@@ -1020,6 +1177,19 @@
       "path": "/record_activity",
       "method": "GET",
       "operation_id": "getRecordActivity",
+      "requires_auth": true,
+      "sandbox_allowed": "none",
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/register_relationship_type",
+      "method": "POST",
+      "operation_id": "registerRelationshipType",
       "requires_auth": true,
       "sandbox_allowed": "none",
       "expected_no_auth_status": [
@@ -1619,5 +1789,21 @@
       ]
     }
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "path": "/ready",
+      "method": "GET",
+      "reason": "503 is /ready's designed response when the database read fails or times out — it is the entire point of the endpoint, not an auth outcome. Without this override, deployed_probes.sh scores a legitimately degraded instance as a security failure, which is both a false alarm and a way to train operators to ignore the probe report. Auth posture is unchanged: the route is public by design and never returns 401.",
+      "fields": {
+        "expected_no_auth_status": [
+          200,
+          503
+        ],
+        "expected_invalid_auth_status": [
+          200,
+          503
+        ]
+      }
+    }
+  ]
 }

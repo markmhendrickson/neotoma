@@ -1,0 +1,17 @@
+endpoint: "POST /entities/query"
+outcome: rejected
+error_code: "VALIDATION_INVALID_FORMAT"
+hint_match: "include_snapshots"
+notes: |
+  v0.18.9 tightening (#1943). A large `limit` with `include_snapshots: true` was
+  accepted on every prior version; `limit` is now capped at 500 while snapshots
+  are requested.
+
+  Each snapshot is hydrated synchronously on the event loop (a JSON blob plus
+  provenance plus a raw_fragments join), so an unbounded page let a single call
+  monopolize the loop — the same class of freeze as the deep-offset case that
+  motivated #1943, reached by page size rather than page depth.
+
+  Fix on the caller side: either request 500 or fewer per page and walk the rest
+  with `cursor`, or set `include_snapshots: false` when only identity fields are
+  needed — the lightweight projection is not capped here.

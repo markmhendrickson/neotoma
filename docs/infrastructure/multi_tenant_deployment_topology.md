@@ -27,9 +27,16 @@ Related:
 These are the constraints any topology choice has to start from, verified against
 `src/repositories/sqlite/sqlite_client.ts` and the server entrypoint:
 
-- **Backend is SQLite** (`better-sqlite3`). The repository layer defines storage
-  interfaces (`src/repositories/interfaces.ts`), so a second backend is a real seam,
-  but only the SQLite binding exists today — there is no Postgres adapter.
+- **Backend is SQLite by default** (`better-sqlite3` / `node:sqlite`), selected via
+  `NEOTOMA_DB_BACKEND` (`sqlite` | `libsql`). All call sites go through the async
+  driver contract in `src/repositories/db/driver.ts`. The `libsql` backend (same
+  file format and SQL dialect) executes statements **off the Node event loop** —
+  local files via worker threads hosting the synchronous driver (one writer + a
+  read-only reader pool under WAL; every local Node binding, including
+  @libsql/client's `file:` protocol, is synchronous on the calling thread), remote
+  sqld/Turso URLs via the genuinely-async @libsql/client — so a slow query cannot
+  freeze health checks or concurrent MCP requests. Recommended for
+  hosted/agent-heavy/shared instances. There is no Postgres adapter yet.
 - **WAL is enabled** (`journal_mode = WAL`), and `foreign_keys = ON`. WAL allows
   concurrent readers alongside a single writer.
 - **`busy_timeout` is set** (default 5000ms, override `NEOTOMA_SQLITE_BUSY_TIMEOUT_MS`).

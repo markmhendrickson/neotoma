@@ -1,4 +1,4 @@
-import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getDb } from "../repositories/db/connection.js";
 import { deriveAgentKeyFromProvenance } from "./agent_key.js";
 
 /** Fallback so max() never compares empty strings (ISO strings sort lexicographically). */
@@ -468,16 +468,16 @@ export interface ListRecentRecordActivityOptions {
   agentKey?: string;
 }
 
-export function listRecentRecordActivity(
+export async function listRecentRecordActivity(
   userId: string,
   limitOrOptions: number | ListRecentRecordActivityOptions,
   offset?: number
-): { items: RecordActivityItem[]; has_more: boolean; limit: number; offset: number } {
+): Promise<{ items: RecordActivityItem[]; has_more: boolean; limit: number; offset: number }> {
   const options: ListRecentRecordActivityOptions =
     typeof limitOrOptions === "number"
       ? { limit: limitOrOptions, offset: offset ?? 0 }
       : limitOrOptions;
-  const db = getSqliteDb();
+  const db = await getDb();
   const safeLimit = Math.min(Math.max(options.limit, 1), 200);
   const safeOffset = Math.max(options.offset, 0);
   const fetchLimit = safeLimit + 1;
@@ -492,7 +492,7 @@ export function listRecentRecordActivity(
     const binds: Array<string | number> = [userId, userId, userId, userId, userId, userId];
     if (recordTypes?.length) binds.push(...recordTypes);
     binds.push(windowSize, 0);
-    const rows = stmt.all(...binds) as SqlRow[];
+    const rows = (await stmt.all(...binds)) as SqlRow[];
     const matching: SqlRow[] = [];
     for (const row of rows) {
       const prov = parseProvenance(row.provenance_json);
@@ -515,7 +515,7 @@ export function listRecentRecordActivity(
   const binds: Array<string | number> = [userId, userId, userId, userId, userId, userId];
   if (recordTypes?.length) binds.push(...recordTypes);
   binds.push(fetchLimit, safeOffset);
-  const rows = stmt.all(...binds) as SqlRow[];
+  const rows = (await stmt.all(...binds)) as SqlRow[];
   const hasMore = rows.length > safeLimit;
   const slice = hasMore ? rows.slice(0, safeLimit) : rows;
   return {

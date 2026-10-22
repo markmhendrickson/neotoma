@@ -1,7 +1,5 @@
-import { mkdirSync } from "fs";
-import path from "path";
-import { config } from "../../config.js";
-import Database, { type SqliteDatabase } from "./sqlite_driver.js";
+import type { DbConnection, DbDatabase } from "../db/driver.js";
+import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -17,20 +15,54 @@ export const SQLITE_BUSY_TIMEOUT_MS = Math.max(
   Number.parseInt(process.env.NEOTOMA_SQLITE_BUSY_TIMEOUT_MS || "", 10) || 5000
 );
 
+function isSqliteBusyError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "SQLITE_BUSY" || code === "SQLITE_BUSY_SNAPSHOT";
+}
+
+/**
+ * Retry `fn` while it keeps throwing SQLITE_BUSY/SQLITE_BUSY_SNAPSHOT, up to
+ * `SQLITE_BUSY_TIMEOUT_MS`. Any other error rethrows immediately and is never
+ * retried, so a real problem (corruption, permissions) surfaces as-is instead
+ * of being masked as transient lock contention.
+ *
+ * Needed specifically for `PRAGMA journal_mode = WAL` on a brand-new DB file:
+ * switching journal mode rewrites the file header and briefly needs the
+ * write lock, so two processes racing to first-touch-open the same fresh
+ * file can have one throw SQLITE_BUSY on this very first statement — before
+ * `busy_timeout` (set moments later on that same connection) has had any
+ * chance to cover it, since the failing call happens ahead of that pragma.
+ * See #1927.
+ */
+async function retryOnBusy<T>(fn: () => Promise<T>): Promise<T> {
+  const deadline = Date.now() + SQLITE_BUSY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isSqliteBusyError(error) || Date.now() >= deadline) {
+        throw error;
+      }
+    }
+  }
+}
+
 /**
  * Apply the connection PRAGMAs every Neotoma SQLite handle needs: WAL for
  * concurrent readers alongside a single writer, foreign-key enforcement, and a
  * busy_timeout so lock contention waits rather than throwing immediately.
+ * journal_mode is retried on SQLITE_BUSY in its own right (see retryOnBusy)
+ * since on a brand-new file it can throw before busy_timeout — set after it,
+ * same as before this fix — has taken effect on this connection.
  */
-function applyConnectionPragmas(db: SqliteDatabase): void {
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+export async function applyConnectionPragmas(db: DbDatabase): Promise<void> {
+  await retryOnBusy(() => db.pragma("journal_mode = WAL"));
+  await db.pragma("foreign_keys = ON");
+  await db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
 }
 
-let cachedDb: SqliteDatabase | null = null;
-
 const SCHEMA_STATEMENTS = [
+  STORE_CONDITION_KEYS_SCHEMA,
   `CREATE TABLE IF NOT EXISTS sources (
     id TEXT PRIMARY KEY,
     user_id TEXT,
@@ -196,6 +228,30 @@ const SCHEMA_STATEMENTS = [
     scope TEXT,
     metadata TEXT
   )`,
+  // Relationship-type registry (#1972 / G25). APPEND-ONLY: every registration,
+  // re-registration and deregistration is an INSERT and `state` is a value on
+  // the row, never a column updated in place — unlike `schema_registry` above,
+  // whose `active INTEGER` is flipped by an UPDATE. Resolution reads the latest
+  // row per (relationship_type, scope, user_id). See
+  // src/services/relationship_types/registry.ts for the full rationale.
+  //
+  // `relationship_type` carries no CHECK: the naming rule lives in the service
+  // where it can produce a structured error, exactly as entity-type naming does
+  // in entity_type_guard.ts. `relationship_snapshots.relationship_type` is
+  // likewise unconstrained TEXT, so widening the vocabulary needs no data
+  // migration — existing edges are untouched.
+  `CREATE TABLE IF NOT EXISTS relationship_type_registry (
+    id TEXT PRIMARY KEY,
+    relationship_type TEXT NOT NULL,
+    registry_version TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT,
+    created_by TEXT,
+    user_id TEXT,
+    scope TEXT,
+    metadata TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_state (
     id TEXT PRIMARY KEY,
     state TEXT NOT NULL,
@@ -208,8 +264,35 @@ const SCHEMA_STATEMENTS = [
     expires_at TEXT,
     user_id TEXT,
     scope TEXT,
-    final_redirect_uri TEXT
+    final_redirect_uri TEXT,
+    authorization_code_provenance TEXT NOT NULL DEFAULT 'client_pkce'
   )`,
+  // Single-use authorization code minted at authorization completion (local
+  // and remote backends alike) and redeemed exactly once at /mcp/oauth/token.
+  // Deliberately distinct from `connection_id`: the code is a bearer secret
+  // that must not be guessable or reusable, while `connection_id` is a stable
+  // handle a client may hold indefinitely and expose in logs/URLs. Redemption
+  // deletes the row (single-use) and, unless the row carries the explicit
+  // OpenAI Custom GPT no-PKCE provenance, checks the caller-supplied
+  // code_verifier against `code_challenge` (PKCE, RFC 7636) before issuing a
+  // token. The default provenance is strict PKCE so old and unknown rows fail
+  // closed.
+  `CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    connection_id TEXT NOT NULL,
+    client_id TEXT,
+    created_at TEXT,
+    expires_at TEXT,
+    authorization_code_provenance TEXT NOT NULL DEFAULT 'client_pkce'
+  )`,
+  // `user_id` is the GRAPH SCOPE principal — the user_id every read and write
+  // is scoped to. Under NEOTOMA_SHARED_GRAPH_USER_ID it is the shared graph
+  // owner, not the person who signed in. `authenticated_user_id` /
+  // `authenticated_email` carry WHO SIGNED IN alongside that scope (#2228);
+  // they are NULL on non-shared-graph and pre-migration rows, where identity
+  // is resolved from `user_id` exactly as before.
   `CREATE TABLE IF NOT EXISTS mcp_oauth_connections (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -220,7 +303,9 @@ const SCHEMA_STATEMENTS = [
     client_name TEXT,
     last_used_at TEXT,
     created_at TEXT,
-    revoked_at TEXT
+    revoked_at TEXT,
+    authenticated_user_id TEXT,
+    authenticated_email TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS mcp_oauth_client_state (
     id TEXT PRIMARY KEY,
@@ -361,86 +446,145 @@ const DEPRECATED_TABLES = [
 ];
 
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
-function addColumnIfMissing(db: SqliteDatabase, table: string, column: string, type: string): void {
-  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+async function addColumnIfMissing(
+  db: DbConnection,
+  table: string,
+  column: string,
+  type: string
+): Promise<void> {
+  const rows = (await db.prepare(`PRAGMA table_info(${table})`).all()) as { name: string }[];
   if (rows.some((r) => r.name === column)) return;
-  db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+  await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
 }
 
-function ensureSchema(db: SqliteDatabase): void {
-  const transaction = db.transaction(() => {
-    db.pragma("foreign_keys = OFF");
+/**
+ * Runs all DDL/backfill inside one `database.transaction()`. Relies on the
+ * transaction backend taking the write lock up front (`BEGIN IMMEDIATE`, or
+ * the libsql driver's `"write"` mode) rather than deferring it to the first
+ * write: a deferred transaction lets two processes opening a fresh DB file
+ * concurrently both start as readers on the same WAL snapshot, and whichever
+ * tries to upgrade to a writer second hits SQLITE_BUSY_SNAPSHOT — a snapshot
+ * conflict busy_timeout cannot retry. See #1927; the write-lock-first
+ * behavior itself lives in each backend's transaction() implementation
+ * (sqlite_driver.ts, libsql_driver.ts).
+ */
+export async function ensureSchema(database: DbDatabase): Promise<void> {
+  await database.transaction(async (db) => {
+    await db.exec("PRAGMA foreign_keys = OFF");
     for (const table of DEPRECATED_TABLES) {
-      db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
+      await db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
     }
-    db.pragma("foreign_keys = ON");
+    await db.exec("PRAGMA foreign_keys = ON");
 
     for (const statement of SCHEMA_STATEMENTS) {
-      db.prepare(statement).run();
+      await db.prepare(statement).run();
     }
 
     // Add columns if missing (existing DBs created before these columns existed)
-    addColumnIfMissing(db, "sources", "source_type", "TEXT");
-    addColumnIfMissing(db, "sources", "original_filename", "TEXT");
-    addColumnIfMissing(db, "sources", "mime_type", "TEXT");
-    addColumnIfMissing(db, "sources", "storage_url", "TEXT");
-    addColumnIfMissing(db, "sources", "file_size", "INTEGER");
-    addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
-    addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
-    addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
-    addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
-    addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
-    addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
-    addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
-    addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
-    addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
+    await addColumnIfMissing(db, "sources", "source_type", "TEXT");
+    await addColumnIfMissing(db, "sources", "original_filename", "TEXT");
+    await addColumnIfMissing(db, "sources", "mime_type", "TEXT");
+    await addColumnIfMissing(db, "sources", "storage_url", "TEXT");
+    await addColumnIfMissing(db, "sources", "file_size", "INTEGER");
+    await addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
+    await addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
+    await addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
+    await addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
+    await addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
     // Agent attribution (Phase 1 AAuth integration). `provenance` is a JSON
     // blob containing AAuth fields, fallback clientInfo, and trust tier; see
     // src/crypto/agent_identity.ts AttributionProvenance shape. Adding via
     // the soft-migration helper keeps existing databases backward-compatible.
-    addColumnIfMissing(db, "observations", "provenance", "TEXT");
+    await addColumnIfMissing(db, "observations", "provenance", "TEXT");
     // Write-kind classification (sensor / llm_summary / workflow_state /
     // human / import), orthogonal to numeric `source_priority` and to the
     // `provenance` attribution blob. Soft migration keeps pre-existing
     // rows at NULL so historical data round-trips intact.
-    addColumnIfMissing(db, "observations", "observation_source", "TEXT");
+    await addColumnIfMissing(db, "observations", "observation_source", "TEXT");
     // Cross-instance sync (Phase 5): originating peer id stamped on
     // observations created from peer webhook replay; drives subscription
     // loop prevention on the event bus.
-    addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
+    await addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
     // Sighting deduplication (#1604): canonical_key groups N reports of the
     // same event into one logical signal; sighting_source_id is the origin
     // record (e.g. a webhook event id) that produced this observation. Together
     // they form a stable compound key for upsert idempotency. Indexed to
     // support fast collapse_by grouping on retrieve_entities.
-    addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
-    addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
-    ).run();
-    addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
-    addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
-    addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
-    addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
-    addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
-    addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
-    addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
-    addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
-    addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
-    addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
-    addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
-    addColumnIfMissing(db, "auto_enhancement_queue", "job_type", "TEXT DEFAULT 'auto_enhance'");
+    await addColumnIfMissing(db, "observations", "canonical_key", "TEXT");
+    await addColumnIfMissing(db, "observations", "sighting_source_id", "TEXT");
+    // #2228: signed-in identity carried alongside the graph-scope user_id.
+    // Existing rows get NULLs and keep resolving identity from user_id.
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_user_id", "TEXT");
+    await addColumnIfMissing(db, "mcp_oauth_connections", "authenticated_email", "TEXT");
+    await addColumnIfMissing(
+      db,
+      "mcp_oauth_state",
+      "authorization_code_provenance",
+      "TEXT NOT NULL DEFAULT 'client_pkce'"
+    );
+    await addColumnIfMissing(
+      db,
+      "mcp_oauth_codes",
+      "authorization_code_provenance",
+      "TEXT NOT NULL DEFAULT 'client_pkce'"
+    );
+    // Redemption lookup for the single-use authorization code (mcp_oauth_codes).
+    // `code` is looked up on every /mcp/oauth/token call with grant_type=
+    // authorization_code, so this index keeps redemption an indexed point
+    // lookup rather than a table scan as codes accumulate pre-expiry-cleanup.
+    await db
+      .prepare("CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_code ON mcp_oauth_codes(code)")
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_canonical_key ON observations(canonical_key, user_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_sighting_key ON observations(sighting_source_id, canonical_key, user_id)"
+      )
+      .run();
+    // Deleted-entity resolution (#1943): getDeletedEntityIds queries observations
+    // by entity_id ordered by (source_priority DESC, observed_at DESC) to find the
+    // highest-priority observation per entity. Without this index every call was
+    // an unindexed scan of the whole observations table, and the old chunked-scan
+    // pagination called it once per chunk — compounding into the reported
+    // event-loop freeze at deep offsets. Matches the query's own ordering.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_entity_id ON observations(entity_id, source_priority, observed_at)"
+      )
+      .run();
+    await addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
+    await addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
+    await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
+    await addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
+    await addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+    await addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
+    await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
+    await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
+    await addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
+    await addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
+    await addColumnIfMissing(
+      db,
+      "auto_enhancement_queue",
+      "job_type",
+      "TEXT DEFAULT 'auto_enhance'"
+    );
 
-    addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 
     // Materialized relationship liveness (#1570). Derived from the
     // highest-priority `relationship_observations` row's `metadata._deleted`
@@ -452,19 +596,36 @@ function ensureSchema(db: SqliteDatabase): void {
     // backfill below recomputes them; the value is re-stamped on every
     // snapshot recompute (computeRelationshipSnapshot), so observations remain
     // the source of truth and the column self-heals.
-    addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
+    await addColumnIfMissing(db, "relationship_snapshots", "is_live", "INTEGER NOT NULL DEFAULT 1");
 
     // By-reference source storage (#1775): path-only ingestion mode where bytes
     // remain on disk. Additive columns; existing rows default storage_mode='inline'
     // so all pre-existing sources behave identically without migration work.
-    addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
-    addColumnIfMissing(db, "sources", "reference_path", "TEXT");
-    addColumnIfMissing(db, "sources", "host_id", "TEXT");
-    addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
-    addColumnIfMissing(db, "sources", "mtime", "TEXT");
+    await addColumnIfMissing(db, "sources", "storage_mode", "TEXT NOT NULL DEFAULT 'inline'");
+    await addColumnIfMissing(db, "sources", "reference_path", "TEXT");
+    await addColumnIfMissing(db, "sources", "host_id", "TEXT");
+    await addColumnIfMissing(db, "sources", "size_bytes", "INTEGER");
+    await addColumnIfMissing(db, "sources", "mtime", "TEXT");
 
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS sandbox_sessions (
+    // #2240: per-member write-attribution ids. A random id minted the first
+    // time a signed-in member's session is resolved, and the ONLY member
+    // identifier stamped into write provenance. Random rather than derived, so
+    // it cannot be recomputed from an email address and differs per instance.
+    // Deleting a row severs the link between that member and every record
+    // carrying the id (the records themselves are untouched).
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS member_attribution_ids (
+      local_user_id TEXT PRIMARY KEY,
+      attribution_id TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    )`
+      )
+      .run();
+
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
       bearer_token_hash TEXT NOT NULL,
       one_time_code_hash TEXT,
@@ -473,13 +634,18 @@ function ensureSchema(db: SqliteDatabase): void {
       expires_at TEXT NOT NULL,
       revoked_at TEXT
     )`
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
-    ).run();
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
+      )
+      .run();
 
     // Graph-traversal indexes (#1467): every hop of retrieve_related_entities /
     // retrieve_graph_neighborhood filters relationship_snapshots by
@@ -488,36 +654,87 @@ function ensureSchema(db: SqliteDatabase): void {
     // traversal cost grows with total table size. Composite indexes turn each
     // hop into an indexed lookup, flattening traversal latency vs graph size
     // (measured: 3-hop over 50k relationships dropped from ~777ms to ~6ms).
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
-    ).run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user ON relationship_snapshots(source_entity_id, user_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user ON relationship_snapshots(target_entity_id, user_id)"
+      )
+      .run();
     // Liveness-aware composites (#1570): the default list_relationships read
     // filters by (source|target entity, user_id, is_live) before paginating at
     // the DB. Including is_live in the index keeps that access path covered so
     // the live-edge filter never falls back to a table scan.
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
-    ).run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_source_user_live ON relationship_snapshots(source_entity_id, user_id, is_live)"
+      )
+      .run();
+
+    // ateles#576: the visible-entity count is a COUNT(*) over entity_snapshots
+    // filtered by (user_id, entity_type). Without this index that count was a
+    // full table SCAN of every snapshot row on every /entities/query request —
+    // the residual per-request cost after the count stopped re-reading the
+    // observation log. `entity_id` is appended so the index covers the
+    // deleted-entity lookups in services/entity_queries.ts too, letting SQLite
+    // answer both from the index without touching the table.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_entity_snapshots_user_type ON entity_snapshots(user_id, entity_type, entity_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_snapshots_target_user_live ON relationship_snapshots(target_entity_id, user_id, is_live)"
+      )
+      .run();
+
+    // Relationship-type registry (#1972 / G25). Two indexes, and neither is
+    // optional: `schema_registry` has NO index at all, so every registry read
+    // there is a full table scan — and this registry is read on the
+    // relationship WRITE path, not just at boot.
+    //
+    // The UNIQUE index is the one `schema_registry` lacks. Without it nothing
+    // prevents two rows for the same key, which is why
+    // schema_registry_bootstrap.ts's `isDuplicateRegistrationError` (matching
+    // "duplicate key" / "unique constraint" / "already exists") is dead code on
+    // SQLite: the concurrent-boot race it claims to absorb is real and
+    // unhandled there. Here a racing double-seed hits a real constraint.
+    await db
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_type_registry_unique " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, registry_version)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_rel_type_registry_resolve " +
+          "ON relationship_type_registry(relationship_type, scope, user_id, created_at)"
+      )
+      .run();
 
     // Durable substrate-event log (#1464 Tier 2): resume queries read by
     // (user_id, seq); pruning reads by created_at.
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
-    ).run();
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
-    ).run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_substrate_events_user_seq ON substrate_events(user_id, seq)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_substrate_events_created ON substrate_events(created_at)"
+      )
+      .run();
 
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
-    ).run();
+    await db
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
+      )
+      .run();
 
     // One-time backfill of relationship_snapshots.is_live (#1570). New rows are
     // stamped at write time by computeRelationshipSnapshot, but pre-existing
@@ -528,9 +745,8 @@ function ensureSchema(db: SqliteDatabase): void {
     // materialized is_live disagrees with the observation-derived value, so it
     // is a no-op once converged. Guarded so it only runs when there is at least
     // one deletion observation to reconcile (the common case has none).
-    backfillRelationshipLiveness(db);
+    await backfillRelationshipLiveness(db);
   });
-  transaction();
 }
 
 /**
@@ -541,10 +757,10 @@ function ensureSchema(db: SqliteDatabase): void {
  * inside `ensureSchema`'s transaction; idempotent and cheap when no deletion
  * observations exist.
  */
-function backfillRelationshipLiveness(db: SqliteDatabase): void {
+async function backfillRelationshipLiveness(db: DbConnection): Promise<void> {
   // Fast exit: if no deletion observations exist, every snapshot is live and
   // the column default (1) is already correct — nothing to reconcile.
-  const deletionProbe = db
+  const deletionProbe = await db
     .prepare(
       `SELECT 1 FROM relationship_observations
        WHERE json_extract(metadata, '$._deleted') = 1
@@ -557,7 +773,7 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
   // Derive the dead set: relationship_keys whose highest-priority (source_priority
   // DESC, then observed_at DESC) observation is a deletion. SQLite window-function
   // ranking selects one winning observation per key, matching the app-side rule.
-  const deadRows = db
+  const deadRows = (await db
     .prepare(
       `WITH ranked AS (
          SELECT relationship_key,
@@ -573,7 +789,7 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
          AND (json_extract(metadata, '$._deleted') = 1
               OR json_extract(metadata, '$._deleted') = 'true')`
     )
-    .all() as { relationship_key: string }[];
+    .all()) as { relationship_key: string }[];
 
   const deadKeys = new Set(deadRows.map((r) => r.relationship_key));
 
@@ -587,63 +803,20 @@ function backfillRelationshipLiveness(db: SqliteDatabase): void {
     "UPDATE relationship_snapshots SET is_live = 1 WHERE relationship_key = ? AND is_live <> 1"
   );
 
-  const allKeys = db.prepare("SELECT relationship_key FROM relationship_snapshots").all() as {
+  const allKeys = (await db
+    .prepare("SELECT relationship_key FROM relationship_snapshots")
+    .all()) as {
     relationship_key: string;
   }[];
   for (const { relationship_key } of allKeys) {
     if (deadKeys.has(relationship_key)) {
-      setDead.run(relationship_key);
+      await setDead.run(relationship_key);
     } else {
-      setLive.run(relationship_key);
+      await setLive.run(relationship_key);
     }
   }
 }
 
-/**
- * Clear the cached SQLite connection. Next getSqliteDb() will open a new
- * connection (and create the DB file if missing). Call this after I/O errors
- * (e.g. disk I/O error, DB file deleted while server was running).
- */
-export function clearSqliteCache(): void {
-  if (cachedDb) {
-    try {
-      cachedDb.close();
-    } catch {
-      // Ignore close errors (e.g. file already deleted)
-    }
-    cachedDb = null;
-  }
-}
-
-export function getSqliteDb(): SqliteDatabase {
-  if (cachedDb) {
-    return cachedDb;
-  }
-
-  const dbPath = config.sqlitePath;
-  const dir = path.dirname(dbPath);
-  mkdirSync(dir, { recursive: true });
-
-  const db = new Database(dbPath);
-  applyConnectionPragmas(db);
-
-  ensureSchema(db);
-  cachedDb = db;
-  return db;
-}
-
-/**
- * Ensure a SQLite database file exists with Neotoma schema initialized.
- * Used by init to eagerly provision both dev and prod databases.
- */
-export function ensureSqliteDbInitialized(dbPath: string): void {
-  const dir = path.dirname(dbPath);
-  mkdirSync(dir, { recursive: true });
-  const db = new Database(dbPath);
-  try {
-    applyConnectionPragmas(db);
-    ensureSchema(db);
-  } finally {
-    db.close();
-  }
-}
+// Connection lifecycle (open/cache/clear/init) lives in
+// src/repositories/db/connection.ts, which selects the backend
+// (NEOTOMA_DB_BACKEND) and runs applyConnectionPragmas + ensureSchema on open.

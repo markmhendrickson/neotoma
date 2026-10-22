@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getSqliteDb } from "../../src/repositories/sqlite/sqlite_client.js";
+import { getDb } from "../../src/repositories/db/connection.js";
 import {
   listConversationTurns,
   getConversationTurn,
@@ -58,8 +58,8 @@ function turnKey(seed: TurnSeed): string {
   return `${seed.session_id}:${seed.turn_id}`;
 }
 
-function seedTurn(seed: TurnSeed) {
-  const db = getSqliteDb();
+async function seedTurn(seed: TurnSeed) {
+  const db = await getDb();
   const id = entityIdFor(seed);
   const tk = turnKey(seed);
   const snapshot: Record<string, unknown> = {
@@ -86,37 +86,41 @@ function seedTurn(seed: TurnSeed) {
   };
 
   const now = new Date().toISOString();
-  db.prepare(
-    `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    seed.entity_type,
-    tk,
-    JSON.stringify([]),
-    seed.started_at ?? now,
-    seed.ended_at ?? seed.started_at ?? now,
-    TEST_USER_ID,
-    seed.started_at ?? now,
-    seed.ended_at ?? seed.started_at ?? now,
-  );
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      seed.entity_type,
+      tk,
+      JSON.stringify([]),
+      seed.started_at ?? now,
+      seed.ended_at ?? seed.started_at ?? now,
+      TEST_USER_ID,
+      seed.started_at ?? now,
+      seed.ended_at ?? seed.started_at ?? now,
+    );
 
-  db.prepare(
-    `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    seed.entity_type,
-    "1.0.0",
-    tk,
-    JSON.stringify(snapshot),
-    seed.ended_at ?? seed.started_at ?? now,
-    1,
-    seed.ended_at ?? seed.started_at ?? now,
-    TEST_USER_ID,
-  );
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      seed.entity_type,
+      "1.0.0",
+      tk,
+      JSON.stringify(snapshot),
+      seed.ended_at ?? seed.started_at ?? now,
+      1,
+      seed.ended_at ?? seed.started_at ?? now,
+      TEST_USER_ID,
+    );
 }
 
-function seedMessage(seed: MessageSeed) {
-  const db = getSqliteDb();
+async function seedMessage(seed: MessageSeed) {
+  const db = await getDb();
   const snapshot = {
     role: seed.role,
     sender_kind: seed.sender_kind,
@@ -124,75 +128,85 @@ function seedMessage(seed: MessageSeed) {
     turn_key: seed.turn_key,
   };
 
-  db.prepare(
-    `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    seed.id,
-    "conversation_message",
-    `conversation_message:${seed.turn_key}`,
-    JSON.stringify([]),
-    seed.observed_at,
-    seed.observed_at,
-    TEST_USER_ID,
-    seed.observed_at,
-    seed.observed_at,
-  );
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      seed.id,
+      "conversation_message",
+      `conversation_message:${seed.turn_key}`,
+      JSON.stringify([]),
+      seed.observed_at,
+      seed.observed_at,
+      TEST_USER_ID,
+      seed.observed_at,
+      seed.observed_at,
+    );
 
-  db.prepare(
-    `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    seed.id,
-    "conversation_message",
-    "1.2",
-    `conversation_message:${seed.turn_key}`,
-    JSON.stringify(snapshot),
-    seed.observed_at,
-    1,
-    seed.observed_at,
-    TEST_USER_ID,
-  );
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      seed.id,
+      "conversation_message",
+      "1.2",
+      `conversation_message:${seed.turn_key}`,
+      JSON.stringify(snapshot),
+      seed.observed_at,
+      1,
+      seed.observed_at,
+      TEST_USER_ID,
+    );
 }
 
-function seedRelatedEntity(id: string, title: string) {
-  const db = getSqliteDb();
+async function seedRelatedEntity(id: string, title: string) {
+  const db = await getDb();
   const now = "2026-04-28T10:00:30Z";
-  db.prepare(
-    `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, "task", title, JSON.stringify([]), now, now, TEST_USER_ID, now, now);
-  db.prepare(
-    `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    "task",
-    "1.0.0",
-    title,
-    JSON.stringify({ title }),
-    now,
-    1,
-    now,
-    TEST_USER_ID,
-  );
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, "task", title, JSON.stringify([]), now, now, TEST_USER_ID, now, now);
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      "task",
+      "1.0.0",
+      title,
+      JSON.stringify({ title }),
+      now,
+      1,
+      now,
+      TEST_USER_ID,
+    );
 }
 
-function seedRelationship(sourceId: string, targetId: string, relationshipType: string) {
-  const db = getSqliteDb();
+async function seedRelationship(sourceId: string, targetId: string, relationshipType: string) {
+  const db = await getDb();
   const now = "2026-04-28T10:00:31Z";
   const key = `${relationshipType}:${sourceId}:${targetId}`;
-  db.prepare(
-    `INSERT OR REPLACE INTO relationship_snapshots (relationship_key, relationship_type, source_entity_id, target_entity_id, schema_version, snapshot, computed_at, observation_count, last_observation_at, provenance, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    key,
-    relationshipType,
-    sourceId,
-    targetId,
-    "1.0",
-    JSON.stringify({}),
-    now,
-    1,
-    now,
-    JSON.stringify({}),
-    TEST_USER_ID,
-  );
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO relationship_snapshots (relationship_key, relationship_type, source_entity_id, target_entity_id, schema_version, snapshot, computed_at, observation_count, last_observation_at, provenance, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      key,
+      relationshipType,
+      sourceId,
+      targetId,
+      "1.0",
+      JSON.stringify({}),
+      now,
+      1,
+      now,
+      JSON.stringify({}),
+      TEST_USER_ID,
+    );
 }
 
 const seeds: TurnSeed[] = [
@@ -246,9 +260,9 @@ const seeds: TurnSeed[] = [
   },
 ];
 
-beforeAll(() => {
-  for (const seed of seeds) seedTurn(seed);
-  seedMessage({
+beforeAll(async () => {
+  for (const seed of seeds) await seedTurn(seed);
+  await seedMessage({
     id: "ent_msg_turn_1_user",
     role: "user",
     sender_kind: "user",
@@ -256,7 +270,7 @@ beforeAll(() => {
     turn_key: "sess-1:turn-1",
     observed_at: "2026-04-28T10:00:05Z",
   });
-  seedMessage({
+  await seedMessage({
     id: "ent_msg_turn_1_assistant",
     role: "assistant",
     sender_kind: "assistant",
@@ -264,25 +278,25 @@ beforeAll(() => {
     turn_key: "sess-1:turn-1:assistant",
     observed_at: "2026-04-28T10:00:45Z",
   });
-  seedRelatedEntity("ent_turn_1_task", "Check Neotoma compliance flow");
-  seedRelationship("ent_msg_turn_1_user", "ent_turn_1_task", "REFERS_TO");
+  await seedRelatedEntity("ent_turn_1_task", "Check Neotoma compliance flow");
+  await seedRelationship("ent_msg_turn_1_user", "ent_turn_1_task", "REFERS_TO");
 });
 
-afterAll(() => {
-  const db = getSqliteDb();
+afterAll(async () => {
+  const db = await getDb();
   const ids = seeds.map((s) => entityIdFor(s));
   for (const key of ["REFERS_TO:ent_msg_turn_1_user:ent_turn_1_task"]) {
-    db.prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?").run(key);
+    await db.prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?").run(key);
   }
   for (const id of [...ids, "ent_msg_turn_1_user", "ent_msg_turn_1_assistant", "ent_turn_1_task"]) {
-    db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(id);
-    db.prepare("DELETE FROM entities WHERE id = ?").run(id);
+    await db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(id);
+    await db.prepare("DELETE FROM entities WHERE id = ?").run(id);
   }
 });
 
 describe("listConversationTurns", () => {
-  it("returns seeded turns ordered by activity_at descending", () => {
-    const { items, has_more } = listConversationTurns(TEST_USER_ID, 10, 0);
+  it("returns seeded turns ordered by activity_at descending", async () => {
+    const { items, has_more } = await listConversationTurns(TEST_USER_ID, 10, 0);
     expect(items.length).toBeGreaterThanOrEqual(4);
     expect(has_more).toBe(false);
     const turnKeys = items.map((i) => i.turn_key);
@@ -292,21 +306,21 @@ describe("listConversationTurns", () => {
     expect(turnKeys).toContain("sess-2:turn-1");
   });
 
-  it("filters by harness", () => {
-    const { items } = listConversationTurns(TEST_USER_ID, 10, 0, { harness: "opencode" });
+  it("filters by harness", async () => {
+    const { items } = await listConversationTurns(TEST_USER_ID, 10, 0, { harness: "opencode" });
     expect(items.length).toBeGreaterThanOrEqual(1);
     for (const item of items) {
       expect(item.harness).toBe("opencode");
     }
   });
 
-  it("respects limit and offset", () => {
-    const { items } = listConversationTurns(TEST_USER_ID, 2, 0);
+  it("respects limit and offset", async () => {
+    const { items } = await listConversationTurns(TEST_USER_ID, 2, 0);
     expect(items.length).toBeLessThanOrEqual(2);
   });
 
-  it("includes hook_summary counters", () => {
-    const { items } = listConversationTurns(TEST_USER_ID, 10, 0);
+  it("includes hook_summary counters", async () => {
+    const { items } = await listConversationTurns(TEST_USER_ID, 10, 0);
     const turn1 = items.find((i) => i.turn_key === "sess-1:turn-1");
     expect(turn1).toBeDefined();
     expect(turn1!.hook_summary.hook_event_count).toBe(3);
@@ -317,8 +331,8 @@ describe("listConversationTurns", () => {
 });
 
 describe("getConversationTurn", () => {
-  it("returns detail for an existing turn_key", () => {
-    const detail = getConversationTurn(TEST_USER_ID, "sess-1:turn-1");
+  it("returns detail for an existing turn_key", async () => {
+    const detail = await getConversationTurn(TEST_USER_ID, "sess-1:turn-1");
     expect(detail).not.toBeNull();
     expect(detail!.turn_key).toBe("sess-1:turn-1");
     expect(detail!.harness).toBe("cursor");
@@ -331,8 +345,8 @@ describe("getConversationTurn", () => {
     expect(detail!.related_entities).toBeDefined();
   });
 
-  it("returns user and assistant messages for the turn key", () => {
-    const detail = getConversationTurn(TEST_USER_ID, "sess-1:turn-1");
+  it("returns user and assistant messages for the turn key", async () => {
+    const detail = await getConversationTurn(TEST_USER_ID, "sess-1:turn-1");
     expect(detail).not.toBeNull();
     expect(detail!.messages).toHaveLength(2);
     expect(detail!.messages.map((m) => m.sender_kind)).toEqual(["user", "assistant"]);
@@ -341,13 +355,13 @@ describe("getConversationTurn", () => {
     expect(detail!.messages[0]!.related_entities[0]?.title).toBe("Check Neotoma compliance flow");
   });
 
-  it("returns null for a non-existent turn_key", () => {
-    const detail = getConversationTurn(TEST_USER_ID, "nope:nope");
+  it("returns null for a non-existent turn_key", async () => {
+    const detail = await getConversationTurn(TEST_USER_ID, "nope:nope");
     expect(detail).toBeNull();
   });
 
-  it("finds legacy turn_compliance entities", () => {
-    const detail = getConversationTurn(TEST_USER_ID, "sess-legacy:turn-legacy");
+  it("finds legacy turn_compliance entities", async () => {
+    const detail = await getConversationTurn(TEST_USER_ID, "sess-legacy:turn-legacy");
     expect(detail).not.toBeNull();
     expect(detail!.harness).toBe("opencode");
     expect(detail!.status).toBe("backfilled_by_hook");
@@ -355,8 +369,8 @@ describe("getConversationTurn", () => {
 });
 
 describe("listHookSummariesByTurnKeys", () => {
-  it("returns summaries keyed by turn_key", () => {
-    const summaries = listHookSummariesByTurnKeys(TEST_USER_ID, [
+  it("returns summaries keyed by turn_key", async () => {
+    const summaries = await listHookSummariesByTurnKeys(TEST_USER_ID, [
       "sess-1:turn-1",
       "sess-1:turn-2",
       "nonexistent:key",

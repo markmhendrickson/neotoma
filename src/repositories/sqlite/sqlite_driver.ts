@@ -1,7 +1,19 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
+import { lstatSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import {
+  NESTED_TRANSACTION_ERROR,
+  normalizeParams,
+  TransactionGate,
+  type DbConnection,
+  type DbDatabase,
+  type DbRunResult,
+  type DbStatement,
+} from "../db/driver.js";
 
 const nodeRequire = createRequire(import.meta.url);
-let DatabaseCtor: new (path: string) => any;
+let DatabaseCtor: new (path: string, options?: Record<string, unknown>) => any;
 let hasNativeSqlite = false;
 
 try {
@@ -20,21 +32,25 @@ try {
     }
     return (originalEmit as (...a: unknown[]) => boolean)(event, ...args);
   } as typeof process.emit;
-  const nativeModule = nodeRequire("node:sqlite") as { DatabaseSync: new (path: string) => any };
+  const nativeModule = nodeRequire("node:sqlite") as {
+    DatabaseSync: new (path: string, options?: Record<string, unknown>) => any;
+  };
   process.emit = originalEmit;
   DatabaseCtor = nativeModule.DatabaseSync;
   hasNativeSqlite = true;
 } catch {
-  DatabaseCtor = nodeRequire("better-sqlite3") as new (path: string) => any;
+  DatabaseCtor = nodeRequire("better-sqlite3") as new (
+    path: string,
+    options?: Record<string, unknown>
+  ) => any;
 }
 
 type UnknownRecord = Record<string, unknown>;
 
-function normalizeParams(params: unknown[]): unknown[] {
-  if (params.length === 1 && Array.isArray(params[0])) {
-    return params[0] as unknown[];
-  }
-  return params;
+/** Internal no-create inspection or isolated-copy open; ordinary opens keep their existing behavior. */
+export interface ExistingSqliteOpenOptions {
+  existing: true;
+  readOnly: boolean;
 }
 
 class SqliteStatementImpl {
@@ -56,8 +72,20 @@ class SqliteStatementImpl {
 class SqliteDatabaseImpl {
   private readonly db: any;
 
-  constructor(path: string) {
-    this.db = new DatabaseCtor(path);
+  constructor(path: string, options?: ExistingSqliteOpenOptions) {
+    if (options) {
+      if (options.existing !== true || typeof options.readOnly !== "boolean")
+        throw new Error("SQLITE_EXISTING_OPEN_INVALID");
+      const file = lstatSync(path);
+      if (!file.isFile() || file.isSymbolicLink()) throw new Error("SQLITE_EXISTING_FILE_REQUIRED");
+      this.db = new DatabaseCtor(
+        hasNativeSqlite && !options.readOnly ? `${pathToFileURL(path).href}?mode=rw` : path,
+        hasNativeSqlite
+          ? { readOnly: options.readOnly }
+          : { readonly: options.readOnly, fileMustExist: true }
+      );
+      if (options.readOnly) this.db.exec("PRAGMA query_only = ON");
+    } else this.db = new DatabaseCtor(path);
   }
 
   prepare(sql: string): SqliteStatementImpl {
@@ -104,6 +132,156 @@ class SqliteDatabaseImpl {
   }
 }
 
-export default class Database extends SqliteDatabaseImpl {}
+/**
+ * Async adapter over the synchronous SQLite implementation, satisfying the
+ * shared DbDatabase contract. Statements resolve immediately (the underlying
+ * driver is sync), but the call-site contract is identical to concurrent
+ * backends like libSQL, so backends can be swapped via configuration.
+ */
+/**
+ * SQLite only binds numbers, strings, bigints, buffers, and null. Match the
+ * libSQL driver's normalization so both backends accept the same inputs.
+ */
+function toSqliteBindValue(value: unknown): unknown {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  return value;
+}
+
+class AsyncSqliteStatement implements DbStatement {
+  constructor(
+    private readonly db: AsyncSqliteDatabase,
+    private readonly sql: string
+  ) {}
+
+  private async exec<T>(op: (stmt: SqliteStatementImpl) => T): Promise<T> {
+    await this.db.readyForStatement();
+    return op(this.db.rawDb().prepare(this.sql));
+  }
+
+  run(...params: unknown[]): Promise<DbRunResult> {
+    const bound = normalizeParams(params).map(toSqliteBindValue);
+    return this.exec((stmt) => {
+      const result = stmt.run(...bound) as {
+        changes?: number | bigint;
+        lastInsertRowid?: number | bigint;
+      };
+      return {
+        changes: Number(result?.changes ?? 0),
+        lastInsertRowid: result?.lastInsertRowid,
+      };
+    });
+  }
+
+  get(...params: unknown[]): Promise<unknown> {
+    const bound = normalizeParams(params).map(toSqliteBindValue);
+    return this.exec((stmt) => stmt.get(...bound));
+  }
+
+  all(...params: unknown[]): Promise<unknown[]> {
+    const bound = normalizeParams(params).map(toSqliteBindValue);
+    return this.exec((stmt) => stmt.all(...bound));
+  }
+}
+
+export class AsyncSqliteDatabase implements DbDatabase {
+  private readonly db: SqliteDatabaseImpl;
+  private readonly gate = new TransactionGate();
+  private readonly txContext = new AsyncLocalStorage<boolean>();
+
+  constructor(path: string, options?: ExistingSqliteOpenOptions) {
+    this.db = new SqliteDatabaseImpl(path, options);
+    this.inspectionOnly = options?.readOnly === true;
+  }
+
+  private readonly inspectionOnly: boolean;
+
+  /** @internal Exposes the sync database to statement wrappers. */
+  rawDb(): SqliteDatabaseImpl {
+    return this.db;
+  }
+
+  /**
+   * @internal Statements wait for any open transaction unless they run inside
+   * its async context (then they join it — the single connection is already
+   * inside BEGIN, matching the old synchronous semantics).
+   */
+  async readyForStatement(): Promise<void> {
+    if (this.txContext.getStore()) return;
+    await this.gate.whenIdle();
+  }
+
+  prepare(sql: string): DbStatement {
+    return new AsyncSqliteStatement(this, sql);
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.readyForStatement();
+    this.db.exec(sql);
+  }
+
+  async pragma(command: string): Promise<unknown[]> {
+    await this.readyForStatement();
+    return this.db.pragma(command);
+  }
+
+  transaction<T>(fn: (tx: DbConnection) => Promise<T>): Promise<T> {
+    // Fail loud, not silent, on nested transaction() (qa review, PR #1944).
+    // The gate serializes transactions against each other, so a transaction()
+    // issued from inside another transaction()'s callback would await a tail
+    // that only resolves once the OUTER transaction finishes — which is itself
+    // waiting on this inner call: a self-deadlock that hangs forever. No current
+    // call site nests, but this throws a clear, actionable error if one ever
+    // does (matching this driver's other fail-loud config guards) instead of
+    // wedging the process. Statements on the db handle inside a transaction
+    // callback join the open transaction (see run/get/all); only a nested
+    // transaction() is unsupported.
+    if (this.txContext.getStore()) throw new Error(NESTED_TRANSACTION_ERROR);
+    // Manual BEGIN/COMMIT: the native sync transaction() helper commits when
+    // its callback *returns*, which for an async fn would be before any awaited
+    // work ran. The gate serializes transactions and holds unrelated statements
+    // out of the open transaction window.
+    //
+    // IMMEDIATE (not deferred): a deferred transaction acquires the write lock
+    // at its first write, and if another connection wrote since our read
+    // snapshot, SQLite fails that upgrade with "database is locked"
+    // IMMEDIATELY — busy_timeout never applies to upgrades because retrying
+    // against a stale snapshot cannot succeed. Acquiring the write lock at
+    // BEGIN makes contention wait up to busy_timeout instead, which matters
+    // now that the async callback keeps transactions open across microtask
+    // hops (observed as cross-process lock failures in ensureSchema).
+    return this.gate.runExclusive(() =>
+      this.txContext.run(true, async () => {
+        // Read-only inspection acquires a read snapshot, not a writer reservation.
+        // Ordinary callers retain their existing IMMEDIATE transaction behavior.
+        this.db.exec(this.inspectionOnly ? "BEGIN" : "BEGIN IMMEDIATE");
+        try {
+          const result = await fn(this);
+          this.db.exec("COMMIT");
+          return result;
+        } catch (error) {
+          try {
+            this.db.exec("ROLLBACK");
+          } catch {
+            // Ignore rollback errors during unwind.
+          }
+          throw error;
+        }
+      })
+    );
+  }
+
+  async close(): Promise<void> {
+    this.db.close();
+  }
+}
+
+export default class Database extends SqliteDatabaseImpl {
+  /** This legacy sync facade historically ignored extra JS options. Inspection is Async-only. */
+  constructor(path: string, legacyOptions?: unknown) {
+    super(path);
+    void legacyOptions;
+  }
+}
 export type SqliteDatabase = SqliteDatabaseImpl;
 export type SqliteStatement = SqliteStatementImpl;

@@ -57,19 +57,22 @@ describe("fixture replay snapshots", () => {
       },
     ];
 
-    const snapshot = await observationReducer.computeSnapshot(
-      "ent_test_contact",
-      observations
-    );
+    const snapshot = await observationReducer.computeSnapshot("ent_test_contact", observations);
 
-    const expectedPath = path.join(
-      process.cwd(),
-      "tests/fixtures/expected/contact_snapshot.json"
-    );
+    const expectedPath = path.join(process.cwd(), "tests/fixtures/expected/contact_snapshot.json");
     const expectedRaw = await fs.readFile(expectedPath, "utf-8");
     const expected = JSON.parse(expectedRaw);
 
-    expect(snapshot).toEqual(expected);
+    // The snapshot records the version of the schema it was computed under, so
+    // the fixture's frozen `schema_version` rots whenever that schema is
+    // deliberately revised — the contact schema went to 1.1 in #1924 (the
+    // leads-graph field additions) and this assertion then failed for a planned
+    // change rather than a regression. Compare the version against the schema
+    // that is actually active, and every other field against the fixture.
+    const { getSchemaDefinition } = await import("../../src/services/schema_definitions.js");
+    const activeContactVersion = getSchemaDefinition("contact")?.schema_version ?? "1.0";
+    expect(snapshot.schema_version).toBe(activeContactVersion);
+    expect({ ...snapshot, schema_version: null }).toEqual({ ...expected, schema_version: null });
 
     vi.useRealTimers();
   });
@@ -113,10 +116,7 @@ describe("fixture replay snapshots", () => {
       },
     ];
 
-    const snapshot = await observationReducer.computeSnapshot(
-      "ent_test_transaction",
-      observations
-    );
+    const snapshot = await observationReducer.computeSnapshot("ent_test_transaction", observations);
 
     const expectedPath = path.join(
       process.cwd(),

@@ -69,7 +69,7 @@ the cascade is attestation-aware (see §2a):
 | Tier                 | When                                                                                          |
 | -------------------- | --------------------------------------------------------------------------------------------- |
 | `hardware`           | AAuth verified AND the JWT carries a `cnf.attestation` envelope that the verifier accepts AND, in v0.12.0+, the bound key has not been revoked. |
-| `operator_attested`  | AAuth verified AND `iss` (or `iss:sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`. |
+| `operator_attested`  | AAuth verified AND the signing key's thumbprint is in `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`, or the key is pinned by an active grant whose `match_iss` (or `match_iss:match_sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`. |
 | `software`           | AAuth verified but no attestation envelope (or attestation failed and operator allowlist did not match), regardless of algorithm. |
 | `unverified_client`  | No AAuth, but clientInfo.name survived normalisation.                                         |
 | `anonymous`          | Nothing else. `client_info` may have been too generic.                                        |
@@ -256,8 +256,10 @@ never broader.
 | `admitted`             | Active grant matched. AAuth alone is sufficient on this request.           |
 | `no_grants_for_user`   | The owner user has no grants at all yet (Inspector → Agent grants → New).  |
 | `no_match`             | This identity does not match any of the user's grants.                     |
-| `grant_revoked`        | Identity matched a grant whose status is `revoked`.                        |
-| `grant_suspended`      | Identity matched a grant whose status is `suspended`.                      |
+| `grant_key_unbound`    | Identity's `sub` / `iss` match a grant that pins no `match_thumbprint`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is pinned, even when Bearer/OAuth authenticates the request. See [Pin a key to an existing grant](./agent_capabilities.md#pin-a-key-to-an-existing-grant). |
+| `grant_revoked`        | The signing key is pinned (`match_thumbprint`) to a grant whose status is `revoked`. The grant does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until the grant is restored to `active`, even when Bearer/OAuth authenticates the request. |
+| `grant_suspended`      | The signing key is pinned (`match_thumbprint`) to a grant whose status is `suspended`. Same refusal as `grant_revoked`, until the grant is restored to `active`. |
+| `grant_pin_conflict`   | Active grants under more than one owner pin the signing key, so it resolves to no owner. The key does not admit, and capability-gated writes carrying this signature are refused (`capability_denied`) until only one owner pins it. |
 | `strict_rejected`      | Strict-AAuth gating rejected the signature before admission ran.           |
 | `aauth_disabled`       | This deployment has AAuth disabled; admission did not run.                 |
 | `not_signed`           | No AAuth signature was presented; only attribution-only paths are open.    |
@@ -335,7 +337,9 @@ the full grant lifecycle (create / suspend / revoke / restore) and the
 matching order admission uses.
 
 `NEOTOMA_STRICT_AAUTH_SUBS` (comma-separated `sub`s that MUST present a
-valid AAuth signature when claimed via `X-Agent-Label`) is unchanged.
+valid AAuth signature when claimed via `X-Agent-Label`) requires the
+signing key to be pinned by an active grant whose `match_sub` is the
+label; see [Strict-require AAuth for claimed subjects](./agent_capabilities.md#strict-require-aauth-for-claimed-subjects).
 
 Per-path overrides accept any of the canonical write paths:
 `observations`, `relationships`, `sources`, `interpretations`,
@@ -518,6 +522,165 @@ suppress this with `--no-external-actors` for privacy.
 The `ExternalActorBadge` component shows login, verification pill,
 and detailed tooltip. The `IssueAuthorLine` extracts and displays
 `external_actor` from provenance alongside existing AAuth attribution.
+
+## 8a. Data origin provenance (#2242)
+
+A third facet, `data_origin`, answers a different question from both of the
+above: not *who wrote to Neotoma* (attribution) or *who authored the upstream
+artifact* (`external_actor`), but **where the stored data came from** — the
+file, sheet row, URL, email or chat message, or API endpoint.
+
+| Facet | Question | Written by | Trust |
+|---|---|---|---|
+| Attribution keys (`agent_*`, `client_name`, `attribution_tier`, …) | Which agent wrote this row? | Server (AAuth middleware, MCP `initialize`) | Verified for AAuth tiers; `client_name` is self-reported |
+| `external_actor` | Who authored the upstream artifact? | Server from verified paths, or a caller claim (`verified_via: claim`) | Per `verified_via` |
+| `data_origin` | Where did the data come from? | Caller, on `store` | Always a claim |
+
+### Write path
+
+- `store` (MCP), `POST /store`, and `neotoma store --data-origin '<json>'`
+  accept a request-level `data_origin`. Shape (`DataOrigin` in
+  `openapi.yaml`): `kind` (`file | url | email | message | api | manual | other`),
+  `locator` (required unless `manual`), and optional `part`, `system`, `url`
+  (absolute http(s)), `producer` (script/agent@revision), `retrieved_at`,
+  `notes`. The object is strict: unknown keys are rejected, so attribution
+  keys cannot be smuggled in through it.
+- An entity's own `data_origin` key inside `entities[]` overrides the request
+  value for that entity (precedence: entity → request → none). It is a
+  reserved control key like `target_id` / `intent` and never becomes an
+  entity field.
+- Each created observation gets `provenance.data_origin` next to — never
+  merged into — the attribution keys and `external_actor`. The effective
+  origin is also inlined into the request's stored structured payload (the
+  `sources` row bytes), so the idempotency content hash covers it: an exact
+  replay replays; reusing a key with a different origin is
+  `ERR_IDEMPOTENCY_MISMATCH`. Without an origin the stored bytes are unchanged.
+- A file-only store with `data_origin` is refused: the stored file is already
+  its own origin record. Implementation: `src/services/provenance_data_origin.ts`.
+- Every text field is single-line: control characters (including newlines)
+  are refused. `url` must not embed credentials (`user:pass@`). Callers should
+  also strip signatures and auth query parameters from `url` and `locator`
+  before sending them, since whatever is sent is stored on every observation.
+
+### Relationship to `data_source`
+
+`data_origin` does not replace the per-entity `data_source` label that the MCP
+instructions require under "Source provenance" and "Multi-row `data_source`
+identity". Keep sending both:
+
+- `data_source` is a free-form, per-entity string. It stays required for API-
+  and tool-sourced entities, and because each row embeds its own upstream id,
+  it also keeps distinct rows in one batch from resolving to the same entity.
+- `data_origin` is the typed origin record. It lives in observation
+  provenance, never in the snapshot, so it plays no part in identity
+  resolution.
+
+### Which field holds what
+
+| `kind` | `locator` (required) | `system` | `part` | `url` |
+|---|---|---|---|---|
+| `file` | Path or file name read | Where the file lives (`local_fs`, `gdrive`) | Sheet, row, page, or range inside it | Web link to the file, if any |
+| `email` | Message id | Mail provider (`gmail`, `outlook`) | Attachment or quoted section | Web link to the message, if any |
+| `message` | Message or thread id | Chat platform (`slack`, `telegram`) | Thread position | Permalink, if any |
+| `api` | Method and endpoint called | API provider (`wise`, `github`) | JSON path inside the response | Not usually needed |
+| `url` | The page address | Site or crawler name | Section or anchor | Same address when it is http(s) |
+| `manual` | Optional | Optional | Optional | Optional |
+
+### Example payloads
+
+An email, with a per-row `data_source` kept alongside:
+
+```json
+{
+  "data_origin": {
+    "kind": "email",
+    "system": "gmail",
+    "locator": "18c2f0a9d1",
+    "url": "https://mail.google.com/mail/u/0/#all/18c2f0a9d1",
+    "retrieved_at": "2026-10-13T09:00:00Z"
+  },
+  "entities": [
+    {
+      "entity_type": "transaction",
+      "amount": 120,
+      "currency": "EUR",
+      "data_source": "Gmail messages.get id=18c2f0a9d1 2026-10-13"
+    }
+  ]
+}
+```
+
+A sheet row:
+
+```json
+{
+  "data_origin": {
+    "kind": "file",
+    "system": "local_fs",
+    "locator": "support_tickets.xlsx",
+    "part": "sheet=Tickets;row=97",
+    "producer": "tools/import_tickets.py@4a5409c"
+  },
+  "entities": [
+    {
+      "entity_type": "support_ticket",
+      "ticket_id": "T-97",
+      "data_source": "support_tickets.xlsx Tickets row=97"
+    }
+  ]
+}
+```
+
+An API call, with one entity overriding the request-level origin:
+
+```json
+{
+  "data_origin": {
+    "kind": "api",
+    "system": "wise",
+    "locator": "GET /v1/transfers/12345",
+    "retrieved_at": "2026-10-13T09:05:00Z"
+  },
+  "entities": [
+    {
+      "entity_type": "transaction",
+      "transfer_id": "12345",
+      "data_source": "Wise API GET /v1/transfers/12345 2026-10-13"
+    },
+    {
+      "entity_type": "contact",
+      "name": "Recipient Example",
+      "data_source": "Wise API GET /v1/accounts/678 2026-10-13",
+      "data_origin": { "kind": "api", "system": "wise", "locator": "GET /v1/accounts/678" }
+    }
+  ]
+}
+```
+
+### Read path
+
+- `list_observations` (MCP + HTTP): `provenance.data_origin` on each row.
+- `retrieve_field_provenance` (MCP): `source_observation.data_origin`; HTTP
+  `get_field_provenance` returns the full observation rows.
+- `retrieve_entity_snapshot` (MCP, JSON and compact text) and HTTP
+  `get_entity_snapshot`: `data_origins`, mapping each observation id the
+  snapshot's field provenance cites to its origin.
+- To find the origin of one field from a snapshot: the snapshot's
+  `provenance[field]` gives the observation id, and `data_origins[that id]`
+  gives its origin.
+- Absent means absent on every surface — no key when no origin was supplied.
+- Guest-token reads have `data_origin` / `data_origins` stripped, by the same
+  send-time redaction that withholds `authenticated_actor_id`
+  (`src/services/attribution_redaction.ts`): locators routinely carry local
+  paths, mailbox ids, and URL tokens.
+
+### What it is not
+
+- Not proof. Neotoma never fetches, opens, or validates a locator or URL.
+- Not a replacement for storing the source itself: when the original bytes are
+  available, store the file (and an `interpretation` link); `data_origin`
+  points at origins whose bytes are not stored.
+- Orthogonal to `observation_source`, which classifies the *kind* of write.
 
 ## 9. Where to go from here
 

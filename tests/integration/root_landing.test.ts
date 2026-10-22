@@ -119,6 +119,18 @@ describe("resolveLandingMode", () => {
     } as unknown as express.Request;
     expect(resolveLandingMode(req, { NEOTOMA_ENV: "development" })).toBe("personal");
   });
+
+  it("in production, does not classify a loopback-only X-Forwarded-For as local", () => {
+    const req = {
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as express.Request;
+    expect(resolveLandingMode(req, { NEOTOMA_ENV: "production" })).toBe("personal");
+    expect(
+      resolveLandingMode(req, { NEOTOMA_ENV: "production", NEOTOMA_TRUST_PROD_LOOPBACK: "1" })
+    ).toBe("local");
+    expect(resolveLandingMode(req, { NEOTOMA_ENV: "development" })).toBe("local");
+  });
 });
 
 describe("root landing — content negotiation", () => {

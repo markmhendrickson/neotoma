@@ -27,6 +27,70 @@ Resolution order:
 - New read endpoints that accept a `user_id` query parameter must declare it in `openapi.yaml` (see `docs/architecture/openapi_contract_flow.md`).
 - The `LOCAL_DEV_USER_ID` override is a deliberate dev-flow affordance; widening it to other users requires an explicit security review.
 
+## Shared-graph identity vs graph scope (`GET /me`)
+
+When `NEOTOMA_SHARED_GRAPH_USER_ID` is set, two concepts travel on the same session and must not be collapsed (#2228):
+
+| Field | Meaning |
+| --- | --- |
+| `user_id` | **Graph scope** — the shared owner id all reads/writes are scoped to |
+| `email` | **Signed-in identity** — the verified Google email of the teammate who signed in |
+| `authenticated_user_id` | Per-email local-auth id of that teammate (only when distinct from `user_id`) |
+| `shared_graph` | `true` when this session operates on the shared graph |
+
+Data scoping (`getAuthenticatedUserId`, store/retrieve) continues to use `user_id` alone. Inspector and CLI consumers treat `email` as who is signed in and `user_id` as whose graph.
+
+### Annotated responses
+
+**Fully remapped shared-graph session** (teammate has signed in after identity columns exist):
+
+```json
+{
+  "user_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "email": "teammate@example.com",
+  "shared_graph": true,
+  "authenticated_user_id": "11111111-2222-3333-4444-555555555555"
+}
+```
+
+- `email` / `authenticated_user_id` = identity (who signed in)
+- `user_id` = scope (shared graph); never label it as the viewer's own account id
+- `shared_graph` = true
+
+**Non-shared-graph session** (env unset): additive fields are omitted so existing consumers keep the prior shape:
+
+```json
+{
+  "user_id": "11111111-2222-3333-4444-555555555555",
+  "email": "solo@example.com"
+}
+```
+
+**Pre-migration residual** (shared-graph env on; connection row has `user_id` = shared owner and NULL `authenticated_*`): identity is **unknown** until the teammate signs in again. `email` is omitted — never fabricated from the graph owner's local-auth row — and `shared_graph` is still `true` without `authenticated_user_id`:
+
+```json
+{
+  "user_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "shared_graph": true
+}
+```
+
+Integrators and UI must treat missing `email` under `shared_graph: true` as “unknown — re-authenticate,” not as “the graph owner.”
+
+### Write attribution (`provenance.authenticated_actor_id`)
+
+Write-path records made under a signed-in session record the member who made them, alongside the graph they land in (#2240). The record's `user_id` is the graph; `provenance.authenticated_actor_id` is the member, so two members writing to one shared graph produce distinguishable records.
+
+- **Covered.** `store` and `correct` observations, relationship observations, timeline events, sources and interpretation runs — on REST, MCP stateless and MCP session. **Not covered yet:** deletes and restores, merges and splits, and observations derived from an interpretation run (the member is on the run). A delete observation's `deleted_by` records the graph `user_id`, which on a shared graph is the owner, not the member who deleted.
+- **Value and privacy property.** A random UUID minted on this instance the first time the member's session is resolved, stored in `member_attribution_ids` (`src/services/member_attribution.ts`). It is pseudonymous: it is not derived from the email or from the member's `user_id` (which is an unkeyed hash of the email), so it cannot be recomputed from a list of addresses, and the same person has a different id on every instance. Anyone with read access to this instance's database can map it back to a member; nothing else can. Deleting a member's row in `member_attribution_ids` severs that link for every record carrying the id, without rewriting the records.
+- **Resolving it to a member.** No API does this yet. An operator with database access can look it up in `member_attribution_ids` (`attribution_id` → `local_user_id`, the id `/me` reports for that member as `authenticated_user_id` under shared-graph mode).
+- **Not `/me`'s `authenticated_user_id`.** Different value and different presence rule. `/me` reports the member's local-auth id, and only when it differs from `user_id`. Provenance carries the attribution id whenever a verified sign-in stands behind the write, including on a single-user instance. Do not infer "shared graph" from its presence on a record, and do not try to join the two.
+- **Guests never see it.** Responses to a guest (entity-scoped token) principal are stripped of `authenticated_actor_id` at any depth, and so are guest event streams.
+- **Fails closed.** Only a verified sign-in produces one. A static bearer token (`NEOTOMA_BEARER_TOKEN`), the key-derived MCP token, local no-auth, an AAuth grant, sandbox sessions, local CLI dispatch, a connection row with no recorded sign-in, and any failure to resolve the id all write **no** `authenticated_actor_id`. It is never back-filled from `user_id`. Read absence as “unknown”. A member whose connection predates identity recording writes unattributed records until they sign in again.
+- **Provenance only.** It is not an authorization input: `getAuthenticatedUserId` and every query stay on `user_id`. Clients cannot set it; every write path builds provenance server-side. Agents neither set nor read it, so the MCP and CLI agent instructions are unchanged.
+- **Forward only.** Records written before this change carry none; they are not rewritten.
+- **Not signing.** It says which member's session made the write, not which agent signed it — that is `agent_sub` / `attribution_tier` (#2256). The two are independent and a record can carry both.
+
 ## Authorization
 
 **Per-user isolation is enforced today, in application code, on every user-scoped read.** This is not a future RLS aspiration — it ships and is regression-tested.

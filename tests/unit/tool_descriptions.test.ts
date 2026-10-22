@@ -55,6 +55,21 @@ describe("tool_descriptions - store tool", () => {
     console.log(`Store tool description (merged): ${charCount} chars, ~${tokenCount} tokens`);
   });
 
+  it("serialized store entry is smaller than main's pre-repair ListTools entry", () => {
+    if (!storeTool) throw new Error("store tool not found");
+    // origin/main at the repair merge: 15,371 bytes for this exact JSON.stringify shape.
+    // Keep at least 5% savings on the store entry, including inputSchema descriptions.
+    expect(JSON.stringify(storeTool).length).toBeLessThanOrEqual(Math.floor(15_371 * 0.95));
+  });
+
+  it("inline fallback stays within the same budget as the YAML override", () => {
+    const fallback = buildToolDefinitions().find((tool) => tool.name === "store");
+    expect(fallback).toBeDefined();
+    expect(estimateTokenCount(fallback!.description)).toBeLessThanOrEqual(60);
+    expect(fallback!.description.length).toBeLessThanOrEqual(250);
+    expect(fallback!.description).toBe(storeTool?.description);
+  });
+
   it("YAML store override must not reintroduce a long-form description", () => {
     const yamlStore = descriptionOverrides.get("store");
     // Absent override is fine (inline default wins). If present, it must stay short.
@@ -65,8 +80,7 @@ describe("tool_descriptions - store tool", () => {
     if (!storeTool) throw new Error("store tool not found");
     // Merged result is what agents see via ListTools
     expect(storeTool.description).toBe(
-      yamlStore ??
-        "Save entities and files to Neotoma. Provide entities[] for structured data, or file_content+mime_type / file_path for files. Handles per-user SHA-256 file dedup and automatic schema inference."
+      yamlStore ?? buildToolDefinitions().find((t) => t.name === "store")?.description
     );
   });
 
@@ -112,6 +126,8 @@ describe("tool_descriptions - store tool", () => {
       "file_path",
       "idempotency_key",
       "mime_type",
+      "data_origin",
+      "expected_entity_absent",
     ];
 
     for (const field of requiredFields) {
@@ -127,6 +143,16 @@ describe("tool_descriptions - store tool", () => {
     }
   });
 
+  it("current store controls remain discoverable after shortening the YAML hint", () => {
+    if (!storeTool) throw new Error("store tool not found");
+    const props = (storeTool.inputSchema as { properties: Record<string, { description: string }> })
+      .properties;
+    expect(props.data_origin.description).toMatch(/Request-level.*entity's data_origin overrides/i);
+    expect(props.data_origin.description).toMatch(/Strip credentials/i);
+    expect(props.expected_entity_absent.description).toMatch(/atomically create exactly one/i);
+    expect(props.relationships.description).toMatch(/Create relationships/i);
+  });
+
   it("entities field should document schema inference and ALL-fields rule", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -138,7 +164,8 @@ describe("tool_descriptions - store tool", () => {
     expect(entitiesDesc).toMatch(/ALL fields/i);
     expect(entitiesDesc).toMatch(/raw_fragments/i);
     expect(entitiesDesc).toMatch(/schema.*infer/i);
-    expect(entitiesDesc).toMatch(/interpretation/i);
+    expect(entitiesDesc).toMatch(/parse readable files/i);
+    expect(entitiesDesc).toMatch(/save.*create entity.*add record.*ingest.*persist/i);
   });
 
   it("interpretation field should document Source → Observation chain semantics", () => {
@@ -168,7 +195,7 @@ describe("tool_descriptions - store tool", () => {
     expect(fileContentDesc).toMatch(/mime_type/i);
   });
 
-  it("file_path field should document platform availability and tenant scope", () => {
+  it("file_path field should document server locality and remote upload", () => {
     if (!storeTool) throw new Error("store tool not found");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const props =
@@ -176,9 +203,10 @@ describe("tool_descriptions - store tool", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const filePathDesc = (props.file_path as { description: string }).description;
 
-    expect(filePathDesc).toMatch(/Cursor.*Claude Code.*only/i);
-    expect(filePathDesc).toMatch(/unavailable.*web/i);
-    expect(filePathDesc).toMatch(/per-user.*dedup/i);
+    expect(filePathDesc).toMatch(/SERVER's filesystem/i);
+    expect(filePathDesc).toMatch(/ERR_FILE_PATH_IS_SERVER_LOCAL/i);
+    expect(filePathDesc).toMatch(/POST \/sources\/upload/i);
+    expect(filePathDesc).toMatch(/file_content.*mime_type/i);
   });
 
   it("idempotency_key field should clarify required vs optional usage", () => {

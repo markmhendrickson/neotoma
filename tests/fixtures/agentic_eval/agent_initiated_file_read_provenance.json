@@ -1,0 +1,127 @@
+{
+  "meta": {
+    "id": "agent_initiated_file_read_provenance",
+    "description": "Agent reads a file it opened itself (not user-attached) via a host Read/parse_file tool, extracts entities from it, and — per the 'Agent-initiated file reads' provenance clause — persists the original bytes in the same turn and links the derived entities to the resulting file asset via EMBEDS. Validates that a self-fetched file gets the same provenance treatment as a user-attached one: no dangling source_file citation, file_urls resolves to a real asset rather than [].",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["provenance", "source-file", "turn-lifecycle"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Read /Users/agent/workspace/lab_results.pdf and store the lab readings you find in it."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_parse_file",
+        "tool_input": { "file_path": "/Users/agent/workspace/lab_results.pdf" },
+        "tool_output": {
+          "text": "Glucose: 95 mg/dL\nCholesterol: 180 mg/dL",
+          "pages": 1
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            { "entity_type": "lab_reading", "test_name": "Glucose", "value": "95 mg/dL", "source_file": "lab_results.pdf" },
+            { "entity_type": "lab_reading", "test_name": "Cholesterol", "value": "180 mg/dL", "source_file": "lab_results.pdf" }
+          ],
+          "file_path": "/Users/agent/workspace/lab_results.pdf",
+          "mime_type": "application/pdf",
+          "interpretation": { "source_ref": "unstructured" },
+          "idempotency_key": "agent-read-eval-001"
+        },
+        "tool_output": {
+          "entities": [
+            { "entity_id": "ent_lab_glucose_001", "entity_type": "lab_reading", "unknown_fields_count": 0 },
+            { "entity_id": "ent_lab_cholesterol_001", "entity_type": "lab_reading", "unknown_fields_count": 0 }
+          ],
+          "source_id": "src_lab_results_001",
+          "asset_entity_id": "ent_file_asset_lab_results_001"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_create_relationship",
+        "tool_input": {
+          "relationship_type": "EMBEDS",
+          "source_entity_id": "ent_lab_glucose_001",
+          "target_entity_id": "ent_file_asset_lab_results_001"
+        },
+        "tool_output": { "relationship_id": "rel_embeds_001" }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_create_relationship",
+        "tool_input": {
+          "relationship_type": "EMBEDS",
+          "source_entity_id": "ent_lab_cholesterol_001",
+          "target_entity_id": "ent_file_asset_lab_results_001"
+        },
+        "tool_output": { "relationship_id": "rel_embeds_002" }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "Stored 2 lab readings from lab_results.pdf (Glucose 95 mg/dL, Cholesterol 180 mg/dL) and persisted the original PDF as a linked file asset."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_parse_file" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "where": { "tool_name": "mcp_neotoma_store" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": { "tool_name": "mcp_neotoma_create_relationship" }
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 3
+      }
+    ]
+  }
+}

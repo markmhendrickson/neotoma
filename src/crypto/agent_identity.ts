@@ -66,6 +66,40 @@ export interface ExternalActor {
 }
 
 /**
+ * The signed-in member whose session made a write (#2240).
+ *
+ * Distinct from both identity channels above: the AAuth agent identity says
+ * which software signed, the external actor says who authored an upstream
+ * artifact, and this says which signed-in member's session the write was made
+ * under. On a shared-graph instance every member writes into one graph
+ * `user_id`, so without this the stored record cannot say who contributed it.
+ *
+ * `actorId` is the member's write-attribution id
+ * (`src/services/member_attribution.ts`): a random UUID minted on this
+ * instance the first time the member's session is resolved. It is NOT the
+ * member's local-auth user id, which is an unkeyed hash of their email and so
+ * would let anyone holding candidate addresses re-identify an author, and
+ * would link the same person across instances. The attribution id is
+ * pseudonymous: only this instance's `member_attribution_ids` table maps it
+ * back to a member. It is provenance only and never scopes a read or a write.
+ *
+ * Only a verified sign-in produces one. A static bearer token, the key-derived
+ * MCP token, a local no-auth request, an AAuth grant, or a connection row that
+ * predates identity recording all yield none, and the write carries no
+ * `authenticated_actor_id` rather than being attributed to anyone by default.
+ */
+export interface AuthenticatedPrincipal {
+  actorId: string;
+}
+
+/**
+ * Provenance key carrying {@link AuthenticatedPrincipal.actorId}. Named
+ * differently from `/me`'s `authenticated_user_id` on purpose: that is the
+ * member's local-auth id, this is the attribution id, and the two never join.
+ */
+export const AUTHENTICATED_ACTOR_PROVENANCE_KEY = "authenticated_actor_id" as const;
+
+/**
  * Trust tier shown in the Inspector and surfaced in API responses.
  *
  * - `hardware` — AAuth verified AND a `cnf.attestation` envelope was
@@ -211,13 +245,16 @@ export interface AttributionDecisionDiagnostics {
       };
   /**
    * Set when the operator allowlist promoted this request to
-   * `operator_attested`. `"issuer"` means the `iss` matched
-   * `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means the
-   * `iss:sub` composite matched `NEOTOMA_OPERATOR_ATTESTED_SUBS`. Absent
-   * when the resolved tier is anything else (including `hardware` — the
-   * cascade short-circuits at the first verified hit).
+   * `operator_attested`. `"thumbprint"` means the verified key's
+   * thumbprint matched `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`;
+   * `"issuer"` means the `match_iss` of the active grant pinning the key
+   * matched `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
+   * that grant's `match_iss:match_sub` composite matched
+   * `NEOTOMA_OPERATOR_ATTESTED_SUBS`. Absent when the resolved tier is
+   * anything else (including `hardware` — the cascade short-circuits at
+   * the first verified hit).
    */
-  operator_allowlist_source?: "issuer" | "issuer_subject";
+  operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
 }
 
 /**
@@ -317,6 +354,15 @@ export interface AttributionProvenance {
   attributed_at?: string;
   /** External actor provenance — who authored the upstream artifact. */
   external_actor?: ExternalActor;
+  /**
+   * The signed-in member whose session made this write (#2240): their
+   * per-instance, random write-attribution id — pseudonymous, not derivable
+   * from their email, different on every instance. Absent when no verified
+   * sign-in stands behind the request; absence means "unknown", never "the
+   * graph owner". Withheld from guest-token reads. See
+   * {@link AuthenticatedPrincipal}.
+   */
+  authenticated_actor_id?: string;
 }
 
 /**
@@ -326,12 +372,16 @@ export interface AttributionProvenance {
  * When an {@link ExternalActor} is provided it is attached under the
  * `external_actor` key. This keeps the two identity channels (AAuth agent
  * vs upstream artifact author) distinct in the persisted JSON.
+ *
+ * When an {@link AuthenticatedPrincipal} is provided its `actorId` is recorded
+ * as `authenticated_actor_id` — the third channel, the signed-in member (#2240).
  */
 export function toAttributionProvenance(
   identity: AgentIdentity | null | undefined,
-  externalActor?: ExternalActor | null
+  externalActor?: ExternalActor | null,
+  principal?: AuthenticatedPrincipal | null
 ): AttributionProvenance {
-  if (!identity && !externalActor) return {};
+  if (!identity && !externalActor && !principal?.actorId) return {};
   const out: AttributionProvenance = {};
   if (identity) {
     out.attribution_tier = identity.tier;
@@ -347,6 +397,9 @@ export function toAttributionProvenance(
   }
   if (externalActor) {
     out.external_actor = externalActor;
+  }
+  if (principal?.actorId) {
+    out.authenticated_actor_id = principal.actorId;
   }
   return out;
 }

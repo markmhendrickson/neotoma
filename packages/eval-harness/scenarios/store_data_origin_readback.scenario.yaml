@@ -1,0 +1,129 @@
+meta:
+  id: store_data_origin_readback
+  description: "Replay synthetic store calls that carry data_origin (#2242).
+    One store sets a request-level origin and overrides it on one entity; the
+    replay then reads each origin back through list_observations and
+    retrieve_field_provenance. The store omits observation_source, so it must
+    return exactly one OBSERVATION_SOURCE_OMITTED warning and both observations
+    must read back as unspecified with their origins intact (#2241). A second store carries a malformed origin (file
+    kind with no locator) and must be refused with nothing written. Design
+    basis: docs/subsystems/agent_attribution_integration.md#8a-data-origin-provenance-2242;
+    docs/testing/testing_standard.md#integration-tests."
+  tags:
+    - tier2
+    - store
+    - provenance
+    - eval-coverage
+seed_strategy: generated
+source_pattern: An agent that read a sheet row and an email must be able to
+  record where each entity came from and read that origin back per entity,
+  and a malformed origin must be refused rather than stored.
+privacy_transform: Synthetic entities, file names and message ids only.
+  Scripted replay cassette, no recorded user data or model output.
+system_prompt: Store each synthetic record with the data origin it was read
+  from, then read the origins back.
+user_prompt: Store one sheet row and one email-derived record with their data
+  origins, confirm each origin on read, and try one malformed origin.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  # Store with a request-level origin and one per-entity override succeeds.
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: entities.1.entity_id
+    present: true
+  - type: entity.exists
+    entity_type: eval_origin_record
+    where:
+      title: origin sheet row 97
+  - type: entity.exists
+    entity_type: eval_origin_record
+    where:
+      title: origin email 18c2f0a9d1
+  # observation_source is omitted on this store (#2241 x #2242): exactly one
+  # OBSERVATION_SOURCE_OMITTED warning for the request, and both observations
+  # read back as unspecified while keeping their origins (asserted below).
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_subset:
+      store_warnings:
+        - code: OBSERVATION_SOURCE_OMITTED
+          observation_index: 0
+          entity_type: eval_origin_record
+  - type: tool_result.matches
+    tool_name: store
+    which: 0
+    result_key: store_warnings.1
+    present: false
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 0
+    result_subset:
+      observations:
+        - observation_source: unspecified
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 1
+    result_subset:
+      observations:
+        - observation_source: unspecified
+  # The origin is a provenance facet, never an entity field.
+  - type: snapshot.field_absent
+    entity_type: eval_origin_record
+    where:
+      title: origin sheet row 97
+    field: data_origin
+  # Entity 0 inherits the request-level origin.
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 0
+    result_subset:
+      observations:
+        - provenance:
+            data_origin:
+              kind: file
+              system: local_fs
+              locator: eval_tickets.xlsx
+              part: sheet=Tickets;row=97
+  # Entity 1 carries its own override, not the request value.
+  - type: tool_result.matches
+    tool_name: list_observations
+    which: 1
+    result_subset:
+      observations:
+        - provenance:
+            data_origin:
+              kind: email
+              system: gmail
+              locator: msg-18c2f0a9d1
+  # Field provenance resolves the same origin for a field of entity 1. The
+  # replay drives the HTTP route, which returns the full observation rows (the
+  # MCP tool's `source_observation.data_origin` is covered by
+  # tests/integration/store_data_origin.test.ts).
+  - type: tool_result.matches
+    tool_name: retrieve_field_provenance
+    which: 0
+    result_subset:
+      field: title
+      observations:
+        - provenance:
+            data_origin:
+              kind: email
+              system: gmail
+              locator: msg-18c2f0a9d1
+  # A file origin without a locator is refused, and nothing is written.
+  - type: tool_result.matches
+    tool_name: store
+    which: 1
+    result_key: error
+    present: true
+  - type: entity.count
+    entity_type: eval_origin_record
+    where:
+      title: origin malformed no locator
+    op: eq
+    value: 0

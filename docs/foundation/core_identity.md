@@ -1,12 +1,52 @@
 # Neotoma Core Identity
 
 ## What Neotoma Is
-Neotoma is a **state layer** — a privacy-first, idempotent, cross-platform data substrate that stores, serves, and signals structured state for AI-native workflows.
-It is:
+
+Neotoma is **the system of record for AI agents** — the designated place where a fact about agent-held state is settled, such that any disagreeing copy elsewhere is by definition stale.
+
+The category is an **authority claim**, not a mechanism claim. A bank's ledger does not compete on "providing versioning"; it decides what your balance is, and every other copy reconciles to it. Neotoma's claim is the same in kind: when an agent, a tool, or a person disagrees with Neotoma about what is currently true, Neotoma is right and the other copy is out of date. Everything in [Core Responsibilities](#core-responsibilities) below is *how* that claim is honoured — versioned observations, deterministic reduction, field-level provenance, corrections-win. None of it is *what the claim is*. A system that merely stored versions would be a state layer; a system whose stored version is the one that counts is a system of record.
+
+The authority is exercised through six powers, stated in the vision-phase table in [`README.md`](../../README.md) as **P2 — Authority over state**:
+
+| Power | What it settles |
+|---|---|
+| **Domain ownership** | Which principal's word governs a given slice of state |
+| **Correction rights** | Who may overrule a recorded fact, and whose overrule stands |
+| **Supersession** | Which assertion replaced which, so "current" is a determinable fact rather than a guess |
+| **Policy ownership** | Who sets the rules by which the previous three are decided |
+| **Temporary grants** | Authority lent for a bounded scope and duration, then withdrawn |
+| **Disclosure logs** | What was released to whom, so the exercise of authority is itself on the record |
+
+Today the **mechanisms** exist (corrections always win, `SUPERSEDES` relationships, per-operation access controls) while the **semantics** — who may correct what, scoped by domain — are future work. That gap is the honest status of the category claim and is tracked as P2 in the README's vision-phase table; it is not a reason to state the category as something smaller.
+
+### What the authority covers, and what it does not
+
+The claim is bounded, and the boundary is load-bearing:
+
+- **In scope: agent-generated and agent-held state** — observations, inferences, entity resolutions, corrections, decisions, and the contextual records agents read and write across tools and sessions. For these, Neotoma is authoritative.
+- **Out of scope: an adopter's operational business data.** An adopter's own Postgres remains the system of record for business data; Neotoma sits between their agents and that database rather than replacing it (see [`../icp/primary_icp.md`](../icp/primary_icp.md), "Integration surface framing"). The **Postgres-authoritative, Neotoma-as-rebuildable-derived-layer** posture is explicitly supported ([`substrate_and_applications.md`](substrate_and_applications.md)), and it does not weaken the claim — the domain over which Neotoma is authoritative is agent state, not every fact an adopter holds.
+
+Reading the noun without that boundary produces a contradiction the foundation does not intend: that Neotoma both is and is not the system of record. It is, for agent state; it is not, for an adopter's business records.
+
+### Relation to the State Layer invariant
+
+"State layer" is **retired as Neotoma's category noun** (decided 2026-08-21; see [`product_positioning.md`](product_positioning.md)). It remains correct and in active use as the name of an **architectural invariant** — the State Layer / Operational Layer boundary in [`layered_architecture.md`](layered_architecture.md), which holds that Neotoma stores and signals but never decides, infers, or acts.
+
+The two are not in tension, and the distinction is worth stating precisely because it is easy to collapse:
+
+- **As a category noun**, "state layer" describes a *mechanism* and invites the buyer to compare storage mechanisms. That is the comparison Neotoma loses by entering, because it concedes that the question is how state is stored rather than whose copy counts.
+- **As an invariant**, "state layer" describes a *constraint on Neotoma's own behaviour*. That constraint is what makes the authority claim credible: an arbiter that also reasons and acts on its own behalf is not an arbiter. Neotoma can be authoritative about state precisely because it never decides what state means.
+
+So: retire the noun from every definition that leads with it; keep the invariant wherever it names the boundary.
+
+Subordinate descriptions, each of which explains how the authority is exercised rather than restating the category:
+
 - The **lowest-level, canonical source of truth** for any data that benefits from deterministic state evolution — personal records, professional context, project metadata, external facts, and third-party data the user chooses to track (see [`what_to_store.md`](what_to_store.md))
 - A **substrate** for AI-native computing
 - A **privacy-first structured memory system** that transforms fragmented data into structured, queryable truth via dual-path ingestion
-- The **state layer** beneath any operational layer — agents, pipelines, orchestration systems, and custom applications that read truth from Neotoma and write results back as observations
+- The authoritative record **beneath any operational layer** — agents, pipelines, orchestration systems, and custom applications that read truth from Neotoma and write results back as observations, under the State Layer invariant described above
+
+None of these is the category. Led with, each one invites a mechanism comparison — against a database, a cache, or a retrieval-memory vendor — on an axis Neotoma does not need to win.
 **Core Architectural Choices (Defensible Differentiators):**
 1. **Privacy-First:** User-controlled memory, no provider access, never used for training
 2. **Idempotent/Verifiable Domain (Creates Verifiable Domain for Personal Data):** Same operation → same final state, always (reproducible, explainable, no hallucinations, no duplicates). Hash-based entity IDs ensure deterministic, tamper-evident records.
@@ -25,7 +65,8 @@ These architectural choices are defensible because competitors (model providers,
 The commitments that protect these choices, and the moves that would cross them, are named in [`redlines.md`](redlines.md).
 
 ### Core Responsibilities
-Neotoma focuses exclusively on:
+
+These are the mechanisms by which the authority claim above is honoured. They are not the identity: a competitor could implement every one of them and still not be the place where a fact is settled. Neotoma focuses exclusively on:
 1. **Ingestion** — Dual-path ingestion: user-provided file uploads (explicit, never automatic) and agent interactions where users provide contextual data via MCP `ingest` action, enabling incremental memory growth as agent usage scales
 2. **Normalization** — Format conversion, text extraction, OCR (file uploads only)
 3. **Extraction** — Deterministic field extraction via rule-based parsing (file uploads) or direct property assignment (agent interactions)

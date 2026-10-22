@@ -31,8 +31,31 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Health check */
+    /**
+     * Liveness check
+     * @description Reports that the process is running. Does NOT touch the database — it returns 200 throughout a total read outage, so it must not be used as a health check or as evidence the server can serve requests. Use /ready for that.
+     */
     get: operations["healthCheck"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Readiness check
+     * @description Runs a bounded real read against the database. Returns 503 when that read errors or exceeds NEOTOMA_READY_DB_TIMEOUT_MS (default 20s). This is the endpoint Fly health checks target. A 200 means the process is up and the database completed a trivial indexed read within the bound; it does not prove that heavier queries or writes succeed.
+     */
+    get: operations["readinessCheck"];
     put?: never;
     post?: never;
     delete?: never;
@@ -69,6 +92,50 @@ export interface paths {
     get: operations["getServerInfo"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * MCP Streamable HTTP endpoint (dual-era, 2026-07-28 stateless + legacy sessions)
+     * @description Single JSON-RPC endpoint for the MCP Streamable HTTP transport. Serves two
+     *     protocol eras on the same route (#2070):
+     *
+     *     - **Modern (2026-07-28, stateless).** Selected when the request carries no
+     *       `Mcp-Session-Id`, is not an `initialize` request, and its
+     *       `params._meta` carries `io.modelcontextprotocol/protocolVersion`. Every
+     *       request is resolved on its own: protocol version and client capabilities
+     *       come from `_meta`, and the caller's identity comes only from the
+     *       credentials on that request. No session is minted and no server state is
+     *       retained, so any API instance can serve any request behind a plain
+     *       round-robin load balancer. `server/discover` is served on this path.
+     *       `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`,
+     *       `resources/read`, `prompts/get`) `Mcp-Name` are required and must match
+     *       the body.
+     *     - **Legacy (2025-11-25 and earlier).** An `initialize` request, or any
+     *       request carrying `Mcp-Session-Id`, is served by the session transport
+     *       exactly as before (session mint on initialize, recover-in-place for a
+     *       stale session id, `404` for an unknown session on GET/DELETE).
+     *
+     *     `Mcp-Method` and `Mcp-Name` carry only a protocol method and a
+     *     tool/resource/prompt name. A value shaped like a credential or personal
+     *     data, or not shaped like a JSON-RPC method, a tool/prompt name or a
+     *     `neotoma://` / `ui://` resource URI, is rejected with `400` on either era,
+     *     and the rejected value is never echoed or logged. The route also accepts GET and DELETE for legacy
+     *     sessions; those are not modelled here.
+     */
+    post: operations["mcpStreamableHttpPost"];
     delete?: never;
     options?: never;
     head?: never;
@@ -218,8 +285,65 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** OAuth 2.0 Protected Resource Metadata */
+    /**
+     * OAuth 2.0 Protected Resource Metadata (RFC 9728)
+     * @description Public, unauthenticated bootstrap document (RFC 9728 §3). Its only job is
+     *     to tell a caller holding no credentials where to obtain them, so it MUST
+     *     NOT require authentication — gating it deadlocks the handshake, since the
+     *     `WWW-Authenticate` challenge on a protected resource points here (#2049).
+     *
+     *     A stale `X-Connection-Id` (with no `Authorization`) still yields 401
+     *     `invalid_token`, because that caller asserted a credential.
+     */
     get: operations["oauthProtectedResource"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/oauth-protected-resource/mcp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OAuth 2.0 Protected Resource Metadata for the /mcp resource (RFC 9728)
+     * @description RFC 9728 §3.1 locates a resource's metadata by appending the resource's
+     *     own path, so a client whose resource is `/mcp` probes this form. Same
+     *     handler and same contract as the bare path; registered explicitly because
+     *     Express does not match it against the bare route (#2049).
+     */
+    get: operations["oauthProtectedResourceForMcp"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/openid-configuration": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OpenID Connect discovery — not offered (RFC 9728 companion decision)
+     * @description Neotoma does not implement OIDC discovery; clients use RFC 8414
+     *     `/.well-known/oauth-authorization-server`. This route exists solely to
+     *     return an explicit 404 rather than falling through to the catch-all auth
+     *     guard, which would answer 401 — telling an OIDC-first client "this exists
+     *     but you are unauthenticated" and sending it down the same dead-end the
+     *     #2049 deadlock created. A 404 correctly makes such a client fall back.
+     */
+    get: operations["openidConfigurationNotOffered"];
     put?: never;
     post?: never;
     delete?: never;
@@ -706,9 +830,11 @@ export interface paths {
     /**
      * Create an agent grant
      * @description Creates a new `agent_grant` for the authenticated user. At least
-     *     one of `match_sub` or `match_thumbprint` must be supplied. The
-     *     grant's `capabilities` follow the same shape used by the
-     *     admitted-request authorization check.
+     *     one of `match_sub` or `match_thumbprint` must be supplied. Only
+     *     `match_thumbprint` admits signed requests; a grant created without
+     *     it is accepted but inert, and the response carries a `warnings`
+     *     entry saying so. The grant's `capabilities` follow the same shape
+     *     used by the admitted-request authorization check.
      */
     post: operations["createAgentGrant"];
     delete?: never;
@@ -735,7 +861,10 @@ export interface paths {
      * Update editable fields on an agent grant
      * @description Patches `label`, `capabilities`, `notes`, or any of the
      *     `match_*` identity fields. Status transitions go through the
-     *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+     *     dedicated `suspend`, `revoke`, and `restore` endpoints. Setting
+     *     `match_thumbprint` is how a key is pinned to an existing grant;
+     *     the admission cache is cleared so the pin applies to the next
+     *     request.
      */
     patch: operations["updateAgentGrant"];
     trace?: never;
@@ -966,7 +1095,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create observation */
+    /**
+     * Create observation
+     * @description Low-level single-observation write. Accepts the same
+     *     `observation_source` enum as `/store`. When the field is omitted
+     *     the observation is stored with `unspecified`, but unlike `/store`
+     *     this endpoint returns no `OBSERVATION_SOURCE_OMITTED` warning
+     *     (its response carries no `store_warnings`). Send
+     *     `observation_source` explicitly to record lineage.
+     */
     post: operations["createObservation"];
     delete?: never;
     options?: never;
@@ -1101,6 +1238,45 @@ export interface paths {
      *     `unknown_fields` and no `required_fields_missing` warnings.
      */
     get: operations["getSchemaByEntityType"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/instance-policy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Describe this instance's data policy
+     * @description Return the instance-level data policy (#1974/#1975): what this instance
+     *     is for, which entity types are in or out of scope, and which
+     *     person-data gates it enforces. Exposed over MCP as the
+     *     `describe_instance_policy` tool and over the CLI as
+     *     `neotoma instance-policy show`.
+     *
+     *     Call this before writing to an unfamiliar instance. Policy that is only
+     *     discoverable by being rejected is a worse experience than no policy at
+     *     all — this endpoint lets a cooperating client comply on the first
+     *     attempt rather than learning the rules through repeated denials.
+     *
+     *     Read-only: creates no sources, observations, or entities. Returns
+     *     `{"policy": null, "entity_id": null}` when no policy is configured —
+     *     never a 404, and never an empty object, so "unset" is never mistaken
+     *     for "denies everything". `entity_id` is opaque; pass it to `correct()`
+     *     when updating the policy remotely.
+     *
+     *     Requires a normal authenticated session. Policy shape can itself reveal
+     *     what kind of data an instance handles, so it is not exposed
+     *     unauthenticated.
+     */
+    get: operations["describeInstancePolicy"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1349,6 +1525,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/query_contacts_at_company": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Query contacts at a company
+     * @description Resolve a free-text company name to the canonical `company` entity
+     *     (exact-normalized match first, then a conservative fuzzy pass — the
+     *     same resolution order used at store time when a `contact`'s
+     *     `organization` field auto-links to a `company` via `works_at`, see
+     *     docs/foundation/entity_resolution.md#15.4-company-entity-resolution-leads-graph-join-key)
+     *     and return every contact linked to it via a live `works_at` edge.
+     *
+     *     Answers "who do we have connected at company X" for a leads/warm-intro
+     *     graph. Read-only: unlike the store-time resolver, this never creates a
+     *     company entity — when no company matches (exact or fuzzy), the
+     *     response reports `company: null` and an empty `contacts` list rather
+     *     than inventing one.
+     *
+     *     Optional `owner_user_id` scopes both the company resolution and the
+     *     works_at/contact lookup to one tenant's graph (which partner's
+     *     network to search); omit to search the caller's own graph via the
+     *     authenticated user. Mirrors the `user_id` override on
+     *     `/list_relationships`: today the server requires it to match the
+     *     authenticated caller (single-tenant admission), so this is
+     *     forward-compatible API surface rather than a live cross-tenant query
+     *     capability yet.
+     */
+    post: operations["queryContactsAtCompany"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/retrieve_entity_by_identifier": {
     parameters: {
       query?: never;
@@ -1518,10 +1734,25 @@ export interface paths {
      * Submit issue
      * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
      *     to the configured operator instance (same flow as MCP submit_issue).
-     *     Authenticated users use the normal user scope. AAuth-signed guest
-     *     submitters may create operator-side issues when the `issue`,
-     *     `conversation`, and `conversation_message` guest access policies allow
-     *     writes; the response includes a guest read-back token.
+     *     Authenticated users use the normal user scope. Guest submitters may create
+     *     operator-side issues when the `issue`, `conversation`, and
+     *     `conversation_message` guest access policies allow writes; the response
+     *     includes a guest read-back token.
+     *
+     *     **No prior identity is required to submit.** A remote caller with no Bearer
+     *     token, no AAuth signature, and no guest access token may open an issue on
+     *     this route whenever the `issue` guest access policy permits guest writes
+     *     (`submit_only`, `submitter_scoped`, or `open`). This is deliberate: the
+     *     guest read-back token is an **output** of a successful submit, so requiring
+     *     one as input would make a third party's first contact impossible. AAuth
+     *     signing remains supported and, when present, partitions the submitter by
+     *     thumbprint. Operators can close the inbox with
+     *     `NEOTOMA_ACCESS_POLICY_ISSUE=closed`, which restores `AUTH_REQUIRED` for
+     *     unauthenticated callers.
+     *
+     *     Anonymous access is scoped to **this route only**: `POST /issues/add_message`
+     *     still requires authentication, since a reporter appending to a thread already
+     *     holds the token their submit returned.
      *
      *     **Reporter environment is required.** Callers MUST supply at least
      *     one of `reporter_git_sha` or `reporter_app_version`. Submissions
@@ -1566,7 +1797,7 @@ export interface paths {
     put?: never;
     /**
      * Sync issues bidirectionally with GitHub
-     * @description Bidirectional sync between local Neotoma and the configured GitHub repo. Push leg (default on): local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. Pull leg: GitHub issues and their comments are pulled into local entities. MCP sync_issues parity.
+     * @description Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their comments are pulled into local entities. Push leg: local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. The target repo defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`); `repo` overrides it for this call only. The push leg is on by default only for the configured default repo and off for any other `repo` unless `push: true` is passed. `commit: false` runs a dry run that reports what would be created, updated and pushed and writes nothing. A GitHub token is required: `NEOTOMA_ISSUES_GITHUB_TOKEN` in the server environment (or `gh auth login` on the server host). MCP sync_issues parity.
      */
     post: operations["issuesSync"];
     delete?: never;
@@ -1742,6 +1973,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/register_relationship_type": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Register a relationship type
+     * @description Add a relationship type to this instance's vocabulary (#1972 / G25). The vocabulary is a runtime registry rather than a closed enum, so a caller needing an edge type the substrate does not already know registers it here instead of bending an existing type or simulating the edge as a field on an entity. Read the vocabulary back with list_relationship_types.
+     *
+     *     Registration is APPEND-ONLY: re-registering a type inserts a newer row that supersedes the prior one, and deregistering appends a deactivated row. Nothing is updated in place and nothing is deleted, so the history of what was registered when stays readable.
+     *
+     *     Scope defaults to "user". Registering at "global" scope changes the vocabulary for every tenant on the instance and requires an explicit register_relationship_type capability naming the type (or "*").
+     *
+     *     source_entity_types, target_entity_types, inverse and symmetric are ADVISORY ONLY and are not enforced at write time, mirroring how entity schemas treat unknown fields. acyclic is the one exception and IS enforced.
+     */
+    post: operations["registerRelationshipType"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/list_relationship_types": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * List registered relationship types
+     * @description The registry census: relationship types this instance PERMITS, which is not the same as types that HAVE edges. A type registered a moment ago with zero edges written appears here, which is exactly what a caller discovering what it may write BEFORE writing it needs.
+     *
+     *     edge_count, when present, means "rows written" and is never evidence of registration.
+     */
+    post: operations["listRelationshipTypes"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/register_schema": {
     parameters: {
       query?: never;
@@ -1756,6 +2035,31 @@ export interface paths {
      * @description Register a new schema or schema version
      */
     post: operations["registerSchema"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/corrections/transaction": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Atomically compare and correct multiple entities
+     * @description Append declared-field corrections in one scoped database transaction.
+     *     Every entity's type, observation count and expected snapshot fields must
+     *     match inside the write transaction. Any validation, policy, write or
+     *     read-back failure rolls back all changes. Reuse the identical request
+     *     and idempotency key after uncertainty; changed payload reuse conflicts.
+     *     This primitive does not decide or authorize application-level approval.
+     */
+    post: operations["correctTransaction"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1785,6 +2089,74 @@ export interface paths {
      *     snapshot until the field is added to the schema.
      */
     post: operations["correct"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/patch_array_item": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Atomically patch one item of a structured array field by key
+     * @description Sibling of `/correct` for structured collection fields whose items
+     *     carry a stable identity (e.g. a `session_digest.tasks_claimed` row
+     *     keyed by `claim_id`). Loads the current array fresh, finds the item
+     *     matching `key_field`/`key_value`, merges `item` onto it (or appends a
+     *     new item when the key is not yet present), and writes the whole
+     *     reconciled array as one new priority-1000 observation.
+     *
+     *     This exists to prevent the lost-update failure mode of full-array
+     *     read-modify-write: two callers patching DIFFERENT keys both succeed,
+     *     because each patch reads fresh state immediately before writing —
+     *     neither has to guess whether the other's row is still there. A caller
+     *     that instead reads the whole array, edits one row locally, and writes
+     *     the full array back can silently discard a concurrent writer's
+     *     disjoint row; `patch_array_item` is the replacement for that pattern.
+     *
+     *     Same-key races are resolved by the field's `merge_array_by_key`
+     *     reducer policy (latest `observed_at` wins per key) unless the caller
+     *     supplies `expected_item_version`, in which case a stale version is
+     *     refused with `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+     */
+    post: operations["patchArrayItem"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/{id}/batch_correct": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Apply an atomic multi-field correction with optimistic concurrency
+     * @description Atomic batch of single-field corrections against one entity, gated by
+     *     a whole-entity optimistic-concurrency check. Backs both the Inspector
+     *     Edit tab and the `neotoma edit` CLI one-shot editor; both surfaces
+     *     compute a field diff against a loaded snapshot and apply it through
+     *     this endpoint so the concurrency check and schema validation are
+     *     atomic across every field in the diff (unlike issuing one `/correct`
+     *     call per changed field).
+     *
+     *     Pre-existing endpoint being documented here for the first time
+     *     (contract gap identified alongside the Waxwing lost-update ADR,
+     *     ent_4b41bb83a4faf4428a73bfc8) — no behavior change.
+     */
+    post: operations["batchCorrectEntity"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1936,7 +2308,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Create a substrate event subscription (webhook or SSE) */
+    /**
+     * Create a substrate event subscription (webhook or SSE)
+     * @description Authenticated owners may subscribe to filters within their own graph.
+     *     Entity-scoped guests must authenticate with their guest bearer token,
+     *     provide a non-empty `entity_ids` filter, and keep every requested entity
+     *     inside that token's current grant. Empty, mixed, or out-of-grant guest
+     *     filters are rejected without creating a subscription. Guests may only
+     *     use `delivery_method: sse`, which is revalidated against the guest
+     *     credential on every delivery; a guest request for `webhook` delivery or
+     *     with a `sync_peer_id` is rejected with 403 without creating a
+     *     subscription.
+     */
     post: operations["subscribe"];
     delete?: never;
     options?: never;
@@ -1953,7 +2336,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Deactivate a subscription */
+    /**
+     * Deactivate a subscription
+     * @description Owners may deactivate their own subscriptions. Guests may deactivate only
+     *     subscriptions whose complete `watch_entity_ids` set remains inside the
+     *     guest token's current entity grant; denial leaves the subscription active.
+     */
     post: operations["unsubscribe"];
     delete?: never;
     options?: never;
@@ -1970,7 +2358,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** List active subscriptions for the current user */
+    /**
+     * List active subscriptions for the current user
+     * @description Owners receive their active subscriptions. Guests receive only subscriptions
+     *     whose complete `watch_entity_ids` set is inside the token's current entity
+     *     grant; subscriptions outside or spanning the grant are omitted.
+     */
     post: operations["listSubscriptions"];
     delete?: never;
     options?: never;
@@ -1987,7 +2380,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Get subscription delivery status */
+    /**
+     * Get subscription delivery status
+     * @description Owners may inspect their subscriptions. A guest receives the status only
+     *     when the subscription's complete `watch_entity_ids` set is inside its
+     *     current grant; an inaccessible subscription is returned as `null`.
+     */
     post: operations["getSubscriptionStatus"];
     delete?: never;
     options?: never;
@@ -2002,7 +2400,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Server-sent events stream for a subscription */
+    /**
+     * Server-sent events stream for a subscription
+     * @description Opens the SSE stream for an active SSE subscription. Owners retain their
+     *     normal authenticated access. Guests may connect only when the subscription's
+     *     complete entity filter is inside the token grant. Guest credentials are
+     *     revalidated while the connection is established: expiry, revocation, or
+     *     grant narrowing closes the stream before another event is delivered.
+     */
     get: operations["eventsStream"];
     put?: never;
     post?: never;
@@ -2120,6 +2525,211 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Additive acquisition evidence from the executing entity collection path. Ranked candidate zero, ignored scope, acquisition caps or degradation cannot establish predicate-population absence. Existing legacy fields retain their meaning. The read interval is not a write fence, revision lease or common database view. See query_convergence and issue #2597. */
+    EntityReadContract: {
+      /** @enum {string} */
+      version: "1";
+      /** @enum {string} */
+      surface: "entity_collection";
+      mode: {
+        /** @enum {string} */
+        actual: "structured" | "semantic" | "lexical_typed" | "lexical_fallback";
+        /** @enum {string|null} */
+        fallback_reason:
+          | "not_configured"
+          | "embedding_unavailable"
+          | "no_usable_candidates"
+          | "filtered_candidates_exhausted"
+          | "unknown"
+          | null;
+      };
+      applied_scope: {
+        /** @enum {string} */
+        owner: "authenticated";
+        entity_types: string[];
+        include_merged: boolean;
+        /** @enum {boolean} */
+        include_deleted: false;
+        include_snapshots: boolean;
+        predicates: {
+          field: string;
+          op: string;
+          value: {
+            /** @enum {string} */
+            kind: "sha256";
+            value: string;
+          };
+        }[];
+        ordering: {
+          field: string;
+          /** @enum {string} */
+          direction: "asc" | "desc";
+          tie_breaker: string | null;
+        };
+        pagination: {
+          /** @enum {string} */
+          kind: "keyset" | "offset";
+          limit: number;
+          offset: number;
+        };
+      };
+      request_options: {
+        applied: string[];
+        normalized: {
+          name: string;
+          canonical_name: string;
+          reason: string;
+        }[];
+        ignored: {
+          name: string;
+          reason: string;
+        }[];
+      };
+      coverage: {
+        /** @enum {string} */
+        kind:
+          | "predicate_population"
+          | "semantic_candidates"
+          | "lexical_candidates"
+          | "synthesized_groups";
+        /** @enum {string} */
+        state: "complete" | "paginated" | "truncated" | "partial" | "unknown";
+        /** @description Safe executing-path cause codes only. Includes semantic_backend_unavailable for an unusable vector backend and semantic_global_candidate_cap for a bounded global KNN pool; never includes provider exceptions, query text or credential values. */
+        reasons: string[];
+        returned_count: number;
+        total: {
+          value: number;
+          /** @enum {string} */
+          relation: "exact" | "lower_bound" | "candidate_count" | "unknown";
+          /** @enum {string} */
+          unit: "entities" | "candidates" | "groups";
+        };
+        page_exhausted: boolean;
+        scope_exhausted: boolean | null;
+        continuation: {
+          /** @enum {string} */
+          kind: "cursor" | "none" | "unsupported";
+          next_cursor: string | null;
+          next_offset: number | null;
+        };
+      };
+      coherence: {
+        /** @enum {string} */
+        kind: "read_interval";
+        /** Format: date-time */
+        started_at: string;
+        /** Format: date-time */
+        completed_at: string;
+        /** @enum {boolean} */
+        common_view: false;
+        /** @enum {string} */
+        collection_and_total: "separate_acquisitions" | "candidate_derived";
+      };
+      diagnostics: {
+        code: string;
+        reason: string;
+        field?: string;
+        entity_type?: string;
+        suggestions?: string[];
+      }[];
+    };
+    /** @description A GitHub issue a `/issues/sync` dry run would create or update locally. */
+    IssuesSyncPlanIssue: {
+      github_number: number;
+      title: string;
+    };
+    /**
+     * @description Per-request protocol fields carried in `params._meta` by 2026-07-28 clients
+     *     (#2070). Operational metadata only: never persisted, never logged in full.
+     */
+    McpRequestMeta: {
+      /**
+       * @description Protocol version for this request. Required on the modern path.
+       * @example 2026-07-28
+       */
+      "io.modelcontextprotocol/protocolVersion"?: string;
+      /** @description Client capabilities relevant to this request. Required on the modern path. */
+      "io.modelcontextprotocol/clientCapabilities"?: {
+        [key: string]: unknown;
+      };
+      /** @description Self-reported client name and version (unverified; attribution fallback only). */
+      "io.modelcontextprotocol/clientInfo"?: {
+        name?: string;
+        version?: string;
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcRequest: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number;
+      /** @description JSON-RPC method, e.g. `server/discover`, `tools/list`, `tools/call`, `initialize` (legacy). */
+      method: string;
+      params?: {
+        _meta?: components["schemas"]["McpRequestMeta"];
+      } & {
+        [key: string]: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    McpJsonRpcResponse: {
+      /** @enum {string} */
+      jsonrpc: "2.0";
+      id?: string | number | null;
+      result?: {
+        [key: string]: unknown;
+      };
+      error?: {
+        code: number;
+        message: string;
+        data?: unknown;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Result of the `server/discover` JSON-RPC method (MCP 2026-07-28). Carries only
+     *     protocol versions, this server's declared capabilities, its identity and its
+     *     instructions: no tenant data, no caller identity, no instance topology.
+     */
+    McpServerDiscoverResult: {
+      /** @enum {string} */
+      resultType: "complete";
+      supportedVersions: string[];
+      capabilities: {
+        [key: string]: unknown;
+      };
+      /** @description Agent-facing MCP instructions plus this instance's declared data policy. */
+      instructions?: string;
+      ttlMs?: number;
+      /** @enum {string} */
+      cacheScope?: "public" | "private";
+      _meta?: {
+        "io.modelcontextprotocol/serverInfo"?: {
+          name?: string;
+          version?: string;
+        };
+      } & {
+        [key: string]: unknown;
+      };
+    };
+    /** @description Result of the /ready database probe. */
+    ReadinessResult: {
+      /** @description True only when the database completed the probe read. */
+      ok?: boolean;
+      checks?: {
+        /** @enum {string} */
+        database?: "ok" | "failed";
+      };
+      /** @description Probe duration, reported on success and failure alike. Degradation is progressive, so the trend matters as much as the verdict. */
+      latency_ms?: number;
+      /** @description Failure reason. Present only when ok is false. */
+      error?: string;
+    };
     FileUrlResponse: {
       /** @description Signed URL for accessing the file */
       url?: string;
@@ -2136,6 +2746,82 @@ export interface components {
       trace_id?: string;
       /** Format: date-time */
       timestamp?: string;
+    };
+    /**
+     * @description One failed item from `create_relationships`. Batch creation retains
+     *     successful siblings and therefore reports item failures inside the
+     *     HTTP 200 response. When `code` is `capability_denied`, `op` and `hint`
+     *     preserve the same structured grant-repair contract as the single-item
+     *     endpoint and MCP adapter.
+     */
+    RelationshipBatchErrorItem: {
+      index: number;
+      relationship: {
+        relationship_type: string;
+        source_entity_id: string;
+        target_entity_id: string;
+        source_id?: string;
+        metadata?: {
+          [key: string]: unknown;
+        };
+      };
+      /** @description Human-readable per-item failure message. */
+      error: string;
+      /** @description Machine-readable failure code; `capability_denied` for grant refusals. */
+      code?: string;
+      /** @description Canonical structured error message when a typed error is available. */
+      message?: string;
+      /** @description Capability operation that was refused. */
+      op?: string;
+      /** @description Primary endpoint entity type named by the capability denial. */
+      entity_type?: string;
+      /** @description Public-safe label for the admitted agent grant. */
+      agent_label?: string;
+      /** @description Actionable instructions for repairing the grant scope. */
+      hint?: string;
+    };
+    /**
+     * @description Nested canonical error envelope returned by schema-registry tools
+     *     (`update_schema_incremental`, and matching MCP tool responses) on HTTP 200
+     *     when the call cannot proceed. Distinct from the flat `ErrorEnvelope` used
+     *     by most REST routes — callers must read `error.error_code`.
+     */
+    SchemaRegistryToolErrorResponse: {
+      error: {
+        /**
+         * @description `ERR_SCHEMA_SCOPE_MISMATCH` — an active schema exists for the
+         *     entity_type, but in a different scope than this call checked
+         *     (`details.guard_scope` vs `details.found_scope`). Hint directs
+         *     the caller to retry with the correct `user_specific` and MUST
+         *     NOT recommend `register_schema`.
+         *     `ERR_NO_SCHEMA_FOR_ENTITY_TYPE` — no schema in any scope; hint
+         *     recommends `register_schema`.
+         * @enum {string}
+         */
+        error_code:
+          | "ERR_SCHEMA_SCOPE_MISMATCH"
+          | "ERR_NO_SCHEMA_FOR_ENTITY_TYPE"
+          | "ERR_SCHEMA_MISSING_IDENTITY_CONFIG";
+        message: string;
+        hint?: string;
+        details?: {
+          entity_type?: string;
+          /**
+           * @description Scope the existence guard checked (`global` or `user`).
+           * @enum {string}
+           */
+          guard_scope?: "global" | "user";
+          /**
+           * @description Scope where an active schema was found (scope-mismatch only).
+           * @enum {string}
+           */
+          found_scope?: "global" | "user";
+          /** @description Present on genuine cold-start (`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`). */
+          no_schema_for_entity_type?: boolean;
+        } & {
+          [key: string]: unknown;
+        };
+      };
     };
     RecentConversationRelatedEntity: {
       entity_id?: string;
@@ -2188,7 +2874,8 @@ export interface components {
         | "ERR_CANONICAL_NAME_UNRESOLVED"
         | "ERR_MERGE_REFUSED"
         | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
-        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT"
+        | "entity_owner_conflict";
       message?: string;
       /**
        * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
@@ -2260,6 +2947,36 @@ export interface components {
       };
     };
     /**
+     * @description RFC 9728 §3 protected-resource metadata. Public by design — this document
+     *     is the unauthenticated entry point a client reads to discover where to
+     *     authenticate, so it contains only public server metadata and never
+     *     user, tenant, or credential data (#2049).
+     */
+    OAuthProtectedResourceMetadata: {
+      /**
+       * @description The protected resource identifier clients bind their token request to
+       *     (the MCP endpoint, e.g. `https://host/mcp`).
+       */
+      resource: string;
+      /**
+       * @description Issuers whose RFC 8414 metadata describes how to obtain a token. Never
+       *     empty: an empty array leaves a bootstrapping client unable to proceed,
+       *     which is the same dead end as a 401, one hop later.
+       */
+      authorization_servers: string[];
+    };
+    /**
+     * @description 401 shape for an asserted-but-stale credential on a discovery endpoint.
+     *     Does not echo the submitted `X-Connection-Id` value. Any
+     *     `resource_metadata` URL named in the accompanying `WWW-Authenticate`
+     *     header must itself resolve 200 unauthenticated.
+     */
+    OAuthInvalidTokenEnvelope: {
+      /** @enum {string} */
+      error?: "invalid_token";
+      error_description?: string;
+    };
+    /**
      * @description 400 response shape for `ERR_CONSTRAINT_VIOLATION`. Returned by `/store`
      *     when one or more observations fail a declarative write-time value
      *     constraint declared on their schema (constraint `policy: "reject"`). The
@@ -2285,6 +3002,208 @@ export interface components {
           /** @description Human-readable description of the constraint violation. */
           message?: string;
         }[];
+      };
+    };
+    /**
+     * @description Instance-level data policy (#1974/#1975). Declares what this instance is
+     *     *for* and what it is allowed to hold. Instance-wide by design: a single
+     *     policy governs every write on the instance regardless of which
+     *     authenticated user issued it — the predicate evaluates the write's
+     *     content against the instance's stated purpose, not the caller's
+     *     identity. This is a deliberate, documented exception to per-user
+     *     scoping (`docs/subsystems/auth.md`), because an instance shared by
+     *     several operators must not enforce silently different rules per
+     *     operator.
+     *
+     *     Two layers consume this record. The advisory layer (#1974) renders it
+     *     into the client instructions served at connect time so a cooperating
+     *     agent can self-comply. The enforcement layer (#1975) evaluates it
+     *     server-side on every write, so a non-cooperating agent is rejected
+     *     regardless. Declaration improves the happy path; enforcement is the
+     *     guarantee.
+     */
+    InstancePolicy: {
+      /**
+       * @description Free text: what this instance is for. Rendered verbatim into the
+       *     served client instructions. Operator-authored and broadcast to every
+       *     connecting agent, so it MUST NOT contain secrets or PII.
+       */
+      purpose?: string;
+      /**
+       * @description Allow-list. When non-empty, ONLY these entity types may be written;
+       *     every other type is denied with `entity_type_denied`. When absent or
+       *     empty, no allow-list constraint applies (all types permitted subject
+       *     to the deny-list). An empty array is therefore NOT "deny all" — see
+       *     `enforcement` for how an unset policy is distinguished from an empty
+       *     one.
+       */
+      in_scope_entity_types?: string[];
+      /**
+       * @description Deny-list, evaluated after the allow-list. A type present here is
+       *     denied even if it also appears in `in_scope_entity_types`
+       *     (deny wins, so a mistaken overlap fails closed).
+       */
+      out_of_scope_entity_types?: string[];
+      /**
+       * @description Free-text minimization/lawful-basis statements rendered into the
+       *     served instructions. Advisory only — these strings are not parsed or
+       *     enforced. Machine-enforced predicates are the typed fields above
+       *     plus `require_lawful_basis` / `max_sensitivity_class`.
+       */
+      sensitivity_rules?: string[];
+      /**
+       * @description When true, a write of an entity whose schema declares
+       *     `person_data: true` must carry a non-empty lawful-basis field, or it
+       *     is denied with `pii_gate_missing_basis`. A present-but-blank value
+       *     is treated as missing (fails closed).
+       */
+      require_lawful_basis?: boolean;
+      /**
+       * @description When true, a write of a `person_data` entity must carry attribution/
+       *     consent metadata, or it is denied with `provenance_required`.
+       */
+      require_provenance?: boolean;
+      /**
+       * @description Highest field-level `sensitivity_class` this instance will hold. A
+       *     field whose schema declares a class above this threshold is denied
+       *     with `field_sensitivity_exceeded`. Read from the schema declaration,
+       *     never from a hardcoded per-type list.
+       * @enum {string|null}
+       */
+      max_sensitivity_class?: "public" | "internal" | "sensitive" | "restricted" | null;
+      /**
+       * @description `advisory` (#1974 only): the policy is declared in the served client
+       *     instructions but violating writes are still accepted. `enforced`
+       *     (#1975): violating writes are rejected with
+       *     `ERR_STORE_POLICY_DENIED`. Defaults to `advisory` so that adding a
+       *     policy record is not itself a breaking change for existing callers;
+       *     an operator opts into rejection explicitly.
+       * @enum {string}
+       */
+      enforcement?: "advisory" | "enforced";
+      /**
+       * @description Opaque short identifier (e.g. `pol_9f2a`) echoed in denial envelopes
+       *     so an operator can correlate a rejection with the policy revision
+       *     that caused it. Deliberately opaque: it describes no policy content.
+       */
+      policy_id?: string;
+      /** Format: date-time */
+      updated_at?: string;
+      /** @description Opaque actor identifier. Never an email address or name. */
+      updated_by?: string;
+    };
+    /**
+     * @description Response shape for `describe_instance_policy`. `policy` is explicitly
+     *     `null` when no policy is configured — never a 404 and never `{}`, so a
+     *     caller can distinguish "this instance has no policy" from "this instance
+     *     denies everything". Read-only; the call creates no observations.
+     */
+    InstancePolicyResponse: {
+      /** @description The configured instance policy, or `null` when unset. */
+      policy: components["schemas"]["InstancePolicy"] | null;
+      /**
+       * @description The underlying entity id of the configured policy record, or `null`
+       *     when no policy is configured. Exists so a remote client (e.g. the
+       *     CLI's `instance-policy set`) can resolve the id needed to `correct`
+       *     an existing policy over HTTP, without a local database connection.
+       *     Opaque; do not parse.
+       */
+      entity_id?: string | null;
+    };
+    /**
+     * @description A single per-entity policy denial inside an `ERR_STORE_POLICY_DENIED`
+     *     response. Sibling to `StoreResolutionIssue`: that type means "malformed",
+     *     this one means "well-formed but not allowed here".
+     */
+    StorePolicyDenial: {
+      /** @description Zero-based index of the denied entity in the request `entities[]` array. */
+      entity_index: number;
+      entity_type?: string;
+      /**
+       * @description Machine-readable denial reason. Clients MUST treat an unrecognized
+       *     value as a hard denial and surface `hint` verbatim rather than
+       *     failing to parse — the enum is extensible by design.
+       * @enum {string}
+       */
+      reason_code:
+        | "entity_type_denied"
+        | "pii_gate_missing_basis"
+        | "field_sensitivity_exceeded"
+        | "provenance_required";
+      /**
+       * @description Actionable next step, naming the tool to call or the field to fix.
+       *     PII-free by construction: interpolated values are schema-declared
+       *     field *names* and configured policy values, never any fragment of the
+       *     submitted payload (guardrails MUST NOT 11).
+       */
+      hint: string;
+      /** @description Opaque identifier of the policy revision that produced this denial. */
+      policy_id?: string;
+    };
+    /**
+     * @description 400 response shape for `ERR_STORE_POLICY_DENIED`. Returned by `/store`
+     *     and `/correct` when a well-formed write is refused by the instance's
+     *     configured data policy.
+     *
+     *     Whole-request reject: NO entity in the request is persisted, even if only
+     *     one violated. `denied[]` enumerates every violating entity in the batch —
+     *     not just the first — so a caller discovers all violations in one round
+     *     trip. There is deliberately no `accepted[]` field: partial persistence
+     *     would introduce a mixed-commit state the ingestion path does not
+     *     otherwise have to reason about. If bulk-import callers need it later, an
+     *     opt-in `allow_partial: true` request flag is a backward-compatible
+     *     addition.
+     */
+    StorePolicyDeniedErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_STORE_POLICY_DENIED";
+        /**
+         * @description States how many entities were denied and that zero were
+         *     persisted. Carries no upgrade text — actionable guidance belongs
+         *     in each denial's structured `hint` (guardrails MUST NOT 7).
+         */
+        message?: string;
+        denied?: components["schemas"]["StorePolicyDenial"][];
+      };
+    };
+    /**
+     * @description 503 response shape for `ERR_STORE_POLICY_UNAVAILABLE`. Returned by
+     *     `/store` and `/correct` when the instance policy could not be READ, so
+     *     the write could not be checked against it. Nothing is persisted.
+     *
+     *     Deliberately distinct from `ERR_STORE_POLICY_DENIED`, and the
+     *     distinction is the point: DENIED means the policy was read and forbids
+     *     the write (fix the payload, do not retry); UNAVAILABLE means permission
+     *     is unknown (retry unchanged, do NOT rewrite). An agent that applies
+     *     DENIED remediation here — narrowing or dropping data — responds to an
+     *     infrastructure fault by silently storing less, which is the failure mode
+     *     this split exists to prevent.
+     *
+     *     503 rather than 400 because the fault is server-side and transient: a
+     *     400 would blame the payload for a condition the caller cannot fix.
+     */
+    StorePolicyUnavailableErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_STORE_POLICY_UNAVAILABLE";
+        /**
+         * @description States that the policy could not be read, that zero entities
+         *     were persisted, and that this is an infrastructure failure
+         *     rather than a policy decision.
+         */
+        message?: string;
+        /**
+         * @description Always true. The same payload should be retried unmodified.
+         * @enum {boolean}
+         */
+        retryable?: true;
+        /**
+         * @description Actionable guidance: retry the same payload; if the condition
+         *     persists the instance operator must check database health — it
+         *     is not resolvable by changing what the caller stores.
+         */
+        hint?: string;
       };
     };
     /**
@@ -2354,11 +3273,14 @@ export interface components {
       replayed: boolean;
     };
     /**
-     * @description Agent-identity provenance recorded on every durable write-path record
+     * @description Write-attribution provenance recorded on durable write-path records
      *     (observations, relationships, sources, interpretations, timeline
-     *     events). Fields are stamped additively into the existing provenance
-     *     JSON blob on each record so no schema migration was required; the
-     *     shape below documents the keys consumers can rely on.
+     *     events). Most keys describe the software that wrote the record (the
+     *     AAuth agent and MCP client); `authenticated_actor_id` instead
+     *     identifies the signed-in member whose session made the write. Fields
+     *     are stamped additively into the existing provenance JSON blob on each
+     *     record so no schema migration was required; the shape below documents
+     *     the keys consumers can rely on.
      *
      *     When AAuth is active the `agent_*` keys carry the cryptographically
      *     verified identity; `client_name`/`client_version` come from the MCP
@@ -2398,6 +3320,24 @@ export interface components {
        * @description ISO-8601 timestamp when the attribution block was stamped.
        */
       attributed_at?: string;
+      /**
+       * @description The signed-in member whose session made this write, as their
+       *     write-attribution id: a random UUID minted on this instance the
+       *     first time the member's session is resolved. It is pseudonymous —
+       *     not derived from the email address or the member's `user_id`, so it
+       *     cannot be recomputed from a list of addresses, and the same person
+       *     has a different id on every instance. Only this instance's
+       *     `member_attribution_ids` table maps it back to a member; no API
+       *     exposes that mapping yet. It is not the same value as `/me`'s
+       *     `authenticated_user_id` and does not join to it. Provenance only —
+       *     it never affects which graph is read or written. Absent when no
+       *     verified sign-in stands behind the request (static bearer token,
+       *     key-derived MCP token, local no-auth, AAuth grant, or a connection
+       *     that predates identity recording); consumers MUST read absence as
+       *     "unknown", never as the graph owner. Withheld from responses to
+       *     guest (entity-scoped token) readers.
+       */
+      authenticated_actor_id?: string;
     };
     /**
      * @description Active attribution policy for the Neotoma instance. Governs how
@@ -2475,12 +3415,16 @@ export interface components {
       } | null;
       /**
        * @description Set when the operator allowlist promoted the request to
-       *     `operator_attested`. `"issuer"` means a hit on
+       *     `operator_attested`. The tier is bound to the verified signing
+       *     key. `"thumbprint"` means the key's thumbprint is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS`; `"issuer"` means the
+       *     `match_iss` of the active grant pinning the key is listed in
        *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-       *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+       *     that grant's `match_iss:match_sub` is listed in
+       *     `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
        * @enum {string}
        */
-      operator_allowlist_source?: "issuer" | "issuer_subject";
+      operator_allowlist_source?: "thumbprint" | "issuer" | "issuer_subject";
     };
     /**
      * @description Resolved attribution and policy for the current session. Returned
@@ -2507,7 +3451,14 @@ export interface components {
        *     that signature to one of this user's `agent_grant` entities
        *     and is treating the caller as authenticated. The two are
        *     independent: a verified-but-unmatched signature stays
-       *     attribution-only and `admitted` is `false`.
+       *     attribution-only and `admitted` is `false`. Admission is
+       *     key-bound: a grant admits only when its `match_thumbprint`
+       *     equals the signing key's thumbprint. `grant_key_unbound`
+       *     means a grant matched sub/iss but pins no key; capability-gated
+       *     writes carrying that signature are refused until the grant is
+       *     pinned, whatever authenticated the request. Pin
+       *     `match_thumbprint` to admit the agent (see
+       *     docs/subsystems/agent_capabilities.md#pin-a-key-to-an-existing-grant).
        */
       aauth: {
         verified: boolean;
@@ -2518,8 +3469,10 @@ export interface components {
           | "admitted"
           | "no_grants_for_user"
           | "no_match"
+          | "grant_key_unbound"
           | "grant_revoked"
           | "grant_suspended"
+          | "grant_pin_conflict"
           | "strict_rejected"
           | "aauth_disabled"
           | "not_signed"
@@ -2623,6 +3576,15 @@ export interface components {
        *     Neotoma-native ops.
        */
       repos?: string[];
+      /**
+       * @description Relationship types this entry may write. Required for
+       *     `create_relationship` edge writes: one entry must cover the
+       *     relationship type AND both endpoint entity types
+       *     (`entity_types`). Absent or empty grants no edge writes. The
+       *     single string `*` wildcards any relationship type. Also the
+       *     scope for `register_relationship_type`.
+       */
+      relationship_types?: string[];
     };
     /**
      * @description First-class persistent grant that admits a verified AAuth
@@ -2718,6 +3680,11 @@ export interface components {
       scoped_entity_types?: string[];
     };
     EntitySnapshot: {
+      /**
+       * @description Present only for an accepted nullable winning projection.
+       * @enum {boolean}
+       */
+      cleared_fields_included?: true;
       entity_id?: string;
       entity_type?: string;
       schema_version?: string;
@@ -2737,11 +3704,25 @@ export interface components {
       provenance?: {
         [key: string]: unknown;
       };
+      /**
+       * @description Caller-claimed data origins (#2242) of the observations this
+       *     snapshot's `provenance` cites: `observation_id → DataOrigin`.
+       *     Join a field through `provenance` to its observation id, then
+       *     here, to see where that value came from. Returned by
+       *     `get_entity_snapshot` / MCP `retrieve_entity_snapshot`. Omitted
+       *     entirely when no cited observation carries an origin; withheld
+       *     from guest-token reads.
+       */
+      data_origins?: {
+        [key: string]: components["schemas"]["DataOrigin"];
+      };
       /** Format: date-time */
       computed_at?: string;
       observation_count?: number;
       /** Format: date-time */
       last_observation_at?: string;
+      /** @description Opaque CAS token that changes for every committed observation. */
+      entity_version?: string;
       canonical_name?: string | null;
       merged_to_entity_id?: string | null;
       /** Format: date-time */
@@ -2817,10 +3798,22 @@ export interface components {
        *       Inspector edit, `entities correct`, manual annotation).
        *     - `import` — batch ingestion / ETL / scheduled imports.
        *     - `sync` — cross-instance replication from a configured Neotoma peer.
+       *     - `unspecified` — the caller did not say what kind of write this
+       *       was. Applied by the write path when a store request omits
+       *       `observation_source` (and accepted when sent explicitly). It is
+       *       a lineage sentinel, not a provenance class: it makes no claim
+       *       about origin, and it is distinct from an explicit
+       *       `llm_summary`. A store that omits the field also returns an
+       *       `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. In the
+       *       reducer tie-break it shares `llm_summary`'s rank unless the
+       *       schema's `observation_source_priority` names it, so recency
+       *       decides between the two.
        *
        *     Null / missing for legacy rows written before the field
-       *     existed; writes default to `llm_summary` when unspecified
-       *     because MCP callers are LLM-driven by construction.
+       *     existed. Rows written before `unspecified` was introduced carry
+       *     `llm_summary` when their caller omitted the field, so a legacy
+       *     `llm_summary` is not by itself evidence that a language model
+       *     produced the value; only explicit values written since are.
        * @enum {string|null}
        */
       observation_source?:
@@ -2830,6 +3823,7 @@ export interface components {
         | "human"
         | "import"
         | "sync"
+        | "unspecified"
         | null;
       fields?: {
         [key: string]: unknown;
@@ -2841,11 +3835,18 @@ export interface components {
        * @description Write-time agent attribution for this observation. Carries the
        *     `AgentAttribution` keys stamped by the AAuth middleware and
        *     MCP `initialize.clientInfo` fallback. Coexists with any
-       *     free-form provenance keys supplied at write time.
+       *     free-form provenance keys supplied at write time, including
+       *     `data_origin` (#2242): the caller-claimed origin of the data
+       *     (file, URL, message, API), present only when the store request
+       *     supplied one. `data_origin` is never merged into the attribution
+       *     keys and is withheld from guest-token reads.
        */
-      provenance?: {
+      provenance?: ({
+        data_origin?: components["schemas"]["DataOrigin"];
+      } & {
         [key: string]: unknown;
-      } & components["schemas"]["AgentAttribution"];
+      }) &
+        components["schemas"]["AgentAttribution"];
     };
     RelationshipSnapshot: {
       relationship_key?: string;
@@ -2887,6 +3888,44 @@ export interface components {
       target_entity_name?: string | null;
       target_entity_type?: string | null;
       target_entity_type_label?: string | null;
+    };
+    /**
+     * @description A relationship from a request's `relationships` array that was
+     *     written. Shared by `StoreStructuredResponse.relationships_created`
+     *     and `CreateInterpretationResponse.relationships_created`. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipCreated: {
+      relationship_type: string;
+      source_entity_id: string;
+      target_entity_id: string;
+    };
+    /**
+     * @description A relationship from a request's `relationships` array that was not
+     *     written. The entities in the call are still stored. Shared by
+     *     `StoreStructuredResponse.relationships_refused` and
+     *     `CreateInterpretationResponse.relationships_refused`. An endpoint
+     *     that does not exist and one owned by another user are both reported
+     *     as `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason. See
+     *     docs/subsystems/relationships.md § 6.1.
+     */
+    RelationshipRefusal: {
+      /** @description Position of the relationship in the request's `relationships` array. */
+      relationship_index: number;
+      relationship_type: string;
+      source_entity_id?: string;
+      target_entity_id?: string;
+      source_index?: number;
+      target_index?: number;
+      /**
+       * @description One of `RELATIONSHIP_ENDPOINT_NOT_FOUND`,
+       *     `RELATIONSHIP_REFERENCE_UNRESOLVED`,
+       *     `RELATIONSHIP_INVALID_ENTITY_ID`,
+       *     `unregistered_relationship_type`, `RELATIONSHIP_NOT_CREATED`.
+       */
+      code: string;
+      reason: string;
+      hint?: string;
     };
     TimelineEvent: {
       id?: string;
@@ -3027,9 +4066,18 @@ export interface components {
        *     data.
        */
       hint?: string;
-      relationships_created?: {
-        [key: string]: unknown;
-      }[];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. See
+       *     docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
     };
     /** @description Aggregate usage statistics computed from local data only. */
     UsageStats: {
@@ -3093,36 +4141,8 @@ export interface components {
     };
     StoreRelationshipInput:
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Index into the entities array for the target entity. */
@@ -3132,36 +4152,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Index into the entities array for the source entity. */
           source_index: number;
           /** @description Existing target entity ID. */
@@ -3171,36 +4163,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Index into the entities array for the target entity. */
@@ -3210,36 +4174,8 @@ export interface components {
           };
         }
       | {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing source entity ID. */
           source_entity_id: string;
           /** @description Existing target entity ID. */
@@ -3248,6 +4184,47 @@ export interface components {
             [key: string]: unknown;
           };
         };
+    /**
+     * @description Where stored data came from (#2242) — the file, sheet row, URL,
+     *     message, or API endpoint — as opposed to who wrote it (attribution,
+     *     `external_actor`). A caller claim, never verified: the server does not
+     *     fetch, open, or validate `locator` or `url`. Persisted on each created
+     *     observation as `provenance.data_origin`. `locator` is required unless
+     *     `kind` is `manual`. Every text field is single-line: control
+     *     characters, including newlines, are refused. Strip credentials,
+     *     signatures, and auth query parameters from `locator` and `url` before
+     *     sending; a `url` with embedded `user:pass@` is refused.
+     */
+    DataOrigin: {
+      /**
+       * @description Category of origin. `manual` = typed or confirmed by a person.
+       * @enum {string}
+       */
+      kind: "file" | "url" | "email" | "message" | "api" | "manual" | "other";
+      /**
+       * @description Primary pointer to the origin: a file path or name, URL, email or
+       *     chat message id, or API endpoint. Required unless `kind` is `manual`.
+       */
+      locator?: string;
+      /** @description Position within the locator, e.g. `sheet=Tickets;row=97`, `page=3`, `attachment=2`. */
+      part?: string;
+      /** @description System that holds the origin, e.g. `gmail`, `google_sheets`, `stripe`, `local_fs`. */
+      system?: string;
+      /**
+       * Format: uri
+       * @description Absolute http(s) link to the original, when `locator` is not itself a URL. Must not embed credentials (`user:pass@`).
+       */
+      url?: string;
+      /** @description Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`. */
+      producer?: string;
+      /**
+       * Format: date-time
+       * @description When the data was read from the origin (ISO 8601).
+       */
+      retrieved_at?: string;
+      /** @description Short free-text note about the derivation. */
+      notes?: string;
+    };
     /**
      * @description Upstream artifact author (e.g. GitHub user) stamped into observation
      *     provenance alongside AAuth agent attribution. Matches
@@ -3264,10 +4241,18 @@ export interface components {
        */
       type?: "User" | "Bot" | "Organization";
       /**
+       * @description Accepted for compatibility, but a request body can only assert an
+       *     external actor: the stored value is always `claim`. The stronger
+       *     tiers are assigned by server-side verification paths (the signed
+       *     GitHub webhook route, AAuth token claims, grant linkage).
        * @default claim
        * @enum {string}
        */
       verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+      /**
+       * @description Not carried over from a request body; set only by the signed
+       *     GitHub webhook route.
+       */
       delivery_id?: string;
       event_type?: string;
       repository?: string;
@@ -3282,6 +4267,15 @@ export interface components {
      *     remain intentionally open so schema-driven fields flow through.
      */
     StoreRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities?: {
         [key: string]: unknown;
       }[];
@@ -3298,9 +4292,12 @@ export interface components {
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
        *     `source_priority`. See `Observation.observation_source` for
-       *     the full semantic contract. Defaults to `llm_summary` when
-       *     unspecified. Applies to every observation created by this
-       *     request.
+       *     the full semantic contract. When omitted, observations are
+       *     stored with `unspecified` and the response carries one
+       *     `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
+       *     field explicitly (for example `llm_summary` for model-authored
+       *     content, `import` for ETL) to record lineage. Applies to every
+       *     observation created by this request.
        * @enum {string}
        */
       observation_source?:
@@ -3309,13 +4306,26 @@ export interface components {
         | "workflow_state"
         | "human"
         | "import"
-        | "sync";
+        | "sync"
+        | "unspecified";
       /**
        * @description Optional upstream author (e.g. GitHub user for issue submission).
        *     Stamped into observation provenance; must align with
        *     `ExternalActorInputSchema` (strict — no extra keys).
        */
       external_actor?: components["schemas"]["ExternalActorInput"];
+      /**
+       * @description Optional (#2242). Where the entities in this request came from.
+       *     Applies to every entity; an entity's own `data_origin` key
+       *     overrides it (precedence: entity → request → none). Stamped on
+       *     each created observation as `provenance.data_origin` and included
+       *     in the request's stored payload, so reusing an `idempotency_key`
+       *     with a different origin is `ERR_IDEMPOTENCY_MISMATCH`. Requires
+       *     `entities` (a file-only store is refused: the stored file is its
+       *     own origin record). A claim, not proof; separate from attribution
+       *     and from `observation_source`.
+       */
+      data_origin?: components["schemas"]["DataOrigin"];
       /** @description Required for structured path, optional for unstructured-only path. */
       idempotency_key?: string;
       /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */
@@ -3367,6 +4377,15 @@ export interface components {
      *     schema-driven fields flow through (see description on `entities[]`).
      */
     StoreStructuredRequest: {
+      /**
+       * @description When true, atomically create exactly one structured entity only if
+       *     its complete schema-declared physical identity is absent. Requires
+       *     commit=true and a nonempty idempotency_key; file, relationship,
+       *     interpretation, intake, target and sync combinations are refused.
+       *     Omitted or false preserves ordinary upsert behavior. Exact retries
+       *     return the original immutable operation receipt without new effects.
+       */
+      expected_entity_absent?: boolean;
       entities: {
         [key: string]: unknown;
       }[];
@@ -3384,9 +4403,12 @@ export interface components {
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
        *     `source_priority`. See `Observation.observation_source` for
-       *     the full semantic contract. Defaults to `llm_summary` when
-       *     unspecified. Applies to every observation created by this
-       *     request.
+       *     the full semantic contract. When omitted, observations are
+       *     stored with `unspecified` and the response carries one
+       *     `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
+       *     field explicitly (for example `llm_summary` for model-authored
+       *     content, `import` for ETL) to record lineage. Applies to every
+       *     observation created by this request.
        * @enum {string}
        */
       observation_source?:
@@ -3395,7 +4417,8 @@ export interface components {
         | "workflow_state"
         | "human"
         | "import"
-        | "sync";
+        | "sync"
+        | "unspecified";
       idempotency_key: string;
       user_id?: string;
       /**
@@ -3422,8 +4445,80 @@ export interface components {
       /** @description Optional peer id stamped on observations for sync loop prevention. */
       source_peer_id?: string;
     };
+    /**
+     * @description Original committed operation facts, verified against the immutable native
+     *     observation and owner/source linkage. Current snapshots are separate.
+     */
+    ConditionalStoreReceipt: {
+      /** @enum {integer} */
+      version: 1;
+      /** @enum {string} */
+      status: "applied" | "replayed";
+      request_fingerprint: string;
+      source_id: string;
+      entity_id: string;
+      entity_type: string;
+      observation_id: string;
+      schema_identity_digest: string;
+      unknown_fields_count: number;
+      /** @description Original declared observation fields, never a current snapshot substitute. */
+      original_observation_fields: {
+        [key: string]: unknown;
+      };
+      diagnostics: {
+        fields_sha256: string;
+        schema_version: string;
+        unknown_fields: string[];
+        constraint_warnings: {
+          field: string;
+          constraint: string;
+        }[];
+      };
+    };
+    ConditionalStoreError: {
+      /** @enum {string} */
+      code:
+        | "VALIDATION_ERROR"
+        | "CONFLICT"
+        | "IDEMPOTENCY_CONFLICT"
+        | "STORE_KEY_MODE_CONFLICT"
+        | "STORE_RECEIPT_UNCERTAIN"
+        | "STORE_CONDITIONAL_FAILED";
+      message: string;
+      hint: string;
+      committed?: false | "unknown";
+      private_storage_residue_possible?: boolean;
+    };
     StoreStructuredResponse: {
+      operation_receipt?: components["schemas"]["ConditionalStoreReceipt"];
+      /**
+       * @description Current snapshot availability, separate from the retained original receipt.
+       * @enum {string}
+       */
+      current_snapshot_status?: "available" | "absent" | "unavailable";
+      /**
+       * @description Notification attempts run after commit. An uncertain notification
+       *     outcome does not mean the applied transaction was rolled back.
+       */
+      postcommit_notifications?: {
+        attempted: number;
+        failed: number;
+        /** @enum {string} */
+        status: "completed" | "uncertain" | "not_repeated";
+      };
       success?: boolean;
+      /**
+       * @description Echoes the request's `commit` flag. `false` means this response
+       *     describes a plan/dry-run preview: no source, observation or entity
+       *     was persisted and `source_id` is `null`.
+       */
+      commit?: boolean;
+      /**
+       * @description Id of the raw `sources` row written for this store. `null` in
+       *     plan/dry-run mode (`commit: false`), where no source row is
+       *     written.
+       */
+      source_id?: string | null;
       /**
        * @description True when the response is an idempotency replay (no new observations
        *     or entities were written for this request). The key was already used
@@ -3437,7 +4532,12 @@ export interface components {
       entities?: {
         entity_id?: string;
         entity_type?: string;
-        observation_id?: string;
+        /**
+         * @description Id of the observation written for this entity. `null` in
+         *     plan/dry-run mode (`commit: false`), where no observation is
+         *     written.
+         */
+        observation_id?: string | null;
         canonical_name?: string;
         resolver_path?: string[];
         /**
@@ -3494,6 +4594,19 @@ export interface components {
         entity_id?: string;
       })[];
       /**
+       * @description Relationships from the request's `relationships` array that were
+       *     written. See docs/subsystems/relationships.md § 6.1.
+       */
+      relationships_created?: components["schemas"]["RelationshipCreated"][];
+      /**
+       * @description Relationships from the request's `relationships` array that were
+       *     not written. The entities in the call are still stored. Present
+       *     only when at least one relationship was refused. An endpoint that
+       *     does not exist and one owned by another user are both reported as
+       *     `RELATIONSHIP_ENDPOINT_NOT_FOUND` with the same reason.
+       */
+      relationships_refused?: components["schemas"]["RelationshipRefusal"][];
+      /**
        * @description Schema-driven non-fatal warnings emitted when a stored observation
        *     omits all fields listed by a schema's `store_warnings` rule. Used
        *     by schemas to surface identity-quality issues (e.g. a
@@ -3525,7 +4638,15 @@ export interface components {
          *     non-default `source_priority` but no field on the entity type
          *     uses a merge strategy that honours it — all fields effectively
          *     use `last_write`, so the priority value has no effect on the
-         *     stored snapshot).
+         *     stored snapshot), and `OBSERVATION_SOURCE_OMITTED` (fired
+         *     once per store request that omits `observation_source`;
+         *     every observation in the request was stored as
+         *     `unspecified`. `observation_index`/`entity_id` name the
+         *     first stored entity only as a nominal pointer: the warning
+         *     is request-scoped, not about that entity. Not fired when
+         *     the caller sends any value explicitly, including
+         *     `unspecified`, which a caller that cannot classify the
+         *     write should send to suppress it).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -3681,9 +4802,21 @@ export interface components {
       original_filename?: string;
       /** Format: uuid */
       user_id?: string;
+      /**
+       * @description When false, runs in plan/dry-run mode: computes the content hash
+       *     without persisting a source row or uploading raw content. Useful
+       *     for previewing an unstructured store before committing.
+       * @default true
+       */
+      commit?: boolean;
     };
     StoreUnstructuredResponse: {
-      source_id?: string;
+      /**
+       * @description Id of the persisted source row. `null` when the request ran in
+       *     plan/dry-run mode (`commit: false`): nothing was persisted, so
+       *     there is no source to point at.
+       */
+      source_id?: string | null;
       content_hash?: string;
       file_size?: number;
       deduplicated?: boolean;
@@ -3691,6 +4824,49 @@ export interface components {
         [key: string]: unknown;
       };
       entity_ids?: string[];
+      /**
+       * @description Echoes the request's `commit` flag. `false` means this response
+       *     describes a plan/dry-run preview: no source row was persisted and
+       *     no raw content was uploaded. `source_id` is `null` in that case.
+       */
+      commit?: boolean;
+      /**
+       * @description Present when the request used reference storage
+       *     (`source_storage: "reference"`), for both a committed store and a
+       *     plan-mode (`commit: false`) preview. A reference-mode response
+       *     carries `storage_mode`, `reference_path` and `mime_type`; a
+       *     committed one also carries `content_hash` and `file_size`, while a
+       *     plan-mode preview carries neither. Inline-mode responses omit
+       *     `storage_mode` and carry `content_hash`, `file_size`,
+       *     `deduplicated`, `entities_created` and `observations_created`
+       *     (plan mode: `source_id` is `null`).
+       * @enum {string}
+       */
+      storage_mode?: "reference";
+      /**
+       * @description Reference-storage only: the file path this store referenced
+       *     (committed) or would reference if committed (plan mode).
+       */
+      reference_path?: string;
+      /**
+       * @description Reference-storage only: the MIME type resolved for the file
+       *     (echoes the request's `mime_type`, or the value inferred from
+       *     the file extension when omitted). Present for both a committed
+       *     store and a plan-mode preview.
+       */
+      mime_type?: string;
+      /**
+       * @description Inline-storage only. Always `0` today: unstructured store never
+       *     creates entities directly, in either commit or plan mode. Not a
+       *     placeholder for a future non-zero value under commit — if that
+       *     changes, this description will change with it.
+       */
+      entities_created?: number;
+      /**
+       * @description Inline-storage only: always `0`, for the same reason as
+       *     `entities_created`.
+       */
+      observations_created?: number;
     };
     /**
      * @description FU-2026-05-002. Identifies the conversation and the assistant message
@@ -3820,36 +4996,8 @@ export interface components {
       canonical_name?: string | null;
     };
     GetRelationshipSnapshotRequest: {
-      /** @enum {string} */
-      relationship_type:
-        | "PART_OF"
-        | "CORRECTS"
-        | "REFERS_TO"
-        | "SETTLES"
-        | "DUPLICATE_OF"
-        | "DEPENDS_ON"
-        | "SUPERSEDES"
-        | "EMBEDS"
-        | "works_at"
-        | "owns"
-        | "manages"
-        | "part_of"
-        | "related_to"
-        | "depends_on"
-        | "references"
-        | "transacted_with"
-        | "member_of"
-        | "reports_to"
-        | "located_at"
-        | "created_by"
-        | "funded_by"
-        | "acquired_by"
-        | "subsidiary_of"
-        | "partner_of"
-        | "competitor_of"
-        | "supplies_to"
-        | "contracted_with"
-        | "invested_in";
+      /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+      relationship_type: string;
       source_entity_id: string;
       target_entity_id: string;
       /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
@@ -3940,7 +5088,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Server is healthy */
+      /** @description Process is running */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3949,6 +5097,35 @@ export interface operations {
           "application/json": {
             ok?: boolean;
           };
+        };
+      };
+    };
+  };
+  readinessCheck: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server is ready to serve reads */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessResult"];
+        };
+      };
+      /** @description Database read failed or timed out */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessResult"];
         };
       };
     };
@@ -3994,6 +5171,94 @@ export interface operations {
           } & {
             [key: string]: unknown;
           };
+        };
+      };
+    };
+  };
+  mcpStreamableHttpPost: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required on modern requests; must equal `_meta["io.modelcontextprotocol/protocolVersion"]`. */
+        "MCP-Protocol-Version"?: string;
+        /** @description Required on modern requests; must equal the JSON-RPC `method`. Never a credential or personal data. */
+        "Mcp-Method"?: string;
+        /**
+         * @description Required on modern `tools/call`, `resources/read` and `prompts/get`; must equal
+         *     `params.name` (or `params.uri`). Non-ASCII values use the `=?base64?...?=`
+         *     sentinel. Never a credential or personal data.
+         */
+        "Mcp-Name"?: string;
+        /** @description Legacy-era session id. Its presence selects the legacy session path. */
+        "Mcp-Session-Id"?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["McpJsonRpcRequest"];
+      };
+    };
+    responses: {
+      /**
+       * @description JSON-RPC response. On the modern path every result carries
+       *     `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`;
+       *     a `server/discover` result has the `McpServerDiscoverResult` shape.
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+          "text/event-stream": string;
+        };
+      };
+      /** @description JSON-RPC notification accepted (no body). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description `-32020` HeaderMismatch (missing, malformed, mismatched, or credential/PII-shaped
+       *     `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name`), `-32022` UnsupportedProtocolVersion,
+       *     `-32602` missing required `_meta` field, or `-32000` legacy request without a session.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Authentication required or credential invalid (`-32001`). On the
+       *     2026-07-28 path this includes a credential that passed the gate but
+       *     resolved to no user (`error.data.error_code` `MCP_AUTH_CONNECTION_INVALID`
+       *     or `MCP_AUTH_UNRESOLVED`), returned before any method runs.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
+        };
+      };
+      /**
+       * @description Modern: `-32601` method not found. Legacy: unknown or expired `Mcp-Session-Id`
+       *     (`-32001`, re-initialize).
+       */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpJsonRpcResponse"];
         };
       };
     };
@@ -4047,12 +5312,52 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Redirect to authorization URL */
+      /**
+       * @description Redirect to the authorization URL, or to /mcp/oauth/key-auth when
+       *     NEOTOMA_REQUIRE_KEY_FOR_OAUTH is set and the request carries no valid
+       *     key session.
+       */
       302: {
         headers: {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /**
+       * @description Authorization refused before any redirect. The body is a plain-text
+       *     sentence addressed to the human in the browser, NOT an ErrorEnvelope:
+       *     this endpoint is reached by a user-agent mid-OAuth-redirect, so the
+       *     response is rendered directly in the address bar. A JSON envelope
+       *     would be read by nobody at this point in the flow. Machine clients
+       *     MUST treat any 400 here as a terminal refusal of the authorization
+       *     request and MUST NOT parse the body; the reason is carried by the
+       *     server's structured warn log, not by this response.
+       *
+       *     Emitted for: a missing `redirect_uri`; a missing `state`; a missing
+       *     or non-S256 PKCE challenge on a non-OpenAI redirect; a `dev_stub`
+       *     request while dev_stub is disabled; and a `redirect_uri` that is not
+       *     on the tunnel allowlist (built-in entries plus any exact callback
+       *     URLs configured in NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS).
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /**
+       * @description Authorization failed unexpectedly. Plain-text body, for the same
+       *     browser-facing reason as the 400 above.
+       */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
       };
     };
   };
@@ -4068,6 +5373,9 @@ export interface operations {
         "application/x-www-form-urlencoded": {
           grant_type?: string;
           code?: string;
+          /** @description PKCE verifier (RFC 7636). Required with grant_type= authorization_code; the server rejects a code redemption whose SHA-256/base64url digest does not match the code_challenge presented at /mcp/oauth/authorize. */
+          code_verifier?: string;
+          refresh_token?: string;
         };
       };
     };
@@ -4114,8 +5422,14 @@ export interface operations {
         };
         content: {
           "application/json": {
+            /** @description Graph scope: the user_id all reads and writes are scoped to. Under shared-graph mode this is the shared graph owner, not the signed-in user. */
             user_id?: string;
+            /** @description Email of the signed-in user when known. Under shared-graph mode this is the verified address of the teammate who signed in, not the graph owner's. May be absent when the signed-in identity was never recorded (pre-migration shared-graph residual); consumers must treat absence as unknown, not as the graph owner. */
             email?: string;
+            /** @description Per-email user_id of the signed-in user. Present only when it differs from user_id (fully remapped shared-graph session). Omitted on non-shared-graph sessions and on degraded shared-graph residuals that have no recorded signer (shared_graph may still be true). */
+            authenticated_user_id?: string;
+            /** @description True when this session operates on a shared graph. May be true without authenticated_user_id when the connection row predates identity columns (degraded residual until re-auth). Omitted on non-shared-graph sessions. */
+            shared_graph?: boolean;
             storage?: {
               /** @enum {string} */
               storage_backend?: "local";
@@ -4253,13 +5567,77 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Protected resource metadata */
+      /** @description Protected resource metadata (served without credentials) */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["OAuthProtectedResourceMetadata"];
+        };
+      };
+      /**
+       * @description Asserted `X-Connection-Id` is expired or unrecognized. Never returned
+       *     for a caller supplying no credentials at all.
+       */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OAuthInvalidTokenEnvelope"];
+        };
+      };
+    };
+  };
+  oauthProtectedResourceForMcp: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Protected resource metadata (served without credentials) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OAuthProtectedResourceMetadata"];
+        };
+      };
+      /** @description Asserted `X-Connection-Id` is expired or unrecognized. */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OAuthInvalidTokenEnvelope"];
+        };
+      };
+    };
+  };
+  openidConfigurationNotOffered: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OIDC discovery is not offered by this server */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error?: string;
+            error_description?: string;
+          };
         };
       };
     };
@@ -4435,7 +5813,26 @@ export interface operations {
         /** @description Compatibility alias for `search`. */
         search_query?: string;
         limit?: number;
+        /**
+         * @deprecated
+         * @description Deprecated in favor of `cursor`. Still accepted for back-compat but
+         *     internally bounded: values above 2000 are rejected with a structured
+         *     hint pointing to `cursor`. Supplying a non-zero `offset` together
+         *     with `cursor` is rejected as a validation error; use one or the other.
+         */
         offset?: number;
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's
+         *     `next_cursor`. Returns the next page in O(page size) time regardless
+         *     of position, unlike `offset` which is bounded and deprecated. Only
+         *     supported with the default `sort_by=entity_id`; cannot be combined
+         *     with `search` or a non-zero `offset`. Reusing a cursor after changing
+         *     `sort_order` returns a structured error — so if you set `sort_order`
+         *     explicitly on the first call of a walk, pass the same value on every
+         *     page (omitting it after having set it explicitly counts as changing
+         *     it).
+         */
+        cursor?: string;
         /**
          * @description Sort field. Non-default values cannot be combined with `search`.
          *     Mirrors the `sort_by` body field of `POST /entities/query`.
@@ -4489,9 +5886,17 @@ export interface operations {
         content: {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
+            read_contract?: components["schemas"]["EntityReadContract"];
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Opaque keyset cursor for the next page, or `null`/omitted
+             *     when this page returned fewer than `limit` rows. Pass back
+             *     as the `cursor` query parameter to continue pagination in
+             *     O(page size) time.
+             */
+            next_cursor?: string | null;
             applied_search_strategies?: (
               | "strict"
               | "semantic"
@@ -4542,8 +5947,35 @@ export interface operations {
           query?: string;
           /** @description Compatibility alias for `search`. */
           search_query?: string;
+          /**
+           * @description Page size. Capped at 500 when `include_snapshots` is true
+           *     (the default), since each snapshot is hydrated synchronously;
+           *     lower the page size or set `include_snapshots=false` for
+           *     larger pages.
+           */
           limit?: number;
+          /**
+           * @deprecated
+           * @description Deprecated in favor of `cursor`. Still accepted for back-compat
+           *     but internally bounded: values above 2000 are rejected with a
+           *     structured hint pointing to `cursor`. Supplying a non-zero
+           *     `offset` together with `cursor` is rejected as a validation
+           *     error; use one or the other.
+           */
           offset?: number;
+          /**
+           * @description Opaque keyset pagination cursor from a previous response's
+           *     `next_cursor`. Returns the next page in O(page size) time
+           *     regardless of position, unlike `offset` which is bounded and
+           *     deprecated. Only supported with the default
+           *     `sort_by=entity_id`; cannot be combined with `search` or a
+           *     non-zero `offset`. Reusing a cursor after changing
+           *     `sort_order` returns a structured error — so if you set
+           *     `sort_order` explicitly on the first call of a walk, pass the
+           *     same value on every page (omitting it after having set it
+           *     explicitly counts as changing it).
+           */
+          cursor?: string;
           /**
            * @description Sort field. Non-default values cannot be combined with `search`.
            *     Predefined values: `entity_id`, `canonical_name`, `observation_count`,
@@ -4612,11 +6044,23 @@ export interface operations {
            *     extraction, so only entities whose snapshot contains a
            *     matching value are returned. Example:
            *     `{"status": {"op": "eq", "value": "active"}}`.
+           *
+           *     `contains` is a raw case-insensitive SUBSTRING match, so
+           *     `{"title": {"op": "contains", "value": "CTO"}}` also matches
+           *     "director" and "doctor". Use `contains_word` for
+           *     whole-word matching: it matches only when the value appears
+           *     as a complete token delimited by punctuation or whitespace
+           *     (matches "VP, CTO" and "CTO & Co-founder"; not "director",
+           *     "coordinator", or "Careers"). Punctuation inside the term is
+           *     handled: "O'Brien", "R&D", and "100%" match their stored
+           *     values (separators in the term are normalized the same way as
+           *     the stored value). Case-insensitivity for `contains_word` is
+           *     ASCII-only.
            */
           snapshot_filters?: {
             [key: string]: {
               /** @enum {string} */
-              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains";
+              op: "eq" | "in" | "gt" | "lt" | "gte" | "lte" | "contains" | "contains_word";
               value?: unknown;
             };
           };
@@ -4632,9 +6076,17 @@ export interface operations {
         content: {
           "application/json": {
             entities?: components["schemas"]["EntitySnapshot"][];
+            read_contract?: components["schemas"]["EntityReadContract"];
             total?: number;
             limit?: number;
             offset?: number;
+            /**
+             * @description Opaque keyset cursor for the next page, or `null`/omitted
+             *     when this page returned fewer than `limit` rows. Pass back
+             *     as the `cursor` request field to continue pagination in
+             *     O(page size) time regardless of position.
+             */
+            next_cursor?: string | null;
             /**
              * @description Which non-strict retrieval strategies contributed to this
              *     result set, so callers can tell when a match came from a
@@ -4665,6 +6117,27 @@ export interface operations {
              */
             search_mode?: "none" | "semantic" | "lexical_typed" | "lexical_fallback";
           };
+        };
+      };
+      /**
+       * @description Invalid request. Error codes:
+       *
+       *     - `INVALID_CURSOR` — the `cursor` is malformed, carries an
+       *       unsupported version, or was minted under a different `sort_order`
+       *       than this request (#1943). `details` carries `code`, `message`,
+       *       and a flat `hint`. Not retryable with the same token: drop the
+       *       cursor and restart the walk from the first page.
+       *     - `VALIDATION_INVALID_FORMAT` — the request violated a parameter
+       *       rule, e.g. `cursor` combined with `search`, a non-default
+       *       `sort_by`, or a non-zero `offset`; `offset` above 2000; or `limit`
+       *       above 500 while `include_snapshots` is true.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -4889,6 +6362,24 @@ export interface operations {
       };
       /** @description Source entity not found. */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `entity_owner_conflict` — `new_entity.target_entity_id` names an
+       *     existing entity owned by a different, non-null user than the
+       *     writer. No observations are re-pointed. The source entity's own
+       *     ownership is already covered by the `404` above (a source owned
+       *     by another user reads as not-found); this refusal is for the
+       *     split's OTHER caller-supplied id, the merge target. The envelope
+       *     details carry `entity_id` and `entity_type`; never the other
+       *     owner's identity or fields.
+       */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -5213,6 +6704,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -5288,6 +6785,12 @@ export interface operations {
         content: {
           "application/json": {
             grant?: components["schemas"]["AgentGrant"];
+            /**
+             * @description Advisory messages about the stored grant. Present when
+             *     the grant pins no `match_thumbprint` and therefore does
+             *     not admit signed requests.
+             */
+            warnings?: string[];
           };
         };
       };
@@ -5684,6 +7187,26 @@ export interface operations {
       };
     };
   };
+  describeInstancePolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The configured instance policy, or null when unset. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InstancePolicyResponse"];
+        };
+      };
+    };
+  };
   listInterpretations: {
     parameters: {
       query?: {
@@ -5845,13 +7368,21 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape. `ERR_CONSTRAINT_VIOLATION` is
+       *     `StoreResolutionErrorEnvelope` shape; one of its per-observation
+       *     `issues[].code` values is `entity_owner_conflict` — resolution
+       *     landed on an existing entity owned by a different, non-null
+       *     user, and the write was refused before anything was persisted
+       *     (see `StoreResolutionIssue.code`). `ERR_CONSTRAINT_VIOLATION` is
        *     returned when one or more observations fail a declarative write-time
        *     value constraint (constraint `policy: "reject"`); its envelope carries
        *     a per-observation `issues[]` array — see `ConstraintViolationErrorEnvelope`.
        *     `ERR_IDEMPOTENCY_MISMATCH` is returned when the same `idempotency_key`
        *     is reused with materially different content — use a new key for a
-       *     different payload. Other validation errors fall back to the generic
+       *     different payload. `ERR_STORE_POLICY_DENIED` is returned when the
+       *     write is well-formed but refused by this instance's configured data
+       *     policy; the whole request is rejected and `denied[]` enumerates every
+       *     violating entity — call `describe_instance_policy` to read the policy
+       *     before retrying. Other validation errors fall back to the generic
        *     `ErrorEnvelope`.
        */
       400: {
@@ -5862,7 +7393,11 @@ export interface operations {
           "application/json":
             | components["schemas"]["StoreResolutionErrorEnvelope"]
             | components["schemas"]["ConstraintViolationErrorEnvelope"]
-            | components["schemas"]["ErrorEnvelope"];
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
       /**
@@ -5880,16 +7415,68 @@ export interface operations {
         };
       };
       /**
-       * @description Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+       * @description Conditional physical presence, changed payload or mode conflict,
+       *     or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
        *     idempotency_key was already used for a store call with different
        *     content. Use a new idempotency_key to write the updated payload.
+       *
+       *     `ERR_STORE_WRITE_INCOMPLETE` (an `ErrorEnvelope` with
+       *     `error_code: ERR_STORE_WRITE_INCOMPLETE`): the idempotency_key
+       *     belongs to a store that did not finish writing, and the request
+       *     carries an `interpretation`, so it cannot be resumed under that
+       *     key. `details` carries `hint`, `source_id`, `entities_requested`,
+       *     `entities_written` and `missing_entity_indexes` (zero-based
+       *     positions in the request's `entities` array that have no
+       *     observation yet; when the list is empty every entity is stored
+       *     and only relationships may be missing). Resend ONLY those
+       *     entities under a new idempotency_key; resending the full payload
+       *     under a new key writes a second set of observations to the
+       *     entities already written. The original request's relationships
+       *     were not written: recreate them separately, referencing the
+       *     entities by entity id (the error does not return the ids; look
+       *     each one up by the entity's identifying fields). Not retryable
+       *     under the same key. A
+       *     replay without an `interpretation` never returns this: it
+       *     finishes the interrupted write, and a replay of a finished write
+       *     is unchanged (`replayed: true`).
        */
       409: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ErrorEnvelope"];
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
+        };
+      };
+      /**
+       * @description Conditional failure/uncertain acknowledgment carries explicit database
+       *     commit and possible private storage residue details when applicable.
+       *     Exact request replay reconciles the original receipt. This is separate from
+       *     `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+       *     read, so the write could not be checked against it. Nothing was
+       *     persisted. Retry the request UNCHANGED; the envelope carries
+       *     `retryable: true`.
+       *
+       *     Do not treat this like the `400` `ERR_STORE_POLICY_DENIED` above.
+       *     DENIED means the policy was read and forbids this payload (fix the
+       *     payload). UNAVAILABLE means permission is unknown. An agent that
+       *     responds by narrowing or dropping entities answers an outage by
+       *     silently storing less — the failure this split exists to prevent.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyUnavailableErrorEnvelope"]
+            | {
+                error?: components["schemas"]["ConditionalStoreError"];
+              };
         };
       };
     };
@@ -5905,6 +7492,11 @@ export interface operations {
       content: {
         "application/json": {
           entity_id?: string;
+          /**
+           * @description Include only selected explicit-null fields with winning provenance; requires complete owned acquisition and an active schema.
+           * @default false
+           */
+          include_cleared_fields?: boolean;
           /** @description Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Reflects what *happened* by time T, regardless of when the observation was ingested into Neotoma. Use `at_ingested` instead when you need "what did we actually know at time T" semantics. */
           at?: string;
           /** @description Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `created_at` (row-insertion time) ≤ this timestamp. Excludes backfilled or late-arriving observations that have a past `observed_at` but arrived after this cutoff, preventing look-ahead leaks. When both `at` and `at_ingested` are supplied, both bounds are applied (AND logic): an observation must satisfy `observed_at ≤ at` AND `created_at ≤ at_ingested`. */
@@ -6008,42 +7600,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /**
-           * @description Typed relationship category. Canonical structural types are
-           *     `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
-           *     `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
-           *     types (e.g. `works_at`, `owns`, `manages`) are also accepted.
-           * @enum {string}
-           */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           /** @description Existing entity id at the source end of the edge. */
           source_entity_id: string;
           /** @description Existing entity id at the target end of the edge. */
@@ -6078,6 +7636,18 @@ export interface operations {
           "application/json": components["schemas"]["RelationshipSnapshot"];
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   createRelationships: {
@@ -6091,36 +7661,8 @@ export interface operations {
       content: {
         "application/json": {
           relationships: {
-            /** @enum {string} */
-            relationship_type:
-              | "PART_OF"
-              | "CORRECTS"
-              | "REFERS_TO"
-              | "SETTLES"
-              | "DUPLICATE_OF"
-              | "DEPENDS_ON"
-              | "SUPERSEDES"
-              | "EMBEDS"
-              | "works_at"
-              | "owns"
-              | "manages"
-              | "part_of"
-              | "related_to"
-              | "depends_on"
-              | "references"
-              | "transacted_with"
-              | "member_of"
-              | "reports_to"
-              | "located_at"
-              | "created_by"
-              | "funded_by"
-              | "acquired_by"
-              | "subsidiary_of"
-              | "partner_of"
-              | "competitor_of"
-              | "supplies_to"
-              | "contracted_with"
-              | "invested_in";
+            /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+            relationship_type: string;
             source_entity_id: string;
             target_entity_id: string;
             source_id?: string;
@@ -6146,9 +7688,7 @@ export interface operations {
             created_count?: number;
             error_count?: number;
             relationships?: components["schemas"]["RelationshipSnapshot"][];
-            errors?: {
-              [key: string]: unknown;
-            }[];
+            errors?: components["schemas"]["RelationshipBatchErrorItem"][];
           };
         };
       };
@@ -6184,41 +7724,8 @@ export interface operations {
                * @enum {string}
                */
               direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
-              /**
-               * @description Optional relationship_type filter. Closed enum matching the handler's
-               *     accepted values; spec-driven clients passing any other value will be
-               *     rejected at runtime with a Zod validation error.
-               * @enum {string}
-               */
-              relationship_type?:
-                | "PART_OF"
-                | "CORRECTS"
-                | "REFERS_TO"
-                | "SETTLES"
-                | "DUPLICATE_OF"
-                | "DEPENDS_ON"
-                | "SUPERSEDES"
-                | "EMBEDS"
-                | "works_at"
-                | "owns"
-                | "manages"
-                | "part_of"
-                | "related_to"
-                | "depends_on"
-                | "references"
-                | "transacted_with"
-                | "member_of"
-                | "reports_to"
-                | "located_at"
-                | "created_by"
-                | "funded_by"
-                | "acquired_by"
-                | "subsidiary_of"
-                | "partner_of"
-                | "competitor_of"
-                | "supplies_to"
-                | "contracted_with"
-                | "invested_in";
+              /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+              relationship_type?: string;
               /**
                * @description Maximum number of relationships to return.
                * @default 100
@@ -6277,6 +7784,96 @@ export interface operations {
             limit?: number;
             /** @description Echo of the requested `offset`. */
             offset?: number;
+          };
+        };
+      };
+    };
+  };
+  queryContactsAtCompany: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /**
+           * @description Free-text company name to resolve, e.g. "Northgate" or
+           *     "North Gate". Matched exact-normalized first, then fuzzy
+           *     (see COMPANY_FUZZY_MATCH_THRESHOLD in
+           *     src/services/company_resolution.ts).
+           */
+          company_name: string;
+          /**
+           * @description Optional user_id override scoping the query to a specific
+           *     partner's network (which partner's contacts/company graph
+           *     to search), matching the `user_id` override pattern on
+           *     /list_relationships. Must equal the authenticated user's
+           *     id today (the server has no cross-tenant admission yet);
+           *     supplying a different value is rejected. When omitted,
+           *     the authenticated user's own graph is searched.
+           */
+          owner_user_id?: string;
+          /**
+           * @description Maximum number of linked contacts to return. Applied
+           *     after the full works_at edge set is resolved, so
+           *     `total_contacts` on the response reflects the true
+           *     pre-limit count.
+           * @default 100
+           */
+          limit?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Resolved company (or none) and its linked contacts */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description The `company_name` as given by the caller, unmodified. */
+            queried_name?: string;
+            /**
+             * @description The resolved company entity, or `null` when no
+             *     exact/fuzzy match exists. Never created by this
+             *     read-only query.
+             */
+            company?: {
+              entity_id?: string;
+              canonical_name?: string;
+              /**
+               * @description Which resolution path matched.
+               * @enum {string}
+               */
+              basis?: "exact_normalized" | "fuzzy_match";
+              /** @description Similarity score when `basis` is `fuzzy_match`. */
+              fuzzy_score?: number;
+            } | null;
+            /**
+             * @description Contacts linked to the resolved company via a live
+             *     `works_at` edge, ordered by entity_id ascending for
+             *     deterministic pagination. Empty when `company` is null
+             *     or no contacts are linked.
+             */
+            contacts?: {
+              entity_id?: string;
+              canonical_name?: string;
+              snapshot?: {
+                [key: string]: unknown;
+              };
+              /** @description The `works_at` relationship_key linking this contact to the company. */
+              relationship_key?: string;
+              /** @description When the works_at relationship was last observed. */
+              last_observation_at?: string;
+            }[];
+            /** @description Total linked contacts before `limit` is applied. */
+            total_contacts?: number;
+            /** @description Echo of the requested (or default) `limit`. */
+            limit?: number;
           };
         };
       };
@@ -6862,26 +8459,69 @@ export interface operations {
           /** @enum {string} */
           state?: "open" | "closed" | "all";
           labels?: string[];
-          /** @description When false, skip the push leg (local public → GitHub). Default true. */
+          /**
+           * @description GitHub repository to mirror, `owner/name` (for example `acme/widgets`). Defaults to the server-configured repo. Must be the configured repo or be listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or `issues.allowed_repos`). A malformed value is rejected with a 400 and a repo that is not permitted with a 403, both before any GitHub request or write.
+           * @example acme/widgets
+           */
+          repo?: string;
+          /** @description Run the push leg (local public -> GitHub). Default true when `repo` is omitted or equals the configured default repo; default false for any other `repo`. Pass true to opt in for another repo. */
           push?: boolean;
+          /** @description When false, dry run: report what would be created, updated and pushed in `plan` and write nothing locally or on GitHub. Default true. */
+          commit?: boolean;
           user_id?: string;
         };
       };
     };
     responses: {
-      /** @description Sync counts and errors */
+      /** @description Sync counts, errors and, for a dry run, the plan */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": {
+            /** @description Target GitHub repo (`owner/name`) this run mirrored. */
+            repo: string;
+            /** @description True when the run was a dry run (`commit: false`); nothing was written. */
+            dry_run: boolean;
+            /** @description Whether the push leg was enabled (resolved from `push` and `repo`). */
+            push_enabled: boolean;
             issues_synced: number;
             messages_synced: number;
             errors: string[];
             issues_pushed: number;
             push_errors: string[];
+            /** @description Present only on a dry run. */
+            plan?: {
+              issues_to_create: components["schemas"]["IssuesSyncPlanIssue"][];
+              issues_to_update: components["schemas"]["IssuesSyncPlanIssue"][];
+              issues_unchanged: number;
+              messages_to_sync: number;
+              issues_to_push: {
+                entity_id: string;
+                title: string;
+              }[];
+              warnings: string[];
+            };
           };
+        };
+      };
+      /** @description Validation error (for example a malformed `repo`) */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist) */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -6958,36 +8598,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -7005,6 +8617,18 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
       /**
@@ -7033,36 +8657,8 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          /** @enum {string} */
-          relationship_type:
-            | "PART_OF"
-            | "CORRECTS"
-            | "REFERS_TO"
-            | "SETTLES"
-            | "DUPLICATE_OF"
-            | "DEPENDS_ON"
-            | "SUPERSEDES"
-            | "EMBEDS"
-            | "works_at"
-            | "owns"
-            | "manages"
-            | "part_of"
-            | "related_to"
-            | "depends_on"
-            | "references"
-            | "transacted_with"
-            | "member_of"
-            | "reports_to"
-            | "located_at"
-            | "created_by"
-            | "funded_by"
-            | "acquired_by"
-            | "subsidiary_of"
-            | "partner_of"
-            | "competitor_of"
-            | "supplies_to"
-            | "contracted_with"
-            | "invested_in";
+          /** @description Relationship type. The vocabulary is a runtime registry, not a closed enum: call list_relationship_types to read what this instance accepts, and register_relationship_type to add to it. Names are identifier-shaped and casing-agnostic (both SCREAMING_SNAKE and lower_snake are in use). */
+          relationship_type: string;
           source_entity_id: string;
           target_entity_id: string;
           reason?: string;
@@ -7080,6 +8676,18 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover
+       *     the relationship type and both endpoint entity types.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -7203,35 +8811,217 @@ export interface operations {
       content: {
         "application/json": {
           entity_type: string;
-          fields_to_add: {
+          fields_to_add?: {
             field_name: string;
             /** @enum {string} */
             field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
             /** @default false */
             required?: boolean;
             /** @enum {string} */
-            reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+            reducer_strategy?:
+              | "last_write"
+              | "highest_priority"
+              | "most_specific"
+              | "merge_array"
+              | "merge_array_by_key";
+            /** @description Required when reducer_strategy is merge_array_by_key; stable identity field on each array item. */
+            reducer_key_field?: string;
           }[];
+          fields_to_remove?: string[];
+          /** @description Replace the entity type's identity rule (how canonical_name / identity is derived). Each item is a single field name (string) or an all-required composite ({composite:[...]}). Rules are ordered precedence with fallback — the resolver uses the first rule whose fields are all present, not an unordered set. Example: [{"composite":["linkedin_url"]},"email","name"] keys on linkedin_url when present, else email, else name. Triggers a major version bump; existing reducer_config is preserved. Omit to keep the current rule. Passing [] clears the rule but only succeeds if the schema also declares identity_opt_out. Applies to new writes only — does not retroactively re-key existing entities. */
+          canonical_name_fields?: (
+            | string
+            | {
+                composite: string[];
+              }
+          )[];
           schema_version?: string;
-          /** @default false */
+          /** @description Explicit scope override, with no default. When omitted, the write goes to whichever scope the caller's own read of the schema resolved: the caller's user-scoped override if one exists, otherwise the global row. Pass true to create or extend a user-scoped override. Pass false to extend the global row: the new global version is built from the current global schema, never from the caller's override, and the call returns ERR_SCHEMA_SCOPE_MISMATCH if the type has no global registry row and no code-defined baseline (but has the caller's user-scoped schema). The response's `scope` reports the scope actually written. */
           user_specific?: boolean;
           user_id?: string;
           /** @default true */
           activate?: boolean;
-          /** @default false */
+          /**
+           * @description Promote existing raw_fragments for the added fields into observations (historical backfill). A request with migrate_existing true can legitimately promote nothing; see `migrated_existing` and `migration_result` in the response.
+           * @default false
+           */
           migrate_existing?: boolean;
+          /**
+           * @description Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Use when entity_type is rejected with a message naming "force: true" as the remedy. Does not affect any other validation.
+           * @default false
+           */
+          force?: boolean;
         };
       };
     };
     responses: {
-      /** @description Schema updated */
+      /**
+       * @description Schema updated on success. On a structured schema-registry client
+       *     error (`ERR_SCHEMA_SCOPE_MISMATCH` or `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`)
+       *     the same 200 response carries the nested canonical envelope
+       *     `{ error: { error_code, message, hint, details } }` — matching the
+       *     MCP tool response so CLI/HTTP/MCP handlers can pattern-match the
+       *     code uniformly (see docs/reference/error_codes.md Schema Registry).
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | ({
+                success?: boolean;
+                entity_type?: string;
+                schema_version?: string;
+                fields_added?: string[];
+                fields_removed?: string[];
+                /** @description The identity rule as resolved on the registered schema after this call — the value supplied if replaced, or the preserved prior rule otherwise; null when the schema declares none. Lets a caller confirm the rule without a second describe_entity_type round trip. */
+                canonical_name_fields?:
+                  | (
+                      | string
+                      | {
+                          composite: string[];
+                        }
+                    )[]
+                  | null;
+                activated?: boolean;
+                /** @description True only when this call actually promoted at least one raw_fragment (`migration_result.migrated_count > 0`). Never an echo of the `migrate_existing` request flag. */
+                migrated_existing?: boolean;
+                /** @description Present only when `migrate_existing` was requested. The actual migration outcome, including every fragment group that did not promote and why. */
+                migration_result?: {
+                  migrated_count: number;
+                  skipped: {
+                    field_name: string;
+                    /** @enum {string} */
+                    reason:
+                      | "no_entity_resolution"
+                      | "no_active_schema"
+                      | "observation_insert_failed"
+                      | "already_promoted"
+                      | "unexpected_error";
+                    count: number;
+                  }[];
+                };
+                /**
+                 * @description The scope this call actually wrote to, read from the persisted row rather than re-derived from the request.
+                 * @enum {string}
+                 */
+                scope?: "global" | "user";
+                /** @description Present only when `scope` is `user`: which user's row was written. */
+                user_id?: string | null;
+              } & {
+                [key: string]: unknown;
+              })
+            | components["schemas"]["SchemaRegistryToolErrorResponse"];
+        };
+      };
+    };
+  };
+  registerRelationshipType: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Identifier-shaped name, 1-64 characters, matching ^[A-Za-z][A-Za-z0-9_]*$. Casing-agnostic. A new name that differs from an existing active type only by case is rejected; the pre-existing PART_OF/part_of and DEPENDS_ON/depends_on pairs are grandfathered. */
+          relationship_type: string;
+          description?: string;
+          /**
+           * @description Defaults to "user" — the safe branch. This deliberately inverts register_schema, whose user_specific defaults to false and whose default branch is therefore both the widest blast radius and the one that records no identity.
+           * @default user
+           * @enum {string}
+           */
+          scope?: "user" | "global";
+          /** @description Advisory only. Not enforced at write time. */
+          source_entity_types?: string[];
+          /** @description Advisory only. Not enforced at write time. */
+          target_entity_types?: string[];
+          /** @description Advisory only. Name of the inverse edge. */
+          inverse?: string;
+          /** @description Advisory only. Whether the edge reads the same both ways. */
+          symmetric?: boolean;
+          /** @description ENFORCED. When true, create_relationship refuses an edge of this type that would close a loop among edges OF THIS TYPE within this tenant. Opt-in: a type whose semantics permit cycles should leave this unset. */
+          acyclic?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Relationship type registered */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": {
-            [key: string]: unknown;
+            success: boolean;
+            relationship_type: string;
+            scope: string;
+            state: string;
+            registry_version?: string;
+            registered_at?: string;
+          };
+        };
+      };
+    };
+  };
+  listRelationshipTypes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Case-insensitive filter over name and description. */
+          keyword?: string;
+          /** @enum {string} */
+          scope?: "user" | "global";
+          /** @default false */
+          include_deactivated?: boolean;
+          /**
+           * @description Include edge_count per type. Costs one aggregate query; "rows written", never evidence of registration.
+           * @default false
+           */
+          include_edge_counts?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Registered relationship types */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            relationship_types: {
+              relationship_type?: string;
+              scope?: string;
+              state?: string;
+              description?: string;
+              registry_version?: string;
+              registered_at?: string;
+              source_entity_types?: string[];
+              target_entity_types?: string[];
+              inverse?: string;
+              symmetric?: boolean;
+              acyclic?: boolean;
+              edge_count?: number;
+            }[];
+            total: number;
+            /**
+             * @description Present only when relationship_types is empty. Never infer "no vocabulary exists" from an empty array alone. registry_unseeded means the instance's relationship-type registry (including the built-in vocabulary) failed to seed and is a registry/seed failure that self-repairs on a subsequent read, not a permanent state; call list_relationship_types again rather than concluding no types are available. filtered_to_empty means a supplied keyword matched nothing against an otherwise-populated registry; retry without keyword to see the full vocabulary. Absent when relationship_types is non-empty.
+             * @enum {string}
+             */
+            empty_reason?: "registry_unseeded" | "filtered_to_empty";
+            /** @description Present only alongside empty_reason. Human/agent-readable elaboration of empty_reason and the recommended next call; never present when relationship_types is non-empty. */
+            hint?: string;
           };
         };
       };
@@ -7261,6 +9051,11 @@ export interface operations {
           user_id?: string;
           /** @default false */
           activate?: boolean;
+          /**
+           * @description Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Use when entity_type is rejected with a message naming "force: true" as the remedy. Does not affect any other validation.
+           * @default false
+           */
+          force?: boolean;
         };
       };
     };
@@ -7285,6 +9080,115 @@ export interface operations {
       };
     };
   };
+  correctTransaction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          user_id?: string;
+          idempotency_key: string;
+          entities: {
+            entity_id: string;
+            entity_type: string;
+            expected_observation_count: number;
+            /** @description Declared expected values; missing differs from null. Observation count guards the whole entity. */
+            expected_snapshot: {
+              [key: string]: unknown;
+            };
+            changes: {
+              field: string;
+              value: unknown;
+            }[];
+          }[];
+        };
+      };
+    };
+    responses: {
+      /** @description Committed atomically, or identical request already committed. Snapshots reflect current stored state on replay. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @enum {string} */
+            status: "applied" | "replayed";
+            entities: ({
+              entity_id: string;
+              entity_type: string;
+              snapshot: {
+                [key: string]: unknown;
+              };
+              observation_count: number;
+            } & {
+              [key: string]: unknown;
+            })[];
+          };
+        };
+      };
+      /** @description Invalid transaction, undeclared fields or instance policy denial; nothing committed. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["ErrorEnvelope"]
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"];
+        };
+      };
+      /** @description Authentication required. */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Calling agent capability, attribution or protected-type policy disallows a correction. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description A transaction target is unavailable in the authenticated graph. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Stale precondition, changed idempotency payload or snapshot mismatch; no new changes committed. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Transaction failed and was rolled back. */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
   correct: {
     parameters: {
       query?: never;
@@ -7301,6 +9205,22 @@ export interface operations {
           value: unknown;
           idempotency_key: string;
           user_id?: string;
+          /**
+           * @description Optional entity-level optimistic-concurrency precondition.
+           *     When supplied, the correction is refused with
+           *     `409 ERR_FIELD_VERSION_CONFLICT` if the entity's current
+           *     collision-safe `entity_version` no longer matches this value (unless
+           *     `overwrite` is also true). Omitted: zero behavior change
+           *     from the legacy unconditional-insert path. Entity-scoped
+           *     (any field changing trips it) — use `/patch_array_item`
+           *     for per-row concurrency on structured array fields.
+           */
+          expected_version?: string;
+          /**
+           * @description When true, proceed even if `expected_version` is stale.
+           *     Ignored when `expected_version` is not supplied.
+           */
+          overwrite?: boolean;
         };
       };
     };
@@ -7317,6 +9237,10 @@ export interface operations {
             field?: string;
             value?: unknown;
             message?: string;
+            /** @description True when this is the exact result of an earlier committed request with the same idempotency key. */
+            replayed?: boolean;
+            /** @description Fresh entity-level CAS token after the committed correction. */
+            entity_version?: string;
             /**
              * @description HTTP-only. Always `true` on a 2xx correction. Absent on the
              *     MCP transport.
@@ -7360,6 +9284,30 @@ export interface operations {
         };
       };
       /**
+       * @description Correction rejected. `ERR_STORE_POLICY_DENIED` is returned when the
+       *     correction is well-formed but refused by this instance's configured
+       *     data policy — for example correcting a field whose schema-declared
+       *     `sensitivity_class` exceeds the instance's configured maximum. No
+       *     observation is written. Call `describe_instance_policy` to read the
+       *     policy before retrying. `ERR_ENTITY_TYPE_MISMATCH` is returned when
+       *     the caller-supplied `entity_type` differs from the target entity's
+       *     authoritative stored type; no observation is written. Other
+       *     validation errors use the generic `ErrorEnvelope`.
+       *     `ERR_IDEMPOTENCY_MISMATCH` means the key already committed a
+       *     different canonical correction payload; the original result is
+       *     unchanged and no new observation is written.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
        * @description Correction rejected by policy. `OVERRIDE_POLICY_VIOLATION` is
        *     returned when an `agent_definition` entity's `override_policy`
        *     denies the calling agent role the corrected field; the envelope
@@ -7371,6 +9319,307 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description Two distinct conflict causes share this status:
+       *
+       *     `entity_owner_conflict` — `entity_id` resolves to an existing
+       *     entity owned by a different, non-null user than the writer. No
+       *     observation is written. `correct()` is the raw entity-store
+       *     surface: a caller names `entity_id` directly with no resolution
+       *     step in between, so this is the only refusal point for a
+       *     correction that would otherwise land on another user's entity.
+       *     The envelope details carry `entity_id` and `entity_type`; never
+       *     the other owner's identity or fields.
+       *
+       *     `ERR_FIELD_VERSION_CONFLICT` — the caller supplied
+       *     `expected_version` and it no longer matches the entity's current
+       *     collision-safe `entity_version`. No observation is written. The envelope
+       *     details carry `entity_id`, `field`, `stored_version`, and
+       *     `expected_version` so the caller can re-read and retry. Entity-
+       *     scoped (any field changing trips it); use `/patch_array_item` for
+       *     per-row concurrency on structured array fields instead of
+       *     widening `expected_version` retries.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance policy could not be
+       *     read, so the correction could not be checked against it. No
+       *     observation was written. Retry the request UNCHANGED; the envelope
+       *     carries `retryable: true`.
+       *
+       *     Do not treat this like the `400` `ERR_STORE_POLICY_DENIED` above.
+       *     DENIED means the policy was read and forbids this correction (fix
+       *     the payload). UNAVAILABLE means permission is unknown, and dropping
+       *     the correction in response answers an outage by silently recording
+       *     less.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+        };
+      };
+    };
+  };
+  patchArrayItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          entity_type: string;
+          /** @description Name of the array field to patch. */
+          field: string;
+          /**
+           * @description Name of the field on each array item that identifies it.
+           *     Must match the field's declared `merge_array_by_key`
+           *     `key_field` for the write to be reflected in the
+           *     snapshot's reducer output.
+           */
+          key_field: string;
+          /**
+           * @description Portable non-null JSON scalar identifying the row. Numbers
+           *     must be finite safe integers. The reducer preserves older
+           *     rows with non-scalar or unsafe-number keys as unkeyed legacy
+           *     rows, but new patches cannot create them.
+           */
+          key_value: string | number | boolean;
+          /**
+           * @description Fields to set on the item identified by `key_value`.
+           *     Merged onto the existing item (shallow) when the key
+           *     already exists; `key_field` is always set to `key_value`
+           *     on the written item regardless of what `item` contains.
+           */
+          item: {
+            [key: string]: unknown;
+          };
+          /**
+           * @description Content-hash version of the item as last observed by the
+           *     caller (returned as `item_version` by a prior patch, or
+           *     computable client-side as SHA-256 over UTF-8 stable
+           *     serialization: object keys sort lexicographically, arrays
+           *     preserve order, and scalar values use JSON spellings).
+           *     When supplied and stale, the patch is refused with
+           *     `409 ERR_ARRAY_ITEM_CONFLICT` and nothing is written.
+           *     Omit to always last-write-win on this one row (still
+           *     scoped — never touches other keys).
+           */
+          expected_item_version?: string;
+          /**
+           * @description When true, create only if no item with `key_value` exists.
+           *     Concurrent creators for the same key produce one success
+           *     and one `409 ERR_ARRAY_ITEM_CONFLICT` with the committed item.
+           */
+          expected_item_absent?: boolean;
+          idempotency_key: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Patch applied. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            success?: boolean;
+            entity_id?: string;
+            entity_type?: string;
+            field?: string;
+            key_field?: string;
+            key_value?: string | number | boolean;
+            observation_id?: string;
+            item?: {
+              [key: string]: unknown;
+            };
+            /** @description Content-hash version of the written item. Pass as `expected_item_version` on the next patch to detect races. */
+            item_version?: string;
+            array_length?: number;
+            /** @description Entity snapshot computed from the committed patch. */
+            snapshot?: {
+              [key: string]: unknown;
+            };
+            /** @description True when this response replays the exact prior committed result for the idempotency key. */
+            replayed?: boolean;
+          };
+        };
+      };
+      /**
+       * @description Validation failed, the supplied entity type or key field does not
+       *     match the stored/schema-declared value, the field is not an array
+       *     with an active `merge_array_by_key` policy, or the instance store
+       *     policy denied the write. `ERR_IDEMPOTENCY_MISMATCH` means the key
+       *     already committed a different canonical request payload. No
+       *     observation is written.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["StorePolicyDeniedErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Entity not found (or not owned by the authenticated user). */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `ERR_ARRAY_ITEM_CONFLICT` — the caller supplied
+       *     `expected_item_version` and the stored item's current content
+       *     hash no longer matches (or the item does not exist yet, when the
+       *     caller expected it to). No observation is written. The envelope
+       *     details carry `current_item`, `current_item_version`, and
+       *     `expected_item_version` so the caller can re-apply its change
+       *     against the current item and retry with a fresh version — no
+       *     second round-trip needed.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description Shared authenticated write-rate limit exceeded. Keyed-item patches
+       *     use the same bounded write bucket as `/store` so
+       *     repeated full-array observations cannot grow without a time bound.
+       */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/plain": string;
+        };
+      };
+      /**
+       * @description `ERR_STORE_POLICY_UNAVAILABLE` — the instance could not read its
+       *     write policy and failed closed. No observation is written; retry
+       *     the unchanged request after the service recovers.
+       */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StorePolicyUnavailableErrorEnvelope"];
+        };
+      };
+    };
+  };
+  batchCorrectEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          changes: {
+            field: string;
+            value: unknown;
+          }[];
+          /**
+           * @description `last_observation_at` the caller saw when it loaded the
+           *     snapshot. When supplied and stale (and `overwrite` is not
+           *     true), the batch is refused as a conflict and nothing is
+           *     written.
+           */
+          expected_last_observation_at?: string | null;
+          /** @description Proceed even if the snapshot has moved since `expected_last_observation_at` was read. */
+          overwrite?: boolean;
+          /** @description Base key used to build a deterministic per-field idempotency key for each applied change. */
+          idempotency_prefix?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /**
+       * @description Batch applied. Body shape matches `BatchCorrectionResult` with
+       *     `status: "applied"` (see `src/services/batch_correction.ts`).
+       */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /**
+       * @description `status: "validation_error"` — one or more changes failed
+       *     schema validation. Nothing was written; `validation_errors[]`
+       *     carries `{ field, message }` per failing change.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Entity not found (or not owned by the authenticated user). */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `status: "conflict"` — `expected_last_observation_at` no longer
+       *     matches the stored value and `overwrite` was not set. Nothing was
+       *     written; the body carries `conflict.stored_last_observation_at`,
+       *     `conflict.expected_last_observation_at`, and
+       *     `conflict.conflicting_fields`.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
     };
@@ -7464,6 +9713,13 @@ export interface operations {
             storage?: {
               /** @enum {string} */
               storage_backend?: "local";
+              /**
+               * @description Active NEOTOMA_ENV for the local backend
+               *     (development vs production), so a caller can
+               *     confirm which graph it resolved to before writing.
+               * @enum {string}
+               */
+              environment?: "development" | "production";
               data_dir?: string;
               sqlite_db?: string;
             };
@@ -7614,6 +9870,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   unsubscribe: {
@@ -7642,6 +9916,24 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription is not wholly inside the guest entity grant */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listSubscriptions: {
@@ -7666,6 +9958,15 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -7696,6 +9997,15 @@ export interface operations {
           };
         };
       };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   eventsStream: {
@@ -7714,7 +10024,27 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      /** @description Guest credential is missing, invalid, expired, or revoked */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Subscription does not exist or is outside the guest entity grant */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
       };
     };
   };
