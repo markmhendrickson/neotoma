@@ -99,7 +99,6 @@ describe("bounded internal shared read kernel", () => {
       for (const name of [
         "retrieve_entities",
         "retrieve_entity_snapshot",
-        "retrieve_field_provenance",
         "register_schema",
         "store",
         "unknown",
@@ -202,10 +201,16 @@ describe("bounded internal shared read kernel", () => {
     const context = runtime({ prepare, close } as unknown as DbDatabase);
     const kernel = createInternalReadKernel({ runtime: context, userId: randomUUID() });
     try {
-      for (const operation of ["store", "unknown", "npm_check_update"])
+      for (const operation of ["store", "unknown", "npm_check_update", "toString", "__proto__"])
         await expect(kernel.execute(operation, { entity_id: "fixture" })).rejects.toBeInstanceOf(
           OperationError
         );
+      await expect(
+        kernel.execute("retrieve_field_provenance", { entity_id: "fixture" })
+      ).rejects.toSatisfy(
+        (error: OperationError) =>
+          error.toErrorEnvelope().error_code === "VALIDATION_INVALID_FORMAT"
+      );
       expect(prepare).not.toHaveBeenCalled();
       await expect(kernel.listObservations({ entity_id: "fixture" })).rejects.toSatisfy(
         (error: OperationError) =>

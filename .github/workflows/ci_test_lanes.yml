@@ -155,7 +155,7 @@ jobs:
       # closure excludes transport/provider/initializer imports; the real HTTP,
       # MCP and internal scenarios must keep matching. No continue-on-error.
       - name: Run shared history kernel and transport parity regressions
-        run: npx vitest run --no-file-parallelism tests/unit/read_kernel.test.ts tests/unit/read_kernel_import.test.ts tests/integration/read_kernel_transport_parity.test.ts
+        run: npx vitest run --no-file-parallelism tests/unit/read_kernel.test.ts tests/unit/read_kernel_import.test.ts tests/integration/read_kernel_transport_parity.test.ts tests/cli/cli_observation_history.test.ts
 
       # #2046 instance-skill MCP initialize effect regression. The service has
       # unit coverage, but that can mock away backend-driver SQL mistakes. This

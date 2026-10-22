@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve } from "node:path";
 import { getDb } from "../../src/repositories/db/connection.js";
 import { db } from "../../src/db.js";
 import { config } from "../../src/config.js";
@@ -115,6 +118,58 @@ describe("shared legacy observation history query", () => {
       expect(http.status).toBe(500);
       expect(http.json.error_code).toBe("DB_QUERY_FAILED");
       expect(JSON.stringify(http.json)).not.toContain("private query detail");
+      // Natural built generic CLI must preserve the shared DB error as well.
+      const env: NodeJS.ProcessEnv = {
+        HOME: process.env.HOME,
+        USERPROFILE: process.env.HOME,
+        NODE_ENV: "test",
+        NEOTOMA_ENV: "development",
+        OPENAI_API_KEY: "",
+        NEOTOMA_DATA_DIR: config.dataDir,
+        NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR: "1",
+      };
+      for (const key of [
+        "PATH",
+        "TMPDIR",
+        "NODE_OPTIONS",
+        "SCHEMA_GATE_NETWORK_JOURNAL",
+        "SCHEMA_GATE_IPC_ROOT",
+      ])
+        if (process.env[key] !== undefined) env[key] = process.env[key];
+      let failure: { code?: unknown; stdout?: string; stderr?: string } | undefined;
+      try {
+        await promisify(execFile)(
+          process.execPath,
+          [
+            resolve("dist/cli/index.js"),
+            "--env",
+            "dev",
+            "--json",
+            "--no-log-file",
+            "--api-only",
+            "--base-url",
+            offline.base,
+            "request",
+            "--operation",
+            "listObservationsForEntity",
+            "--body",
+            JSON.stringify({ entity_id: id }),
+          ],
+          { env, timeout: 20000 }
+        );
+      } catch (error) {
+        failure = error as typeof failure;
+      }
+      expect(failure?.code).toBe(1);
+      expect(failure!.stdout).toBe("");
+      const line = failure!
+        .stderr!.trim()
+        .split("\n")
+        .reverse()
+        .find((line) => line.startsWith('{"error":'));
+      expect(line, failure!.stderr).toBeDefined();
+      expect(JSON.parse(line!).error).toContain("DB_QUERY_FAILED");
+      expect(JSON.parse(line!).error).not.toContain("private query detail");
     } finally {
       spy.mockRestore();
     }

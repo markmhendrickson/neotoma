@@ -3,7 +3,7 @@ export async function resolve(specifier, context, next) {
   const resolved = await next(specifier, context);
   const url = resolved.url.split("?")[0];
   if (
-    /\/dist\/(server|actions)\.js$/.test(url) ||
+    /\/dist\/(server|actions|utils\/logger)\.js$/.test(url) ||
     /\/dist\/repositories\/(db\/connection|sqlite\/sqlite_client)\.js$/.test(url) ||
     /\/node_modules\/(openai|@modelcontextprotocol\/sdk)\//.test(url)
   ) {

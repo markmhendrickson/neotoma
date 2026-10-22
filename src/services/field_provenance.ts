@@ -31,7 +31,7 @@ export class FieldProvenanceError extends Error {
     this.statusCode = code === "RESOURCE_NOT_FOUND" ? 404 : 500;
   }
 
-  toErrorEnvelope() {
+  toErrorEnvelope(): components["schemas"]["ErrorEnvelope"] {
     return {
       error_code: this.code,
       message: this.message,

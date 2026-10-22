@@ -6,12 +6,19 @@ import { syncBuiltinESMExports } from "node:module";
 const before = { ...process.env };
 const directory = process.argv[2];
 const manifest = JSON.parse(fs.readFileSync(directory + "/manifest.json", "utf8"));
-await assert.rejects(
-  () => import("../../../dist/server.js?positive-control"),
-  /READ_KERNEL_FORBIDDEN_IMPORT/
-);
-assert.equal(fs.readFileSync(process.env.KERNEL_IMPORT_JOURNAL, "utf8"), "blocked\n");
-fs.writeFileSync(process.env.KERNEL_IMPORT_JOURNAL, "");
+for (const forbidden of [
+  "../../../dist/server.js?positive-control",
+  "../../../dist/actions.js?positive-control",
+  "../../../dist/utils/logger.js?positive-control",
+  "../../../dist/repositories/db/connection.js?positive-control",
+  "../../../dist/repositories/sqlite/sqlite_client.js?positive-control",
+  "openai",
+  "@modelcontextprotocol/sdk/types.js",
+]) {
+  await assert.rejects(() => import(forbidden), /READ_KERNEL_FORBIDDEN_IMPORT/);
+  assert.equal(fs.readFileSync(process.env.KERNEL_IMPORT_JOURNAL, "utf8"), "blocked\n");
+  fs.writeFileSync(process.env.KERNEL_IMPORT_JOURNAL, "");
+}
 assert.throws(
   () => fetch("https://example.invalid/kernel-positive-control"),
   /external network denied/
@@ -78,6 +85,30 @@ await Promise.all(
   resources.map(async ({ fixture, kernel }) => {
     const result = await kernel.listObservations({ entity_id: fixture.id });
     assert.equal(result.total, 2);
+    const provenance = await kernel.retrieveFieldProvenance({
+      entity_id: fixture.id,
+      field: "status",
+    });
+    assert.equal(provenance.value, fixture.label + "-corrected");
+    assert.equal(provenance.observations.length, 1);
+    assert.equal(provenance.source, null);
+    assert.deepEqual(provenance.sources, []);
+    assert.equal(provenance.source_observation.observation_source, "correction");
+    assert.equal(provenance.source_observation.idempotency_key, "same-correction");
+    assert.deepEqual(provenance.source_observation.fields, {
+      status: fixture.label + "-corrected",
+    });
+    const title = await kernel.execute("retrieve_field_provenance", {
+      entity_id: fixture.id,
+      field: "title",
+    });
+    assert.equal(title.observations.length, 1);
+    assert.equal(title.sources.length, 1);
+    assert.deepEqual(Object.keys(title.source_observation.fields), ["title"]);
+    await assert.rejects(
+      () => kernel.retrieveFieldProvenance({ entity_id: fixture.id, field: "missing" }),
+      (error) => error.toErrorEnvelope().error_code === "RESOURCE_NOT_FOUND"
+    );
     assert.deepEqual(
       result.observations.map((row) => row.fields.status),
       [fixture.label + "-corrected", fixture.label]

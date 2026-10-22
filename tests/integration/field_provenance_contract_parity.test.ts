@@ -7,6 +7,11 @@ import addFormats from "ajv-formats";
 import yaml from "js-yaml";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "../../src/db.js";
+import { config } from "../../src/config.js";
+import { getDb } from "../../src/repositories/db/connection.js";
+import { EmbeddedRuntimeContext } from "../../src/core/runtime_context.js";
+import { createEmbeddedRuntimeConfiguration } from "../../src/core/runtime_configuration.js";
+import { createInternalReadKernel } from "../../src/core/read_kernel.js";
 import { NeotomaServer } from "../../src/server.js";
 import { routeAcceptsGuestPrincipal } from "../../src/actions.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
@@ -43,6 +48,8 @@ const cleanError = (error: Record<string, unknown>) => {
 
 describe("complete field provenance contract (#2649)", () => {
   let server: NeotomaServer;
+  let context: EmbeddedRuntimeContext;
+  let kernel: ReturnType<typeof createInternalReadKernel>;
   let offline: Awaited<ReturnType<typeof startOfflineServer>>;
   const entities = new Set<string>();
   const sources = new Set<string>();
@@ -70,6 +77,14 @@ describe("complete field provenance contract (#2649)", () => {
       user_id: FOREIGN,
     });
     expect(mcp).toEqual(rest.body);
+    expect(await kernel.retrieveFieldProvenance({ entity_id: entityId, field })).toEqual(rest.body);
+    expect(
+      await kernel.execute("retrieve_field_provenance", {
+        entity_id: entityId,
+        field,
+        user_id: FOREIGN,
+      })
+    ).toEqual(rest.body);
     expect(validate(mcp), JSON.stringify(validate.errors)).toBe(true);
     return mcp;
   }
@@ -83,6 +98,14 @@ describe("complete field provenance contract (#2649)", () => {
     } catch (error) {
       caught = error as McpError;
     }
+    let native: { toErrorEnvelope(): Record<string, unknown> } | undefined;
+    try {
+      await kernel.retrieveFieldProvenance({ entity_id: entityId, field });
+    } catch (error) {
+      native = error as typeof native;
+    }
+    expect(native).toBeDefined();
+    expect(cleanError(native!.toErrorEnvelope())).toEqual(cleanError(rest.body));
     expect(caught).toBeInstanceOf(McpError);
     expect(caught!.code).toBe(status === 404 ? ErrorCode.InvalidParams : ErrorCode.InternalError);
     expect(cleanError(caught!.data as Record<string, unknown>)).toEqual(cleanError(rest.body));
@@ -135,6 +158,17 @@ describe("complete field provenance contract (#2649)", () => {
   beforeAll(async () => {
     server = makeMcpServer();
     offline = await startOfflineServer();
+    context = new EmbeddedRuntimeContext({
+      database: await getDb(),
+      configuration: createEmbeddedRuntimeConfiguration({
+        dataDirectory: config.dataDir,
+        packageRoot: config.projectRoot,
+      }),
+      legacyIdentityPolicy: { tenantScopedEntityIds: false },
+      attributionPolicy: { anonymous_writes: "allow" },
+      adapters: {},
+    });
+    kernel = createInternalReadKernel({ runtime: context, userId: USER });
     await schemaRegistry.register({
       entity_type: TYPE,
       schema_version: "1.0",
@@ -160,6 +194,8 @@ describe("complete field provenance contract (#2649)", () => {
     });
   });
   afterAll(async () => {
+    await kernel?.dispose();
+    await context?.dispose();
     vi.restoreAllMocks();
     if (extraObservations.size)
       await db

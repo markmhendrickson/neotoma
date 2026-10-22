@@ -1,4 +1,3 @@
-import { logger } from "./utils/logger.js";
 import { createLocalDbClient, LocalDbClient } from "./repositories/sqlite/local_db_adapter.js";
 
 export const db: LocalDbClient = createLocalDbClient();
@@ -8,6 +7,8 @@ export function getServiceRoleClient(): LocalDbClient {
 }
 
 export async function initDatabase(): Promise<void> {
+  // Logging mode is an ambient legacy concern; ordinary injected reads do not load it.
+  const { logger } = await import("./utils/logger.js");
   // Run migrations before initializing database
   // Note: Migrations are skipped in MCP mode to avoid stdout pollution
   // Apply migrations manually via: npm run migrate
