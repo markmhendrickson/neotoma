@@ -14,6 +14,7 @@ Emitted by `buildErrorEnvelope(code, message, details?)` in `src/actions.ts`. Us
 interface ErrorEnvelope {
   error_code: string; // e.g., 'INGESTION_INVALID_FILE'
   message: string; // Human-readable description
+  hint?: string; // Actionable recovery guidance
   details?: Record<string, any>; // Additional context (no PII)
   trace_id?: string; // Distributed tracing ID
   timestamp: string; // ISO 8601
@@ -21,6 +22,8 @@ interface ErrorEnvelope {
 ```
 
 Wire format: `{ error: ErrorEnvelope }`.
+
+MCP `RESPONSE_TOO_LARGE` uses this envelope inside the tool's text response. Its `details` provide `original_size_bytes` and `limit_bytes`; no partial payload is returned. Narrow the request and retry. This is a successful MCP transport response carrying a withheld-result error, not an HTTP status code.
 
 ### 2. Resolution envelope (`ERR_STORE_RESOLUTION_FAILED`)
 
@@ -83,6 +86,12 @@ Process wiring: the pre-PR checklist in `docs/architecture/change_guardrails_rul
 Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new field (including `hint`, `details` sub-keys, new issue codes) follows the OpenAPI contract flow: spec first, regenerate types, populate from server, test at contract level. See `docs/architecture/openapi_contract_flow.md`.
 
 ## Canonical Error Codes
+
+### MCP Result Errors
+
+| Code | Meaning | HTTP | Retry? |
+|------|---------|------|--------|
+| `RESPONSE_TOO_LARGE` | Serialized MCP result exceeded `NEOTOMA_MCP_RESPONSE_MAX_BYTES` and was withheld. Narrow and retry. | n/a | Yes, with a narrower request |
 
 ### Ingestion Errors
 

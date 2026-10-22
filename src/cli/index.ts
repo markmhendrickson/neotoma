@@ -13366,6 +13366,7 @@ entitiesCommand
   .argument("<entityId>", "Entity ID")
   .option("--direction <direction>", "Direction: inbound, outbound, both", "both")
   .option("--relationship-types <types>", "Comma-separated relationship types to filter")
+  .option("--limit <n>", "Maximum relationships (default 50, max 500)", "50")
   .option("--max-hops <n>", "Maximum relationship hops (1 = direct, 2 = 2-hop, etc.)", "1")
   .option("--include-entities", "Include full entity snapshots in response", true)
   .option("--user-id <userId>", "User ID")
@@ -13386,6 +13387,7 @@ entitiesCommand
         direction: opts.direction,
         relationship_types: relationshipTypes,
         max_hops: Number(opts.maxHops),
+        limit: Number(opts.limit),
         include_entities: opts.includeEntities,
       },
     });

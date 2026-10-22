@@ -132,6 +132,8 @@ It is read-only (declares nothing) and reports, per type, the undeclared `fragme
 
 ## Retrieval command quick reference (CLI backup)
 
+`neotoma entities related <entityId> --limit <n>` accepts 1–500 (default 50). Treat `truncated: true` as an incomplete list and use `matched_entity_count` and `truncation_hint` to narrow or raise the limit. The canonical MCP behavior is in `docs/developer/mcp/instructions.md`.
+
 When MCP is not available and prompt context may depend on prior memory:
 
 ```bash

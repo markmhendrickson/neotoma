@@ -477,6 +477,9 @@ components:
     ErrorEnvelope:
       type: object
       properties:
+        hint:
+          type: string
+          description: Actionable recovery guidance.
         error_code:
           type: string
         message:
@@ -7139,14 +7142,14 @@ paths:
                   default: true
                 limit:
                   type: integer
-                  default: 200
+                  default: 50
                   minimum: 1
-                  maximum: 1000
+                  maximum: 500
                   description: >-
                     Maximum relationships to traverse and return. Bounds both the
                     edge list and the entities hydrated from it. When more exist
                     than the limit allows, the response sets `truncated: true` and
-                    carries `traversed_relationships` plus a narrowing hint.
+                    carries `matched_entity_count` plus a narrowing hint.
       responses:
         "200":
           description: Related entities
@@ -7155,6 +7158,25 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  relationships:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  entities:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  truncated:
+                    type: boolean
+                    description: True when more matching relationships exist than the limit allows.
+                  limit:
+                    type: integer
+                    description: Effective relationship limit when truncated.
+                  matched_entity_count:
+                    type: integer
+                    description: Number of distinct matched entities in the returned relationships.
+                  truncation_hint:
+                    type: string
+                    description: How to narrow the request or raise the limit when truncated.
 
   /retrieve_graph_neighborhood:
     post:

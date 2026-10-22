@@ -1129,11 +1129,10 @@ export const RetrieveRelatedEntitiesSchema = z.object({
    * persist in the client's context for the rest of the session, so that cost
    * was re-paid on every later turn.
    *
-   * Defaults to 200, matching the ceiling `observations_limit` above already
-   * uses for the same reason. A caller who genuinely needs more asks for it
+   * Defaults to 50; callers may explicitly request up to 500. A caller who genuinely needs more asks for it
    * explicitly, which is the polarity an unbounded default had backwards.
    */
-  limit: z.number().int().positive().max(1000).optional().default(200),
+  limit: z.number().int().positive().max(500).optional().default(50),
 });
 
 /**

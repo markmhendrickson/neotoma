@@ -369,7 +369,7 @@ export function buildToolDefinitions(
       name: "retrieve_related_entities",
       description: desc(
         "retrieve_related_entities",
-        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal."
+        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal with a default limit of 50 (max 500); truncated and matched_entity_count identify incomplete results."
       ),
       inputSchema: {
         type: "object",
@@ -394,6 +394,14 @@ export function buildToolDefinitions(
             type: "number",
             description: "Maximum number of relationship hops (1 = direct, 2 = 2-hop, etc.)",
             default: 1,
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 500,
+            default: 50,
+            description:
+              "Maximum relationships returned and entities hydrated (default 50, max 500). A capped response sets truncated: true.",
           },
           include_entities: {
             type: "boolean",

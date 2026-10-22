@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **739**
-- Backend and repo Vitest files: **703**
+- Total automated test files: **741**
+- Backend and repo Vitest files: **705**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 205 |
+| Vitest unit tests | 206 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 222 |
+| Vitest integration tests | 223 |
 | Vitest CLI tests | 88 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (205):**
+**Files (206):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -230,6 +230,7 @@ flowchart TD
 - `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
+- `tests/unit/mcp_response_budget.test.ts`
 - `tests/unit/mcp_server_authenticated_principal.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
 - `tests/unit/mcp_sse_keepalive.test.ts`
@@ -464,7 +465,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (222):**
+**Files (223):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -583,6 +584,7 @@ flowchart TD
 - `tests/integration/mcp_oauth_token_endpoint.test.ts`
 - `tests/integration/mcp_oauth_trusted_callback.test.ts`
 - `tests/integration/mcp_query_variations.test.ts`
+- `tests/integration/mcp_related_entities_limit.test.ts`
 - `tests/integration/mcp_relationship_variations.test.ts`
 - `tests/integration/mcp_resource_variations.test.ts`
 - `tests/integration/mcp_resources.test.ts`

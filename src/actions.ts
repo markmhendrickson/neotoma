@@ -10888,7 +10888,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
       direction = "both",
       max_hops = 1,
       include_entities = true,
-      limit = 200,
+      limit = 50,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
 
@@ -10901,7 +10901,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
     const relatedIds = new Set<string>();
     let currentLevel = [entity_id];
 
-    for (let hop = 0; hop < max_hops; hop++) {
+    traversal: for (let hop = 0; hop < max_hops; hop++) {
       const nextLevel: string[] = [];
 
       for (const currentId of currentLevel) {
@@ -10912,7 +10912,8 @@ app.post("/retrieve_related_entities", async (req, res) => {
             .select("*")
             .eq("source_entity_id", currentId)
             .eq("user_id", userId)
-            .order("relationship_key", { ascending: true });
+            .order("relationship_key", { ascending: true })
+            .limit(Math.max(1, limit - relationships.length + 1));
 
           if (relationship_types && relationship_types.length > 0) {
             query = query.in("relationship_type", relationship_types);
@@ -10928,6 +10929,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
                 nextLevel.push(rel.target_entity_id);
               }
             }
+            if (relationships.length > limit) break traversal;
           }
         }
 
@@ -10938,7 +10940,8 @@ app.post("/retrieve_related_entities", async (req, res) => {
             .select("*")
             .eq("target_entity_id", currentId)
             .eq("user_id", userId)
-            .order("relationship_key", { ascending: true });
+            .order("relationship_key", { ascending: true })
+            .limit(Math.max(1, limit - relationships.length + 1));
 
           if (relationship_types && relationship_types.length > 0) {
             query = query.in("relationship_type", relationship_types);
@@ -10954,19 +10957,16 @@ app.post("/retrieve_related_entities", async (req, res) => {
                 nextLevel.push(rel.source_entity_id);
               }
             }
+            if (relationships.length > limit) break traversal;
           }
         }
       }
 
       if (nextLevel.length === 0) break;
-      // Stop descending once the cap is reached (#2432), matching the MCP
-      // handler in server.ts so the two paths cannot diverge.
-      if (relationships.length >= limit) break;
       currentLevel = nextLevel;
     }
 
-    // Apply the relationship cap (#2432). Previously unbounded: each hop ran
-    // `.select("*")` with no limit, so a hub entity returned every edge it had.
+    // Queries fetch at most the remaining rows plus one lookahead row.
     const relationshipsTruncated = relationships.length > limit;
     const cappedRelationships = relationshipsTruncated
       ? relationships.slice(0, limit)
@@ -11015,7 +11015,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
       ...(relationshipsTruncated
         ? {
             limit,
-            traversed_relationships: relationships.length,
+            matched_entity_count: retainedIds.size,
             truncation_hint:
               "More relationships exist than the limit allows. Raise `limit`, narrow " +
               "`relationship_types`, or set `direction` to one side.",

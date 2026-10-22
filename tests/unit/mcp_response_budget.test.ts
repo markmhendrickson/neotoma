@@ -18,9 +18,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyResponseBudget,
-  resolveMaxResponseChars,
-  DEFAULT_MAX_RESPONSE_CHARS,
-  MIN_CONFIGURABLE_RESPONSE_CHARS,
+  resolveMaxResponseBytes,
+  DEFAULT_MAX_RESPONSE_BYTES,
+  MIN_CONFIGURABLE_RESPONSE_BYTES,
 } from "../../src/mcp_response_budget.js";
 
 describe("applyResponseBudget (#2432)", () => {
@@ -31,7 +31,7 @@ describe("applyResponseBudget (#2432)", () => {
     const result = applyResponseBudget(payload, 1_000);
     expect(result.truncated).toBe(false);
     expect(result.text).toBe(payload);
-    expect(result.originalChars).toBe(payload.length);
+    expect(result.originalBytes).toBe(payload.length);
   });
 
   it("passes a payload exactly at the limit (boundary is inclusive)", () => {
@@ -43,7 +43,7 @@ describe("applyResponseBudget (#2432)", () => {
     expect(result.text).toBe(payload);
   });
 
-  it("withholds a payload one character over the limit", () => {
+  it("withholds a payload one byte over the limit", () => {
     const payload = "x".repeat(501);
     const result = applyResponseBudget(payload, 500);
     expect(result.truncated).toBe(true);
@@ -62,10 +62,22 @@ describe("applyResponseBudget (#2432)", () => {
     expect(result.truncated).toBe(true);
 
     const parsed = JSON.parse(result.text) as Record<string, unknown>;
-    expect(parsed.error).toBe("RESPONSE_TOO_LARGE");
-    expect(parsed.original_size_chars).toBe(payload.length);
-    expect(parsed.limit_chars).toBe(10_000);
-    expect(String(parsed.hint)).toMatch(/include_snapshots|limit|cursor/);
+    expect((parsed.error as Record<string, unknown>).error_code).toBe("RESPONSE_TOO_LARGE");
+    expect(
+      (parsed.error as Record<string, unknown>).details &&
+        ((parsed.error as Record<string, unknown>).details as Record<string, unknown>)
+          .original_size_bytes
+    ).toBe(payload.length);
+    expect(
+      ((parsed.error as Record<string, unknown>).details as Record<string, unknown>).limit_bytes
+    ).toBe(10_000);
+    expect(String((parsed.error as Record<string, unknown>).hint)).toMatch(/Narrow/);
+  });
+
+  it("counts UTF-8 bytes rather than JavaScript characters", () => {
+    const payload = "é".repeat(501);
+    expect(applyResponseBudget(payload, 1_000).truncated).toBe(true);
+    expect(applyResponseBudget(payload.slice(0, 500), 1_000).truncated).toBe(false);
   });
 
   it("returns an envelope far smaller than the payload it replaced", () => {
@@ -83,17 +95,17 @@ describe("applyResponseBudget (#2432)", () => {
     // would also silently understate the problem in logs.
     const payload = "x".repeat(250_000);
     const result = applyResponseBudget(payload, 100_000);
-    expect(result.originalChars).toBe(250_000);
+    expect(result.originalBytes).toBe(250_000);
   });
 });
 
-describe("resolveMaxResponseChars — fails toward the smaller result (#2432)", () => {
+describe("resolveMaxResponseBytes — fails toward the smaller result (#2432)", () => {
   it("uses the default when unset", () => {
-    expect(resolveMaxResponseChars(undefined)).toBe(DEFAULT_MAX_RESPONSE_CHARS);
+    expect(resolveMaxResponseBytes(undefined)).toBe(DEFAULT_MAX_RESPONSE_BYTES);
   });
 
   it("uses an explicitly configured value", () => {
-    expect(resolveMaxResponseChars("50000")).toBe(50_000);
+    expect(resolveMaxResponseBytes("50000")).toBe(50_000);
   });
 
   it.each([
@@ -103,28 +115,33 @@ describe("resolveMaxResponseChars — fails toward the smaller result (#2432)", 
     ["NaN-producing", "12abc"],
     ["infinity", "Infinity"],
     ["fractional", "1000.5"],
+    ["scientific notation", "1e9"],
+    ["hex notation", "0xFFFF"],
   ])("falls back to the default for a %s value", (_label, raw) => {
     // The failure this guards is a typo in an env var silently restoring
     // unbounded responses. Every malformed spelling must take the RESTRICTIVE
     // branch, so there is deliberately no value that disables the guard by
     // being wrong — removing the ceiling requires a large number on purpose.
-    expect(resolveMaxResponseChars(raw)).toBe(DEFAULT_MAX_RESPONSE_CHARS);
+    expect(resolveMaxResponseBytes(raw)).toBe(DEFAULT_MAX_RESPONSE_BYTES);
   });
 
   it.each([
     ["zero", "0"],
     ["negative", "-1"],
     ["implausibly small", "10"],
-  ])("falls back to the default for a %s value rather than truncating everything", (_label, raw) => {
-    // The opposite failure: a ceiling small enough to truncate every response
-    // would be an outage, so an implausible value is treated as
-    // misconfiguration rather than honoured literally.
-    expect(resolveMaxResponseChars(raw)).toBe(DEFAULT_MAX_RESPONSE_CHARS);
-  });
+  ])(
+    "falls back to the default for a %s value rather than truncating everything",
+    (_label, raw) => {
+      // The opposite failure: a ceiling small enough to truncate every response
+      // would be an outage, so an implausible value is treated as
+      // misconfiguration rather than honoured literally.
+      expect(resolveMaxResponseBytes(raw)).toBe(DEFAULT_MAX_RESPONSE_BYTES);
+    }
+  );
 
   it("accepts a value exactly at the minimum", () => {
-    expect(resolveMaxResponseChars(String(MIN_CONFIGURABLE_RESPONSE_CHARS))).toBe(
-      MIN_CONFIGURABLE_RESPONSE_CHARS
+    expect(resolveMaxResponseBytes(String(MIN_CONFIGURABLE_RESPONSE_BYTES))).toBe(
+      MIN_CONFIGURABLE_RESPONSE_BYTES
     );
   });
 
@@ -132,25 +149,32 @@ describe("resolveMaxResponseChars — fails toward the smaller result (#2432)", 
     // Anchors the default to the evidence that motivated the guard rather than
     // to a round number: if someone raises it above 83,773, the responses this
     // issue exists to bound would pass through again.
-    expect(DEFAULT_MAX_RESPONSE_CHARS).toBeLessThan(83_773);
+    expect(DEFAULT_MAX_RESPONSE_BYTES).toBe(65_536);
   });
 });
 
 describe("RetrieveRelatedEntitiesSchema limit (#2432)", () => {
-  it("defaults to 200 when the caller supplies no limit", async () => {
+  it("advertises the limit to MCP clients", async () => {
+    const { buildToolDefinitions } = await import("../../src/tool_definitions.js");
+    const tool = buildToolDefinitions().find((item) => item.name === "retrieve_related_entities");
+    const properties = tool?.inputSchema.properties as Record<string, Record<string, unknown>>;
+    expect(properties.limit).toMatchObject({ type: "integer", default: 50, maximum: 500 });
+  });
+
+  it("defaults to 50 when the caller supplies no limit", async () => {
     // This traversal had NO bound of any kind: each hop ran `.select("*")`
     // with no `.limit()`, and `max_hops` multiplied that rather than capping
     // it, so a hub entity returned every edge it had. The default is the
     // whole point — an unbounded default is the defect.
     const { RetrieveRelatedEntitiesSchema } = await import("../../src/shared/action_schemas.js");
     const parsed = RetrieveRelatedEntitiesSchema.parse({ entity_id: "ent_abc" });
-    expect(parsed.limit).toBe(200);
+    expect(parsed.limit).toBe(50);
   });
 
   it("accepts an explicit larger limit up to the ceiling", async () => {
     const { RetrieveRelatedEntitiesSchema } = await import("../../src/shared/action_schemas.js");
-    expect(RetrieveRelatedEntitiesSchema.parse({ entity_id: "ent_abc", limit: 1000 }).limit).toBe(
-      1000
+    expect(RetrieveRelatedEntitiesSchema.parse({ entity_id: "ent_abc", limit: 500 }).limit).toBe(
+      500
     );
   });
 
@@ -164,6 +188,8 @@ describe("RetrieveRelatedEntitiesSchema limit (#2432)", () => {
   it("rejects a zero or negative limit", async () => {
     const { RetrieveRelatedEntitiesSchema } = await import("../../src/shared/action_schemas.js");
     expect(() => RetrieveRelatedEntitiesSchema.parse({ entity_id: "ent_abc", limit: 0 })).toThrow();
-    expect(() => RetrieveRelatedEntitiesSchema.parse({ entity_id: "ent_abc", limit: -5 })).toThrow();
+    expect(() =>
+      RetrieveRelatedEntitiesSchema.parse({ entity_id: "ent_abc", limit: -5 })
+    ).toThrow();
   });
 });

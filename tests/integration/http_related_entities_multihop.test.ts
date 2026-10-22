@@ -26,7 +26,9 @@ describe("HTTP /retrieve_related_entities multi-hop traversal", () => {
   const b = `ent_mh_b_${suffix}`;
   const c = `ent_mh_c_${suffix}`;
   const d = `ent_mh_d_${suffix}`;
-  const entityIds = [a, b, c, d];
+  const hub = `ent_mh_hub_${suffix}`;
+  const spokes = Array.from({ length: 52 }, (_, i) => `ent_mh_spoke_${i}_${suffix}`);
+  const entityIds = [a, b, c, d, hub, ...spokes];
 
   // Directed chain a->b->c->d, plus a back-edge d->a to form a cycle.
   const edges: Array<{ source: string; target: string }> = [
@@ -34,6 +36,7 @@ describe("HTTP /retrieve_related_entities multi-hop traversal", () => {
     { source: b, target: c },
     { source: c, target: d },
     { source: d, target: a },
+    ...spokes.map((target) => ({ source: hub, target })),
   ];
   const relationshipKeys = edges.map((e) => `related_to:${e.source}:${e.target}`);
 
@@ -121,5 +124,28 @@ describe("HTTP /retrieve_related_entities multi-hop traversal", () => {
     expect(ids.has(c)).toBe(true);
     expect(ids.has(d)).toBe(true);
     expect(ids.has(a)).toBe(false);
+  });
+
+  it("HTTP returns a bounded hub and an explicit incomplete-result signal", async () => {
+    const response = await fetch(`${API_BASE}/retrieve_related_entities`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_id: hub, direction: "outbound", limit: 50 }),
+    });
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as {
+      relationships: unknown[];
+      entities: unknown[];
+      truncated: boolean;
+      limit: number;
+      matched_entity_count: number;
+      truncation_hint: string;
+    };
+    expect(result.relationships).toHaveLength(50);
+    expect(result.entities).toHaveLength(50);
+    expect(result.truncated).toBe(true);
+    expect(result.limit).toBe(50);
+    expect(result.matched_entity_count).toBe(50);
+    expect(result.truncation_hint).toContain("limit");
   });
 });
