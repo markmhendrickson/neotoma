@@ -216,6 +216,176 @@ describe("CLI backup verify (smoke)", () => {
     expect(report.status).toBe("valid");
   });
 
+  it.each(["traversal", "absolute", "symlink"] as const)(
+    "does not validate an external database referenced by %s",
+    async (kind) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-containment-");
+      const outside = path.join(dataDir, "neotoma.db");
+      const backupDir = path.join(parent, "backup");
+      await fs.mkdir(backupDir);
+      const dbName =
+        kind === "traversal" ? "../data/neotoma.db" : kind === "absolute" ? outside : "external.db";
+      if (kind === "symlink") await fs.symlink(outside, path.join(backupDir, dbName));
+      const dbBytes = await fs.readFile(outside);
+      await fs.writeFile(
+        path.join(backupDir, "manifest.json"),
+        JSON.stringify({
+          contents: { neotoma_db: dbName },
+          checksums: { [dbName]: "sha256:" + createHash("sha256").update(dbBytes).digest("hex") },
+        })
+      );
+
+      const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+      expect(verified.error).toBeUndefined();
+      expect(verified.stdout + verified.stderr).toContain("outside backup directory");
+      expect(verified.exitCode, verified.stdout + verified.stderr).toBe(1);
+      const report = JSON.parse(verified.stdout) as { status: string; issues?: string[] };
+      expect(report.status).toBe("invalid");
+      expect(report.issues?.join(" ")).toContain("outside backup directory");
+      expect(verified.stderr).not.toContain("VERIFY_INSTRUMENT_FAILURE");
+    }
+  );
+
+  it("rejects a directory symlink to external files in verification and restore", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-dir-containment-");
+    const backupDir = path.join(parent, "backup");
+    const outsideDir = path.join(parent, "outside-sources");
+    const target = path.join(parent, "target");
+    await fs.mkdir(backupDir);
+    await fs.mkdir(outsideDir);
+    await fs.writeFile(path.join(outsideDir, "outside.txt"), "external");
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backupDir, "neotoma.db"));
+    await fs.symlink(outsideDir, path.join(backupDir, "sources"));
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db", sources: "sources/" } })
+    );
+
+    const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+    expect(verified.error).toBeUndefined();
+    expect(verified.exitCode, verified.stdout + verified.stderr).toBe(1);
+    expect((JSON.parse(verified.stdout) as { issues: string[] }).issues.join(" ")).toContain(
+      "outside backup directory"
+    );
+
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(await fs.stat(target).catch(() => null)).toBeNull();
+  });
+
+  it("rejects a referenced directory containing an external symlink", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-nested-symlink-");
+    const backupDir = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(path.join(backupDir, "sources"), { recursive: true });
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backupDir, "neotoma.db"));
+    await fs.symlink(
+      path.join(dataDir, "neotoma.db"),
+      path.join(backupDir, "sources", "external.db")
+    );
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db", sources: "sources/" } })
+    );
+
+    const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+    expect(verified.exitCode, verified.stdout + verified.stderr).toBe(1);
+    expect((JSON.parse(verified.stdout) as { issues: string[] }).issues.join(" ")).toContain(
+      "referenced directory contains a symlink"
+    );
+
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(await fs.stat(path.join(target, "neotoma.db")).catch(() => null)).toBeNull();
+  });
+
+  it("does not restore an external database or write through a target symlink", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-restore-containment-");
+    const backupDir = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(backupDir);
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "../data/neotoma.db" } })
+    );
+
+    const external = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+      {}
+    );
+    expect(external.exitCode, external.stdout + external.stderr).toBe(1);
+    expect(await fs.stat(target).catch(() => null)).toBeNull();
+
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backupDir, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+    );
+    await fs.mkdir(target);
+    await fs.symlink(path.join(dataDir, "neotoma.db"), path.join(target, "neotoma.db"));
+    const before = await fs.readFile(path.join(dataDir, "neotoma.db"));
+    const unsafeTarget = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+      {}
+    );
+    expect(unsafeTarget.exitCode, unsafeTarget.stdout + unsafeTarget.stderr).toBe(1);
+    expect(await fs.readFile(path.join(dataDir, "neotoma.db"))).toEqual(before);
+  });
+
+  it("restores a contained legacy database and real WAL", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-local-legacy-");
+    const backupDir = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    const sourceDbPath = path.join(dataDir, "neotoma.db");
+    const sourceDb = createFixtureSqliteDatabase(sourceDbPath);
+    sourceDb.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0");
+    sourceDb.exec("insert into test_data values ('from-wal')");
+    await fs.mkdir(path.join(backupDir, "sources"), { recursive: true });
+    await fs.copyFile(sourceDbPath, path.join(backupDir, "neotoma.db"));
+    await fs.copyFile(`${sourceDbPath}-wal`, path.join(backupDir, "neotoma.db-wal"));
+    await fs.writeFile(path.join(backupDir, "sources", "source.txt"), "source-content");
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify({
+        db_snapshot_method: "file_copy",
+        contents: {
+          neotoma_db: "neotoma.db",
+          wal: "neotoma.db-wal",
+          sources: "sources/",
+        },
+      })
+    );
+
+    const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+    expect(verified.exitCode, verified.stdout + verified.stderr).toBe(0);
+    expect((JSON.parse(verified.stdout) as { status: string }).status).toBe("valid");
+
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+      {}
+    );
+    sourceDb.close();
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(0);
+    const restoredDb = createFixtureSqliteDatabase(path.join(target, "neotoma.db"));
+    try {
+      const rows = restoredDb.prepare("select value from test_data order by rowid").all() as Array<{
+        value: string;
+      }>;
+      expect(rows.map((row) => row.value)).toEqual(["ready", "from-wal"]);
+    } finally {
+      restoredDb.close();
+    }
+    expect(await fs.readFile(path.join(target, "sources", "source.txt"), "utf8")).toBe(
+      "source-content"
+    );
+  });
+
   async function createBackupInput(prefix: string): Promise<{ parent: string; dataDir: string }> {
     const parent = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
     backupRoots.push(parent);
