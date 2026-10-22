@@ -1932,6 +1932,24 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
   return { kind: "verify_instrument_failure" };
 }
 
+async function verifyBackupDatabaseIntegrity(
+  databasePath: string
+): Promise<BackupIntegrityVerification> {
+  let database: AsyncSqliteDatabase | null = null;
+  try {
+    database = new AsyncSqliteDatabase(databasePath, { existing: true, readOnly: true });
+    return classifyBackupIntegrityCheck(await database.pragma("integrity_check"));
+  } catch (error) {
+    return {
+      kind: isStructuredSqliteCorruptionError(error)
+        ? "integrity_failed"
+        : "verify_instrument_failure",
+    };
+  } finally {
+    await database?.close().catch(() => {});
+  }
+}
+
 /** Wait for session port file written by API when it binds; returns actual port or preferred on timeout. */
 async function waitForSessionPortFile(
   portFilePath: string,
@@ -11301,22 +11319,7 @@ backupCommand
       // Verify the snapshot is a usable database, not merely a plausible-sized file.
       // The old >1KB check passed happily on corrupt output, which is what made the
       // #2075 failure silent.
-      let integrity: BackupIntegrityVerification = {
-        kind: "verify_instrument_failure",
-      };
-      let verifyDb: AsyncSqliteDatabase | null = null;
-      try {
-        verifyDb = new AsyncSqliteDatabase(destDb);
-        integrity = classifyBackupIntegrityCheck(await verifyDb.pragma("integrity_check"));
-      } catch (err) {
-        integrity = {
-          kind: isStructuredSqliteCorruptionError(err)
-            ? "integrity_failed"
-            : "verify_instrument_failure",
-        };
-      } finally {
-        await verifyDb?.close().catch(() => {});
-      }
+      const integrity = await verifyBackupDatabaseIntegrity(destDb);
 
       if (integrity.kind !== "verified") {
         const instrumentFailure = integrity.kind === "verify_instrument_failure";
@@ -11346,8 +11349,19 @@ backupCommand
       const dbBuf = await fs.readFile(destDb);
       checksums[path.basename(sqlitePath)] =
         "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-    } catch {
+    } catch (error) {
       if (!dbCopied) {
+        if (isStructuredSqliteCorruptionError(error)) {
+          writeCliError(
+            new CliHintError(
+              "Backup failed: the source database integrity check failed. " +
+                "No usable snapshot was created.",
+              { code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" }
+            )
+          );
+          process.exitCode = 1;
+          return;
+        }
         writeCliError(
           "SQLite database not found, not readable, or could not be snapshotted at " + sqlitePath,
           { suppressRecoveryHint: true }
@@ -11693,6 +11707,7 @@ backupCommand
 
     const contents = (manifest.contents || {}) as Record<string, string>;
     const checksums = (manifest.checksums || {}) as Record<string, string>;
+    let databaseIsLargeEnoughToInspect = false;
 
     // Verify DB file exists and has reasonable size
     if (!contents.neotoma_db) {
@@ -11703,6 +11718,8 @@ backupCommand
         const stat = await fs.stat(dbPath);
         if (stat.size < 1024) {
           issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
+        } else {
+          databaseIsLargeEnoughToInspect = true;
         }
 
         // Verify checksum if available
@@ -11717,6 +11734,30 @@ backupCommand
         }
       } catch {
         issues.push("database file missing from backup directory: " + contents.neotoma_db);
+      }
+
+      const integrity = databaseIsLargeEnoughToInspect
+        ? await verifyBackupDatabaseIntegrity(dbPath)
+        : null;
+      if (integrity !== null && integrity.kind !== "verified") {
+        const instrumentFailure = integrity.kind === "verify_instrument_failure";
+        const message = instrumentFailure
+          ? "Backup verification could not obtain an integrity result. " +
+            "The snapshot has been left in place for inspection at " +
+            dbPath +
+            `. Run \`sqlite3 ${quotePosixShellArgument(dbPath)} "PRAGMA integrity_check;"\` directly; ` +
+            'if it returns "ok", this is a tooling or driver issue.'
+          : "Backup verification failed: the snapshot integrity check failed. " +
+            "The backup is NOT usable and has been left in place for inspection at " +
+            dbPath;
+        writeCliError(
+          new CliHintError(message, {
+            code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
+            failure_kind: integrity.kind,
+          })
+        );
+        process.exitCode = 1;
+        return;
       }
     }
 

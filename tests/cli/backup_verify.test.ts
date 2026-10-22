@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -7,6 +8,44 @@ import path from "node:path";
 
 import { runCli } from "../../src/cli/index.ts";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.ts";
+
+type FixtureSqliteStatement = {
+  all(...params: unknown[]): unknown[];
+  get(...params: unknown[]): unknown;
+  run(...params: unknown[]): unknown;
+};
+
+type FixtureSqliteDatabase = {
+  close(): void;
+  exec(sql: string): void;
+  prepare(sql: string): FixtureSqliteStatement;
+};
+
+const nodeRequire = createRequire(import.meta.url);
+
+function activeSqliteDriverName(): "node:sqlite" | "better-sqlite3" {
+  try {
+    return typeof nodeRequire("node:sqlite").DatabaseSync === "function"
+      ? "node:sqlite"
+      : "better-sqlite3";
+  } catch {
+    return "better-sqlite3";
+  }
+}
+
+function createFixtureSqliteDatabase(databasePath: string): FixtureSqliteDatabase {
+  if (activeSqliteDriverName() === "node:sqlite") {
+    const native = nodeRequire("node:sqlite") as {
+      DatabaseSync: new (path: string, options?: Record<string, unknown>) => FixtureSqliteDatabase;
+    };
+    return new native.DatabaseSync(databasePath);
+  }
+  const BetterSqlite = nodeRequire("better-sqlite3") as new (
+    path: string,
+    options?: Record<string, unknown>
+  ) => FixtureSqliteDatabase;
+  return new BetterSqlite(databasePath);
+}
 
 if (process.env.NEOTOMA_REQUIRE_NATIVE_SQLITE === "1") {
   try {
@@ -159,10 +198,12 @@ describe("CLI backup verify (smoke)", () => {
   });
 
   it("backup verify <dir> --json after backup create", async () => {
-    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-backup-verify-"));
-    backupRoots.push(parent);
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-verify-");
 
-    const create = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {});
+    const create = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+      NEOTOMA_DATA_DIR: dataDir,
+      NEOTOMA_ENV: "development",
+    });
     expect(create.exitCode, create.stderr + create.stdout).toBe(0);
     const created = JSON.parse(create.stdout) as { backup_dir?: string; verified?: boolean };
     expect(created.backup_dir).toMatch(/neotoma-backup-/);
@@ -180,8 +221,7 @@ describe("CLI backup verify (smoke)", () => {
     backupRoots.push(parent);
     const dataDir = path.join(parent, "data");
     await fs.mkdir(dataDir, { recursive: true });
-    const { default: Database } = await import("better-sqlite3");
-    const db = new Database(path.join(dataDir, "neotoma.db"));
+    const db = createFixtureSqliteDatabase(path.join(dataDir, "neotoma.db"));
     try {
       db.exec("create table test_data(value text); insert into test_data values ('ready');");
     } finally {
@@ -189,6 +229,68 @@ describe("CLI backup verify (smoke)", () => {
     }
     return { parent, dataDir };
   }
+
+  it(`rejects a real corrupt source database through backup create (${activeSqliteDriverName()})`, async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-real-corrupt-source-");
+    await fs.truncate(path.join(dataDir, "neotoma.db"), 4096);
+
+    const run = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+      NEOTOMA_DATA_DIR: dataDir,
+      NEOTOMA_ENV: "development",
+    });
+
+    expect(run.exitCode).toBe(1);
+    const envelope = JSON.parse(run.stderr) as {
+      error: string;
+      hint?: { code?: string; failure_kind?: string; message?: string };
+    };
+    expect(envelope.error).toContain("source database integrity check failed");
+    expect(envelope.hint).toEqual({
+      code: "INTEGRITY_FAILED",
+      failure_kind: "integrity_failed",
+      message:
+        "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
+        "`neotoma storage recover-db --recover` after stopping Neotoma.",
+    });
+  });
+
+  it(`rejects a real corrupt snapshot through backup verify (${activeSqliteDriverName()})`, async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-real-corrupt-snapshot-");
+    const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+      NEOTOMA_DATA_DIR: dataDir,
+      NEOTOMA_ENV: "development",
+    });
+    expect(created.exitCode, created.stderr + created.stdout).toBe(0);
+    const { backup_dir: backupDir } = JSON.parse(created.stdout) as { backup_dir: string };
+    const snapshotPath = path.join(backupDir, "neotoma.db");
+
+    await fs.truncate(snapshotPath, 4096);
+    const manifestPath = path.join(backupDir, "manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as {
+      checksums: Record<string, string>;
+    };
+    const corruptSnapshot = await fs.readFile(snapshotPath);
+    manifest.checksums["neotoma.db"] =
+      "sha256:" + createHash("sha256").update(corruptSnapshot).digest("hex");
+    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {
+      NEOTOMA_ENV: "development",
+    });
+    expect(verified.exitCode).toBe(1);
+    const envelope = JSON.parse(verified.stderr) as {
+      error: string;
+      hint?: { code?: string; failure_kind?: string; message?: string };
+    };
+    expect(envelope.error).toContain("snapshot integrity check failed");
+    expect(envelope.hint).toEqual({
+      code: "INTEGRITY_FAILED",
+      failure_kind: "integrity_failed",
+      message:
+        "SQLite may be corrupted. Run `neotoma storage recover-db` first, then " +
+        "`neotoma storage recover-db --recover` after stopping Neotoma.",
+    });
+  });
 
   it("reports a genuine non-ok integrity result as corruption in human and JSON output", async () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-integrity-failure-");
@@ -583,17 +685,16 @@ describe("CLI backup verify (smoke)", () => {
     const dataDir = path.join(parent, "data");
     await fs.mkdir(dataDir, { recursive: true });
 
-    const { default: Database } = await import("better-sqlite3");
     const dbPath = path.join(dataDir, "neotoma.prod.db");
-    const db = new Database(dbPath);
-    db.pragma("journal_mode=WAL");
+    const db = createFixtureSqliteDatabase(dbPath);
+    db.exec("PRAGMA journal_mode=WAL");
     db.exec("create table t(x)");
     const insert = db.prepare("insert into t values (?)");
 
     // Checkpoint once so the main file holds a small prefix, then commit a large
     // batch that lives ONLY in the WAL — the state that made the two-file copy tear.
     for (let i = 0; i < 50; i++) insert.run(i);
-    db.pragma("wal_checkpoint(TRUNCATE)");
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     for (let i = 50; i < 5000; i++) insert.run(i);
 
     // Keep committing while the backup runs.
@@ -631,11 +732,11 @@ describe("CLI backup verify (smoke)", () => {
 
     // The snapshot must actually open and be internally consistent. Before the fix
     // this threw SQLITE_CORRUPT: "database disk image is malformed".
-    const snapshot = new Database(path.join(created.backup_dir!, "neotoma.prod.db"), {
-      readonly: true,
-    });
+    const snapshot = createFixtureSqliteDatabase(path.join(created.backup_dir!, "neotoma.prod.db"));
     try {
-      const integrity = snapshot.pragma("integrity_check") as Array<Record<string, unknown>>;
+      const integrity = snapshot.prepare("PRAGMA integrity_check").all() as Array<
+        Record<string, unknown>
+      >;
       expect(String(Object.values(integrity[0])[0])).toBe("ok");
       // A consistent point-in-time cut: at least everything committed before the
       // backup started, and never more than was ever written.
