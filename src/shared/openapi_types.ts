@@ -4008,7 +4008,7 @@ export interface components {
       observations: components["schemas"]["FieldProvenanceObservation"][];
       sources: components["schemas"]["FieldProvenanceSource"][];
       source_observation: components["schemas"]["FieldProvenanceObservation"];
-      source: components["schemas"]["FieldProvenanceSource"] | null;
+      source: components["schemas"]["FieldProvenanceSource"] | (never | null);
       /** Format: date-time */
       observed_at: string;
     };
