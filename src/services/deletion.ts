@@ -6,6 +6,7 @@
  * full audit trail and immutability guarantees.
  */
 
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
 import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
@@ -743,15 +744,30 @@ export async function restoreRelationship(
  * @param userId - User ID (for RLS)
  * @returns True if entity is deleted
  */
-export async function isEntityDeleted(entityId: string, userId: string): Promise<boolean> {
+export async function isEntityDeleted(
+  entityId: string,
+  userId: string,
+  requireComplete = false
+): Promise<boolean> {
   if (!(await hasRecordedEntityLifecycleCutover(await getDb()))) {
     // Preserve this facade's actual legacy comparator until the explicit cutover.
     const { data, error } = await db
       .from("observations")
-      .select("fields, source_priority, observed_at")
+      .select(
+        requireComplete
+          ? "fields, source_priority, observed_at, entity_type"
+          : "fields, source_priority, observed_at"
+      )
       .eq("entity_id", entityId)
       .eq("user_id", userId);
+    if (error && requireComplete) throw new Error("Entity lifecycle acquisition is incomplete");
     if (error || !data?.length) return false;
+    if (requireComplete)
+      for (const row of data) {
+        if (typeof row.entity_type !== "string" || !row.entity_type)
+          throw new Error("Entity lifecycle physical authority is unavailable");
+        await assertIdentityResolutionAvailable(await getDb(), row.entity_type, userId);
+      }
     const sorted = [...data].sort(
       (a, b) =>
         b.source_priority - a.source_priority ||

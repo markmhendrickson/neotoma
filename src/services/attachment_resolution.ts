@@ -113,7 +113,11 @@ export interface AttachmentResolution {
  */
 export async function resolveAttachmentTarget(
   entityId: string,
-  userId: string | null
+  userId: string | null,
+  acquisition: {
+    requireComplete?: boolean;
+    identityCandidates?: Array<{ entity_type: unknown; identity_record?: unknown }>;
+  } = {}
 ): Promise<{
   resolvedEntityId: string;
   path: string[];
@@ -130,7 +134,14 @@ export async function resolveAttachmentTarget(
     // caller's existing contract, not something this layer may tighten:
     // narrowing a previously-unscoped fetch would change which observations
     // the reducer sees, which is the one thing this migration must not do.
-    let entityQuery = db.from("entities").select("id, merged_to_entity_id").eq("id", current);
+    let entityQuery = db
+      .from("entities")
+      .select(
+        acquisition.identityCandidates
+          ? "id, merged_to_entity_id, entity_type, identity_record"
+          : "id, merged_to_entity_id"
+      )
+      .eq("id", current);
     if (userId !== null) entityQuery = entityQuery.eq("user_id", userId);
     const { data: row, error } = await entityQuery.single();
 
@@ -139,8 +150,14 @@ export async function resolveAttachmentTarget(
     // that), and the flat fetch never consulted `entities` at all. Resolving
     // to the id as given preserves that behaviour.
     if (error || !row) {
+      if (acquisition.requireComplete)
+        throw new Error("Entity attachment acquisition is incomplete");
       return { resolvedEntityId: current, path, truncated: false };
     }
+    acquisition.identityCandidates?.push({
+      entity_type: row.entity_type,
+      identity_record: row.identity_record,
+    });
 
     const next = (row as { merged_to_entity_id?: string | null }).merged_to_entity_id;
     if (!next) {

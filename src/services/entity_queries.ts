@@ -2,6 +2,8 @@ import type { EntityReadTrace } from "../shared/entity_read_contract.js";
 // FU-134: Query Updates
 // Provenance chain, merged entity exclusion
 
+import { OperationError } from "../core/operation_error.js";
+import { EntityIdentityContractError } from "./entity_identity_contract.js";
 import { db } from "../db.js";
 import { acquireDatabase } from "../repositories/db/acquisition.js";
 import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
@@ -1009,6 +1011,27 @@ export function computeNextCursor(
  */
 export async function getEntityWithProvenance(
   entityId: string,
+  includeDeleted = false,
+  userId?: string,
+  projection: { includeClearedFields?: boolean } = {}
+): Promise<EntityWithProvenance | null> {
+  if (projection.includeClearedFields && !userId)
+    throw new Error("Nullable winning projection requires an explicit owner");
+  try {
+    return await acquireEntityWithProvenance(entityId, includeDeleted, userId, projection);
+  } catch (error) {
+    if (error instanceof EntityIdentityContractError || error instanceof OperationError)
+      throw error;
+    throw new OperationError("DB_QUERY_FAILED", "Failed to acquire the owned entity", {
+      statusCode: 500,
+      details: {
+        hint: "Retry after complete owned entity, snapshot, attachment and lifecycle evidence is available.",
+      },
+    });
+  }
+}
+async function acquireEntityWithProvenance(
+  entityId: string,
   includeDeleted: boolean = false,
   userId?: string,
   projection: { includeClearedFields?: boolean } = {}
@@ -1023,36 +1046,59 @@ export async function getEntityWithProvenance(
   if (userId) {
     entityQuery = entityQuery.eq("user_id", userId);
   }
-  const { data: entity, error: entityError } = await entityQuery.single();
+  const { data: firstEntity, error: entityError } = await entityQuery.maybeSingle();
 
-  if (entityError || !entity) {
-    return null;
-  }
-
-  // Check if entity is merged - redirect to target
+  if (entityError) throw new Error("Entity acquisition failed");
+  if (!firstEntity) return null;
+  let entity = firstEntity;
+  const owner = userId ?? entity.user_id;
+  if (typeof owner !== "string" || !owner) throw new Error("Point entity owner is unavailable");
+  const candidates: Array<{ entity_type: unknown; identity_record?: unknown }> = [entity];
   if (entity.merged_to_entity_id) {
-    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted, userId, projection);
+    const { resolveAttachmentTarget } = await import("./attachment_resolution.js");
+    const target = await resolveAttachmentTarget(entityId, owner, {
+      requireComplete: true,
+      identityCandidates: candidates,
+    });
+    if (target.truncated) throw new Error("Entity attachment acquisition is incomplete");
+    const { data: resolved, error } = await db
+      .from("entities")
+      .select("*")
+      .eq("id", target.resolvedEntityId)
+      .eq("user_id", owner)
+      .maybeSingle();
+    if (error || !resolved) throw new Error("Entity attachment target is unavailable");
+    entity = resolved;
+    entityId = entity.id;
+    candidates.push(entity);
   }
-
+  async function admit(candidate: { entity_type: unknown; identity_record?: unknown }) {
+    if (typeof candidate.entity_type !== "string" || !candidate.entity_type)
+      throw new EntityIdentityContractError(
+        "Point entity acquisition authority is unavailable or invalid."
+      );
+    await assertIdentityResolutionAvailable(
+      await acquireDatabase(),
+      candidate.entity_type,
+      owner,
+      candidate.identity_record
+    );
+  }
+  for (const candidate of candidates) await admit(candidate);
   if (!includeDeleted) {
     const { isEntityDeleted } = await import("./deletion.js");
-    if (await isEntityDeleted(entityId, entity.user_id as string)) return null;
+    if (await isEntityDeleted(entityId, owner, true)) return null;
   }
 
-  // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
-  let snapshotQuery = db.from("entity_snapshots").select("*").eq("entity_id", entityId);
-  if (userId) {
-    snapshotQuery = snapshotQuery.eq("user_id", userId);
-  }
-  const { data: snapshot, error: snapshotError } = await snapshotQuery.single();
-
+  const { data: snapshot, error: snapshotError } = await db
+    .from("entity_snapshots")
+    .select("*")
+    .eq("entity_id", entityId)
+    .eq("user_id", owner)
+    .maybeSingle();
+  if (snapshotError) throw new Error("Entity snapshot acquisition failed");
+  if (snapshot) await admit(snapshot);
   let effectiveSnapshot: EntitySnapshotRow | null = snapshot as EntitySnapshotRow | null;
-  if (snapshotError && snapshotError.code !== "PGRST116") {
-    console.warn(
-      `Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`
-    );
-    effectiveSnapshot = null;
-  }
 
   if (projection.includeClearedFields) {
     const { computeEntitySnapshotAtTime } = await import("./entity_snapshot_at_time.js");
@@ -1071,13 +1117,13 @@ export async function getEntityWithProvenance(
   // Find all sources that have observations for this entity
   let sourceObsQuery = db
     .from("observations")
-    .select("source_id, user_id")
+    .select("source_id, user_id, entity_type")
     .eq("entity_id", entityId)
     .not("source_id", "is", null);
-  if (userId) {
-    sourceObsQuery = sourceObsQuery.eq("user_id", userId);
-  }
-  const { data: observations } = await sourceObsQuery.limit(100); // Get sample of sources
+  sourceObsQuery = sourceObsQuery.eq("user_id", owner);
+  const { data: observations, error: sourceError } = await sourceObsQuery;
+  if (sourceError) throw new Error("Entity fragment source acquisition failed");
+  for (const observation of observations ?? []) await admit(observation);
 
   const rawFragments: Record<string, unknown> = {};
   if (observations && observations.length > 0) {
@@ -1111,11 +1157,13 @@ export async function getEntityWithProvenance(
       fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
     }
 
-    const { data: observationsForSources } = await db
+    const { data: observationsForSources, error: linkError } = await db
       .from("observations")
       .select("entity_id, source_id")
       .eq("entity_type", entity.entity_type)
-      .in("source_id", sourceIds);
+      .in("source_id", sourceIds)
+      .eq("user_id", owner);
+    if (linkError) throw new Error("Entity fragment link acquisition failed");
     const legacyEntityCountsBySource = new Map<string, Set<string>>();
     for (const obs of observationsForSources || []) {
       if (!obs.source_id || !obs.entity_id) continue;
@@ -1128,7 +1176,7 @@ export async function getEntityWithProvenance(
     const { data: fragments, error: fragmentError } = await fragmentQuery;
 
     if (fragmentError) {
-      console.warn(`Failed to get raw_fragments for entity ${entityId}:`, fragmentError.message);
+      throw new Error("Entity fragment acquisition failed");
     } else if (fragments && fragments.length > 0) {
       // Merge fragments by fragment_key (last_write: most recent last_seen wins)
       const fragmentMap = new Map<string, { value: unknown; last_seen: string }>();
@@ -1184,7 +1232,7 @@ export async function getEntityWithProvenance(
       const schemaFieldOrder = schema?.schema_definition?.fields
         ? Object.keys(schema.schema_definition.fields)
         : [];
-      const { orderedSnapshotKeys } = await import("./canonical_markdown.js");
+      const { orderedSnapshotKeys } = await import("../shared/snapshot_field_order.js");
       const ordered = orderedSnapshotKeys(snapshotObj, schemaFieldOrder);
       // Cap to a reasonable overview-card size; UI is free to pick fewer.
       primaryFields = ordered.slice(0, 8);
