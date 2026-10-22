@@ -241,6 +241,94 @@ describe("private typed plain entity listing", () => {
     await tool("restore_entity", { entity_id: target, entity_type: TYPE });
     expect((await parity()).total).toBe(3);
   });
+  it.each([
+    { label: "sort", input: { sort_by: "snapshot." } },
+    {
+      label: "filter",
+      input: {
+        snapshot_filters: { "private.rejected": { op: "eq", value: "PRIVATE-REJECTED-VALUE" } },
+      },
+    },
+  ])(
+    "maps rejected $label query fields to canonical 400 guidance across natural surfaces without writes",
+    async ({ input }) => {
+      const database = await getDb();
+      async function state() {
+        const tables = (await database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+          )
+          .all()) as { name: string }[];
+        const result: Record<string, unknown> = {};
+        for (const { name } of tables) {
+          const rows = await database
+            .prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`)
+            .all();
+          result[name] = rows.map((row) => JSON.stringify(row)).sort();
+        }
+        return result;
+      }
+      const before = await state();
+      const body = { entity_type: TYPE, ...input };
+      let failure: any;
+      try {
+        await kernel.execute("retrieve_entities", body);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeDefined();
+      expect(failure.statusCode).toBe(400);
+      const envelope = failure.toErrorEnvelope();
+      expect(envelope).toMatchObject({
+        error_code: "INVALID_QUERY_FIELD",
+        message: "Invalid query field name.",
+        details: {
+          hint: expect.stringContaining("bare identifiers"),
+          detail: expect.stringContaining("bare identifiers"),
+        },
+      });
+      expect(JSON.stringify(envelope)).not.toMatch(/private\.rejected|PRIVATE-REJECTED-VALUE/);
+      const http = await callHttp(api.base, "/entities/query", body);
+      expect(http.status).toBe(400);
+      expect({
+        error_code: http.json.error_code,
+        message: http.json.message,
+        details: http.json.details,
+      }).toEqual(envelope);
+      await expect(tool("retrieve_entities", body)).rejects.toMatchObject({
+        code: -32602,
+        data: envelope,
+      });
+      for (const mode of ["offline", "api"] as const)
+        await expect(cli(mode, "queryEntities", body)).rejects.toSatisfy((error: any) => {
+          const text = error.stderr || error.stdout || "";
+          return (
+            error.code === 1 &&
+            text.includes(envelope.error_code) &&
+            text.includes(envelope.message) &&
+            text.includes(envelope.details.hint) &&
+            !/private\.rejected|PRIVATE-REJECTED-VALUE/.test(text)
+          );
+        });
+      const query = new URLSearchParams({ entity_type: TYPE });
+      for (const [key, value] of Object.entries(input))
+        if (value !== undefined)
+          query.set(key, typeof value === "string" ? value : JSON.stringify(value));
+      const get = await fetch(api.base + "/entities?" + query);
+      expect(get.status).toBe(400);
+      const getBody = await get.json();
+      expect({
+        error_code: getBody.error_code,
+        message: getBody.message,
+        details: getBody.details,
+      }).toEqual(envelope);
+      expect(await state()).toEqual(before);
+      // Shared Zod admission remains a separate caller failure, never a retryable DB error.
+      expect(
+        (await callHttp(api.base, "/entities/query", { entity_type: TYPE, limit: 0 })).status
+      ).toBe(400);
+    }
+  );
   it("refuses unsupported selectors before DB calls and reports validation/query errors canonically", async () => {
     const prepare = vi.fn(() => {
       throw new Error("PRIVATE_DB_DETAIL");
@@ -280,6 +368,25 @@ describe("private typed plain entity listing", () => {
     await expect(
       kernel.execute("retrieve_entities", { entity_type: TYPE, cursor: "bad" })
     ).rejects.toSatisfy((e: any) => e.toErrorEnvelope().error_code === "INVALID_CURSOR");
+  });
+  it("retains a genuine closed SQLite failure as a safe retryable 500", async () => {
+    const database = new AsyncSqliteDatabase(":memory:");
+    expect(await database.prepare("SELECT 1 AS alive").get()).toEqual({ alive: 1 });
+    await database.close();
+    const ctx = runtime(database);
+    const read = createInternalReadKernel({ runtime: ctx, userId: USER });
+    try {
+      await expect(read.retrieveEntities({ entity_type: TYPE })).rejects.toSatisfy(
+        (error: any) =>
+          error.statusCode === 500 &&
+          error.toErrorEnvelope().error_code === "DB_QUERY_FAILED" &&
+          error.toErrorEnvelope().details.hint.startsWith("Retry") &&
+          !/closed|SQLITE|database|prepare/i.test(error.message)
+      );
+    } finally {
+      await read.dispose();
+      await ctx.dispose();
+    }
   });
   it("never leaks foreign snapshot/observation metadata sharing an owned legacy ID and scopes source links", async () => {
     const target = created[0];
@@ -571,18 +678,16 @@ describe("private typed plain entity listing", () => {
     fragments.push(id);
     expect(
       (
-        await db
-          .from("raw_fragments")
-          .insert({
-            id,
-            source_id: created[2].source,
-            entity_id: null,
-            entity_type: TYPE,
-            user_id: USER,
-            fragment_key: "merged_note",
-            fragment_value: "MERGED-ATTACHMENT",
-            last_seen: new Date().toISOString(),
-          })
+        await db.from("raw_fragments").insert({
+          id,
+          source_id: created[2].source,
+          entity_id: null,
+          entity_type: TYPE,
+          user_id: USER,
+          fragment_key: "merged_note",
+          fragment_value: "MERGED-ATTACHMENT",
+          last_seen: new Date().toISOString(),
+        })
       ).error
     ).toBeNull();
     await mergeEntities({

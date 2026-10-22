@@ -4,6 +4,7 @@ import { assertIdentityResolutionAvailable } from "../../services/entity_identit
 import { acquireDatabase as getDb } from "../../repositories/db/acquisition.js";
 import {
   queryEntities,
+  InvalidSnapshotFieldError,
   normalizeEntityTypeFilter,
   computeNextCursor,
   filterCurrentLifecycleRecords,
@@ -1510,7 +1511,8 @@ export function filterEntitiesBySearch<T extends { canonical_name: string }>(
  * queryEntitiesWithCount; this adds no SQL, authentication or identity owner. */
 export async function queryPlainEntitiesForUser(userId: string, input: unknown) {
   const { RetrieveEntitiesRequestSchema } = await import("../action_schemas.js");
-  const { OperationError } = await import("../../core/operation_error.js");
+  const { OperationError, invalidQueryFieldOperationError } =
+    await import("../../core/operation_error.js");
   const raw =
     input && typeof input === "object" && !Array.isArray(input)
       ? (input as Record<string, unknown>)
@@ -1592,6 +1594,7 @@ export async function queryPlainEntitiesForUser(userId: string, input: unknown) 
     // Existing canonical identity errors keep their code/hint; legacy query
     // details must not escape through the new neutral private entrance.
     if (error instanceof EntityIdentityContractError) throw error;
+    if (error instanceof InvalidSnapshotFieldError) throw invalidQueryFieldOperationError();
     if (error instanceof Error && error.name === "CursorError") {
       const detail = error as Error & { code?: string; hint?: string };
       throw new OperationError(detail.code ?? "VALIDATION_INVALID_FORMAT", detail.message, {

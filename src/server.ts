@@ -21,7 +21,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "./db.js";
 import { EntityIdentityContractError } from "./services/entity_identity_contract.js";
-import { isValidSnapshotFieldName } from "./services/entity_queries.js";
+import { invalidQueryFieldOperationError } from "./core/operation_error.js";
+import { InvalidSnapshotFieldError, isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
 import { z } from "zod";
@@ -2558,6 +2559,10 @@ export class NeotomaServer {
           throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
         if (error instanceof EntityIdentityContractError)
           throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
+        if (error instanceof InvalidSnapshotFieldError) {
+          const mapped = invalidQueryFieldOperationError();
+          throw new McpError(ErrorCode.InvalidParams, mapped.message, mapped.toErrorEnvelope());
+        }
         const { StoreConditionError } = await import("./services/store_condition_keys.js");
         if (error instanceof StoreConditionError) {
           throw new McpError(

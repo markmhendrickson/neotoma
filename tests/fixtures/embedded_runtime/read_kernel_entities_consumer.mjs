@@ -106,6 +106,25 @@ try {
       assert.equal(result.entities[0].entity_id, fixture.id);
       assert.equal(result.entities[0].snapshot.status, fixture.label + "-corrected");
       assert.equal(result.read_contract.mode.actual, "structured");
+      for (const selector of [
+        { sort_by: "snapshot." },
+        { snapshot_filters: { "private.rejected": { op: "eq", value: "PRIVATE-REJECTED-VALUE" } } },
+      ])
+        await assert.rejects(
+          () => kernel.execute("retrieve_entities", { entity_type: "kernel_note", ...selector }),
+          (error) => {
+            const envelope = error.toErrorEnvelope();
+            assert.equal(error.statusCode, 400);
+            assert.equal(envelope.error_code, "INVALID_QUERY_FIELD");
+            assert.equal(envelope.message, "Invalid query field name.");
+            assert.match(envelope.details.hint, /bare identifiers/);
+            assert.doesNotMatch(
+              JSON.stringify(envelope),
+              /private\.rejected|PRIVATE-REJECTED-VALUE/
+            );
+            return true;
+          }
+        );
       const light = await kernel.execute("retrieve_entities", {
         entity_type: "kernel_note",
         include_snapshots: false,

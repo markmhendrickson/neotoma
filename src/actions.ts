@@ -1,3 +1,4 @@
+import { invalidQueryFieldOperationError } from "./core/operation_error.js";
 import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
 import {
   canonicalObservationValidity,
@@ -5073,12 +5074,11 @@ function handleApiError(
     // reflecting rejected input, even sanitized, is needless. Return a generic
     // detail that names the constraint. (Vanellus review, PR #2129, non-blocking.)
     logWarn(logContext || "InvalidQueryField", req, { detail: error.message });
-    return res.status(400).json(
-      buildErrorEnvelope("INVALID_QUERY_FIELD", "Invalid query field name.", {
-        detail:
-          "Query field names (sort_by / snapshot_filters keys) must be bare identifiers matching ^[A-Za-z_][A-Za-z0-9_]*$.",
-      })
-    );
+    const mapped = invalidQueryFieldOperationError();
+    const envelope = mapped.toErrorEnvelope();
+    return res
+      .status(mapped.statusCode)
+      .json(buildErrorEnvelope(envelope.error_code, envelope.message, envelope.details));
   }
   logError(logContext || "APIError", req, error);
   // SECURITY: do not echo raw Error.message to clients in production; SQLite /
