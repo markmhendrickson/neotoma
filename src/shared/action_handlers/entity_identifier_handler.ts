@@ -190,9 +190,23 @@ export async function retrieveEntityByIdentifierWithFallback(
   if (params.entityType)
     await assertIdentityResolutionAvailable(database, params.entityType, params.userId);
   const result = await retrieveLegacyEntityByIdentifier(params);
-  // Untyped and raw-ID lookups retain legacy behavior, but cannot surface an
-  // exact namespace through a legacy matching path, including snapshot-only rows.
-  for (const entityType of new Set(result.entities.map((entity) => entity.entity_type)))
+  // A legacy entity can carry independently materialized snapshot metadata.
+  // Guard both authoritative type columns before returning any candidate; never
+  // interpret a user field named entity_type inside snapshot JSON as metadata.
+  const candidateTypes = new Set(result.entities.map((entity) => entity.entity_type));
+  if (result.entities.length > 0) {
+    const { data: snapshots, error } = await db
+      .from("entity_snapshots")
+      .select("entity_type")
+      .eq("user_id", params.userId)
+      .in(
+        "entity_id",
+        result.entities.map((entity) => entity.id)
+      );
+    if (error) throw new Error(`Failed to validate identifier snapshot metadata: ${error.message}`);
+    for (const snapshot of snapshots || []) candidateTypes.add(snapshot.entity_type);
+  }
+  for (const entityType of candidateTypes)
     await assertIdentityResolutionAvailable(database, entityType, params.userId);
   return result;
 }

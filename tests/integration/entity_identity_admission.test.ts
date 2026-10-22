@@ -368,6 +368,195 @@ describe("immutable exact-identity admission in the existing registry", () => {
     }
   });
 
+  it.each(["raw_id", "raw_decoy", "direct_name", "snapshot_field"])(
+    "refuses returned reserved snapshot metadata on %s without exposing contents or changing storage",
+    async (scenario) => {
+      const reservedType = type(`candidate_${scenario}`);
+      const ordinaryType = type(`ordinary_${scenario}`);
+      const registered = await schemaRegistry.register(config(reservedType));
+      const database = await getDb();
+      const foreignOwner = `synthetic-foreign-${suffix}`;
+      const id = () => `ent_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
+      const reservedId = id(),
+        ordinaryId = id(),
+        foreignId = id(),
+        emptyId = id(),
+        absentId = id();
+      const name = `synthetic-candidate-${scenario}-${suffix}`;
+      const code = `synthetic-snapshot-code-${scenario}-${suffix}`;
+      const privateMarker = `synthetic-unreturned-content-${scenario}-${suffix}`;
+      const entities = [
+        {
+          id: reservedId,
+          entity_type: ordinaryType,
+          canonical_name: name,
+          user_id: PARITY_USER_ID,
+        },
+        {
+          id: ordinaryId,
+          entity_type: ordinaryType,
+          canonical_name: `ordinary-${name}`,
+          user_id: PARITY_USER_ID,
+        },
+        {
+          id: foreignId,
+          entity_type: ordinaryType,
+          canonical_name: `foreign-${name}`,
+          user_id: foreignOwner,
+        },
+        {
+          id: emptyId,
+          entity_type: ordinaryType,
+          canonical_name: `empty-${name}`,
+          user_id: PARITY_USER_ID,
+        },
+      ];
+      expect((await db.from("entities").insert(entities)).error).toBeNull();
+      const now = "2026-10-22T00:00:00Z";
+      // NEGATIVE fault injection only: an ordinary physical entity carries a
+      // reserved snapshot type. No exact entity/observation is inserted, no
+      // native guard is removed and no schema is activated.
+      const snapshots = [
+        {
+          entity_id: reservedId,
+          entity_type: reservedType,
+          user_id: PARITY_USER_ID,
+          canonical_name: name,
+          snapshot: { code, private_marker: privateMarker },
+        },
+        // A domain field named entity_type is not authority metadata.
+        {
+          entity_id: ordinaryId,
+          entity_type: ordinaryType,
+          user_id: PARITY_USER_ID,
+          canonical_name: `ordinary-${name}`,
+          snapshot: { code: `ordinary-${code}`, entity_type: reservedType },
+        },
+        {
+          entity_id: foreignId,
+          entity_type: reservedType,
+          user_id: foreignOwner,
+          canonical_name: `foreign-${name}`,
+          snapshot: { code: `foreign-${code}`, private_marker: privateMarker },
+        },
+      ].map((row) => ({
+        ...row,
+        schema_version: "1",
+        observation_count: 0,
+        provenance: {},
+        computed_at: now,
+        last_observation_at: now,
+      }));
+      expect((await db.from("entity_snapshots").insert(snapshots)).error).toBeNull();
+      expect(
+        await database
+          .prepare("SELECT entity_type,user_id FROM entities WHERE id = ?")
+          .get(reservedId)
+      ).toEqual({ entity_type: ordinaryType, user_id: PARITY_USER_ID });
+      expect(
+        await database
+          .prepare("SELECT entity_type,user_id FROM entity_snapshots WHERE entity_id = ?")
+          .get(reservedId)
+      ).toEqual({ entity_type: reservedType, user_id: PARITY_USER_ID });
+      expect((await stored(reservedType))[0].active).toBe(false);
+      const guardNames = async () =>
+        database
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'identity_%' ORDER BY name"
+          )
+          .all();
+      const guards = await guardNames();
+      expect(guards).toEqual(
+        expect.arrayContaining([
+          { name: "identity_reserved_entity_insert_guard" },
+          { name: "identity_reserved_observation_insert_guard" },
+          { name: "identity_reserved_entity_update_guard" },
+          { name: "identity_reserved_observation_update_guard" },
+        ])
+      );
+      async function state() {
+        const result: Record<string, unknown> = {};
+        for (const table of [
+          "schema_registry",
+          "entities",
+          "entity_snapshots",
+          "observations",
+          "sources",
+          "interpretations",
+          "store_condition_keys",
+          "timeline_events",
+        ])
+          result[table] = await database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+        return result;
+      }
+      const before = await state();
+      const server = await startOfflineServer();
+      try {
+        const request: Record<string, unknown> =
+          scenario === "snapshot_field"
+            ? { identifier: code, by: "code", include_observations: true }
+            : {
+                identifier: scenario === "direct_name" ? name : reservedId,
+                include_observations: true,
+                ...(scenario === "raw_decoy" ? { entity_type: ordinaryType } : {}),
+              };
+        const http = await callHttp(server.base, "/retrieve_entity_by_identifier", request);
+        expect(http.status).toBe(400);
+        expect(http.json).toMatchObject({
+          error_code: "VALIDATION_INVALID_FORMAT",
+          details: { hint: expect.any(String) },
+        });
+        expect(JSON.stringify(http.json)).not.toContain(privateMarker);
+        const error = (await callRegisteredMcp(request, "retrieve_entity_by_identifier").catch(
+          (failure: unknown) => failure
+        )) as { code: number; data: Record<string, unknown> };
+        expect(error.code).toBe(-32602);
+        expect(domainEnvelope(error.data)).toEqual(domainEnvelope(http.json));
+        expect(JSON.stringify(error.data)).not.toContain(privateMarker);
+        const failure = (await cliRequest(server.base, request, "retrieveEntityByIdentifier").catch(
+          (error: unknown) => error
+        )) as { code: number; stderr: string };
+        expect(failure.code).toBe(1);
+        const line = failure.stderr.split("\n").find((text) => text.startsWith('{"error":'));
+        expect(line).toBeTruthy();
+        expect(JSON.parse(line!).hint).toMatchObject({
+          code: http.json.error_code,
+          hint: (http.json.details as Record<string, unknown>).hint,
+        });
+        expect(failure.stderr).not.toContain(privateMarker);
+        for (const [identifier, expectedIds] of [
+          [ordinaryId, [ordinaryId]],
+          [emptyId, [emptyId]],
+          [foreignId, []],
+          [absentId, []],
+        ] as Array<[string, string[]]>) {
+          const body = { identifier, entity_type: ordinaryType, include_observations: true };
+          const httpControl = await callHttp(server.base, "/retrieve_entity_by_identifier", body);
+          expect(httpControl.status).toBe(200);
+          const mcpControl = await callRegisteredMcp(body, "retrieve_entity_by_identifier");
+          const cliControl = JSON.parse(
+            (await cliRequest(server.base, body, "retrieveEntityByIdentifier")).stdout
+          );
+          for (const result of [httpControl.json, mcpControl, cliControl]) {
+            expect((result.entities as Array<{ id: string }>).map((row) => row.id)).toEqual(
+              expectedIds
+            );
+            expect(result.total).toBe(expectedIds.length);
+            expect(JSON.stringify(result)).not.toContain(privateMarker);
+          }
+        }
+        expect(await state()).toEqual(before);
+        expect(await guardNames()).toEqual(guards);
+        expect((await stored(reservedType))[0].identity_binding).toEqual(
+          registered.identity_binding
+        );
+        expect((await stored(reservedType))[0].active).toBe(false);
+      } finally {
+        await stopServer(server.server);
+      }
+    }
+  );
+
   it("blocks native reclassification into a reserved identity namespace before changing either row", async () => {
     const entityType = type("reclassification");
     await schemaRegistry.register(config(entityType));
