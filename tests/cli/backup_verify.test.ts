@@ -689,62 +689,69 @@ describe("CLI backup verify (smoke)", () => {
     expect(await fs.readFile(path.join(dataDir, "neotoma.db"))).toEqual(before);
   });
 
-  it("restores a contained legacy database and real WAL", async () => {
-    const { parent, dataDir } = await createBackupInput("neotoma-backup-local-legacy-");
-    const backupDir = path.join(parent, "backup");
-    const target = path.join(parent, "target");
-    const sourceDbPath = path.join(dataDir, "neotoma.db");
-    const sourceDb = createFixtureSqliteDatabase(sourceDbPath);
-    sourceDb.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0");
-    sourceDb.exec("insert into test_data values ('from-wal')");
-    await fs.mkdir(path.join(backupDir, "sources"), { recursive: true });
-    await fs.copyFile(sourceDbPath, path.join(backupDir, "neotoma.db"));
-    const mainOnlyDb = createFixtureSqliteDatabase(path.join(backupDir, "neotoma.db"));
-    try {
-      const rows = mainOnlyDb.prepare("select value from test_data order by rowid").all() as Array<{
-        value: string;
-      }>;
-      expect(rows.map((row) => row.value)).toEqual(["ready"]);
-    } finally {
-      mainOnlyDb.close();
-    }
-    await fs.copyFile(`${sourceDbPath}-wal`, path.join(backupDir, "neotoma.db-wal"));
-    await fs.writeFile(path.join(backupDir, "sources", "source.txt"), "source-content");
-    await fs.writeFile(
-      path.join(backupDir, "manifest.json"),
-      JSON.stringify({
-        db_snapshot_method: "file_copy",
-        contents: {
-          neotoma_db: "neotoma.db",
-          wal: "neotoma.db-wal",
-          sources: "sources/",
-        },
-      })
-    );
+  it.each(["file_copy", undefined])(
+    "restores a contained legacy database and real WAL (%s)",
+    async (snapshotMethod) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-local-legacy-");
+      const backupDir = path.join(parent, "backup");
+      const target = path.join(parent, "target");
+      const sourceDbPath = path.join(dataDir, "neotoma.db");
+      const sourceDb = createFixtureSqliteDatabase(sourceDbPath);
+      sourceDb.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0");
+      sourceDb.exec("insert into test_data values ('from-wal')");
+      await fs.mkdir(path.join(backupDir, "sources"), { recursive: true });
+      await fs.copyFile(sourceDbPath, path.join(backupDir, "neotoma.db"));
+      const mainOnlyDb = createFixtureSqliteDatabase(path.join(backupDir, "neotoma.db"));
+      try {
+        const rows = mainOnlyDb
+          .prepare("select value from test_data order by rowid")
+          .all() as Array<{
+          value: string;
+        }>;
+        expect(rows.map((row) => row.value)).toEqual(["ready"]);
+      } finally {
+        mainOnlyDb.close();
+      }
+      await fs.copyFile(`${sourceDbPath}-wal`, path.join(backupDir, "neotoma.db-wal"));
+      await fs.writeFile(path.join(backupDir, "sources", "source.txt"), "source-content");
+      await fs.writeFile(
+        path.join(backupDir, "manifest.json"),
+        JSON.stringify({
+          ...(snapshotMethod && { db_snapshot_method: snapshotMethod }),
+          contents: {
+            neotoma_db: "neotoma.db",
+            wal: "neotoma.db-wal",
+            sources: "sources/",
+          },
+        })
+      );
 
-    const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
-    expect(verified.exitCode, verified.stdout + verified.stderr).toBe(0);
-    expect((JSON.parse(verified.stdout) as { status: string }).status).toBe("valid");
+      const verified = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+      expect(verified.exitCode, verified.stdout + verified.stderr).toBe(0);
+      expect((JSON.parse(verified.stdout) as { status: string }).status).toBe("valid");
 
-    const restored = await runNeotomaCli(
-      ["--json", "backup", "restore", "--from", backupDir, "--target", target],
-      {}
-    );
-    sourceDb.close();
-    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(0);
-    const restoredDb = createFixtureSqliteDatabase(path.join(target, "neotoma.db"));
-    try {
-      const rows = restoredDb.prepare("select value from test_data order by rowid").all() as Array<{
-        value: string;
-      }>;
-      expect(rows.map((row) => row.value)).toEqual(["ready", "from-wal"]);
-    } finally {
-      restoredDb.close();
+      const restored = await runNeotomaCli(
+        ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+        {}
+      );
+      sourceDb.close();
+      expect(restored.exitCode, restored.stdout + restored.stderr).toBe(0);
+      const restoredDb = createFixtureSqliteDatabase(path.join(target, "neotoma.db"));
+      try {
+        const rows = restoredDb
+          .prepare("select value from test_data order by rowid")
+          .all() as Array<{
+          value: string;
+        }>;
+        expect(rows.map((row) => row.value)).toEqual(["ready", "from-wal"]);
+      } finally {
+        restoredDb.close();
+      }
+      expect(await fs.readFile(path.join(target, "sources", "source.txt"), "utf8")).toBe(
+        "source-content"
+      );
     }
-    expect(await fs.readFile(path.join(target, "sources", "source.txt"), "utf8")).toBe(
-      "source-content"
-    );
-  });
+  );
 
   for (const snapshotMethod of ["file_copy", undefined]) {
     it(`refuses an unpaired legacy WAL before restore (${snapshotMethod ?? "older manifest"})`, async () => {
@@ -823,6 +830,89 @@ describe("CLI backup verify (smoke)", () => {
       sourceDb.close();
     }
   });
+
+  it.each([
+    ["unknown name", "snapshot_archive"],
+    ["typo", "file_coppy"],
+    ["empty name", ""],
+    ["null", null],
+    ["number", 7],
+    ["object", { kind: "file_copy" }],
+    ["array", ["file_copy"]],
+    ["boolean", true],
+  ])(
+    "rejects unsupported snapshot methods before verify or restore (%s)",
+    async (_label, method) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-unsupported-method-");
+      const backupDir = path.join(parent, "backup");
+      const newTarget = path.join(parent, "new-target");
+      const existingTarget = path.join(parent, "existing-target");
+      const sourceDbPath = path.join(dataDir, "neotoma.db");
+      const sourceDb = createFixtureSqliteDatabase(sourceDbPath);
+      const integrityCheck = vi.spyOn(AsyncSqliteDatabase.prototype, "pragma");
+      try {
+        sourceDb.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0");
+        sourceDb.exec("insert into test_data values ('only-in-wal')");
+        await fs.mkdir(backupDir);
+        await fs.copyFile(sourceDbPath, path.join(backupDir, "neotoma.db"));
+        await fs.copyFile(`${sourceDbPath}-wal`, path.join(backupDir, "neotoma.db-wal"));
+        await fs.writeFile(
+          path.join(backupDir, "manifest.json"),
+          JSON.stringify({
+            db_snapshot_method: method,
+            contents: { neotoma_db: "neotoma.db", wal: "neotoma.db-wal" },
+          })
+        );
+
+        for (const args of [
+          ["backup", "verify", backupDir],
+          ["--json", "backup", "verify", backupDir],
+        ]) {
+          const verified = await runNeotomaCli(args, {});
+          expect(verified.exitCode, verified.stdout + verified.stderr).toBe(1);
+          const diagnostic =
+            args[0] === "--json"
+              ? (JSON.parse(verified.stdout) as { status: string; issues: string[] })
+              : null;
+          if (diagnostic) expect(diagnostic.status).toBe("invalid");
+          const output = diagnostic ? diagnostic.issues.join(" ") : verified.stdout;
+          expect(output).toContain("db_snapshot_method");
+          expect(output).toContain("file_copy");
+          expect(output).toContain("vacuum_into");
+          expect(verified.stdout + verified.stderr).not.toMatch(
+            /recover-db|SQLite may be corrupted|INTEGRITY_FAILED|VERIFY_INSTRUMENT_FAILURE/
+          );
+        }
+
+        await fs.mkdir(existingTarget);
+        await fs.writeFile(path.join(existingTarget, "neotoma.db"), "previous-target-database");
+        await fs.writeFile(path.join(existingTarget, "keep.txt"), "previous-target-file");
+        const beforeDb = await fs.readFile(path.join(existingTarget, "neotoma.db"));
+        const beforeFile = await fs.readFile(path.join(existingTarget, "keep.txt"));
+        for (const target of [newTarget, existingTarget]) {
+          const restored = await runNeotomaCli(
+            ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+            {}
+          );
+          expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+          const error = JSON.parse(restored.stderr) as { error: string; hint?: unknown };
+          expect(error.error).toContain("db_snapshot_method");
+          expect(error.error).toContain("file_copy");
+          expect(error.hint).toBeUndefined();
+          expect(restored.stdout + restored.stderr).not.toMatch(
+            /recover-db|SQLite may be corrupted|INTEGRITY_FAILED|VERIFY_INSTRUMENT_FAILURE/
+          );
+        }
+        await expect(fs.stat(newTarget)).rejects.toMatchObject({ code: "ENOENT" });
+        expect(await fs.readFile(path.join(existingTarget, "neotoma.db"))).toEqual(beforeDb);
+        expect(await fs.readFile(path.join(existingTarget, "keep.txt"))).toEqual(beforeFile);
+        expect(integrityCheck).not.toHaveBeenCalled();
+      } finally {
+        integrityCheck.mockRestore();
+        sourceDb.close();
+      }
+    }
+  );
 
   async function createBackupInput(prefix: string): Promise<{ parent: string; dataDir: string }> {
     const parent = await fs.mkdtemp(path.join(os.tmpdir(), prefix));

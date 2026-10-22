@@ -11351,6 +11351,17 @@ async function inspectBackupDirectory(dir: string): Promise<BackupInspection> {
     return result;
   }
   const checksums = (rawChecksums ?? {}) as Record<string, unknown>;
+  if (
+    Object.hasOwn(result.manifest, "db_snapshot_method") &&
+    result.manifest.db_snapshot_method !== "file_copy" &&
+    result.manifest.db_snapshot_method !== "vacuum_into"
+  ) {
+    result.issues.push(
+      "unsupported manifest db_snapshot_method; expected 'file_copy' or 'vacuum_into' " +
+        "(omit the field only for older backups)"
+    );
+    return result;
+  }
   try {
     const resolved = await resolveManifestContents(dir, result.contents);
     result.paths = resolved.paths;
