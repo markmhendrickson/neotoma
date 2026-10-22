@@ -22,6 +22,7 @@
  */
 
 import type { NeotomaServer } from "../server.js";
+import { getEmbeddedRuntimeContext } from "./runtime_context.js";
 
 export interface CreateOperationsOptions {
   userId: string;
@@ -235,6 +236,10 @@ export function createOperations(options: CreateOperationsOptions): Operations {
   }
 
   async function call<T = unknown>(name: string, args: unknown = {}): Promise<T> {
+    if (getEmbeddedRuntimeContext()) {
+      const { assertEmbeddedOperationSupported } = await import("./runtime_capabilities.js");
+      assertEmbeddedOperationSupported(name, args);
+    }
     const dispatcher = await getServer();
     const raw = await dispatcher.executeToolForCli(name, args, userId);
     return parseToolResult(raw) as T;

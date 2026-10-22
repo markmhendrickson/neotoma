@@ -94,6 +94,42 @@ for (const [context, operations, version, label] of [
     installSubscriptionBridge();
   });
 }
+// Refused features must leave all write-bearing tables unchanged.
+await a.run(async () => {
+  const tables = [
+    "sources",
+    "entities",
+    "observations",
+    "entity_snapshots",
+    "raw_fragments",
+    "schema_registry",
+    "relationship_observations",
+  ];
+  const counts = async () =>
+    Promise.all(
+      tables.map(
+        async (table) =>
+          (await a.database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()).count
+      )
+    );
+  const initial = await counts();
+  for (const invoke of [
+    () => opsA.executeTool("unrecognized_future_operation", {}),
+    () =>
+      opsA.store({
+        entities: [{ entity_type: "runtime_note", title: "Must not land" }],
+        file_content: "bytes",
+        idempotency_key: "refused-mixed",
+      }),
+    () => opsA.executeTool("store", { intake: { mode: "overflow" } }),
+  ])
+    await assert.rejects(invoke, (error) => error.data?.error_code === "FEATURE_UNAVAILABLE");
+  await assert.rejects(
+    () => opsA.executeTool("npm_check_update", {}),
+    (error) => error.data?.error_code === "NETWORK_DISABLED"
+  );
+  assert.deepEqual(await counts(), initial);
+});
 await new Promise((resolve) => setImmediate(resolve));
 assert.deepEqual(warnings, []);
 assert.deepEqual({ ...process.env }, before);
