@@ -1,7 +1,7 @@
 /** One declared entity, one authoritative transaction, and an immutable operation receipt. */
 import { db } from "../db.js";
 import { withConditionalStoreMutation } from "./store_mutation_authority.js";
-import { getDb } from "../repositories/db/connection.js";
+import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
 import type { DbConnection } from "../repositories/db/driver.js";
 import { schemaRegistry, type SchemaRegistryEntry } from "./schema_registry.js";
 import { deriveConditionalStoreIdentity } from "./store_condition_identity.js";

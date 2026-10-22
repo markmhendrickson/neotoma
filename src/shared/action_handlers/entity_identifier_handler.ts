@@ -1,5 +1,5 @@
 import { db } from "../../db.js";
-import { getDb } from "../../repositories/db/connection.js";
+import { acquireDatabase as getDb } from "../../repositories/db/acquisition.js";
 import { assertIdentityResolutionAvailable } from "../../services/entity_identity_admission.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import { queryEntities } from "../../services/entity_queries.js";

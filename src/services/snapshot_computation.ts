@@ -6,7 +6,7 @@
  */
 
 import { db } from "../db.js";
-import { getDb } from "../repositories/db/connection.js";
+import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
 import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import { logger } from "../utils/logger.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
