@@ -128,6 +128,7 @@ const SCHEMA_STATEMENTS = [
     entity_type TEXT NOT NULL,
     canonical_name TEXT NOT NULL,
     aliases TEXT,
+    identity_record TEXT,
     created_at TEXT,
     updated_at TEXT,
     user_id TEXT,
@@ -500,6 +501,7 @@ export async function ensureSchema(
 
     // Add columns if missing (existing DBs created before these columns existed)
     await addColumnIfMissing(db, "schema_registry", "identity_binding", "TEXT");
+    await addColumnIfMissing(db, "entities", "identity_record", "TEXT");
     for (const statement of ENTITY_IDENTITY_CONTRACT_SCHEMA) {
       await db.prepare(statement).run();
     }

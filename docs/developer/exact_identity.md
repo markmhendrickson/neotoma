@@ -87,3 +87,35 @@ before validation. User data named `entity_type` inside snapshot JSON supplies n
 metadata authority; the sidecar is absent from public responses. Negative
 fault-injection fixtures exercise this boundary without activating a namespace
 or creating an exact entity.
+
+## Original component storage foundation
+
+A nullable private `entities.identity_record` column reserves immutable original
+identity authority in the existing entity store. Internal preparation retains the
+original accepted anchor and contract ID, namespace, owner, selected rule and
+ordered raw components. Validation must reproduce the physical entity ID from
+those components under the retained accepted binding. Display names, aliases and
+snapshots cannot reconstruct this authority. Ordinary row responses omit this
+private column, including its legacy NULL value.
+
+This is a storage/preparation foundation. Non-NULL insertion remains refused while
+activation is closed; legacy rows cannot acquire authority through an update.
+Native guards prevent replacing or removing stored authority, changing its entity
+or owner, and erasing it through replacement or deletion. Negative unsupported
+restore fixtures prove these guards without representing corrupt rows as accepted
+exact persistence. No supported exact record has been written by this stage.
+
+Positive atomic component persistence and operation-receipt replay remain an
+explicit gate: the existing entity insertion path must write validated original
+components under the same admission/owner transaction after every remaining
+consumer is converted or refused and owning proof is accepted. Existing legacy
+IDs and public operations retain their current behavior. Sensitive admission,
+live migration, global rehash and identifier-changing corrections are unavailable.
+
+The multi-signal MCP resolver propagates the shared exact-identity refusal;
+unsupported namespaces do not become an empty ranked result. The declared HTTP
+signal route remains a separate existing parity gate. Other inventoried writers,
+imports and lifecycle operations still require conversion or pre-effect refusal
+before exact activation.
+The private original-component column is outside fields-column encryption;
+no sensitive-profile or encrypted-at-rest coverage is claimed for it.

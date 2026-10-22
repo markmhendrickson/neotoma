@@ -4,6 +4,8 @@ import {
   createAcceptedIdentityBinding,
   deriveExactEntityIdentity,
   EntityIdentityContractError,
+  prepareExactEntityIdentityRecord,
+  validateExactEntityIdentityRecord,
 } from "../../src/services/entity_identity_contract.js";
 import { generateEntityId } from "../../src/services/entity_resolution.js";
 
@@ -99,6 +101,51 @@ describe("admitted exact identity bytes", () => {
       expect(() =>
         deriveExactEntityIdentity(changed, { code: "SR-cli" }, "synthetic-owner")
       ).toThrow(EntityIdentityContractError);
+  });
+
+  it("retains immutable ordered original components and validates them against the admitted entity", () => {
+    const fields = { code: " SR-cli\u00a0" };
+    const record = prepareExactEntityIdentityRecord(binding, fields, "synthetic-owner");
+    const entityId = deriveExactEntityIdentity(binding, fields, "synthetic-owner").entityId;
+    expect(record.components).toEqual([["code", " SR-cli\u00a0"]]);
+    expect(record.namespace).toBe(binding.contract.namespace);
+    expect(record.contract_id).toBe(binding.contract_id);
+    expect(record.anchor_schema_id).toBe(binding.anchor_schema_id);
+    expect(Object.isFrozen(record)).toBe(true);
+    expect(Object.isFrozen(record.components[0])).toBe(true);
+    expect(
+      validateExactEntityIdentityRecord(
+        binding,
+        JSON.stringify(record),
+        entityId,
+        "synthetic-owner"
+      )
+    ).toEqual(record);
+    for (const changed of [
+      { ...record, owner_id: "synthetic-other-owner" },
+      { ...record, namespace: "synthetic:changed" },
+      { ...record, contract_id: "0".repeat(64) },
+      { ...record, anchor_schema_id: "synthetic-other-anchor" },
+      { ...record, rule_index: 7 },
+      { ...record, components: [["code", "sr-cli"]] },
+      {
+        ...record,
+        components: [
+          ["code", "SR-cli"],
+          ["code", "sr-cli"],
+        ],
+      },
+      { ...record, extra: "unsupported" },
+    ])
+      expect(() =>
+        validateExactEntityIdentityRecord(binding, changed, entityId, "synthetic-owner")
+      ).toThrow(EntityIdentityContractError);
+    expect(() =>
+      validateExactEntityIdentityRecord(binding, record, "ent_different", "synthetic-owner")
+    ).toThrow(EntityIdentityContractError);
+    expect(() =>
+      validateExactEntityIdentityRecord(binding, "{broken", entityId, "synthetic-owner")
+    ).toThrow(EntityIdentityContractError);
   });
 
   it("canonicalizes declaration key order and refuses unsupported declarations before encoding", () => {

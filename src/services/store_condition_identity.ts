@@ -10,6 +10,7 @@ import { canonicalStoreRequest, StoreConditionError } from "./store_condition_ke
 import {
   assertAcceptedIdentityDefinition,
   deriveExactEntityIdentity,
+  prepareExactEntityIdentityRecord,
   EntityIdentityContractError,
 } from "./entity_identity_contract.js";
 
@@ -72,6 +73,7 @@ export function deriveConditionalStoreIdentity(
     return {
       ...validated,
       entityId: exact.entityId,
+      identityRecord: prepareExactEntityIdentityRecord(binding, fields, owner),
       canonicalName: `${schema.entity_type}:${exact.components.map((component) => component[1]).join("|")}`,
       identityRule: `composite:${exact.components.map((component) => component[0]).join("+")}`,
     };

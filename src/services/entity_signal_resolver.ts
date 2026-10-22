@@ -47,6 +47,7 @@ import { retrieveEntityByIdentifierWithFallback } from "../shared/action_handler
 import { stringSimilarity } from "./duplicate_detection.js";
 import { loadConceptTypeSynonyms, normalizeEntityTypeForSchema } from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
+import { EntityIdentityContractError } from "./entity_identity_contract.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -254,6 +255,8 @@ export async function identifyEntityBySignals(
           observationsLimit: 20,
         });
       } catch (err) {
+        // Accepted identity refusals are not evidence of an empty match.
+        if (err instanceof EntityIdentityContractError) throw err;
         logger.warn(
           `[entity_signal_resolver] lookup failed for signal=${key} value=${value} etype=${etype ?? "all"}: ${String(err)}`
         );

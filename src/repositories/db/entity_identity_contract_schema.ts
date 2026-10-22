@@ -112,4 +112,21 @@ export const ENTITY_IDENTITY_CONTRACT_SCHEMA = [
        s.identity_binding IS NOT NULL AND
        (s.scope = 'global' OR s.user_id IS NEW.user_id OR NEW.user_id IS NULL)
    ) BEGIN SELECT RAISE(ABORT, 'EXACT_IDENTITY_ACTIVATION_UNAVAILABLE'); END`,
+  // Public exact insertion remains closed. Ordinary writes cannot attach a
+  // forged record, including REPLACE that would erase existing authority.
+  `CREATE TRIGGER IF NOT EXISTS identity_entity_record_insert_guard
+   BEFORE INSERT ON entities
+   BEGIN
+     SELECT CASE WHEN NEW.identity_record IS NOT NULL
+       THEN RAISE(ABORT, 'EXACT_IDENTITY_ACTIVATION_UNAVAILABLE') END;
+     SELECT CASE WHEN EXISTS (SELECT 1 FROM entities e WHERE e.id = NEW.id AND e.identity_record IS NOT NULL)
+       THEN RAISE(ABORT, 'EXACT_IDENTITY_RECORD_IMMUTABLE') END;
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS identity_entity_record_update_guard
+   BEFORE UPDATE ON entities WHEN OLD.identity_record IS NOT NEW.identity_record OR
+     (OLD.identity_record IS NOT NULL AND (OLD.id IS NOT NEW.id OR OLD.entity_type IS NOT NEW.entity_type OR OLD.user_id IS NOT NEW.user_id))
+   BEGIN SELECT RAISE(ABORT, 'EXACT_IDENTITY_RECORD_IMMUTABLE'); END`,
+  `CREATE TRIGGER IF NOT EXISTS identity_entity_record_delete_guard
+   BEFORE DELETE ON entities WHEN OLD.identity_record IS NOT NULL
+   BEGIN SELECT RAISE(ABORT, 'EXACT_IDENTITY_RECORD_IMMUTABLE'); END`,
 ];

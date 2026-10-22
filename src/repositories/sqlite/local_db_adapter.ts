@@ -259,6 +259,9 @@ function sleep(ms: number): Promise<void> {
 
 export function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
+  // Private original-identity authority is read only through its native loader.
+  // Omit even NULL so a storage upgrade preserves ordinary public row shapes.
+  if (table === "entities") delete result.identity_record;
   const booleanColumns = BOOLEAN_COLUMNS[table];
   if (booleanColumns) {
     for (const column of booleanColumns) {

@@ -22,7 +22,11 @@ import {
   prepareExactEntityResolution,
   resolveEntityWithTrace,
 } from "../../src/services/entity_resolution.js";
-import { loadAcceptedIdentityState } from "../../src/services/entity_identity_admission.js";
+import {
+  loadAcceptedIdentityState,
+  loadEntityIdentityRecord,
+} from "../../src/services/entity_identity_admission.js";
+import { fromDbRow } from "../../src/repositories/sqlite/local_db_adapter.js";
 import { deriveConditionalStoreIdentity } from "../../src/services/store_condition_identity.js";
 import { maybeRederiveCanonicalName } from "../../src/services/snapshot_computation.js";
 import { createObservation } from "../../src/services/observation_storage.js";
@@ -823,30 +827,26 @@ describe("immutable exact-identity admission in the existing registry", () => {
     const marker = `synthetic-unverified-authority-${suffix}`;
     expect(
       (
-        await db
-          .from("entities")
-          .insert({
-            id: entityId,
-            entity_type: ordinaryType,
-            canonical_name: name,
-            user_id: PARITY_USER_ID,
-          })
+        await db.from("entities").insert({
+          id: entityId,
+          entity_type: ordinaryType,
+          canonical_name: name,
+          user_id: PARITY_USER_ID,
+        })
       ).error
     ).toBeNull();
     expect(
       (
-        await db
-          .from("entity_snapshots")
-          .insert({
-            entity_id: entityId,
-            entity_type: ordinaryType,
-            schema_version: "1",
-            canonical_name: name,
-            snapshot: { marker },
-            provenance: {},
-            observation_count: 0,
-            user_id: PARITY_USER_ID,
-          })
+        await db.from("entity_snapshots").insert({
+          entity_id: entityId,
+          entity_type: ordinaryType,
+          schema_version: "1",
+          canonical_name: name,
+          snapshot: { marker },
+          provenance: {},
+          observation_count: 0,
+          user_id: PARITY_USER_ID,
+        })
       ).error
     ).toBeNull();
     const server = await startOfflineServer();
@@ -1312,6 +1312,173 @@ describe("immutable exact-identity admission in the existing registry", () => {
       .prepare("UPDATE schema_registry SET metadata = '{\"synthetic\":true}' WHERE id = ?")
       .run(registered.id);
     expect((await stored(entityType))[0].identity_binding).toEqual(registered.identity_binding);
+  });
+
+  it("preserves an admitted identity refusal through the actual multi-signal tool instead of reporting no match", async () => {
+    const entityType = type("signal_refusal");
+    await schemaRegistry.register(config(entityType));
+    const database = await getDb();
+    async function state() {
+      const result: Record<string, unknown> = {};
+      for (const table of [
+        "entities",
+        "entity_snapshots",
+        "sources",
+        "observations",
+        "interpretations",
+        "store_condition_keys",
+      ])
+        result[table] = await database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+      return result;
+    }
+    const before = await state();
+    await expect(
+      callRegisteredMcp(
+        { signals: { name: "SR-cli" }, entity_type: entityType },
+        "identify_entity_by_signals"
+      )
+    ).rejects.toMatchObject({
+      code: -32602,
+      data: { error_code: "VALIDATION_INVALID_FORMAT", details: { hint: expect.any(String) } },
+    });
+    expect(await state()).toEqual(before);
+    expect((await stored(entityType))[0].active).toBe(false);
+  });
+
+  it("reserves original component storage without admitting forged records or changing ordinary row shapes", async () => {
+    const database = await getDb();
+    expect(
+      (await database.prepare("PRAGMA table_info(entities)").all()) as Array<{ name: string }>
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          name: "identity_record",
+          type: "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+          cid: expect.any(Number),
+        },
+      ])
+    );
+    const entityType = type("record_storage");
+    const entityId = generateEntityId(entityType, "legacy-control");
+    expect(
+      (
+        await db.from("entities").insert({
+          id: entityId,
+          entity_type: entityType,
+          canonical_name: "legacy-control",
+          user_id: PARITY_USER_ID,
+        })
+      ).error
+    ).toBeNull();
+    const ordinary = await db.from("entities").select("*").eq("id", entityId).single();
+    expect(ordinary.error).toBeNull();
+    expect(ordinary.data).not.toHaveProperty("identity_record");
+    expect(await loadEntityIdentityRecord(database, entityId, PARITY_USER_ID)).toBeNull();
+    const before = await database.prepare("SELECT * FROM entities WHERE id = ?").get(entityId);
+    await expect(
+      database
+        .prepare("UPDATE entities SET identity_record = ? WHERE id = ?")
+        .run('{"forged":true}', entityId)
+    ).rejects.toThrow(/EXACT_IDENTITY_RECORD_IMMUTABLE/);
+    await expect(
+      database
+        .prepare(
+          "INSERT INTO entities(id,entity_type,canonical_name,user_id,identity_record) VALUES(?,?,?,?,?)"
+        )
+        .run(`ent_forged_${suffix}`, entityType, "forged", PARITY_USER_ID, '{"forged":true}')
+    ).rejects.toThrow(/EXACT_IDENTITY_ACTIVATION_UNAVAILABLE/);
+    expect(
+      (
+        await db
+          .from("entities")
+          .update({ identity_record: { forged: true } })
+          .eq("id", entityId)
+      ).error
+    ).toBeTruthy();
+    expect(await database.prepare("SELECT * FROM entities WHERE id = ?").get(entityId)).toEqual(
+      before
+    );
+    expect(
+      (
+        await db
+          .from("entities")
+          .update({ canonical_name: "ordinary-display-update" })
+          .eq("id", entityId)
+      ).error
+    ).toBeNull();
+    expect(
+      (await db.from("entities").select("*").eq("id", entityId).single()).data
+    ).not.toHaveProperty("identity_record");
+  });
+
+  it("freezes unsupported original-record restore evidence without treating it as admitted exact persistence", async () => {
+    const source = await getDb();
+    const { sql } = (await source
+      .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='entities'")
+      .get()) as { sql: string };
+    const database = new AsyncSqliteDatabase(":memory:");
+    try {
+      // Unsupported corrupt old-state fixture before guard installation. This
+      // is NOT an accepted record, activation or a supported persistence path.
+      await database.exec(sql);
+      await database
+        .prepare(
+          "INSERT INTO entities(id,entity_type,canonical_name,user_id,identity_record) VALUES(?,?,?,?,?)"
+        )
+        .run(
+          "ent_unsupported_record",
+          "synthetic_unadmitted_record",
+          "untrusted-display",
+          PARITY_USER_ID,
+          '{"unsupported":true}'
+        );
+      await ensureSchema(database);
+      const before = (await database
+        .prepare("SELECT * FROM entities WHERE id = ?")
+        .get("ent_unsupported_record")) as Record<string, unknown>;
+      expect(before.identity_record).toBe('{"unsupported":true}');
+      expect(fromDbRow("entities", before)).not.toHaveProperty("identity_record");
+      await expect(
+        loadEntityIdentityRecord(database, "ent_unsupported_record", PARITY_USER_ID)
+      ).rejects.toMatchObject({ code: "VALIDATION_INVALID_FORMAT" });
+      expect(
+        await loadEntityIdentityRecord(
+          database,
+          "ent_unsupported_record",
+          "synthetic-foreign-owner"
+        )
+      ).toBeNull();
+      for (const statement of [
+        "UPDATE entities SET identity_record = NULL WHERE id = ?",
+        "UPDATE entities SET identity_record = '{}' WHERE id = ?",
+        "UPDATE entities SET user_id = 'synthetic-other-owner' WHERE id = ?",
+        "UPDATE entities SET entity_type = 'synthetic_other_type' WHERE id = ?",
+        "DELETE FROM entities WHERE id = ?",
+      ])
+        await expect(database.prepare(statement).run("ent_unsupported_record")).rejects.toThrow(
+          /EXACT_IDENTITY_RECORD_IMMUTABLE/
+        );
+      await expect(
+        database
+          .prepare(
+            "INSERT OR REPLACE INTO entities(id,entity_type,canonical_name,user_id) VALUES(?,?,?,?)"
+          )
+          .run(
+            "ent_unsupported_record",
+            "synthetic_unadmitted_record",
+            "replacement",
+            PARITY_USER_ID
+          )
+      ).rejects.toThrow(/EXACT_IDENTITY_RECORD_IMMUTABLE/);
+      expect(
+        await database.prepare("SELECT * FROM entities WHERE id = ?").get("ent_unsupported_record")
+      ).toEqual(before);
+    } finally {
+      await database.close();
+    }
   });
 
   it("upgrades an owned old registry without changing legacy declaration bytes or IDs", async () => {

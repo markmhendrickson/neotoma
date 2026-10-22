@@ -265,3 +265,83 @@ export function deriveExactEntityIdentity(
     exactIdentityInputHint(binding)
   );
 }
+
+/** Private immutable entity authority; construction alone does not admit a write. */
+export interface ExactEntityIdentityRecord {
+  readonly version: "1";
+  readonly anchor_schema_id: string;
+  readonly contract_id: string;
+  readonly namespace: string;
+  readonly owner_id: string;
+  readonly rule_index: number;
+  readonly components: ReadonlyArray<readonly [string, string]>;
+}
+
+export function prepareExactEntityIdentityRecord(
+  binding: AcceptedIdentityBinding,
+  fields: Record<string, unknown>,
+  owner: string
+): ExactEntityIdentityRecord {
+  const exact = deriveExactEntityIdentity(binding, fields, owner);
+  const record: ExactEntityIdentityRecord = {
+    version: "1",
+    anchor_schema_id: binding.anchor_schema_id,
+    contract_id: binding.contract_id,
+    namespace: binding.contract.namespace,
+    owner_id: owner,
+    rule_index: exact.ruleIndex,
+    components: exact.components.map(([name, value]) => [name, value]),
+  };
+  for (const component of record.components) Object.freeze(component);
+  Object.freeze(record.components);
+  return Object.freeze(record);
+}
+
+/** Original components, never display/aliases/snapshot data, must reproduce the ID. */
+export function validateExactEntityIdentityRecord(
+  binding: AcceptedIdentityBinding,
+  raw: unknown,
+  entityId: string,
+  owner: string
+): ExactEntityIdentityRecord {
+  let parsed: unknown;
+  try {
+    parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    refuse("Stored exact identity authority is unavailable or invalid.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    refuse("Stored exact identity authority is unavailable or invalid.");
+  const record = parsed as ExactEntityIdentityRecord;
+  if (
+    record.version !== "1" ||
+    typeof record.anchor_schema_id !== "string" ||
+    typeof record.contract_id !== "string" ||
+    typeof record.namespace !== "string" ||
+    typeof record.owner_id !== "string" ||
+    !Number.isInteger(record.rule_index) ||
+    Object.keys(record).sort().join(",") !==
+      "anchor_schema_id,components,contract_id,namespace,owner_id,rule_index,version"
+  )
+    refuse("Stored exact identity authority is unavailable or invalid.");
+  if (!Array.isArray(record.components) || !record.components.length)
+    refuse("Stored exact identity components are unavailable or invalid.");
+  const fields: Record<string, unknown> = Object.create(null);
+  for (const component of record.components) {
+    if (
+      !Array.isArray(component) ||
+      component.length !== 2 ||
+      typeof component[0] !== "string" ||
+      Object.hasOwn(fields, component[0])
+    )
+      refuse("Stored exact identity components are unavailable or invalid.");
+    fields[component[0]] = component[1];
+  }
+  const expected = prepareExactEntityIdentityRecord(binding, fields, owner);
+  if (
+    JSON.stringify(expected) !== JSON.stringify(record) ||
+    deriveExactEntityIdentity(binding, fields, owner).entityId !== entityId
+  )
+    refuse("Stored exact identity authority does not match its admitted entity.");
+  return expected;
+}

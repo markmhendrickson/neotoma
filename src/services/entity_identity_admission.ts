@@ -6,6 +6,7 @@ import {
   createAcceptedIdentityBinding,
   EntityIdentityContractError,
   type AcceptedIdentityBinding,
+  validateExactEntityIdentityRecord,
 } from "./entity_identity_contract.js";
 
 export async function prepareIdentityRegistration(
@@ -196,4 +197,23 @@ export async function assertIdentityResolutionAvailable(
     throw new EntityIdentityContractError(
       "Exact identity consumer activation is unavailable; legacy identity fallback is unavailable."
     );
+}
+
+/** Read original authority through the same retained registry, never a projection. */
+export async function loadEntityIdentityRecord(tx: DbConnection, entityId: string, owner: string) {
+  const row = (await tx
+    .prepare("SELECT entity_type,identity_record FROM entities WHERE id = ? AND user_id = ?")
+    .get(entityId, owner)) as { entity_type: string; identity_record: unknown } | undefined;
+  if (!row) return null;
+  const accepted = await loadAcceptedIdentityState(tx, row.entity_type, owner);
+  if (row.identity_record == null) {
+    if (accepted)
+      throw new EntityIdentityContractError("Original exact identity components are unavailable.");
+    return null;
+  }
+  if (!accepted)
+    throw new EntityIdentityContractError(
+      "Stored exact identity has no admitted registry authority."
+    );
+  return validateExactEntityIdentityRecord(accepted.binding, row.identity_record, entityId, owner);
 }

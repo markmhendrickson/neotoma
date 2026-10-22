@@ -17,6 +17,7 @@ import {
 import {
   assertAcceptedIdentityDefinition,
   deriveExactEntityIdentity,
+  prepareExactEntityIdentityRecord,
   EntityIdentityContractError,
 } from "./entity_identity_contract.js";
 import {
@@ -1168,6 +1169,11 @@ export async function prepareExactEntityResolution(
   return {
     ...exact,
     binding: accepted.binding,
+    identityRecord: prepareExactEntityIdentityRecord(
+      accepted.binding,
+      options.fields,
+      options.userId ?? ""
+    ),
     // Presentation only: this joined label never feeds back into the ID.
     canonicalName: `${options.entityType}:${exact.components.map((component) => component[1]).join("|")}`,
     identityRule: `composite:${exact.components.map((component) => component[0]).join("+")}`,
