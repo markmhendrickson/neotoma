@@ -11,6 +11,8 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { runInNewContext } from "node:vm";
+import { execFileSync } from "node:child_process";
+import { observeViewportMotion } from "./viewport_motion";
 import { ENTITY_SCHEMAS } from "../../../../src/services/schema_definitions";
 import { InterfaceExplorer } from "./InterfaceExplorer";
 import { CodeBlock } from "../InstallCodeBlock";
@@ -27,19 +29,31 @@ function renderedStorePayload(tab: string): Record<string, unknown> {
   fireEvent.click(screen.getByRole("tab", { name: tab }));
   const code =
     within(screen.getByRole("tabpanel", { name: tab })).getByRole("code").textContent ?? "";
-  if (tab === "CLI") {
-    const match = code.match(/--entities '([^']+)'/);
-    if (!match) throw new Error("CLI store payload missing");
-    return JSON.parse(match[1])[0];
-  }
   if (tab === "MCP") {
-    const match = code.match(/^store\((\{[^\n]+\})\)/m);
-    if (!match) throw new Error("MCP store payload missing");
-    return runInNewContext(`(${match[1]})`).entities[0];
+    const calls: Record<string, unknown>[] = [];
+    const capture = (payload: Record<string, unknown>) => {
+      calls.push(payload);
+    };
+    runInNewContext(code, {
+      store: capture,
+      correct: capture,
+      retrieve_entity_snapshot: capture,
+      list_observations: capture,
+      retrieve_field_provenance: capture,
+    });
+    return (calls[0].entities as Record<string, unknown>[])[0];
   }
-  const match = code.match(/-d '(\{"entities":\[[^']+\],"observation_source":"import"\})'/);
-  if (!match) throw new Error("REST store payload missing");
-  return JSON.parse(match[1]).entities[0];
+  // Execute natural shell shapes against local functions, never the real CLI or network.
+  execFileSync("/bin/bash", ["-n"], { input: code });
+  const args = execFileSync("/bin/bash", [], {
+    input: `neotoma() { printf '%s\\0' "$@"; printf '\\1'; }; curl() { neotoma "$@"; }; INVOICE_ID=ent_example; NEOTOMA_URL=http://example.invalid; NEOTOMA_TOKEN=placeholder;\n${code}`,
+    encoding: "utf8",
+  })
+    .split("\x01")[0]
+    .split("\0");
+  const flag = tab === "CLI" ? "--entities" : "--data-binary";
+  const payload = JSON.parse(args[args.indexOf(flag) + 1]);
+  return tab === "CLI" ? payload[0] : payload.entities[0];
 }
 
 describe("one-page interface examples", () => {
@@ -140,9 +154,11 @@ describe("copy feedback on the one-page site", () => {
         <NeotomaOnePager />
       </MemoryRouter>
     );
-    const evaluate = screen.getByText("Ask your agent to evaluate").closest(".plan-evaluate");
+    const evaluate = screen
+      .getByText("Ask your agent to evaluate")
+      .closest<HTMLElement>(".plan-evaluate");
     if (!evaluate) throw new Error("evaluation card missing");
-    fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
+    fireEvent.click(within(evaluate).getByRole("button", { name: "Copy" }));
     await waitFor(() =>
       expect(within(evaluate).getByRole("status")).toHaveTextContent(
         /copy failed.*try again.*select.*manually/i
@@ -150,8 +166,110 @@ describe("copy feedback on the one-page site", () => {
     );
     expect(within(evaluate).getByRole("status")).toHaveClass("plan-copy-error");
     expect(fallback).toHaveBeenCalledWith("copy");
-    fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument());
+    fireEvent.click(within(evaluate).getByRole("button", { name: "Copy" }));
+    await waitFor(() =>
+      expect(within(evaluate).getByRole("button", { name: "Copied" })).toBeInTheDocument()
+    );
     expect(screen.queryByText(/copy failed/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("shared site snippet content", () => {
+  it("copies the exact selectable source including quoted hashes and multiline continuations", async () => {
+    const write = vi.fn(async () => {});
+    clipboard(write, () => false);
+    const source =
+      "# Read this comment before running\nprintf '%s' '# retained' \\n  'second argument'";
+    render(
+      <CodeBlock code={source} copyFeedbackId="exact-source" installBlock="manual_commands" />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith(source));
+    expect(screen.getByRole("code").textContent).toBe(source);
+  });
+
+  it("copies the selected interface's formatted source without altering its JSON", async () => {
+    const write = vi.fn(async () => {});
+    clipboard(write, () => false);
+    render(<InterfaceExplorer />);
+    for (const name of ["CLI", "MCP", "REST API"]) {
+      fireEvent.click(screen.getByRole("tab", { name }));
+      const panel = screen.getByRole("tabpanel", { name });
+      const source = within(panel).getByRole("code").textContent;
+      fireEvent.click(within(panel).getByRole("button", { name: "Copy" }));
+      await waitFor(() => expect(write).toHaveBeenLastCalledWith(source));
+      expect(source).toContain('"invoice_date": "2026-10-01"');
+    }
+  });
+});
+
+describe("viewport entrance lifecycle", () => {
+  it("replays only after exit and re-entry and cancels on reduced motion, hidden documents and cleanup", () => {
+    let notify: IntersectionObserverCallback = () => {};
+    const disconnect = vi.fn();
+    const media = new EventTarget() as MediaQueryList;
+    Object.defineProperty(media, "matches", { configurable: true, value: false, writable: true });
+    vi.stubGlobal("matchMedia", () => media);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          notify = callback;
+        }
+        observe() {}
+        disconnect = disconnect;
+      }
+    );
+    Object.defineProperty(Element.prototype, "animate", { configurable: true, value: vi.fn() });
+    const target = document.createElement("div");
+    const cancel = vi.fn();
+    const play = vi.fn(() => [
+      { cancel, finished: new Promise(() => {}), playState: "running" } as unknown as Animation,
+    ]);
+    const stop = observeViewportMotion([target], play);
+    const entry = (isIntersecting: boolean) =>
+      notify([{ target, isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver);
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(1);
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(1);
+    entry(false);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(2);
+    Object.assign(media, { matches: true });
+    media.dispatchEvent(new Event("change"));
+    expect(cancel).toHaveBeenCalledTimes(2);
+    entry(false);
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(2);
+    Object.assign(media, { matches: false });
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    entry(false);
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(2);
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(play).toHaveBeenCalledTimes(3);
+    stop();
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledTimes(3);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(play).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("keeps the authored final state when observer or animation support is unavailable", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const target = document.createElement("div");
+    target.textContent = "Record";
+    const play = vi.fn();
+    observeViewportMotion([target], play)();
+    expect(play).not.toHaveBeenCalled();
+    expect(target.textContent).toBe("Record");
+    expect(target.getAttribute("style")).toBeNull();
+    vi.unstubAllGlobals();
   });
 });

@@ -50,11 +50,11 @@ describe("one-pager sheets 02 to 04", () => {
     expect(text).not.toMatch(
       /ids are from one run|\$ neotoma (store|corrections|entities|observations)\b/i
     );
-    expect(text).toContain('store({entities:[{"entity_type":"invoice"');
-    expect(examples).toContain('correct({entity_id:"$INVOICE_ID"');
-    expect(examples).toContain('retrieve_entity_snapshot({entity_id:"$INVOICE_ID"');
-    expect(examples).toContain('"$NEOTOMA_URL/store"');
-    expect(examples).toContain('"$NEOTOMA_URL/correct"');
+    expect(text).toMatch(/store\(\{\s*"entities":\s*\[\s*\{\s*"entity_type":\s*"invoice"/);
+    expect(text).toMatch(/correct\(\{\s*"entity_id":\s*"\$INVOICE_ID"/);
+    expect(text).toMatch(/retrieve_entity_snapshot\(\{\s*"entity_id":\s*"\$INVOICE_ID"/);
+    expect(text).toContain('"$NEOTOMA_URL/store"');
+    expect(text).toContain('"$NEOTOMA_URL/correct"');
     expect(examples).toContain("Authorization: Bearer $NEOTOMA_TOKEN");
   });
   it("limits shared reads to a configured instance and matching entry or profile", () => {
@@ -230,14 +230,21 @@ describe("sheet 06 limits", () => {
     text.indexOf("Explore the source")
   );
   it("separates the current record from planned governance", () => {
-    expect(direction).toContain("Today, Neotoma stores observations, computes current fields");
-    expect(direction).toContain(
-      "Planned work includes domain-scoped correction rights, explicit disputes and official positions"
+    expect(direction).toContain("The source, observation and snapshot foundation is here today");
+    expect(direction).toContain("Planned governance, with no promised timeline");
+    for (const ambition of [
+      "Give each domain a clear owner",
+      "Keep disagreement on the record",
+      "Make authority easier to inspect",
+    ]) {
+      expect(direction).toContain(ambition);
+    }
+    expect((direction.match(/Planned direction/g) ?? []).length).toBe(3);
+    expect(direction).toContain("authority scoped to the domain");
+    expect(direction).toContain("competing claims, unresolved disputes and official positions");
+    expect(direction.indexOf("foundation is here today")).toBeLessThan(
+      direction.indexOf("Planned direction")
     );
-    expect(direction).toContain(
-      "Those governance features are direction, not current capabilities or a timeline promise"
-    );
-    expect(direction.indexOf("Today, Neotoma")).toBeLessThan(direction.indexOf("Planned work"));
     expect(direction).not.toMatch(
       /correction rights (ship|are available)|disputes (ship|are available)/i
     );

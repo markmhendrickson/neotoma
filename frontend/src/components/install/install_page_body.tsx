@@ -87,7 +87,9 @@ function WhatChangesSection({
         {rows.map((row) => (
           <li key={row.what} className="rounded-lg border border-border px-3 py-2 text-[13px]">
             <div className="font-medium text-foreground break-words">{row.what}</div>
-            <div className="mt-1 font-mono text-[12px] text-muted-foreground break-words">{row.path}</div>
+            <div className="mt-1 font-mono text-[12px] text-muted-foreground break-words">
+              {row.path}
+            </div>
             <div className="mt-1 text-muted-foreground">
               {tableScope}: {row.scope}. <code className={codeXs}>{tableReset}</code>: {row.reset}
             </div>
@@ -151,7 +153,7 @@ export function InstallPageBody() {
           code={INSTALL_COMMANDS}
           copyFeedbackId="install-copy-quick"
           installBlock="manual_commands"
-          scrollLabel="Install commands. Scroll sideways if a line is clipped."
+          scrollLabel="Install commands."
         />
       </div>
 

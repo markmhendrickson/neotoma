@@ -939,41 +939,12 @@
   box-shadow: none !important;
 }
 
-/* /install, round 3: every code block on the sheet takes the drawing palette (the global
-   `.mdx-site-page-content pre` rule applies a teal gradient in dark mode), the permissions snippet
-   keeps its lines, and clipped lines show a scroll cue at the edge. */
+/* The install sheet replaces the legacy site code gradient with the paper palette. */
 .plan-install-sheet pre {
   background: var(--paper) !important;
   background-image: none !important;
   border-color: var(--line) !important;
   box-shadow: none !important;
-}
-.plan-install-preflight pre {
-  white-space: pre !important;
-  word-break: normal !important;
-  overflow-wrap: normal !important;
-}
-.plan-install-sheet .plan-install-commands pre,
-.plan-install-sheet .plan-install-preflight pre {
-  --edge: color-mix(in srgb, var(--ink) 28%, transparent);
-  background-color: var(--paper) !important;
-  background-image:
-    linear-gradient(to right, var(--paper), var(--paper)),
-    linear-gradient(to left, var(--paper), var(--paper)),
-    linear-gradient(to right, var(--edge), transparent),
-    linear-gradient(to left, var(--edge), transparent) !important;
-  background-position:
-    left center,
-    right center,
-    left center,
-    right center !important;
-  background-size:
-    24px 100%,
-    24px 100%,
-    14px 100%,
-    14px 100% !important;
-  background-repeat: no-repeat !important;
-  background-attachment: local, local, scroll, scroll !important;
 }
 
 /* October editorial variant. The older plate rules above remain for the standalone plate component. */
@@ -1615,4 +1586,209 @@
   .plan-inspector-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Second editorial pass: one snippet language, short labels and a directional gallery. */
+.plan-hero-aside .plan-actions {
+  margin-top: 1.8rem;
+}
+.plan-meta-pills li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.plan-meta-pills svg {
+  flex-shrink: 0;
+  stroke-width: 1.7;
+}
+.plan-section-cut .plan-step-copy a {
+  display: inline-block;
+  margin-top: 1rem;
+  text-underline-offset: 0.2em;
+}
+.plan .site-snippet {
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+.plan .site-snippet-title {
+  margin: 0;
+  font: 600 0.72rem/1.5 var(--sans);
+  color: var(--rust);
+}
+.plan .site-snippet .site-snippet-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: visible;
+  border-radius: 0;
+  font-size: 0.8rem;
+}
+.plan .site-snippet-copy {
+  border-radius: 0;
+}
+.plan .site-snippet-prose {
+  margin: 0;
+  max-width: 75ch;
+}
+.plan .plan-evaluate {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  margin-bottom: 2rem;
+}
+.plan-companion-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+.plan-companion-link:hover {
+  color: var(--rust);
+}
+.plan-vision-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1.2rem, 2.5vw, 2rem);
+  margin: 2rem 0;
+}
+.plan-vision-card {
+  min-width: 0;
+}
+.plan-vision-art {
+  background: var(--band);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 1.4rem;
+  overflow: hidden;
+}
+.plan-vision-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--ink);
+}
+.plan-vision-card h3 {
+  margin: 0.6rem 0 0.8rem;
+  font-size: clamp(1.9rem, 2.3vw, 2.6rem);
+  max-width: 16ch;
+}
+.plan-vision-card > p:last-child {
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: var(--slate);
+}
+.vision-paper {
+  fill: var(--sheet);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.vision-shadow {
+  fill: var(--ink);
+  opacity: 0.08;
+}
+.vision-fold {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.vision-lines {
+  stroke: var(--ink);
+  fill: none;
+  stroke-width: 2;
+  opacity: 0.65;
+}
+.vision-connector {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+.vision-ink {
+  fill: var(--ink);
+}
+.vision-rust {
+  fill: var(--rust);
+}
+.vision-sage {
+  fill: #879483;
+}
+.vision-highlight {
+  fill: #c9d0bd;
+  opacity: 0.7;
+}
+.vision-node {
+  fill: var(--band);
+  stroke: var(--rust);
+  stroke-width: 1.5;
+}
+.vision-dispute {
+  stroke: var(--rust);
+  stroke-width: 1.5;
+}
+.vision-check {
+  stroke: var(--sheet);
+  fill: none;
+  stroke-width: 2;
+}
+.plan-vision-diagram [data-vision-record] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.plan-vision-boundary {
+  max-width: 78ch;
+}
+.plan-current-boundaries {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: 1.4rem 0 1.8rem;
+  padding: 1rem 0;
+}
+.plan-current-boundaries summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.plan-current-boundaries p {
+  margin: 0.85rem 0 0;
+}
+@media (max-width: 900px) {
+  .plan-vision-gallery {
+    grid-template-columns: 1fr;
+  }
+  .plan-vision-card {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    gap: 0 1.5rem;
+    align-items: start;
+  }
+  .plan-vision-art {
+    grid-row: 1 / 4;
+    margin: 0;
+  }
+  .plan-vision-card .plan-label {
+    margin-top: 0.5rem;
+  }
+}
+@media (max-width: 540px) {
+  .plan-vision-card {
+    display: block;
+  }
+  .plan-vision-art {
+    margin-bottom: 1.2rem;
+  }
+  .plan-vision-card h3 {
+    max-width: 22ch;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan img,
+  .plan-inspector,
+  .plan-vision-diagram [data-vision-record],
+  .plan-vision-diagram [data-vision-connection] {
+    animation: none !important;
+  }
+}
+
+.plan-install-sheet .site-snippet .site-snippet-code {
+  background: var(--band) !important;
+  background-image: none !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
 }

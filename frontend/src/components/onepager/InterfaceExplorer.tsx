@@ -1,9 +1,10 @@
+import { SiteSnippet } from "../SiteSnippet";
 import { useRef, useState, type KeyboardEvent } from "react";
 
 type Interface = "CLI" | "MCP" | "REST API";
 const interfaces: Interface[] = ["CLI", "MCP", "REST API"];
 
-const invoicePayload = JSON.stringify({
+const invoice = {
   entity_type: "invoice",
   schema_version: "1.0",
   invoice_number: "INV-2041",
@@ -12,29 +13,66 @@ const invoicePayload = JSON.stringify({
   amount_due: 3200,
   currency: "USD",
   date_due: "2026-10-22",
-});
+};
+const pretty = (value: unknown) => JSON.stringify(value, null, 2);
+const invoicePayload = pretty([invoice]);
+const amended = {
+  entity_id: "$INVOICE_ID",
+  entity_type: "invoice",
+  field: "date_due",
+  value: "2026-10-29",
+  idempotency_key: "unique-amendment-key",
+};
+// Newlines inside shell quotes are part of the same JSON argument; backslashes continue flags.
+const continuation = " " + String.fromCharCode(92) + "\n  ";
+const cli = (...parts: string[]) => parts.join(continuation);
+const curl = (operation: string, payload: unknown, expandId = false) => {
+  const json = pretty(payload);
+  const body = expandId ? `"${json.replace(/"/g, String.fromCharCode(92) + '"')}"` : `'${json}'`;
+  return cli(
+    `curl -sS -X POST "$NEOTOMA_URL/${operation}"`,
+    '-H "Authorization: Bearer $NEOTOMA_TOKEN"',
+    "-H 'Content-Type: application/json'",
+    `--data-binary ${body}`
+  );
+};
+const mcp = (operation: string, payload: unknown) => `${operation}(${pretty(payload)})`;
 
 /** One illustrative invoice, with variable IDs and explicit transport-specific auth. No requests run. */
 const examples: Record<Interface, string> = {
-  CLI: `# Local profile. Store the invoice; read the returned entity_id as INVOICE_ID.
-neotoma dev store --observation-source import --entities '[${invoicePayload}]'
-# An email changes the date. Use the invoice entity ID returned above.
-neotoma dev corrections create "$INVOICE_ID" --entity-type invoice --field-name date_due --corrected-value 2026-10-29
-neotoma dev entities get "$INVOICE_ID"
-neotoma dev observations list --entity-id "$INVOICE_ID"
-neotoma dev request --operation getFieldProvenance --body "{\\"entity_id\\":\\"$INVOICE_ID\\",\\"field\\":\\"date_due\\"}"`,
-  MCP: `// Calls your configured Neotoma MCP server. Replace $INVOICE_ID with the store result.
-store({entities:[${invoicePayload}],observation_source:"import"})
-correct({entity_id:"$INVOICE_ID",entity_type:"invoice",field:"date_due",value:"2026-10-29",idempotency_key:"unique-amendment-key"})
-retrieve_entity_snapshot({entity_id:"$INVOICE_ID",format:"json"})
-list_observations({entity_id:"$INVOICE_ID"})
-retrieve_field_provenance({entity_id:"$INVOICE_ID",field:"date_due"})`,
-  "REST API": `# Your running local API needs a configured owner token. Replace $INVOICE_ID after store.
-curl -sS -X POST "$NEOTOMA_URL/store" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d '{"entities":[${invoicePayload}],"observation_source":"import"}'
-curl -sS -X POST "$NEOTOMA_URL/correct" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\",\\"entity_type\\":\\"invoice\\",\\"field\\":\\"date_due\\",\\"value\\":\\"2026-10-29\\",\\"idempotency_key\\":\\"unique-amendment-key\\"}"
-curl -sS -X POST "$NEOTOMA_URL/get_entity_snapshot" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\"}"
-curl -sS -X POST "$NEOTOMA_URL/list_observations" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\"}"
-curl -sS -X POST "$NEOTOMA_URL/get_field_provenance" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\",\\"field\\":\\"date_due\\"}"`,
+  CLI: [
+    "# Local profile. Read the returned entity_id as INVOICE_ID.",
+    cli("neotoma dev store", "--observation-source import", `--entities '${invoicePayload}'`),
+    "# The supplied email changes the date. Use the entity ID returned above.",
+    cli(
+      'neotoma dev corrections create "$INVOICE_ID"',
+      "--entity-type invoice",
+      "--field-name date_due",
+      "--corrected-value 2026-10-29"
+    ),
+    'neotoma dev entities get "$INVOICE_ID"',
+    'neotoma dev observations list --entity-id "$INVOICE_ID"',
+    cli(
+      "neotoma dev request --operation getFieldProvenance",
+      `--body "${pretty({ entity_id: "$INVOICE_ID", field: "date_due" }).replace(/"/g, String.fromCharCode(92) + '"')}"`
+    ),
+  ].join("\n\n"),
+  MCP: [
+    "// Calls your configured MCP server. Replace $INVOICE_ID with the store result.",
+    mcp("store", { entities: [invoice], observation_source: "import" }),
+    mcp("correct", amended),
+    mcp("retrieve_entity_snapshot", { entity_id: "$INVOICE_ID", format: "json" }),
+    mcp("list_observations", { entity_id: "$INVOICE_ID" }),
+    mcp("retrieve_field_provenance", { entity_id: "$INVOICE_ID", field: "date_due" }),
+  ].join("\n\n"),
+  "REST API": [
+    "# Set NEOTOMA_URL and your owner token. Replace INVOICE_ID after store.",
+    curl("store", { entities: [invoice], observation_source: "import" }),
+    curl("correct", amended, true),
+    curl("get_entity_snapshot", { entity_id: "$INVOICE_ID" }, true),
+    curl("list_observations", { entity_id: "$INVOICE_ID" }, true),
+    curl("get_field_provenance", { entity_id: "$INVOICE_ID", field: "date_due" }, true),
+  ].join("\n\n"),
 };
 
 export function InterfaceExplorer() {
@@ -102,9 +140,12 @@ export function InterfaceExplorer() {
                 ? "The connected MCP client reports its identity; verification depends on signed requests."
                 : "REST requires configured authentication; unsigned writer names are self-reported."}
           </p>
-          <pre className="plan-pre" tabIndex={0} aria-label={`${name} illustrative invoice calls`}>
-            <code>{examples[name]}</code>
-          </pre>
+          <SiteSnippet
+            text={examples[name]}
+            title={`${name} example`}
+            copyFeedbackId={`invoice-${name}`}
+            label={`${name} illustrative invoice calls`}
+          />
         </div>
       ))}
       <p className="plan-small">

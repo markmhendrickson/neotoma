@@ -36,6 +36,7 @@ const files = [
   "onepager_figures.tsx",
   "InterfaceExplorer.tsx",
   "InspectorPreview.tsx",
+  "VisionGallery.tsx",
 ].map((f) => readFileSync(join(dir, f), "utf-8"));
 // Doc comments list what is deliberately not claimed; only shipped copy is checked.
 const all = [...files, readFileSync(join(dir, "onepager_plate.tsx"), "utf-8")]
@@ -326,9 +327,8 @@ describe("review fixes (install path, accessibility, wording)", () => {
   });
 
   it("bounds the companion project to action authority", () => {
-    expect(page).toMatch(
-      /Ateles<\/a>\s*\{" "\}\s*coordinates work and action under explicit authority\./
-    );
+    expect(page).toContain('href="https://github.com/markmhendrickson/ateles"');
+    expect(page).toMatch(/coordinates work and action under explicit authority\./);
     expect(page).not.toContain("agentic organizations");
   });
 });
@@ -368,7 +368,8 @@ describe("logo size rule and union outline", () => {
     expect(mast).toContain("<AnimatedLockup");
     const animated = read("frontend/src/components/onepager/AnimatedLockup.tsx");
     expect(animated).toContain("n2-nav-light.svg?raw");
-    expect(animated).toContain("selected-site-identity.js");
+    expect(animated).toContain("observeViewportMotion");
+    expect(animated).toContain("playLogo");
     const footer = onepager.slice(onepager.indexOf('<footer className="plan-footer">'));
     expect(footer.slice(0, footer.indexOf("</footer>"))).toContain("<SolidLockup");
     const installMast = installPage.slice(installPage.indexOf('className="plan-install-masthead"'));
@@ -489,7 +490,10 @@ describe("/install polish", () => {
         "Give agents operational truth they can read, update, and maintain as they work."
       );
       expect(lede).not.toMatch(/corrected/i);
-      expect(page2).toContain("A current field comes from recorded observations and a field rule");
+      expect(page2).not.toContain(
+        "A current field comes from recorded observations and a field rule"
+      );
+      expect(copy2).toContain("Merge rules per field compute the current value");
     });
 
     it("shows an amendment without a reusable fixed ID", () => {
@@ -972,7 +976,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     }
     expect(page).toContain("{PLATE_CAPTION}");
     expect(copyConst("PLATE_CAPTION")).toBe(
-      "Synthetic example: the current record selects a value for each field and keeps its observation trail."
+      "The current record selects a value for each field and keeps its observation trail."
     );
   });
 });
@@ -988,20 +992,26 @@ describe("/install code blocks (round 3)", () => {
     );
   });
 
-  it("keeps the permissions snippet on single lines and focusable", () => {
-    expect(css).toMatch(/\.plan-install-preflight pre \{[^}]*white-space: pre !important;/);
+  it("uses the same wrapped, labelled snippet for permissions", () => {
     expect(body).toContain('className="plan-install-preflight');
     const pf = read("frontend/src/components/PermissionsPreflight.tsx");
-    expect(pf).toMatch(
-      /<pre\s+tabIndex=\{0\}\s+role="region"\s+aria-label="Permissions pre-flight snippet/
-    );
+    expect(pf).toContain("<SiteSnippet");
+    expect(pf).toContain('label="Permissions pre-flight snippet"');
+    expect(css).toMatch(/white-space: pre-wrap !important/);
+    expect(css).toMatch(/overflow-wrap: anywhere !important/);
   });
 
-  it("makes the clipped install block a labelled, focusable region with an edge cue", () => {
+  it("keeps the wrapped install source labelled, focusable and selectable", () => {
     expect(body).toMatch(/scrollLabel="Install commands\./);
     const block = read("frontend/src/components/InstallCodeBlock.tsx");
-    expect(block).toContain('tabIndex: 0, role: "region", "aria-label": scrollLabel');
-    expect(css).toMatch(/background-attachment: local, local, scroll, scroll !important;/);
+    const shared = read("frontend/src/components/SiteSnippet.tsx");
+    const sharedCss = read("frontend/src/components/site_snippet.css");
+    expect(block).toContain("label={scrollLabel}");
+    expect(shared).toContain("tabIndex={0}");
+    expect(shared).toContain('role="region"');
+    expect(shared).toContain("aria-label={label ?? title}");
+    expect(sharedCss).toMatch(/white-space: pre-wrap/);
+    expect(sharedCss).toMatch(/overflow-wrap: anywhere/);
   });
 });
 

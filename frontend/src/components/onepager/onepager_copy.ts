@@ -36,7 +36,7 @@ export const PLATE_NOTE: readonly string[] = [
 
 /** Caption line under the synthetic example. */
 export const PLATE_CAPTION =
-  "Synthetic example: the current record selects a value for each field and keeps its observation trail.";
+  "The current record selects a value for each field and keeps its observation trail.";
 
 export const RECALL_VS_RECORD: readonly {
   question: string;
@@ -146,7 +146,7 @@ export const DEEPER_MATERIAL: readonly {
       { label: "npm package", href: "https://www.npmjs.com/package/neotoma" },
       { label: "Issues", href: `${GH}/issues` },
       { label: "Discussions", href: `${GH}/discussions` },
-      { label: "Talk to the author", href: "/meet" },
+      { label: "Talk to us", href: "/meet" },
     ],
   },
 ];

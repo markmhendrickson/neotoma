@@ -693,6 +693,10 @@ if (fs.existsSync(installHtmlForHowTo)) {
 const homeForLimits = path.join(siteDir, "index.html");
 if (fs.existsSync(homeForLimits)) {
   const homeText = servedText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
+  const directionText = homeText.slice(
+    homeText.indexOf("Where this is going"),
+    homeText.indexOf("Explore the source")
+  );
   for (const needle of [
     "Where this is going",
     "Current boundaries: one local operator",
@@ -700,14 +704,26 @@ if (fs.existsSync(homeForLimits)) {
     "export contains current values without observation history",
     "authorship is verified only for signed requests, and some paths record no writer",
     "One entity can be read as of a past time; the whole record cannot",
-    "Planned work includes domain-scoped correction rights, explicit disputes and official positions",
-    "Those governance features are direction, not current capabilities or a timeline promise",
+    "A record people and agents maintain together",
+    "Give each domain a clear owner",
+    "authority scoped to the domain",
+    "Keep disagreement on the record",
+    "competing claims, unresolved disputes and official positions",
+    "Make authority easier to inspect",
+    "Planned governance, with no promised timeline",
+    "Authority to act stays in the operational tools above the record",
     "known limitations",
   ]) {
-    if (!homeText.includes(needle)) {
-      fail(`site_pages/index.html limits section no longer says "${needle}"`);
+    if (!directionText.includes(needle)) {
+      fail(`site_pages/index.html direction section no longer says "${needle}"`);
       servedPageFailures++;
     }
+  }
+  if ((directionText.match(/Planned direction/g) ?? []).length !== 3) {
+    fail(
+      "site_pages/index.html must label each of the three governance ambitions as planned direction"
+    );
+    servedPageFailures++;
   }
   if (
     /Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants|corrections always win|export (with|including) (full )?history/i.test(

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { observeViewportMotion, playLogo } from "./viewport_motion";
 import light from "../../../public/brand/n2-nav-light.svg?raw";
 import dark from "../../../public/brand/n2-nav-dark.svg?raw";
 import "./selected-site-identity.css";
@@ -15,14 +16,11 @@ function markParts(svg: string, theme: "light" | "dark") {
 const artwork = markParts(light, "light") + markParts(dark, "dark");
 
 export function AnimatedLockup() {
-  useEffect(() => {
-    // Existing selected-site identity player from the accepted draft. It reveals
-    // the three symbol paths in 550 ms and skips animation for reduced motion.
-    // @ts-expect-error static site script intentionally has no TypeScript declarations
-    void import("./selected-site-identity.js");
-  }, []);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => (ref.current ? observeViewportMotion([ref.current], playLogo) : undefined), []);
   return (
     <span
+      ref={ref}
       className="selected-site-logo neotoma plan-animated-lockup"
       role="img"
       aria-label="Neotoma"

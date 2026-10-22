@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Braces, Cable, HardDrive, Scale, Terminal } from "lucide-react";
+import { SiteSnippet } from "../SiteSnippet";
+import { usePageVisualMotion } from "./viewport_motion";
+import { VisionGallery } from "./VisionGallery";
 import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO, neotomaGithubBlobUrl } from "@/site/neotoma_repo";
 import { CodeBlock } from "@/components/InstallCodeBlock";
-import { useCopyFeedback } from "@/lib/copy_feedback";
-import { copyTextToClipboard } from "@/lib/copy_to_clipboard";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
 import { AnimatedLockup } from "./AnimatedLockup";
@@ -33,15 +35,16 @@ function SheetHead({ id, mark, title }: { id: string; mark: string; title: strin
 
 export function NeotomaOnePager() {
   const [host, setHost] = useState(CONNECTIONS_SETUP[0]);
-  const [promptCopied, markPromptCopied] = useCopyFeedback("onepager-evaluate", 0);
-  const [promptCopyFailed, setPromptCopyFailed] = useState(false);
-  const evaluationPrompt = `Evaluate whether Neotoma fits a workflow with changing facts across AI tools. Read ${NEOTOMA_GITHUB_REPO} and ${neotomaGithubBlobUrl("docs/known_limitations.md")}. Compare it with tools I already use. Tell me whether those tools are sufficient, what I would need to run locally, and which current limits matter. Do not install anything or write data during this evaluation.`;
+  const pageRef = useRef<HTMLElement>(null);
+  usePageVisualMotion(pageRef);
+  const evaluationPrompt =
+    "Read https://neotoma.io/. Ask about my workflow, then explain whether Neotoma fits, whether my existing tools are sufficient, and which current limits matter.";
   return (
     <div>
       <a className="plan-skip" href="#plan-content">
         Skip to content
       </a>
-      <main className="plan" id="top">
+      <main className="plan" id="top" ref={pageRef}>
         <section className="plan-sheet plan-hero" aria-labelledby="s1">
           <div className="plan-masthead">
             <AnimatedLockup />
@@ -61,20 +64,31 @@ export function NeotomaOnePager() {
               <p className="plan-label">A record, not recall.</p>
               <h1 id="s1">The system of record for AI agents.</h1>
               <ul className="plan-meta-pills" aria-label="Product details">
-                <li>MIT</li>
-                <li>Local-first</li>
-                <li>MCP</li>
-                <li>REST API</li>
-                <li>CLI</li>
+                <li>
+                  <Scale size={13} aria-hidden="true" />
+                  MIT
+                </li>
+                <li>
+                  <HardDrive size={13} aria-hidden="true" />
+                  Local-first
+                </li>
+                <li>
+                  <Cable size={13} aria-hidden="true" />
+                  MCP
+                </li>
+                <li>
+                  <Braces size={13} aria-hidden="true" />
+                  REST API
+                </li>
+                <li>
+                  <Terminal size={13} aria-hidden="true" />
+                  CLI
+                </li>
               </ul>
             </div>
             <div className="plan-hero-aside">
               <p className="plan-lede">
                 Give agents operational truth they can read, update, and maintain as they work.
-              </p>
-              <p className="plan-small">
-                A current field comes from recorded observations and a field rule, with its source
-                trail close at hand.
               </p>
               <div className="plan-actions">
                 <Link
@@ -106,10 +120,9 @@ export function NeotomaOnePager() {
             one.
           </p>
           <p className="plan-body plan-fit-note">
-            For developers and operators whose configured agents handle changing facts across tools.
-            You run a local service, decide what to write, and connect the tools that should read
-            it. If your existing tools already give you a maintained, source-backed record, they may
-            be sufficient.
+            Neotoma is for developers and operators whose agents handle changing facts across tools.
+            You choose what enters the local record and which tools use it. If your existing tools
+            already maintain a source-backed record, they may be sufficient.
           </p>
           <div className="plan-contrast">
             <article>
@@ -160,18 +173,15 @@ export function NeotomaOnePager() {
               October value and can inspect which observation supplied it. The amount still comes
               from the PDF.
             </p>
-            <p className="plan-note">
-              Fictional data; no email is read or invoice stored by this page.
-            </p>
           </div>
           <ol className="plan-section-cut">
             {PIPELINE.map((step, i) => (
               <li key={step.name}>
                 <div className="plan-step-copy">
-                  <span className="plan-label">Step {String(i + 1).padStart(2, "0")}</span>
-                  <h3>
-                    {step.label} <span className="plan-step-term">({step.name})</span>
-                  </h3>
+                  <span className="plan-label">
+                    Step {String(i + 1).padStart(2, "0")} · {step.name}
+                  </span>
+                  <h3>{step.label}</h3>
                   <p>{step.text}</p>
                   <a href={neotomaGithubBlobUrl(step.doc)}>
                     Read the {step.name.toLowerCase()} reference
@@ -277,24 +287,25 @@ export function NeotomaOnePager() {
         <section className="plan-sheet" aria-labelledby="s5" id="vision">
           <SheetHead id="s5" mark="04 · Direction" title="Where this is going" />
           <p className="plan-body">
-            A record people and agents maintain together. Today, Neotoma stores observations,
-            computes current fields and keeps the source and history behind them. That is the
-            foundation for clearer authority over state.
+            A record people and agents maintain together. The source, observation and snapshot
+            foundation is here today. These ambitions extend it toward clearer authority over state.
           </p>
-          <p className="plan-body">
-            Planned work includes domain-scoped correction rights, explicit disputes and official
-            positions, and clearer views of why a value holds. Those governance features are
-            direction, not current capabilities or a timeline promise. Authority to act remains with
-            the operational tools above the record.
-          </p>
-          <p className="plan-body plan-small">
-            Current boundaries: one local operator; later ordinary writes can replace corrections;
-            export contains current values without observation history; authorship is verified only
-            for signed requests, and some paths record no writer. One entity can be read as of a
-            past time; the whole record cannot. See{" "}
-            <a href={neotomaGithubBlobUrl("docs/known_limitations.md")}>known limitations</a> and{" "}
+          <VisionGallery />
+          <p className="plan-small plan-vision-boundary">
+            Planned governance, with no promised timeline. Authority to act stays in the operational
+            tools above the record. See{" "}
             <a href={`${NEOTOMA_GITHUB_REPO}#vision-and-execution-status`}>vision status</a>.
           </p>
+          <details className="plan-current-boundaries">
+            <summary>Current scope and limits</summary>
+            <p className="plan-small">
+              Current boundaries: one local operator; later ordinary writes can replace corrections;
+              export contains current values without observation history; authorship is verified
+              only for signed requests, and some paths record no writer. One entity can be read as
+              of a past time; the whole record cannot. Read the{" "}
+              <a href={neotomaGithubBlobUrl("docs/known_limitations.md")}>known limitations</a>.
+            </p>
+          </details>
           <div className="plan-actions">
             <Link
               to="/install"
@@ -315,27 +326,14 @@ export function NeotomaOnePager() {
             Evaluate the fit before installing. Your agent can compare Neotoma with your current
             tools and recommend staying with those tools when they already meet the need.
           </p>
-          <div className="plan-evaluate">
-            <p className="plan-label">Ask your agent to evaluate</p>
-            <p>{evaluationPrompt}</p>
-            <button
-              type="button"
-              className="plan-btn"
-              aria-live="polite"
-              onClick={async () => {
-                const copied = await copyTextToClipboard(evaluationPrompt);
-                setPromptCopyFailed(!copied);
-                if (copied) markPromptCopied();
-              }}
-            >
-              {promptCopied ? "Copied" : "Copy prompt"}
-            </button>
-            {promptCopyFailed && (
-              <p className="plan-copy-error" role="status">
-                Copy failed. Try again, or select the prompt above and copy manually.
-              </p>
-            )}
-          </div>
+          <SiteSnippet
+            text={evaluationPrompt}
+            title="Ask your agent to evaluate"
+            prose
+            className="plan-evaluate"
+            copyFeedbackId="onepager-evaluate"
+            successMessage="Prompt copied"
+          />
           <div className="plan-deeper">
             {DEEPER_MATERIAL.map((group) => (
               <div key={group.title}>
@@ -351,7 +349,10 @@ export function NeotomaOnePager() {
             ))}
           </div>
           <p className="plan-small">
-            Companion project: <a href="https://github.com/markmhendrickson/ateles">Ateles</a>{" "}
+            See the companion project:{" "}
+            <a className="plan-companion-link" href="https://github.com/markmhendrickson/ateles">
+              Ateles
+            </a>{" "}
             coordinates work and action under explicit authority.
           </p>
           <footer className="plan-footer">
