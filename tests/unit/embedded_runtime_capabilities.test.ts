@@ -7,6 +7,8 @@ import type { DbDatabase } from "../../src/repositories/db/driver.js";
 
 function context() {
   return new EmbeddedRuntimeContext({
+    legacyIdentityPolicy: { tenantScopedEntityIds: false },
+    attributionPolicy: { anonymous_writes: "allow" },
     database: {} as DbDatabase,
     configuration: createEmbeddedRuntimeConfiguration({
       dataDirectory: join(process.cwd(), ".vitest", "capabilities"),

@@ -15,6 +15,8 @@ function make(database = {} as DbDatabase, keyFilePath = "") {
     packageRoot: process.cwd(),
   });
   return new EmbeddedRuntimeContext({
+    legacyIdentityPolicy: { tenantScopedEntityIds: false },
+    attributionPolicy: { anonymous_writes: "allow" },
     database,
     configuration: {
       ...configuration,

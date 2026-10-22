@@ -40,6 +40,8 @@ async function fixture(label: string, ownership: "caller" | "runtime" = "caller"
     packageRoot: process.cwd(),
   });
   const context = new EmbeddedRuntimeContext({
+    legacyIdentityPolicy: { tenantScopedEntityIds: false },
+    attributionPolicy: { anonymous_writes: "allow" },
     database,
     configuration,
     adapters: { fixture: { label } },
@@ -83,7 +85,7 @@ describe("embedded runtime context foundation", () => {
            const {createEmbeddedRuntimeConfiguration} = await import(${JSON.stringify(configurationUrl)});
            const {EmbeddedRuntimeContext,getEmbeddedRuntimeContext} = await import(${JSON.stringify(contextUrl)});
            const configuration = createEmbeddedRuntimeConfiguration({dataDirectory:${JSON.stringify(data)},packageRoot:${JSON.stringify(cwd)}});
-           const context = new EmbeddedRuntimeContext({database:{},configuration,adapters:{}});
+           const context = new EmbeddedRuntimeContext({legacyIdentityPolicy: {tenantScopedEntityIds: false}, attributionPolicy: {anonymous_writes: "allow"},database:{},configuration,adapters:{}});
            await context.run(() => assert.equal(getEmbeddedRuntimeContext().configuration.dataDir, ${JSON.stringify(data)}));
            await context.dispose();
            assert.deepEqual({...process.env}, before);
@@ -232,7 +234,13 @@ describe("embedded runtime context foundation", () => {
     const configuration = { ...pure, iconGeneration: { ...pure.iconGeneration } };
     const adapter = { calls: 0 };
     const adapters: Record<string, unknown> = { fixture: adapter };
-    const context = new EmbeddedRuntimeContext({ database, configuration, adapters });
+    const context = new EmbeddedRuntimeContext({
+      legacyIdentityPolicy: { tenantScopedEntityIds: false },
+      attributionPolicy: { anonymous_writes: "allow" },
+      database,
+      configuration,
+      adapters,
+    });
     configuration.iconGeneration.enabled = true;
     adapters.fixture = "rebound";
     adapter.calls += 1;

@@ -20,6 +20,7 @@
 
 import type { AgentIdentity, AttributionTier } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 
 /**
  * Canonical write-path identifier. Used as the per-path override key and
@@ -106,6 +107,8 @@ function parsePerPath(
  * worrying about mutation.
  */
 export function getAttributionPolicySnapshot(): AttributionPolicySnapshot {
+  const runtime = getEmbeddedRuntimeContext();
+  if (runtime) return structuredClone(runtime.attributionPolicy);
   const anonymousWrites =
     parseAnonymousWriteMode(process.env.NEOTOMA_ATTRIBUTION_POLICY) ??
     DEFAULT_POLICY.anonymous_writes;
@@ -211,8 +214,8 @@ export interface PolicyOutcome {
  * Callers MUST invoke this at the top of each public write method so
  * all transports (HTTP, MCP stdio, MCP HTTP, CLI backup) share one seam.
  *
- * This function is synchronous and cheap: it reads `process.env` once per
- * call. If a future profile caches snapshots, keep this signature stable
+ * This function is synchronous and cheap: it reads the immutable explicit
+ * host policy or the legacy environment snapshot per call. Keep this signature stable
  * so call sites don't change.
  */
 export function enforceAttributionPolicy(

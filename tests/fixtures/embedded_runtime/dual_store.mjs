@@ -44,6 +44,8 @@ function make(label) {
   const dataDirectory = directory + "/" + label;
   mkdirSync(dataDirectory, { recursive: true });
   return new EmbeddedRuntimeContext({
+    legacyIdentityPolicy: { tenantScopedEntityIds: false },
+    attributionPolicy: { anonymous_writes: "allow" },
     database: new AsyncSqliteDatabase(dataDirectory + "/store.db"),
     configuration: createEmbeddedRuntimeConfiguration({ dataDirectory, packageRoot }),
     adapters: { label },
@@ -129,6 +131,24 @@ await a.run(async () => {
     (error) => error.data?.error_code === "NETWORK_DISABLED"
   );
   assert.deepEqual(await counts(), initial);
+});
+await a.run(async () => {
+  const stored = await opsA.store({
+    entities: [{ entity_type: "runtime_note", title: "Explicit before legacy", status: "initial" }],
+    idempotency_key: "explicit-before-legacy",
+  });
+  const id = stored.entities[0].entity_id;
+  await opsA.correct({
+    entity_id: id,
+    entity_type: "runtime_note",
+    field: "status",
+    value: "corrected",
+    idempotency_key: "explicit-before-legacy-correction",
+  });
+  assert.equal(
+    (await opsA.retrieveEntitySnapshot({ entity_id: id, format: "json" })).snapshot.status,
+    "corrected"
+  );
 });
 await new Promise((resolve) => setImmediate(resolve));
 assert.deepEqual(warnings, []);

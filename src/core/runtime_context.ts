@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { NeotomaConfiguration } from "../config.js";
 import type { DbDatabase } from "../repositories/db/driver.js";
+import type { AttributionPolicySnapshot } from "../services/attribution_policy.js";
+import { validateEmbeddedHostPolicies, type LegacyIdentityPolicy } from "./runtime_host_policy.js";
 
 interface OperationScope {
   context: EmbeddedRuntimeContext;
@@ -11,6 +13,8 @@ const currentOperation = new AsyncLocalStorage<OperationScope>();
 
 export interface EmbeddedRuntimeContextOptions {
   database: DbDatabase;
+  legacyIdentityPolicy: Readonly<LegacyIdentityPolicy>;
+  attributionPolicy: Readonly<AttributionPolicySnapshot>;
   configuration: Readonly<NeotomaConfiguration>;
   /** Adapter objects remain caller-owned. This internal seam does not admit capabilities. */
   adapters: Readonly<Record<string, unknown>>;
@@ -24,6 +28,8 @@ export interface EmbeddedRuntimeContextOptions {
  */
 export class EmbeddedRuntimeContext {
   readonly database: DbDatabase;
+  readonly legacyIdentityPolicy: Readonly<LegacyIdentityPolicy>;
+  readonly attributionPolicy: Readonly<AttributionPolicySnapshot>;
   readonly configuration: Readonly<NeotomaConfiguration>;
   readonly adapters: Readonly<Record<string, unknown>>;
   private readonly ownsDatabase: boolean;
@@ -33,6 +39,9 @@ export class EmbeddedRuntimeContext {
   private disposal?: Promise<void>;
 
   constructor(options: EmbeddedRuntimeContextOptions) {
+    const policies = validateEmbeddedHostPolicies(options);
+    this.legacyIdentityPolicy = policies.legacyIdentityPolicy;
+    this.attributionPolicy = policies.attributionPolicy;
     if (
       options.databaseOwnership !== undefined &&
       options.databaseOwnership !== "caller" &&
@@ -48,6 +57,15 @@ export class EmbeddedRuntimeContext {
     this.configuration = Object.freeze(configuration);
     this.adapters = Object.freeze({ ...options.adapters });
     this.ownsDatabase = options.databaseOwnership === "runtime";
+    for (const key of [
+      "database",
+      "configuration",
+      "adapters",
+      "legacyIdentityPolicy",
+      "attributionPolicy",
+    ]) {
+      Object.defineProperty(this, key, { writable: false, configurable: false });
+    }
   }
 
   async run<T>(operation: () => Promise<T> | T): Promise<T> {

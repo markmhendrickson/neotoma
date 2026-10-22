@@ -11,6 +11,8 @@ import type { DbDatabase } from "../../src/repositories/db/driver.js";
 
 function context(label: string) {
   return new EmbeddedRuntimeContext({
+    legacyIdentityPolicy: { tenantScopedEntityIds: false },
+    attributionPolicy: { anonymous_writes: "allow" },
     database: {} as DbDatabase,
     configuration: createEmbeddedRuntimeConfiguration({
       dataDirectory: join(process.cwd(), ".vitest", label),
@@ -107,7 +109,7 @@ describe("contextual configuration selection", () => {
         const before = {...process.env};
         const {EmbeddedRuntimeContext} = await import(${JSON.stringify(url("core/runtime_context.js"))});
         const {createEmbeddedRuntimeConfiguration} = await import(${JSON.stringify(url("core/runtime_configuration.js"))});
-        function make(label) {return new EmbeddedRuntimeContext({database:{},configuration:createEmbeddedRuntimeConfiguration({dataDirectory:${JSON.stringify(temporary)}+"/"+label,packageRoot:${JSON.stringify(cwd)}}),adapters:{}});}
+        function make(label) {return new EmbeddedRuntimeContext({legacyIdentityPolicy: {tenantScopedEntityIds: false}, attributionPolicy: {anonymous_writes: "allow"},database:{},configuration:createEmbeddedRuntimeConfiguration({dataDirectory:${JSON.stringify(temporary)}+"/"+label,packageRoot:${JSON.stringify(cwd)}}),adapters:{}});}
         const a=make("a"), b=make("b");
         let settings, icons, embeddings, oauth;
         await a.run(async () => {
@@ -190,6 +192,8 @@ describe("contextual configuration selection", () => {
             USERPROFILE: home,
             TMPDIR: temporary,
             NODE_ENV: mode === "explicit-only" ? "development" : "test",
+            NEOTOMA_ATTRIBUTION_POLICY: mode === "explicit-only" ? "reject" : "allow",
+            NEOTOMA_TENANT_SCOPED_ENTITY_IDS: mode === "explicit-only" ? "1" : "0",
             NEOTOMA_ENV: "development",
             NEOTOMA_DATA_DIR: join(temporary, "legacy-data"),
             NEOTOMA_DB_BACKEND: "sqlite",

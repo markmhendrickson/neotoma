@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import { isSandboxMode } from "./sandbox_mode.js";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 import {
   schemaRegistry,
   type CanonicalNameRule,
@@ -307,6 +308,8 @@ export function generateEntityId(
  */
 export function entityIdTenantSalt(userId?: string | null): string | undefined {
   if (!userId) return undefined;
+  const runtime = getEmbeddedRuntimeContext();
+  if (runtime) return runtime.legacyIdentityPolicy.tenantScopedEntityIds ? userId : undefined;
   const override = (process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS ?? "")
     .toString()
     .trim()
