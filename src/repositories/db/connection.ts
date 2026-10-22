@@ -9,7 +9,6 @@
  */
 
 import { mkdirSync } from "fs";
-import { AsyncLocalStorage } from "node:async_hooks";
 import path from "path";
 import { config } from "../../config.js";
 import {
@@ -20,10 +19,10 @@ import {
 import { AsyncSqliteDatabase } from "../sqlite/sqlite_driver.js";
 import type { DbDatabase } from "./driver.js";
 import { getEmbeddedRuntimeContext } from "../../core/runtime_context.js";
+import { lifecycleDatabaseScope as lifecycleDatabase, getExplicitScopedDatabase } from "./scope.js";
 
 let cachedDb: DbDatabase | null = null;
 let opening: Promise<DbDatabase> | null = null;
-const lifecycleDatabase = new AsyncLocalStorage<{ database: DbDatabase; active: boolean }>();
 let lifecycleBindingActive = false;
 
 /** Fresh dedicated-process scope only: adapters share the already validated handle. */
@@ -131,12 +130,8 @@ async function openDb(): Promise<DbDatabase> {
  */
 export function getDb(): Promise<DbDatabase> {
   try {
-    const runtime = getEmbeddedRuntimeContext();
-    if (runtime) {
-      if (lifecycleDatabase.getStore())
-        return Promise.reject(new Error("EXPLICIT_RUNTIME_DATABASE_BINDING_CONFLICT"));
-      return Promise.resolve(runtime.database);
-    }
+    const explicit = getExplicitScopedDatabase();
+    if (explicit) return Promise.resolve(explicit);
   } catch (error) {
     return Promise.reject(error);
   }

@@ -10478,29 +10478,23 @@ app.post("/list_observations", async (req, res) => {
     return sendError(res, 401, "UNAUTHORIZED", (err as Error).message);
   }
 
-  let query = db.from("observations").select("*").eq("entity_id", entity_id).eq("user_id", userId);
-
-  if (updated_since) {
-    query = query.gte("observed_at", updated_since);
+  const { listObservationHistoryForUser } = await import("./services/observation_history.js");
+  try {
+    const result = await listObservationHistoryForUser(userId, {
+      entity_id,
+      limit,
+      offset,
+      updated_since,
+      created_since,
+    });
+    logDebug("Success:list_observations", req, { entity_id, count: result.observations.length });
+    return res.json({ observations: result.observations });
+  } catch (error) {
+    const { OperationError } = await import("./core/operation_error.js");
+    if (error instanceof OperationError)
+      return sendError(res, error.statusCode, "DB_QUERY_FAILED", error.message);
+    throw error;
   }
-  if (created_since) {
-    query = query.gte("observed_at", created_since);
-  }
-
-  const { data, error } = await query
-    .order("observed_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (error) {
-    logError("DbError:list_observations", req, error);
-    return sendError(res, 500, "DB_QUERY_FAILED", error.message);
-  }
-
-  logDebug("Success:list_observations", req, {
-    entity_id,
-    count: data?.length || 0,
-  });
-  return res.json({ observations: data || [] });
 });
 
 // Get field provenance (trace field to source documents)

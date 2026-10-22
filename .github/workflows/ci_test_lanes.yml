@@ -151,6 +151,12 @@ jobs:
       - name: Run natural CLI correction durability and reserved-authority effects (#2033)
         run: npx vitest run --no-file-parallelism tests/cli/cli_correction_durability.test.ts
 
+      # Internal shared history kernel: the built child proves the explicit read
+      # closure excludes transport/provider/initializer imports; the real HTTP,
+      # MCP and internal scenarios must keep matching. No continue-on-error.
+      - name: Run shared history kernel and transport parity regressions
+        run: npx vitest run --no-file-parallelism tests/unit/read_kernel.test.ts tests/unit/read_kernel_import.test.ts tests/integration/read_kernel_transport_parity.test.ts
+
       # #2046 instance-skill MCP initialize effect regression. The service has
       # unit coverage, but that can mock away backend-driver SQL mistakes. This
       # integration test seeds real rows and drives MCP initialize through the

@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **757**
-- Backend and repo Vitest files: **721**
+- Total automated test files: **760**
+- Backend and repo Vitest files: **724**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 214 |
+| Vitest unit tests | 216 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 228 |
+| Vitest integration tests | 229 |
 | Vitest CLI tests | 90 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (214):**
+**Files (216):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -269,6 +269,8 @@ flowchart TD
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/read_kernel_import.test.ts`
+- `tests/unit/read_kernel.test.ts`
 - `tests/unit/readiness_probe.test.ts`
 - `tests/unit/recover_json_array_string.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
@@ -473,7 +475,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (228):**
+**Files (229):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -635,6 +637,7 @@ flowchart TD
 - `tests/integration/plan_body_raw_fragment_backfill.test.ts`
 - `tests/integration/process_issues_skill.test.ts`
 - `tests/integration/public_key_registry.test.ts`
+- `tests/integration/read_kernel_transport_parity.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`
 - `tests/integration/relationship_delete_discovery_mcp.test.ts`

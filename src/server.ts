@@ -3796,37 +3796,16 @@ export class NeotomaServer {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
 
-    let obsQuery = db
-      .from("observations")
-      .select("*", { count: "exact" })
-      .eq("entity_id", parsed.entity_id)
-      .eq("user_id", userId);
-
-    if (parsed.updated_since) {
-      obsQuery = obsQuery.gte("observed_at", parsed.updated_since);
+    const { listObservationHistoryForUser } = await import("./services/observation_history.js");
+    try {
+      return this.buildTextResponse(await listObservationHistoryForUser(userId, parsed));
+    } catch (error) {
+      const { OperationError } = await import("./core/operation_error.js");
+      if (error instanceof OperationError) {
+        throw new McpError(ErrorCode.InternalError, error.message, error.toErrorEnvelope());
+      }
+      throw error;
     }
-    if (parsed.created_since) {
-      obsQuery = obsQuery.gte("observed_at", parsed.created_since);
-    }
-
-    const {
-      data: observations,
-      error,
-      count,
-    } = await obsQuery
-      .order("observed_at", { ascending: false })
-      .range(parsed.offset, parsed.offset + parsed.limit - 1);
-
-    if (error) {
-      throw new McpError(ErrorCode.InternalError, `Failed to list observations: ${error.message}`);
-    }
-
-    return this.buildTextResponse({
-      observations: observations || [],
-      total: count || 0,
-      limit: parsed.limit,
-      offset: parsed.offset,
-    });
   }
 
   private async retrieveFieldProvenance(

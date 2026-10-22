@@ -6,7 +6,7 @@ import {
 import { mkdirSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
-import { clearDbCache, getDb } from "../db/connection.js";
+import { acquireDatabase as getDb } from "../db/acquisition.js";
 import type { DbDatabase } from "../db/driver.js";
 import { config } from "../../config.js";
 import { getEmbeddedRuntimeContext } from "../../core/runtime_context.js";
@@ -1184,7 +1184,12 @@ class LocalQueryBuilder {
 
           return { data: null, error: { message: "Unsupported operation" } };
         } catch (error: any) {
-          if (attempt === 0 && isRecoverableSqliteConnectionError(error)) {
+          if (
+            attempt === 0 &&
+            isRecoverableSqliteConnectionError(error) &&
+            !getEmbeddedRuntimeContext()
+          ) {
+            const { clearDbCache } = await import("../db/connection.js");
             clearDbCache();
             continue;
           }
