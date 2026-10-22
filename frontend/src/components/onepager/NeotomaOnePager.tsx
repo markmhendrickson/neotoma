@@ -151,19 +151,21 @@ export function NeotomaOnePager() {
           </ol>
           <aside className="plan-example" aria-label="Synthetic invoice example">
             <p className="plan-label">Synthetic example · one invoice</p>
-            {OCTOBER_RENDERS.invoiceExample && (
-              <img {...OCTOBER_RENDERS.invoiceExample} loading="lazy" />
-            )}
-            <ol className="plan-legend">
-              {FIGURE_LEGEND.map((item, i) => (
-                <li key={item}>
-                  <span className="plan-key" aria-hidden="true">
-                    {i + 1}
-                  </span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ol>
+            <div className="plan-example-content">
+              {OCTOBER_RENDERS.invoiceExample && (
+                <img {...OCTOBER_RENDERS.invoiceExample} loading="lazy" />
+              )}
+              <ol className="plan-legend">
+                {FIGURE_LEGEND.map((item, i) => (
+                  <li key={item}>
+                    <span className="plan-key" aria-hidden="true">
+                      {i + 1}
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
             <p className="plan-note">{PLATE_CAPTION}</p>
           </aside>
           <p className="plan-body">

@@ -1127,7 +1127,7 @@
 .plan-hero-scene {
   margin-top: clamp(2rem, 4vw, 3.5rem);
 }
-.plan-hero-scene figcaption {
+.plan-scene figcaption {
   padding: 0.9rem 1rem;
   font-size: 0.88rem;
   color: var(--muted);
@@ -1221,8 +1221,22 @@
   margin-bottom: 1.75rem;
   border-radius: 12px;
 }
+.plan-example-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+.plan-example-content img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3/2;
+  object-fit: cover;
+  border-radius: 12px;
+}
 .plan-example .plan-legend {
-  margin-top: 1rem;
+  grid-template-columns: 1fr;
+  margin-top: 0;
 }
 .plan-key {
   border-color: var(--rust);
@@ -1317,6 +1331,9 @@
     font-size: clamp(3.2rem, 11vw, 5rem);
   }
   .plan-legend {
+    grid-template-columns: 1fr;
+  }
+  .plan-example-content {
     grid-template-columns: 1fr;
   }
   .plan-install-sheet {
