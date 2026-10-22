@@ -3,23 +3,34 @@ import { useRef, useState, type KeyboardEvent } from "react";
 type Interface = "CLI" | "MCP" | "REST API";
 const interfaces: Interface[] = ["CLI", "MCP", "REST API"];
 
+const invoicePayload = JSON.stringify({
+  entity_type: "invoice",
+  schema_version: "1.0",
+  invoice_number: "INV-2041",
+  vendor_name: "Acme",
+  invoice_date: "2026-10-01",
+  amount_due: 3200,
+  currency: "USD",
+  date_due: "2026-10-22",
+});
+
 /** One illustrative invoice, with variable IDs and explicit transport-specific auth. No requests run. */
 const examples: Record<Interface, string> = {
   CLI: `# Local profile. Store the invoice; read the returned entity_id as INVOICE_ID.
-neotoma dev store --observation-source import --entities '[{"entity_type":"invoice","invoice_number":"INV-2041","vendor_name":"Acme","amount_due":3200,"currency":"USD","date_due":"2026-10-22"}]'
+neotoma dev store --observation-source import --entities '[${invoicePayload}]'
 # An email changes the date. Use the invoice entity ID returned above.
 neotoma dev corrections create "$INVOICE_ID" --entity-type invoice --field-name date_due --corrected-value 2026-10-29
 neotoma dev entities get "$INVOICE_ID"
 neotoma dev observations list --entity-id "$INVOICE_ID"
 neotoma dev request --operation getFieldProvenance --body "{\\"entity_id\\":\\"$INVOICE_ID\\",\\"field\\":\\"date_due\\"}"`,
   MCP: `// Calls your configured Neotoma MCP server. Replace $INVOICE_ID with the store result.
-store({entities:[{entity_type:"invoice",invoice_number:"INV-2041",vendor_name:"Acme",amount_due:3200,currency:"USD",date_due:"2026-10-22"}],observation_source:"import"})
+store({entities:[${invoicePayload}],observation_source:"import"})
 correct({entity_id:"$INVOICE_ID",entity_type:"invoice",field:"date_due",value:"2026-10-29",idempotency_key:"unique-amendment-key"})
 retrieve_entity_snapshot({entity_id:"$INVOICE_ID",format:"json"})
 list_observations({entity_id:"$INVOICE_ID"})
 retrieve_field_provenance({entity_id:"$INVOICE_ID",field:"date_due"})`,
   "REST API": `# Your running local API needs a configured owner token. Replace $INVOICE_ID after store.
-curl -sS -X POST "$NEOTOMA_URL/store" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d '{"entities":[{"entity_type":"invoice","invoice_number":"INV-2041","vendor_name":"Acme","amount_due":3200,"currency":"USD","date_due":"2026-10-22"}],"observation_source":"import"}'
+curl -sS -X POST "$NEOTOMA_URL/store" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d '{"entities":[${invoicePayload}],"observation_source":"import"}'
 curl -sS -X POST "$NEOTOMA_URL/correct" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\",\\"entity_type\\":\\"invoice\\",\\"field\\":\\"date_due\\",\\"value\\":\\"2026-10-29\\",\\"idempotency_key\\":\\"unique-amendment-key\\"}"
 curl -sS -X POST "$NEOTOMA_URL/get_entity_snapshot" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\"}"
 curl -sS -X POST "$NEOTOMA_URL/list_observations" -H "Authorization: Bearer $NEOTOMA_TOKEN" -H 'Content-Type: application/json' -d "{\\"entity_id\\":\\"$INVOICE_ID\\"}"

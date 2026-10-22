@@ -34,6 +34,7 @@ function SheetHead({ id, mark, title }: { id: string; mark: string; title: strin
 export function NeotomaOnePager() {
   const [host, setHost] = useState(CONNECTIONS_SETUP[0]);
   const [promptCopied, markPromptCopied] = useCopyFeedback("onepager-evaluate", 0);
+  const [promptCopyFailed, setPromptCopyFailed] = useState(false);
   const evaluationPrompt = `Evaluate whether Neotoma fits a workflow with changing facts across AI tools. Read ${NEOTOMA_GITHUB_REPO} and ${neotomaGithubBlobUrl("docs/known_limitations.md")}. Compare it with tools I already use. Tell me whether those tools are sufficient, what I would need to run locally, and which current limits matter. Do not install anything or write data during this evaluation.`;
   return (
     <div>
@@ -322,11 +323,18 @@ export function NeotomaOnePager() {
               className="plan-btn"
               aria-live="polite"
               onClick={async () => {
-                if (await copyTextToClipboard(evaluationPrompt)) markPromptCopied();
+                const copied = await copyTextToClipboard(evaluationPrompt);
+                setPromptCopyFailed(!copied);
+                if (copied) markPromptCopied();
               }}
             >
               {promptCopied ? "Copied" : "Copy prompt"}
             </button>
+            {promptCopyFailed && (
+              <p className="plan-copy-error" role="status">
+                Copy failed. Try again, or select the prompt above and copy manually.
+              </p>
+            )}
           </div>
           <div className="plan-deeper">
             {DEEPER_MATERIAL.map((group) => (

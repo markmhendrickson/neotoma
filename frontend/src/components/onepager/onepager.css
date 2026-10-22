@@ -1599,6 +1599,11 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.plan-evaluate .plan-copy-error {
+  margin: 0.7rem 0 0;
+  color: var(--rust);
+  font-weight: 600;
+}
 @media (max-width: 760px) {
   .plan-masthead {
     align-items: flex-start;

@@ -50,7 +50,7 @@ describe("one-pager sheets 02 to 04", () => {
     expect(text).not.toMatch(
       /ids are from one run|\$ neotoma (store|corrections|entities|observations)\b/i
     );
-    expect(examples).toContain('store({entities:[{entity_type:"invoice"');
+    expect(text).toContain('store({entities:[{"entity_type":"invoice"');
     expect(examples).toContain('correct({entity_id:"$INVOICE_ID"');
     expect(examples).toContain('retrieve_entity_snapshot({entity_id:"$INVOICE_ID"');
     expect(examples).toContain('"$NEOTOMA_URL/store"');

@@ -1,4 +1,5 @@
 import { Check, Copy } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useCopyFeedback } from "@/lib/copy_feedback";
 import { copyTextToClipboard } from "@/lib/copy_to_clipboard";
 import { sendFunnelInstallPromptCopy, type InstallPromptCopyBlock } from "@/utils/analytics";
@@ -103,11 +104,18 @@ export function CodeBlock({
   scrollLabel?: string;
 }) {
   const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
+  const [copyFailed, setCopyFailed] = useState(false);
   const chrome = INSTALL_BLOCK_CHROME[installBlock];
+
+  useEffect(() => setCopyFailed(false), [code, copyFeedbackId]);
 
   const onCopy = async () => {
     const ok = await copyTextToClipboard(sanitizeCodeForCopy(code));
-    if (!ok) return;
+    if (!ok) {
+      setCopyFailed(true);
+      return;
+    }
+    setCopyFailed(false);
     markCopied();
     sendFunnelInstallPromptCopy(installBlock);
   };
@@ -135,8 +143,18 @@ export function CodeBlock({
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </Button>
-        <span className="sr-only" role="status" aria-live="polite">
-          {copied ? "Commands copied" : ""}
+        <span
+          className={
+            copyFailed ? "col-span-full text-sm text-red-700 dark:text-red-300" : "sr-only"
+          }
+          role="status"
+          aria-live="polite"
+        >
+          {copyFailed
+            ? "Copy failed. Try again, or select the commands below and copy manually."
+            : copied
+              ? "Commands copied"
+              : ""}
         </span>
       </div>
       <pre
