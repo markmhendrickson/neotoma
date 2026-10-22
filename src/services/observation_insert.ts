@@ -39,7 +39,7 @@
 import { db } from "../db.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
-import type { ObservationValidity } from "./observation_validity.js";
+import { STATE_VALIDITY_PROVENANCE_KEY, type ObservationValidity } from "./observation_validity.js";
 
 /** The query builder the shared database client hands out for a table. */
 type ObservationsQuery = ReturnType<LocalDbClient["from"]>;
@@ -141,6 +141,13 @@ export function buildObservationRow(input: ObservationRowInput): ObservationInse
   if (input.provenance !== undefined && Object.keys(input.provenance).length > 0) {
     row.provenance = input.provenance;
   }
+  // Presence matters even when both physical endpoints are null. Preserve it
+  // for auditing and for legacy writers that must refuse interval invention.
+  const validity: ObservationValidity = {};
+  if (input.valid_from !== undefined) validity.valid_from = input.valid_from;
+  if (input.valid_to !== undefined) validity.valid_to = input.valid_to;
+  if (Object.keys(validity).length)
+    row.provenance = { ...input.provenance, [STATE_VALIDITY_PROVENANCE_KEY]: validity };
   return row;
 }
 

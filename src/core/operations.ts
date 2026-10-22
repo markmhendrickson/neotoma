@@ -44,6 +44,8 @@ export interface StoreRelationshipInput {
 }
 
 export interface StoreInput {
+  valid_from?: string | null;
+  valid_to?: string | null;
   entities?: StoreEntityInput[];
   relationships?: StoreRelationshipInput[];
   idempotency_key?: string;

@@ -1,5 +1,12 @@
 import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
 import {
+  canonicalObservationValidity,
+  canonicalValidityInstant,
+  normalizeObservationValidity,
+  ObservationValidityError,
+  structuredValidityPayload,
+} from "./services/observation_validity.js";
+import {
   preflightStructuredStoreAdmission,
   type StructuredStoreApiParams,
   type StoreRelationshipRef,
@@ -7622,6 +7629,8 @@ app.get("/access_policies", async (req, res) => {
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user
 app.post("/observations/create", async (req, res) => {
   const schema = z.object({
+    valid_from: z.string().nullable().optional(),
+    valid_to: z.string().nullable().optional(),
     entity_type: z.string(),
     entity_identifier: z.string(),
     fields: z.record(z.unknown()),
@@ -7673,6 +7682,8 @@ app.post("/observations/create", async (req, res) => {
     const { createObservation } = await import("./services/observation_storage.js");
     const { getSnapshot, recomputeSnapshot } = await import("./services/snapshot_computation.js");
 
+    const observedAt = new Date().toISOString();
+    const validity = normalizeObservationValidity(parsed.data, observedAt);
     const entity_id = await resolveEntity({
       entityType: entity_type,
       fields: { name: entity_identifier },
@@ -7685,7 +7696,8 @@ app.post("/observations/create", async (req, res) => {
       schema_version: "1.0",
       source_id: null,
       interpretation_id: null,
-      observed_at: new Date().toISOString(),
+      observed_at: observedAt,
+      ...validity,
       specificity_score: 1.0,
       source_priority,
       observation_source,
@@ -7703,6 +7715,8 @@ app.post("/observations/create", async (req, res) => {
       snapshot: snapshot?.snapshot || {},
     });
   } catch (error) {
+    if (error instanceof ObservationValidityError)
+      return sendError(res, 400, error.code, error.message, { field: error.field });
     if (error instanceof ReservedObservationSourceError) {
       logWarn("ReservedObservationSource:observations_create", req, {
         code: error.code,
@@ -7804,6 +7818,10 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
     strict: strictInput,
     dataOrigins,
   } = params;
+  const validity = canonicalObservationValidity(params);
+  const hasValidity = Object.keys(validity).length > 0;
+  let validityObservedAt = params.validityObservedAt ?? new Date().toISOString();
+  params = { ...params, validityObservedAt };
   const commit = commitInput !== false;
   const strict = strictInput === true;
   await preflightStructuredStoreAdmission(params);
@@ -7828,6 +7846,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
       originalFilename,
       strict,
       dataOrigin: dataOrigins?.[0],
+      ...validity,
     });
   }
 
@@ -7838,12 +7857,15 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
   // origin the stored JSON is unchanged.
   const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
   const storedEntities = entitiesWithStoredDataOrigins(entities, dataOrigins);
-  const incomingJsonContent = JSON.stringify(storedEntities, (key, value) => {
-    if (typeof value === "bigint") {
-      return Number(value);
+  const incomingJsonContent = JSON.stringify(
+    structuredValidityPayload(storedEntities, validity),
+    (key, value) => {
+      if (typeof value === "bigint") {
+        return Number(value);
+      }
+      return value;
     }
-    return value;
-  });
+  );
   const { computeContentHash: _computeContentHash } = await import("./services/raw_storage.js");
   const incomingContentHash = _computeContentHash(Buffer.from(incomingJsonContent, "utf-8"));
 
@@ -7926,6 +7948,13 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         throw incompleteErr;
       }
       resumeIncompleteWrite = true;
+      if (hasValidity) {
+        const clock = (existingSource.provenance as Record<string, unknown> | null)
+          ?.validity_asserted_at;
+        if (typeof clock !== "string")
+          throw new Error("Incomplete validity store has no recorded assertion clock.");
+        validityObservedAt = canonicalValidityInstant(clock, "valid_from");
+      }
     }
   }
 
@@ -7981,6 +8010,8 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
       entities: existingEntities,
     };
   }
+
+  if (hasValidity) normalizeObservationValidity(validity, validityObservedAt);
 
   // Instance store-policy enforcement (#1975).
   //
@@ -8043,6 +8074,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         idempotencyKey,
         provenance: {
           upload_method: "api_store",
+          ...(hasValidity ? { validity_asserted_at: validityObservedAt } : {}),
           client: "api",
           source_priority: sourcePriority,
           ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
@@ -8574,7 +8606,8 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         schema_version: "1.0",
         source_id: observationSourceId,
         interpretation_id: interpretationId,
-        observed_at: new Date().toISOString(),
+        observed_at: hasValidity ? validityObservedAt : new Date().toISOString(),
+        ...validity,
         specificity_score: 1.0,
         source_priority: sourcePriority,
         observation_source: observationSource,
@@ -9419,6 +9452,7 @@ async function handleStorePost(
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const validityObservedAt = new Date().toISOString();
     // #2033: reject-not-strip reserved correction authority at the client
     // transport boundary, before any source or observation is written.
     // Internal server callers of storeStructuredForApi (e.g. sync
@@ -9446,6 +9480,9 @@ async function handleStorePost(
           interpretation: parsed.data.interpretation,
           sourcePeerId: parsed.data.source_peer_id,
           strict: parsed.data.strict,
+          valid_from: parsed.data.valid_from,
+          valid_to: parsed.data.valid_to,
+          validityObservedAt,
         },
         {
           key: parsed.data.file_idempotency_key,
@@ -9555,6 +9592,9 @@ async function handleStorePost(
           userId,
           entities: parsed.data.entities as Record<string, unknown>[],
           expectedEntityAbsent: parsed.data.expected_entity_absent,
+          valid_from: parsed.data.valid_from,
+          valid_to: parsed.data.valid_to,
+          validityObservedAt,
           sourcePriority: parsed.data.source_priority ?? 100,
           observationSource: parsed.data.observation_source,
           sourcePeerId: parsed.data.source_peer_id,
@@ -9608,6 +9648,8 @@ async function handleStorePost(
     }
     return res.status(200).json(unstructuredResult);
   } catch (error) {
+    if (error instanceof ObservationValidityError)
+      return sendError(res, 400, error.code, error.message, { field: error.field });
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
@@ -12477,7 +12519,7 @@ app.post("/correct", async (req, res) => {
   } catch (error) {
     const { ObservationValidityError } = await import("./services/observation_validity.js");
     if (error instanceof ObservationValidityError)
-      return sendError(res, 400, error.code, error.message);
+      return sendError(res, 400, error.code, error.message, { field: error.field });
     // Parity with the MCP correct() path: a missing schema is a client error
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500

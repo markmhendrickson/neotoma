@@ -4353,6 +4353,16 @@ export interface components {
      */
     StoreRequest: {
       /**
+       * Format: date-time
+       * @description Optional inclusive state-validity start for every structured entity assertion. Null/omitted falls back to its server assertion clock. Requires entities; interpretation and overflow combinations are refused before mutation.
+       */
+      valid_from?: string | null;
+      /**
+       * Format: date-time
+       * @description Optional exclusive state-validity end; null/omitted is open-ended. Canonical endpoints participate in source payload and keyed replay identity. In combined file+entities calls, validity applies only to the structured entity leg.
+       */
+      valid_to?: string | null;
+      /**
        * @description When true, atomically create exactly one structured entity only if
        *     its complete schema-declared physical identity is absent. Requires
        *     commit=true and a nonempty idempotency_key; file, relationship,
@@ -7072,6 +7082,17 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
+          /**
+           * Format: date-time
+           * @description Optional inclusive validity start; omitted/null uses this assertion's server clock.
+           */
+          valid_from?: string | null;
+          /**
+           * Format: date-time
+           * @description Optional exclusive validity end; omitted/null is open-ended. Empty intervals are refused before entity resolution.
+           */
+          valid_to?: string | null;
+        } & {
           [key: string]: unknown;
         };
       };
@@ -9006,6 +9027,7 @@ export interface operations {
                     field_name: string;
                     /** @enum {string} */
                     reason:
+                      | "state_validity_requires_explicit_assertion"
                       | "no_entity_resolution"
                       | "no_active_schema"
                       | "observation_insert_failed"

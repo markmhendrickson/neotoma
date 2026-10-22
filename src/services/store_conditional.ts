@@ -7,6 +7,13 @@ import { schemaRegistry, type SchemaRegistryEntry } from "./schema_registry.js";
 import { deriveConditionalStoreIdentity } from "./store_condition_identity.js";
 import { assertConditionalStoreRequest } from "./store_condition_request.js";
 import {
+  canonicalObservationValidity,
+  normalizeObservationValidity,
+  structuredValidityPayload,
+  STATE_VALIDITY_PROVENANCE_KEY,
+  type ObservationValidity,
+} from "./observation_validity.js";
+import {
   assertConditionalEntityAbsent,
   canonicalStoreRequest,
   commitConditionalStoreKey,
@@ -49,7 +56,7 @@ import {
 import { buildObservationSourceOmittedWarning } from "./observation_source_warning.js";
 import { refreshEntitySnapshotEmbeddingAfterCommit } from "./entity_snapshot_embedding.js";
 
-export interface ConditionalStoreOptions {
+export interface ConditionalStoreOptions extends ObservationValidity {
   userId: string;
   entities: Record<string, unknown>[];
   idempotencyKey: string;
@@ -66,7 +73,11 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     entities: options.entities,
     idempotency_key: options.idempotencyKey,
     expected_entity_absent: true,
+    valid_from: options.valid_from,
+    valid_to: options.valid_to,
   });
+  const validity = canonicalObservationValidity(options);
+  const observedAt = new Date().toISOString();
   const entity = options.entities[0];
   const entityType = entity.entity_type as string;
   const fields = { ...entity };
@@ -83,6 +94,7 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     options.dataOrigin ? [options.dataOrigin] : undefined
   );
   const request = {
+    ...(Object.keys(validity).length ? { validity } : {}),
     owner: options.userId,
     entity: storedEntities[0],
     expected_entity_absent: true,
@@ -113,9 +125,11 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
     );
     const originalActor = { ...(row?.provenance ?? {}) } as Record<string, unknown>;
     const originalDataOrigin = originalActor[DATA_ORIGIN_PROVENANCE_KEY] ?? null;
+    const originalValidity = originalActor[STATE_VALIDITY_PROVENANCE_KEY];
     delete originalActor.attributed_at;
     delete originalActor.store_operation_receipt;
     delete originalActor[DATA_ORIGIN_PROVENANCE_KEY];
+    delete originalActor[STATE_VALIDITY_PROVENANCE_KEY];
     if (
       error ||
       !row ||
@@ -129,8 +143,13 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
           null,
           original.entity_id,
           row.fields,
-          observationKey
+          observationKey,
+          validity
         ) ||
+      (row.valid_from ?? null) !== (validity.valid_from ?? null) ||
+      (row.valid_to ?? null) !== (validity.valid_to ?? null) ||
+      (Object.keys(validity).length > 0 &&
+        canonicalStoreRequest(originalValidity) !== canonicalStoreRequest(validity)) ||
       row.schema_version !== original.diagnostics.schema_version ||
       row.source_priority !== options.sourcePriority ||
       row.observation_source !== observationSource ||
@@ -240,10 +259,13 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
           options.idempotencyKey,
           fingerprint,
           async () => {
+            normalizeObservationValidity(validity, observedAt);
             uploadAttempted = true;
             const source = await storeRawContent({
               userId: options.userId,
-              fileBuffer: Buffer.from(JSON.stringify(storedEntities)),
+              fileBuffer: Buffer.from(
+                JSON.stringify(structuredValidityPayload(storedEntities, validity))
+              ),
               mimeType: "application/json",
               originalFilename: filename ?? undefined,
               idempotencyKey: options.idempotencyKey,
@@ -253,7 +275,7 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
                 source_priority: options.sourcePriority,
               },
             });
-            const now = new Date().toISOString();
+            const now = Object.keys(validity).length ? observedAt : new Date().toISOString();
             const inserted = await db.from("entities").insert({
               id: prepared.entityId,
               entity_type: entityType,
@@ -276,7 +298,8 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
                 null,
                 prepared.entityId,
                 prepared.validFields,
-                observationKey
+                observationKey,
+                validity
               ),
               schema_identity_digest: schemaDigest,
               unknown_fields_count: Object.values(prepared.unknownFields).filter((x) => x != null)
@@ -298,6 +321,7 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
               source_id: source.sourceId,
               interpretation_id: null,
               observed_at: now,
+              ...validity,
               specificity_score: 1,
               source_priority: options.sourcePriority,
               observation_source: observationSource,

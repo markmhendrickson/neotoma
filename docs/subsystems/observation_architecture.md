@@ -418,7 +418,51 @@ original assertion clock, including an end-only interval retried after its end.
 For ordinary corrections a missing/null start falls back to the new correction's
 own `observed_at`; it does not inherit an occurrence base interval.
 
-Public store validity inputs, protected occurrence lineage/inheritance and exact
-entity-identity namespaces remain separate implementation slices. Storage
-metadata and this point query do not imply protected occurrences or full-series
-historical views.
+`store` accepts the same top-level optional endpoints for its structured entity
+assertions, including conditional create. For example, after declaring a schema:
+
+```json
+{
+  "entities": [{ "entity_type": "device_state", "name": "alpha", "status": "offline" }],
+  "idempotency_key": "device-state-alpha-interval-1",
+  "valid_from": "2026-01-01T00:00:00Z",
+  "valid_to": "2026-01-02T00:00:00Z"
+}
+```
+
+A snapshot query with `valid_at: "2026-01-01T12:00:00Z"` selects this assertion;
+one at the exclusive endpoint does not. An additional `at` or `at_ingested`
+cutoff still excludes assertions not known by that clock. Existing field reducers
+choose among overlapping eligible assertions, so this is a state point query,
+not a complete event-series or branch-history API.
+
+When validity is supplied (including explicit null), structured source bytes use
+`{entities, observation_validity}` with canonical endpoints. Both transports use
+the same serialization, so equivalent-offset retries share source identity;
+a changed interval under the same key is refused. Without validity, legacy
+source-array serialization and observation-ID bytes are unchanged. The captured
+assertion clock is retained in source bookkeeping so an unfinished keyed write
+can resume after an end-only interval expires without re-stamping its assertions.
+Observation provenance records `state_validity_request` presence even when both
+physical endpoints are null; this is audit metadata, not an authority grant.
+
+| Writer or recovery path | Validity behavior |
+| --- | --- |
+| Core/MCP/HTTP structured `store`, conditional create | Canonical metadata, keyed identity and stored interval |
+| Combined file + explicit entities | Applies only to entity assertions; file leg keeps its own write semantics |
+| HTTP `/observations/create` | Validates interval before entity resolution and stores metadata |
+| `correct` | Ordinary assertion interval; replay preserves original row and clock |
+| File-only/parquet import, overflow or interpretation-bearing `store` | New validity combination refused before either leg writes |
+| Standalone `create_interpretation` | Top-level validity metadata refused; same-named entity fields remain ordinary data |
+| Legacy fragment promotion/repair | An entity with validity intent is skipped with an explicit reason; no interval is invented from aggregated fragments |
+| Snapshot-based sync/import | Does not promise validity-history preservation; no implicit interval inheritance |
+
+`update_schema_incremental(migrate_existing: true)` reports skipped fragment groups
+as `state_validity_requires_explicit_assertion`. Original evidence remains intact;
+when promotion needs a new assertion, supply its interval explicitly through the
+supported write surface. The legacy repair service similarly reports a refusal.
+No-validity legacy migration behavior remains unchanged.
+
+Protected occurrence lineage/base inheritance and exact entity-identity namespaces
+remain separate implementation slices. Nullable metadata and these public V
+operations do not imply protected occurrences or full-series historical views.

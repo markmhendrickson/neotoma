@@ -1,4 +1,12 @@
 import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
+import {
+  canonicalObservationValidity,
+  canonicalValidityInstant,
+  normalizeObservationValidity,
+  ObservationValidityError,
+  structuredValidityPayload,
+  type ObservationValidity,
+} from "./services/observation_validity.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -302,7 +310,8 @@ export function installStdioSignalHandlers(close: () => Promise<void>): boolean 
   return true;
 }
 
-type StoreStructuredInternalOptions = {
+type StoreStructuredInternalOptions = ObservationValidity & {
+  validityObservedAt?: string;
   expectedEntityAbsent?: boolean;
   commit?: boolean;
   strict?: boolean;
@@ -2544,6 +2553,8 @@ export class NeotomaServer {
         if (error instanceof McpError) {
           throw error;
         }
+        if (error instanceof ObservationValidityError)
+          throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
         const { StoreConditionError } = await import("./services/store_condition_keys.js");
         if (error instanceof StoreConditionError) {
           throw new McpError(
@@ -5640,6 +5651,8 @@ export class NeotomaServer {
 
     const schema = z
       .object({
+        valid_from: z.string().nullable().optional(),
+        valid_to: z.string().nullable().optional(),
         expected_entity_absent: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
@@ -5738,6 +5751,7 @@ export class NeotomaServer {
     }
 
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const validityObservedAt = new Date().toISOString();
     // idempotency_key is guaranteed present for non-overflow calls by the second
     // refine in the local schema (the overflow branch returned above).
     const idempotencyKey = parsed.idempotency_key!;
@@ -5757,6 +5771,9 @@ export class NeotomaServer {
           interpretation: parsed.interpretation,
           sourcePeerId: parsed.source_peer_id,
           strict: parsed.strict,
+          valid_from: parsed.valid_from,
+          valid_to: parsed.valid_to,
+          validityObservedAt,
         },
         {
           key: parsed.file_idempotency_key ?? `${idempotencyKey}-file`,
@@ -5804,6 +5821,9 @@ export class NeotomaServer {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
           expectedEntityAbsent: parsed.expected_entity_absent,
+          valid_from: parsed.valid_from,
+          valid_to: parsed.valid_to,
+          validityObservedAt,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -6295,6 +6315,9 @@ export class NeotomaServer {
     relationships?: StoreRelationshipRef[],
     options: StoreStructuredInternalOptions = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const validity = canonicalObservationValidity(options);
+    const hasValidity = Object.keys(validity).length > 0;
+    let validityObservedAt = options.validityObservedAt ?? new Date().toISOString();
     if (options.expectedEntityAbsent === true) {
       const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
       const { storeConditionalStructured } = await import("./services/store_conditional.js");
@@ -6316,6 +6339,7 @@ export class NeotomaServer {
         strict: options.strict,
         observationSource: options.observationSource,
         dataOrigin: options.dataOrigins?.[0],
+        ...validity,
       });
       return this.buildTextResponse(result);
     }
@@ -6452,6 +6476,7 @@ export class NeotomaServer {
     // Plan mode: resolve deterministically, report planned actions per entity,
     // and skip every write (source row, observations, snapshots, relationships).
     if (!commit) {
+      if (hasValidity) normalizeObservationValidity(validity, validityObservedAt);
       const planEntities: Array<{
         observation_index: number;
         entity_type: string;
@@ -6535,7 +6560,20 @@ export class NeotomaServer {
     let resumeSourceId: string | undefined;
     if (idempotencyKey) {
       const incomingContentHash = createHash("sha256")
-        .update(JSON.stringify(entities, null, 2))
+        .update(
+          JSON.stringify(
+            hasValidity
+              ? structuredValidityPayload(
+                  (
+                    await import("./services/provenance_data_origin.js")
+                  ).entitiesWithStoredDataOrigins(entities, options.dataOrigins),
+                  validity
+                )
+              : entities,
+            null,
+            hasValidity ? undefined : 2
+          )
+        )
         .digest("hex");
       const { assertLegacyStoreKeyMode } = await import("./services/store_condition_keys.js");
       const { getDb } = await import("./repositories/db/connection.js");
@@ -6560,7 +6598,8 @@ export class NeotomaServer {
         const mismatchErr = new McpError(
           ErrorCode.InvalidParams,
           `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
-            `Use a unique idempotency_key for each distinct write.`
+            `Use a unique idempotency_key for each distinct write.`,
+          { code: "ERR_IDEMPOTENCY_MISMATCH", idempotency_key: idempotencyKey }
         );
         throw mismatchErr;
       }
@@ -6599,6 +6638,13 @@ export class NeotomaServer {
           }
           resumeIncompleteWrite = true;
           resumeSourceId = existingSource.id;
+          if (hasValidity) {
+            const clock = (existingSource.provenance as Record<string, unknown> | null)
+              ?.validity_asserted_at;
+            if (typeof clock !== "string")
+              throw new Error("Incomplete validity store has no recorded assertion clock.");
+            validityObservedAt = canonicalValidityInstant(clock, "valid_from");
+          }
         }
       }
 
@@ -6735,6 +6781,7 @@ export class NeotomaServer {
         }
 
         return this.buildTextResponse({
+          replayed: true,
           source_id: existingSource.id,
           entities:
             existingObservations.map(
@@ -6767,6 +6814,8 @@ export class NeotomaServer {
       "mcp"
     );
 
+    if (hasValidity) normalizeObservationValidity(validity, validityObservedAt);
+
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
     // #2242: each entity's effective data_origin is part of the stored payload
@@ -6774,14 +6823,14 @@ export class NeotomaServer {
     const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
     const dataOrigins = options.dataOrigins;
     const jsonContent = JSON.stringify(
-      entitiesWithStoredDataOrigins(entities, dataOrigins),
+      structuredValidityPayload(entitiesWithStoredDataOrigins(entities, dataOrigins), validity),
       (key, value) => {
         if (typeof value === "bigint") {
           return Number(value);
         }
         return value;
       },
-      2
+      hasValidity ? undefined : 2
     );
     const fileBuffer = Buffer.from(jsonContent, "utf-8");
 
@@ -6797,6 +6846,7 @@ export class NeotomaServer {
         idempotencyKey,
         provenance: {
           upload_method: "mcp_store",
+          ...(hasValidity ? { validity_asserted_at: validityObservedAt } : {}),
           client: "mcp",
           source_priority: sourcePriority,
           ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
@@ -7372,7 +7422,9 @@ export class NeotomaServer {
         storageResult.sourceId,
         null,
         entityId,
-        fieldsForObservation
+        fieldsForObservation,
+        undefined,
+        validity
       );
       // Consistency fix: scope the existing-observation check to (id, user_id).
       // Without the user_id filter, a same-content observation written by a
@@ -7398,7 +7450,7 @@ export class NeotomaServer {
           _structuredAttrib(),
           dataOrigins?.[entityIndex]
         );
-        const observedAt = new Date().toISOString();
+        const observedAt = hasValidity ? validityObservedAt : new Date().toISOString();
         const { error: obsError } = await insertObservationRow(
           buildObservationRow({
             id: observationId,
@@ -7408,6 +7460,7 @@ export class NeotomaServer {
             source_id: storageResult.sourceId,
             interpretation_id: null, // No interpretation run for structured data
             observed_at: observedAt,
+            ...validity,
             specificity_score: 1.0, // Structured data has high specificity
             source_priority: sourcePriority, // Use provided priority (default 100)
             observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
@@ -8341,7 +8394,7 @@ export class NeotomaServer {
     } catch (corrErr) {
       const { ObservationValidityError } = await import("./services/observation_validity.js");
       if (corrErr instanceof ObservationValidityError)
-        throw new McpError(ErrorCode.InvalidParams, corrErr.message);
+        throw new McpError(ErrorCode.InvalidParams, corrErr.message, corrErr.toErrorEnvelope());
       if (corrErr instanceof FieldVersionConflictError) {
         throw new McpError(ErrorCode.InvalidRequest, corrErr.message, {
           ...corrErr.toErrorEnvelope(),

@@ -1,3 +1,4 @@
+import { entityHasObservationValidityIntent } from "./observation_validity.js";
 /**
  * Schema Registry Service for Schema Registry Service (FU-057)
  *
@@ -727,6 +728,7 @@ export interface SchemaRegistryEntry {
 export interface SkippedMigrationGroup {
   field_name: string;
   reason:
+    | "state_validity_requires_explicit_assertion"
     | "no_entity_resolution"
     | "no_active_schema"
     | "observation_insert_failed"
@@ -2106,6 +2108,21 @@ export class SchemaRegistryService {
                 recordSkip(fragment.fragment_key, "no_entity_resolution");
               }
             }
+            continue;
+          }
+
+          // Fragments aggregate values, not complete assertion intervals. Preserve
+          // original evidence rather than promoting it with a fresh fallback clock.
+          if (
+            await entityHasObservationValidityIntent(
+              await (await import("../repositories/db/connection.js")).getDb(),
+              entityId,
+              firstFragment.user_id ?? options.user_id ?? null
+            )
+          ) {
+            for (const fragment of groupFragments)
+              if (options.field_names.includes(fragment.fragment_key))
+                recordSkip(fragment.fragment_key, "state_validity_requires_explicit_assertion");
             continue;
           }
 

@@ -2770,6 +2770,16 @@ components:
         `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
         remain intentionally open so schema-driven fields flow through.
       properties:
+        valid_from:
+          type: string
+          nullable: true
+          format: date-time
+          description: Optional inclusive state-validity start for every structured entity assertion. Null/omitted falls back to its server assertion clock. Requires entities; interpretation and overflow combinations are refused before mutation.
+        valid_to:
+          type: string
+          nullable: true
+          format: date-time
+          description: Optional exclusive state-validity end; null/omitted is open-ended. Canonical endpoints participate in source payload and keyed replay identity. In combined file+entities calls, validity applies only to the structured entity leg.
         expected_entity_absent:
           type: boolean
           description: |
@@ -6047,6 +6057,18 @@ paths:
             schema:
               type: object
               additionalProperties: true
+              properties:
+                valid_from:
+                  type: string
+                  nullable: true
+                  format: date-time
+                  description: Optional inclusive validity start; omitted/null uses this assertion's server clock.
+                valid_to:
+                  type: string
+                  nullable: true
+                  format: date-time
+                  description: Optional exclusive validity end; omitted/null is open-ended. Empty intervals are refused before entity resolution.
+
       responses:
         "200":
           description: Observation created
@@ -8478,6 +8500,7 @@ paths:
                                 reason:
                                   type: string
                                   enum:
+                                    - state_validity_requires_explicit_assertion
                                     - no_entity_resolution
                                     - no_active_schema
                                     - observation_insert_failed

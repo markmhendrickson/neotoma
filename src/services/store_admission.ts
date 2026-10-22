@@ -10,6 +10,11 @@ import { contextFromAgentIdentity, enforceAgentCapability } from "./agent_capabi
 import { enforceRelationshipWriteCapabilities } from "./relationship_write_capability.js";
 import { assertCanWriteProtectedBatch } from "./protected_entity_types.js";
 import type { StoreInterpretationInput } from "../shared/action_schemas.js";
+import {
+  canonicalObservationValidity,
+  normalizeObservationValidity,
+  type ObservationValidity,
+} from "./observation_validity.js";
 export type StoreRelationshipRef = {
   relationship_type: string;
   source_index?: number;
@@ -19,7 +24,9 @@ export type StoreRelationshipRef = {
   metadata?: Record<string, unknown>;
 };
 
-export interface StructuredStoreApiParams {
+export interface StructuredStoreApiParams extends ObservationValidity {
+  /** Internal captured assertion clock for an opt-in validity write. */
+  validityObservedAt?: string;
   expectedEntityAbsent?: boolean;
   userId: string;
   entities: Record<string, unknown>[];
@@ -66,7 +73,22 @@ export async function preflightStructuredStoreAdmission(
     interpretation,
     interpretation_source_id: interpretationSourceId,
     source_peer_id: sourcePeerId ?? undefined,
+    valid_from: params.valid_from,
+    valid_to: params.valid_to,
   });
+  const validity = canonicalObservationValidity(params);
+  if (Object.keys(validity).length && !params.expectedEntityAbsent) {
+    const { db } = await import("../db.js");
+    const prior = await db
+      .from("sources")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (prior.error) throw prior.error;
+    if (!prior.data)
+      normalizeObservationValidity(validity, params.validityObservedAt ?? new Date().toISOString());
+  }
 
   // Access policy: when the caller is a guest (AAuth-verified but not admitted
   // via a grant), check per-entity-type access policies. If the policy allows

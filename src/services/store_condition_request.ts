@@ -1,7 +1,21 @@
 /** Pure shape gate shared by public store facades, before either leg can write. */
 import { canonicalStoreRequest, StoreConditionError } from "./store_condition_keys.js";
+import { canonicalObservationValidity } from "./observation_validity.js";
 
 export function assertConditionalStoreRequest(input: Record<string, unknown>): void {
+  const validity = canonicalObservationValidity(input);
+  if (
+    Object.keys(validity).length &&
+    (!Array.isArray(input.entities) ||
+      !input.entities.length ||
+      (input.intake as { mode?: unknown } | undefined)?.mode === "overflow" ||
+      input.interpretation !== undefined ||
+      input.interpretation_source_id !== undefined)
+  )
+    throw new StoreConditionError(
+      "VALIDATION_ERROR",
+      "State validity requires structured entities without interpretation or overflow. In a combined call it applies only to the entity leg."
+    );
   const flag = input.expected_entity_absent;
   if (flag !== undefined && typeof flag !== "boolean")
     throw new StoreConditionError(

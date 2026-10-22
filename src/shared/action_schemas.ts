@@ -874,6 +874,10 @@ export function refuseEntityDataOriginKey(
 }
 
 export const CreateInterpretationRequestSchema = z.object({
+  // This writer has a distinct dedup contract. Refuse new metadata instead of
+  // silently stripping it; same-named keys inside entity fields remain data.
+  valid_from: z.never().optional(),
+  valid_to: z.never().optional(),
   source_id: z.string().min(1),
   entities: z.array(z.record(z.unknown())).min(1).superRefine(refuseEntityDataOriginKey),
   interpretation_config: z.record(z.unknown()).optional(),
@@ -941,6 +945,8 @@ export const ExternalActorInputSchema = z
 
 export const StoreRequestSchema = z
   .object({
+    valid_from: z.string().nullable().optional(),
+    valid_to: z.string().nullable().optional(),
     expected_entity_absent: z.boolean().optional(),
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),

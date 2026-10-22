@@ -470,6 +470,16 @@ components:
     StoreRequest:
       type: object
       properties:
+        valid_from:
+          type: string
+          nullable: true
+          format: date-time
+          description: Optional inclusive state-validity start for every structured entity assertion. Null/omitted falls back to its server assertion clock. Requires entities; interpretation and overflow combinations are refused before mutation.
+        valid_to:
+          type: string
+          nullable: true
+          format: date-time
+          description: Optional exclusive state-validity end; null/omitted is open-ended. Canonical endpoints participate in source payload and keyed replay identity. In combined file+entities calls, validity applies only to the structured entity leg.
         entities:
           type: array
           items:

@@ -1,5 +1,8 @@
 /** State-validity metadata is separate from assertion and row-insertion clocks. */
 import { z } from "zod";
+import type { DbConnection } from "../repositories/db/driver.js";
+
+export const STATE_VALIDITY_PROVENANCE_KEY = "state_validity_request";
 
 export interface ObservationValidity {
   valid_from?: string | null;
@@ -10,6 +13,9 @@ const instant = z.string().datetime({ offset: true });
 
 export class ObservationValidityError extends Error {
   readonly code = "VALIDATION_INVALID_FORMAT";
+  toErrorEnvelope() {
+    return { code: this.code, message: this.message, field: this.field };
+  }
   constructor(readonly field: "valid_from" | "valid_to" | "valid_at") {
     super(
       `Invalid ${field}: supply a supported RFC3339 instant or null and a nonempty validity interval.`
@@ -99,4 +105,29 @@ export function observationIsValidAt(
     compareInstants(start, canonicalAt) <= 0 &&
     (end === null || compareInstants(canonicalAt, end) < 0)
   );
+}
+
+/** Opt-in metadata is part of source bytes; legacy structured arrays remain byte-compatible. */
+export function structuredValidityPayload(
+  entities: Record<string, unknown>[],
+  validity: ObservationValidity
+): unknown {
+  const canonical = canonicalObservationValidity(validity);
+  return Object.keys(canonical).length ? { entities, observation_validity: canonical } : entities;
+}
+
+/** Legacy fragment promotion cannot infer intervals across aggregated assertions. */
+export async function entityHasObservationValidityIntent(
+  database: DbConnection,
+  entityId: string,
+  userId: string | null
+): Promise<boolean> {
+  const row = await database
+    .prepare(
+      "SELECT id FROM observations WHERE entity_id = ? AND user_id IS ? AND " +
+        "(valid_from IS NOT NULL OR valid_to IS NOT NULL OR " +
+        "json_type(provenance, '$.state_validity_request') IS NOT NULL) LIMIT 1"
+    )
+    .get(entityId, userId);
+  return row !== undefined;
 }

@@ -1,3 +1,5 @@
+import { entityHasObservationValidityIntent } from "./observation_validity.js";
+import { getDb } from "../repositories/db/connection.js";
 /**
  * Schema lag repair service — fixes raw_fragments rows that were misrouted
  * due to the schema-projection-lag bug (issue #142).
@@ -238,6 +240,13 @@ export async function repairEntityType(
 
   for (const group of groups.values()) {
     if (!group.entityId || Object.keys(group.fields).length === 0) continue;
+
+    if (await entityHasObservationValidityIntent(await getDb(), group.entityId, group.userId)) {
+      errors.push(
+        "State-validity assertions require an explicit interval-preserving write; legacy fragment promotion was refused."
+      );
+      continue;
+    }
 
     const fieldsWithSentinel = { ...group.fields, _migration_run_id: runId };
 
