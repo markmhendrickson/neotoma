@@ -873,6 +873,31 @@ export function withDbAbortSignal<T>(signal: AbortSignal | undefined, fn: () => 
   return abortContext.run(signal, fn);
 }
 
+/**
+ * Run `fn` with NO abort signal bound, even when the caller is inside a
+ * request whose signal is. Reads issued inside `fn` are never abandoned on a
+ * client disconnect.
+ *
+ * For a unit of work that interleaves reads with writes and must not stop
+ * half way: `dbAbortContext` promises writes are never abandoned, but a
+ * read-then-write loop inherits the request's signal on its reads, and a
+ * hang-up rejecting one of them ends the loop after the writes already made
+ * and before the rest (#2144). The statement-timeout budget still applies, so a
+ * genuinely stuck read cannot hold a reader slot forever.
+ */
+export function detachDbAbortSignal<T>(fn: () => T): T {
+  return abortContext.exit(fn);
+}
+
+/**
+ * The abort signal currently bound to this async context, if any. Read-only
+ * accessor so callers (and tests) can assert whether a unit of work is running
+ * under a request's cancellation, without the context itself being exported.
+ */
+export function currentDbAbortSignal(): AbortSignal | undefined {
+  return abortContext.getStore();
+}
+
 export class WorkerFileDatabase implements DbDatabase {
   private readonly dbPath: string;
   private readonly busyTimeoutMs: number;

@@ -112,6 +112,8 @@ Each predicate has a `type` discriminator:
 | `turn_compliance`   | `status` (`backfilled_by_hook`\|`absent`), optional `missed_includes: string[]`            | Asserts the presence/absence of a `turn_compliance` observation.                                  |
 | `request_field_eq`  | `endpoint`, `path: string` (dot path), `value`                                             | Inspects the most recent payload to that endpoint and asserts a field matches.                    |
 | `no_writes`         | (no extra fields)                                                                          | Asserts the harness made zero `/store` and `/create_relationship` calls. Useful for failure paths.|
+| `request_field_absent` | `endpoint`, `path: string` (dot path)                                                | Asserts that NO request to that endpoint carries a value at the path. Negative counterpart of `request_field_eq`. |
+| `field_not_matches` | `entity_type`, `field`, `matches` (regex), optional `where`                               | Asserts at least one matching stored entity exists and none has a string `field` matching the regex. Fails when no candidate exists, so it cannot pass by omission. |
 | `turn_diagnosis`    | optional `classification`, `confidence`, `local_build`, `reminder_injected`, `recommends_includes` | Asserts the `conversation_turn` entity carries `instruction_diagnostics` fields matching the given values. `recommends_includes` checks that at least one `recommended_repairs` entry contains the substring. |
 
 ### `expected_outputs`

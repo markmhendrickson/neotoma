@@ -97,10 +97,13 @@ export function CodeBlock({
   code,
   copyFeedbackId,
   installBlock,
+  scrollLabel,
 }: {
   code: string;
   copyFeedbackId: string;
   installBlock: InstallPromptCopyBlock;
+  /** When set, the code area is a focusable, labelled region so keyboard users can scroll a clipped line. */
+  scrollLabel?: string;
 }) {
   const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
   const chrome = INSTALL_BLOCK_CHROME[installBlock];
@@ -138,6 +141,7 @@ export function CodeBlock({
       </div>
       <pre
         className={`${CODE_BLOCK_CARD_INNER_CLASS} code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words`}
+        {...(scrollLabel ? { tabIndex: 0, role: "region", "aria-label": scrollLabel } : {})}
       >
         <code>{code}</code>
       </pre>

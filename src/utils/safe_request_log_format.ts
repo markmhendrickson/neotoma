@@ -6,6 +6,8 @@
 
 import { inspect } from "node:util";
 
+import { DATA_ORIGIN_KINDS } from "../shared/action_schemas.js";
+
 /** Keys whose values are almost always credentials or signing material. */
 const SENSITIVE_KEY_NAMES = new Set([
   "token",
@@ -54,6 +56,47 @@ const OMIT_STRING_KEYS = new Set([
 
 /** Long narrative fields: keep a short prefix after scrubbing, then elide. */
 const TRUNCATE_STRING_KEYS = new Set(["summary", "description", "notes", "subject"]);
+
+/**
+ * `data_origin` (#2242) and the snapshot `data_origins` map carry
+ * caller-claimed locators, URLs, and notes that may hold local paths, message
+ * ids, or URL tokens. Their content never reaches a log line: only the origin
+ * `kind` and per-field lengths are kept.
+ */
+const DATA_ORIGIN_KEY = "data_origin";
+const DATA_ORIGINS_KEY = "data_origins";
+const KNOWN_DATA_ORIGIN_KINDS = new Set<string>(DATA_ORIGIN_KINDS);
+
+/** Log-safe summary of one `data_origin` value: kind plus field lengths. */
+export function summarizeDataOriginForLog(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    const length = typeof value === "string" ? value.length : undefined;
+    return `[omitted:data_origin type=${Array.isArray(value) ? "array" : typeof value}${
+      length !== undefined ? ` len=${length}` : ""
+    }]`;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "kind") {
+      out.kind =
+        typeof raw === "string" && KNOWN_DATA_ORIGIN_KINDS.has(raw) ? raw : "[omitted:kind]";
+      continue;
+    }
+    // Field names are attacker-chosen on a malformed (non-strict) input too, so
+    // only keep a name that is a plain identifier.
+    const safeKey = /^[a-z_]{1,32}$/.test(key) ? key : "[key]";
+    out[`${safeKey}_len`] = typeof raw === "string" ? raw.length : `[${typeof raw}]`;
+  }
+  return out;
+}
+
+function summarizeDataOriginsMapForLog(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return summarizeDataOriginForLog(value);
+  }
+  return `[omitted:data_origins count=${Object.keys(value as Record<string, unknown>).length}]`;
+}
 
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 const US_PHONE_RE = /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
@@ -105,11 +148,28 @@ function deepSanitizeForRequestLog(value: unknown, seen: WeakSet<object>, depth:
   seen.add(value);
 
   const obj = value as Record<string, unknown>;
+  // A validation issue about a data_origin field (Zod `{ path, received }`)
+  // may echo the submitted value in `received`; keep the issue, drop the value.
+  const isDataOriginIssue =
+    Array.isArray(obj.path) && (obj.path as unknown[]).includes(DATA_ORIGIN_KEY);
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(obj)) {
     const lower = key.toLowerCase();
     const raw = obj[key];
 
+    if (isDataOriginIssue && lower === "received") {
+      out[key] = "[omitted:received]";
+      continue;
+    }
+
+    if (lower === DATA_ORIGIN_KEY) {
+      out[key] = summarizeDataOriginForLog(raw);
+      continue;
+    }
+    if (lower === DATA_ORIGINS_KEY) {
+      out[key] = summarizeDataOriginsMapForLog(raw);
+      continue;
+    }
     if (OMIT_RECURSE_KEYS.has(lower)) {
       out[key] = "[REDACTED:payload_field]";
       continue;

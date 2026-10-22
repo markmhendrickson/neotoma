@@ -552,6 +552,31 @@ policy breach. See
 [`docs/developer/cli_agent_instructions.md`](../developer/cli_agent_instructions.md)
 `[ATTRIBUTION & AGENT IDENTITY]` for the full contract.
 
+### 10.6 Data Origin (#2242)
+
+Attribution says which agent wrote a record; it does not say where the data
+came from. For a stored file the `sources` row is that origin. For entities
+read from somewhere whose bytes are not stored (a sheet row, a web page, a
+message id, an API response), callers declare it with `data_origin` on
+`store`, stamped as `provenance.data_origin` on each observation and inlined
+into the structured source's stored JSON. See
+[`agent_attribution_integration.md` § 8a](./agent_attribution_integration.md#8a-data-origin-provenance-2242).
+
+Known limit: peer sync does not replicate provenance facets, so `data_origin`
+does not travel to peers, just as `external_actor` and the attribution keys do
+not. `create_interpretation` refuses a per-entity `data_origin` key for now;
+store such entities through `store` instead.
+
+### 10.7 Store Completion Marker (#2144)
+
+A structured `/store` or MCP `store` that carries an `idempotency_key` stamps
+`provenance.store_write` (`in_progress`, then `complete`) on the keyed source
+row. It is the only change to `provenance` after a source row is inserted, and
+it is bookkeeping about the ingest, not a fact about the world: the stored bytes
+and every observation stay immutable. Clients cannot send the marker; it is set
+server-side only. See `docs/architecture/idempotence_pattern.md` § Store write
+completion.
+
 ## 11. Security Model
 
 - **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access

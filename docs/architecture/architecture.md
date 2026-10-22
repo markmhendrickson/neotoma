@@ -1,836 +1,256 @@
-# Neotoma Architecture — Canonical Platform Definition
+# Neotoma architecture
 
-**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+Neotoma is the system of record for AI agents: it keeps observations with their sources, computes the current value of each field, and serves both to connected agents over MCP, REST, and the CLI.
+
+Applies to v0.25.0 and main. Where main differs from v0.25.0, the text says so.
+
+Terms on this page follow the [canonical vocabulary](../vocabulary/canonical_terms.md).
 
 ## Scope
 
-This document covers:
-- Platform-level architectural layers
-- Component boundaries and allowed dependencies
-- Request/response flows for core operations
-- Cross-cutting architectural concerns (consistency, determinism, security)
-This document does NOT cover:
-- Implementation details (see subsystem docs)
-- Specific schemas (see `docs/subsystems/schema.md`)
-- UI component structure (see `docs/ui/dsl_spec.md`)
-- Deployment or infrastructure (infrastructure docs)
-## Implementation Status
-### Completed Releases
-**v0.1.0 (2025-12-11):** Internal MCP Release — Full architecture implementation complete.
-All foundational architectural components described in this document are now fully implemented:
-- ✅ Three-layer truth model ([Source](../vocabulary/canonical_terms.md#source) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
-- ✅ Five-layer internal architecture (External → Infrastructure → Domain → Application → Presentation)
-- ✅ Event-sourced state management
-- ✅ Repository abstractions with DB and file implementations
-- ✅ Complete graph model with entities, timeline events, and typed edges
-- ✅ All MCP actions operational (13/13 actions)
-- ✅ Graph integrity validation (orphan detection, cycle detection)
-- ✅ Deterministic entity resolution and event generation with database persistence
-See `docs/releases/v0.1.0/` for release details.
-### Planned Releases
-**v0.2.0:** Sources-First [Ingestion](../vocabulary/canonical_terms.md#ingestion) Architecture — Minimal [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Correction Loop
-- [Source](../vocabulary/canonical_terms.md#source) table migration (content-addressed raw storage with per-owner `user_id` scoping)
-- [Interpretations](../vocabulary/canonical_terms.md#interpretation) table for versioned [interpretation](../vocabulary/canonical_terms.md#interpretation) tracking
-- [Observation](../vocabulary/canonical_terms.md#observation) and raw fragments extensions with [provenance](../vocabulary/canonical_terms.md#provenance) (`source_id`, `interpretation_id` linkage)
-- [Entity](../vocabulary/canonical_terms.md#entity) extensions with user_id and merge tracking
-- MCP tools: `ingest()`, `reinterpret()`, `correct()`, `merge_entities()`
-- Query updates with [provenance](../vocabulary/canonical_terms.md#provenance) chain support
-See `docs/releases/v0.2.0/` for detailed release plan.
+This page covers:
 
-**v0.2.15:** Complete Architecture Migration — Unified [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Terminology Alignment
-- Unified `ingest` MCP action for all [source](../vocabulary/canonical_terms.md#source) (unstructured and structured)
-- Elimination of capabilities — [canonicalization rules](../vocabulary/canonical_terms.md#canonicalization-rules) and [entity extraction rules](../vocabulary/canonical_terms.md#entity-extraction-rule) moved to [entity schemas](../vocabulary/canonical_terms.md#entity-schema)
-- Vocabulary alignment per [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
-- Deprecation of `submit_payload` and `ingest_structured` (merged into unified `ingest`)
-- Migration from records to [source](../vocabulary/canonical_terms.md#source)-based architecture
-See `docs/releases/v0.2.15/` for detailed release plan.
-**v0.2.1:** Documentation & Support System
-- AI-powered repository analysis and comprehensive documentation generation
-- Static documentation web server
-- MCP support inquiry endpoint
-- RAG-based support agent system
-See `docs/releases/v0.2.1/` for detailed release plan.
-**v0.3.0:** Operational Hardening
-- Storage infrastructure (upload queue, storage usage tracking, quotas)
-- Background workers (upload queue processor, stale interpretation cleanup)
-- Strict quota enforcement
-- Interpretation timeout columns
-See `docs/releases/v0.3.0/` for detailed release plan.
-**v0.4.0:** Intelligence + Housekeeping
-- Duplicate detection worker
-- Archival job for old interpretations
-- Raw fragments analytics for schema promotion candidates
-- Chat transcript extraction CLI
-See `docs/releases/v0.4.0/` for detailed release plan.
-**v1.0.0:** MVP
-- Core workflows functional (upload → extraction → timeline → AI query)
-- Empty states and error handling
-- Full P0 feature units deployed
-- Production readiness with monitoring and marketing
-See `docs/releases/v1.0.0/` for detailed release plan.
-**v2.0.0:** End-to-End Encryption (E2EE)
-Major architectural transformation to local-first, end-to-end encrypted architecture:
-- Browser becomes authoritative datastore (SQLite WASM + OPFS, encrypted-at-rest)
-- Server stores only encrypted ciphertext
-- X25519/Ed25519 crypto library with envelope encryption
-- Encrypted WebSocket bridge for MCP communication
-- Public key authentication (bearer token = Ed25519 public key)
-- Dual-mode operation (plaintext + encrypted) for backward compatibility
-- Migration tooling for existing cloud records
-- Optional multi-device sync via encrypted deltas
-See `docs/releases/v2.0.0/` and `docs/architecture/local_first_e2ee_architecture.md` for detailed architecture and release plan.
-**v2.1.0:** GDPR & US State Privacy Compliance
-- Automated GDPR data export and account deletion
-- Request tracking and management system
-- Identity verification and security (rate limiting, audit logging)
-- E2EE-specific handling (lost keys, encrypted data cleanup)
-- Legal document serving (Privacy Policy, Terms of Service)
-- Consent management and cookie consent banner
-- US state privacy law compliance (GPC signals, sensitive data opt-in, right to correct)
-See `docs/releases/v2.1.0/` for detailed release plan.
-## 1. Neotoma in Context: State Layer + Operational Layers
-Neotoma is designed as a **State Layer** that can support any operational system above it — agents, pipelines, orchestrators, and custom applications that read truth and write results back as observations. Understanding this two-tier model is **critical** to maintaining architectural purity.
-### 1.1 Core Architectural Model
-Neotoma is the **state layer** providing structured personal data memory:
-- Event-sourced
-- Reducer-driven
-- Deterministic world model
-- Dual-path ingestion (file uploads + agent interactions via MCP)
-- All operational systems read from it, write structured data via MCP
+- What Neotoma does and what it leaves to the systems built on it
+- The data model: sources, observations, entities, snapshots, and relationships
+- How a write becomes a current value, and how reads, corrections, and deletions work
+- The interfaces, storage, outbound signals, and security boundaries
 
-Above Neotoma sit one or more **operational layers** — any agent, pipeline, orchestrator, or custom application that reads truth and writes results back. The state layer never decides, infers, or acts. Operational layers may reason, plan, decide, and execute side effects; the artifacts of those activities (plans, decisions, rules, preferences, action logs) are themselves stored in Neotoma as inert state.
+It does not cover:
 
-#### Example operational systems
+- Field-level schemas (see [`docs/subsystems/schema.md`](../subsystems/schema.md))
+- Reducer internals (see [`docs/subsystems/reducer.md`](../subsystems/reducer.md))
+- Deployment and hosting (see `docs/infrastructure/`)
 
-The following are illustrative examples of operational systems built on Neotoma. They are not architectural layers Neotoma prescribes.
+## A record, not recall
 
-##### Agentic Portfolio (reasoning-style operational system)
-- Reads the current world state
-- Evaluates priorities, constraints, risk, commitments, time, and financial posture
-- Plans _what_ should happen next
-- Outputs **Decisions** + **Commands** (intents) — stored back in Neotoma as `decision` / `command` entities
-- Never mutates truth directly; writes results via observations
+Neotoma does not try to remember on an agent's behalf or rank what to retrieve. It records what was observed, where each observation came from, and which observation currently sets each field. Agents, pipelines, and applications read that record, reason and act outside Neotoma, and write their results back as new observations.
 
-##### Agentic Wallet + Domain Agents (effect-style operational system)
-- Takes commands (read from Neotoma)
-- Performs side effects using **external adapters** (email, scheduling APIs, financial services, messaging systems, etc.)
-- Emits **Domain Events** describing what happened
-- Domain Events are validated → Reducers → Updated world state
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart TD
-    User[User / AI Agent]
-    User --> Operational[Operational Layer]
-    User --> Neotoma[Neotoma - State Layer]
-    Operational --> Neotoma
-    Operational -.->|Reads Only| Neotoma
-    Operational -.->|Emits Domain Events| Neotoma
-    subgraph OperationalLayer["Operational Layer (examples)"]
-        Wallet[Agentic Wallet]
-        Portfolio[Agentic Portfolio]
-        DomainAgents[Domain Agents]
-        Harness[Agent harnesses (Claude, Cursor, ChatGPT)]
-        Custom[Custom apps and pipelines]
-        OpResp["• Reads world state<br/>• Reasons / plans / acts<br/>• Writes results as observations<br/>• Strategy artifacts (plans, decisions) stored in Neotoma"]
-    end
-    subgraph TruthLayer["State Layer (Neotoma)"]
-        Neotoma
-        Reducers[Reducers]
-        EventLog[Event Log]
-        NeoResp["• Event-sourced<br/>• Reducer-driven<br/>• Deterministic world model<br/>• Domain Events → State updates"]
-    end
-    Operational -.->|Domain Events| Reducers
-    Reducers --> EventLog
-    EventLog --> Neotoma
-    style OperationalLayer fill:#ffe6e6
-    style TruthLayer fill:#e6f7ff
-```
-_Figure: Two-tier architecture — operational layers (agents, pipelines, orchestrators, custom apps) sit above Neotoma's event-sourced state layer. Agentic Portfolio and Agentic Wallet are illustrative examples of operational systems, not architectural layers Neotoma extends into._
-### 1.2 Event Flow & State Management
-The closed loop of autonomy:
-```
-Inbound Signals (email, WhatsApp, calendar, financial data)
-↓
-Normalization → Observations
-↓
-Neotoma State (event log + reducers → snapshots)
-↓                              ↓
-Strategy Tick                  Event Emission → Subscriptions → Webhook/SSE
-(General Strategy Engine)      (best-effort delivery to registered consumers)
-↓
-Decisions + Commands
-↓
-Execution Agents
-↓
-Domain Events (what actually happened)
-↓
-Reducers → Updated State
-↓
-Next Tick
-```
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-sequenceDiagram
-    participant Signals as Inbound Signals<br/>(email, calendar, etc.)
-    participant Normalize as Normalization
-    participant State as Neotoma State<br/>(Event Log + Reducers)
-    participant Strategy as Operational Layer<br/>(reasoning system, e.g. Agentic Portfolio)
-    participant Execution as Operational Layer<br/>(effect system, e.g. Agentic Wallet + Domain Agents)
-    participant Adapters as External Adapters<br/>(Gmail, Calendar, etc.)
-    participant Events as Domain Events
-    participant Subscribers as Registered Subscribers<br/>(daemons, peer instances, agents)
-    Signals->>Normalize: Raw signals
-    Normalize->>State: Observations
-    State->>Strategy: Current world state
-    State->>Subscribers: State-change signals (best-effort, fire-and-forget)
-    Strategy->>Strategy: Evaluate priorities<br/>constraints, risk
-    Strategy->>Execution: Decisions + Commands
-    Execution->>Adapters: Execute side effects
-    Adapters-->>Execution: Results
-    Execution->>Events: Emit Domain Events<br/>(EMAIL_SENT, PAYMENT_INITIATED, etc.)
-    Events->>State: Domain Events
-    State->>State: Reducers update state
-    State->>Subscribers: State-change signals (best-effort, fire-and-forget)
-    State->>Strategy: Updated world state
-```
-_Figure: Event flow showing the closed loop from inbound signals through normalization, strategy evaluation, execution, and back to state updates via reducers. The State Layer also emits derived state-change signals to registered subscribers (best-effort delivery, no retry queue or ordering guarantees) — see `docs/foundation/philosophy.md` §5.9._
-### 1.3 State Layer Responsibilities (Neotoma)
-Neotoma MUST:
-- Ingest user-provided files (explicit upload, Gmail attachments)
-- Extract structured data via deterministic rules
-- Assign schemas based on field detection
-- Resolve entities (people, companies, locations)
-- Generate timeline events from extracted dates
-- Build and maintain the memory graph (source → observations → entities → events)
-- Expose truth via MCP tools
-- Maintain provenance and immutability
-- Process Domain Events through reducers to update state
-- Maintain event log for auditability and replay
-- Emit structured state-change events after every successful write
-- Deliver events to registered subscribers via webhook/SSE (best-effort, fire-and-forget)
-- Maintain subscription registry (registration of interest only; not prioritization of action)
-Neotoma MUST NOT:
-- Infer meaning beyond extracted fields
-- Predict future states
-- Execute financial transactions
-- Implement strategy or planning logic
-- Act as an autonomous agent (Neotoma signals state changes to agents but does not subscribe to its own events, reason about them, or take autonomous action; see `docs/foundation/philosophy.md` §5.9)
-- Perform semantic search (MVP constraint)
-- Mutate state directly (only via reducers processing Domain Events)
-- Add retry queues, dead-letter queues, ordered delivery guarantees, or exactly-once semantics to outbound signaling (those are operational-layer concerns)
-### 1.4 Operational Layer Responsibilities (general)
-Operational layers (any agent, pipeline, orchestrator, or custom application above Neotoma) MAY:
-- Read current world state from Neotoma
-- Evaluate tasks, obligations, schedules, financial positions
-- Compute priority scores
-- Determine whether tasks are AUTO_EXECUTE, ASK_USER (Watch prompts), or ESCALATE (iPhone/Mac)
-- Read values/constraints config (budgets, time blocks, autonomy caps, risk tolerances)
-- Enforce constraints at decision time
-- Reason across multiple domains (communications, household operations, financial flows, portfolio management, tax & entity logic, scheduling, projects, logistics)
-- Output binary or ternary choices for Watch interaction (micro-prompts, minimal user input)
-- Perform side effects using external adapters (GmailAdapter, WhatsAppAdapter, CalendarAdapter, PaymentsAdapter, TradingAdapter, etc.)
-- Emit Domain Events describing what happened (EMAIL_SENT, PAYMENT_INITIATED, TRADE_EXECUTED, SCHEDULE_BLOCKED, CONTRACTOR_CONFIRMED, TASK_COMPLETED)
-- Store the artifacts of strategy and execution (plans, decisions, rules, preferences, action logs) as entities in Neotoma
+Neotoma does not decide, plan, or take actions. The systems above it do. Plans, decisions, and action logs those systems produce can be stored in Neotoma as entities like any other data.
 
-Operational layers MUST NOT:
-- Mutate Neotoma truth directly (only via Domain Events → Reducers)
-- Bypass adapters for side effects
-- Emit events without performing the actual action
-### 1.5 Layer Boundaries
-**Critical Invariant:** Operational layers MAY read from Neotoma but MUST NEVER write or modify truth directly.
-**Truth updates flow only through:**
-1. Domain Events emitted by operational layers
-2. Reducers processing Domain Events
-3. Updated world state
-4. (Derived) State-change signals emitted to registered consumers — these are reports of completed updates, not causes of new state changes; they do not pass through reducers and do not themselves cause state changes (see `docs/foundation/philosophy.md` §5.9)
+```text
+Agents, pipelines, and applications
+  read current values and provenance; reason, decide, and act;
+  write results back as observations
+        |                         ^
+        | store, correct          | retrieve, subscribe
+        v                         |
+Neotoma (the system of record)
+  sources -> observations -> entity snapshots
+  relationships, timeline events, schema registry
+```
 
-**Note:** Agentic Portfolio and Agentic Wallet are illustrative examples of operational systems built on Neotoma. Many other operational systems (agent harnesses, pipelines, custom apps) are possible. Neotoma is a general-purpose State Layer substrate that does not prescribe how operational systems above it are structured.
-## 1.7 Recommended Operational-Layer Patterns
-Operational systems built on Neotoma SHOULD consider the following patterns. Neotoma does not enforce them; they are operational-layer engineering recommendations.
-### 1.7.1 Pure Reasoning Functions (recommended)
-- No side effects
-- No file I/O
-- Inputs: world state
-- Outputs: decisions, commands (stored back as entities)
-### 1.7.2 Side Effects via Adapters Only (recommended)
-- GmailAdapter, WhatsAppAdapter, CalendarAdapter, PaymentsAdapter, TradingAdapter, etc.
-- Adapters generate events, not truth writes
-- All side effects go through adapters
-### 1.7.3 Event-Sourced Truth
-- All state updates come from reducers
-- No direct mutations
-- Reducers MUST be deterministic and pure
-- Domain Events are the only source of truth changes
-- **Immutable audit trail:** Every change permanently recorded with full provenance
-- **Historical replay:** Complete event log enables time-travel queries (view entity state at any point in time)
-- **Cryptographic integrity:** Hash chaining ensures deterministic, tamper-evident data
-### 1.7.4 Ports & Adapters Architecture
-Repositories:
-- EventRepository
-- StateRepository
-- EntitySchemaRepository
-- CommandRepository
-Adapters for:
-- Flat files (now)
-- Databases (later)
-- Distributed/multi-node (future)
-- Blockchain anchoring (future optional)
-### 1.7.5 Capability Tokens (future-proofing)
-- Agent permissions encoded as explicit capabilities
-- Constraints (limits, expiry, scopes) verified before accepting events
-- Replace static whitelists
-### 1.7.6 Hash-Chained Event Log (cryptographic integrity)
-- Events include `previous_event_hash` + `event_hash` for cryptographic integrity
-- Ensures deterministic, tamper-evident data with immutable audit trail
-- Enables historical replay and time-travel queries (view entity state at any point in time)
-- Hash-based entity IDs provide canonical, deterministic identification across all personal data
-- Foundation for future blockchain anchoring (optional)
-## 2. Neotoma Internal Architecture: Five-Layer Model
-Neotoma itself is structured as a **five-layer architecture**:
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart TD
-    subgraph External["External Layer"]
-        MCP[MCP Server]
-        Gmail[Gmail API]
-        OpenAI[OpenAI API]
-        PG[(PostgreSQL)]
-        Storage[File Storage]
-    end
-    subgraph Infrastructure["Infrastructure Layer"]
-        DB[Database Client]
-        FileIO[File I/O]
-        Network[Network Client]
-        Crypto[Crypto Utils]
-    end
-    subgraph Domain["Domain Layer"]
-        Ingestion[Ingestion Service]
-        Extraction[Extraction Service]
-        ObservationStorage[Observation Storage]
-        ReducerEngine[Reducer Engine]
-        SchemaRegistry[Schema Registry]
-        EntityRes[Entity Resolution]
-        EventGen[Event Generation]
-        GraphBuilder[Graph Builder]
-        SearchSvc[Search Service]
-    end
-    subgraph Application["Application Layer"]
-        Actions[MCP Actions]
-        Workflows[Workflows]
-        Orchestration[Orchestration]
-    end
-    subgraph Presentation["Presentation Layer (UI)"]
-        Frontend[React Frontend]
-        API[HTTP API]
-    end
-    %% Connections
-    Frontend --> API
-    API --> Actions
-    MCP --> Actions
-    Actions --> Workflows
-    Workflows --> Domain
-    Domain --> Infrastructure
-    Infrastructure --> External
-    style External fill:#f0f0f0
-    style Infrastructure fill:#e1f5ff
-    style Domain fill:#fff4e6
-    style Application fill:#e6ffe6
-    style Presentation fill:#ffe6f0
-```
-### 2.1 Layer Definitions
-#### Layer 1: External Layer
-**Responsibility:** Third-party services and data stores outside Neotoma's control.
-**Components:**
-- MCP client connections (from ChatGPT, Claude, Cursor)
-- Gmail API for attachment retrieval
-- OpenAI API for embeddings (deterministic, not extraction)
-- Local SQLite database by default, PostgreSQL when configured
-- File storage (local by default, S3 when configured)
-**Constraints:**
-- MUST NOT contain business logic
-- MUST be swappable (abstracted by Infrastructure layer)
-#### Layer 2: Infrastructure Layer
-**Responsibility:** Abstract external dependencies, provide stable internal APIs.
-**Components:**
-- Database client wrappers (SQL query builders, connection pooling)
-- File I/O abstractions (read, write, delete)
-- Network client utilities (HTTP, retries, timeouts)
-- Cryptographic utilities (hashing, signing, key derivation)
-**Constraints:**
-- MUST provide deterministic APIs
-- MUST handle transient errors (retries, circuit breakers)
-- MUST NOT contain domain logic
-#### Layer 3: Domain Layer
-**Responsibility:** Core State Layer business logic — ingestion, extraction, entity resolution, graph construction.
-**Components:**
-- **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, cloud storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
-- **Interpretation Service (v0.2.0+):** AI-powered field extraction, schema validation, unknown field routing to raw_fragments, interpretation tracking
-- **[Observation](../vocabulary/canonical_terms.md#observation) Storage:** Store granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source) with [provenance](../vocabulary/canonical_terms.md#provenance) (source_id, interpretation_id)
-- **Reducer Engine:** Compute entity snapshots from observations using deterministic merge strategies
-- **Schema Registry:** Manage config-driven schema definitions, versions, and merge policies
-- **Entity Resolution:** Canonical entity ID generation and deduplication
-- **Event Generation:** Extract dates → create timeline events
-- **Graph Builder:** Insert nodes (source, entities, events) and edges, manage relationships
-- **Search Service:** Query records, entities, events by structured filters
-**Constraints:**
-- MUST be deterministic (same input → same output)
-- MUST NOT call upper layers
-- MUST validate all inputs
-- MUST emit events for observability
-**Dependencies:**
-- Infrastructure layer only (no direct External calls)
-#### Layer 4: Application Layer
-**Responsibility:** Orchestrate domain services, implement MCP actions, manage workflows.
-**Components:**
-- **MCP Actions (v0.1.0):** `upload_file`, `retrieve_entities`, `get_entity_snapshot`, `search`, `list_observations`, `list_timeline_events` (operational)
-- **MCP Actions (v0.2.15+):** Unified `ingest()` for all [source](../vocabulary/canonical_terms.md#source), `reinterpret()`, `correct()`, `merge_entities()` ([source](../vocabulary/canonical_terms.md#source)-based architecture)
-- **Workflows:** Multi-step operations orchestrating domain services
-- **Orchestration:** Request routing, validation, error handling
-**Constraints:**
-- MUST NOT contain conversational logic or chat state management
-- MUST expose only deterministic, typed operations via MCP
-- MUST validate all inputs before calling Domain layer
-- MUST use ErrorEnvelope for all errors
-- **Workflows:** Multi-step orchestrations (e.g., Gmail sync → download attachments → ingest)
-- **Orchestration:** Retry logic, transaction management, saga patterns
-**Constraints:**
-- MUST coordinate Domain services
-- MUST enforce authorization
-- MUST provide structured error responses
-- MUST NOT contain extraction or graph logic (that's Domain)
-**Dependencies:**
-- Domain layer + Infrastructure layer
-#### Layer 5: Presentation Layer
-**Responsibility:** User-facing interfaces — web UI, HTTP API endpoints.
-**Components:**
-- **React Frontend:** Record list, detail, timeline, search UI, upload UI
-- **HTTP API:** REST endpoints for UI (separate from MCP)
-**Constraints:**
-- MUST NOT contain business logic
-- MUST call Application or Domain layers via defined contracts
-- MUST handle UI state and rendering only
-- MUST NOT include chat UI or conversational interfaces (see `docs/architecture/conversational_ux_architecture.md`)
-**Dependencies:**
-- Application layer (via HTTP/WebSocket)
-## 3. Dependency Rules and Constraints
-### 3.1 Allowed Dependencies
-```
-Presentation → Application → Domain → Infrastructure → External
-```
-**Rules:**
-- Each layer MAY depend on layers below it
-- Each layer MUST NOT depend on layers above it
-- Each layer SHOULD minimize direct calls to Infrastructure (prefer Domain abstractions)
-### 3.2 Forbidden Dependencies
-❌ Domain → Application (domain logic calling orchestration)
-❌ Domain → Presentation (domain logic calling UI)
-❌ Infrastructure → Domain (infra calling business logic)
-❌ External → Any internal layer (external services can't call in)
-### 3.3 Dependency Injection
-All dependencies MUST be injected:
-- Domain services receive Infrastructure clients via constructors
-- Application workflows receive Domain services via constructors
-- Presentation components receive Application actions via props/context
-No global singletons for services.
-## 4. Data Flow Patterns
-### 4.1 Ingestion Flow (Sources-First Architecture, v0.2.0+)
-**Note:** This flow reflects the sources-first ingestion architecture introduced in v0.2.0. See `docs/releases/v0.2.0/` for details.
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-sequenceDiagram
-    participant User
-    participant UI
-    participant API
-    participant MCP_Action as MCP Action<br/>(unified ingest)
-    participant Storage as Raw Storage<br/>Service
-    participant Sources as Sources<br/>Table
-    participant Interp as Interpretation<br/>Service
-    participant InterpRun as Interpretation<br/>(interpretations table)
-    participant EntityRes as Entity<br/>Resolution
-    participant Observations as Observations<br/>Storage
-    participant Reducer as Reducer<br/>Engine
-    participant Snapshots as Entity<br/>Snapshots
-    participant DB
-    User->>UI: Upload file
-    UI->>API: POST /api/upload
-    API->>MCP_Action: ingest({file_content, mime_type} or {entities: [...]})
-    alt Unstructured source (file)
-        MCP_Action->>Storage: Store file (SHA-256 hash)
-        Storage->>Storage: Compute content_hash
-        Storage->>Sources: Check for existing (user_id, content_hash)
-        Sources-->>Storage: existing_source_id or null
-        alt New source
-            Storage->>Sources: INSERT source (content-addressed)
-            Sources-->>Storage: source_id
-            Storage->>Interp: Trigger interpretation (optional)
-        else Duplicate source
-            Sources-->>MCP_Action: existing_source_id (deduplicated)
-        end
-        Interp->>InterpRun: CREATE interpretation (versioned)
-        InterpRun-->>Interp: interpretation_id
-        Interp->>Interp: Extract fields via AI (non-deterministic)
-        Interp->>Interp: Validate against schema_registry
-        Interp->>Interp: Categorize known vs unknown fields
-        Interp->>Observations: Store unknown fields in raw_fragments
-        Interp->>EntityRes: resolve_entities(validated_fields)
-        EntityRes->>EntityRes: Generate canonical entity IDs
-        EntityRes-->>Interp: entity_ids
-        Interp->>Observations: CREATE observations (source_id, interpretation_id, entity_id)
-        Observations-->>Interp: observation_ids
-        Interp->>Reducer: Trigger reducer computation
-        Reducer->>Reducer: Compute snapshots from observations
-        Reducer->>Snapshots: UPDATE entity_snapshots
-        Interp->>InterpRun: UPDATE status = 'completed'
-    else Structured source (entities array)
-        MCP_Action->>Interp: Validate against schema_registry
-        Interp->>EntityRes: resolve_entities(properties)
-        EntityRes-->>Interp: entity_ids
-        Interp->>Observations: CREATE observations (source_priority=100)
-        Observations-->>Interp: observation_ids
-        Interp->>Reducer: Compute snapshots
-    end
-    MCP_Action-->>API: {source_id, interpretation_id?, entities, ...}
-    API-->>UI: 201 Created
-    UI-->>User: Show entity details
-```
-**Key Characteristics (v0.2.0+):**
-- **Content-addressed storage:** Same file content = same source (deduplication via SHA-256)
-- **Versioned interpretation:** Each interpretation creates new observations; prior observations immutable
-- **[Provenance](../vocabulary/canonical_terms.md#provenance) chain:** [Observations](../vocabulary/canonical_terms.md#observation) link to `source_id` and `interpretation_id` (from `interpretations` table) for full auditability
-- **Schema validation:** Unknown fields stored in `raw_fragments`, schema-valid fields create observations
-- **Deterministic components:** Content hashing, entity resolution, reducer computation
-- **Non-deterministic boundary:** AI interpretation outputs vary; config logged for audit
-- **Correction support:** High-priority observations via `correct()` tool
-- **Entity merging:** `merge_entities()` tool for duplicate resolution
-**See also:** `docs/architecture/sources_first_ingestion_final.md` for detailed architecture.
-### 4.2 Search Flow (Query → Results)
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-sequenceDiagram
-    participant User
-    participant UI
-    participant API
-    participant MCP_Action as MCP Action<br/>(search)
-    participant Search as Search<br/>Service
-    participant DB
-    User->>UI: Enter search query
-    UI->>API: GET /api/search?q=...
-    API->>MCP_Action: search({query, filters})
-    MCP_Action->>Search: search(query, filters)
-    Search->>Search: Parse query
-    Search->>Search: Build SQL WHERE clause
-    Search->>DB: SELECT records WHERE ...
-    DB-->>Search: rows
-    Search->>Search: Apply ranking (deterministic)
-    Search->>Search: Apply pagination
-    Search-->>MCP_Action: results
-    MCP_Action-->>API: {records, total, page}
-    API-->>UI: JSON response
-    UI-->>User: Display results
-```
-**Key Characteristics:**
-- **Deterministic ranking:** Same query + same DB state → same order
-- **Structured filters:** No semantic search in MVP
-- **Consistent:** May show stale results during indexing (bounded eventual consistency)
-### 4.3 Entity Resolution Flow (Extracted Fields → Canonical Entity)
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart TD
-    Start[Extracted Fields] --> HasEntity{Contains entity<br/>field?}
-    HasEntity -->|No| Skip[Skip entity resolution]
-    HasEntity -->|Yes| Extract[Extract entity value]
-    Extract --> Normalize[Normalize:<br/>trim, lowercase, dedupe]
-    Normalize --> GenerateID[Generate canonical ID:<br/>hash(entity_type:normalized_value)]
-    GenerateID --> CheckExists{Entity ID<br/>exists in DB?}
-    CheckExists -->|Yes| Link[Link record to existing entity]
-    CheckExists -->|No| Create[Create new entity]
-    Create --> Link
-    Link --> InsertEdge[Insert graph edge:<br/>record → entity]
-    InsertEdge --> Done[Done]
-    Skip --> Done
-    style Start fill:#e1f5ff
-    style Done fill:#e6ffe6
-    style GenerateID fill:#fff4e6
-```
-**Key Characteristics:**
-- **Deterministic IDs:** Same normalized value → same entity ID (globally)
-- **Automatic deduplication:** Multiple records with "Acme Corp" link to same entity
-- **No inference:** Only extract entities explicitly present in fields
-### 4.4 Timeline Event Flow (Extracted Dates → Events)
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-flowchart TD
-    Start[Extracted Fields] --> FindDates[Find all date fields]
-    FindDates --> HasDates{Has dates?}
-    HasDates -->|No| Skip[No events created]
-    HasDates -->|Yes| Loop[For each date field]
-    Loop --> Normalize[Normalize to ISO 8601]
-    Normalize --> MapEvent[Map field → event_type:<br/>e.g., invoice_date → InvoiceIssued]
-    MapEvent --> CreateEvent[Create event object]
-    CreateEvent --> LinkEvent[Link: record → event,<br/>event → entities]
-    LinkEvent --> NextDate{More dates?}
-    NextDate -->|Yes| Loop
-    NextDate -->|No| Done[Done]
-    Skip --> Done
-    style Start fill:#e1f5ff
-    style Done fill:#e6ffe6
-    style MapEvent fill:#fff4e6
-```
-**Key Characteristics:**
-- **One event per date field:** `invoice_date` → `InvoiceIssued` event
-- **Deterministic event IDs:** hash(record_id + field_name + date)
-- **Timeline ordering:** Events sorted by timestamp for UI
-## 5. Error Propagation Model
-### 5.1 Error Flow
-Errors propagate **up** the layer stack, never down:
-```
-Domain error → Application catches → Application returns structured error → Presentation displays
-```
-### 5.2 Error Envelope
-All errors MUST use a structured envelope (see `docs/subsystems/errors.md`):
-```typescript
-interface ErrorEnvelope {
-  error_code: string; // e.g., "INGESTION_INVALID_FILE"
-  message: string; // Human-readable description
-  details?: Record<string, any>; // Additional context
-  trace_id?: string; // Distributed tracing ID
-  timestamp: string; // ISO 8601
-}
-```
-### 5.3 Error Handling by Layer
-**Domain Layer:**
-- Throws typed errors (e.g., `InvalidSchemaError`, `EntityResolutionError`)
-- MUST NOT return partial results on error
-- MUST rollback transactions on failure
-**Application Layer:**
-- Catches Domain errors
-- Converts to ErrorEnvelope
-- Logs errors with trace_id
-- Returns error to caller (UI or MCP client)
-**Presentation Layer:**
-- Displays user-friendly error messages
-- Shows retry options if transient error
-- Logs errors for debugging (no PII)
-### 5.4 Transient vs Permanent Errors
-**Transient (retry allowed):**
-- Network timeouts
-- Database connection errors
-- Rate limits
-**Permanent (no retry):**
-- Invalid file format
-- Schema validation failures
-- Authorization errors
-Application layer MUST distinguish and signal retry eligibility.
-## 6. Performance Boundaries
-### 6.1 Response Time Targets
-| Operation            | Target  | Max Acceptable |
-| -------------------- | ------- | -------------- |
-| Search query         | < 200ms | 1s             |
-| Record fetch         | < 100ms | 500ms          |
-| File upload (< 10MB) | < 5s    | 30s            |
-| Entity resolution    | < 500ms | 2s             |
-| Timeline generation  | < 1s    | 5s             |
-### 6.2 Throughput Targets
-| Operation             | Target  | Notes            |
-| --------------------- | ------- | ---------------- |
-| Concurrent ingestions | 10/sec  | Per user         |
-| Search queries        | 100/sec | Across all users |
-| MCP tool calls        | 50/sec  | Per user         |
-### 6.3 Scalability Constraints
-**Vertical Scaling (MVP):**
-- Single-instance PostgreSQL
-- Local or S3 file storage
-- No horizontal scaling in MVP
-**Future Horizontal Scaling:**
-- Ingestion workers (queue-based)
-- Read replicas for search
-- Distributed graph storage
-## 7. Security Boundaries
-### 7.1 Authentication and Authorization
-**Authentication:**
-- User authentication via OAuth
-- MCP connections authenticated via session tokens
-- No anonymous access
-**Authorization:**
-- Per-`user_id` isolation is enforced **today** in the application layer: every user-scoped query applies `.eq("user_id", userId)` (`src/services/entity_queries.ts`), and `getAuthenticatedUserId` rejects a mismatched caller-supplied id, so a token cannot read across tenants
-- Covers graph and relationship reads, not just flat lists; regression-tested in `tests/security/tenant_isolation_matrix.test.ts` (advisory GHSA-wrr4-782v-jhwh)
-- A user can only access their own records, entities, events
-- Database-level row-level security (RLS) is a possible future defense-in-depth layer, not the current line of defense — see [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization) for the enforced contract and the two multi-tenant models
-### 7.2 Data Security
-**At Rest:**
-- **Application-layer column encryption (AES-256-GCM)** protects the sensitive content and derived-metadata columns when encryption is enabled (`NEOTOMA_ENCRYPTION_ENABLED=true` with a key file `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`). The data key is derived from the configured key/mnemonic (`src/crypto/key_derivation.ts`), and the live SQLite adapter (`src/repositories/sqlite/local_db_adapter.ts`) encrypts on write / decrypts on read. Covered columns: `observations.fields`, `entity_snapshots.snapshot` + `provenance`, `relationship_snapshots.snapshot` + `provenance`, `raw_fragments.fragment_value` + `fragment_envelope`, `schema_recommendations.*`, `auto_enhancement_queue.payload`. IDs, timestamps, hashes, and signatures are intentionally left plaintext so hash-chain integrity and indexed lookups still work. A CLI migration (`neotoma db ...`) encrypts pre-existing rows; covered by `tests/cli/db_migrate_encryption.test.ts`.
-- **Known at-rest gaps (not yet column-encrypted):** the `substrate_events` durable log (`payload`, written via `event_log.ts` on the raw client) and the vector embedding tables (`entity_embeddings_vec` / `entity_embedding_rows`) bypass the column-encryption adapter and are written plaintext even when encryption is enabled. Auth/session/OAuth tables are also plaintext (MCP refresh tokens are separately encrypted with AES-256-GCM — see `docs/subsystems/auth.md`). For these, and for defense in depth generally, an **encrypted volume** under the instance (LUKS / cloud-provider volume encryption) is the recommended belt-and-suspenders; a full-database SQLCipher build is a possible future option, not a shipped configuration.
-- File storage encryption (S3 server-side encryption) when an S3-compatible backend is configured.
-- The planned local-first E2EE architecture (v2.x, browser SQLite WASM + OPFS, server stores only ciphertext) is the eventual whole-database at-rest story; it is aspirational, not current.
-**In Transit:**
-- HTTPS for all HTTP API calls
-- WSS (WebSocket Secure) for MCP connections
-**PII Handling:**
-- MUST NOT log PII (see `docs/subsystems/privacy.md`)
-- Extraction preserves original text (no redaction)
-- User controls deletion via MCP entity management actions (future)
-### 7.3 Input Validation
-**All layers MUST validate inputs:**
-- **Presentation:** Client-side validation (UX, not security)
-- **Application:** Server-side validation (schema validation)
-- **Domain:** Business rule validation (e.g., valid date formats)
-- **Infrastructure:** Type validation (e.g., SQL injection prevention)
-## 8. Testing Implications
-### 8.1 Layer-Specific Testing
-**Domain Layer:**
-- **Unit tests:** Pure functions (extraction, entity ID generation)
-- **Integration tests:** Domain service + in-memory DB
-- **Property tests:** Determinism (same input → same output)
-**Application Layer:**
-- **Integration tests:** Workflows calling real Domain services + test DB
-- **Contract tests:** MCP action signatures
-**Presentation Layer:**
-- **Component tests:** React component rendering
-- **E2E tests:** Full user flows (Playwright)
-### 8.2 Cross-Layer Testing
-**End-to-End Tests:**
-- Upload file via UI → verify record in DB
-- Search via MCP → verify results match expected entities
-- Timeline view → verify events sorted correctly
-**Performance Tests:**
-- Load test search with 10K records
-- Ingestion throughput test (100 files in 30s)
-### 8.3 Architectural Invariant Tests
-**Dependency Tests:**
-- Domain layer MUST NOT import Application or Presentation modules
-- Infrastructure layer MUST NOT import Domain modules
-**Determinism Tests:**
-- Upload same file twice → same record_id, entities, events
-- Search same query twice → same order
-## 9. Architectural Invariants (MUST/MUST NOT)
-### MUST
-1. **Layers MUST respect dependency rules** (no upward dependencies)
-2. **Domain logic MUST be deterministic** (same input → same output)
-3. **All errors MUST use ErrorEnvelope structure**
-4. **All external calls MUST go through Infrastructure layer**
-5. **All database writes MUST be transactional**
-6. **All user data MUST be isolated by user_id** (enforced in the application layer on every query; see `docs/subsystems/auth.md`)
-7. **All MCP actions MUST validate inputs**
-8. **All timeline events MUST trace to source fields**
-9. **All entities MUST have canonical IDs**
-10. **All graph edges MUST be typed**
-11. **Reducers MUST be deterministic** (same observations + merge rules → same entity snapshot)
-12. **All entity snapshot fields MUST have provenance** (trace to specific observations and documents)
-13. **Observations MUST reference schema version** (for deterministic replay)
-14. **Schema evolution MUST be append-only and versioned** (no breaking changes)
-### MUST NOT
-1. **Domain layer MUST NOT call Application or Presentation**
-2. **Infrastructure MUST NOT contain business logic**
-3. **Presentation MUST NOT call External layer directly**
-4. **Any layer MUST NOT introduce nondeterminism** (randomness) except AI interpretation with auditability
-5. **Graph MUST NOT contain orphan nodes** (all nodes have edges)
-6. **Schema assignments MUST NOT change post-creation**
-7. **Raw text MUST NOT be modified after ingestion**
-8. **Entities MUST NOT be inferred** (only extracted)
-9. **Search MUST NOT use semantic embeddings for ranking** (MVP)
-10. **MCP MUST NOT expose strategy or execution logic** (State Layer only)
-11. **Reducers MUST NOT be nondeterministic** (must be pure functions)
-12. **Entity snapshots MUST NOT be computed without observations** (observations are source of truth)
-13. **Schema changes MUST NOT break existing data** (must be backward compatible)
-14. **Observations MUST NOT be modified after creation** (immutable)
-## 10. Future Architectural Extensions
-### 10.1 Planned Additions (Post-MVP)
-**v2.0.0: End-to-End Encryption (E2EE) Architecture**
-Major architectural transformation planned for v2.0.0:
-- **Local-first datastore:** Browser becomes authoritative (SQLite WASM + OPFS, encrypted-at-rest)
-- **End-to-end encryption:** X25519 envelope encryption + Ed25519 signatures
-- **Encrypted MCP bridge:** Server stores only ciphertext; MCP servers cannot decrypt
-- **Public key authentication:** Bearer token = Ed25519 public key
-- **Multi-device sync (optional):** Encrypted delta sync via conflict-free merge
-See `docs/releases/v2.0.0/` and `docs/architecture/local-first-e2ee-architecture.md` for detailed architecture.
-**v2.1.0: GDPR & Privacy Compliance**
-- Automated GDPR data export and account deletion
-- Request tracking and identity verification
-- Legal document serving
-- Consent management
-- US state privacy law compliance
-See `docs/releases/v2.1.0/` for detailed release plan.
-**Post-MVP Enhancements:**
-**Horizontal Scaling:**
-- Ingestion worker pool (queue-based with Redis/RabbitMQ)
-- Read replicas for search and timeline queries
-- CDN for file storage
-**Advanced Search:**
-- Hybrid search (structured + embeddings)
-- Cross-language search refinements
-**Graph Query Language:**
-- Custom query language for graph traversal (e.g., "Find all entities linked to records from Q1 2024")
-### 10.2 Non-Goals (Never)
-- Autonomous agents in the State Layer (belongs in operational layers)
-- Predictive analytics in the State Layer (belongs in operational layers)
-- Strategy or execution logic in the State Layer (belongs in operational layers)
-- Direct truth mutations (all updates via Domain Events → Reducers)
-- Side effects in the State Layer (operational layers perform effects through adapters and write results back as observations)
+## Data model
 
-**Note:** AI interpretation for unstructured files is allowed with audit trail and idempotence (see `docs/architecture/determinism.md` Section 1.2-1.4). The system logs interpretation config (model, temperature, prompt_hash) and ensures idempotence via canonicalization and hashing. While LLM output is non-deterministic, the final system state is idempotent.
-- Internal chat UI or conversational interfaces (externalized to MCP-compatible agents; see `docs/architecture/conversational_ux_architecture.md`)
+### Sources
+
+A source is the input a write arrived with: a file, raw text, or a structured payload. File sources are stored by content hash (SHA-256), and the hash is unique per user, so uploading the same file twice reuses one source.
+
+### Interpretations
+
+An interpretation records one extraction over a stored source: the entities a client extracted from it and the extraction configuration the client reports (provider, model, temperature, and a prompt hash). Neotoma stores files as they arrive and does not run an extraction model over them; the agent or client extracts the fields and passes them with an `interpretation` block on `store`, or through `create_interpretation`. A new interpretation of the same source adds new observations and leaves the earlier ones in place.
+
+### Observations
+
+An observation is a set of field values about one entity, written at one time. Observations from a store or an interpretation are linked to their source. A correction observation has no source.
+
+Observation ids and source ids are not portable across instances:
+
+- An observation id is a hash of its source id, its interpretation, its entity id, and its fields (`generateObservationId` in `src/services/observation_identity.ts`).
+- A source id is a hash of the user id and the content hash (`generateDeterministicSourceId` in `src/services/source_identity.ts`).
+- The user can differ between installs:
+  - The stdio MCP server writes as the shared local development user, so the same content gets the same source and observation ids on every install.
+  - The HTTP server, which the CLI's local transport also starts (`src/shared/local_transport.ts`), runs in `local_sandbox` mode by default when it binds to loopback with no auth outside production (`resolveSandboxMode` in `src/services/sandbox_mode.ts`). Each install then gets its own fingerprinted local user (`ensureLocalSandboxUser` in `src/services/local_auth.ts`), so the same data stored on two installs gets different source and observation ids.
+- Each interpretation run gets a new id, so the observations it writes get new ids too.
+
+Entity ids, described below, agree across instances. Do not rely on source or observation ids matching across instances.
+
+Fields that the entity's schema does not declare are kept as raw fragments rather than dropped.
+
+### Entities
+
+An entity is one person, company, task, invoice, or other thing that observations are about. Its id is a hash of the entity type and its identity fields (for most types, the normalized canonical name), so the same identity resolves to the same id. In sandbox mode, or when `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` is set, the user id is folded into the hash so two users can hold same-named entities separately.
+
+### Entity snapshots
+
+A snapshot is the current value of each field, computed by the reducer from the entity's observations using the merge policy declared in the schema for each field. The policies are `last_write` (the default), `highest_priority`, `most_specific`, and `merge_array`; main also adds `merge_array_by_key` (not in v0.25.0). Each field in a snapshot names the observation that set it. Given the same observations and the same merge policies, the reducer produces the same snapshot.
+
+Under the default policy a later store changes only the fields it sets; the other fields keep their current values.
+
+### Relationships
+
+A relationship is a typed connection between two entities, such as `PART_OF` or `REFERS_TO`. The type vocabulary is a runtime registry. Relationships are stored as relationship observations and reduced to relationship snapshots, the same way entities are. Deleting a relationship adds an observation that marks it deleted, and `restore_relationship` restores it.
+
+### Timeline events
+
+Timeline events are derived from date fields on a snapshot. When a schema declares `temporal_fields`, only those fields produce events; otherwise a date-field heuristic applies. Event ids are hashes of the source, entity, field, and timestamp.
+
+### Schema registry
+
+Entity schemas (fields, types, merge policies, and identity rules) live in a registry that can be extended at runtime. Type checks on write are uneven today. A plain store keeps a value of the wrong type for a declared field out of the snapshot and stores it as an unknown field (a raw fragment). A `date` field accepts any string, and `correct()` does not check types, so both can put a wrong-type value into the snapshot (issues [#2219](https://github.com/markmhendrickson/neotoma/issues/2219) and [#2699](https://github.com/markmhendrickson/neotoma/issues/2699); `docs/known_limitations.md`, added by #2697, lists these limits).
+
+## How a write becomes a current value
+
+1. A client calls `store` (MCP tool, `POST /store`, or `neotoma store`).
+2. Neotoma records the source, resolves each entity to its id, and writes one observation per entity. Undeclared fields go to raw fragments.
+3. The reducer recomputes the snapshot of each affected entity, and timeline events are derived from its date fields.
+4. Neotoma emits a substrate event describing the completed write (see [Outbound signals](#outbound-signals)).
+
+A file is stored as a source as it arrives. Its fields enter the record only when a client sends extracted entities for it, which then follow the same steps.
+
+## Reads
+
+- `retrieve_entities` and `retrieve_entity_by_identifier` return entities with their current snapshots.
+- `retrieve_entity_snapshot` returns one entity's snapshot with per-field provenance. It also answers an as-of question for that one entity: `at` limits the observations it uses by when they were observed, and `at_ingested` by when Neotoma received them.
+- `list_observations` and `retrieve_field_provenance` show which observations exist for an entity and which one set each field.
+
+There is no as-of query across the whole record: point-in-time reads work one entity at a time. The export commands (`neotoma entities export`, `neotoma snapshots export`, and `neotoma memory-export`) carry current values only, not observation history.
+
+## Corrections and deletions
+
+A correction adds a new observation with source priority 1000 and no source. The earlier value is not edited and stays listed among the entity's observations. A correction does not always stay in effect: under the default `last_write` policy a later write to the same field can replace it (tracked in [issue #2033](https://github.com/markmhendrickson/neotoma/issues/2033)).
+
+Who made a correction is recorded only for writes over MCP, and only as the client name that the MCP client reports about itself.
+
+Deleting an entity records the deletion and hides the entity from snapshots and queries; its observations are not removed. `restore_entity` reverses it. The separate GDPR deletion path in `src/services/gdpr_deletion.ts` handles erasure requests.
+
+## Interfaces
+
+| Interface | Where it is defined | Notes |
+| --- | --- | --- |
+| MCP | `src/server.ts`, `src/tool_definitions.ts` | stdio, and HTTP at `/mcp` |
+| REST | [`openapi.yaml`](../../openapi.yaml) | 112 paths on main, 109 in v0.25.0 |
+| CLI | `src/cli/` | `neotoma <command>`; see the [CLI reference](../developer/cli_reference.md) |
+
+On main, the MCP WebSocket bridge (`src/mcp_ws_bridge.ts`) binds to loopback by default and `NEOTOMA_WS_HOST` widens it; in v0.25.0 it binds to all interfaces. The Inspector is a web UI served by the same HTTP server.
+
+## Storage
+
+- **Database.** SQLite by default (`better-sqlite3` or `node:sqlite`). Set `NEOTOMA_DB_BACKEND=libsql` to use the libSQL driver, which runs statements off the Node event loop for local files and can connect to a remote sqld or Turso server through `NEOTOMA_DB_URL`. There is no PostgreSQL backend.
+- **Files.** Source files are stored at `sources/<user_id>/<content_hash>` in the configured file storage.
+- **Embeddings.** Semantic search over entities is optional. When `OPENAI_API_KEY` is set, Neotoma requests embeddings from OpenAI (`text-embedding-3-small`) and stores them in SQLite through `sqlite-vec`. Without the key, search uses structured filters only.
+
+## Network use
+
+The requests below are the ones found in the code; the list is not exhaustive. Before relying on the absence of a request, search `src/` for `fetch(`, for `guardedFetch` (`src/services/net/private_host_guard.ts`), and for the OpenAI client.
+
+### Possible by default
+
+- **Update checks.** The CLI checks the npm registry for a newer release about once a day (off with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`). The stdio MCP server checks when a session starts and about every 6 hours after that (off with `NO_UPDATE_NOTIFIER=1`). The request carries only the package name, and the registry sees ordinary connection metadata.
+- **Google Fonts, from the browser.** The server-rendered OAuth pages link fonts on `fonts.googleapis.com` and `fonts.gstatic.com` (`renderOauthPage` in `src/actions.ts`), so a browser that opens them requests those hosts.
+
+### Only when configured
+
+- **OpenAI**, when `OPENAI_API_KEY` is set: embeddings for semantic search, and model calls for schema recommendations and schema icons.
+- **Webhooks** to the URLs that subscribers register (see [Outbound signals](#outbound-signals)).
+- **Peer sync** to the peers an operator configures.
+- **GitHub**, when issue sync is configured (`neotoma issues sync` with the server's `NEOTOMA_ISSUES_GITHUB_TOKEN`).
+- **Google sign-in.** The server fetches Google's signing keys and calls Google's token endpoint, which carries the authorization code and the client secret (`src/services/google_oidc.ts`). The authorization endpoint is only a browser redirect.
+- **Apple App Attest revocation**, when an AAuth attestation is verified: a request to Apple's revoked-list endpoint, or to `NEOTOMA_AAUTH_APPLE_REVOCATION_URL` (`src/services/aauth_attestation_revocation.ts`).
+- **Tunnels**, when started with `--tunnel`: ngrok or cloudflared connect to their provider.
+
+### Only when an agent calls a tool
+
+- **`submit_issue`** forwards the report to the instance named by `NEOTOMA_ISSUES_TARGET_URL`.
+- **`npm_check_update`** queries the npm registry, and with `include_release_notes` also the GitHub API.
+
+By default `submit_issue` reports go to the maintainer's instance (`DEFAULT_ISSUES_TARGET_URL` in `src/services/issues/types.ts`). Only setting the `NEOTOMA_ISSUES_TARGET_URL` environment variable to an empty string keeps them local; an empty `target_url` in the stored issues config does not, because it falls back to the default (`src/services/issues/config.ts`).
+
+## Code layout
+
+| Path | Role |
+| --- | --- |
+| `src/server.ts` | MCP server and tool handlers |
+| `src/actions.ts` | HTTP API routes |
+| `src/cli/` | The `neotoma` command |
+| `src/services/` | Store, correction, resolution, query, and subscription logic |
+| `src/reducers/` | Entity and relationship reducers |
+| `src/repositories/` | Database drivers and connection lifecycle |
+
+## Outbound signals
+
+After a successful write, Neotoma emits a substrate event that reports what changed. It does not decide which changes matter or act on its own events.
+
+- **SSE.** Subscribers on the event stream receive events from an in-memory buffer. Events are also written to the `substrate_events` table so a client can resume after a restart; that log keeps events for `NEOTOMA_EVENT_RETENTION_DAYS` (default 7).
+- **Webhooks.** Delivery is best effort. Each event is retried in process after 1 s, 5 s, 30 s, and 5 min; nothing persists a retry queue. A subscription is deactivated after its failure limit (default 10) and rate-limited to 60 deliveries a minute.
+
+Ordering and exactly-once delivery are not guaranteed. Consumers that need them build them on their side. See [`docs/subsystems/subscriptions.md`](../subsystems/subscriptions.md) and [`docs/subsystems/substrate_events.md`](../subsystems/substrate_events.md).
+
+## Security boundaries
+
+### Tenant isolation
+
+Each user's data is isolated in the application layer. User-scoped queries filter on `user_id` (`src/services/entity_queries.ts`), and `getAuthenticatedUserId` in `src/actions.ts` rejects a caller-supplied user id that does not match the authenticated one. The exception is the local development user: on a local install, a request from the same machine with no credential acts as that user, and it may pass any `user_id`. Graph and relationship reads are covered as well as flat lists; `tests/security/tenant_isolation_matrix.test.ts` is the regression test. The database does not enforce row-level security. See [`docs/subsystems/auth.md`](../subsystems/auth.md#authorization).
+
+### Encryption at rest
+
+When `NEOTOMA_ENCRYPTION_ENABLED=true` with a key file (`NEOTOMA_KEY_FILE_PATH`) or a mnemonic (`NEOTOMA_MNEMONIC`), the SQLite adapter encrypts these columns with AES-256-GCM on write and decrypts them on read: observation fields, entity and relationship snapshots and their provenance, raw fragment values, schema recommendations, and the auto-enhancement queue payload. The `substrate_events` payload is encrypted with the same key. `neotoma db migrate-encryption` encrypts rows written before encryption was enabled.
+
+Everything else stays in plaintext, and Neotoma has no file-level encryption:
+
+- Source files on disk at `sources/<user_id>/<content_hash>`
+- The markdown mirror, when enabled
+- Metadata columns: entity ids, types, canonical names, and aliases; source filenames, MIME types, and provenance; timeline events; observation provenance; relationship observation metadata; interpretation configuration; and IDs, timestamps, and hashes everywhere
+- Embedding tables and auth tables
+- Log files. A `NEOTOMA_LOG_ENCRYPTION_ENABLED` setting and `neotoma logs tail --decrypt` exist, but no code path writes encrypted log lines, in v0.25.0 or on main.
+
+Where any of that matters, put the data directory on an encrypted volume (for example LUKS, FileVault, or a cloud provider's volume encryption).
+
+### In transit and in logs
+
+Put HTTPS (a reverse proxy or tunnel) in front of the HTTP API and `/mcp` whenever they are reachable beyond localhost. Logs must not contain personal data (see [`docs/subsystems/privacy.md`](../subsystems/privacy.md)).
+
+## What Neotoma does not do
+
+- Act as an agent, plan, or execute side effects
+- Infer facts that no observation states
+- Rank or prioritize changes for consumers
+- Guarantee ordered or exactly-once delivery of signals
+- Answer as-of queries across the whole record, or export history
+
+## Related documents
+
+- [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md)
+- [`docs/subsystems/reducer.md`](../subsystems/reducer.md)
+- [`docs/subsystems/relationships.md`](../subsystems/relationships.md)
+- [`docs/architecture/determinism.md`](determinism.md)
+- [`docs/architecture/consistency.md`](consistency.md)
+- [`docs/foundation/core_identity.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/foundation/core_identity.md) (opens on GitHub)
+
 ## Agent Instructions
-### When to Load This Document
-Load `docs/architecture/architecture.md` when:
-- Making any structural or cross-layer change
-- Adding a new subsystem or service
-- Implementing MCP actions
-- Refactoring Domain, Application, or Infrastructure layers
-- Designing data flows for new features
-- Reviewing pull requests for architectural compliance
-### Required Co-Loaded Documents
-- `docs/vocabulary/canonical_terms.md` (authoritative terminology)
-- `docs/foundation/core_identity.md` (always)
-- Foundation rules in `.cursor/rules/` (agent instructions and documentation loading order)
-- `docs/conventions/documentation_standards.md` (formatting)
-- `docs/architecture/architectural_decisions.md` (core architectural decisions)
-- `docs/architecture/consistency.md` (consistency models)
-- `docs/architecture/determinism.md` (determinism rules)
-- `docs/architecture/conversational_ux_architecture.md` (when evaluating chat/conversational features)
-### Constraints Agents Must Enforce
-1. **Respect layer boundaries:** No upward dependencies
-2. **Maintain determinism:** All Domain logic must be reproducible
-3. **Use ErrorEnvelope:** All errors follow structured format
-4. **Validate inputs:** Every layer validates its inputs
-5. **Transactional writes:** All graph writes in transactions
-6. **User isolation:** per-`user_id` scoping enforced in the application layer on every user-scoped read (see `docs/subsystems/auth.md`)
-7. **No global state:** Dependency injection for all services
-8. **State Layer purity:** No strategy, execution, or agent logic in Neotoma
-9. **Event-sourced updates:** All state changes via Domain Events → Reducers
-10. **Operational-layer boundary:** Operational layers MUST NOT mutate Neotoma truth directly; all writes flow through observations and reducers
-11a. **Substrate Outbound Signaling:** State Layer emits state-change signals to registered consumers after writes (reports of state transitions, not causes of them). These signals are derived outputs of the write pipeline, do not pass through reducers, and do not themselves cause state changes. Delivery is best-effort; no retry queues, dead-letter queues, or ordering guarantees in the substrate (those are operational-layer concerns). See `docs/foundation/philosophy.md` §5.9.
-12. **Four-layer model:** [Source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
-13. **Reducer determinism:** Same observations + merge rules → same entity snapshot
-14. **Provenance tracking:** All entity snapshot fields trace to observations and documents
-15. **Schema registry:** Domain schemas managed via registry, not code
-### Forbidden Patterns
-- Domain service calling Application layer
-- Infrastructure layer containing business rules
-- Direct External calls from Domain or Application
-- Non-transactional graph writes
-- Mutable records or schema reassignment
-- Nondeterministic extraction or entity resolution
-- Semantic search in MVP
-- Internal chat UI or conversational interfaces (externalize to MCP-compatible agents)
-- PII in logs
-- Operational layers mutating Neotoma truth directly (must use observations / Domain Events)
-- Bypassing reducers for state updates
-- Direct file-to-entity updates (must go through observations)
-- Hard-coded parent-child relationships (use relationship types)
-- Ad-hoc JSON fields in core schemas (use raw_fragments)
-- Non-deterministic reducers (must be pure functions)
-- Schema changes without versioning (must use schema registry)
-- Breaking changes to existing schemas (must be additive)
-- Modifying observations after creation (immutable)
-### Validation Checklist
-- [ ] Change respects five-layer architecture
-- [ ] No upward dependencies introduced
-- [ ] Domain logic is deterministic and testable
-- [ ] Errors use ErrorEnvelope structure
-- [ ] Database writes are transactional
-- [ ] User data isolation maintained (application-layer `user_id` scoping via `getAuthenticatedUserId`)
-- [ ] MCP actions validate inputs
-- [ ] Performance targets considered
-- [ ] Security boundaries respected
-- [ ] Tests cover new architectural paths
-- [ ] Documentation updated if patterns change
+
+### When to load this document
+
+Load it before a structural or cross-module change, when adding an MCP tool or REST route, when changing how writes reach snapshots, or when reviewing a pull request for those changes.
+
+### Required co-loaded documents
+
+- `docs/vocabulary/canonical_terms.md`
+- `docs/conventions/documentation_standards.md`
+- `docs/architecture/determinism.md`
+- `docs/architecture/consistency.md`
+
+### Constraints agents must enforce
+
+1. Writes reach snapshots only through observations and the reducer; no code path edits a snapshot directly.
+2. Reducers stay deterministic: the same observations and merge policies produce the same snapshot.
+3. Every snapshot field names the observation that set it.
+4. A correction adds an observation; it never edits an earlier one.
+5. User-scoped reads and writes filter on the authenticated `user_id`.
+6. Neotoma emits signals about completed writes; it does not act on them.
+7. Statements in this document describe shipped behaviour; anything planned goes in an issue or a plan, not here.
+
+### Forbidden patterns
+
+- Editing or deleting an observation to change a current value
+- Snapshot writes that bypass the reducer
+- Strategy, planning, or execution logic inside Neotoma
+- Personal data in logs
+- Describing Neotoma as a memory layer or a state layer (see the canonical vocabulary)
+
+### Validation checklist
+
+- The change keeps writes flowing through observations and the reducer
+- Reducer output stays deterministic for the same inputs
+- Provenance is kept for every new or changed field
+- Tenant isolation holds for new reads, including graph reads
+- This document is updated when the described behaviour changes
