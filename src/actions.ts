@@ -7890,9 +7890,12 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         // A resumed write would open a fresh interpretation run, whose id is
         // part of each observation id, so the entities already written would
         // be written a second time. Report the incomplete write instead.
+        // Count where the interrupted attempt wrote its observations: the
+        // interpretation's own source when it names one (same resolution as
+        // `observationSourceId` below and the MCP path), else the keyed source.
         const summary = await storeWriteState.summarizeUnfinishedStore({
           userId,
-          sourceId: existingSource.id,
+          sourceId: interpretation.source_id ?? interpretationSourceId ?? existingSource.id,
           entities: entities as Array<Record<string, unknown>>,
         });
         const incompleteErr = new Error(

@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
-import { PlanTitleBlock, SolidLockup } from "@/components/onepager/NeotomaLogos";
+import { SolidLockup } from "@/components/onepager/NeotomaLogos";
 import "@/components/onepager/onepager.css";
 import { useLocale } from "@/i18n/LocaleContext";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { MdxSitePage } from "./MdxSitePage";
 
 /**
- * /install on the one-pager site: the real install page, restyled as a drawing sheet with minimal
+ * /install on the one-pager site: the real install page, with the same editorial chrome and minimal
  * chrome (masthead with the accepted lockup, a way back, GitHub). The page body is unchanged.
  */
 export function InstallPage() {
@@ -28,7 +28,6 @@ export function InstallPage() {
       </div>
       <section className="plan-sheet plan-install-sheet" aria-label="Install Neotoma">
         <MdxSitePage canonicalPath="/install" detailTitle={subpage.install.title} />
-        <PlanTitleBlock sheet="05A / 07" title="INSTALL" />
       </section>
     </div>
   );

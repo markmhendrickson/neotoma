@@ -61,9 +61,9 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **739**
-- Backend and repo Vitest files: **703**
-- Frontend Vitest files: **10**
+- Total automated test files: **741**
+- Backend and repo Vitest files: **704**
+- Frontend Vitest files: **11**
 - Playwright spec files: **26**
 
 ### Suite counts
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 205 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 222 |
+| Vitest integration tests | 223 |
 | Vitest CLI tests | 88 |
 | Vitest contract tests | 25 |
 | Vitest security tests | 18 |
@@ -81,7 +81,7 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 10 |
+| Frontend Vitest tests | 11 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
@@ -464,7 +464,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (222):**
+**Files (223):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -500,6 +500,7 @@ flowchart TD
 - `tests/integration/correct_unknown_field_append.test.ts`
 - `tests/integration/correction_scalar_tiebreak_surfaces.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
+- `tests/integration/cross_type_merge_snapshot.test.ts`
 - `tests/integration/csp_local_http.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
@@ -891,8 +892,9 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (10):**
+**Files (11):**
 - `frontend/src/bridge/websocket.test.ts`
+- `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx`
 - `frontend/src/components/subpages/EvaluatePage.icp_fit.test.tsx`
 - `frontend/src/lib/idempotency.test.ts`
 - `frontend/src/site/mdx_site_registry.test.ts`
