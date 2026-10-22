@@ -21,8 +21,12 @@ import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
-import { softDeleteRelationship } from "../../src/services/deletion.js";
-import { isRelationshipLive } from "../../src/services/relationships.js";
+import {
+  isRelationshipDeleted,
+  restoreRelationship,
+  softDeleteRelationship,
+} from "../../src/services/deletion.js";
+import { isRelationshipLive, relationshipsService } from "../../src/services/relationships.js";
 
 const OWNER_USER_ID = "00000000-0000-0000-0000-0000000004a0";
 const API_PORT = 18176;
@@ -101,7 +105,10 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
   afterAll(async () => {
     await db.from("relationship_snapshots").delete().in("relationship_key", allKeys);
     await db.from("relationship_observations").delete().in("relationship_key", allKeys);
-    await db.from("entities").delete().in("id", [hub, ...spokes]);
+    await db
+      .from("entities")
+      .delete()
+      .in("id", [hub, ...spokes]);
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   });
 
@@ -202,11 +209,183 @@ describe("relationship liveness materialization + pagination (#1570, #1571)", ()
       user_id: OWNER_USER_ID,
       include_deleted: true,
     });
-    const allReturned = (
-      withDeleted.relationships as Array<{ relationship_key: string }>
-    ).map((r) => r.relationship_key);
+    const allReturned = (withDeleted.relationships as Array<{ relationship_key: string }>).map(
+      (r) => r.relationship_key
+    );
     expect(allReturned).toContain(key);
     expect(withDeleted.total_count).toBe(5);
+  });
+
+  it("can delete a restored edge again without losing lifecycle history", async () => {
+    const victim = spokes[1];
+    const key = keyFor(victim);
+    const firstDelete = await softDeleteRelationship(
+      key,
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID,
+      "first delete",
+      "2026-06-06T00:00:00.000Z"
+    );
+    expect(firstDelete.success).toBe(true);
+
+    const restore = await restoreRelationship(
+      key,
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID,
+      "restore",
+      "2026-06-07T00:00:00.000Z"
+    );
+    expect(restore.success).toBe(true);
+    expect(
+      await relationshipsService.getRelationshipSnapshot(
+        relationshipType,
+        hub,
+        victim,
+        OWNER_USER_ID
+      )
+    ).not.toBeNull();
+    const { json: restoredList } = await post("/list_relationships", {
+      entity_id: hub,
+      direction: "outgoing",
+      user_id: OWNER_USER_ID,
+    });
+    expect(
+      (restoredList.relationships as Array<{ relationship_key: string }>).map(
+        (relationship) => relationship.relationship_key
+      )
+    ).toContain(key);
+
+    const secondDelete = await softDeleteRelationship(
+      key,
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID,
+      "second delete",
+      "2026-06-08T00:00:00.000Z"
+    );
+    expect(secondDelete.success).toBe(true);
+    expect(await isRelationshipDeleted(key, OWNER_USER_ID)).toBe(true);
+    expect(
+      await relationshipsService.getRelationshipSnapshot(
+        relationshipType,
+        hub,
+        victim,
+        OWNER_USER_ID
+      )
+    ).toBeNull();
+
+    const { data: snapshot } = await db
+      .from("relationship_snapshots")
+      .select("is_live")
+      .eq("relationship_key", key)
+      .single();
+    expect(snapshot?.is_live).toBe(0);
+
+    const { json: active } = await post("/list_relationships", {
+      entity_id: hub,
+      direction: "outgoing",
+      user_id: OWNER_USER_ID,
+    });
+    expect(
+      (active.relationships as Array<{ relationship_key: string }>).map((r) => r.relationship_key)
+    ).not.toContain(key);
+
+    const { data: history } = await db
+      .from("relationship_observations")
+      .select("metadata, source_priority")
+      .eq("relationship_key", key)
+      .eq("user_id", OWNER_USER_ID)
+      .order("source_priority", { ascending: true });
+    expect(history).toHaveLength(4);
+    expect(history?.map((observation) => observation.source_priority)).toEqual([
+      1, 1000, 1001, 1002,
+    ]);
+    expect(history?.filter((observation) => observation.metadata?._deleted === true)).toHaveLength(
+      2
+    );
+    expect(history?.filter((observation) => observation.metadata?._deleted === false)).toHaveLength(
+      1
+    );
+  });
+
+  it("serializes overlapping lifecycle writes and materializes the winning state", async () => {
+    const victim = spokes[2];
+    const key = keyFor(victim);
+    const timestamp = "2026-06-09T00:00:00.000Z";
+
+    const deletions = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        softDeleteRelationship(
+          key,
+          relationshipType,
+          hub,
+          victim,
+          OWNER_USER_ID,
+          undefined,
+          timestamp
+        )
+      )
+    );
+    expect(deletions.every((result) => result.success)).toBe(true);
+    expect(new Set(deletions.map((result) => result.observation_id)).size).toBe(8);
+
+    const [restore, deleteAgain] = await Promise.all([
+      restoreRelationship(key, relationshipType, hub, victim, OWNER_USER_ID, undefined, timestamp),
+      softDeleteRelationship(
+        key,
+        relationshipType,
+        hub,
+        victim,
+        OWNER_USER_ID,
+        undefined,
+        timestamp
+      ),
+    ]);
+    expect(restore.success).toBe(true);
+    expect(deleteAgain.success).toBe(true);
+
+    const { data: observations } = await db
+      .from("relationship_observations")
+      .select("source_priority, metadata")
+      .eq("relationship_key", key)
+      .eq("user_id", OWNER_USER_ID)
+      .order("source_priority", { ascending: false });
+    expect(observations).toHaveLength(11);
+    const priorities = observations?.map((observation) => observation.source_priority) ?? [];
+    expect(new Set(priorities).size).toBe(11);
+    expect(priorities.slice(0, 10)).toEqual([
+      1009, 1008, 1007, 1006, 1005, 1004, 1003, 1002, 1001, 1000,
+    ]);
+
+    const winningDeleted = observations?.[0].metadata?._deleted === true;
+    const { data: snapshot } = await db
+      .from("relationship_snapshots")
+      .select("is_live")
+      .eq("relationship_key", key)
+      .single();
+    expect(snapshot?.is_live).toBe(winningDeleted ? 0 : 1);
+    expect(await isRelationshipDeleted(key, OWNER_USER_ID)).toBe(winningDeleted);
+    const visible = await relationshipsService.getRelationshipSnapshot(
+      relationshipType,
+      hub,
+      victim,
+      OWNER_USER_ID
+    );
+    expect(visible === null).toBe(winningDeleted);
+    const { json: active } = await post("/list_relationships", {
+      entity_id: hub,
+      direction: "outgoing",
+      user_id: OWNER_USER_ID,
+    });
+    const listed = (active.relationships as Array<{ relationship_key: string }>).some(
+      (relationship) => relationship.relationship_key === key
+    );
+    expect(listed).toBe(!winningDeleted);
   });
 });
 

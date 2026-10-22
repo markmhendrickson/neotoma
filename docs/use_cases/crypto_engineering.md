@@ -28,7 +28,6 @@ In codebases where a single vulnerability can result in catastrophic financial l
 | Skill | Role |
 |-------|------|
 | `remember-codebase` | Captures agent sessions, commits, and code review context |
-| `store-data` | Persists structured security findings and bounty reports |
 
 ## External tools
 

@@ -28,9 +28,15 @@
  *   - Bidirectional mirror-file sync. The mirror stays a derived artifact.
  */
 import { db } from "../db.js";
-import { createCorrection } from "./correction.js";
+import { getDb } from "../repositories/db/connection.js";
+import {
+  createCorrection,
+  emitCommittedCorrection,
+  type DeferredCorrectionEvent,
+} from "./correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
 import { schemaRegistry } from "./schema_registry.js";
+import { stableSerialize } from "./stable_serialize.js";
 
 export interface BatchCorrectionFieldChange {
   field: string;
@@ -63,6 +69,8 @@ export interface BatchCorrectionOptions {
   changes: BatchCorrectionFieldChange[];
   /** Optional base key used to build deterministic idempotency keys. */
   idempotency_prefix?: string;
+  /** @internal rollback fault injection for transaction publication tests. */
+  before_commit?: () => void | Promise<void>;
 }
 
 export type BatchCorrectionStatus = "applied" | "conflict" | "validation_error";
@@ -114,17 +122,6 @@ export function diffSnapshotFields(
     }
   }
   return changes;
-}
-
-function stableSerialize(v: unknown): string {
-  if (v === undefined) return "__undefined__";
-  if (v === null) return "null";
-  if (typeof v !== "object") return JSON.stringify(v);
-  if (Array.isArray(v)) return JSON.stringify(v.map(stableSerialize));
-  const obj = v as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  const parts = keys.map((k) => `${JSON.stringify(k)}:${stableSerialize(obj[k])}`);
-  return `{${parts.join(",")}}`;
 }
 
 /**
@@ -192,6 +189,21 @@ function typeOf(v: unknown): string {
 export async function applyBatchCorrection(
   options: BatchCorrectionOptions
 ): Promise<BatchCorrectionResult> {
+  const database = await getDb();
+  const deferredEvents: DeferredCorrectionEvent[] = [];
+  const result = await database.transaction(async () => {
+    const applied = await applyBatchCorrectionInTransaction(options, deferredEvents);
+    await options.before_commit?.();
+    return applied;
+  });
+  for (const event of deferredEvents) emitCommittedCorrection(event);
+  return result;
+}
+
+async function applyBatchCorrectionInTransaction(
+  options: BatchCorrectionOptions,
+  deferredEvents: DeferredCorrectionEvent[]
+): Promise<BatchCorrectionResult> {
   const {
     entity_id,
     user_id,
@@ -201,19 +213,31 @@ export async function applyBatchCorrection(
     idempotency_prefix,
   } = options;
 
+  // Ownership precheck (neotoma#2229): this is a by-id write entrance —
+  // getEntityWithProvenance's userId param is OPTIONAL, so a caller that
+  // forgets to pass it gets an unscoped-by-id read/write. Both current
+  // production callers (POST /entities/:id/batch_correct and `neotoma edit`,
+  // via that same route) already precheck ownership before calling in, but
+  // this function must not depend on that — it is a library entrance, not a
+  // route, and must fail closed on its own. Passing user_id here scopes both
+  // the read (no cross-owner snapshot/entity_type leak on the changes.length
+  // === 0 early return below) and every write that follows.
   if (changes.length === 0) {
-    const current = await getEntityWithProvenance(entity_id);
+    const current = await getEntityWithProvenance(entity_id, false, user_id);
+    if (!current) {
+      throw new Error(`Entity not found: ${entity_id}`);
+    }
     return {
       status: "applied",
       entity_id,
-      entity_type: current?.entity_type ?? options.entity_type ?? "",
+      entity_type: current.entity_type ?? options.entity_type ?? "",
       applied: [],
-      snapshot: (current?.snapshot as Record<string, unknown>) ?? null,
-      last_observation_at: current?.last_observation_at ?? null,
+      snapshot: (current.snapshot as Record<string, unknown>) ?? null,
+      last_observation_at: current.last_observation_at ?? null,
     };
   }
 
-  const current = await getEntityWithProvenance(entity_id);
+  const current = await getEntityWithProvenance(entity_id, false, user_id);
   if (!current) {
     throw new Error(`Entity not found: ${entity_id}`);
   }
@@ -277,7 +301,10 @@ export async function applyBatchCorrection(
       schema_version: schema?.schema_version ?? "1.0",
       user_id,
       idempotency_key,
+      defer_substrate_events: true,
+      in_transaction: true,
     });
+    if (res.deferred_substrate_event) deferredEvents.push(res.deferred_substrate_event);
     applied.push({
       observation_id: res.observation_id,
       field: res.field,
@@ -285,7 +312,7 @@ export async function applyBatchCorrection(
     });
   }
 
-  const refreshed = await getEntityWithProvenance(entity_id);
+  const refreshed = await getEntityWithProvenance(entity_id, false, user_id);
   return {
     status: "applied",
     entity_id,
@@ -300,15 +327,24 @@ export async function applyBatchCorrection(
  * Lightweight helper used by both surfaces to fetch the current snapshot
  * plus its `last_observation_at` marker for concurrency tracking. Avoids
  * callers pulling in `getEntityWithProvenance` directly.
+ *
+ * `user_id` is required (neotoma#2229): this is a by-id read that a batch
+ * write is built on top of, so — like `applyBatchCorrection` above — it must
+ * fail closed on its own rather than trust that every future caller
+ * prechecks ownership before calling in. A missing-or-not-owned entity_id
+ * returns `null`, identically to a genuinely missing one.
  */
-export async function loadEntityForEdit(entity_id: string): Promise<{
+export async function loadEntityForEdit(
+  entity_id: string,
+  user_id: string
+): Promise<{
   entity_id: string;
   entity_type: string;
   schema_version: string;
   snapshot: Record<string, unknown>;
   last_observation_at: string | null;
 } | null> {
-  const current = await getEntityWithProvenance(entity_id);
+  const current = await getEntityWithProvenance(entity_id, false, user_id);
   if (!current) return null;
   return {
     entity_id: current.entity_id ?? entity_id,

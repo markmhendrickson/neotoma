@@ -61,7 +61,8 @@ const FAILURE_REASON_LABEL: Record<SessionAttestationFailureReason, string> = {
     "TPM public area did not match the expected key parameters.",
 };
 
-const ALLOWLIST_LABEL: Record<"issuer" | "issuer_subject", string> = {
+const ALLOWLIST_LABEL: Record<"thumbprint" | "issuer" | "issuer_subject", string> = {
+  thumbprint: "Key thumbprint (NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS)",
   issuer: "Issuer (NEOTOMA_OPERATOR_ATTESTED_ISSUERS)",
   issuer_subject: "Issuer:Subject (NEOTOMA_OPERATOR_ATTESTED_SUBS)",
 };

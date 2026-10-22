@@ -93,7 +93,6 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     return data as { canonical_name: string; aliases: unknown } | null;
   }
 
-
   afterEach(async () => {
     if (createdSourceIds.length > 0) {
       await db.from("raw_fragments").delete().in("source_id", createdSourceIds);
@@ -187,8 +186,9 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     // the exact condition this PR's rewrite is meant to keep processable
     // (as distinct from a row owned by a genuinely different, non-null user).
     await db.from("entities").update({ user_id: null }).eq("id", entityId);
-    expect((await db.from("entities").select("user_id").eq("id", entityId).maybeSingle()).data)
-      .toEqual({ user_id: null });
+    expect(
+      (await db.from("entities").select("user_id").eq("id", entityId).maybeSingle()).data
+    ).toEqual({ user_id: null });
 
     // Corrective observation under TEST_USER_ID's session — the acting user
     // is not the row's user_id, because the row has none.
@@ -200,7 +200,7 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     expect(row?.canonical_name).not.toContain("🐚");
   });
 
-  it("refuses to rename a row owned by a different, non-null user_id", async () => {
+  it("refuses to write ANY observation to a row owned by a different, non-null user_id", async () => {
     await registerSchema();
 
     const created = await storeEntity({ name: "🦊 Other Tenant Contact" });
@@ -212,15 +212,25 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
     // rowUserId !== userId.
     const otherUserId = randomUUID();
     await db.from("entities").update({ user_id: otherUserId }).eq("id", entityId);
-    expect((await db.from("entities").select("user_id").eq("id", entityId).maybeSingle()).data)
-      .toEqual({ user_id: otherUserId });
+    expect(
+      (await db.from("entities").select("user_id").eq("id", entityId).maybeSingle()).data
+    ).toEqual({ user_id: otherUserId });
 
-    // Corrective observation under TEST_USER_ID's session — acting user does
-    // not own this row.
-    const corrected = await storeEntity({ target_id: entityId, name: "Renamed Contact" });
-    expect(corrected.entities[0].action).toBe("extended");
+    // Before the entity-resolution security fix (EntityOwnerConflictError,
+    // src/services/entity_resolution.ts), a corrective observation under
+    // TEST_USER_ID's session against this row was accepted (action:
+    // "extended") with only canonical_name left unchanged — i.e. the
+    // observation itself, and every OTHER field, still landed on another
+    // tenant's entity. resolveEntityWithTrace's target_id path now refuses
+    // the write outright, before recomputeSnapshot (and this canonical_name
+    // guard) ever runs. See
+    // tests/services/entity_resolution_cross_owner_conflict.test.ts for the
+    // dedicated "B's explicit target_id naming A's entity is refused" case.
+    await expect(storeEntity({ target_id: entityId, name: "Renamed Contact" })).rejects.toThrow(
+      /owned by a different user/
+    );
 
-    // The refusal is deliberate: canonical_name must stay unchanged.
+    // Nothing changed: not the name, not anything else.
     const row = await readEntityRow(entityId);
     expect(row?.canonical_name).toBe("🦊 Other Tenant Contact");
   });
@@ -248,10 +258,7 @@ describe("store: entities.canonical_name re-derives on corrective observation", 
 
     // Observations must carry the caller's user_id; a NULL here silently
     // disables snapshot recompute for this entity.
-    const { data: obs } = await db
-      .from("observations")
-      .select("user_id")
-      .eq("entity_id", entityId);
+    const { data: obs } = await db.from("observations").select("user_id").eq("entity_id", entityId);
     expect((obs ?? []).every((o) => (o as { user_id: string }).user_id === TEST_USER_ID)).toBe(
       true
     );

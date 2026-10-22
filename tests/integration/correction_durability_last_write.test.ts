@@ -6,11 +6,9 @@
  *
  * Exercises the REAL write path (`createObservation` / `createCorrection` /
  * `recomputeSnapshot`) against a live local DB, and separately confirms the
- * MCP `correct` action and the HTTP `/correct` route both funnel through the
- * same `createCorrection` service and produce an identical, durable
- * resolution — locking the single-call-surface contract Eng's spec relies
- * on (see tests/integration/mcp_actions_matrix.test.ts for the sibling MCP
- * action-matrix coverage this augments).
+ * MCP `correct` action stamps `observation_source: "correction"`. The
+ * reserved-source guard is covered on the public surfaces in
+ * correction_durability_surfaces.test.ts.
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
@@ -83,8 +81,6 @@ describe("correct() durability against last_write (#2033)", () => {
       idempotency_key: `2033-correction-${randomUUID()}`,
     });
 
-    // Routine re-ingest AFTER the correction, later observed_at, default
-    // priority, non-correction observation_source — the exact repro shape.
     await createObservation({
       entity_id: entityId,
       entity_type: testEntityType,
@@ -106,7 +102,7 @@ describe("correct() durability against last_write (#2033)", () => {
     expect(snapshot!.snapshot.field).toBe("B");
   });
 
-  it("MCP correct action and HTTP /correct-equivalent createCorrection call both stamp a durable marker", async () => {
+  it("MCP correct stamps observation_source=correction and remains durable", async () => {
     const server = new NeotomaServer();
     (server as any).authenticatedUserId = testUserId;
 
@@ -128,7 +124,6 @@ describe("correct() durability against last_write (#2033)", () => {
       idempotency_key: `2033-mcp-original-${randomUUID()}`,
     });
 
-    // MCP surface
     await callMCPAction(server, "correct", {
       user_id: testUserId,
       idempotency_key: `2033-mcp-correct-${randomUUID()}`,
@@ -138,7 +133,6 @@ describe("correct() durability against last_write (#2033)", () => {
       value: "after-mcp-correction",
     });
 
-    // Later, lower-priority re-ingest via the generic write path.
     await createObservation({
       entity_id: mcpEntityId,
       entity_type: testEntityType,
@@ -157,9 +151,6 @@ describe("correct() durability against last_write (#2033)", () => {
     const mcpSnapshot = await recomputeSnapshot(mcpEntityId, testUserId);
     expect(mcpSnapshot!.snapshot.field).toBe("after-mcp-correction");
 
-    // Confirm the underlying observation row from the MCP surface carries the
-    // same server-stamped marker createCorrection() sets directly (locks that
-    // MCP does not bypass the shared service and stamp independently).
     const { data: mcpCorrectionRows } = await db
       .from("observations")
       .select("*")
@@ -169,11 +160,11 @@ describe("correct() durability against last_write (#2033)", () => {
       (row: any) => row.fields?.field === "after-mcp-correction"
     );
     expect(mcpCorrectionRow).toBeDefined();
-    expect(mcpCorrectionRow!.is_correction).toBe(true);
+    expect(mcpCorrectionRow!.observation_source).toBe("correction");
   });
 
-  it("a client-supplied source_priority: 1000 via the generic store path does NOT receive correction-partition treatment (spoofing guard)", async () => {
-    const entityId = `ent_2033_spoof_${randomUUID()}`;
+  it("does not promote an ambiguous unmarked historical row to correction authority", async () => {
+    const entityId = `ent_2033_premarker_${randomUUID()}`;
     createdEntityIds.push(entityId);
 
     await createObservation({
@@ -186,15 +177,16 @@ describe("correct() durability against last_write (#2033)", () => {
       specificity_score: 1.0,
       source_priority: 100,
       observation_source: "import",
-      fields: { field: "legit-original" },
+      fields: { field: "A" },
       user_id: testUserId,
-      idempotency_key: `2033-spoof-original-${randomUUID()}`,
+      idempotency_key: `2033-premarker-original-${randomUUID()}`,
     });
 
-    // A caller forging source_priority: 1000 through the ordinary
-    // createObservation/store path (NOT createCorrection) must not be
-    // treated as a durable correction — is_correction is never set here.
-    await createObservation({
+    // Ordinary historical writers could create the same priority/null-source
+    // shape as correct(). Preserve its row, without inferring authority.
+    const preMarkerObsId = `obs_2033_premarker_${randomUUID()}`;
+    const { error: insertError } = await db.from("observations").insert({
+      id: preMarkerObsId,
       entity_id: entityId,
       entity_type: testEntityType,
       schema_version: "1.0",
@@ -203,13 +195,14 @@ describe("correct() durability against last_write (#2033)", () => {
       observed_at: new Date(Date.now() - 1000).toISOString(),
       specificity_score: 1.0,
       source_priority: 1000,
-      observation_source: "import",
-      fields: { field: "forged-priority-1000" },
+      observation_source: null,
+      fields: { field: "B" },
       user_id: testUserId,
-      idempotency_key: `2033-spoof-forged-${randomUUID()}`,
+      idempotency_key: `2033-premarker-correction-${randomUUID()}`,
+      created_at: new Date().toISOString(),
     });
+    expect(insertError).toBeNull();
 
-    // A later, ordinary write at default priority.
     await createObservation({
       entity_id: entityId,
       entity_type: testEntityType,
@@ -220,16 +213,19 @@ describe("correct() durability against last_write (#2033)", () => {
       specificity_score: 1.0,
       source_priority: 100,
       observation_source: "import",
-      fields: { field: "later-ordinary-write" },
+      fields: { field: "A" },
       user_id: testUserId,
-      idempotency_key: `2033-spoof-later-${randomUUID()}`,
+      idempotency_key: `2033-premarker-reingest-${randomUUID()}`,
     });
 
     const snapshot = await recomputeSnapshot(entityId, testUserId);
-
-    // Pure last_write by observed_at — the forged priority-1000 write does
-    // NOT survive being superseded, because it was never stamped
-    // is_correction by createCorrection.
-    expect(snapshot!.snapshot.field).toBe("later-ordinary-write");
+    expect(snapshot!.snapshot.field).toBe("A");
+    const { data: historical } = await db
+      .from("observations")
+      .select("*")
+      .eq("id", preMarkerObsId)
+      .single();
+    expect(historical?.fields).toEqual({ field: "B" });
+    expect(historical?.observation_source).toBeNull();
   });
 });

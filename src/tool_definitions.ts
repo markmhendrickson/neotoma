@@ -1,5 +1,5 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
-import { RelationshipTypeSchema } from "./shared/action_schemas.js";
+import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
 
 export type ToolInputSchema = Record<string, unknown>;
 
@@ -12,19 +12,32 @@ export interface ToolDefinition {
 }
 
 /**
- * Relationship types advertised by the hand-built tool schemas
- * (`delete_relationship`, `restore_relationship`, `get_relationship_snapshot`).
+ * Relationship types are NOT enumerated in any tool schema (#1972 / G25).
  *
- * Derived from `RelationshipTypeSchema` — the SAME Zod enum the server parses
- * these three requests with — rather than restated as a literal. Until #1972
- * this was a local 8-member list while `create_relationship` (whose schema
- * comes from OpenAPI) advertised 28, so an edge written with any of the other
- * 20 types was advertised to MCP clients as undeletable: a schema-validating
+ * History, kept because it records why the drift happened twice. Until #1972
+ * these three hand-built schemas (`delete_relationship`,
+ * `restore_relationship`, `get_relationship_snapshot`) carried a local
+ * 8-member literal while `create_relationship` — whose schema comes from
+ * OpenAPI — advertised 28. An edge written with any of the other 20 types was
+ * therefore advertised to MCP clients as UNDELETABLE: a schema-validating
  * client refused the call before it reached a server that would have accepted
- * it. Reading the advertisement off the validator makes that class of drift
- * unrepresentable here instead of merely fixed once.
+ * it. The first fix derived all four from `RelationshipTypeSchema.options`,
+ * which made those four agree — but left fifteen further copies of the same
+ * literal elsewhere in the tree, any of which could be wrong with no test
+ * failing. One of them, `docs/developer/mcp/tool_descriptions.yaml`, WAS wrong
+ * in the field: loaded into the live tool descriptions at server boot, it told
+ * every LLM client the vocabulary was 8 types while the schema beside it said
+ * 28.
+ *
+ * The vocabulary is now a runtime registry. These schemas advertise
+ * `type: string` and point at `list_relationship_types`, so there is nothing
+ * left here to drift. `tests/contract/relationship_type_single_source.test.ts`
+ * fails if a literal enumeration comes back anywhere outside the seed file.
  */
-const RELATIONSHIP_TYPE_ENUM: readonly string[] = RelationshipTypeSchema.options;
+const RELATIONSHIP_TYPE_DESCRIPTION =
+  "Relationship type. The vocabulary is a runtime registry, not a closed enum: " +
+  "call list_relationship_types to read what this instance accepts, and " +
+  "register_relationship_type to add to it.";
 
 /**
  * Build the complete list of Neotoma MCP tool definitions.
@@ -61,7 +74,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_snapshot",
       description: desc(
         "retrieve_entity_snapshot",
-        "Retrieve the current snapshot of an entity with provenance information. Supports point-in-time / as-of reconstruction ('what did we know at time T') via 'at' (event-time cutoff: filters on observed_at) and 'at_ingested' (ingestion-time cutoff: filters on created_at, prevents look-ahead from backfilled observations). When both are supplied, both bounds are applied."
+        "Retrieve the current snapshot of an entity with provenance information. Optional historical cutoffs: 'at' filters observations on observed_at, which public store and correct stamp with the server clock at write time, so it answers 'what had been asserted by T', not 'what was true in the world at T'; 'at_ingested' filters on created_at (row-insertion time). When both are supplied, both bounds are applied. Domain date fields such as measured_at are ordinary fields, not a time axis; native valid-time queries are not supported."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
     },
@@ -74,7 +87,7 @@ export function buildToolDefinitions(
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve the provenance chain for a specific field in an entity snapshot"
+        "Retrieve the provenance chain for a specific field in an entity snapshot. source is null when the winning observation has no source document (for example a correction). For a merged array field, source_observation and source describe the most recent contributing observation, not every contributor."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },
@@ -118,8 +131,7 @@ export function buildToolDefinitions(
         properties: {
           relationship_type: {
             type: "string",
-            enum: RELATIONSHIP_TYPE_ENUM,
-            description: "Type of relationship",
+            description: RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -467,7 +479,7 @@ export function buildToolDefinitions(
           file_path: {
             type: "string",
             description:
-              "Local file path (alternative to file_content). If provided, file will be read from filesystem. MIME type will be auto-detected from extension if not provided. Works in local environments (Cursor, Claude Code) where MCP server has filesystem access. Does NOT work in web-based environments (claude.ai, chatgpt.com) - use file_content for those.",
+              "A path on the SERVER's filesystem, not yours. The file is read by the Neotoma instance, so this only works when your client runs on the same machine as the instance — the axis is co-located vs remote, not desktop vs web. Against a hosted or otherwise remote instance it cannot see your disk and is rejected with ERR_FILE_PATH_IS_SERVER_LOCAL. To send a file from a remote client: upload the bytes (POST /sources/upload, multipart/form-data) and pass the returned source_id, or inline small files with file_content (base64) + mime_type. MIME type is auto-detected from the content or extension when not provided.",
           },
           mime_type: {
             type: "string",
@@ -518,9 +530,16 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "correct_transaction",
+      description:
+        "Atomically compare and correct declared fields on multiple entities. Supply each loaded observation count and expected fields. Any conflict, denied write or snapshot mismatch rolls back every change. Retry the identical request and key after uncertainty. This primitive does not authorize application-level approval.",
+      inputSchema: getOpenApiInputSchemaOrThrow("correct_transaction"),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    {
       name: "correct",
       description:
-        "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation.",
+        "Create a priority-1000 correction-sourced observation to override lower-priority extracted fields. New correction-sourced observations survive later routine writes under default last_write. Other declared strategies retain their own comparison rules; unmarked historical rows are not inferred to be corrections. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect.",
       inputSchema: {
         type: "object",
         properties: {
@@ -547,9 +566,26 @@ export function buildToolDefinitions(
             type: "string",
             description: "Required. Client-provided idempotency key for replay-safe corrections.",
           },
+          expected_version: {
+            type: "string",
+            description:
+              "Optional opaque entity_version from a current entity read. A stale token returns ERR_FIELD_VERSION_CONFLICT and writes nothing.",
+          },
+          overwrite: {
+            type: "boolean",
+            description: "Apply even when expected_version is stale. Ignored when it is omitted.",
+          },
         },
         required: ["entity_id", "entity_type", "field", "value", "idempotency_key"],
       },
+    },
+    {
+      name: "patch_array_item",
+      description: desc(
+        "patch_array_item",
+        "Atomically patch one item of a structured array field by key, instead of read-modify-full-array-write. Loads the current array fresh, finds/replaces the item matching key_field/key_value, and writes the reconciled array as one new observation. Concurrent patches to DIFFERENT keys both survive. Pass expected_item_version (from a prior patch's response) to detect a same-key race, or expected_item_absent for race-safe creation; a conflict returns the current item instead of overwriting."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("patch_array_item"),
     },
     {
       name: "merge_entities",
@@ -605,7 +641,7 @@ export function buildToolDefinitions(
       name: "delete_entity",
       description: desc(
         "delete_entity",
-        "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use."
+        "Hide an entity from current snapshots and queries through an immutable lifecycle observation. After the explicit authority cutover, serialized action sequence controls visibility; before cutover, existing legacy behavior applies. Each accepted request is a separate action, without an idempotency key or conditional rollback baseline. Physical legal erasure is a separate operation."
       ),
       inputSchema: {
         type: "object",
@@ -642,8 +678,9 @@ export function buildToolDefinitions(
           relationship_type: {
             type: "string",
             description:
-              "Exact relationship type of the existing edge. Accepts the same set create_relationship writes: structural types (PART_OF, REFERS_TO, EMBEDS) and domain types (works_at, related_to, owns).",
-            enum: RELATIONSHIP_TYPE_ENUM,
+              "Exact relationship type of the existing edge — the same vocabulary " +
+              "create_relationship writes. " +
+              RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -669,7 +706,7 @@ export function buildToolDefinitions(
       name: "restore_entity",
       description: desc(
         "restore_entity",
-        "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."
+        "Restore visibility of an entity through an immutable lifecycle observation and expose its current factual reduction, including ordinary facts accepted while hidden. After the explicit authority cutover, serialized action sequence controls visibility; before cutover, existing legacy behavior applies. Each accepted request is a separate action, without an idempotency key or historical beforeimage restoration."
       ),
       inputSchema: {
         type: "object",
@@ -698,7 +735,7 @@ export function buildToolDefinitions(
       name: "restore_relationship",
       description: desc(
         "restore_relationship",
-        "Restore a deleted relationship. Creates a restoration observation (priority 1001) that overrides the deletion. Relationship becomes visible in snapshots and queries again. Immutable restoration for audit."
+        "Restore a deleted relationship. Creates an immutable restoration observation that outranks earlier observations. Relationship becomes visible in snapshots and queries again; later explicit deletion remains possible."
       ),
       inputSchema: {
         type: "object",
@@ -706,8 +743,9 @@ export function buildToolDefinitions(
           relationship_type: {
             type: "string",
             description:
-              "Exact relationship type of the existing edge. Accepts the same set create_relationship writes: structural types (PART_OF, REFERS_TO, EMBEDS) and domain types (works_at, related_to, owns).",
-            enum: RELATIONSHIP_TYPE_ENUM,
+              "Exact relationship type of the existing edge — the same vocabulary " +
+              "create_relationship writes. " +
+              RELATIONSHIP_TYPE_DESCRIPTION,
           },
           source_entity_id: {
             type: "string",
@@ -747,10 +785,38 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "list_relationship_types",
+      description: desc(
+        "list_relationship_types",
+        "List the relationship types this instance PERMITS. This is the registry census, " +
+          "not a survey of what has been written: a type registered a moment ago with zero " +
+          "edges appears here, which is what you need when discovering what you may write " +
+          "BEFORE writing it. Call this instead of assuming a fixed vocabulary. " +
+          "source_entity_types, target_entity_types, inverse and symmetric are advisory " +
+          "metadata and are NOT enforced at write time; acyclic IS enforced. edge_count, " +
+          "when requested, means rows written and is never evidence of registration."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("list_relationship_types"),
+    },
+    {
+      name: "register_relationship_type",
+      description: desc(
+        "register_relationship_type",
+        "Add a relationship type to this instance's vocabulary, so an edge you need can be " +
+          "named rather than bent onto an existing type or simulated as a field on an entity. " +
+          "Registration is append-only: re-registering supersedes with a newer row, " +
+          "deregistering appends a deactivated one, and nothing is updated in place. " +
+          'scope defaults to "user"; registering at "global" scope changes the vocabulary ' +
+          "for every tenant and requires an explicit register_relationship_type capability. " +
+          "Read the result back with list_relationship_types."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("register_relationship_type"),
+    },
+    {
       name: "list_entity_types",
       description: desc(
         "list_entity_types",
-        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type."
+        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type. Each version shown is the one YOUR writes resolve against: a schema scoped to you wins over the instance-wide one. describe_entity_type resolves the same way, so the two agree."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
@@ -758,7 +824,7 @@ export function buildToolDefinitions(
       name: "describe_entity_type",
       description: desc(
         "describe_entity_type",
-        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. Read-only."
+        "Return the full schema for one entity_type: field names, types, descriptions, and which fields are required. Call this before store when you know the entity_type but not its declared fields, so the first store lands with no unknown_fields and no required_fields_missing warnings. The schema returned is the one YOUR writes resolve against: if this instance holds a schema scoped to you for this type, that is what you get, otherwise the instance-wide one. list_entity_types resolves the same way, so the two agree. Read-only."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
     },
@@ -898,8 +964,8 @@ export function buildToolDefinitions(
           },
           user_specific: {
             type: "boolean",
-            description: "Create user-specific schema variant (default: false)",
-            default: false,
+            description:
+              'Explicit scope override. Omit this to write to whichever scope your own read of the schema resolved (global row, or your user-scoped override if you have one) — the common case, and the safe default. Pass true to create or extend a user-specific override for you even if you currently resolve the global row. Pass false to extend the global row even if you have a user-scoped override: the new global version is built from the current global schema, never from your override; if the type has no global registry row and no code-defined baseline (but has your user-scoped schema), the call returns ERR_SCHEMA_SCOPE_MISMATCH. The response\'s "scope" field reports which scope was actually written.',
           },
           user_id: {
             type: "string",
@@ -914,7 +980,13 @@ export function buildToolDefinitions(
           migrate_existing: {
             type: "boolean",
             description:
-              "Migrate existing raw_fragments to observations for historical data backfill (default: false). Note: New data automatically uses updated schema after activation, migration is only for old data.",
+              'Migrate existing raw_fragments to observations for historical data backfill (default: false). Note: New data automatically uses updated schema after activation, migration is only for old data. The response\'s "migrated_existing" reflects whether anything actually promoted, and "migration_result.skipped" names any fragment groups that did not (e.g. ambiguous ownership, already promoted by a prior call) — a request with migrate_existing: true can legitimately promote zero fragments.',
+            default: false,
+          },
+          force: {
+            type: "boolean",
+            description:
+              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
             default: false,
           },
         },
@@ -947,6 +1019,12 @@ export function buildToolDefinitions(
             description: "User ID for user-specific schema (required if user_specific=true)",
           },
           activate: { type: "boolean", default: false },
+          force: {
+            type: "boolean",
+            description:
+              'Bypass the entity-type naming guards (forbidden test-artifact patterns and the plural-name guard) for this call only. Required when entity_type is rejected with a message naming "force: true" as the remedy — e.g. a name the plural guard misclassifies (like "hypothesis"). Does not affect any other validation.',
+            default: false,
+          },
         },
         required: ["entity_type", "schema_definition", "reducer_config"],
       },
@@ -1296,10 +1374,15 @@ export function buildToolDefinitions(
       name: "sync_issues",
       description: desc(
         "sync_issues",
-        "Bidirectional sync between local Neotoma and the configured GitHub repo. " +
-          "Push leg (default on): local public issues with no github_number are sanitized " +
-          "(PII stripped) and created on GitHub, then updated locally with the returned number/url. " +
-          "Pull leg: GitHub issues and their messages are pulled into local entities. " +
+        "Sync local Neotoma with a GitHub repo's issues. Pull leg: GitHub issues and their messages " +
+          "are pulled into local entities. Push leg: local public issues with no github_number are " +
+          "sanitized (PII stripped) and created on GitHub, then updated locally with the returned " +
+          "number/url. Target repo defaults to the server-configured repo (NEOTOMA_ISSUES_REPO); pass " +
+          "`repo` (`owner/name`) to mirror a different repo for one call without changing server config. " +
+          "The push leg is ON by default only for the configured default repo and OFF for any other " +
+          "`repo` unless `push: true` is passed. Pass `commit: false` for a dry run that reports what " +
+          "would be created, updated and pushed and writes nothing. Requires a GitHub token: " +
+          "NEOTOMA_ISSUES_GITHUB_TOKEN in the server environment (or `gh auth login` on the server host). " +
           "Supports filtering by state, labels, and since date."
       ),
       inputSchema: {
@@ -1319,9 +1402,21 @@ export function buildToolDefinitions(
             type: "string",
             description: "Only sync issues updated after this ISO date.",
           },
+          repo: {
+            type: "string",
+            pattern: REPO_SLUG_PATTERN,
+            description:
+              "GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Must be the configured repo or be listed in the server's `NEOTOMA_ISSUES_ALLOWED_REPOS` (or `issues.allowed_repos`). A malformed or non-permitted value is rejected before any GitHub request or write.",
+          },
           push: {
             type: "boolean",
-            description: "When false, skip the push leg (local public → GitHub). Default: true.",
+            description:
+              "Run the push leg (local public → GitHub). Default: true when `repo` is omitted or equals the configured default repo; false for any other `repo`. Pass true to opt in for another repo.",
+          },
+          commit: {
+            type: "boolean",
+            description:
+              "When false, dry run: report what would be created, updated and pushed (`plan`) and write nothing locally or on GitHub. Default: true.",
           },
         },
       },
@@ -1556,6 +1651,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "store",
   "parse_file",
   "correct",
+  "correct_transaction",
+  "patch_array_item",
   "merge_entities",
   "split_entity",
   "list_potential_duplicates",
@@ -1565,6 +1662,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "restore_relationship",
   "get_entity_type_counts",
   "list_entity_types",
+  "list_relationship_types",
+  "register_relationship_type",
   "describe_entity_type",
   "describe_instance_policy",
   "analyze_schema_candidates",

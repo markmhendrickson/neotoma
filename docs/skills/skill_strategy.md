@@ -12,7 +12,7 @@ Canonical reference for how Neotoma treats agent skills — naming, publishing, 
 
 | Tree                     | Location                             | Published in npm tarball                      | Audience                            | Examples                                         |
 | ------------------------ | ------------------------------------ | --------------------------------------------- | ----------------------------------- | ------------------------------------------------ |
-| **User-facing**          | `skills/` (repo root)                | Yes (`"files": ["skills"]` in `package.json`) | End users, SkillHub visitors        | `remember-email`, `store-data`, `ensure-neotoma` |
+| **User-facing**          | `skills/` (repo root)                | Yes (`"files": ["skills"]` in `package.json`) | End users, SkillHub visitors        | `remember-email`, `ensure-neotoma` |
 | **Developer/maintainer** | `.cursor/skills/`, `.claude/skills/` | No                                            | Repo contributors, release managers | `release`, `commit`, `debug`, `process-issues`   |
 
 Developer skills are synced from the foundation submodule via `scripts/setup_cursor_from_foundation.sh` and are never included in the npm tarball. User-facing skills ship with the package and are installed into harnesses by `neotoma setup --skills`.
@@ -27,7 +27,6 @@ Use language that resonates with first-time users who do not yet know Neotoma:
 - `remember-conversations` not `import-chat-history`
 - `remember-meetings` not `ingest-meeting-transcripts`
 - `remember-finances` not `import-financial-docs`
-- `store-data` and `query-memory` already follow this pattern
 
 Triggers include both generic terms ("remember my emails") and Neotoma-specific terms ("import email to neotoma") for dual discoverability.
 
@@ -47,8 +46,13 @@ Skills that install or operate Neotoma use explicit product naming:
 | `ensure-neotoma`         | Install Neotoma, configure MCP, verify connectivity. Prereq for all Tier A skills.          | Node.js / npm                                     |
 | `remember-email`         | Configure email MCP, discover/preview emails, extract contacts, tasks, events, transactions | Gmail MCP, IMAP MCP                               |
 | `remember-conversations` | Import ChatGPT JSON exports, Claude history, Slack archives, or scrape share URLs           | ChatGPT JSON export, web-scraper MCP, file system |
-| `store-data`             | Generic "remember this" for any structured data                                             | Neotoma MCP                                       |
-| `query-memory`           | Generic "what do you know about X" retrieval                                                | Neotoma MCP                                       |
+
+Ordinary "remember this" storage and "what do you know about X" retrieval need no skill:
+they are covered directly by the live MCP tool instructions delivered at session start (see
+`docs/developer/mcp/instructions.md`). `store-data` and `query-memory` were retired as
+redundant primitive wrappers that had drifted from that contract; their `SKILL.md` files
+remain on disk (`deprecated: true` in frontmatter) only so pre-existing links keep resolving
+— they are excluded from `neotoma setup --skills` installs and from `available_skills`.
 
 ### Tier 2 — Use-case-specific
 
@@ -194,8 +198,8 @@ Vertical use cases documented in `docs/use_cases/` and on the site's `/use-cases
 | Personal data | `remember-email`, `remember-finances`, `remember-contacts`, `remember-calendar` |
 | Financial ops | `remember-finances`                                                             |
 | CRM           | `remember-email`, `remember-contacts`                                           |
-| Compliance    | `remember-email`, `store-data`                                                  |
-| Contracts     | `store-data`, `query-memory`                                                    |
+| Compliance    | `remember-email`, `ensure-neotoma`                                              |
+| Contracts     | `ensure-neotoma`                                                                |
 
 ### Adding a new skill (checklist)
 

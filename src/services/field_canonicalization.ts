@@ -11,6 +11,7 @@ import { recoverJsonArrayString } from "./recover_json_array_string.js";
 
 export interface CanonicalizationOptions {
   preserveCase?: boolean; // Don't lowercase strings (default: false)
+  preserveWhitespace?: boolean; // Do not trim or collapse whitespace (default: false)
   dateFormat?: "iso" | "date-only"; // Date format (default: "iso")
   numberPrecision?: number; // Decimal places for numbers (default: 2)
 }
@@ -159,7 +160,11 @@ export function canonicalizeFields(
       }
     }
 
-    const fieldOptions = { ...options, preserveCase: shouldPreserveCase };
+    const fieldOptions = {
+      ...options,
+      preserveCase: shouldPreserveCase,
+      preserveWhitespace: options.preserveWhitespace ?? fieldDef.preserveWhitespace,
+    };
 
     // Canonicalize based on field type
     canonical[key] = canonicalizeValue(value, fieldDef.type, fieldOptions);
@@ -215,17 +220,19 @@ function canonicalizeString(value: unknown, options: CanonicalizationOptions): s
 
   let normalized = value;
 
-  // Trim whitespace
-  normalized = normalized.trim();
+  if (!options.preserveWhitespace) {
+    // Trim whitespace
+    normalized = normalized.trim();
 
-  // Normalize line endings
-  normalized = normalized.replace(/\r\n/g, "\n");
+    // Normalize line endings
+    normalized = normalized.replace(/\r\n/g, "\n");
 
-  // Normalize multiple spaces to single space
-  normalized = normalized.replace(/\s+/g, " ");
+    // Normalize multiple spaces to single space
+    normalized = normalized.replace(/\s+/g, " ");
 
-  // Remove trailing spaces
-  normalized = normalized.trimEnd();
+    // Remove trailing spaces
+    normalized = normalized.trimEnd();
+  }
 
   // Lowercase (unless preserveCase is true)
   if (!options.preserveCase) {

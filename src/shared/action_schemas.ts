@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
 import { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "../services/entity_query_limits.js";
 
 export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
@@ -45,18 +46,22 @@ export const EntityIdSchema = z.object({
 
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
+  include_cleared_fields: z.boolean().optional(),
   /**
-   * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
-   * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,
-   * regardless of when the observation was ingested.
+   * Observation-time cutoff (ISO 8601). Reconstructs the snapshot from
+   * observations whose `observed_at` ≤ this timestamp. Public store and correct
+   * stamp `observed_at` with the server clock at write time, so this answers
+   * "what had been asserted by T", not "what was true in the world at T".
+   * Domain date fields are ordinary fields, not a reducer time axis.
    */
   at: z.string().optional(),
   /**
    * Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from
    * observations whose `created_at` (row-insertion time) ≤ this timestamp.
-   * Use this for "what did we actually KNOW at time T" semantics: backfilled
-   * or late-arriving observations with a past `observed_at` are excluded if
-   * they arrived after this cutoff.
+   * Public store and correct assign both timestamps during the write, but
+   * assertion stamping and row insertion can occur at different moments.
+   * The timestamps are not guaranteed to be identical. Neither cutoff
+   * filters domain date fields.
    *
    * When both `at` and `at_ingested` are supplied, both bounds are applied
    * simultaneously (most conservative knowledge-as-of: an observation must
@@ -84,36 +89,38 @@ export const FieldProvenanceRequestSchema = z.object({
   field: z.string(),
 });
 
-export const RelationshipTypeSchema = z.enum([
-  "PART_OF",
-  "CORRECTS",
-  "REFERS_TO",
-  "SETTLES",
-  "DUPLICATE_OF",
-  "DEPENDS_ON",
-  "SUPERSEDES",
-  "EMBEDS",
-  "works_at",
-  "owns",
-  "manages",
-  "part_of",
-  "related_to",
-  "depends_on",
-  "references",
-  "transacted_with",
-  "member_of",
-  "reports_to",
-  "located_at",
-  "created_by",
-  "funded_by",
-  "acquired_by",
-  "subsidiary_of",
-  "partner_of",
-  "competitor_of",
-  "supplies_to",
-  "contracted_with",
-  "invested_in",
-]);
+/**
+ * Relationship-type SHAPE validation (#1972 / G25).
+ *
+ * This was a closed 28-member `z.enum`. It is now a naming rule only:
+ * MEMBERSHIP is decided against the runtime registry at the single enforcement
+ * point in `services/relationships.ts`, not here.
+ *
+ * Splitting the two is the point. A Zod enum here was one of sixteen places
+ * the vocabulary was written down and the only one of them a caller's error
+ * message came from, so a type registered at runtime would have been refused
+ * by the parser before the service that knew about it ever ran. Shape is
+ * static and belongs here; membership is dynamic and does not.
+ *
+ * The pattern is casing-agnostic by necessity: the seeded vocabulary already
+ * contains `PART_OF` and `part_of`, and `DEPENDS_ON` and `depends_on`.
+ */
+export const RELATIONSHIP_TYPE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+export const RELATIONSHIP_TYPE_SHAPE_HINT =
+  "Relationship type must be identifier-shaped: a letter, then letters, digits or " +
+  "underscores, 1-64 characters. Call list_relationship_types to see the vocabulary " +
+  "this instance accepts, or register_relationship_type to add to it.";
+
+export const RelationshipTypeSchema = z.string().superRefine((value, ctx) => {
+  if (!RELATIONSHIP_TYPE_NAME_PATTERN.test(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${RELATIONSHIP_TYPE_SHAPE_HINT} Received: ${JSON.stringify(value)}`,
+      params: { code: "invalid_relationship_type_name", hint: RELATIONSHIP_TYPE_SHAPE_HINT },
+    });
+  }
+});
 
 export const CreateRelationshipRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema,
@@ -148,7 +155,11 @@ const StoreRelationshipTargetEndpointSchema = z.union([
 
 export const StoreRelationshipInputSchema = z
   .object({
-    relationship_type: z.string(),
+    // Same shape rule as CreateRelationshipRequestSchema — previously a bare
+    // z.string() here while create_relationship carried a 28-member enum, so
+    // the two doors advertised different vocabularies. Membership is still the
+    // service's job against the registry.
+    relationship_type: RelationshipTypeSchema,
     source_index: z.number().int().min(0).optional(),
     source_entity_id: z.string().min(1).optional(),
     target_index: z.number().int().min(0).optional(),
@@ -616,10 +627,13 @@ export const ObservationsQueryRequestSchema = z.object({
 /**
  * Classification of the *kind* of write being performed, orthogonal to
  * numeric `source_priority`. See `Observation.observation_source` in
- * openapi.yaml for the full semantic contract. Default (`llm_summary`)
- * is applied by the write path, not at parse time, so MCP callers that
- * omit the field remain LLM-driven by construction without breaking
- * idempotency hashes or contract-test fixtures.
+ * openapi.yaml for the full semantic contract. The default
+ * (`unspecified`, see `DEFAULT_OBSERVATION_SOURCE`) is applied by the write
+ * path, not at parse time, so the store handlers can still tell "the caller
+ * omitted the field" (which earns an `OBSERVATION_SOURCE_OMITTED` store
+ * warning) apart from "the caller sent `unspecified`" (which does not).
+ * Omission is not a claim about lineage: before #2241 it was recorded as
+ * `llm_summary`, which asserted model authorship nobody had declared.
  *
  * NOTE (v0.17 → v0.18 breaking change, issue #1841): this is a CLOSED enum.
  * v0.17 accepted arbitrary `observation_source` strings; v0.18 restricts them
@@ -634,11 +648,177 @@ export const OBSERVATION_SOURCE_VALUES = [
   "human",
   "import",
   "sync",
+  // Lineage sentinel (#2241): the caller did not classify the write. Kept
+  // last so existing positional consumers of this list are undisturbed.
+  "unspecified",
+  // Server-stamped by createCorrection only (#2033). Present in the wire
+  // enum so responses/docs round-trip; generic store rejects client-supplied
+  // values with RESERVED_OBSERVATION_SOURCE (reject-not-strip).
+  "correction",
 ] as const;
 
 export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
 
 export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
+
+/**
+ * Data origin (#2242): where the stored data came from — the file, sheet row,
+ * URL, message, or API endpoint — as opposed to who wrote it (attribution,
+ * `external_actor`). Caller-supplied claim, never verified or dereferenced by
+ * the server. Persisted under `observations.provenance.data_origin`.
+ *
+ * Widening this enum is additive; narrowing it is a breaking change.
+ */
+export const DATA_ORIGIN_KINDS = [
+  "file",
+  "url",
+  "email",
+  "message",
+  "api",
+  "manual",
+  "other",
+] as const;
+
+/** Per-field length caps keep provenance blobs bounded. */
+export const DATA_ORIGIN_LIMITS = {
+  locator: 2048,
+  url: 2048,
+  part: 512,
+  system: 256,
+  producer: 512,
+  notes: 2000,
+} as const;
+
+/**
+ * The reserved per-entity control key that carries an entity-level origin
+ * override inside `entities[]`, peeled off before field validation exactly
+ * like `target_id` / `intent`.
+ */
+export const DATA_ORIGIN_ENTITY_KEY = "data_origin";
+
+/**
+ * Origin fields are single-line identifiers. Control characters (C0, DEL, C1)
+ * and the Unicode line/paragraph separators are refused so a stored value can
+ * never read as extra lines or fields on a text surface.
+ */
+// eslint-disable-next-line no-control-regex
+const DATA_ORIGIN_CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/;
+
+export const DATA_ORIGIN_CONTROL_CHAR_MESSAGE =
+  "data_origin fields must be single-line text without control characters";
+
+function dataOriginText(max: number) {
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine((value) => !DATA_ORIGIN_CONTROL_CHARS.test(value), {
+      message: DATA_ORIGIN_CONTROL_CHAR_MESSAGE,
+    });
+}
+
+/** True when an absolute URL embeds userinfo (`user[:pass]@host`). */
+function urlHasUserinfo(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.username !== "" || parsed.password !== "";
+  } catch {
+    return false;
+  }
+}
+
+export const DataOriginSchema = z
+  .object({
+    kind: z.enum(DATA_ORIGIN_KINDS),
+    locator: dataOriginText(DATA_ORIGIN_LIMITS.locator).optional(),
+    part: dataOriginText(DATA_ORIGIN_LIMITS.part).optional(),
+    system: dataOriginText(DATA_ORIGIN_LIMITS.system).optional(),
+    url: z
+      .string()
+      .max(DATA_ORIGIN_LIMITS.url)
+      .url()
+      .refine((value) => /^https?:\/\//i.test(value), {
+        message: "data_origin.url must be an absolute http(s) URL",
+      })
+      .refine((value) => !DATA_ORIGIN_CONTROL_CHARS.test(value), {
+        message: DATA_ORIGIN_CONTROL_CHAR_MESSAGE,
+      })
+      .refine((value) => !urlHasUserinfo(value), {
+        message:
+          "data_origin.url must not embed credentials (user:pass@); remove them before storing",
+      })
+      .optional(),
+    producer: dataOriginText(DATA_ORIGIN_LIMITS.producer).optional(),
+    retrieved_at: z.string().datetime({ offset: true }).optional(),
+    notes: dataOriginText(DATA_ORIGIN_LIMITS.notes).optional(),
+  })
+  .strict()
+  .refine((value) => value.kind === "manual" || Boolean(value.locator), {
+    message: "data_origin.locator is required unless kind is 'manual'",
+    path: ["locator"],
+  });
+
+export type DataOrigin = z.infer<typeof DataOriginSchema>;
+
+/**
+ * Structured hint for the one tightening #2242 introduces: an entity that
+ * already carried its own field named `data_origin` now has it read as the
+ * reserved origin override. Surfaced as `details.hint` (via issue
+ * `params.hint`) per docs/subsystems/errors.md § Tightening-change hint
+ * obligation.
+ */
+export const DATA_ORIGIN_ENTITY_KEY_HINT =
+  "entities[i].data_origin is a reserved per-entity origin override: an object with at least " +
+  '`kind` (e.g. {"kind":"file","locator":"report.xlsx"}). If this entity type stores its own ' +
+  "field named data_origin, rename that field (e.g. to origin_label).";
+
+/**
+ * Validate every per-entity `data_origin` override in an `entities[]` array.
+ * Entity objects are otherwise open, so this is the only place the reserved
+ * key is checked; issues carry `[index, "data_origin", ...]` paths.
+ */
+export function refineEntityDataOrigins(
+  entities: Array<Record<string, unknown>> | undefined,
+  ctx: z.RefinementCtx
+): void {
+  if (!Array.isArray(entities)) return;
+  entities.forEach((entity, index) => {
+    if (!entity || typeof entity !== "object") return;
+    if (!Object.prototype.hasOwnProperty.call(entity, DATA_ORIGIN_ENTITY_KEY)) return;
+    const result = DataOriginSchema.safeParse(entity[DATA_ORIGIN_ENTITY_KEY]);
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index, DATA_ORIGIN_ENTITY_KEY, ...issue.path],
+        message: `Invalid reserved data_origin override: ${issue.message}`,
+        params: { hint: DATA_ORIGIN_ENTITY_KEY_HINT, cause: issue.code },
+      });
+    }
+  });
+}
+
+/**
+ * `data_origin` describes where *entities* came from. A file-only store has no
+ * entity observations to stamp, and the stored file is already its own origin
+ * record (the `sources` row), so the claim is refused rather than dropped.
+ */
+export function dataOriginHasEntities(data: {
+  data_origin?: unknown;
+  entities?: unknown[];
+  intake?: { mode?: string };
+}): boolean {
+  if (data.data_origin === undefined || data.intake?.mode === "overflow") return true;
+  return Array.isArray(data.entities) && data.entities.length > 0;
+}
+
+export const DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE = {
+  message:
+    "data_origin applies to the entities in a store request; a file-only store already records " +
+    "its origin as the stored source. Send entities with data_origin, or omit data_origin.",
+  path: ["data_origin"],
+};
 
 export const StoreInterpretationInputSchema = z
   .object({
@@ -652,9 +832,37 @@ export const StoreInterpretationInputSchema = z
 
 export type StoreInterpretationInput = z.infer<typeof StoreInterpretationInputSchema>;
 
+/**
+ * `create_interpretation` does not apply a per-entity `data_origin` yet
+ * (#2242 follow-up). Refuse the reserved key there rather than letting it land
+ * as an unknown field in raw_fragments, where its `unknown_fields` hint could
+ * lead an agent to declare a schema field that `store` can never write.
+ */
+export const CREATE_INTERPRETATION_DATA_ORIGIN_HINT =
+  "create_interpretation does not accept a per-entity data_origin override yet: send these " +
+  "entities through store with data_origin (request-level or per entity), or omit the key. If " +
+  "this entity type stores its own field named data_origin, rename that field (e.g. to origin_label).";
+
+export function refuseEntityDataOriginKey(
+  entities: Array<Record<string, unknown>> | undefined,
+  ctx: z.RefinementCtx
+): void {
+  if (!Array.isArray(entities)) return;
+  entities.forEach((entity, index) => {
+    if (!entity || typeof entity !== "object") return;
+    if (!Object.prototype.hasOwnProperty.call(entity, DATA_ORIGIN_ENTITY_KEY)) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [index, DATA_ORIGIN_ENTITY_KEY],
+      message: "data_origin is a reserved key that create_interpretation does not accept",
+      params: { hint: CREATE_INTERPRETATION_DATA_ORIGIN_HINT },
+    });
+  });
+}
+
 export const CreateInterpretationRequestSchema = z.object({
   source_id: z.string().min(1),
-  entities: z.array(z.record(z.unknown())).min(1),
+  entities: z.array(z.record(z.unknown())).min(1).superRefine(refuseEntityDataOriginKey),
   interpretation_config: z.record(z.unknown()).optional(),
   relationships: z.array(StoreRelationshipInputSchema).optional(),
   idempotency_key: z.string().min(1).optional(),
@@ -662,6 +870,9 @@ export const CreateInterpretationRequestSchema = z.object({
 });
 
 export const StoreStructuredRequestSchema = z.object({
+  expected_entity_absent: z.boolean().optional(),
+  commit: z.boolean().optional().default(true),
+  strict: z.boolean().optional().default(false),
   entities: z.array(z.record(z.unknown())),
   relationships: z.array(StoreRelationshipInputSchema).optional(),
   interpretation: StoreInterpretationInputSchema.optional(),
@@ -676,6 +887,7 @@ export const StoreStructuredRequestSchema = z.object({
 
 /** REST store/unstructured: file_content (base64) + mime_type, raw storage only. */
 export const StoreUnstructuredRequestSchema = z.object({
+  expected_entity_absent: z.boolean().optional(),
   file_content: z.string(),
   mime_type: z.string().min(1),
   idempotency_key: z.string().min(1).optional(),
@@ -716,14 +928,20 @@ export const ExternalActorInputSchema = z
 
 export const StoreRequestSchema = z
   .object({
+    expected_entity_absent: z.boolean().optional(),
     user_id: z.string().optional(),
-    entities: z.array(z.record(z.unknown())).optional(),
+    entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),
     interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
     source_peer_id: z.string().min(1).optional(),
     external_actor: ExternalActorInputSchema.optional(),
+    /**
+     * Data origin (#2242) for every entity in this request; an entity's own
+     * `data_origin` key overrides it. Stamped into observation provenance.
+     */
+    data_origin: DataOriginSchema.optional(),
     idempotency_key: z.string().min(1).optional(),
     file_idempotency_key: z.string().min(1).optional(),
     file_content: z.string().optional(),
@@ -754,7 +972,8 @@ export const StoreRequestSchema = z
       message:
         "Must provide either entities, file_path, or file_content with mime_type (or use intake.mode='overflow')",
     }
-  );
+  )
+  .refine(dataOriginHasEntities, DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE);
 
 export const MergeEntitiesRequestSchema = z.object({
   from_entity_id: z.string(),
@@ -843,6 +1062,41 @@ export const CorrectEntityRequestSchema = z.object({
   entity_type: z.string().optional().default("unknown"),
   field: z.string(),
   value: z.unknown(),
+  idempotency_key: z.string().min(1),
+  user_id: z.string().optional(),
+  /**
+   * Optional entity-level optimistic-concurrency precondition (Waxwing ADR,
+   * ent_4b41bb83a4faf4428a73bfc8). When supplied, the correction is refused
+   * with `ERR_FIELD_VERSION_CONFLICT` if the entity's current
+   * collision-safe `entity_version` no longer matches — unless `overwrite` is also
+   * true. Omitted (the default): zero behavior change from the legacy
+   * unconditional-insert path.
+   */
+  expected_version: z.string().optional(),
+  /**
+   * When true, proceed even if `expected_version` is stale. Mirrors
+   * `batch_correction.ts`'s `overwrite` flag. Ignored when
+   * `expected_version` is not supplied.
+   */
+  overwrite: z.boolean().optional(),
+});
+
+export const PatchArrayItemRequestSchema = z.object({
+  entity_id: z.string().min(1),
+  entity_type: z.string().min(1),
+  field: z.string().min(1),
+  key_field: z.string().min(1),
+  // Keyed reduction treats null/missing as an unkeyed legacy item, so the
+  // write surface accepts only non-null JSON scalars as stable identities.
+  key_value: z.union([
+    z.string(),
+    z.number().finite().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    z.boolean(),
+  ]),
+  item: z.record(z.unknown()),
+  expected_item_version: z.string().optional(),
+  /** Refuse if the keyed item already exists; used for race-safe creation. */
+  expected_item_absent: z.boolean().optional(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
 });
@@ -948,8 +1202,15 @@ export const UpdateSchemaIncrementalRequestSchema = z
           field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
           required: z.boolean().default(false),
           reducer_strategy: z
-            .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
+            .enum([
+              "last_write",
+              "highest_priority",
+              "most_specific",
+              "merge_array",
+              "merge_array_by_key",
+            ])
             .optional(),
+          reducer_key_field: z.string().min(1).optional(),
         })
       )
       .optional(),
@@ -961,7 +1222,15 @@ export const UpdateSchemaIncrementalRequestSchema = z
       .array(z.union([z.string(), z.object({ composite: z.array(z.string()) })]))
       .optional(),
     schema_version: z.string().optional(),
-    user_specific: z.boolean().default(false),
+    // #2374: stays OPTIONAL with no `.default()`. Whether the caller stated
+    // an explicit scope intent is itself meaningful — `updateSchemaIncremental`
+    // now defers to whatever scope its OWN read resolved when this is
+    // omitted, and only treats it as a hard override when present. A
+    // `.default(false)` here would erase that distinction before the
+    // service ever saw it, which is exactly how the write-scope bug
+    // shipped: every caller that didn't think about scope got `false`
+    // indistinguishable from a caller who explicitly wanted global.
+    user_specific: z.boolean().optional(),
     user_id: z.string().optional(),
     activate: z.boolean().default(true),
     migrate_existing: z.boolean().default(false),
@@ -976,7 +1245,18 @@ export const UpdateSchemaIncrementalRequestSchema = z
       message:
         "At least one of fields_to_add, fields_to_remove, or canonical_name_fields must be provided",
     }
-  );
+  )
+  .superRefine((data, ctx) => {
+    for (const [index, field] of (data.fields_to_add ?? []).entries()) {
+      if (field.reducer_strategy === "merge_array_by_key" && !field.reducer_key_field) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["fields_to_add", index, "reducer_key_field"],
+          message: "reducer_key_field is required for merge_array_by_key",
+        });
+      }
+    }
+  });
 
 export const RegisterSchemaRequestSchema = z.object({
   entity_type: z.string(),
@@ -1065,15 +1345,35 @@ export const IssuesGetStatusRequestSchema = z
     { message: "Provide entity_id or issue_number" }
   );
 
+/**
+ * Validated `owner/name` GitHub repository slug for `sync_issues` (HTTP + CLI + MCP).
+ * Strict on purpose: see `src/shared/repo_slug.ts`.
+ */
+export const IssuesSyncRepoSchema = z
+  .string()
+  .refine((v) => isValidRepoSlug(v), { message: REPO_SLUG_FORMAT_MESSAGE });
+
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),
   state: z.enum(["open", "closed", "all"]).optional(),
   labels: z.array(z.string()).optional(),
   /**
-   * When true (default), local public issues with no github_number are pushed to GitHub
-   * before the pull leg runs. Pass false to disable the push leg.
+   * GitHub repository to mirror, `owner/name`. Defaults to the server-configured repo
+   * (`NEOTOMA_ISSUES_REPO` / `issues.repo`). Validated before any GitHub call or write.
+   */
+  repo: IssuesSyncRepoSchema.optional(),
+  /**
+   * Push leg (local public issues with no github_number -> GitHub). When omitted it
+   * defaults to true for the configured default repo and to false for any other `repo`.
+   * Pass true to opt in explicitly.
    */
   push: z.boolean().optional(),
+  /**
+   * When false, run as a dry run: read GitHub and local state, report what would be
+   * created, updated and pushed, and write nothing (no local store/correct, no GitHub
+   * create). Default true.
+   */
+  commit: z.boolean().optional(),
   user_id: z.string().optional(),
 });

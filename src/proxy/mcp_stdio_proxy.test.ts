@@ -39,7 +39,7 @@ const SERVER_404_SESSION_LOST_BODY = {
   error: {
     code: -32001,
     message:
-      "Not Found: MCP session is unknown or expired on this API instance. The client should re-initialize by sending a new InitializeRequest without a session ID. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance).",
+      "Not Found: MCP session is unknown or expired on this API instance. The server may have restarted or the client is holding a stale session id. Re-initialize by sending a new InitializeRequest without a session id.",
   },
 };
 

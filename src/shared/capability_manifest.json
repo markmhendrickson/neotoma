@@ -102,6 +102,9 @@
     "list_recent_changes": {
       "addedInVersion": "v0.5.0"
     },
+    "list_relationship_types": {
+      "addedInVersion": "v0.24.0"
+    },
     "list_relationships": {
       "addedInVersion": "v0.4.3"
     },
@@ -131,6 +134,9 @@
     },
     "query_contacts_at_company": {
       "addedInVersion": "v0.19.0"
+    },
+    "register_relationship_type": {
+      "addedInVersion": "v0.24.0"
     },
     "register_schema": {
       "addedInVersion": "v0.4.3"

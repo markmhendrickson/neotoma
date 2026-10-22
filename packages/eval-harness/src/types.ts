@@ -72,7 +72,11 @@ export interface ExpectedAssertion {
     /** Assert a field is present on a retrieved entity snapshot. */
     | "snapshot.field_present"
     /** Assert a field is absent from a retrieved entity snapshot. */
-    | "snapshot.field_absent";
+    | "snapshot.field_absent"
+    /** Compare a numeric key of the post-turn `/stats` payload (`field`, `op`, `value`). */
+    | "stats.counter"
+    /** Count files written under the isolated server's raw-storage dir (`op`, `value`). */
+    | "raw_storage.file_count";
   /** Numeric comparison op for count-shaped predicates. */
   op?: "eq" | "gte" | "lte";
   value?: number | string | boolean;
@@ -189,6 +193,13 @@ export interface ScenarioFile {
    * Server fault injection — configures the isolated server to simulate
    * failures for error-recovery scenarios.
    */
+  /**
+   * Make the isolated server write raw bytes to disk. A server running under
+   * NODE_ENV=test (every isolated server) otherwise skips the raw-storage
+   * upload and writes only the `sources` row, which hides stored-file effects
+   * from `raw_storage.file_count`. Sets NEOTOMA_TEST_REAL_STORAGE=1.
+   */
+  real_storage?: boolean;
   server_faults?: {
     /** Target MCP tool or HTTP endpoint to inject faults on. */
     target: string;

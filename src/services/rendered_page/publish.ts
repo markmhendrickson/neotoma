@@ -191,7 +191,7 @@ export async function publishRenderedPage(
     // blocks publishing: any failure leaves checkHtml/checkCss undefined.
     try {
       const { getEntityWithProvenance } = await import("../entity_queries.js");
-      const current = await getEntityWithProvenance(entityId);
+      const current = await getEntityWithProvenance(entityId, false, params.userId);
       const snap = (current?.snapshot ?? {}) as Record<string, unknown>;
       if (typeof snap.html_body === "string") checkHtml = snap.html_body;
       if (typeof snap.custom_css === "string") checkCss = snap.custom_css;

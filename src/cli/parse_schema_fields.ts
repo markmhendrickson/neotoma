@@ -6,7 +6,7 @@
  *   2. Pre-built schema object: `{ fields: { fieldName: { ... } }, reducer_config?: { merge_policies } }`
  *   3. Array form: `[{ field_name, field_type, required?, reducer_config? }, ...]`
  *
- * Per-field `reducer_config: { strategy, tie_breaker? }` is extracted from each field
+ * Per-field `reducer_config: { strategy, tie_breaker?, key_field? }` is extracted from each field
  * definition and collected into the top-level `reducer_config.merge_policies` map that
  * the server expects — it must NOT remain inside the field definition.
  */
@@ -14,6 +14,7 @@
 export interface FieldReducerConfig {
   strategy: string;
   tie_breaker?: string;
+  key_field?: string;
 }
 
 export interface ParsedSchemaFields {
@@ -35,6 +36,9 @@ export function parseSchemaFields(parsedFields: unknown): ParsedSchemaFields {
       const policy: FieldReducerConfig = { strategy: rc.strategy };
       if (rc.tie_breaker) {
         policy.tie_breaker = rc.tie_breaker;
+      }
+      if (rc.key_field) {
+        policy.key_field = rc.key_field;
       }
       mergePolicies[fieldName] = policy;
     }

@@ -5,11 +5,39 @@
  */
 
 import { getDb } from "../repositories/db/connection.js";
+import { getSharedGraphUserId } from "./google_oidc.js";
 import { getLocalAuthUserById } from "./local_auth.js";
+import { getOrCreateMemberAttributionId } from "./member_attribution.js";
 
 export interface ValidatedUser {
+  /**
+   * Graph scope: the user_id every read and write is scoped to. Under
+   * NEOTOMA_SHARED_GRAPH_USER_ID this is the shared graph owner, NOT the person
+   * who signed in. This is the authorization principal and must stay the only
+   * input to data scoping (#2228).
+   */
   userId: string;
+  /**
+   * Email of the person actually signed in. Under shared-graph mode this is the
+   * teammate's verified Google address, not the graph owner's — before #2228 it
+   * was resolved from `userId` and so could only ever be the owner's.
+   */
   email?: string;
+  /** Per-email user_id of the signer, set only when distinct from `userId`. */
+  authenticatedUserId?: string;
+  /** True when this session's graph scope was remapped by shared-graph mode. */
+  sharedGraph?: boolean;
+  /**
+   * Write-attribution id of the signed-in member behind this session (#2240):
+   * the random per-instance id `getOrCreateMemberAttributionId` maps to the
+   * per-email user id a verified sign-in recorded on the connection row. Set
+   * whether or not the signer differs from the graph scope, because a write
+   * needs to name its author either way. Absent when the row carries no
+   * recorded sign-in (key-entry or bearer-gate sign-ins, rows that predate
+   * identity recording) or the id cannot be resolved — never back-filled from
+   * `userId`, which on a shared graph names the owner, not the author.
+   */
+  actorId?: string;
 }
 
 /**
@@ -39,9 +67,16 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
   const db = await getDb();
   const connection = (await db
     .prepare(
-      "SELECT user_id, access_token_expires_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
+      "SELECT user_id, access_token_expires_at, authenticated_user_id, authenticated_email FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
     )
-    .get(token)) as { user_id?: string; access_token_expires_at?: string } | undefined;
+    .get(token)) as
+    | {
+        user_id?: string;
+        access_token_expires_at?: string;
+        authenticated_user_id?: string | null;
+        authenticated_email?: string | null;
+      }
+    | undefined;
 
   if (!connection?.user_id) {
     // Fail closed: a bearer that matches no live connection is not a valid
@@ -57,9 +92,45 @@ export async function validateSessionToken(token: string): Promise<ValidatedUser
     throw new Error("Local session token expired");
   }
 
-  const user = await getLocalAuthUserById(connection.user_id);
+  // #2228: `user_id` is the graph scope and stays the sole basis for data
+  // access. The email, in contrast, must describe the person signed in. When
+  // shared-graph mode remapped the scope, the connection row carries the
+  // signer's verified identity; prefer it.
+  //
+  // Rows without authenticated_*:
+  //   - Non-shared-graph (E4): fall back to getLocalAuthUserById(user_id) —
+  //     user_id IS the signer, so the lookup is correct.
+  //   - Shared-graph residual (E4b): user_id is the SHARED OWNER. Looking up
+  //     email from it fabricates the owner's address as "who signed in" —
+  //     the #2228 failure class until re-auth. Omit email and still emit
+  //     sharedGraph so consumers degrade instead of mislabeling.
+  const authenticatedEmail = connection.authenticated_email ?? undefined;
+  const authenticatedUserId = connection.authenticated_user_id ?? undefined;
+  const sharedOwnerId = getSharedGraphUserId();
+  const isSharedGraphScope = Boolean(sharedOwnerId && connection.user_id === sharedOwnerId);
+
+  let email: string | undefined = authenticatedEmail;
+  if (!email && !isSharedGraphScope) {
+    email = (await getLocalAuthUserById(connection.user_id))?.email;
+  }
+
+  // Remapped identity columns, OR a shared-scope row with no recorded signer
+  // (pre-migration residual — degraded but still shared-graph).
+  const sharedGraph =
+    Boolean(authenticatedUserId && authenticatedUserId !== connection.user_id) ||
+    (isSharedGraphScope && !authenticatedEmail);
+
+  const actorId = await getOrCreateMemberAttributionId(authenticatedUserId);
+
   return {
     userId: connection.user_id,
-    email: user?.email,
+    ...(actorId ? { actorId } : {}),
+    ...(email ? { email } : {}),
+    ...(sharedGraph
+      ? {
+          sharedGraph: true as const,
+          ...(authenticatedUserId ? { authenticatedUserId } : {}),
+        }
+      : {}),
   };
 }

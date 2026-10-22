@@ -15,6 +15,8 @@ import type {
   ToolCall,
 } from "./types.js";
 import type { HostToolInvocation, HostToolRegistry } from "./host_tools.js";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 export interface AssertionContext {
   baseUrl: string;
@@ -32,6 +34,12 @@ export interface AssertionContext {
    * and tool_result.matches.
    */
   toolCalls?: ToolCall[];
+  /**
+   * Data directory of the isolated Neotoma server for this cell. Lets
+   * `raw_storage.file_count` observe the bytes actually written to disk,
+   * independent of any database row.
+   */
+  dataDir?: string;
 }
 
 interface EntitiesQueryResponse {
@@ -195,6 +203,21 @@ function countHostToolInvocations(
 ): number {
   if (!toolName) return invocations.length;
   return invocations.filter((i) => i.name === toolName).length;
+}
+
+
+/** Raw-storage subdirectories under NEOTOMA_DATA_DIR (see config.rawStorageDir). */
+const RAW_STORAGE_SUBDIRS = ["sources", "sources_prod"];
+
+function countFilesRecursive(dir: string): number {
+  let count = 0;
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const st = statSync(full);
+    if (st.isDirectory()) count += countFilesRecursive(full);
+    else if (st.isFile()) count += 1;
+  }
+  return count;
 }
 
 // ── #1703 helpers ────────────────────────────────────────────────────────────
@@ -570,6 +593,65 @@ export async function evaluatePredicate(
         }
       }
       return null;
+    }
+    // ── store plan-mode (#2493) state-delta primitives ──
+    case "stats.counter": {
+      const field = predicate.field ?? "";
+      const expected = typeof predicate.value === "number" ? predicate.value : 0;
+      const op = predicate.op ?? "eq";
+      if (!field) {
+        return {
+          predicate,
+          message: `stats.counter requires a "field" naming a numeric key of the post-turn /stats payload.`,
+          expected: predicate,
+          actual: null,
+        };
+      }
+      const raw = ctx.stats ? getPath(ctx.stats, field) : { found: false, value: undefined };
+      // Fail closed: a missing or non-numeric counter is never read as zero,
+      // otherwise "== 0" would pass on an unreadable /stats payload.
+      if (!raw.found || typeof raw.value !== "number") {
+        return {
+          predicate,
+          message: `stats.counter: /stats has no numeric field "${field}" (got ${
+            raw.found ? typeof raw.value : "absent"
+          }); cannot assert it ${op} ${expected}.`,
+          expected: { field, op, value: expected },
+          actual: ctx.stats ? Object.keys(ctx.stats) : null,
+        };
+      }
+      if (compareNumber(raw.value, op, expected)) return null;
+      return {
+        predicate,
+        message: `Expected /stats "${field}" ${op} ${expected}, got ${raw.value}.`,
+        expected: { field, op, value: expected },
+        actual: raw.value,
+      };
+    }
+    case "raw_storage.file_count": {
+      const expected = typeof predicate.value === "number" ? predicate.value : 0;
+      const op = predicate.op ?? "eq";
+      if (!ctx.dataDir) {
+        return {
+          predicate,
+          message: `raw_storage.file_count needs the isolated server's data dir, which this run did not provide.`,
+          expected: { op, value: expected },
+          actual: null,
+        };
+      }
+      const present = RAW_STORAGE_SUBDIRS.map((d) => join(ctx.dataDir as string, d)).filter(
+        (d) => existsSync(d)
+      );
+      // A directory that was never created holds zero files; that is the
+      // correct reading for a run that wrote nothing to raw storage.
+      const actual = present.reduce((acc, d) => acc + countFilesRecursive(d), 0);
+      if (compareNumber(actual, op, expected)) return null;
+      return {
+        predicate,
+        message: `Expected raw-storage file count ${op} ${expected}, got ${actual}.`,
+        expected: { op, value: expected },
+        actual,
+      };
     }
     case "snapshot.field_present":
     case "snapshot.field_absent": {

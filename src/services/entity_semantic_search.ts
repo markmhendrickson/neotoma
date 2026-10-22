@@ -1,13 +1,15 @@
 // Entity semantic search via pgvector or sqlite-vec (local)
 // Structural filters (user_id, entity_type, merged) always applied
 
+import type { EntityFallbackReason, EntityReadTrace } from "../shared/entity_read_contract.js";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
-import { generateEmbedding } from "../embeddings.js";
+import { generateEmbedding, type EmbeddingAcquisitionTrace } from "../embeddings.js";
 import { searchLocalEntityEmbeddings } from "./local_entity_embedding.js";
 
 export interface SemanticSearchEntitiesOptions {
   searchText: string;
+  readTrace?: EntityReadTrace;
   userId: string;
   entityType?: string;
   /** Multi-type filter, OR-combined with `entityType` (#1562). */
@@ -22,6 +24,7 @@ export interface SemanticSearchEntitiesOptions {
 export interface SemanticSearchEntitiesResult {
   entityIds: string[];
   total: number;
+  fallbackReason?: EntityFallbackReason;
 }
 
 /**
@@ -44,13 +47,22 @@ export async function semanticSearchEntities(
     offset,
   } = options;
 
-  const queryEmbedding = await generateEmbedding(searchText);
+  const embeddingTrace: EmbeddingAcquisitionTrace = {};
+  const queryEmbedding = await generateEmbedding(searchText, embeddingTrace);
   if (!queryEmbedding) {
     logger.warn("[entity_semantic_search] No query embedding (OPENAI_API_KEY?)");
-    return { entityIds: [], total: 0 };
+    return {
+      entityIds: [],
+      total: 0,
+      fallbackReason:
+        embeddingTrace.reason === "embedding_not_configured"
+          ? "not_configured"
+          : "embedding_unavailable",
+    };
   }
 
-  const { entityIds, total } = await searchLocalEntityEmbeddings({
+  const { entityIds, total, fallbackReason } = await searchLocalEntityEmbeddings({
+    readTrace: options.readTrace,
     queryEmbedding,
     userId,
     entityType: entityType ?? null,
@@ -64,5 +76,5 @@ export async function semanticSearchEntities(
   logger.info(
     `[entity_semantic_search] local userId=${userId} search="${searchText.slice(0, 40)}${searchText.length > 40 ? "..." : ""}" entityIds=${entityIds.length} backend=${config.storageBackend}`
   );
-  return { entityIds, total };
+  return { entityIds, total, ...(fallbackReason ? { fallbackReason } : {}) };
 }

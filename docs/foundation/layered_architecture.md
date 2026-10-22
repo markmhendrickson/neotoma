@@ -1,5 +1,15 @@
 # Neotoma as the State Layer
 
+> **"State layer" here is an architectural invariant, not Neotoma's category
+> noun.** As a category noun it was retired on 2026-08-21 in favour of *the
+> system of record for AI agents*; as the name of the State Layer / Operational
+> Layer boundary described below, it is correct and in active use. The two are
+> complementary: the invariant — that Neotoma stores and signals but never
+> decides, infers, or acts — is what makes the authority claim credible, since
+> an arbiter that also acts on its own behalf is not an arbiter. See
+> [`core_identity.md`](core_identity.md) § "Relation to the State Layer
+> invariant".
+
 ## Core architectural model
 
 Neotoma is the **state layer**: a deterministic, event-sourced, reducer-driven world model. Anything sitting above Neotoma is an **operational layer** — agents, pipelines, orchestration systems, custom applications. The boundary is a single, simple invariant:

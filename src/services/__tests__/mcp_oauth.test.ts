@@ -18,6 +18,7 @@ import {
   isRedirectUriAllowedForTunnel,
 } from "../mcp_oauth.js";
 import { OAuthError } from "../mcp_oauth_errors.js";
+import { config } from "../../config.js";
 import { randomBytes } from "node:crypto";
 import path from "path";
 import { rmSync } from "fs";
@@ -226,6 +227,261 @@ describe("MCP OAuth Service", () => {
     });
   });
 
+  describe("operator-configured trusted callback URLs", () => {
+    const original = [...config.oauthTrustedCallbackUrls];
+
+    function setTrusted(entries: string[]): void {
+      config.oauthTrustedCallbackUrls.length = 0;
+      config.oauthTrustedCallbackUrls.push(...entries);
+    }
+
+    afterEach(() => {
+      setTrusted(original);
+    });
+
+    it("defaults to empty, changing nothing for an operator who sets no variable", () => {
+      // The default from a real process with no NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS set.
+      expect(original).toEqual([]);
+      setTrusted([]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://bottega8-dashboard.fly.dev/auth/callback")
+      ).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("allows a configured exact callback URL", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+    });
+
+    it("allows a configured callback carrying a query string or fragment", () => {
+      // A real client callback arrives with ?code=&state=; only origin+path is compared.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?state=abc123")
+      ).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback#frag")).toBe(
+        true
+      );
+    });
+
+    it("ignores the query string entirely rather than making it part of the match", () => {
+      // DOCUMENTING THE CHOSEN RULE, not merely asserting "it works": the query
+      // string is NOT part of the exact match. canonicalCallbackUrl compares
+      // protocol + host + port + pathname and drops query and fragment, so a
+      // difference in the query cannot cause either a false accept or a false
+      // reject. Both directions are asserted below so the rule is pinned.
+      //
+      // Why this is the right rule here: the redirect_uri that arrives at
+      // authorize is the client's REGISTERED callback, and the authorization
+      // code is appended to it as ?code=&state= by this server afterwards. A
+      // client that registered `/auth/callback` and is sent to
+      // `/auth/callback?code=…` must still match, so treating the query as
+      // significant would break every real callback. Nothing is given away by
+      // ignoring it: the query cannot change WHERE the browser sends the code,
+      // which is what the allowlist exists to constrain.
+
+      // A configured entry with no query matches a request carrying any query.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?code=abc&state=xyz")
+      ).toBe(true);
+      // ...including a query that differs from any other request's query.
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?tenant=other")
+      ).toBe(true);
+
+      // And symmetrically: a configured entry that itself carries a query still
+      // matches a request with a DIFFERENT query, or none at all, because the
+      // query is dropped from both sides before comparison.
+      setTrusted(["https://app.example.com/auth/callback?env=prod"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback?env=staging")
+      ).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+
+      // The path remains significant even when the query would "look" right —
+      // ignoring the query must not soften the path match.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/other?env=prod")).toBe(false);
+    });
+
+    it("treats a trailing slash as insignificant, including against a query and on the root path", () => {
+      // DOCUMENTING THE CHOSEN RULE: a trailing slash is stripped from the
+      // pathname on BOTH sides before comparison, so `/cb` and `/cb/` are the
+      // same callback. An operator should not be locked out by a slash.
+      //
+      // The root path is the deliberate exception: `https://host` and
+      // `https://host/` both parse to pathname "/", which is left as "/" rather
+      // than stripped to "", so a configured root callback still matches
+      // itself and does not collapse into an empty path.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      // Trailing slash on the request, combined with a real query.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/?code=abc")).toBe(
+        true
+      );
+
+      // A root-path callback matches with and without the slash...
+      setTrusted(["https://app.example.com/"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/")).toBe(true);
+      // ...and does NOT thereby trust every path on that host.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/admin")).toBe(false);
+
+      // The slash rule does not merge genuinely different paths.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/extra")).toBe(
+        false
+      );
+    });
+
+    it("refuses the same origin at a different path", () => {
+      // The #2215 defect in miniature: trusting an origin must not trust the host.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/anything-else")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback2")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth")).toBe(false);
+    });
+
+    it("refuses a path-traversal walk out of the configured callback path", () => {
+      // The URL parser resolves `..` before we compare, so this is /auth/admin.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/../admin")).toBe(
+        false
+      );
+      expect(
+        isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/%2E%2E/admin")
+      ).toBe(false);
+    });
+
+    it("treats a dot segment that resolves back to the callback as the callback", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/./callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/x/../auth/callback")).toBe(
+        true
+      );
+    });
+
+    it("ignores host case but respects path case", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      // Hosts are case-insensitive.
+      expect(isRedirectUriAllowedForTunnel("HTTPS://APP.EXAMPLE.COM/auth/callback")).toBe(true);
+      // Paths are not.
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/CALLBACK")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/Auth/callback")).toBe(false);
+    });
+
+    it("normalises a configured entry's own case too", () => {
+      setTrusted(["HTTPS://APP.EXAMPLE.COM/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+    });
+
+    it("treats a trailing slash as insignificant in either direction", () => {
+      setTrusted(["https://app.example.com/auth/callback/"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(true);
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback/")).toBe(true);
+    });
+
+    it("resolves backslashes the way a browser would", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https:\\\\app.example.com\\auth\\callback")).toBe(true);
+      // And a backslash walk out of the path is still refused.
+      expect(
+        isRedirectUriAllowedForTunnel("https:\\\\app.example.com\\auth\\callback\\..\\admin")
+      ).toBe(false);
+    });
+
+    it("treats a default port as equivalent to no port, and a non-default port as distinct", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com:443/auth/callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com:8443/auth/callback")).toBe(
+        false
+      );
+      setTrusted(["https://app.example.com:8443/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com:8443/auth/callback")).toBe(
+        true
+      );
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("does not treat an encoded slash as a path separator", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com/auth%2Fcallback")).toBe(false);
+    });
+
+    it("refuses plaintext http: to a non-loopback host even when configured", () => {
+      // Fail closed on operator misconfiguration rather than shipping codes in cleartext.
+      setTrusted(["http://evil.com/cb"]);
+      expect(isRedirectUriAllowedForTunnel("http://evil.com/cb")).toBe(false);
+      setTrusted(["http://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("http://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("does not let a configured https entry authorise its http twin", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("http://app.example.com/auth/callback")).toBe(false);
+    });
+
+    it("refuses a URL carrying userinfo on either side", () => {
+      // `https://app.example.com@evil.com/cb` reads as the trusted host to a human
+      // skimming config but resolves to evil.com.
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://evil.com@app.example.com/auth/callback")).toBe(
+        false
+      );
+      setTrusted(["https://app.example.com@evil.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://evil.com/auth/callback")).toBe(false);
+    });
+
+    it("refuses a host that merely contains or extends the configured host", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("https://app.example.com.evil.com/auth/callback")).toBe(
+        false
+      );
+      expect(isRedirectUriAllowedForTunnel("https://evil-app.example.com/auth/callback")).toBe(
+        false
+      );
+      expect(isRedirectUriAllowedForTunnel("https://sub.app.example.com/auth/callback")).toBe(
+        false
+      );
+    });
+
+    it("honours several configured entries, each on its own exact terms", () => {
+      // A well-formed multi-entry list: every entry authorises its own exact
+      // callback and nothing else. (A list containing a MALFORMED entry cannot
+      // reach this matcher at all — config parsing rejects the whole list at
+      // load; see the fail-closed suite in src/__tests__/config_trusted_callbacks.test.ts.)
+      setTrusted(["https://a.example.com/cb", "https://b.example.com/cb"]);
+      expect(isRedirectUriAllowedForTunnel("https://a.example.com/cb")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://b.example.com/cb")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://c.example.com/cb")).toBe(false);
+      // Configuring two hosts does not merge their paths.
+      expect(isRedirectUriAllowedForTunnel("https://a.example.com/other")).toBe(false);
+    });
+
+    it("leaves the pre-existing allowlist intact when entries are configured", () => {
+      setTrusted(["https://app.example.com/auth/callback"]);
+      expect(isRedirectUriAllowedForTunnel("cursor://auth/callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("http://localhost:5195/oauth")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://chatgpt.com/aip/g-123/oauth/callback")).toBe(
+        true
+      );
+      expect(isRedirectUriAllowedForTunnel("https://claude.ai/api/mcp/auth_callback")).toBe(true);
+      // ...and does not loosen what it refused before.
+      expect(isRedirectUriAllowedForTunnel("https://claude.ai/other/path")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://example.com/oauth/callback")).toBe(false);
+    });
+
+    it("authorises the motivating self-hosted dashboard callback exactly", () => {
+      setTrusted(["https://bottega8-dashboard.fly.dev/auth/callback"]);
+      expect(
+        isRedirectUriAllowedForTunnel("https://bottega8-dashboard.fly.dev/auth/callback")
+      ).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://bottega8-dashboard.fly.dev/admin")).toBe(false);
+    });
+  });
+
   describe("local backend OAuth flow", () => {
     it("creates local authorization state and completes login", async () => {
       const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-${Date.now()}`);
@@ -238,23 +494,72 @@ describe("MCP OAuth Service", () => {
       }
 
       const connectionId = "cursor-local-123";
+      const { codeVerifier, codeChallenge } = generatePKCE();
       const request = await oauth.createLocalAuthorizationRequest({
         connectionId,
         redirectUri: "cursor://oauth",
         clientState: "client-state",
-        codeChallenge: "test-challenge",
+        codeChallenge,
       });
 
       expect(request.state).toBeTruthy();
 
       const callback = await oauth.completeLocalAuthorization(request.state, user.id);
       expect(callback.connectionId).toBe(connectionId);
+      expect(callback.code).toBeTruthy();
+      expect(callback.code).not.toBe(connectionId);
 
       const status = await oauth.getConnectionStatus(connectionId);
       expect(status).toBe("active");
 
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseForConnection(callback.code, codeVerifier);
       expect(tokenResponse.access_token).toMatch(/^local_access_/);
+      expect(tokenResponse.connection_id).toBe(connectionId);
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("concurrent redemption of the same authorization code: exactly one succeeds", async () => {
+      // Modeled on "concurrent refresh calls both succeed" below, but the
+      // opposite assertion: refresh tokens are reusable by design (that test
+      // asserts both concurrent refreshes succeed), while an authorization
+      // code is single-use, so of two concurrent redemptions with the SAME
+      // code and the SAME correct verifier, exactly one must succeed and the
+      // other must be refused as already-used/invalid — never both.
+      const tempDir = path.join(
+        process.cwd(),
+        "tmp",
+        `neotoma-oauth-code-redemption-race-${Date.now()}`
+      );
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      await localAuth.createLocalAuthUser("race@example.com", "password123");
+      const user = await localAuth.getLocalAuthUserByEmail("race@example.com");
+      if (!user) throw new Error("Local auth user not found in test");
+
+      const connectionId = "cursor-local-race";
+      const { codeVerifier, codeChallenge } = generatePKCE();
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge,
+      });
+      const callback = await oauth.completeLocalAuthorization(request.state, user.id);
+
+      const results = await Promise.allSettled([
+        oauth.getTokenResponseForConnection(callback.code, codeVerifier),
+        oauth.getTokenResponseForConnection(callback.code, codeVerifier),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+      expect(
+        (fulfilled[0] as PromiseFulfilledResult<{ access_token: string }>).value.access_token
+      ).toMatch(/^local_access_/);
 
       rmSync(tempDir, { recursive: true, force: true });
     });
@@ -278,7 +583,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       await (await getDb())
         .prepare(
@@ -287,7 +592,7 @@ describe("MCP OAuth Service", () => {
         .run(new Date(Date.now() - 60_000).toISOString(), connectionId);
 
       const renewed = await oauth.getAccessTokenForConnection(connectionId);
-      const secondToken = await oauth.getTokenResponseForConnection(connectionId);
+      const secondToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       expect(renewed.userId).toBe(user.id);
       expect(renewed.accessToken).toMatch(/^local_access_/);
@@ -318,7 +623,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseByConnectionId(connectionId);
       await (await getDb())
         .prepare(
           "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
@@ -397,7 +702,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      const tokenResponse = await oauth.getTokenResponseByConnectionId(connectionId);
 
       const validated = await mcpAuth.validateSessionToken(tokenResponse.access_token);
       expect(validated.userId).toBe(user.id);
@@ -424,7 +729,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) {
         throw new Error("Expected local OAuth flow to return a refresh token");
       }
@@ -455,7 +760,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
       const [r1, r2] = await Promise.all([
@@ -466,7 +771,7 @@ describe("MCP OAuth Service", () => {
       expect(r1.access_token).toMatch(/^local_access_/);
       expect(r2.access_token).toMatch(/^local_access_/);
 
-      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      const finalToken = await oauth.getTokenResponseByConnectionId(connectionId);
       expect(finalToken.access_token).toMatch(/^local_access_/);
       expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
@@ -493,7 +798,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
       if (!firstToken.refresh_token) throw new Error("Expected refresh token");
 
       await (await getDb())
@@ -524,7 +829,7 @@ describe("MCP OAuth Service", () => {
         codeChallenge: "test-challenge",
       });
       await oauth.completeLocalAuthorization(request.state, user.id);
-      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      const firstToken = await oauth.getTokenResponseByConnectionId(connectionId);
 
       await (await getDb())
         .prepare(
@@ -543,7 +848,7 @@ describe("MCP OAuth Service", () => {
       const finalStatus = await oauth.getConnectionStatus(connectionId);
       expect(finalStatus).toBe("active");
 
-      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      const finalToken = await oauth.getTokenResponseByConnectionId(connectionId);
       expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
       rmSync(tempDir, { recursive: true, force: true });

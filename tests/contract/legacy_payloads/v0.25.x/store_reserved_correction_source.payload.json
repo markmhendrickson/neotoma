@@ -1,0 +1,5 @@
+{
+  "idempotency_key": "legacy-v0.25-store-reserved-correction-source",
+  "observation_source": "correction",
+  "entities": [{ "entity_type": "note", "title": "Client-claimed correction authority" }]
+}

@@ -22,6 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Real Docker matcher, synthetic-only FROM scratch context; no registry pull.
+      # Fail the required baseline lane if a local environment variant is copied.
+      - name: Check Docker build context exclusions (#2608)
+        run: python3 -m unittest discover -s tests/scripts -p test_docker_context.py -v
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -73,6 +78,11 @@ jobs:
 
       - name: Build server (required by CLI tests)
         run: npm run build:server
+
+      - name: Execute native compiled schema release gate
+        run: |
+          test -f tests/scripts/test_schema_release_gate.py
+          python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v
 
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
@@ -138,6 +148,14 @@ jobs:
       - name: Run cross-surface contract-parity integration tests
         run: npm run test:contract-parity
 
+      # #2046 instance-skill MCP initialize effect regression. The service has
+      # unit coverage, but that can mock away backend-driver SQL mistakes. This
+      # integration test seeds real rows and drives MCP initialize through the
+      # built server so the PR lane fails if stored enabled skills do not reach
+      # the agent-visible initialize payload.
+      - name: Run instance-skill initialize effect regression (#2046)
+        run: npx vitest run --no-file-parallelism tests/integration/instance_skills_initialize_effect.test.ts
+
       # Concurrent-backend (PR #1944) effect-verified regressions. These two
       # tests existed but ran in NO PR lane (test:unit excludes tests/integration
       # and tests/scripts; only a hand-picked contract-parity subset ran here),
@@ -165,6 +183,87 @@ jobs:
       # asserts is covered by the merged-entity cases in the file below.
       - name: Run entity-query read-latency regressions (#2266)
         run: npx vitest run --no-file-parallelism tests/integration/entity_query_deleted_count.test.ts
+
+      # #2316/#2324 DB-worker abandonment survival. The same gap as the two steps
+      # above, and the one that cost the most: this suite already existed and
+      # already asserted the right property, but `test:unit` excludes
+      # tests/integration and this lane's allowlist omitted it — so the crash
+      # shipped to production TWICE while four passing tests guarded nothing.
+      #
+      # It gates two distinct faults. #2316 is a JS unhandled rejection (exit 1).
+      # #2324 is a Rust panic inside libsql's neon binding (SIGABRT, exit 134),
+      # reached by terminating a worker while a synchronous native call is on its
+      # stack — unreachable by any JavaScript-level guard, since libsql-js builds
+      # with `panic = "abort"`.
+      #
+      # The lane MUST run where `libsql` resolves. The suite asserts the driver
+      # and FAILS rather than skips when it does not, because `better-sqlite3`
+      # contains no neon and cannot produce the panic at all: a run on the wrong
+      # driver is green for the wrong reason, which is exactly how this shipped.
+      # ubuntu-latest + `npm ci` installs @libsql/linux-x64-gnu, so it resolves
+      # here; if that ever stops being true this step turns red loudly instead of
+      # passing quietly, which is the intended failure mode.
+      - name: Run DB-worker abandonment survival regressions (#2316/#2324)
+        run: npx vitest run --no-file-parallelism tests/integration/db_abort_client_disconnect_survival.test.ts
+
+      # #2483 unhandled abandoned-abort containment. QA review of this suite's
+      # first version (PR #2484) found it ran in no PR lane at all — this step
+      # closes that gap the same way the #2316/#2324 step above closes its own.
+      # Forces the libsql backend (NEOTOMA_DB_BACKEND) for the same reason the
+      # step above does: readerPoolSnapshotForDiagnostics() in actions.ts only
+      # has a non-null branch to report on the worker-hosted (libsql) backend,
+      # so a run on better-sqlite3 would pass the readerPoolStats assertion for
+      # the wrong reason (a `null` it never inspected) rather than exercising it.
+      - name: Run abandoned-abort containment regressions (#2483)
+        run: npx vitest run --no-file-parallelism tests/integration/unhandled_abandoned_abort_containment.test.ts
+
+      - name: Run schema-lookup scope-mismatch regression (#2454)
+        run: npx vitest run --no-file-parallelism tests/integration/update_schema_incremental_scope_mismatch.test.ts
+
+      # #2026 field provenance on corrected and merge_array fields. Lives under
+      # tests/integration, which test:unit excludes, so without this step the
+      # regression would gate nothing. Drives store -> correct -> provenance
+      # read over both MCP and HTTP.
+      - name: Run field-provenance regression for corrected and merged fields (#2026)
+        run: npx vitest run --no-file-parallelism tests/integration/field_provenance_corrected_and_merged.test.ts
+
+      # #2356 schema-scope parity. Surface parity alone stays green when
+      # last-arrival wins, because that file inserts the user row second.
+      # Resolution parity seeds the global row last and is what fails if
+      # listEntityTypes drops isHigherPrecedenceSchemaRow.
+      - name: Run schema-scope parity (#2356)
+        run: npx vitest run --no-file-parallelism tests/integration/schema_scope_surface_parity.test.ts tests/integration/schema_scope_resolution_parity.test.ts
+
+      # #2597 collection evidence and #2611 native scoped catalog. These are
+      # integration suites, so the unit directory lane does not execute them.
+      # The assertions fail when actual caps, scope, membership or query
+      # authority are omitted; unknown/ranked reads cannot certify absence.
+      # Offline synthetic cutover only; contains real native HTTP/modern MCP,
+      # compiled CLI and the existing Tier 2 named-tool replay driver.
+      - name: Run explicit-null atomic and snapshot surface effects (#2619)
+        run: npx vitest run --no-file-parallelism tests/integration/atomic_null_projection.test.ts tests/unit/nullable_winning_projection.test.ts src/services/correction_transaction.test.ts
+
+      - name: Run authenticated lifecycle/cutover effects (#2588)
+        run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_executor_boundary.test.ts tests/integration/entity_lifecycle_executor_program.test.ts tests/integration/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts
+
+      # #2144 keyed store completion. The unit lane runs tests/unit, not
+      # tests/integration, so without this step the effect tests for resuming an
+      # interrupted keyed store (HTTP route, store core and MCP store) and for
+      # the abort-signal detach gate nothing. They inject a real mid-write
+      # failure and assert observations, completion state and the 409 envelope.
+      - name: Run keyed store partial-write and abort-context effects (#2144)
+        run: npx vitest run --no-file-parallelism tests/integration/store_partial_write_2144.test.ts tests/integration/store_abort_context_2144.test.ts
+
+      - name: "Run retrieval acquisition contract (#2597, #2611)"
+        run: npx vitest run --no-file-parallelism tests/integration/entity_read_contract.test.ts tests/integration/entity_read_contract_semantic.test.ts tests/integration/entity_read_contract_backend.test.ts tests/integration/entity_search_mode.test.ts tests/integration/entity_queries_cursor.test.ts
+
+      # #2524 relationship-write capability, every entrance. The first fix
+      # gated REST /store only; MCP store and the standalone relationship
+      # routes kept writing any edge. This drives each surface (REST over HTTP,
+      # MCP tool methods) as a REFERS_TO-scoped agent and asserts the effect: an
+      # out-of-scope edge is refused and absent, the in-scope edge still lands.
+      - name: Run relationship-write capability surface parity (#2524)
+        run: npx vitest run --no-file-parallelism tests/integration/relationship_write_capability_surfaces.test.ts
 
       # OFFLINE/local-transport parity gate. Curated behaviors that broke on the
       # offline/HTTP path (#1819 at_ingested, #1840 dedup, #1839 null-cleared,
@@ -211,7 +310,7 @@ jobs:
     # opening /graph AND /embed/graph and asserting at the PIXEL level:
     # elementFromPoint at a node center hits a .react-flow__node and .react-flow has
     # non-zero clientHeight. A failure blocks the PR (task ent_6636601b50fc2d43b21d5174).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -238,7 +337,7 @@ jobs:
         run: npm run test:e2e:graph-render
 
   site_export:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4

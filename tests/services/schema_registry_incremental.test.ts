@@ -86,12 +86,21 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     return mock;
   };
 
-  // Helper to mock activate() calls (3 database calls: select, update deactivate, update activate)
-  const mockActivateCalls = () => {
+  // Helper to mock activate() calls (3 database calls: select, update
+  // deactivate, update activate). #2356/#2389: activate() awaits ALL candidate
+  // rows for (entity_type, schema_version) as an array — not .single() — picks
+  // one by fail-closed scope precedence, then targets the deactivate/activate
+  // updates by that row's id.
+  const mockActivateCalls = (
+    row: { id?: string; scope?: string; user_id?: string | null } = {}
+  ) => {
+    const resolvedRow = {
+      id: row.id ?? "activated-row-id",
+      scope: row.scope ?? "global",
+      user_id: row.user_id ?? null,
+    };
     const mockSelect = createChainableQuery({
-      single: vi.fn().mockResolvedValue({
-        data: { scope: "global", user_id: null },
-      }),
+      then: (resolve: any) => Promise.resolve({ data: [resolvedRow], error: null }).then(resolve),
     });
 
     // For deactivate: create chainable query where update() returns the query itself
@@ -99,6 +108,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       update: vi.fn(),
       eq: vi.fn(),
       is: vi.fn(),
+      not: vi.fn(),
       then: vi.fn((resolve: any) => Promise.resolve({}).then(resolve)),
       catch: vi.fn(),
     };
@@ -106,18 +116,23 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateDeactivate.update.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.eq.mockReturnValue(mockUpdateDeactivate);
     mockUpdateDeactivate.is.mockReturnValue(mockUpdateDeactivate);
+    mockUpdateDeactivate.not.mockReturnValue(mockUpdateDeactivate);
 
-    // For activate: similar setup
+    // For activate: similar setup — now targets by id only (single .eq call).
     const mockUpdateActivate: any = {
       update: vi.fn(),
       eq: vi.fn(),
+      // #2356: the activate UPDATE is now scope-partitioned like the
+      // deactivation beside it, so it chains .is("user_id", null) for global.
+      is: vi.fn(),
       then: vi.fn((resolve: any) => Promise.resolve({ error: null }).then(resolve)),
       catch: vi.fn(),
     };
     mockUpdateActivate.update.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
+    mockUpdateActivate.is.mockReturnValue(mockUpdateActivate);
 
-    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate };
+    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate, resolvedRow };
   };
 
   beforeEach(() => {
@@ -366,6 +381,52 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       expect(service.loadActiveSchema).toHaveBeenCalledWith("transaction", undefined);
       expect(result).toBeDefined();
+    });
+
+    it("persists merge_array_by_key and its key_field for an added array field", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "session_digest",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: { title: { type: "string" } },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: { merge_policies: { title: { strategy: "last_write" } } },
+        active: true,
+      };
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "1.1" },
+        }),
+      });
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      await service.updateSchemaIncremental({
+        entity_type: "session_digest",
+        fields_to_add: [
+          {
+            field_name: "tasks_claimed",
+            field_type: "array",
+            reducer_strategy: "merge_array_by_key",
+            reducer_key_field: "claim_id",
+          },
+        ],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.reducer_config.merge_policies.tasks_claimed).toEqual({
+        strategy: "merge_array_by_key",
+        tie_breaker: "observed_at",
+        key_field: "claim_id",
+      });
     });
 
     it("uses code-defined baseline when loadActiveSchema returns null", async () => {

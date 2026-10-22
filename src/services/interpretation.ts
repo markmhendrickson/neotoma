@@ -9,6 +9,7 @@ import {
   type SchemaRegistryEntry,
 } from "./schema_registry.js";
 import { resolveEntity } from "./entity_resolution.js";
+import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import {
@@ -55,6 +56,13 @@ export interface InterpretationOptions {
   sourceId: string;
   extractedData: Record<string, unknown>[];
   config: InterpretationConfig;
+  /** When set, stamped onto created observations for exact idempotent replay. */
+  idempotencyKey?: string;
+  /**
+   * Effective data origin per `extractedData` index (#2242), stamped as
+   * `provenance.data_origin` on the observation created for that entity.
+   */
+  dataOrigins?: Array<import("../shared/action_schemas.js").DataOrigin | undefined>;
 }
 
 export const UNKNOWN_FIELDS_HINT =
@@ -329,7 +337,7 @@ export async function runInterpretation(
   options: InterpretationOptions
 ): Promise<InterpretationResult> {
   enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
-  const { userId, sourceId, extractedData, config } = options;
+  const { userId, sourceId, extractedData, config, idempotencyKey } = options;
 
   // Validate that the source exists before creating an interpretation
   const { data: sourceCheck, error: sourceCheckError } = await db
@@ -396,7 +404,8 @@ export async function runInterpretation(
     ];
 
     // Process each extracted entity
-    for (const entityData of extractedData) {
+    for (const [entityIndex, entityData] of extractedData.entries()) {
+      const entityDataOrigin = options.dataOrigins?.[entityIndex];
       // Support both 'entity_type' and 'type' fields for entity type identification
       let entityType =
         (entityData.entity_type as string) || (entityData.type as string) || "generic";
@@ -681,6 +690,17 @@ export async function runInterpretation(
         continue;
       }
 
+      if (entityType === "agent_grant") {
+        // A key thumbprint may be pinned by agent_grants under one owner only.
+        const { assertGrantWriteKeepsPinUnique } = await import("./agent_grants.js");
+        await assertGrantWriteKeepsPinUnique({
+          userId,
+          entityType,
+          fields: canonicalFields,
+          entityId,
+        });
+      }
+
       // Create observation with canonical fields and hash
       // Handle schema cache issues: if canonical_hash column not in cache, retry without it
       const observationData: Record<string, unknown> = {
@@ -696,6 +716,8 @@ export async function runInterpretation(
         fields: canonicalFields, // Store canonical fields, not raw
         canonical_hash: canonicalHash, // Store hash for deduplication
         user_id: userId,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        ...(entityDataOrigin ? { provenance: { data_origin: entityDataOrigin } } : {}),
       };
 
       let { error: obsError } = await db.from("observations").insert(observationData);
@@ -757,17 +779,30 @@ export async function runInterpretation(
         const priorSnapshot =
           (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
 
-        // Get all observations for entity
-        const { data: allObservations, error: fetchError } = await db
-          .from("observations")
-          .select("*")
-          .eq("entity_id", entity.entityId)
-          .order("observed_at", { ascending: false });
-
-        if (fetchError) {
+        // #2343: the observations ATTACHED to this entity, through the
+        // declared resolution layer. Scope stays `null` because this fetch was
+        // unscoped before the migration and narrowing it would change which
+        // rows the reducer sees — a separate concern from routing the fetch.
+        //
+        // A `null` result means the id is redirected. This call site just
+        // interpreted the entity it is snapshotting, so a redirect here means
+        // an entity was merged away mid-interpretation: log it loudly rather
+        // than skipping quietly, and never upsert under the redirected id.
+        let allObservations: unknown[] | null = null;
+        try {
+          allObservations = await resolveOwnedObservations(entity.entityId, null);
+        } catch (fetchError) {
           console.error(
             `Failed to fetch observations for entity ${entity.entityId}:`,
-            fetchError.message
+            fetchError instanceof Error ? fetchError.message : String(fetchError)
+          );
+          continue;
+        }
+        if (allObservations === null) {
+          console.error(
+            `[INTERPRETATION] Entity ${entity.entityId} resolves elsewhere (merged away?); ` +
+              `it owns no snapshot, so none was written. This is unexpected on a path that ` +
+              `just interpreted the entity.`
           );
           continue;
         }

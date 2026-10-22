@@ -89,8 +89,10 @@ export function AauthReferencePage() {
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground"><code>operator_attested</code></strong>,
-          AAuth verified AND <code>iss</code> (or <code>iss:sub</code>) is in
-          the operator allowlist
+          AAuth verified AND the signing key is listed in{" "}
+          <code>NEOTOMA_OPERATOR_ATTESTED_THUMBPRINTS</code>, or is pinned by
+          an active grant whose <code>match_iss</code> (or{" "}
+          <code>match_iss:match_sub</code>) is in the operator allowlist
           (<code>NEOTOMA_OPERATOR_ATTESTED_ISSUERS</code> /{" "}
           <code>NEOTOMA_OPERATOR_ATTESTED_SUBS</code>).
         </li>

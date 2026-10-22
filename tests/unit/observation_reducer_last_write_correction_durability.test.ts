@@ -1,13 +1,14 @@
 /**
  * Regression tests for issue #2033:
- * a correct() observation (`is_correction: true`) on a `last_write` field
- * must survive a later, non-correction write — the "corrections always win"
- * contract (#1541) already honoured by `merge_array`, extended here to
- * `last_write`, the default merge policy for every auto-discovered field.
+ * a correct() observation (`observation_source: "correction"`) on a
+ * `last_write` field must survive a later, non-correction write — the
+ * "corrections always win" contract (#1541) already honoured by
+ * `merge_array`, extended here to `last_write`, the default merge policy
+ * for every auto-discovered field.
  *
- * The reducer partitions `last_write` candidates on the `is_correction`
- * marker (stamped only by `createCorrection`, never client-settable): when
- * any candidate is correction-marked, only correction-marked candidates are
+ * The reducer partitions `last_write` candidates on correction-sourced
+ * observations (stamped only by `createCorrection`, never client-settable):
+ * when any candidate is correction-sourced, only those candidates are
  * considered. Corrections remain mutually last-write among themselves via
  * the existing observed_at DESC sort. Ordinary numeric `source_priority` is
  * NOT read by this partition — #1755 intentionally left source_priority
@@ -19,7 +20,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
+import {
+  ObservationReducer,
+  isCorrectionSourcedObservation,
+  type Observation,
+} from "../../src/reducers/observation_reducer.js";
 
 vi.mock("../../src/services/schema_registry.js", () => ({
   DEFAULT_OBSERVATION_SOURCE_PRIORITY: [
@@ -117,7 +122,7 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       source_id: null,
       observed_at: "2026-01-02T00:00:00Z",
       source_priority: 1000,
-      is_correction: true,
+      observation_source: "correction",
       fields: { field: "B" },
     });
     // Routine re-ingest AFTER the correction, default priority, non-correction.
@@ -129,11 +134,7 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       fields: { field: "A" },
     });
 
-    const snapshot = await reducer.computeSnapshot(testEntityId, [
-      original,
-      correction,
-      reIngest,
-    ]);
+    const snapshot = await reducer.computeSnapshot(testEntityId, [original, correction, reIngest]);
 
     expect(snapshot!.snapshot.field).toBe("B");
     expect(snapshot!.provenance.field).toBe("obs_correction_b");
@@ -145,7 +146,7 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       source_id: null,
       observed_at: "2026-01-01T00:00:00Z",
       source_priority: 1000,
-      is_correction: true,
+      observation_source: "correction",
       fields: { field: "first-correction" },
     });
     const secondCorrection = makeObs({
@@ -153,7 +154,7 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       source_id: null,
       observed_at: "2026-01-02T00:00:00Z",
       source_priority: 1000,
-      is_correction: true,
+      observation_source: "correction",
       fields: { field: "second-correction" },
     });
     const laterLowerPriorityWrite = makeObs({
@@ -231,7 +232,7 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       source_id: null,
       observed_at: "2026-01-01T00:00:00Z",
       source_priority: 1000,
-      is_correction: true,
+      observation_source: "correction",
       fields: { field: "corrected-a" },
     });
     const fieldALaterReingest = makeObs({
@@ -280,7 +281,7 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       source_id: null,
       observed_at: "2026-01-02T00:00:00Z",
       source_priority: 1000,
-      is_correction: true,
+      observation_source: "correction",
       fields: { field: "B" },
     });
     const reIngest = makeObs({
@@ -290,12 +291,63 @@ describe("ObservationReducer - last_write correction durability (#2033)", () => 
       fields: { field: "A" },
     });
 
+    const snapshot = await reducer.computeSnapshot(testEntityId, [original, correction, reIngest]);
+
+    expect(snapshot!.snapshot.field).toBe("B");
+  });
+
+  it("does not infer correction authority from an ambiguous historical row shape", async () => {
+    // Ordinary pre-marker writers could create this same shape. Promoting it
+    // would change ordinary last_write semantics without evidence of authority.
+    const original = makeObs({
+      id: "obs_premarker_a",
+      observed_at: "2026-01-01T00:00:00Z",
+      source_priority: 100,
+      observation_source: "import",
+      fields: { field: "A" },
+    });
+    const preMarkerCorrection = makeObs({
+      id: "obs_premarker_correction",
+      source_id: null,
+      observed_at: "2026-01-02T00:00:00Z",
+      source_priority: 1000,
+      // deliberately omit observation_source — historical shape
+      fields: { field: "B" },
+    });
+    const reIngest = makeObs({
+      id: "obs_premarker_reingest",
+      observed_at: "2026-01-03T00:00:00Z",
+      source_priority: 100,
+      observation_source: "import",
+      fields: { field: "A" },
+    });
+
     const snapshot = await reducer.computeSnapshot(testEntityId, [
       original,
-      correction,
+      preMarkerCorrection,
       reIngest,
     ]);
 
-    expect(snapshot!.snapshot.field).toBe("B");
+    expect(snapshot!.snapshot.field).toBe("A");
+    expect(snapshot!.provenance.field).toBe("obs_premarker_reingest");
+  });
+
+  it("does not elevate either deletion or ordinary null-source priority-1000 rows", () => {
+    expect(
+      isCorrectionSourcedObservation({
+        observation_source: null,
+        source_priority: 1000,
+        source_id: null,
+        fields: { field: "gone", _deleted: true },
+      })
+    ).toBe(false);
+    expect(
+      isCorrectionSourcedObservation({
+        observation_source: null,
+        source_priority: 1000,
+        source_id: null,
+        fields: { field: "B" },
+      })
+    ).toBe(false);
   });
 });

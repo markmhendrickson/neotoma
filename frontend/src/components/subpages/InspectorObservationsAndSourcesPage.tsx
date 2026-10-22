@@ -28,7 +28,7 @@ export function InspectorObservationsAndSourcesPage() {
         <code>/observations</code> shows them in reverse chronological order
         with filters for entity, field, agent, trust tier, and{" "}
         <code>observation_source</code> (sensor, workflow_state,
-        llm_summary, human, import).
+        llm_summary, human, import, sync, unspecified).
       </p>
 
       <InspectorPreview
@@ -159,8 +159,9 @@ export function InspectorObservationsAndSourcesPage() {
         Each observation displays which row currently "wins" for its field.
         The reducer order is documented and visible: higher{" "}
         <code>source_priority</code> wins, with{" "}
-        <code>observation_source</code> as the tie-break (sensor &lt;
-        workflow_state &lt; llm_summary &lt; human &lt; import). Inspector
+        <code>observation_source</code> as the tie-break (sensor first,
+        then workflow_state, then llm_summary and unspecified level with
+        each other, then human, import, sync). Inspector
         shows this in the row metadata so operators don't have to guess why
         a "human" correction did or did not override an automated row.
       </p>

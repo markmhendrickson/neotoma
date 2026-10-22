@@ -111,12 +111,15 @@ handlers can pattern-match the code uniformly.
 | Code                                 | HTTP | Retry? | Description                                                               |
 | ------------------------------------ | ---- | ------ | ------------------------------------------------------------------------- |
 | `ERR_NO_SCHEMA_FOR_ENTITY_TYPE`      | 200  | No     | No registered or code-defined schema exists for the given `entity_type`   |
+| `ERR_SCHEMA_SCOPE_MISMATCH`          | 200  | No     | Active schema exists, but in a different scope than the call checked      |
 | `ERR_SCHEMA_MISSING_IDENTITY_CONFIG` | 200  | No     | Existing schema lacks both `canonical_name_fields` and `identity_opt_out` |
 
 **`ERR_NO_SCHEMA_FOR_ENTITY_TYPE`** — raised by `update_schema_incremental` when
 the target `entity_type` has no schema registered in `schema_registry` and no
-code-defined fallback in `schema_definitions.ts`. Incremental update needs a
-baseline to extend, so the call cannot proceed.
+code-defined fallback in `schema_definitions.ts` **in any scope the caller can
+see**. Incremental update needs a baseline to extend, so the call cannot proceed.
+Do **not** use this code when a schema exists in another scope — that is
+`ERR_SCHEMA_SCOPE_MISMATCH` (#2454).
 
 Response shape (canonical envelope):
 
@@ -138,6 +141,47 @@ Remediation: call `analyze_schema_candidates` for field suggestions, then
 `register_schema` with a complete `schema_definition` including either
 `canonical_name_fields` or `identity_opt_out`. Retry
 `update_schema_incremental` once the baseline schema is registered.
+
+**`ERR_SCHEMA_SCOPE_MISMATCH`** — raised by `update_schema_incremental` when the
+caller passed an explicit `user_specific: false`, so the existence guard checked
+global scope only and found no global registry row and no code-defined
+baseline, but an active schema for the same `entity_type` exists in the
+caller's **user** scope. When `user_specific` is
+omitted, the guard and the update both resolve user-scope-first (the same
+precedence `describe_entity_type` uses), so this error cannot arise (#2374).
+Distinct from a genuine cold start.
+
+Response shape (canonical envelope):
+
+```json
+{
+  "error": {
+    "error_code": "ERR_SCHEMA_SCOPE_MISMATCH",
+    "message": "An active schema for entity_type \"<type>\" exists in \"user\" scope, but this call resolved schemas in \"global\" scope and found none there.",
+    "hint": "…retry update_schema_incremental without user_specific…, or with user_specific: true.",
+    "details": {
+      "entity_type": "<type>",
+      "guard_scope": "global",
+      "found_scope": "user"
+    }
+  }
+}
+```
+
+Remediation: retry without `user_specific`, or with the value that matches
+`details.found_scope` (`true` for user). Retrying without the flag writes to the
+caller's **user-scoped override**, not to global, so it is not the same intent
+as the call that failed. The hint MUST NOT recommend `register_schema` —
+registering a second schema for a type that already has an active row is how
+the dual-active-row condition in #2374/#2378 arises.
+
+If the goal really is to change the **global** schema for a type that exists
+only as a user-scoped override, no retry of this call achieves it. Creating the
+first global row from an override is schema reconciliation (see
+`docs/subsystems/schema_registry.md` §4.4), a deliberate step the operator
+performs; an agent should report the situation rather than loop or register a
+second schema. In practice `guard_scope` is always `global` and `found_scope`
+is always `user` for this code.
 
 **`ERR_SCHEMA_MISSING_IDENTITY_CONFIG`** — raised when the existing schema for
 the target `entity_type` lacks both `canonical_name_fields` and
@@ -265,6 +309,7 @@ caller repairs in-turn via `correct` rather than re-submitting the same payload.
 | `SOURCE_PRIORITY_IGNORED`     | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot.                                                          |
 | `AUTO_LINK_EDGE_RETRACTED`    | 200  | No     | A schema-declared reference field's resolved target changed, so a stale auto-linked edge (e.g. a prior `works_at`) was retracted in the same reduction that created the new one (#1963). Positive signal; no action needed.                                    |
 | `AUTO_LINK_RETRACTION_FAILED` | 200  | No     | A stale auto-linked edge should have been retracted but the soft-delete failed. The superseded edge may still be live despite the store succeeding. The message lists the stale `target_entity_id`s; clean up via `delete_relationship` (or re-run the store). |
+| `STORE_WARNING_RULE_NOT_EVALUATED` | 200 | No | A schema-declared `store_warnings` rule could not be evaluated (its `fields` list or `condition` is malformed, uses an unsupported `condition` key, or declares neither spelling). The write is NOT blocked by this; it is a fail-open diagnostic naming the inert rule and the specific path that could not be read (#2165, #2170). |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -362,6 +407,32 @@ knowing its own schema, or re-run the store. Example:
 
 This code exists so the retraction failure is never silent — a silently-surviving edge is
 the exact bug #1963 was filed to fix.
+
+**`STORE_WARNING_RULE_NOT_EVALUATED`** — fired when a schema-declared `store_warnings`
+rule cannot be evaluated. A rule's condition may be spelled as a flat `fields: string[]`
+list (fire when none of the named fields carry a value) or declaratively as
+`condition: { missing_all_of: [...] }`; both spellings evaluate identically. This code
+fires instead of either spelling's own warning when the rule's `fields` or
+`condition.missing_all_of` list is malformed (not a non-empty array of non-empty
+strings), when `condition` declares an unsupported key, or when the rule declares
+neither spelling at all. Before this code existed, an unevaluable rule threw a
+`TypeError` that escaped as `DB_QUERY_FAILED`, making every write of that entity type
+fail — including `commit: false` dry runs, since evaluation happens before the commit
+decision (#2165, #2170). This warning is a fail-open diagnostic: it never blocks the
+write, and it does not claim the entity was persisted — persistence is the response's
+own `success` field and read-back to report. The `message` names the declared rule's own
+`code` and the exact path (`fields` or `condition.missing_all_of`) that could not be
+read, so a schema author can correct or remove the rule. Example:
+
+```json
+{
+  "code": "STORE_WARNING_RULE_NOT_EVALUATED",
+  "entity_type": "skill",
+  "entity_id": "ent_abc…",
+  "observation_index": 0,
+  "message": "Store-warning rule \"MISSING_CONTENT_FIELD\" declared on this entity type could not be evaluated: `condition` declares no recognised condition key. Supported condition keys: [\"missing_all_of\"]. Correct or remove the rule in the schema; the entity itself does not need to be re-sent for this warning alone. This advisory did NOT block the operation."
+}
+```
 
 ## ERR_CONSTRAINT_VIOLATION
 
@@ -461,7 +532,7 @@ Treat an **unrecognized `reason_code`** as a hard denial and surface
 extensible by design.
 
 No PII appears in this envelope: interpolated values are schema-declared field
-*names* and configured policy values, never any fragment of the submitted
+_names_ and configured policy values, never any fragment of the submitted
 payload.
 
 ## ERR_STORE_POLICY_UNAVAILABLE
@@ -500,11 +571,37 @@ refused either way; only the explanation differs.
 | `VALIDATION_INVALID_TYPE`   | 400  | No     | Field has invalid type               |
 | `VALIDATION_INVALID_FORMAT` | 400  | No     | Field format is invalid (e.g., date) |
 | `VALIDATION_OUT_OF_RANGE`   | 400  | No     | Field value out of allowed range     |
+| `RESERVED_OBSERVATION_SOURCE` | 400  | No     | Generic `store`/`store_structured` asserted reserved correction authority (`observation_source: "correction"` and/or `source_priority: 1000`). No observation row is persisted. |
+
+### RESERVED_OBSERVATION_SOURCE
+
+Returned when a client claims correction authority on the generic write path
+instead of calling `correct()`. Since #2033 this is reject-not-strip: the
+request fails with HTTP 400 and nothing is written.
+
+```json
+{
+  "error_code": "RESERVED_OBSERVATION_SOURCE",
+  "message": "observation_source: 'correction' is reserved — only the correct() operation may set it. Use correct() instead of store() to make an authoritative field change.",
+  "details": {
+    "hint": "Call correct({ entity_id, field, value }). Since #2033, store()/store_structured() reject reserved correction authority instead of silently accepting it.",
+    "field": "observation_source",
+    "rejected_value": "correction"
+  },
+  "timestamp": "2026-09-08T12:00:00.000Z"
+}
+```
+
+**Remediation:**
+
+- Use `correct({ entity_id, field, value })` (MCP/REST/CLI) for authoritative field changes.
+- For ordinary writes, omit `observation_source` (defaults to `llm_summary`) or use `sensor` / `workflow_state` / `human` / `import` / `sync`, and keep `source_priority` below 1000.
 
 **Common Causes:**
 
 - `VALIDATION_MISSING_FIELD`: Missing required `type` or `properties`
 - `VALIDATION_INVALID_FORMAT`: Invalid date format or JSON structure
+- `RESERVED_OBSERVATION_SOURCE`: Client sent `observation_source: "correction"` or `source_priority: 1000` on `/store`
 
 ## Idempotency Errors
 
@@ -512,6 +609,7 @@ refused either way; only the explanation differs.
 | --------------------------- | ---- | ------ | --------------------------------------------------------------------------------------------------------------- |
 | `ERR_IDEMPOTENCY_MISMATCH`  | 400  | No     | `idempotency_key` reused with a different canonicalized predicate (`entity_split`, `correct`).                  |
 | `ERR_IDEMPOTENCY_COLLISION` | 409  | No     | `idempotency_key` reused on `/store` with different content (different content hash) than the original request. |
+| `ERR_STORE_WRITE_INCOMPLETE` | 409  | No     | `idempotency_key` belongs to a store that did not finish writing and cannot be resumed under the same key (the request carries an `interpretation`). HTTP `/store` returns 409; MCP `store` returns the code in an invalid-params error with the same summary under `data`. The `details` name the entities with no observation yet (`missing_entity_indexes`); resend only those under a new key. The original request's relationships were not written: recreate them by entity id, looking each id up by the entity's identifying fields (the error does not return ids). |
 
 `ERR_IDEMPOTENCY_MISMATCH` and `ERR_IDEMPOTENCY_COLLISION` describe the same
 semantic class — a previously-seen idempotency key reused with different
@@ -539,6 +637,18 @@ whose canonical content hash matches the prior call. See
 
 - `GRAPH_ORPHAN_NODE`: Entity or event created without record link
 - `GRAPH_EDGE_INVALID`: Invalid edge type (not in allowed set)
+
+### Relationship Refusal Codes
+
+Unlike the codes above, these appear inside a **2xx** response's `relationships_refused[].code` field (`StoreStructuredResponse` / `CreateInterpretationResponse` in `openapi.yaml`) — the overall call still succeeds, but one or more requested edges were not created. `POST /create_relationship`'s direct-call path (not via `store`/`create_interpretation`) surfaces the same conditions as a top-level 4xx/404 error instead; see [`docs/subsystems/relationships.md`](../subsystems/relationships.md) § 6.1.
+
+| Code                              | Meaning                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `unregistered_relationship_type`  | The relationship type is not registered on this instance. Call `list_relationship_types` and retry, or `register_relationship_type` if the meaning is genuinely new. |
+| `RELATIONSHIP_ENDPOINT_NOT_FOUND` | Source or target entity does not exist, or is not owned by the caller — both cases refuse identically so the refusal reveals nothing about other users' data. Store the missing entity first, then retry. |
+| `RELATIONSHIP_REFERENCE_UNRESOLVED` | An index-based endpoint reference (from the same `store` call) did not resolve to a stored entity. Fix the index. |
+| `RELATIONSHIP_INVALID_ENTITY_ID`  | A supplied endpoint id is not a well-formed entity id. |
+| `RELATIONSHIP_NOT_CREATED`        | Any other failure creating the edge, including a refused write from an `acyclic` type's cycle check. |
 
 ## Generic Errors
 

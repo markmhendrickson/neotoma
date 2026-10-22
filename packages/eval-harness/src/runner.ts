@@ -206,6 +206,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       hooksEnabled: plan.hooksEnabled,
       env: {
         NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
+        ...(plan.scenario.real_storage ? { NEOTOMA_TEST_REAL_STORAGE: "1" } : {}),
       },
       faults: plan.scenario.server_faults,
     });
@@ -246,6 +247,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       effectiveProfile,
       assistantText: driverResult.assistantText,
       toolCalls: driverResult.toolCalls,
+      dataDir: server.dataDir,
     });
     pass = assertionFailures.length === 0;
     if (!pass) {

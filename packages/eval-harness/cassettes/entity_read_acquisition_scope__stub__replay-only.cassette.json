@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "entity_read_acquisition_scope",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-08T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "system_prompt": "Inspect actual acquisition metadata; no model or writer fence is exercised.",
+  "user_prompt": "Seed and read a complete synthetic population, then inspect ignored scope uncertainty.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_read_acquisition",
+        "schema_version": "1.0",
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "canonical_name_fields": ["title"]
+        },
+        "reducer_config": {
+          "merge_policies": {
+            "title": {
+              "strategy": "highest_priority",
+              "tie_breaker": "observed_at"
+            }
+          }
+        },
+        "activate": true
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "eval-read-acquisition-seed",
+        "entities": [
+          {
+            "entity_type": "eval_read_acquisition",
+            "title": "Acquisition alpha"
+          },
+          {
+            "entity_type": "eval_read_acquisition",
+            "title": "Acquisition beta"
+          },
+          {
+            "entity_type": "eval_read_acquisition",
+            "title": "Acquisition gamma"
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "eval_read_acquisition",
+        "limit": 100
+      },
+      "sequence": 2
+    },
+    {
+      "name": "retrieve_entities",
+      "input": {
+        "entity_type": "eval_read_acquisition",
+        "limit": 100,
+        "unsupported_scope": "synthetic-unapplied-value"
+      },
+      "sequence": 3
+    }
+  ],
+  "assistant_text": "The native tool results expose complete versus partial acquisition. The adopting-scanner effect and interleave controls are separate native evals."
+}
