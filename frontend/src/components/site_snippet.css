@@ -111,3 +111,18 @@
 .site-snippet-title > span[aria-hidden] {
   display: none;
 }
+.site-snippet-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.5rem 0 1.5rem;
+  color: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.site-snippet-expand:focus-visible {
+  outline: 3px solid var(--rust, #a14624);
+  outline-offset: 3px;
+}

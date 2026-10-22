@@ -47,7 +47,7 @@ export function CopyableCodeBlock({
       {canExpand && (
         <button
           type="button"
-          className="site-snippet-copy mb-4"
+          className="site-snippet-expand"
           onClick={() => setShowFullCode((v) => !v)}
         >
           {showFullCode ? (
