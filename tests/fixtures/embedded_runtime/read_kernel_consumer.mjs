@@ -114,7 +114,7 @@ await Promise.all(
       [fixture.label + "-corrected", fixture.label]
     );
     await assert.rejects(
-      () => kernel.execute("retrieve_entity_snapshot", { entity_id: fixture.id }),
+      () => kernel.execute("retrieve_entity_snapshot", { entity_id: fixture.id, at: "2000-01-01" }),
       (error) => error.toErrorEnvelope().error_code === "FEATURE_UNAVAILABLE"
     );
     await assert.rejects(

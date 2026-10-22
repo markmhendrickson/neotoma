@@ -3713,15 +3713,36 @@ export class NeotomaServer {
     // Get entity first to check if it exists and handle merged entity redirection
     // Historical reads resolve ownership/redirects without applying CURRENT hiding.
     // The shared temporal selector alone decides the requested past visibility.
-    const entity = await getEntityWithProvenance(
-      parsed.entity_id,
-      Boolean(parsed.at || parsed.at_ingested || parsed.valid_at),
-      userId,
-      {
-        includeClearedFields:
-          !parsed.at && !parsed.at_ingested && !parsed.valid_at && parsed.include_cleared_fields,
-      }
-    );
+    const currentPoint =
+      !parsed.at && !parsed.at_ingested && !parsed.valid_at && !parsed.include_cleared_fields;
+    const entity = currentPoint
+      ? await (async () => {
+          const { getCurrentEntityForUser } = await import("./services/entity_queries.js");
+          try {
+            return await getCurrentEntityForUser(userId, { entity_id: parsed.entity_id });
+          } catch (error) {
+            const { OperationError } = await import("./core/operation_error.js");
+            if (error instanceof OperationError)
+              throw new McpError(
+                error.statusCode >= 500 ? ErrorCode.InternalError : ErrorCode.InvalidParams,
+                error.message,
+                error.toErrorEnvelope()
+              );
+            throw error;
+          }
+        })()
+      : await getEntityWithProvenance(
+          parsed.entity_id,
+          Boolean(parsed.at || parsed.at_ingested || parsed.valid_at),
+          userId,
+          {
+            includeClearedFields:
+              !parsed.at &&
+              !parsed.at_ingested &&
+              !parsed.valid_at &&
+              parsed.include_cleared_fields,
+          }
+        );
 
     if (!entity) {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);

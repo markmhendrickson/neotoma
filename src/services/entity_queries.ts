@@ -6,7 +6,11 @@ import { OperationError } from "../core/operation_error.js";
 import { EntityIdentityContractError } from "./entity_identity_contract.js";
 import { db } from "../db.js";
 import { acquireDatabase } from "../repositories/db/acquisition.js";
-import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
+import {
+  assertIdentityResolutionAvailable,
+  loadEntityIdentityRecord,
+} from "./entity_identity_admission.js";
+import { fromDbRow } from "../repositories/sqlite/local_db_adapter.js";
 import {
   decodeCursor,
   encodeCursor,
@@ -1039,21 +1043,32 @@ async function acquireEntityWithProvenance(
   if (projection.includeClearedFields && !userId) {
     throw new Error("Nullable winning projection requires an explicit owner");
   }
-  // Get entity. When a userId is supplied, scope by it so a cross-user
-  // entity_id cannot be read by id alone (the HTTP callers precheck ownership;
-  // the MCP retrieve_entity_snapshot path historically did not).
-  let entityQuery = db.from("entities").select("*").eq("id", entityId);
-  if (userId) {
-    entityQuery = entityQuery.eq("user_id", userId);
+  // Legacy unbound callers may derive the owner as before. Every payload then
+  // comes from one native acquisition bound to that owner, before projection.
+  let owner = userId;
+  if (!owner) {
+    const { data, error } = await db
+      .from("entities")
+      .select("user_id")
+      .eq("id", entityId)
+      .maybeSingle();
+    if (error) throw new Error("Entity owner acquisition failed");
+    if (!data) return null;
+    owner = data.user_id;
   }
-  const { data: firstEntity, error: entityError } = await entityQuery.maybeSingle();
-
-  if (entityError) throw new Error("Entity acquisition failed");
-  if (!firstEntity) return null;
-  let entity = firstEntity;
-  const owner = userId ?? entity.user_id;
   if (typeof owner !== "string" || !owner) throw new Error("Point entity owner is unavailable");
-  const candidates: Array<{ entity_type: unknown; identity_record?: unknown }> = [entity];
+  const candidates: Array<{ entity_type: unknown; identity_record?: unknown }> = [];
+  async function acquireOwnedEntity(id: string) {
+    let raw: Readonly<Record<string, unknown>> | undefined;
+    await loadEntityIdentityRecord(await acquireDatabase(), id, owner!, (row) => {
+      raw = row;
+    });
+    if (!raw) return null;
+    candidates.push({ entity_type: raw.entity_type, identity_record: raw.identity_record });
+    return fromDbRow("entities", raw) as any;
+  }
+  let entity = await acquireOwnedEntity(entityId);
+  if (!entity) return null;
   if (entity.merged_to_entity_id) {
     const { resolveAttachmentTarget } = await import("./attachment_resolution.js");
     const target = await resolveAttachmentTarget(entityId, owner, {
@@ -1061,16 +1076,10 @@ async function acquireEntityWithProvenance(
       identityCandidates: candidates,
     });
     if (target.truncated) throw new Error("Entity attachment acquisition is incomplete");
-    const { data: resolved, error } = await db
-      .from("entities")
-      .select("*")
-      .eq("id", target.resolvedEntityId)
-      .eq("user_id", owner)
-      .maybeSingle();
-    if (error || !resolved) throw new Error("Entity attachment target is unavailable");
+    const resolved = await acquireOwnedEntity(target.resolvedEntityId);
+    if (!resolved) throw new Error("Entity attachment target is unavailable");
     entity = resolved;
     entityId = entity.id;
-    candidates.push(entity);
   }
   async function admit(candidate: { entity_type: unknown; identity_record?: unknown }) {
     if (typeof candidate.entity_type !== "string" || !candidate.entity_type)
@@ -1084,7 +1093,11 @@ async function acquireEntityWithProvenance(
       candidate.identity_record
     );
   }
-  for (const candidate of candidates) await admit(candidate);
+  for (const candidate of candidates) {
+    if (!Object.hasOwn(candidate, "identity_record"))
+      throw new Error("Original identity metadata acquisition is unavailable");
+    await admit(candidate);
+  }
   if (!includeDeleted) {
     const { isEntityDeleted } = await import("./deletion.js");
     if (await isEntityDeleted(entityId, owner, true)) return null;
@@ -1270,6 +1283,46 @@ async function acquireEntityWithProvenance(
     primary_fields: primaryFields,
     created_at: entity.created_at,
   };
+}
+
+export interface CurrentEntityInput {
+  entity_id: string;
+  format?: "json";
+}
+/** Private/current structured entrance; serializers and historical selection stay outside. */
+export async function getCurrentEntityForUser(
+  userId: string,
+  input: unknown
+): Promise<EntityWithProvenance> {
+  const raw =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  if (
+    (Object.getPrototypeOf(raw) !== Object.prototype && Object.getPrototypeOf(raw) !== null) ||
+    Reflect.ownKeys(raw).some((key) => key !== "entity_id" && key !== "format") ||
+    (raw.format !== undefined && raw.format !== "json")
+  )
+    throw new OperationError(
+      "FEATURE_UNAVAILABLE",
+      "This current point projection is not converted",
+      {
+        statusCode: 400,
+        details: {
+          hint: "Use entity_id with optional format=json; historical, cleared and rendered projections remain unavailable.",
+        },
+      }
+    );
+  const { EntitySnapshotRequestSchema } = await import("../shared/action_schemas.js");
+  const parsed = EntitySnapshotRequestSchema.safeParse(input);
+  if (!parsed.success || !parsed.data.entity_id.trim())
+    throw new OperationError("VALIDATION_INVALID_FORMAT", "A nonempty entity_id is required", {
+      statusCode: 400,
+    });
+  const entity = await getEntityWithProvenance(parsed.data.entity_id, false, userId);
+  if (!entity)
+    throw new OperationError("RESOURCE_NOT_FOUND", "Entity not found", { statusCode: 404 });
+  return entity;
 }
 
 /**

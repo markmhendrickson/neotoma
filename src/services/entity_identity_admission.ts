@@ -230,11 +230,27 @@ export async function assertIdentityResolutionAvailable(
 }
 
 /** Read original authority through the same retained registry, never a projection. */
-export async function loadEntityIdentityRecord(tx: DbConnection, entityId: string, owner: string) {
+export async function loadEntityIdentityRecord(
+  tx: DbConnection,
+  entityId: string,
+  owner: string,
+  acquiredRow?: (row: Readonly<Record<string, unknown>>) => void
+) {
   const row = (await tx
-    .prepare("SELECT entity_type,identity_record FROM entities WHERE id = ? AND user_id = ?")
+    .prepare(
+      acquiredRow
+        ? "SELECT * FROM entities WHERE id = ? AND user_id = ?"
+        : "SELECT entity_type,identity_record FROM entities WHERE id = ? AND user_id = ?"
+    )
     .get(entityId, owner)) as { entity_type: string; identity_record: unknown } | undefined;
   if (!row) return null;
+  // Internal consumers bind projection and opaque authority to this exact owned
+  // acquisition. The default identity-only loader keeps its existing contract.
+  if (acquiredRow) {
+    if (!Object.hasOwn(row, "identity_record") || row.identity_record === undefined)
+      throw new Error("Original identity metadata acquisition is unavailable");
+    acquiredRow(Object.freeze({ ...row }));
+  }
   const accepted = await loadAcceptedIdentityState(tx, row.entity_type, owner);
   if (row.identity_record == null) {
     if (accepted)

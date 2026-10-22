@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **767**
-- Backend and repo Vitest files: **731**
+- Total automated test files: **769**
+- Backend and repo Vitest files: **733**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 218 |
+| Vitest unit tests | 219 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 233 |
+| Vitest integration tests | 234 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (218):**
+**Files (219):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -272,6 +272,7 @@ flowchart TD
 - `tests/unit/pull_request_schema.test.ts`
 - `tests/unit/read_kernel_entities_import.test.ts`
 - `tests/unit/read_kernel_import.test.ts`
+- `tests/unit/read_kernel_point_import.test.ts`
 - `tests/unit/read_kernel.test.ts`
 - `tests/unit/readiness_probe.test.ts`
 - `tests/unit/recover_json_array_string.test.ts`
@@ -477,7 +478,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (233):**
+**Files (234):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -642,6 +643,7 @@ flowchart TD
 - `tests/integration/process_issues_skill.test.ts`
 - `tests/integration/public_key_registry.test.ts`
 - `tests/integration/read_kernel_entities_parity.test.ts`
+- `tests/integration/read_kernel_point_parity.test.ts`
 - `tests/integration/read_kernel_transport_parity.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
 - `tests/integration/relationship_agent_attribution_api.test.ts`

@@ -1,4 +1,4 @@
-import { invalidQueryFieldOperationError } from "./core/operation_error.js";
+import { OperationError, invalidQueryFieldOperationError } from "./core/operation_error.js";
 import { getFieldProvenance, FieldProvenanceError } from "./services/field_provenance.js";
 import {
   canonicalObservationValidity,
@@ -4934,6 +4934,16 @@ function handleApiError(
   errorCode: string = "DB_QUERY_FAILED",
   logContext?: string
 ): express.Response {
+  if (error instanceof OperationError) {
+    const envelope = error.toErrorEnvelope();
+    return sendError(
+      res,
+      error.statusCode,
+      envelope.error_code,
+      envelope.message,
+      envelope.details
+    );
+  }
   if (error instanceof EntityIdentityContractError)
     return sendError(res, 400, error.code, error.message, { hint: error.hint });
   if (error instanceof Error && error.message.includes("Not authenticated")) {
@@ -5355,10 +5365,11 @@ app.get("/entities/:id", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
+    let userId: string;
     if (principal.kind === "guest") {
-      await resolveGuestScopedEntityAccess(principal, entityId);
+      userId = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
     } else {
-      const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
       const { data: entity, error: entityError } = await db
         .from("entities")
         .select("id, user_id")
@@ -5371,8 +5382,8 @@ app.get("/entities/:id", async (req, res) => {
       }
     }
 
-    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const entityWithProvenance = await getEntityWithProvenance(entityId);
+    const { getCurrentEntityForUser } = await import("./services/entity_queries.js");
+    const entityWithProvenance = await getCurrentEntityForUser(userId, { entity_id: entityId });
 
     if (!entityWithProvenance) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
@@ -5413,7 +5424,7 @@ app.get("/entities/:id/markdown", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const current = await getEntityWithProvenance(entityId);
+    const current = await getEntityWithProvenance(entityId, false, userId);
     if (!current) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
@@ -5470,10 +5481,12 @@ app.get("/entities/:id/html", async (req, res) => {
     const entityId = req.params.id;
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
+    let pointOwner: string;
     if (principal.kind === "guest") {
-      await resolveGuestScopedEntityAccess(principal, entityId);
+      pointOwner = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
     } else {
       const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      pointOwner = userId;
       const { data: entity, error: entityError } = await db
         .from("entities")
         .select("id, user_id, entity_type")
@@ -5486,7 +5499,7 @@ app.get("/entities/:id/html", async (req, res) => {
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const current = await getEntityWithProvenance(entityId);
+    const current = await getEntityWithProvenance(entityId, false, pointOwner);
     if (!current) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }

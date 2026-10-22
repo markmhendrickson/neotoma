@@ -1,3 +1,4 @@
+import type { CurrentEntityInput, EntityWithProvenance } from "../services/entity_queries.js";
 import type { EmbeddedRuntimeContext } from "./runtime_context.js";
 import type {
   ListObservationsInput,
@@ -21,11 +22,16 @@ export type PrivateEntityListInput = PlainOptions &
 
 export type FieldProvenanceInput = z.input<typeof FieldProvenanceRequestSchema>;
 export type InternalReadResult =
+  | EntityWithProvenance
   | ObservationHistoryPage
   | FieldProvenanceResponse
   | PrivateEntityListResult;
 
 const CONVERTED_READS = {
+  async retrieve_entity_snapshot(userId: string, input: unknown) {
+    const { getCurrentEntityForUser } = await import("../services/entity_queries.js");
+    return getCurrentEntityForUser(userId, input);
+  },
   async retrieve_entities(userId: string, input: unknown) {
     const { queryPlainEntitiesForUser } =
       await import("../shared/action_handlers/entity_handlers.js");
@@ -49,6 +55,8 @@ const CONVERTED_READS = {
 };
 
 export interface InternalReadKernel {
+  retrieveCurrentEntity(input: CurrentEntityInput): Promise<EntityWithProvenance>;
+  execute(operation: "retrieve_entity_snapshot", input: unknown): Promise<EntityWithProvenance>;
   retrieveEntities(input: PrivateEntityListInput): Promise<PrivateEntityListResult>;
   listObservations(input: ListObservationsInput): Promise<ObservationHistoryPage>;
   retrieveFieldProvenance(input: FieldProvenanceInput): Promise<FieldProvenanceResponse>;
@@ -82,6 +90,10 @@ export function createInternalReadKernel(options: {
   let disposal: Promise<void> | undefined;
   const active = new Set<Promise<unknown>>();
   function execute(
+    operation: "retrieve_entity_snapshot",
+    input: unknown
+  ): Promise<EntityWithProvenance>;
+  function execute(
     operation: "retrieve_entities",
     input: unknown
   ): Promise<PrivateEntityListResult>;
@@ -105,7 +117,7 @@ export function createInternalReadKernel(options: {
         new OperationError(code, "This operation is not available in the internal read kernel", {
           statusCode: 400,
           details: {
-            hint: "Use only converted typed plain retrieve_entities, list_observations or retrieve_field_provenance operations; other operations remain unavailable.",
+            hint: "Use only converted current JSON retrieve_entity_snapshot, typed plain retrieve_entities, list_observations or retrieve_field_provenance operations; other operations remain unavailable.",
           },
         })
       );
@@ -119,6 +131,9 @@ export function createInternalReadKernel(options: {
     return pending;
   }
   return {
+    retrieveCurrentEntity(input) {
+      return execute("retrieve_entity_snapshot", input);
+    },
     retrieveEntities(input) {
       return execute("retrieve_entities", input);
     },

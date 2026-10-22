@@ -79,6 +79,9 @@
  * inconsistency is repaired.
  */
 
+import { loadEntityIdentityRecord } from "./entity_identity_admission.js";
+import { acquireDatabase } from "../repositories/db/acquisition.js";
+import { fromDbRow } from "../repositories/sqlite/local_db_adapter.js";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import type { Observation } from "../reducers/observation_reducer.js";
@@ -134,16 +137,26 @@ export async function resolveAttachmentTarget(
     // caller's existing contract, not something this layer may tighten:
     // narrowing a previously-unscoped fetch would change which observations
     // the reducer sees, which is the one thing this migration must not do.
-    let entityQuery = db
-      .from("entities")
-      .select(
-        acquisition.identityCandidates
-          ? "id, merged_to_entity_id, entity_type, identity_record"
-          : "id, merged_to_entity_id"
-      )
-      .eq("id", current);
-    if (userId !== null) entityQuery = entityQuery.eq("user_id", userId);
-    const { data: row, error } = await entityQuery.single();
+    let row: any;
+    let error: unknown;
+    if (acquisition.identityCandidates) {
+      if (!userId) throw new Error("Owned attachment authority is unavailable");
+      let acquired: Readonly<Record<string, unknown>> | undefined;
+      await loadEntityIdentityRecord(await acquireDatabase(), current, userId, (raw) => {
+        acquired = raw;
+      });
+      if (acquired) {
+        acquisition.identityCandidates.push({
+          entity_type: acquired.entity_type,
+          identity_record: acquired.identity_record,
+        });
+        row = fromDbRow("entities", acquired);
+      }
+    } else {
+      let entityQuery = db.from("entities").select("id, merged_to_entity_id").eq("id", current);
+      if (userId !== null) entityQuery = entityQuery.eq("user_id", userId);
+      ({ data: row, error } = await entityQuery.single());
+    }
 
     // A missing entity row is not an error here: observations can be fetched
     // for an id with no `entities` row (the CLI recompute path does exactly
@@ -154,10 +167,6 @@ export async function resolveAttachmentTarget(
         throw new Error("Entity attachment acquisition is incomplete");
       return { resolvedEntityId: current, path, truncated: false };
     }
-    acquisition.identityCandidates?.push({
-      entity_type: row.entity_type,
-      identity_record: row.identity_record,
-    });
 
     const next = (row as { merged_to_entity_id?: string | null }).merged_to_entity_id;
     if (!next) {
