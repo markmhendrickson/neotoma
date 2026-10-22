@@ -1,64 +1,114 @@
 {
-  "source_root": ".october-reference/page",
+  "source_root": ".october-reference",
   "files": {
     "N-hero.webp": {
-      "source": "images/tension-trace-r2/N-hero.jpg",
+      "source": "page/images/tension-trace-r2/N-hero.jpg",
       "source_sha256": "8eee3947a65ac16fd41b359e558a6f4839c5c679cd6c8c1dcc0d4b115572476f",
       "used_in": "hero"
     },
     "N-before.webp": {
-      "source": "images/feedback-2026-10-07/N-before.png",
+      "source": "page/images/feedback-2026-10-07/N-before.png",
       "source_sha256": "a5b39ad0bdd3b25856e09ba677b5d9421e56110706e9b5576ec62a1caf5a9d38",
       "used_in": "recall contrast"
     },
     "N-after.webp": {
-      "source": "images/feedback-2026-10-07/N-after.png",
+      "source": "page/images/feedback-2026-10-07/N-after.png",
       "source_sha256": "d05eabe66ed6e6527930245dfd959ab7cb325970dadafa01f52464383eba65ea",
       "used_in": "record contrast"
     },
     "N-capture.webp": {
-      "source": "images/tension-trace-r2/N-capture.jpg",
+      "source": "page/images/tension-trace-r2/N-capture.jpg",
       "source_sha256": "68e222c80789e028f26a34dde5c6f2516bb10a7254dc39b1bebe307e735ee780",
       "used_in": "source step"
     },
-    "N-structure.webp": {
-      "source": "images/tension-trace-r2/N-structure.jpg",
-      "source_sha256": "95b5bd126f1ef9bbbbf26587a6050f7233e8f4c0251e8aca0fd5ef2b7a8e683c",
-      "used_in": "observation step"
-    },
-    "N-change.webp": {
-      "source": "images/tension-trace-r2/N-change.jpg",
-      "source_sha256": "232f91ea4ab30aa24f8965ded511da44acacdce54b7e2fa78b757828c1c2ca9c",
-      "used_in": "entity step"
-    },
-    "N-current.webp": {
-      "source": "images/tension-trace-r2/N-current.jpg",
-      "source_sha256": "4c2aeba330bdbfcb264b6fa78cd4e3e93b2a0cbc1fb86fee81e26da30535ccea",
-      "used_in": "reducer step"
-    },
     "N-basis.webp": {
-      "source": "images/tension-trace-r2/N-basis.jpg",
+      "source": "page/images/tension-trace-r2/N-basis.jpg",
       "source_sha256": "c15eab5ca13db42f5ea398687463f0038a12ca57a75998e3be714920dde925bd",
       "used_in": "snapshot step"
     },
     "instrument-sans-regular.ttf": {
-      "source": "fonts/recovery-2026-10-05/font-2.ttf",
+      "source": "page/fonts/recovery-2026-10-05/font-2.ttf",
       "source_sha256": "01689ad055025ff1891607b077513c9389f73360d471dcffa036e326af179b00",
       "used_in": "body font"
     },
     "instrument-sans-semibold.ttf": {
-      "source": "fonts/recovery-2026-10-05/font-4.ttf",
+      "source": "page/fonts/recovery-2026-10-05/font-4.ttf",
       "source_sha256": "5e39a358a65a72b6b74b56b384bbe17a61d8899d33cc255d49112e6522e3df0d",
       "used_in": "body emphasis"
     },
     "instrument-serif.ttf": {
-      "source": "fonts/recovery-2026-10-05/font-5.ttf",
+      "source": "page/fonts/recovery-2026-10-05/font-5.ttf",
       "source_sha256": "a99e3db50076202713812ed541feeb23ffeebb61db1fa6b1cf48fe590d37ef18",
       "used_in": "display font"
     },
-    "N-self-host.webp": {
-      "source": "images/tension-trace-feedback/N-self-host.jpg",
-      "source_sha256": "0c88b46b9fedf4e9507b4a1e71665c1b027d8b2a18973bcdf5040e2b1ce648d4",
+    "N-observation.webp": {
+      "source": "new/observation-1.png",
+      "source_sha256": "8ffd8e51c3c43243375d6dee24dbcc7502f00be46079075799c0b9556011f305",
+      "generator": "Codex built-in image generation",
+      "generated_on": "2026-10-22",
+      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "brief": {
+        "section": "How a fact becomes current, step 02 Observation",
+        "meaning": "Each extracted fact is stored as its own small record that stays attached to the document it came from.",
+        "scene": "Two source objects lie apart on the table: a tall cream document sheet with navy ruled lines, and a folded powder-blue envelope card. From each source, two or three small cream slips have been cut out and set beside it; each slip carries one short navy bar and one small rust dot, and each slip is tied back to its own source by a single thin navy thread. The slips are clearly separate pieces, neatly spaced, none merged."
+      },
+      "conversion": "cwebp -q 82 -resize 1200 800",
+      "used_in": "observation step"
+    },
+    "N-entity.webp": {
+      "source": "new/entity-2.png",
+      "source_sha256": "5c5a9af72984a32d5b14d26b2a58b68ca4fcf90cb1d0ddf0e302ebaf1b98b69d",
+      "generator": "Codex built-in image generation",
+      "generated_on": "2026-10-22",
+      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "brief": {
+        "section": "How a fact becomes current, step 03 Entity",
+        "meaning": "Slips that share the same identity mark are gathered under one thing; a slip with a different mark goes to a different thing.",
+        "scene": "Five small cream slips, scattered loosely at the left, each with a small rust-orange tab on its top edge; four tabs are the same notched shape and one is a plain square tab in sage green. Thin navy threads lead the four matching slips into one cream folder card on the right that carries the same notched rust tab on its edge. The sage-tabbed slip is threaded to a second, smaller sage folder card set slightly apart."
+      },
+      "conversion": "cwebp -q 82 -resize 1200 800",
+      "used_in": "entity step"
+    },
+    "N-reducer.webp": {
+      "source": "new/reducer-1.png",
+      "source_sha256": "3aa2c186c9294601fe4d36a6a0c2f1ea315ff49f72183519d38d7c5a3f03da18",
+      "generator": "Codex built-in image generation",
+      "generated_on": "2026-10-22",
+      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "brief": {
+        "section": "How a fact becomes current, step 04 Reducer",
+        "meaning": "For each field, a rule picks which recorded value is current; older values stay underneath, nothing is thrown away.",
+        "scene": "A cream record card at the right with three horizontal field rows, each row a short navy bar. To the left of each row sits a small fanned stack of thin cream slips. For each stack, the top slip is slid forward and aligned with its row by a short navy thread, while the slips beneath stay visibly in place. In the middle row the top slip has a rust-orange edge, a newer correction lying over an older slip that remains visible beneath it."
+      },
+      "conversion": "cwebp -q 82 -resize 1200 800",
+      "used_in": "reducer step"
+    },
+    "N-invoice-example.webp": {
+      "source": "new/invoice_example-2.png",
+      "source_sha256": "11b5ba9395c6c8092e266ddb15ffe1bedbb7235ddd111fc3948a0ceead667d83",
+      "generator": "Codex built-in image generation",
+      "generated_on": "2026-10-22",
+      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "brief": {
+        "section": "Synthetic example: one invoice",
+        "meaning": "Two sources disagree about one invoice; both are kept, and one current record shows the value now in force, with a visible correction mark.",
+        "scene": "At the left, a cream invoice-like sheet with a ruled table and a navy header bar; below it, an open powder-blue envelope with a cream letter card half out. Each carries one small highlighted field band: on the sheet the band is short, on the letter card the band is longer, so the two visibly disagree. Thin navy threads from both bands run to a single cream record card on the right. On that card one field row carries a small rust-orange revision flag clipped to its edge, and a second, thinner thread from a small rust correction slip also reaches that row."
+      },
+      "conversion": "cwebp -q 82 -resize 1200 800",
+      "used_in": "synthetic invoice example"
+    },
+    "N-tools.webp": {
+      "source": "new/tools-1.png",
+      "source_sha256": "e3fbe9eca50ea14cef68873751a1ad46588bbc7ae2db1f4dc53d810b8c9982ba",
+      "generator": "Codex built-in image generation",
+      "generated_on": "2026-10-22",
+      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "brief": {
+        "section": "One local service, read by the tools you connect",
+        "meaning": "Several different agent tools write to and read from the same single record kept on one machine.",
+        "scene": "At the centre, one cream record box with a navy band, standing on a low square sage-green base that reads as one local machine. Around it, at even distances, four distinct small cards that stand for different tools, each a different shape and colour (powder-blue rounded card, navy square card with a cream bar, cream folded card, sage tag). Each tool card is joined to the record box by two thin parallel navy threads, one with a small rust bead near the tool and one with a small rust bead near the box, suggesting traffic in both directions. No screens, no logos, no lettering."
+      },
+      "conversion": "cwebp -q 82 -resize 1200 800",
       "used_in": "local service section"
     }
   }

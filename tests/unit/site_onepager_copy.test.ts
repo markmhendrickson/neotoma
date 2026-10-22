@@ -174,13 +174,37 @@ describe("October visual variant", () => {
     const provenance = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8"));
     const renders = Object.values(OCTOBER_RENDERS).filter((render) => render !== null);
     expect(RECORD_RENDERS).toHaveLength(5);
-    expect(OCTOBER_RENDERS.invoiceExample).toBeNull();
-    expect(OCTOBER_RENDERS.localService).toBeNull();
+    expect(
+      Object.fromEntries(
+        Object.entries(OCTOBER_RENDERS).map(([slot, render]) => [slot, render.src])
+      )
+    ).toEqual({
+      hero: "/brand/october/N-hero.webp",
+      before: "/brand/october/N-before.webp",
+      after: "/brand/october/N-after.webp",
+      source: "/brand/october/N-capture.webp",
+      observation: "/brand/october/N-observation.webp",
+      entity: "/brand/october/N-entity.webp",
+      reducer: "/brand/october/N-reducer.webp",
+      snapshot: "/brand/october/N-basis.webp",
+      invoiceExample: "/brand/october/N-invoice-example.webp",
+      localService: "/brand/october/N-tools.webp",
+    });
     for (const render of renders) {
       const name = render.src.split("/").at(-1)!.replace(".webp", "");
       expect(render.alt, name).not.toBe("");
       const info = provenance.files[`${name}.webp`];
       expect(info.source_sha256, name).toMatch(/^[a-f0-9]{64}$/);
+      if (
+        ["N-observation", "N-entity", "N-reducer", "N-invoice-example", "N-tools"].includes(name)
+      ) {
+        expect(info.source, name).toMatch(/^new\/.+\.png$/);
+        expect(info.generator, name).toBe("Codex built-in image generation");
+        expect(info.generated_on, name).toBe("2026-10-22");
+        expect(info.style_references, name).toEqual(["N-hero", "N-capture", "N-basis"]);
+        expect(info.brief.meaning, name).not.toBe("");
+        expect(info.brief.scene, name).not.toBe("");
+      }
       const image = await sharp(join(brand, `${name}.webp`)).metadata();
       expect(image.format, name).toBe("webp");
       expect([image.width, image.height], name).toEqual([render.width, render.height]);

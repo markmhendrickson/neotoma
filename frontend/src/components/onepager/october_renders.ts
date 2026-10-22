@@ -13,12 +13,27 @@ export const OCTOBER_RENDERS = {
   before: render("N-before", "Scattered paper fragments"),
   after: render("N-after", "Paper fragments filed into one record"),
   source: render("N-capture", "Source represented with connected paper records"),
-  observation: render("N-structure", "Observation represented with connected paper records"),
-  entity: render("N-change", "Entity represented with connected paper records"),
-  reducer: render("N-current", "Reducer represented with connected paper records"),
+  observation: render(
+    "N-observation",
+    "A document and envelope each linked to separate fact slips"
+  ),
+  entity: render(
+    "N-entity",
+    "Four rust-tabbed fact cards linked to one folder, and a sage-tabbed card linked to another"
+  ),
+  reducer: render(
+    "N-reducer",
+    "One fact slip selected from each visible stack and linked to a row on a record card"
+  ),
   snapshot: render("N-basis", "Snapshot represented with connected paper records"),
-  invoiceExample: null as Render | null,
-  localService: null as Render | null,
+  invoiceExample: render(
+    "N-invoice-example",
+    "An invoice sheet and a letter linked to one record card with a rust correction tab"
+  ),
+  localService: render(
+    "N-tools",
+    "Four different tool cards connected by paired threads to one record box on a local base"
+  ),
 } as const;
 
 export const RECORD_RENDERS = [
