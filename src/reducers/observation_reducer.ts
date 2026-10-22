@@ -39,8 +39,12 @@ import {
 } from "../services/entity_lifecycle_authority.js";
 import { acquireEntityLifecycleContext } from "../services/entity_lifecycle_storage.js";
 import { getDb } from "../repositories/db/connection.js";
+import {
+  observationIsValidAt,
+  type ObservationValidity,
+} from "../services/observation_validity.js";
 
-export interface Observation {
+export interface Observation extends ObservationValidity {
   entity_lifecycle_kind?: EntityLifecycleKind | null;
   entity_lifecycle_sequence?: number | null;
   entity_lifecycle_target_id?: string | null;
@@ -166,6 +170,8 @@ export function sortObservationsInReducerOrder<T extends Pick<Observation, "obse
 
 export interface SnapshotProjectionOptions {
   includeClearedFields?: boolean;
+  /** Canonical UTC instant; facts only, after complete lifecycle selection. */
+  validAt?: string;
 }
 
 export interface EntitySnapshot {
@@ -220,6 +226,8 @@ export class ObservationReducer {
     const visibility = selectEntityLifecycleVisibility(observations, context);
     if (visibility.hidden) return null;
     observations = visibility.factual_observations as Observation[];
+    if (projection.validAt !== undefined)
+      observations = observations.filter((row) => observationIsValidAt(row, projection.validAt!));
     if (!observations.length) return null; // authority/baseline-only is not factual data
     const sortedObservations = this.sortObservations(observations);
     // Get entity type and user from first observation

@@ -6433,7 +6433,16 @@ paths:
                     world at T": a fact stored after T is excluded even when it
                     describes an earlier moment. Domain date fields on an entity
                     (for example `measured_at` or `date`) are ordinary fields, not a
-                    reducer time axis; native valid-time queries are not supported.
+                    reducer time axis. Use `valid_at` for observation state validity.
+                valid_at:
+                  type: string
+                  format: date-time
+                  description: >-
+                    Select field assertions valid at this RFC3339 instant after
+                    applying at/at_ingested knowledge cutoffs and lifecycle visibility.
+                    The lower bound is inclusive valid_from (or observed_at when null);
+                    valid_to is exclusive and null means open-ended. Lifecycle controls
+                    are never filtered by state validity. Omitted: existing snapshot behavior.
                 at_ingested:
                   type: string
                   description: >-

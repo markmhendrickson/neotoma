@@ -3695,9 +3695,12 @@ export class NeotomaServer {
     // The shared temporal selector alone decides the requested past visibility.
     const entity = await getEntityWithProvenance(
       parsed.entity_id,
-      Boolean(parsed.at || parsed.at_ingested),
+      Boolean(parsed.at || parsed.at_ingested || parsed.valid_at),
       userId,
-      { includeClearedFields: !parsed.at && !parsed.at_ingested && parsed.include_cleared_fields }
+      {
+        includeClearedFields:
+          !parsed.at && !parsed.at_ingested && !parsed.valid_at && parsed.include_cleared_fields,
+      }
     );
 
     if (!entity) {
@@ -3716,14 +3719,14 @@ export class NeotomaServer {
     // satisfy observed_at ≤ at AND created_at ≤ at_ingested. This is the most
     // conservative "knowledge-as-of" view and prevents look-ahead leaks from
     // backfilled/late-arriving observations.
-    if (parsed.at || parsed.at_ingested) {
+    if (parsed.at || parsed.at_ingested || parsed.valid_at) {
       try {
         const historicalResult = await computeEntitySnapshotAtTime(
           entity.entity_id,
           userId,
           parsed.at,
           parsed.at_ingested,
-          { includeClearedFields: parsed.include_cleared_fields }
+          { includeClearedFields: parsed.include_cleared_fields, validAt: parsed.valid_at }
         );
 
         if (!historicalResult) {

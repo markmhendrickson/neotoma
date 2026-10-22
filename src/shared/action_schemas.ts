@@ -3,6 +3,18 @@ import { z } from "zod";
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
 import { REPO_SLUG_FORMAT_MESSAGE, isValidRepoSlug } from "./repo_slug.js";
 import { MAX_QUERY_OFFSET, MAX_SNAPSHOT_PAGE_SIZE } from "../services/entity_query_limits.js";
+import { canonicalValidityInstant } from "../services/observation_validity.js";
+
+const ValidAtSchema = z.string().superRefine((value, context) => {
+  try {
+    canonicalValidityInstant(value, "valid_at");
+  } catch {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "valid_at must be a supported RFC3339 instant",
+    });
+  }
+});
 
 export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
 export const RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE = "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
@@ -46,6 +58,7 @@ export const EntityIdSchema = z.object({
 
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
+  valid_at: ValidAtSchema.optional(),
   include_cleared_fields: z.boolean().optional(),
   /**
    * Observation-time cutoff (ISO 8601). Reconstructs the snapshot from

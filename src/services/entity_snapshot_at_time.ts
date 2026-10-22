@@ -32,6 +32,7 @@ import { resolveAttachmentTarget } from "./attachment_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import { schemaRegistry } from "./schema_registry.js";
 import type { SnapshotProjectionOptions, Observation } from "../reducers/observation_reducer.js";
+import { canonicalValidityInstant } from "./observation_validity.js";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -75,6 +76,12 @@ export async function computeEntitySnapshotAtTime(
   atIngested?: string,
   projection: SnapshotProjectionOptions = {}
 ): Promise<EntitySnapshotAtTimeResult | null> {
+  // Validate before acquisition and preserve fractional precision beyond milliseconds.
+  if (projection.validAt !== undefined)
+    projection = {
+      ...projection,
+      validAt: canonicalValidityInstant(projection.validAt, "valid_at"),
+    };
   // ------------------------------------------------------------------
   // 1. Validate timestamps before touching the DB.
   // ------------------------------------------------------------------
@@ -142,7 +149,7 @@ export async function computeEntitySnapshotAtTime(
   // Opt-in acquisition reads the complete physical owner-scoped set, rather
   // than inferring explicit clears from the cached/default snapshot or a cap.
   let observations: any[] | null;
-  if (projection.includeClearedFields) {
+  if (projection.includeClearedFields || projection.validAt !== undefined) {
     const rows = await (await getDb())
       .prepare("SELECT * FROM observations WHERE entity_id = ? AND user_id = ?")
       .all(resolvedEntityId, userId);
@@ -155,7 +162,7 @@ export async function computeEntitySnapshotAtTime(
       count.count !== rows.length ||
       new Set(rows.map((r) => (r as Record<string, unknown>).id)).size !== rows.length
     ) {
-      throw new Error("Nullable winning projection acquisition is incomplete");
+      throw new Error("Snapshot projection acquisition is incomplete");
     }
     observations = rows.map((raw) => {
       const row = raw as Record<string, any>;
@@ -171,7 +178,7 @@ export async function computeEntitySnapshotAtTime(
         !Number.isFinite(Date.parse(row.observed_at)) ||
         !Number.isFinite(Date.parse(row.created_at))
       ) {
-        throw new Error("Nullable winning projection acquisition is inconsistent");
+        throw new Error("Snapshot projection acquisition is inconsistent");
       }
       return { ...row, fields };
     });
@@ -230,6 +237,8 @@ export async function computeEntitySnapshotAtTime(
     schema_version: obs.schema_version,
     source_id: obs.source_id || "",
     observed_at: obs.observed_at,
+    valid_from: obs.valid_from,
+    valid_to: obs.valid_to,
     specificity_score: obs.specificity_score,
     source_priority: obs.source_priority,
     observation_source: obs.observation_source ?? null,

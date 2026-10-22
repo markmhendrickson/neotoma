@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **746**
-- Backend and repo Vitest files: **710**
+- Total automated test files: **747**
+- Backend and repo Vitest files: **711**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 207 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 226 |
+| Vitest integration tests | 227 |
 | Vitest CLI tests | 88 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -466,7 +466,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (226):**
+**Files (227):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -618,6 +618,7 @@ flowchart TD
 - `tests/integration/observation_insert_sites_routing.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`
 - `tests/integration/observation_source_unspecified_default.test.ts`
+- `tests/integration/observation_validity_query.test.ts`
 - `tests/integration/observation_validity_storage.test.ts`
 - `tests/integration/override_policy_enforcement.test.ts`
 - `tests/integration/payload_compiler.test.ts`

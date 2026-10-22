@@ -57,7 +57,7 @@ function snapshotCutoffDescriptions(specPath: string): { at: string; at_ingested
 function expectAssertionTimeWording(label: string, at: string, atIngested: string) {
   expect(at, `${label}: at`).toMatch(/observed_at/);
   expect(at, `${label}: at`).toMatch(/server clock at write time/);
-  expect(at, `${label}: at`).toMatch(/valid-time queries are not supported/);
+  expect(at, `${label}: at`).toMatch(/Use `valid_at`/);
   expect(at, `${label}: at`).not.toMatch(EVENT_TIME_CLAIM);
   expect(atIngested, `${label}: at_ingested`).toMatch(/created_at/);
   expect(atIngested, `${label}: at_ingested`).toMatch(/not guaranteed to be identical/);
@@ -129,7 +129,7 @@ describe("retrieve_entity_snapshot cutoff wording matches the stamped clocks", (
     expect(line).toMatch(/at_ingested.*created_at/);
     expect(line).toMatch(/both bounds AND/);
     expect(line).toMatch(/measured_at.*ordinary fields/);
-    expect(line).toMatch(/native valid-time queries are not supported/);
+    expect(line).toMatch(/valid_at.*field assertions/);
     expect(line).not.toMatch(EVENT_TIME_CLAIM);
   });
 });

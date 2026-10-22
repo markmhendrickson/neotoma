@@ -130,6 +130,7 @@ export interface Operations {
     format?: string;
     at?: string;
     at_ingested?: string;
+    valid_at?: string;
   }): Promise<unknown>;
 
   /** List observations for provenance / history. */

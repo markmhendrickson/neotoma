@@ -7515,8 +7515,13 @@ export interface operations {
            * @default false
            */
           include_cleared_fields?: boolean;
-          /** @description Observation-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Public `store` and `correct` stamp `observed_at` with the server clock at write time; callers cannot set it. For ordinary writes `at` therefore answers "what had been asserted by T", not "what was true in the world at T": a fact stored after T is excluded even when it describes an earlier moment. Domain date fields on an entity (for example `measured_at` or `date`) are ordinary fields, not a reducer time axis; native valid-time queries are not supported. */
+          /** @description Observation-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `observed_at` ≤ this timestamp. Public `store` and `correct` stamp `observed_at` with the server clock at write time; callers cannot set it. For ordinary writes `at` therefore answers "what had been asserted by T", not "what was true in the world at T": a fact stored after T is excluded even when it describes an earlier moment. Domain date fields on an entity (for example `measured_at` or `date`) are ordinary fields, not a reducer time axis. Use `valid_at` for observation state validity. */
           at?: string;
+          /**
+           * Format: date-time
+           * @description Select field assertions valid at this RFC3339 instant after applying at/at_ingested knowledge cutoffs and lifecycle visibility. The lower bound is inclusive valid_from (or observed_at when null); valid_to is exclusive and null means open-ended. Lifecycle controls are never filtered by state validity. Omitted: existing snapshot behavior.
+           */
+          valid_at?: string;
           /** @description Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from observations whose `created_at` (row-insertion time) ≤ this timestamp. Public `store` and `correct` assign both timestamps during the write, but they are not guaranteed to be identical: assertion stamping and row insertion can occur at different moments. This cutoff excludes any row inserted after T, even if its `observed_at` is earlier. Neither cutoff filters domain date fields. When both `at` and `at_ingested` are supplied, both bounds are applied (AND logic): an observation must satisfy `observed_at ≤ at` AND `created_at ≤ at_ingested`. */
           at_ingested?: string;
           /**

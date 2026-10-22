@@ -401,8 +401,16 @@ of a fact's real-world beginning. Existing rows are retained with null endpoints
 This metadata is independent of `observed_at`, insertion `created_at`, and domain
 event fields. It is available in observation-history responses when present.
 
-Public store/correct validity inputs, native `valid_at` queries, protected
-occurrence lineage/inheritance and exact entity-identity namespaces are not
-implemented by this storage change. Public snapshot cutoffs still have their
-existing assertion/ingestion semantics; callers must not infer valid-time support
-from nullable columns or history metadata.
+`get_entity_snapshot` / `retrieve_entity_snapshot` accept `valid_at`, independently
+of the existing `at` / `at_ingested` assertion/insertion cutoffs. The query acquires
+the complete owned population, applies knowledge cutoffs and lifecycle visibility,
+then selects factual assertions in `[valid_from ?? observed_at, valid_to)` before
+existing field reducers run. Lifecycle controls cannot disappear because their
+own assertion clock lies outside the requested validity interval. Offset-equivalent
+instants compare identically and fractional precision is retained. Omitting
+`valid_at` preserves the existing materialized/current and historical behavior.
+
+Public store/correct validity inputs, protected occurrence lineage/inheritance and
+exact entity-identity namespaces remain separate implementation slices. Storage
+metadata and this point query do not imply protected occurrences or full-series
+historical views.
