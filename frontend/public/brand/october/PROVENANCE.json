@@ -1,0 +1,65 @@
+{
+  "source_root": ".october-reference/page",
+  "files": {
+    "N-hero.webp": {
+      "source": "images/tension-trace-r2/N-hero.jpg",
+      "source_sha256": "8eee3947a65ac16fd41b359e558a6f4839c5c679cd6c8c1dcc0d4b115572476f",
+      "used_in": "hero"
+    },
+    "N-before.webp": {
+      "source": "images/feedback-2026-10-07/N-before.png",
+      "source_sha256": "a5b39ad0bdd3b25856e09ba677b5d9421e56110706e9b5576ec62a1caf5a9d38",
+      "used_in": "recall contrast"
+    },
+    "N-after.webp": {
+      "source": "images/feedback-2026-10-07/N-after.png",
+      "source_sha256": "d05eabe66ed6e6527930245dfd959ab7cb325970dadafa01f52464383eba65ea",
+      "used_in": "record contrast"
+    },
+    "N-capture.webp": {
+      "source": "images/tension-trace-r2/N-capture.jpg",
+      "source_sha256": "68e222c80789e028f26a34dde5c6f2516bb10a7254dc39b1bebe307e735ee780",
+      "used_in": "source step"
+    },
+    "N-structure.webp": {
+      "source": "images/tension-trace-r2/N-structure.jpg",
+      "source_sha256": "95b5bd126f1ef9bbbbf26587a6050f7233e8f4c0251e8aca0fd5ef2b7a8e683c",
+      "used_in": "observation step"
+    },
+    "N-change.webp": {
+      "source": "images/tension-trace-r2/N-change.jpg",
+      "source_sha256": "232f91ea4ab30aa24f8965ded511da44acacdce54b7e2fa78b757828c1c2ca9c",
+      "used_in": "entity step"
+    },
+    "N-current.webp": {
+      "source": "images/tension-trace-r2/N-current.jpg",
+      "source_sha256": "4c2aeba330bdbfcb264b6fa78cd4e3e93b2a0cbc1fb86fee81e26da30535ccea",
+      "used_in": "reducer step"
+    },
+    "N-basis.webp": {
+      "source": "images/tension-trace-r2/N-basis.jpg",
+      "source_sha256": "c15eab5ca13db42f5ea398687463f0038a12ca57a75998e3be714920dde925bd",
+      "used_in": "snapshot step"
+    },
+    "instrument-sans-regular.ttf": {
+      "source": "fonts/recovery-2026-10-05/font-2.ttf",
+      "source_sha256": "01689ad055025ff1891607b077513c9389f73360d471dcffa036e326af179b00",
+      "used_in": "body font"
+    },
+    "instrument-sans-semibold.ttf": {
+      "source": "fonts/recovery-2026-10-05/font-4.ttf",
+      "source_sha256": "5e39a358a65a72b6b74b56b384bbe17a61d8899d33cc255d49112e6522e3df0d",
+      "used_in": "body emphasis"
+    },
+    "instrument-serif.ttf": {
+      "source": "fonts/recovery-2026-10-05/font-5.ttf",
+      "source_sha256": "a99e3db50076202713812ed541feeb23ffeebb61db1fa6b1cf48fe590d37ef18",
+      "used_in": "display font"
+    },
+    "N-self-host.webp": {
+      "source": "images/tension-trace-feedback/N-self-host.jpg",
+      "source_sha256": "0c88b46b9fedf4e9507b4a1e71665c1b027d8b2a18973bcdf5040e2b1ce648d4",
+      "used_in": "local service section"
+    }
+  }
+}

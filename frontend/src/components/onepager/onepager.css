@@ -975,3 +975,372 @@
   background-repeat: no-repeat !important;
   background-attachment: local, local, scroll, scroll !important;
 }
+
+/* October editorial variant. The older plate rules above remain for the standalone plate component. */
+@font-face {
+  font-family: "Instrument Sans Onepager";
+  src: url("/brand/october/instrument-sans-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Sans Onepager";
+  src: url("/brand/october/instrument-sans-semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif Onepager";
+  src: url("/brand/october/instrument-serif.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+.plan {
+  --paper: #faf8f3;
+  --sheet: #faf8f3;
+  --ink: #172b39;
+  --rust: #a14624;
+  --slate: #52616a;
+  --muted: #52616a;
+  --line: #d6d0c4;
+  --band: #f1ece2;
+  --serif: "Instrument Serif Onepager", Georgia, serif;
+  --sans: "Instrument Sans Onepager", system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.55 var(--sans);
+  padding: 0;
+}
+.dark .plan {
+  --paper: #1d272c;
+  --sheet: #1d272c;
+  --ink: #eeeae0;
+  --rust: #e5a17c;
+  --slate: #b7c4ca;
+  --muted: #b7c4ca;
+  --line: #4b5050;
+  --band: #303333;
+}
+.plan-sheet {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(3.5rem, 7vw, 7rem) clamp(1.35rem, 5vw, 5rem);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  box-shadow: none;
+}
+.plan-sheet::before {
+  display: none;
+}
+.plan-hero {
+  padding-top: 0;
+}
+.plan-masthead,
+.plan-install-masthead {
+  max-width: none;
+  margin: 0 0 clamp(2.5rem, 5vw, 4.5rem);
+  padding: 1.5rem 0;
+  border: 0;
+}
+.plan-hero-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: end;
+}
+.plan-hero-aside {
+  padding-bottom: 0.3rem;
+}
+.plan h1 {
+  font-size: clamp(3.2rem, 7vw, 7rem);
+  max-width: 13ch;
+  margin: 0.75rem 0 1rem;
+}
+.plan h2 {
+  font-size: clamp(2.75rem, 4.2vw, 4.9rem);
+  max-width: 18ch;
+}
+.plan h3 {
+  font: 400 clamp(1.55rem, 2.5vw, 2.35rem)/1.12 var(--serif);
+}
+.plan-label,
+.plan-table caption,
+.plan-table thead th {
+  font: 600 0.78rem/1.4 var(--sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rust);
+}
+.plan-lede {
+  font: 400 clamp(1.1rem, 1.55vw, 1.35rem)/1.48 var(--sans);
+  max-width: 43ch;
+  margin-bottom: 1.5rem;
+}
+.plan-meta {
+  font: 0.875rem/1.5 var(--sans);
+  color: var(--muted);
+}
+.plan-actions {
+  gap: 0.8rem 1.2rem;
+  margin-bottom: 0;
+}
+.plan .plan-btn {
+  min-height: 44px;
+  padding: 0.8rem 1.15rem;
+  border: 1px solid var(--ink);
+  font: 600 0.95rem/1.2 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.plan .plan-btn-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.dark .plan .plan-btn-primary {
+  color: var(--paper);
+}
+.plan .plan-btn-primary:hover {
+  background: var(--rust);
+  border-color: var(--rust);
+  color: var(--paper);
+}
+.plan .plan-link {
+  font: 600 0.95rem/1.3 var(--sans);
+  letter-spacing: 0;
+}
+.plan-scene {
+  overflow: hidden;
+  margin: 0;
+  border-radius: 12px;
+  background: var(--band);
+}
+.plan-scene img,
+.plan-contrast img,
+.plan-section-cut img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+.plan-hero-scene {
+  margin-top: clamp(2rem, 4vw, 3.5rem);
+}
+.plan-hero-scene figcaption {
+  padding: 0.9rem 1rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.plan-sheet-head {
+  margin-bottom: 2rem;
+}
+.plan-sheet-head .plan-label {
+  margin-bottom: 0.85rem;
+}
+.plan-body {
+  max-width: 68ch;
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+.plan-contrast {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1rem, 3vw, 3rem);
+  margin: 2.5rem 0 3rem;
+}
+.plan-contrast article {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+.plan-contrast img {
+  aspect-ratio: 3/2;
+  border-radius: 10px;
+  margin: 1.2rem 0 1.5rem;
+}
+.plan-contrast h3 {
+  margin: 0.5rem 0 1.2rem;
+}
+.plan-contrast ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  color: var(--muted);
+}
+.plan-contrast li {
+  position: relative;
+  padding: 0.25rem 0 0.55rem 1.65rem;
+}
+.plan-contrast li::before {
+  position: absolute;
+  left: 0;
+  top: 0.15rem;
+  font: 700 1.15rem var(--sans);
+}
+.plan-contrast article:first-child li::before {
+  content: "×";
+  color: #a14624;
+}
+.plan-contrast article:last-child li::before {
+  content: "✓";
+  color: #276d4e;
+}
+.dark .plan-contrast article:last-child li::before {
+  color: #8cc8a7;
+}
+.plan-table {
+  border: 0;
+  font-size: 0.95rem;
+}
+.plan-table th,
+.plan-table td {
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 0.9rem 1rem;
+}
+.plan-table thead th {
+  background: var(--band);
+  color: var(--ink);
+}
+.plan-table td:first-child {
+  font-family: var(--sans);
+}
+.plan-section-cut {
+  display: block;
+  border: 0;
+  margin: 1.5rem 0 3rem;
+}
+.plan-section-cut li,
+.plan-section-cut li:first-child {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: clamp(1.5rem, 5vw, 5rem);
+  padding: clamp(2.5rem, 5vw, 5rem) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.plan-section-cut li:nth-child(even) .plan-step-copy {
+  order: 2;
+}
+.plan-section-cut li:nth-child(even) img {
+  order: 1;
+}
+.plan-step-copy h3 {
+  font-size: clamp(2.4rem, 4vw, 4.5rem);
+  margin: 0.8rem 0 1rem;
+}
+.plan-section-cut .plan-step-copy p {
+  font-size: 1.1rem;
+  max-width: 36ch;
+}
+.plan-section-cut img {
+  aspect-ratio: 3/2;
+  border-radius: 12px;
+  background: var(--band);
+}
+.plan-example {
+  background: var(--band);
+  padding: clamp(1.5rem, 4vw, 3rem);
+  margin-bottom: 2.5rem;
+  border-radius: 12px;
+}
+.plan-example .plan-legend {
+  margin-top: 1rem;
+}
+.plan-key {
+  border-color: var(--rust);
+}
+.plan-pre {
+  background: var(--band);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.plan-split {
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+}
+.plan-notes li::before {
+  border-color: var(--line);
+}
+.plan-deeper ul {
+  font: 0.95rem/1.5 var(--sans);
+}
+.plan-footer {
+  border-color: var(--line);
+  justify-content: space-between;
+}
+.plan-install {
+  --background: 40 33% 97%;
+  --foreground: 204 41% 16%;
+  --card: 40 33% 97%;
+  --card-foreground: 204 41% 16%;
+  --primary: 204 41% 16%;
+  --primary-foreground: 40 33% 97%;
+  --secondary: 39 24% 91%;
+  --secondary-foreground: 204 41% 16%;
+  --muted: 39 24% 91%;
+  --muted-foreground: 203 13% 37%;
+  --accent: 39 24% 91%;
+  --accent-foreground: 204 41% 16%;
+  --border: 39 11% 80%;
+  --input: 39 11% 80%;
+  --ring: 19 64% 39%;
+  --radius: 0.6rem;
+}
+.dark .plan-install {
+  --background: 201 21% 14%;
+  --foreground: 44 29% 91%;
+  --card: 201 21% 14%;
+  --card-foreground: 44 29% 91%;
+  --primary: 44 29% 91%;
+  --primary-foreground: 201 21% 14%;
+  --secondary: 45 3% 19%;
+  --secondary-foreground: 44 29% 91%;
+  --muted: 45 3% 19%;
+  --muted-foreground: 198 12% 75%;
+  --accent: 45 3% 19%;
+  --accent-foreground: 44 29% 91%;
+  --border: 180 3% 30%;
+  --input: 180 3% 30%;
+  --ring: 22 66% 69%;
+}
+.plan-install {
+  padding: 0 clamp(1.35rem, 5vw, 5rem) 4rem;
+}
+.plan-install-masthead {
+  max-width: 1240px;
+  margin-inline: auto;
+}
+.plan-install-sheet {
+  max-width: 1240px;
+  padding: 0;
+}
+.plan-install-sheet [class*="rounded"] {
+  border-radius: 0.6rem;
+}
+.plan-install-sheet .code-block-palette,
+.plan-install-sheet pre {
+  background-color: var(--band) !important;
+}
+@media (max-width: 760px) {
+  .plan-hero-copy,
+  .plan-contrast,
+  .plan-section-cut li,
+  .plan-section-cut li:first-child,
+  .plan-split {
+    grid-template-columns: 1fr;
+  }
+  .plan-section-cut li:nth-child(even) .plan-step-copy,
+  .plan-section-cut li:nth-child(even) img {
+    order: initial;
+  }
+  .plan h1 {
+    font-size: clamp(3.2rem, 11vw, 5rem);
+  }
+  .plan-legend {
+    grid-template-columns: 1fr;
+  }
+  .plan-install-sheet {
+    padding: 0;
+  }
+}

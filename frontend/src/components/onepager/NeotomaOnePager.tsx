@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
-import { PlanTitleBlock, SolidLockup } from "./NeotomaLogos";
+import { SolidLockup } from "./NeotomaLogos";
 import { ServicePlan } from "./onepager_figures";
-import { RecordPlate } from "./onepager_plate";
 import {
   CLI_TRANSCRIPT,
   DEEPER_MATERIAL,
@@ -20,16 +19,7 @@ import {
 } from "./onepager_copy";
 import "./onepager.css";
 
-const SHEETS = 7;
-
-function TitleBlock({ n, title }: { n: number; title: string }) {
-  return (
-    <PlanTitleBlock
-      sheet={`${String(n).padStart(2, "0")} / ${String(SHEETS).padStart(2, "0")}`}
-      title={title}
-    />
-  );
-}
+const RECORD_IMAGES = ["capture", "structure", "change", "current", "basis"] as const;
 
 function SheetHead({ id, mark, title }: { id: string; mark: string; title: string }) {
   return (
@@ -44,7 +34,6 @@ export function NeotomaOnePager() {
   return (
     <div>
       <main className="plan" id="top">
-        {/* Sheet 01 */}
         <section className="plan-sheet plan-hero" aria-labelledby="s1">
           <div className="plan-masthead">
             <SolidLockup />
@@ -52,64 +41,61 @@ export function NeotomaOnePager() {
               GitHub
             </a>
           </div>
-          <p className="plan-label">Neotoma · the system of record for AI agents</p>
-          <h1 id="s1">A record, not recall.</h1>
-          <p className="plan-lede">
-            Neotoma is the system of record for AI agents. Without one, an agent works from whatever
-            it happens to recall: part of the last session, a note its tool saved, or nothing. With
-            one, it reads what was stored, from which source, and what is current now, so the
-            agents you connect can defer to one answer.
-          </p>
-          <p className="plan-meta">
-            Open source (MIT) · local-first · MCP server, REST API and CLI
-          </p>
-          <div className="plan-actions">
-            <Link
-              to="/install"
-              className="plan-btn plan-btn-primary"
-              onClick={() => sendCtaClick("hero_install")}
-            >
-              Install
-            </Link>
-            <a
-              href={NEOTOMA_GITHUB_REPO}
-              className="plan-btn"
-              onClick={() => sendCtaClick("view_repo")}
-            >
-              View on GitHub
-            </a>
-            <a
-              href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/architecture/architecture.md`}
-              className="plan-link"
-            >
-              Read the architecture
-            </a>
+          <div className="plan-hero-copy">
+            <div>
+              <p className="plan-label">Neotoma · the system of record for AI agents</p>
+              <h1 id="s1">A record, not recall.</h1>
+              <p className="plan-meta">
+                Open source (MIT) · local-first · MCP server, REST API and CLI
+              </p>
+            </div>
+            <div className="plan-hero-aside">
+              <p className="plan-lede">
+                Neotoma is the system of record for AI agents. Without one, an agent works from
+                whatever it happens to recall: part of the last session, a note its tool saved, or
+                nothing. With one, it reads what was stored, from which source, and what is current
+                now, so the agents you connect can defer to one answer.
+              </p>
+              <div className="plan-actions">
+                <Link
+                  to="/install"
+                  className="plan-btn plan-btn-primary"
+                  onClick={() => sendCtaClick("hero_install")}
+                >
+                  Install
+                </Link>
+                <a
+                  href={NEOTOMA_GITHUB_REPO}
+                  className="plan-btn"
+                  onClick={() => sendCtaClick("view_repo")}
+                >
+                  View on GitHub
+                </a>
+                <a
+                  href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/architecture/architecture.md`}
+                  className="plan-link"
+                >
+                  Read the architecture
+                </a>
+              </div>
+            </div>
           </div>
-
-          <figure className="plan-figure">
-            <RecordPlate />
-            <figcaption>
-              <ol className="plan-legend">
-                {FIGURE_LEGEND.map((item, i) => (
-                  <li key={item}>
-                    <span className="plan-key" aria-hidden="true">
-                      {i + 1}
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ol>
-              <p className="plan-note">{PLATE_CAPTION}</p>
-            </figcaption>
+          <figure className="plan-scene plan-hero-scene">
+            <img
+              src="/brand/october/N-hero.webp"
+              width="1536"
+              height="1024"
+              alt="Paper source cards linked to a current record card"
+              fetchPriority="high"
+            />
+            <figcaption>Sources, observations and a current record.</figcaption>
           </figure>
-          <TitleBlock n={1} title="TITLE · RECORD PLAN" />
         </section>
 
-        {/* Sheet 02 */}
         <section className="plan-sheet" aria-labelledby="s2">
           <SheetHead
             id="s2"
-            mark="Sheet 02 · Schedule"
+            mark="01 · Compare"
             title="Recall and record answer different questions"
           />
           <p className="plan-body">
@@ -118,6 +104,40 @@ export function NeotomaOnePager() {
             back to the evidence for each field. The two overlap, and a product can cover more than
             one.
           </p>
+          <div className="plan-contrast">
+            <article>
+              <img
+                src="/brand/october/N-before.webp"
+                width="1200"
+                height="800"
+                loading="lazy"
+                alt="Scattered paper fragments"
+              />
+              <p className="plan-label">Without one</p>
+              <h3>What an agent happens to recall</h3>
+              <ul>
+                {RECALL_VS_RECORD.map((row) => (
+                  <li key={row.question}>{row.recall}</li>
+                ))}
+              </ul>
+            </article>
+            <article>
+              <img
+                src="/brand/october/N-after.webp"
+                width="1200"
+                height="800"
+                loading="lazy"
+                alt="Paper fragments filed into one record"
+              />
+              <p className="plan-label">With one</p>
+              <h3>The current record</h3>
+              <ul>
+                {RECALL_VS_RECORD.map((row) => (
+                  <li key={row.question}>{row.record}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
           <div className="plan-table-wrap">
             <table className="plan-table">
               <caption className="plan-sr">Recall compared with a record</caption>
@@ -143,43 +163,61 @@ export function NeotomaOnePager() {
               </tbody>
             </table>
           </div>
-          <TitleBlock n={2} title="SCHEDULE · RECALL AND RECORD" />
         </section>
 
-        {/* Sheet 03 */}
         <section className="plan-sheet" aria-labelledby="s3">
-          <SheetHead id="s3" mark="Sheet 03 · Section A-A" title="How a fact becomes current" />
+          <SheetHead id="s3" mark="02 · Follow a record" title="How a fact becomes current" />
           <ol className="plan-section-cut">
             {PIPELINE.map((step, i) => (
               <li key={step.name}>
-                <span className="plan-key" aria-hidden="true">
-                  {i + 1}
-                </span>
-                <h3>{step.name}</h3>
-                <p>{step.text}</p>
+                <div className="plan-step-copy">
+                  <span className="plan-label">Step {String(i + 1).padStart(2, "0")}</span>
+                  <h3>{step.name}</h3>
+                  <p>{step.text}</p>
+                </div>
+                <img
+                  src={`/brand/october/N-${RECORD_IMAGES[i]}.webp`}
+                  width="1200"
+                  height="800"
+                  loading="lazy"
+                  alt={`${step.name} represented with connected paper records`}
+                />
               </li>
             ))}
           </ol>
+          <aside className="plan-example" aria-label="Synthetic invoice example">
+            <p className="plan-label">Synthetic example · one invoice</p>
+            <ol className="plan-legend">
+              {FIGURE_LEGEND.map((item, i) => (
+                <li key={item}>
+                  <span className="plan-key" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="plan-note">{PLATE_CAPTION}</p>
+          </aside>
           <p className="plan-body">
             A correction is one more observation. It does not edit the earlier one, so the original
             value is still listed and every current field names the observation that set it. The
-            transcript below illustrates the invoice from sheet 01 plus one correction. The commands
-            start with <code>neotoma dev</code> because a plain npm install points the CLI at the
-            production profile, which needs a token. Output is reformatted from the CLI&apos;s JSON
-            to fit the page. Store observation ids differ between installs; yours will not match
-            these.
+            transcript below illustrates the invoice from the example above plus one correction. The
+            commands start with <code>neotoma dev</code> because a plain npm install points the CLI
+            at the production profile, which needs a token. Output is reformatted from the
+            CLI&apos;s JSON to fit the page. Store observation ids differ between installs; yours
+            will not match these.
           </p>
           <pre className="plan-pre" tabIndex={0} aria-label="CLI transcript">
             <code>{CLI_TRANSCRIPT}</code>
           </pre>
-          <TitleBlock n={3} title="SECTION A-A · CURRENT FROM OBSERVATIONS" />
         </section>
 
         {/* Sheet 04 */}
         <section className="plan-sheet" aria-labelledby="s4">
           <SheetHead
             id="s4"
-            mark="Sheet 04 · Schedule of connections"
+            mark="03 · Connect"
             title="One local service, read by the tools you connect"
           />
           <div className="plan-split">
@@ -188,10 +226,20 @@ export function NeotomaOnePager() {
             </figure>
             <p className="plan-body">
               Neotoma runs as a local service. Agents reach it through an MCP server, a REST API or
-              the CLI, and you inspect it in a bundled web app. Agents connected to the same MCP entry
-              read and write the same record.
+              the CLI, and you inspect it in a bundled web app. Agents connected to the same MCP
+              entry read and write the same record.
             </p>
           </div>
+          <figure className="plan-scene plan-local-scene">
+            <img
+              src="/brand/october/N-self-host.webp"
+              width="1200"
+              height="800"
+              loading="lazy"
+              alt="Local server connected to a computer"
+            />
+            <figcaption>Run the service locally and connect the tools you use.</figcaption>
+          </figure>
           <div className="plan-table-wrap">
             <table className="plan-table plan-table-hosts">
               <caption>Hosts with a one-command setup</caption>
@@ -224,18 +272,17 @@ export function NeotomaOnePager() {
             </a>{" "}
             for each guide.
           </p>
-          <TitleBlock n={4} title="SCHEDULE OF CONNECTIONS" />
         </section>
 
         {/* Sheet 05 */}
         <section className="plan-sheet" aria-labelledby="s5">
-          <SheetHead id="s5" mark="Sheet 05 · Install" title="Install in a few minutes" />
+          <SheetHead id="s5" mark="04 · Install" title="Install in a few minutes" />
           <pre className="plan-pre" tabIndex={0} aria-label="Install commands">
             <code>{INSTALL_COMMANDS}</code>
           </pre>
           <p className="plan-small plan-install-note">
             Using another host? Swap <code>claude-code</code> for the tool name in the setup column
-            of the sheet 04 table. To print the MCP entry for another client, run{" "}
+            of the connection table above. To print the MCP entry for another client, run{" "}
             <code>neotoma mcp config</code> in a terminal; it asks which one.
           </p>
           <div className="plan-actions">
@@ -250,16 +297,11 @@ export function NeotomaOnePager() {
               Documentation
             </a>
           </div>
-          <TitleBlock n={5} title="INSTALL" />
         </section>
 
         {/* Sheet 06 */}
         <section className="plan-sheet" aria-labelledby="s6">
-          <SheetHead
-            id="s6"
-            mark="Sheet 06 · General notes"
-            title="What this drawing does not show"
-          />
+          <SheetHead id="s6" mark="05 · Limits" title="What to expect, and what is not built yet" />
           <p className="plan-label">What to expect</p>
           <ol className="plan-notes">
             {EXPECTATIONS.map((note) => (
@@ -280,18 +322,16 @@ export function NeotomaOnePager() {
           </ol>
           <p className="plan-body plan-small plan-scope">
             {SCOPE_SENTENCE} Known defects and edge cases are listed in{" "}
-            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/known_limitations.md`}>known limitations</a>.
+            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/known_limitations.md`}>
+              known limitations
+            </a>
+            .
           </p>
-          <TitleBlock n={6} title="GENERAL NOTES · LIMITS" />
         </section>
 
         {/* Sheet 07 */}
         <section className="plan-sheet" aria-labelledby="s7">
-          <SheetHead
-            id="s7"
-            mark="Sheet 07 · Deeper material"
-            title="Everything else lives on GitHub"
-          />
+          <SheetHead id="s7" mark="06 · Deeper material" title="Everything else lives on GitHub" />
           <p className="plan-body">
             This page is the whole site. Documentation, the architecture, integration guides and the
             changelog are kept in the repository, next to the code they describe.
@@ -322,7 +362,6 @@ export function NeotomaOnePager() {
               <a href="/privacy">Privacy</a> · <a href="/terms">Terms of use</a>
             </p>
           </footer>
-          <TitleBlock n={7} title="DEEPER MATERIAL · GITHUB" />
         </section>
       </main>
     </div>

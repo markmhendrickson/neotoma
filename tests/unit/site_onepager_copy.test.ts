@@ -157,6 +157,28 @@ describe("accepted Neotoma logo", () => {
   });
 });
 
+describe("October visual variant", () => {
+  it("uses the accepted gem lockup and maps each local render to a developer explanation", async () => {
+    const page = files[0];
+    const brand = join(root, "frontend", "public", "brand", "october");
+    const provenance = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8"));
+    for (const name of [
+      "N-hero", "N-before", "N-after", "N-capture", "N-structure", "N-change",
+      "N-current", "N-basis", "N-self-host",
+    ]) {
+      expect(page, name).toContain(`${name}.webp`);
+      const info = provenance.files[`${name}.webp`];
+      expect(info.source_sha256, name).toMatch(/^[a-f0-9]{64}$/);
+      const image = await sharp(join(brand, `${name}.webp`)).metadata();
+      expect(image.format, name).toBe("webp");
+      expect(image.width, name).toBeLessThanOrEqual(1536);
+    }
+    expect(page).toContain("<SolidLockup />");
+    expect(page).not.toContain("<TitleBlock");
+    expect(page).not.toMatch(/N-(cloud|managed)/i);
+  });
+});
+
 describe("review fixes (install path, accessibility, wording)", () => {
   const read = (rel: string) => readFileSync(join(root, rel), "utf-8");
   const copy = files[1];
@@ -167,7 +189,7 @@ describe("review fixes (install path, accessibility, wording)", () => {
     const block = /INSTALL_COMMANDS = `([^`]*)`/.exec(copy)![1];
     expect(block).toContain("neotoma setup --tool claude-code --yes");
     expect(block).not.toMatch(/[<>|]/);
-    expect(page).toContain("sheet 04 table");
+    expect(page).toContain("connection table above");
   });
 
   it("/install leads with the same command block, then the agent prompt, and has no human evaluate callout", () => {
@@ -331,13 +353,12 @@ describe("/install polish", () => {
     expect(css).toMatch(/\.plan-install-commands pre \{[^}]*white-space: pre !important;/);
   });
 
-  it("gives the label chip a visible dot and the code blocks the drawing palette in both themes", () => {
+  it("gives the label chip a visible dot and the code blocks the editorial palette in both themes", () => {
     expect(css).toMatch(
       /span\.rounded-full\[class\*="emerald"\] \{\s*background-color: var\(--rust\) !important;/
     );
-    expect(css).toMatch(
-      /\.plan-install-sheet \.code-block-palette \{[^}]*background-image: none !important;[^}]*var\(--paper\)|\.plan-install-sheet \.code-block-palette \{[^}]*var\(--paper\) !important;[^}]*background-image: none !important;/
-    );
+    expect(css).toMatch(/\.plan-install-sheet \.code-block-palette \{[^}]*background: var\(--paper\) !important;/);
+    expect(css).toMatch(/\.plan-install-sheet \.code-block-palette,[\s\S]*?background-color: var\(--band\) !important;/);
   });
 
   it("has no stale 280 px drafting-logo comment", () => {
@@ -366,7 +387,7 @@ describe("/install polish", () => {
 
     it("does not attribute the illustrative transcript to a release, and says ids vary", () => {
       expect(page2).not.toContain("published npm package (0.25.0) and on main");
-      expect(page2).toContain("transcript below illustrates the invoice from sheet 01");
+      expect(page2).toContain("transcript below illustrates the invoice from the example above");
       expect(page2).toContain("Store observation ids differ");
     });
 
@@ -780,7 +801,9 @@ describe("sheet 01 plate (FIG. A-1)", () => {
 
   it("keeps the four legend items word for word and adds item 5 with the MCP-only, self-reported attribution limit", () => {
     const page = files[0];
-    expect(page).toContain("<RecordPlate />");
+    expect(page).not.toContain("<RecordPlate />");
+    expect(page).toContain("FIGURE_LEGEND.map");
+    expect(page).toContain("N-hero.webp");
     expect(page).not.toContain("RecordPlan");
     expect(files[2]).not.toContain("RecordPlan");
     expect(page).toContain("FIGURE_LEGEND.map");
