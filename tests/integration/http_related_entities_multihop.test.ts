@@ -126,11 +126,11 @@ describe("HTTP /retrieve_related_entities multi-hop traversal", () => {
     expect(ids.has(a)).toBe(false);
   });
 
-  it("HTTP returns a bounded hub and an explicit incomplete-result signal", async () => {
+  it("HTTP default returns a bounded hub and an explicit incomplete-result signal", async () => {
     const response = await fetch(`${API_BASE}/retrieve_related_entities`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entity_id: hub, direction: "outbound", limit: 50 }),
+      body: JSON.stringify({ entity_id: hub, direction: "outbound" }),
     });
     expect(response.status).toBe(200);
     const result = (await response.json()) as {
@@ -147,5 +147,20 @@ describe("HTTP /retrieve_related_entities multi-hop traversal", () => {
     expect(result.limit).toBe(50);
     expect(result.matched_entity_count).toBe(50);
     expect(result.truncation_hint).toContain("limit");
+  });
+
+  it("HTTP returns the complete hub when limit is raised", async () => {
+    const response = await fetch(`${API_BASE}/retrieve_related_entities`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_id: hub, direction: "outbound", limit: 52 }),
+    });
+    expect(response.status).toBe(200);
+    const result = await response.json() as {
+      relationships: unknown[]; entities: unknown[]; truncated: boolean;
+    };
+    expect(result.relationships).toHaveLength(52);
+    expect(result.entities).toHaveLength(52);
+    expect(result.truncated).toBe(false);
   });
 });
