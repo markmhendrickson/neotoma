@@ -56,6 +56,45 @@ async function currentValue() {
 }
 
 describe("embedded runtime context foundation", () => {
+  it("captures identity admission policy from each explicit context despite conflicting host policy", async () => {
+    const { captureEntityIdOwnerScopePolicy, entityIdTenantSalt } = await import(
+      "../../src/services/entity_resolution.js"
+    );
+    const unscoped = await fixture("identity-unscoped");
+    const scoped = new EmbeddedRuntimeContext({
+      legacyIdentityPolicy: { tenantScopedEntityIds: true },
+      attributionPolicy: { anonymous_writes: "allow" },
+      database: unscoped.database,
+      configuration: unscoped.context.configuration,
+      adapters: {},
+      databaseOwnership: "caller",
+    });
+    vi.stubEnv("NEOTOMA_TENANT_SCOPED_ENTITY_IDS", "true");
+    try {
+      await Promise.all([
+        unscoped.context.run(async () => {
+          await Promise.resolve();
+          expect(captureEntityIdOwnerScopePolicy()).toEqual({ tenantScopedEntityIds: false });
+          expect(entityIdTenantSalt("synthetic-owner")).toBeUndefined();
+        }),
+        scoped.run(async () => {
+          await Promise.resolve();
+          expect(captureEntityIdOwnerScopePolicy()).toEqual({ tenantScopedEntityIds: true });
+          expect(entityIdTenantSalt("synthetic-owner")).toBe("synthetic-owner");
+        }),
+      ]);
+      vi.stubEnv("NEOTOMA_TENANT_SCOPED_ENTITY_IDS", "false");
+      await scoped.run(() => {
+        expect(captureEntityIdOwnerScopePolicy()).toEqual({ tenantScopedEntityIds: true });
+        expect(entityIdTenantSalt("synthetic-owner")).toBe("synthetic-owner");
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await scoped.dispose();
+      await unscoped.context.dispose();
+    }
+  });
+
   it("builds a pure configuration/context despite poisoned host config and creates no files", () => {
     const temporary = mkdtempSync(join(tmpdir(), "neotoma-context-import-"));
     try {
