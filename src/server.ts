@@ -8311,6 +8311,7 @@ export class NeotomaServer {
         userId
       ));
     } catch (schemaErr) {
+      if (schemaErr instanceof EntityIdentityContractError) throw schemaErr;
       if (schemaErr instanceof CorrectionSchemaNotFoundError) {
         throw new McpError(ErrorCode.InvalidParams, schemaErr.message);
       }
@@ -8381,6 +8382,7 @@ export class NeotomaServer {
         })
       );
     } catch (corrErr) {
+      if (corrErr instanceof EntityIdentityContractError) throw corrErr;
       const { ObservationValidityError } = await import("./services/observation_validity.js");
       if (corrErr instanceof ObservationValidityError)
         throw new McpError(ErrorCode.InvalidParams, corrErr.message, corrErr.toErrorEnvelope());
@@ -8645,6 +8647,7 @@ export class NeotomaServer {
         merge_reason: parsed.merge_reason,
       });
     } catch (err) {
+      if (err instanceof EntityIdentityContractError) throw err;
       if (err instanceof EntityNotFoundError) {
         throw new McpError(ErrorCode.InvalidParams, err.message);
       }
@@ -8702,6 +8705,7 @@ export class NeotomaServer {
         reason: parsed.reason,
       });
     } catch (err) {
+      if (err instanceof EntityIdentityContractError) throw err;
       if (
         err instanceof EntityNotFoundError ||
         err instanceof EntityAlreadyMergedError ||

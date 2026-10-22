@@ -179,12 +179,42 @@ export async function loadAcceptedIdentityState(
   });
 }
 
+/** Refuse mutation of an owned physical target before replay or write effects.
+ * Missing/foreign targets are left to each operation's existing ownership errors.
+ */
+export async function assertOwnedEntityIdentityAvailable(
+  database: DbConnection,
+  entityId: string,
+  ownerId: string
+): Promise<void> {
+  const row = (await database
+    .prepare("SELECT entity_type,identity_record FROM entities WHERE id = ? AND user_id = ?")
+    .get(entityId, ownerId)) as { entity_type: string; identity_record: unknown } | undefined;
+  if (row) {
+    if (!Object.hasOwn(row, "identity_record"))
+      throw new EntityIdentityContractError("Physical original identity metadata is unavailable.");
+    await assertIdentityResolutionAvailable(
+      database,
+      row.entity_type,
+      ownerId,
+      row.identity_record
+    );
+  }
+}
+
 /** Inactive admission is a reservation, never permission to use legacy folding. */
 export async function assertIdentityResolutionAvailable(
   tx: DbConnection,
   entityType: string,
-  userId?: string | null
+  userId?: string | null,
+  originalIdentityRecord?: unknown
 ): Promise<void> {
+  // Presence comes from the SAME physical entity acquisition as the payload.
+  // Original exact identity is reserved, never positive consumer permission.
+  if (originalIdentityRecord != null)
+    throw new EntityIdentityContractError(
+      "Exact identity consumer activation is unavailable; legacy identity fallback is unavailable."
+    );
   const accepted = await loadAcceptedIdentityState(tx, entityType, userId);
   const ownerlessReservation = !userId
     ? ((await tx

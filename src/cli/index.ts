@@ -17091,7 +17091,16 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      if (opts.operation === "registerSchema" || opts.operation === "retrieveEntityByIdentifier")
+      if (
+        [
+          "registerSchema",
+          "retrieveEntityByIdentifier",
+          "mergeEntities",
+          "splitEntity",
+          "correct",
+          "correctTransaction",
+        ].includes(opts.operation)
+      )
         throw cliApiError(error);
       throw new Error("Request failed: " + formatRequestError(error));
     }

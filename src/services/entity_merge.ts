@@ -24,8 +24,8 @@
  */
 
 import crypto from "crypto";
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import { getDb } from "../repositories/db/connection.js";
-import { db } from "../db.js";
 import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 export interface MergeEntitiesParams {
@@ -47,19 +47,21 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
 
   // --- Pre-mutation validation (outside transaction — throws typed errors) ---
 
-  const { data: fromEntity } = await db
-    .from("entities")
-    .select("id, merged_to_entity_id, entity_type")
-    .eq("id", fromEntityId)
-    .eq("user_id", userId)
-    .single();
-
-  const { data: toEntity } = await db
-    .from("entities")
-    .select("id, merged_to_entity_id, entity_type")
-    .eq("id", toEntityId)
-    .eq("user_id", userId)
-    .single();
+  const sqliteDb = await getDb();
+  // Preserve physical identity metadata alongside the owned rows. The public
+  // adapter intentionally strips identity_record, so it cannot certify this
+  // mutation boundary.
+  type OwnedEntity = {
+    id: string;
+    merged_to_entity_id: string | null;
+    entity_type: string;
+    identity_record: unknown;
+  };
+  const owned = sqliteDb.prepare(
+    "SELECT id,merged_to_entity_id,entity_type,identity_record FROM entities WHERE id = ? AND user_id = ?"
+  );
+  const fromEntity = (await owned.get(fromEntityId, userId)) as OwnedEntity | undefined;
+  const toEntity = (await owned.get(toEntityId, userId)) as OwnedEntity | undefined;
 
   if (!fromEntity || !toEntity) {
     throw new EntityNotFoundError("Entity not found");
@@ -73,6 +75,19 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     throw new EntityAlreadyMergedError("Target entity already merged");
   }
 
+  await assertIdentityResolutionAvailable(
+    sqliteDb,
+    fromEntity.entity_type,
+    userId,
+    fromEntity.identity_record
+  );
+  await assertIdentityResolutionAvailable(
+    sqliteDb,
+    toEntity.entity_type,
+    userId,
+    toEntity.identity_record
+  );
+
   // A key thumbprint may be pinned by agent_grants under one owner only.
   // Merging moves the source's observations (and any match_thumbprint they
   // carry) onto the target, so both sides must hold only pins no other
@@ -85,7 +100,6 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
 
   // --- Atomic mutation sequence ---
 
-  const sqliteDb = await getDb();
   const merged_at = new Date().toISOString();
 
   const result = await sqliteDb.transaction(

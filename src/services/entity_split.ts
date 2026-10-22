@@ -17,6 +17,11 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { getDb } from "../repositories/db/connection.js";
+import {
+  assertIdentityResolutionAvailable,
+  assertOwnedEntityIdentityAvailable,
+} from "./entity_identity_admission.js";
 import {
   hasEntityLifecycleAuthority,
   type LifecycleObservation,
@@ -193,6 +198,11 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   const { sourceEntityId, userId, predicate, newEntity, idempotencyKey, reason, splitBy } = params;
 
   const canonicalPredicate = canonicalizePredicate(predicate);
+  const identityDatabase = await getDb();
+  await assertOwnedEntityIdentityAvailable(identityDatabase, sourceEntityId, userId);
+  await assertIdentityResolutionAvailable(identityDatabase, newEntity.entity_type, userId);
+  if (newEntity.target_entity_id)
+    await assertOwnedEntityIdentityAvailable(identityDatabase, newEntity.target_entity_id, userId);
 
   // Idempotency: replay same (user_id, idempotency_key) with same predicate ⇒
   // return the original split. Different predicate ⇒ IdempotencyMismatchError.
@@ -214,6 +224,10 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
           "Provide a new idempotency_key for a new split, or re-send the original predicate."
       );
     }
+    // Validate the stored receipt's physical targets as well as this request;
+    // a changed request cannot disguise a reserved target in old split evidence.
+    for (const id of [existingSplit.source_entity_id, existingSplit.new_entity_id])
+      await assertOwnedEntityIdentityAvailable(identityDatabase, id as string, userId);
     return {
       split_id: (existingSplit as { id: string }).id,
       source_entity_id: (existingSplit as { source_entity_id: string }).source_entity_id,
@@ -262,11 +276,11 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   // regardless of who owned it — this entrance was flagged as unreproduced
   // during the entity-resolution security review and closed here with the
   // same guard used at every other write entrance.
-  const { data: targetEntityRow } = await db
-    .from("entities")
-    .select("user_id")
-    .eq("id", newEntityId)
-    .maybeSingle();
+  const targetEntityRow = (await identityDatabase
+    .prepare("SELECT user_id,entity_type,identity_record FROM entities WHERE id = ?")
+    .get(newEntityId)) as
+    | { user_id: string | null; entity_type: string; identity_record: unknown }
+    | undefined;
   if (targetEntityRow) {
     assertNoOwnerConflict({
       entityId: newEntityId,
@@ -275,6 +289,14 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
       writerUserId: userId,
     });
   }
+
+  if (targetEntityRow)
+    await assertIdentityResolutionAvailable(
+      identityDatabase,
+      targetEntityRow.entity_type,
+      userId,
+      targetEntityRow.identity_record
+    );
 
   // Select candidate observations and filter by predicate in-process. Doing
   // the filter in code keeps the predicate surface small and DB-agnostic

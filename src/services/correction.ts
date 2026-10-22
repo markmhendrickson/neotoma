@@ -6,6 +6,10 @@
  * layer boundaries.
  */
 
+import {
+  assertIdentityResolutionAvailable,
+  assertOwnedEntityIdentityAvailable,
+} from "./entity_identity_admission.js";
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
@@ -194,6 +198,9 @@ export async function findCommittedCorrectionReplay(
 ): Promise<CorrectionResult | null> {
   const existing = await existingCorrectionForKey(params);
   if (!existing) return null;
+  const identityDatabase = await getDb();
+  await assertOwnedEntityIdentityAvailable(identityDatabase, params.entity_id, params.user_id);
+  await assertIdentityResolutionAvailable(identityDatabase, params.entity_type, params.user_id);
   const requestHash = correctionRequestHash(params);
   if (
     (existing.canonical_hash && existing.canonical_hash !== requestHash) ||
@@ -256,6 +263,11 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     if (result.deferred_substrate_event) emitCommittedCorrection(result.deferred_substrate_event);
     return { ...result, deferred_substrate_event: undefined };
   }
+  // Identity admission precedes receipt replay: an old receipt cannot authorize
+  // mutation or successful replay in a reserved namespace.
+  const identityDatabase = await getDb();
+  await assertOwnedEntityIdentityAvailable(identityDatabase, params.entity_id, params.user_id);
+  await assertIdentityResolutionAvailable(identityDatabase, params.entity_type, params.user_id);
   // The grouped transaction owns complete-payload receipt validation. Its
   // corrections deliberately share a key/hash, so an ordinary per-field lookup
   // would mistake the second field for a mismatching replay. These internal
@@ -586,6 +598,8 @@ export async function createCorrectionWithVersionPrecondition(
   const result = await database.transaction(async () => {
     // A queued identical retry must see the first commit's receipt before
     // comparing its now-stale version. Both checks share the write boundary.
+    await assertOwnedEntityIdentityAvailable(database, params.entity_id, params.user_id);
+    await assertIdentityResolutionAvailable(database, params.entity_type, params.user_id);
     const replay = await findCommittedCorrectionReplay(params);
     if (replay) return replay;
     await assertCorrectionVersionPrecondition({
@@ -642,6 +656,7 @@ export async function resolveCorrectionSchema(
   field: string,
   userId?: string
 ): Promise<CorrectionSchemaResolution> {
+  await assertIdentityResolutionAvailable(await getDb(), entityType, userId);
   const { loadCodeDefinedSchemaEntry, schemaRegistry } = await import("./schema_registry.js");
 
   // IO failures here propagate intentionally — see contract above.

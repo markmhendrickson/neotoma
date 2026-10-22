@@ -61,17 +61,18 @@ is read-only and does not authorize persistence. Targeted writes refuse until
 immutable original per-entity components are supported. Snapshot-derived names
 cannot replace original exact identifiers.
 
-| Consumer                                                        | Current exact-namespace boundary                                                                                   | Work before activation                                                           |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Central object/positional resolution and structured store       | Accepted declaration validated; public mutation refused                                                            | Persist immutable original components and use them for matching/replay           |
-| Conditional store                                               | Refuses before claiming its operation key; internal preparation uses raw strings                                   | Bind persisted components and conditional receipts atomically                    |
-| Typed identifier lookup (HTTP, MCP, generic CLI)                | Canonical refusal before legacy folding, aliases or fuzzy matching                                                 | Match admitted original components and the selected rule                         |
-| Untyped/raw-ID identifier lookup                                | Returned entity and owned snapshot metadata types refuse before return; ordinary candidates retain legacy behavior | Prove complete exact candidate acquisition without display-derived identity      |
-| Snapshot computation/canonical-name recomputation               | Reserved types refuse before projection or name effects                                                            | Read immutable original components; keep display separate                        |
-| Company normalization/fuzzy helpers and signal lookup           | Not converted                                                                                                      | Use the same admitted binding or refuse before any relaxed matching              |
-| Targeted correction, merge, split and type repair               | Not converted; native reserved writes remain closed                                                                | Explicit preflight and canonical refusal or settled original-component semantics |
-| Interpretation, raw-fragment promotion and file/model ingestion | Not converted end to end                                                                                           | Preflight before source/run/claim effects, including inferred/aliased types      |
-| Import/sync and specialized internal entity writers             | No separate exact import contract                                                                                  | Inventory entrypoints and prove the shared resolver or explicit refusal          |
+| Consumer                                                        | Current exact-namespace boundary                                                                                      | Work before activation                                                      |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Central object/positional resolution and structured store       | Accepted declaration validated; public mutation refused                                                               | Persist immutable original components and use them for matching/replay      |
+| Conditional store                                               | Refuses before claiming its operation key; internal preparation uses raw strings                                      | Bind persisted components and conditional receipts atomically               |
+| Typed identifier lookup (HTTP, MCP, generic CLI)                | Canonical refusal before legacy folding, aliases or fuzzy matching                                                    | Match admitted original components and the selected rule                    |
+| Untyped/raw-ID identifier lookup                                | Returned entity and owned snapshot metadata types refuse before return; ordinary candidates retain legacy behavior    | Prove complete exact candidate acquisition without display-derived identity |
+| Snapshot computation/canonical-name recomputation               | Reserved types refuse before projection or name effects                                                               | Read immutable original components; keep display separate                   |
+| Company normalization/fuzzy helpers and signal lookup           | Not converted                                                                                                         | Use the same admitted binding or refuse before any relaxed matching         |
+| Correction (including CAS/transaction), merge and split         | Owned physical types and requested namespaces refuse before effects or replay; HTTP/MCP/CLI preserve canonical errors | Settled original-component mutation semantics before any positive support   |
+| Plural type repair                                              | Not converted; native reserved writes remain closed                                                                   | Explicit preflight and canonical refusal before repair effects              |
+| Interpretation, raw-fragment promotion and file/model ingestion | Not converted end to end                                                                                              | Preflight before source/run/claim effects, including inferred/aliased types |
+| Import/sync and specialized internal entity writers             | No separate exact import contract                                                                                     | Inventory entrypoints and prove the shared resolver or explicit refusal     |
 
 Native guards also reject reclassification of an ordinary entity or observation
 into a reserved namespace. They are a persistence boundary, not evidence that an
@@ -119,3 +120,17 @@ imports and lifecycle operations still require conversion or pre-effect refusal
 before exact activation.
 The private original-component column is outside fields-column encryption;
 no sensitive-profile or encrypted-at-rest coverage is claimed for it.
+
+Correction, merge and split remain unsupported for reserved exact namespaces.
+Their refusal uses retained registry authority and physical owned target types,
+including an explicit split target whose request declares an ordinary type.
+Retained physical targets are checked before correction and split receipt replay. Multi-entity
+corrections preflight every target before their first field write. Ordinary
+operations retain their established mutation and replay behavior. Negative
+restored-state fixtures do not establish a supported exact persistence path.
+
+A non-NULL physical `identity_record` also refuses these mutations when an
+unsupported restored row carries an ordinary type. This is a presence-based
+refusal, not validation or admission of that record. Mutation preflight selects
+the private column directly with the owned physical entity row; ordinary public
+adapter projections cannot supply this authority metadata.

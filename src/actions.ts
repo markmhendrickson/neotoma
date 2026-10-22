@@ -10289,6 +10289,8 @@ app.post("/entities/merge", async (req, res) => {
     if (error instanceof EntityAlreadyMergedError) {
       return sendError(res, 400, "VALIDATION_INVALID_FORMAT", error.message);
     }
+    if (error instanceof EntityIdentityContractError)
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
     logError("APIError:entities_merge", req, error);
     const message = error instanceof Error ? error.message : "Failed to merge entities";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -10359,6 +10361,8 @@ app.post("/entities/split", async (req, res) => {
         .status(error.statusCode)
         .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
     }
+    if (error instanceof EntityIdentityContractError)
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
     logError("APIError:entities_split", req, error);
     const message = error instanceof Error ? error.message : "Failed to split entity";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -12524,6 +12528,8 @@ app.post("/correct", async (req, res) => {
     const { ObservationValidityError } = await import("./services/observation_validity.js");
     if (error instanceof ObservationValidityError)
       return sendError(res, 400, error.code, error.message, { field: error.field });
+    if (error instanceof EntityIdentityContractError)
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
     // Parity with the MCP correct() path: a missing schema is a client error
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500

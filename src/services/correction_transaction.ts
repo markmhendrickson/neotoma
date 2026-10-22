@@ -2,6 +2,10 @@
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { getDb } from "../repositories/db/connection.js";
+import {
+  assertIdentityResolutionAvailable,
+  assertOwnedEntityIdentityAvailable,
+} from "./entity_identity_admission.js";
 import { createCorrection } from "./correction.js";
 import { validateChangesAgainstSchema } from "./batch_correction.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
@@ -151,6 +155,12 @@ export async function applyCorrectionTransaction(options: CorrectionTransactionO
   const notifications: Array<() => void> = [];
   const connection = await getDb();
   const result = await connection.transaction(async () => {
+    // Validate the entire population before receipt replay or the first field
+    // write, including targets whose request type is an ordinary decoy.
+    for (const entity of entities) {
+      await assertOwnedEntityIdentityAvailable(connection, entity.entity_id, options.user_id);
+      await assertIdentityResolutionAvailable(connection, entity.entity_type, options.user_id);
+    }
     const prior = await db
       .from("observations")
       .select("id,canonical_hash,entity_id,fields")
