@@ -153,6 +153,29 @@ describe("core operations runtime initialization", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it("can retry initialization after a constructor failure without retrying the first operation", async () => {
+    const failure = new Error("runtime initialization temporarily unavailable");
+    const execute = vi.fn(async () => ({ content: [{ type: "text", text: "[]" }] }));
+    let attempts = 0;
+    vi.doMock("../../src/server.js", () => ({
+      NeotomaServer: class {
+        constructor() {
+          attempts += 1;
+          if (attempts === 1) throw failure;
+        }
+        executeToolForCli = execute;
+      },
+    }));
+    const { createOperations } = await import("../../src/core/operations.js");
+    const operations = createOperations({ userId: OWNER });
+    await expect(operations.listEntityTypes()).rejects.toBe(failure);
+    expect(execute).not.toHaveBeenCalled();
+    expect(await operations.listEntityTypes()).toEqual([]);
+    expect(await operations.listEntityTypes()).toEqual([]);
+    expect(attempts).toBe(2);
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it("propagates guarded dispatcher failures without replaying a mutation", async () => {
     const failure = new Error("guard refused the operation");
     const execute = vi.fn(async () => {
