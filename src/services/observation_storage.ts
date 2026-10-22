@@ -20,6 +20,7 @@ import { assertAgentGrantFieldValid } from "./agent_grants.js";
 import { assertNoOwnerConflict } from "./entity_resolution.js";
 import type { DataOrigin, ObservationSource } from "../shared/action_schemas.js";
 import { withDataOriginProvenance } from "./provenance_data_origin.js";
+import { normalizeObservationValidity, type ObservationValidity } from "./observation_validity.js";
 import {
   DEFAULT_OBSERVATION_SOURCE,
   buildObservationRow,
@@ -31,7 +32,7 @@ import {
 // the definition (and its rationale) now lives with the shared insert primitive.
 export { DEFAULT_OBSERVATION_SOURCE };
 
-export interface CreateObservationParams {
+export interface CreateObservationParams extends ObservationValidity {
   entity_id: string;
   entity_type: string;
   schema_version: string;
@@ -76,6 +77,8 @@ export interface CreateObservationParams {
 }
 
 export interface ObservationRecord {
+  valid_from?: string | null;
+  valid_to?: string | null;
   id: string;
   entity_id: string;
   entity_type: string;
@@ -152,12 +155,14 @@ export async function createObservation(
       entityId: params.entity_id,
     });
   }
+  const validity = normalizeObservationValidity(params, params.observed_at);
   const observationId = generateObservationId(
     params.source_id,
     params.interpretation_id,
     params.entity_id,
     params.fields,
-    params.idempotency_key
+    params.idempotency_key,
+    validity
   );
 
   // Agent attribution (Phase 1). The provenance blob is empty when no
@@ -179,6 +184,7 @@ export async function createObservation(
     observation_source: params.observation_source ?? DEFAULT_OBSERVATION_SOURCE,
     fields: params.fields,
     user_id: params.user_id,
+    ...validity,
     created_at: new Date().toISOString(),
     // Optional columns are written only when truthy, so an empty string is
     // treated as absent rather than persisted.

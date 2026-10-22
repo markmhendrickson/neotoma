@@ -39,6 +39,7 @@
 import { db } from "../db.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
+import type { ObservationValidity } from "./observation_validity.js";
 
 /** The query builder the shared database client hands out for a table. */
 type ObservationsQuery = ReturnType<LocalDbClient["from"]>;
@@ -64,7 +65,7 @@ export const DEFAULT_OBSERVATION_SOURCE: ObservationSource = "unspecified";
  * (that is, when the property is not `undefined`); callers decide what counts
  * as "supplied" (for example a truthiness check) before passing a value in.
  */
-export interface ObservationRowInput {
+export interface ObservationRowInput extends ObservationValidity {
   id: string;
   entity_id: string;
   entity_type: string;
@@ -130,6 +131,8 @@ export function buildObservationRow(input: ObservationRowInput): ObservationInse
     user_id: input.user_id,
   };
   if (input.observation_source !== undefined) row.observation_source = input.observation_source;
+  if (input.valid_from !== undefined) row.valid_from = input.valid_from;
+  if (input.valid_to !== undefined) row.valid_to = input.valid_to;
   if (input.created_at !== undefined) row.created_at = input.created_at;
   if (input.idempotency_key !== undefined) row.idempotency_key = input.idempotency_key;
   if (input.identity_basis !== undefined) row.identity_basis = input.identity_basis;

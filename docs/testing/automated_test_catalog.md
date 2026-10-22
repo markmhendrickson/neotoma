@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **744**
-- Backend and repo Vitest files: **708**
+- Total automated test files: **746**
+- Backend and repo Vitest files: **710**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 206 |
+| Vitest unit tests | 207 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 225 |
+| Vitest integration tests | 226 |
 | Vitest CLI tests | 88 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (206):**
+**Files (207):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -253,6 +253,7 @@ flowchart TD
 - `tests/unit/observation_reducer_projection.test.ts`
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/observation_source_omitted_warning.test.ts`
+- `tests/unit/observation_validity.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
 - `tests/unit/patch_array_item_store_policy_envelope.test.ts`
@@ -465,7 +466,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (225):**
+**Files (226):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -617,6 +618,7 @@ flowchart TD
 - `tests/integration/observation_insert_sites_routing.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`
 - `tests/integration/observation_source_unspecified_default.test.ts`
+- `tests/integration/observation_validity_storage.test.ts`
 - `tests/integration/override_policy_enforcement.test.ts`
 - `tests/integration/payload_compiler.test.ts`
 - `tests/integration/payload/payload_submission.test.ts`

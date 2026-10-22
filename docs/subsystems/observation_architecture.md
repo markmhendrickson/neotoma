@@ -389,3 +389,20 @@ Load `docs/subsystems/observation_architecture.md` when:
 - [ ] [Reducer](../vocabulary/canonical_terms.md#reducer) determinism maintained
 - [ ] Integration with schema registry verified
 - [ ] Tests verify [observation](../vocabulary/canonical_terms.md#observation) immutability and [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation
+
+### State-validity storage metadata
+
+Observations may retain independent nullable `valid_from` / `valid_to` metadata,
+with an inclusive start and exclusive end. The guarded storage service normalizes
+explicit endpoints to UTC without discarding fractional precision and rejects an
+empty interval before inserting an observation. A missing/null lower endpoint
+uses the row's observation clock as a compatibility fallback; that is not evidence
+of a fact's real-world beginning. Existing rows are retained with null endpoints.
+This metadata is independent of `observed_at`, insertion `created_at`, and domain
+event fields. It is available in observation-history responses when present.
+
+Public store/correct validity inputs, native `valid_at` queries, protected
+occurrence lineage/inheritance and exact entity-identity namespaces are not
+implemented by this storage change. Public snapshot cutoffs still have their
+existing assertion/ingestion semantics; callers must not infer valid-time support
+from nullable columns or history metadata.

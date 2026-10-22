@@ -3779,6 +3779,10 @@ export interface components {
       interpretation_id?: string | null;
       /** Format: date-time */
       observed_at?: string;
+      /** @description Optional canonical UTC state-validity start metadata. Null on legacy rows means the observation clock is the compatibility fallback, not evidence of when the fact became true. This storage foundation does not yet add validity arguments to public writes or queries. */
+      readonly valid_from?: string | null;
+      /** @description Optional canonical UTC exclusive state-validity end metadata. Null means open end. Independent of observed_at, created_at and any domain event date field. Public validity queries remain unsupported. */
+      readonly valid_to?: string | null;
       specificity_score?: number;
       /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
       source_priority?: number;

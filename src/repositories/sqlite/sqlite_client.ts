@@ -97,6 +97,8 @@ const SCHEMA_STATEMENTS = [
     source_id TEXT,
     interpretation_id TEXT,
     observed_at TEXT NOT NULL,
+    valid_from TEXT,
+    valid_to TEXT,
     specificity_score REAL,
     source_priority INTEGER,
     observation_source TEXT,
@@ -495,6 +497,10 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
     await addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
     await addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
+    // Nullable state-validity foundation. Existing rows remain NULL; this
+    // does not reinterpret observation clocks or enable valid-time queries.
+    await addColumnIfMissing(db, "observations", "valid_from", "TEXT");
+    await addColumnIfMissing(db, "observations", "valid_to", "TEXT");
     // Agent attribution (Phase 1 AAuth integration). `provenance` is a JSON
     // blob containing AAuth fields, fallback clientInfo, and trust tier; see
     // src/crypto/agent_identity.ts AttributionProvenance shape. Adding via

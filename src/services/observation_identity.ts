@@ -7,6 +7,7 @@
 
 import { createHash } from "crypto";
 import { db } from "../db.js";
+import type { ObservationValidity } from "./observation_validity.js";
 
 export interface Observation {
   id: string;
@@ -38,7 +39,8 @@ export function generateObservationId(
   interpretationId: string | null,
   entityId: string,
   canonicalFields: Record<string, unknown>,
-  idempotencyKey?: string | null
+  idempotencyKey?: string | null,
+  validity?: ObservationValidity
 ): string {
   const canonical: Record<string, unknown> = {
     source_id: sourceId ?? "none",
@@ -48,6 +50,10 @@ export function generateObservationId(
   };
   if (idempotencyKey) {
     canonical.idempotency_key = idempotencyKey;
+  }
+  // Opt-in metadata must distinguish assertions without rehashing legacy rows.
+  if (validity && Object.keys(validity).length > 0) {
+    canonical.validity = validity;
   }
 
   // JSON.stringify on canonical object is deterministic because:
