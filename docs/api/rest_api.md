@@ -1,118 +1,83 @@
-# REST API reference
+# REST API Reference
 
-How to call Neotoma's HTTP API: base URL, authentication, the MCP OAuth endpoints, a few utility routes, and where the full route list lives.
-
-Applies to v0.25.0 and main. The full route list is [`openapi.yaml`](../../openapi.yaml): 112 paths on main and 109 in v0.25.0 (main adds `/corrections/transaction`, `/entities/{id}/batch_correct`, and `/patch_array_item`).
+_(HTTP Endpoints for Frontend and External Clients)_
 
 ## Scope
 
 This document covers:
 
-- Base URL and authentication
-- The MCP OAuth endpoints and discovery documents
-- File URLs, health, usage, and the OpenAPI document
-- The error format, rate limits, and pagination
-
-It does not cover:
-
-- Every route and schema (see [`openapi.yaml`](../../openapi.yaml))
-- MCP tools (see [`docs/developer/mcp_overview.md`](../developer/mcp_overview.md) and `docs/specs/MCP_SPEC.md`)
+- All HTTP endpoints and their parameters
+- Request/response formats
+- Authentication requirements
+- Error handling
+- Rate limiting
+  This document does NOT cover:
+- MCP tools (see `docs/specs/MCP_SPEC.md`)
 - WebSocket connections
 - Internal service-to-service communication
 
-## The full route list
-
-The REST API covers the same record operations as the MCP tools: storing, correcting, querying, merging, relationships, timeline, schemas, subscriptions, and peer sync. [`openapi.yaml`](../../openapi.yaml) is the reference for every route, parameter, and response. A few common ones:
-
-| Route | Operation ID | MCP tool |
-| --- | --- | --- |
-| `POST /store` | `store` | `store` |
-| `POST /correct` | `correct` | `correct` |
-| `POST /entities/query` | `queryEntities` | `retrieve_entities` |
-| `POST /get_entity_snapshot` | `getEntitySnapshot` | `retrieve_entity_snapshot` |
-| `POST /entities/merge` | `mergeEntities` | `merge_entities` |
-
-Call any operation by its ID from the CLI with `neotoma request --operation <operationId>` (see the [CLI reference](../developer/cli_reference.md#openapi-request)).
-
 ## Base URL
 
-A local install listens on port 3080 for the development API and 3180 for the production API:
+**Development:**
 
-```text
+```
 http://localhost:3080
-http://localhost:3180
 ```
 
-A remote or hosted instance uses its own host:
+**Production:**
 
-```text
-https://<your-instance-host>
+```
+https://neotoma.fly.dev
 ```
 
 ## Authentication
 
-Most routes need a credential, sent as a bearer token:
+All endpoints (except `/health`, `/openapi.yaml`, and MCP OAuth public endpoints) require Bearer token authentication:
 
 ```http
 Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
 ```
 
-- Set the server's token with the `NEOTOMA_BEARER_TOKEN` environment variable. Use a strong random value and never commit it.
-- When encryption is enabled (`NEOTOMA_ENCRYPTION_ENABLED=true`), use the key-derived token printed by `neotoma auth mcp-token`.
-- MCP OAuth access tokens and AAuth-signed requests are also accepted.
+**Token Configuration:**
 
-### Routes that answer without a credential
+- Set via `NEOTOMA_BEARER_TOKEN` environment variable (preferred) or legacy `ACTIONS_BEARER_TOKEN`
+- Use strong random token in production
+- Never commit tokens to git
+- When encryption is enabled (`NEOTOMA_ENCRYPTION_ENABLED=true`), use the key-derived MCP token instead: `neotoma auth mcp-token`
 
-Routes registered in `src/actions.ts` before the authentication middleware, and the middleware's own exemptions, answer without a credential. The list below is that set, checked by calling each route with no credential on a scratch server built from main and run with `NEOTOMA_ENV=production`; v0.25.0 registers the same routes in the same order.
+## MCP OAuth Endpoints
 
-- Discovery and server information: `GET /`, `GET /robots.txt`, `GET /favicon.ico`, `GET /health`, `GET /ready`, `GET /openapi.yaml`, `GET /openapi_actions.yaml`, `GET /server-info`, `GET /mcp-interaction-instructions`, `GET /.well-known/mcp/server-card.json`, `GET /.well-known/aauth-resource.json`, `GET /.well-known/oauth-authorization-server`, and `GET /.well-known/oauth-protected-resource` (also with the `/mcp` suffix). `GET /.well-known/openid-configuration` returns 404.
-- Pages: the bundled docs at `GET /docs` and `GET /docs/*`, and the Inspector page shell at `/inspector`. The Inspector's data calls still need a credential.
-- The MCP OAuth flow: `POST /mcp/oauth/initiate`, `GET /mcp/oauth/callback`, `GET /mcp/oauth/key-auth`, `POST /mcp/oauth/key-auth` (which checks the key it is given), `GET /mcp/oauth/authorize`, `GET /mcp/oauth/local-login`, `POST /mcp/oauth/token`, `POST /mcp/oauth/register`, `GET /mcp/oauth/status`, and `GET /mcp/oauth/google/start` and `/google/callback` (404 unless Google sign-in is configured).
-- Sandbox forms: `GET /sandbox/terms`, `POST /sandbox/report`, and `GET /sandbox/report/status`.
-- `POST /auth/dev-signin`, which always answers 403.
-- `OPTIONS` preflight requests.
-
-Some routes registered before the middleware check a credential themselves and answer 401 without one: `/mcp`, `GET /mcp/oauth/connections`, `DELETE /mcp/oauth/connections/{connection_id}`, and `GET /mcp/oauth/authorization-details`.
-
-Every other route goes through the middleware, which also admits a request without a bearer token in these cases:
-
-- **Local requests.** On a local install, a request from the same machine with no `Authorization` header acts as the local user. In production (`NEOTOMA_ENV=production`) a loopback request counts as local only when `NEOTOMA_TRUST_PROD_LOOPBACK=1` is set and no `X-Forwarded-For` entry is an untrusted address, or when the nearest `X-Forwarded-For` hop is listed in `NEOTOMA_TRUSTED_PROXY_IPS` (see `isLocalRequest` in `src/actions.ts`).
-- **Sandbox mode.** With `NEOTOMA_SANDBOX_MODE` set, a request with no bearer token acts as its sandbox session user, or as the shared public sandbox user, and the `/sandbox/session` routes are registered.
-- **Guest access tokens.** An entity-scoped guest token is accepted on the guest-capable routes: `POST /issues/submit`, `/issues/status`, and `/issues/add_message`; `POST /subscribe`, `/unsubscribe`, `/list_subscriptions`, and `/get_subscription_status`; `GET /events/stream`; and `GET /entities/{id}` with its `/observations`, `/relationships`, and `/html` subpaths (`routeAcceptsGuestPrincipal` in `src/actions.ts`).
-
-## MCP OAuth endpoints
-
-OAuth endpoints for MCP client authentication. The public ones need no bearer token.
+OAuth endpoints for MCP client authentication (no bearer token required for public endpoints).
 
 ### Discovery bootstrap (unauthenticated)
 
-A client with no credentials reaches an authenticated session in four requests. Step 2 returns 200 with no credential, as RFC 9728 §3 requires: the discovery documents tell a caller holding nothing where to authenticate, so gating them would deadlock the handshake. The `WWW-Authenticate` challenge in step 1 points at the step-2 document.
+A client with no credentials reaches an authenticated session in four requests. **Step 2 returns 200 with no credential — that is required by RFC 9728 §3, not a bug.** The discovery documents exist to tell a caller holding nothing where to authenticate, so gating them would deadlock the handshake: the `WWW-Authenticate` challenge in step 1 points at the step-2 document.
 
-1. `POST /mcp` with no credential returns 401 with `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource"`.
-2. `GET` that URL with no `Authorization` and no `X-Connection-Id` returns 200 with `resource` and a non-empty `authorization_servers`.
-3. `GET /.well-known/oauth-authorization-server` returns 200 with the authorization and token endpoints.
+1. `POST /mcp` with no credential → 401 carrying `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource"`.
+2. `GET` that URL, no `Authorization` and no `X-Connection-Id` → **200** with `resource` and a non-empty `authorization_servers`.
+3. `GET /.well-known/oauth-authorization-server` → **200** with the authorization and token endpoints.
 4. Complete the OAuth flow against those endpoints, then retry `/mcp` with `Authorization: Bearer <token>`.
 
-Check the public documents:
+Verify the public documents:
 
 ```bash
-curl -sI https://<your-instance-host>/.well-known/oauth-protected-resource
-curl -sI https://<your-instance-host>/.well-known/oauth-protected-resource/mcp
-curl -sI https://<your-instance-host>/.well-known/oauth-authorization-server
-curl -sI https://<your-instance-host>/.well-known/openid-configuration
+curl -sI https://<instance>/.well-known/oauth-protected-resource        # expect 200
+curl -sI https://<instance>/.well-known/oauth-protected-resource/mcp    # expect 200
+curl -sI https://<instance>/.well-known/oauth-authorization-server      # expect 200
+curl -sI https://<instance>/.well-known/openid-configuration            # expect 404
 ```
 
-The first three return 200 and the last returns 404.
+`/.well-known/oauth-protected-resource/mcp` is the RFC 9728 §3.1 resource-suffixed form, served identically — a client whose resource is `/mcp` probes that path rather than the bare one, and either probe order works.
 
-`/.well-known/oauth-protected-resource/mcp` is the RFC 9728 §3.1 resource-suffixed form, served identically. A client whose resource is `/mcp` probes that path rather than the bare one, and either probe order works.
+`/.well-known/openid-configuration` returns **404**: this server does not implement OIDC discovery, and a 404 correctly makes an OIDC-first client fall back to the RFC 8414 document. It is deliberately not a 401 (which would claim the endpoint exists and send the client into a dead end) and not a synthetic 200 alias (which would advertise a discovery contract the server does not implement).
 
-`/.well-known/openid-configuration` returns 404: this server does not implement OIDC discovery, and a 404 makes an OIDC-first client fall back to the RFC 8414 document. It is deliberately not a 401, which would claim the endpoint exists, and not a synthetic 200 alias, which would advertise a discovery contract the server does not implement.
+One legitimate 401 remains on the protected-resource paths: a request carrying a stale or unrecognized `X-Connection-Id` gets `401 invalid_token`, because that caller *asserted* a credential. Any `resource_metadata` URL named in that response still resolves 200 unauthenticated.
 
-One 401 remains on the protected-resource paths: a request carrying a stale or unrecognized `X-Connection-Id` gets `401 invalid_token`, because that caller asserted a credential. Any `resource_metadata` URL named in that response still returns 200 unauthenticated.
+### Initiate OAuth Flow
 
-### Initiate OAuth flow
+Start OAuth authorization flow for MCP client.
 
-**Endpoint:** `POST /mcp/oauth/initiate` (rate-limited to 5 requests a minute)
+**Endpoint:** `POST /mcp/oauth/initiate`
 
 **Request:**
 
@@ -123,50 +88,56 @@ One 401 remains on the protected-resource paths: a request carrying a stale or u
 }
 ```
 
-- `connection_id`: unique identifier for this connection (required)
-- `client_name`: name of the MCP client (optional)
-- `redirect_uri`: optional. It must parse as a URL with an `http`, `https`, `cursor`, `vscode`, or `app` scheme. When omitted, a local install uses `<frontend>/oauth`, where `<frontend>` is `NEOTOMA_FRONTEND_URL` (or `FRONTEND_URL`, default `http://localhost:5195`)
+**Parameters:**
+
+- `connection_id`: Unique identifier for this connection (required)
+- `client_name`: Name of MCP client (optional, e.g., "Cursor", "Claude Code")
 
 **Response:** `200 OK`
 
 ```json
 {
-  "authUrl": "https://<your-instance-host>/mcp/oauth/authorize?...",
-  "connectionId": "cursor-2025-01-21-abc123",
-  "expiresAt": "2025-01-21T10:10:00Z"
+  "auth_url": "https://your-server/mcp/oauth/authorize?...",
+  "connection_id": "cursor-2025-01-21-abc123",
+  "expires_at": "2025-01-21T10:10:00Z"
 }
 ```
 
-**Errors:** `400` when `connection_id` is missing or invalid; `500` when the OAuth state cannot be created.
+**Errors:**
 
-### OAuth callback
+- `400`: Missing or invalid connection_id
+- `500`: Failed to create OAuth state
+
+### OAuth Callback
+
+Handles OAuth authorization callback.
 
 **Endpoint:** `GET /mcp/oauth/callback`
 
-Every current build answers this route with `400` and `Local OAuth callback is disabled. Use /mcp/oauth/local-login.`, because the storage backend is always local (`storageBackend` in `src/config.ts`), in v0.25.0 and on main. MCP clients complete sign-in through `/mcp/oauth/authorize` and `/mcp/oauth/local-login` instead.
+**Query Parameters:**
 
-### Authorize (MCP clients)
+- `code`: Authorization code from OAuth provider (required)
+- `state`: OAuth state token (required)
 
-**Endpoint:** `GET /mcp/oauth/authorize` (RFC 8414 authorization endpoint)
+**Response:** Redirects to frontend with connection status
 
-- `redirect_uri` and `state` are required.
-- PKCE is required (`code_challenge` with `code_challenge_method=S256`), except for OpenAI Custom GPT callbacks on `https://chatgpt.com/aip/g-<id>/oauth/callback` or `https://chat.openai.com/aip/g-<id>/oauth/callback`.
-- Unless `NEOTOMA_REQUIRE_KEY_FOR_OAUTH=false`, a browser without a key session is redirected to `/mcp/oauth/key-auth` first.
+- Success: `{FRONTEND_URL}/mcp-setup?connection_id={id}&status=success`
+- Error: `{FRONTEND_URL}/mcp-setup?status=error&error={message}`
 
-When the request does not come from the same machine (for example through a tunnel), `redirect_uri` must be one of these, or the route answers `400` and names the value it compared (`isRedirectUriAllowedForTunnel` in `src/services/mcp_oauth.ts`):
+**Errors:**
 
-- A `cursor:`, `vscode:`, or `app:` URL
-- `http` or `https` on `localhost`, `127.0.0.1`, or `[::1]`
-- `https` on this instance's own host (from `X-Forwarded-Host`, or `Host`)
-- `https` on `chatgpt.com` or `chat.openai.com`
-- `https://claude.ai` (or `www.claude.ai`) with the path `/api/mcp/auth_callback` or `/api/mcp/oauth/callback`
-- An exact URL listed in `NEOTOMA_OAUTH_TRUSTED_CALLBACK_URLS`. Matching ignores the query, fragment, and a trailing slash; plain `http` is accepted only for loopback hosts, and an entry with a user name or password never matches. A malformed entry stops the server at startup.
+- `400`: Missing code or state
+- `500`: Token exchange or storage failed
 
-From the same machine, any `redirect_uri` that passes the scheme check above is accepted.
+### Get Connection Status
 
-### Get connection status
+Check status of MCP OAuth connection.
 
-**Endpoint:** `GET /mcp/oauth/status?connection_id=<id>`
+**Endpoint:** `GET /mcp/oauth/status`
+
+**Query Parameters:**
+
+- `connection_id`: Connection identifier (required)
 
 **Response:** `200 OK`
 
@@ -177,15 +148,28 @@ From the same machine, any `redirect_uri` that passes the scheme check above is 
 }
 ```
 
-Status values:
+**Status Values:**
 
-- `pending`: the flow started and has not completed
-- `active`: the connection is ready to use
-- `expired`: the connection was revoked or the flow timed out
+- `pending`: OAuth flow initiated but not completed
+- `active`: Connection active and ready to use
+- `expired`: Connection revoked or OAuth flow timed out
 
-### List MCP connections
+**Errors:**
 
-**Endpoint:** `GET /mcp/oauth/connections` (authenticated)
+- `400`: Missing connection_id
+- `500`: Failed to query status
+
+### List MCP Connections
+
+List user's active MCP OAuth connections (authenticated).
+
+**Endpoint:** `GET /mcp/oauth/connections`
+
+**Headers:**
+
+```http
+Authorization: Bearer <SESSION_TOKEN>
+```
 
 **Response:** `200 OK`
 
@@ -202,63 +186,217 @@ Status values:
 }
 ```
 
-### Revoke an MCP connection
+**Errors:**
 
-**Endpoint:** `DELETE /mcp/oauth/connections/{connection_id}` (authenticated)
+- `401`: Missing or invalid bearer token
+- `500`: Failed to fetch connections
 
-**Response:** `200 OK` with `{"success": true}`.
+### Revoke MCP Connection
 
-## Files
+Revoke an OAuth connection (authenticated).
 
-### Storing a file
+**Endpoint:** `DELETE /mcp/oauth/connections/:connection_id`
 
-Files are stored through `POST /store`: send `file_content` (base64) with `mime_type`, or `file_path`, which the server reads from its own filesystem and so works only when the client runs on the same machine. File sources are deduplicated per user by SHA-256 content hash. Neotoma does not extract fields from a stored file; send the extracted entities in `entities`, with an `interpretation` block to link them to the file's source. The server caps JSON bodies at 10 MB.
+**Headers:**
 
-### Get a file URL
-
-**Endpoint:** `GET /get_file_url?file_path=<path>&expires_in=<seconds>`
-
-Returns a signed URL for one of the caller's own sources. `expires_in` defaults to 3600 seconds. A path that belongs to another user gets the same 404 as a path that does not exist.
-
-**Response:** `200 OK` with `{"url": "..."}`.
-
-## Quick check with curl
-
-Read the health endpoint, then make one authenticated read, with the token taken from your environment:
-
-```bash
-curl -s http://localhost:3080/health
-curl -s -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" "http://localhost:3080/entities?limit=1"
+```http
+Authorization: Bearer <SESSION_TOKEN>
 ```
-
-Export `NEOTOMA_BEARER_TOKEN` with the server's token first. On a local development install you can drop the header, because local requests act as the local user. Use port 3180 for a local production API, or `https://<your-instance-host>` for a remote one.
-
-## Utility endpoints
-
-### Health check
-
-**Endpoint:** `GET /health` (no authentication)
 
 **Response:** `200 OK`
 
 ```json
 {
-  "ok": true,
-  "version": "0.25.0"
+  "success": true
 }
 ```
 
-`/health` reports that the process is up. `GET /ready` also queries the database and returns 503 when it is unreachable, erroring, or too slow.
+**Errors:**
 
-### Usage statistics
+- `401`: Missing or invalid bearer token
+- `500`: Failed to revoke connection
+
+## Core Record Operations
+
+**Use MCP actions instead:**
+
+- `store()` - For [storing](#storing) [source](#source) (unstructured files or structured data)
+- `correct()` - For corrections
+- `merge_entities()` - For entity merging
+- `retrieve_entities()` - For querying entities
+- See `docs/specs/MCP_SPEC.md` for complete MCP action reference
+
+### Retrieve Records
+
+Query records with filters and search.
+**Endpoint:** `POST /retrieve_records`
+**Request:**
+
+```json
+{
+  "type": "note",
+  "properties": {
+    "tags": ["important"]
+  },
+  "search": ["meeting", "notes"],
+  "search_mode": "both",
+  "limit": 20,
+  "offset": 0,
+  "include_total_count": true
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "records": [
+    {
+      "id": "uuid-1",
+      "type": "note",
+      "properties": { "text": "Meeting notes", "tags": ["important"] }
+    }
+  ],
+  "total_count": 42
+}
+```
+
+**Parameters:**
+
+- `type`: Filter by record type (optional)
+- `properties`: Filter by property values (optional, JSON object)
+- `search`: Array of search terms (optional)
+- `search_mode`: `"keyword"`, `"semantic"`, or `"both"` (default: `"both"`)
+- `limit`: Maximum results (default: 100, max: 1000)
+- `offset`: Pagination offset (default: 0)
+- `include_total_count`: Include total count in response (default: false)
+  **Errors:**
+- `400`: Invalid request (invalid search_mode)
+- `401`: Missing or invalid bearer token
+
+## File Operations
+
+### Upload File
+
+Upload a file and optionally create/update a record.
+**Endpoint:** `POST /upload_file`
+**Content-Type:** `multipart/form-data`
+**Form Fields:**
+
+- `file`: File to upload (required)
+- `record_id`: Existing record ID to attach file to (optional)
+- `properties`: JSON string of properties (optional)
+- `bucket`: Storage bucket name (optional, default: `files`)
+  **Request Example:**
+
+```bash
+curl -X POST http://localhost:3080/upload_file \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@document.pdf" \
+  -F "properties={\"title\":\"My Document\"}"
+```
+
+**Response:** `201 Created` or `200 OK`
+
+```json
+{
+  "id": "uuid-here",
+  "type": "pdf_document",
+  "properties": {
+    "title": "My Document",
+    "file_name": "document.pdf",
+    "file_size": 102400
+  },
+  "file_urls": ["/api/files/uuid/document.pdf"],
+  "created_at": "2024-01-01T12:00:00Z"
+}
+```
+
+**Behavior:**
+
+- If `record_id` provided: Attach file to existing record
+- If `record_id` omitted: Auto-analyze file and create new record
+- CSV files: Create one record per row
+  **Errors:**
+- `400`: Invalid file (too large, unsupported type)
+- `401`: Missing or invalid bearer token
+- `413`: File too large (>50MB)
+
+### Get File URL
+
+Generate signed URL for file access.
+**Endpoint:** `GET /get_file_url`
+**Query Parameters:**
+
+- `file_path`: Path to file in storage (required)
+- `expires_in`: URL expiration in seconds (optional, default: 3600)
+  **Request:**
+
+```http
+GET /get_file_url?file_path=files/uuid/document.pdf&expires_in=7200
+Authorization: Bearer <token>
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "url": "/api/files/uuid/document.pdf?token=...",
+  "expires_at": "2024-01-01T14:00:00Z"
+}
+```
+
+**Errors:**
+
+- `400`: Invalid request (missing `file_path`)
+- `404`: File not found
+- `401`: Missing or invalid bearer token
+
+## Utility Endpoints
+
+### Health Check
+
+Check if server is running.
+**Endpoint:** `GET /health`
+**Request:**
+
+```http
+GET /health
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+
+**No authentication required.**
+
+### Usage Statistics
+
+Get aggregate usage statistics for the authenticated user. Powers the Neotoma Inspector dashboard summary tiles. Figures are computed on each request from live data — no server-side cache.
 
 **Endpoint:** `GET /usage`
 
-Aggregate usage statistics for the authenticated user, computed from live data on each request. They power the Inspector dashboard tiles.
+**Authentication:** Required — Bearer token, AAuth grant, or MCP OAuth token. Guest principals are rejected with `401`.
 
-**Authentication:** a bearer token, an AAuth grant, or an MCP OAuth token. Guest principals get `401`.
+**Query parameters:**
 
-**Query parameter:** `user_id` (optional). It must match the authenticated user; the local development user on a local install may pass any `user_id`.
+| Parameter | Type        | Required | Description                                                                            |
+| --------- | ----------- | -------- | -------------------------------------------------------------------------------------- |
+| `user_id` | UUID string | No       | Must match authenticated user if supplied. AAuth-admitted agents cannot override this. |
+
+**Request:**
+
+```http
+GET /usage HTTP/1.1
+Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
+```
+
+**curl example:**
 
 ```bash
 curl -s \
@@ -290,56 +428,115 @@ curl -s \
 }
 ```
 
-Response fields:
+**Response fields:**
 
-- `entities_by_type`: active entity counts per type, sorted by count descending
-- `total_entities`: total active (non-merged) entities
-- `observations_by_source`: observation counts per `observation_source`; rows with none appear as `"unclassified"`
-- `total_observations`: total observations
-- `entities_created_last_7_days` and `entities_created_last_30_days`: entities created in those windows
-- `entity_types_with_schema`: distinct entity types in the data that have an active registered schema
-- `entity_types_total`: distinct entity types across all active entities
-- `last_updated`: when these figures were computed (the request time)
+| Field                           | Type                     | Description                                                                                   |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| `entities_by_type`              | `Record<string, number>` | Active entity counts per type, sorted by count descending.                                    |
+| `total_entities`                | `number`                 | Total active (non-merged) entities.                                                           |
+| `observations_by_source`        | `Record<string, number>` | Observation counts per `observation_source`; unsourced rows appear as `"unclassified"`.       |
+| `total_observations`            | `number`                 | Total observations.                                                                           |
+| `entities_created_last_7_days`  | `number`                 | Entities created within the last 7 days.                                                      |
+| `entities_created_last_30_days` | `number`                 | Entities created within the last 30 days.                                                     |
+| `entity_types_with_schema`      | `number`                 | Distinct entity types present in the data that also have an active registered schema.         |
+| `entity_types_total`            | `number`                 | Total distinct entity types present across all active entities.                               |
+| `last_updated`                  | `string` (ISO-8601)      | Timestamp when these aggregates were computed (reflects request time, not a cache watermark). |
 
-Errors:
+**Error responses:**
 
-| Status | `error_code` | Cause |
-| --- | --- | --- |
-| `401` | `AUTH_REQUIRED` | Missing or invalid token, or a guest principal |
-| `403` | `FORBIDDEN` | `user_id` does not match the authenticated user |
-| `500` | `DB_QUERY_FAILED` | Database query failure |
+| Status | `error_code`      | Cause                                                    |
+| ------ | ----------------- | -------------------------------------------------------- |
+| `401`  | `AUTH_REQUIRED`   | Missing or invalid token; guest principal.               |
+| `403`  | `FORBIDDEN`       | `user_id` query param does not match authenticated user. |
+| `500`  | `DB_QUERY_FAILED` | Database query failure.                                  |
 
-OpenAPI operation `getUsage`; the CLI equivalent is `neotoma request --operation getUsage`. See [`docs/subsystems/usage_digest.md`](../subsystems/usage_digest.md#usage-http-api-endpoint) for how `/usage` differs from `usage_digest` entities.
+**OpenAPI:** `operationId: getUsage` — see `openapi.yaml` and `src/shared/openapi_types.ts` (`UsageStats` schema).
 
-### OpenAPI document
+**CLI equivalent:** `neotoma request --operation getUsage`
 
-**Endpoint:** `GET /openapi.yaml` (no authentication) returns [`openapi.yaml`](../../openapi.yaml), with its `servers` list adjusted to the host that served the request.
+**See also:** [`docs/subsystems/usage_digest.md`](../subsystems/usage_digest.md#usage-http-api-endpoint) for the full endpoint reference including the distinction between `/usage` HTTP aggregates and `usage_digest` telemetry entities.
 
-## Error format
+### OpenAPI Specification
 
-Errors use one envelope:
+Get OpenAPI spec for API documentation.
+**Endpoint:** `GET /openapi.yaml`
+**Request:**
+
+```http
+GET /openapi.yaml
+```
+
+**Response:** `200 OK`
+
+```yaml
+openapi: 3.0.0
+info:
+  title: Neotoma API
+  version: 1.0.0
+...
+```
+
+**No authentication required.**
+
+## Error Responses
+
+All errors follow this format:
 
 ```json
 {
-  "error_code": "VALIDATION_MISSING_FIELD",
-  "message": "connection_id is required",
+  "error_code": "INGESTION_FILE_TOO_LARGE",
+  "message": "File exceeds maximum size of 50MB",
+  "details": {
+    "file_size": 52428800,
+    "max_size": 52428800
+  },
+  "trace_id": "trace-uuid",
   "timestamp": "2024-01-01T12:00:00Z"
 }
 ```
 
-`details` (an object) and `trace_id` appear when the handler supplies them. Status codes in use include `400` (bad request), `401` (missing or invalid credential), `403` (forbidden), `404` (not found), `409` (conflict), `413` (payload too large), `429` (rate limited), `500` (server error), and `503` (not ready). See `docs/reference/error_codes.md` for the error codes.
+**HTTP Status Codes:**
 
-## Rate limits
+- `200`: Success
+- `201`: Created
+- `400`: Bad Request (client error)
+- `401`: Unauthorized (missing/invalid token)
+- `403`: Forbidden (insufficient permissions)
+- `404`: Not Found
+- `409`: Conflict (duplicate record)
+- `413`: Payload Too Large
+- `429`: Too Many Requests (rate limited)
+- `500`: Internal Server Error
+- `503`: Service Unavailable
+  See `docs/reference/error_codes.md` for complete error code reference.
 
-- Writes through `POST /store` and `POST /patch_array_item` (main only) are limited per authenticated user, or per IP address without one, to `NEOTOMA_WRITE_RATE_LIMIT_PER_MIN` requests a minute (default 120).
-- The MCP OAuth endpoints have their own per-minute limits; `POST /mcp/oauth/initiate` allows 5.
-- Sandbox deployments apply a tighter write limit (`NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN`, default 30).
+## Rate Limiting
 
-A limited request gets `429`.
+**Current Limits (MVP):**
+
+- No explicit rate limiting (post-MVP feature)
+- Recommended: <100 requests/second per client
+  **Future Limits:**
+- Per-user rate limits
+- Per-endpoint rate limits
+- Rate limit headers in responses
 
 ## Pagination
 
-List and query routes take `limit` and `offset`. `GET /entities` also accepts an opaque `cursor` from a previous response's `next_cursor`, which is the preferred way to page through entities; `offset` there is deprecated and bounded. Each operation's parameters are in [`openapi.yaml`](../../openapi.yaml).
+Use `limit` and `offset` for pagination:
+
+```json
+{
+  "limit": 20,
+  "offset": 0
+}
+```
+
+**Best Practices:**
+
+- Use `limit` ≤ 100 for optimal performance
+- Use `include_total_count: true` for UI pagination
+- Implement cursor-based pagination (post-MVP)
 
 ## Agent Instructions
 
@@ -350,27 +547,26 @@ Load when:
 - Implementing frontend API calls
 - Integrating external clients
 - Debugging API issues
-- Understanding request and response formats
+- Understanding request/response formats
 
 ### Required Co-Loaded Documents
 
-- [`openapi.yaml`](../../openapi.yaml): every route and schema
-- `docs/developer/mcp_overview.md`: MCP tool equivalents
-- `docs/reference/error_codes.md`: error code reference
-- `docs/subsystems/errors.md`: error handling patterns
+- `docs/specs/MCP_SPEC.md` — MCP tool equivalents
+- `docs/reference/error_codes.md` — Error code reference
+- `docs/subsystems/errors.md` — Error handling patterns
 
 ### Constraints Agents Must Enforce
 
-1. Send a credential on every route except those listed under [Routes that answer without a credential](#routes-that-answer-without-a-credential).
-2. Check required fields against `openapi.yaml` before calling.
-3. Handle errors by `error_code`, not only the HTTP status.
-4. Back off on `429`.
-5. Page through results instead of fetching everything at once.
+1. **Always include Authorization header** — Except `/health` and `/openapi.yaml`
+2. **Validate request format** — Check required fields
+3. **Handle errors gracefully** — Check error_code, not just HTTP status
+4. **Respect rate limits** — Implement exponential backoff
+5. **Use pagination** — Don't fetch all records at once
 
 ### Forbidden Patterns
 
-- Calling authenticated routes without a credential
+- Calling endpoints without authentication (except health/openapi)
 - Ignoring error responses
-- Fetching unbounded result sets
+- Fetching unlimited records (use pagination)
 - Hardcoding bearer tokens in frontend code
-- Presenting any single host as the production base URL
+- Bypassing rate limits

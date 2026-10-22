@@ -32,8 +32,6 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
   const isRawMarkdownRoute = stripped === "/raw";
   const isMarkdownMirrorRoute = stripped === "/markdown" || stripped.startsWith("/markdown/");
   const isRouteHome = stripped === "/";
-  /** One-pager site: the home page and /install draw their own minimal chrome (no app header, sidebar or footer). */
-  const isOnePagerShell = (isRouteHome && !isProductBasePath()) || stripped === "/install";
   const isFullPageLanding = isMarketingFullPageRoute(stripped);
   /** Full-bleed shell: home, marketing use case landings, product-at-root basenames. */
   const isHomeShell = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
@@ -43,18 +41,6 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
 
   if (isRawMarkdownRoute || isMarkdownMirrorRoute) {
     return <>{children}</>;
-  }
-
-  if (isOnePagerShell) {
-    return (
-      <SiteAppNavProvider>
-        <SidebarProvider defaultOpen={false} className="flex-col">
-          <div data-site-markdown-root className="contents">
-            {children}
-          </div>
-        </SidebarProvider>
-      </SiteAppNavProvider>
-    );
   }
 
   /** Marketing `/` (and locale roots) scroll inside `SitePage`; dev SEO panel belongs in that scroll, not below `h-screen`. */

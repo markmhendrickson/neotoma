@@ -312,47 +312,6 @@ function evaluatePredicate(
         actual: candidates.map((e) => ({ [predicate.field]: e[predicate.field] })),
       };
     }
-    case "request_field_absent": {
-      const offending = getRequests(cell, predicate.endpoint).filter(
-        (r) => dotPath(r.body, predicate.path) !== undefined
-      );
-      if (offending.length === 0) return null;
-      return {
-        predicate,
-        message: `Expected no ${predicate.endpoint} request to carry body.${predicate.path}, but ${offending.length} did.`,
-        expected: { endpoint: predicate.endpoint, path: predicate.path, presence: "absent" },
-        actual: offending.map((r) => dotPath(r.body, predicate.path)),
-      };
-    }
-    case "field_not_matches": {
-      const candidates = getStoredEntities(cell).filter(
-        (e) =>
-          e.entity_type === predicate.entity_type &&
-          whereMatches(e, predicate.where)
-      );
-      if (candidates.length === 0) {
-        return {
-          predicate,
-          message: `Expected at least one stored entity of type "${predicate.entity_type}"${
-            predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
-          } to check, but found none.`,
-          expected: predicate,
-          actual: null,
-        };
-      }
-      const re = new RegExp(predicate.matches);
-      const hits = candidates.filter((e) => {
-        const v = e[predicate.field];
-        return typeof v === "string" && re.test(v);
-      });
-      if (hits.length === 0) return null;
-      return {
-        predicate,
-        message: `Expected no stored "${predicate.entity_type}" to have field "${predicate.field}" matching /${predicate.matches}/, but ${hits.length} did.`,
-        expected: { field: predicate.field, not_matches: predicate.matches },
-        actual: hits.map((e) => ({ [predicate.field]: e[predicate.field] })),
-      };
-    }
     case "turn_diagnosis": {
       const turnEntity = getStoredEntities(cell).find(
         (e) => e.entity_type === "conversation_turn" && e.instruction_diagnostics

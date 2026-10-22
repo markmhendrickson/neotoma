@@ -68,7 +68,7 @@ interface SubstrateEvent {
   source_id?: string;
   idempotency_key?: string;
   agent_thumbprint?: string;    // resolved via getCurrentAgentIdentity()
-  observation_source?: string;  // sensor | llm_summary | workflow_state | human | import | sync | unspecified
+  observation_source?: string;  // sensor | llm_summary | workflow_state | human | import | sync
   source_peer_id?: string;      // set when the observation was replayed from a peer
 }
 ```

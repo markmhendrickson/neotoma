@@ -34,12 +34,6 @@ export interface StructuredStoreApiParams {
   interpretationSourceId?: string;
   commit?: boolean;
   strict?: boolean;
-  /**
-   * Effective data origin per entity index (#2242), already resolved from the
-   * request default and per-entity overrides and peeled off `entities`. Omit
-   * when the request carried no origin.
-   */
-  dataOrigins?: Array<import("../shared/action_schemas.js").DataOrigin | undefined>;
 }
 
 /** Pure pre-persistence admission, reusable before either combined leg starts. */

@@ -4,8 +4,7 @@
  * item-1-observation-source).
  *
  * The enum is the public classification of *what kind of write* produced
- * an observation (sensor, llm_summary, workflow_state, human, import, sync,
- * and the `unspecified` lineage sentinel added by #2241).
+ * an observation (sensor, llm_summary, workflow_state, human, import, sync).
  * This test file locks the exact enum membership, case sensitivity, and
  * optional-by-default semantics so a future schema edit cannot silently
  * change the wire contract used by fleet agents and the CLI.
@@ -31,9 +30,6 @@ describe("ObservationSource enum contract", () => {
       "human",
       "import",
       "sync",
-      // #2241: appended last; the write-path default when the caller omits
-      // the field. Deliberately absent from DEFAULT_OBSERVATION_SOURCE_PRIORITY.
-      "unspecified",
     ]);
   });
 
@@ -45,7 +41,7 @@ describe("ObservationSource enum contract", () => {
   });
 
   it("rejects unknown kinds and case variants", () => {
-    for (const value of ["agent", "human_input", "Sensor", "LLM_SUMMARY", "Unspecified", "unknown", ""]) {
+    for (const value of ["agent", "human_input", "Sensor", "LLM_SUMMARY", ""]) {
       expect(ObservationSourceSchema.safeParse(value).success).toBe(false);
     }
   });

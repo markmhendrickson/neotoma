@@ -1,6 +1,6 @@
 /**
  * First URL segment (after {@link normalizeToDefaultRoute}) for marketing use case
- * pages that use the full-page shell: no docs sidebar.
+ * pages that use the full-page shell: no docs sidebar, no developer-preview badge.
  * Covers `/use-cases`, `/use-cases/…`, locale-prefixed `/es/use-cases`, trailing slashes, etc.
  */
 const MARKETING_FULL_PAGE_FIRST_SEGMENTS = new Set([

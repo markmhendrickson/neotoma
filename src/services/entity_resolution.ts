@@ -851,30 +851,6 @@ export interface ResolveEntityOptions {
    * `intent: "create_new"`.
    */
   strict?: boolean;
-  /**
-   * Set only when a keyed store is resuming its own unfinished write (#2144).
-   * An entity row that resolution finds is then one the interrupted attempt
-   * created, not a pre-existing entity this write would merge into, so the
-   * strict refusal and the `reject`/`warn` collision handling are skipped for
-   * it. The skip applies only while every observation on that entity belongs
-   * to `resumeSourceId` (or there are none): an entity that also carries an
-   * observation from another source is a real merge target and is judged as
-   * usual. If that check cannot be made, the entity is judged as usual.
-   *
-   * The skip is a property of this one write, not of an entity row, so it also
-   * requires that the row was created by this write's interrupted attempt:
-   * not merged away, and created at or after the keyed source.
-   */
-  resumeSourceId?: string;
-  /**
-   * Entity ids already resolved earlier in THIS request's pass, for a resume.
-   * A row claimed by an earlier payload of the same request is a collision
-   * between two payloads, which the first attempt refuses, so a second payload
-   * landing on it is never "this write's own entity". The caller creates one
-   * fresh Set per pass and adds every successfully resolved entity id to it.
-   * Internal: not part of any public schema.
-   */
-  resumeClaimedEntityIds?: Set<string>;
 }
 
 export interface ResolveEntityResult {
@@ -1065,55 +1041,6 @@ export function assertNoOwnerConflict(params: {
 }
 
 /**
- * True when `entityId` has at least one observation that does not belong to
- * `sourceId`. Fails closed: a read error counts as "yes", so a resume never
- * skips the identity refusals on evidence it could not read.
- */
-async function entityHasObservationFromOtherSource(
-  entityId: string,
-  sourceId: string
-): Promise<boolean> {
-  const { data, error } = await db
-    .from("observations")
-    .select("id")
-    .eq("entity_id", entityId)
-    .or(`source_id.neq.${sourceId},source_id.is.null`)
-    .limit(1);
-  if (error) return true;
-  return Array.isArray(data) && data.length > 0;
-}
-
-/**
- * True when the entity row `existing` was created by the interrupted write that
- * keyed source `sourceId` records (#2144). Three things must hold, and every
- * one fails closed (an unreadable or unparsable value means "not its own"):
- *
- *   - the row is not merged away (a merged-away row has had its observations
- *     moved, so "no observation from another source" is vacuous for it);
- *   - the row was created at or after the keyed source, because the source row
- *     is stored before any entity row of that write; an older row is a
- *     pre-existing entity, however few observations it carries;
- *   - no observation on it comes from another source.
- */
-async function resumeOwnsExistingEntity(
-  existing: { id: string; created_at?: string | null; merged_to_entity_id?: string | null },
-  sourceId: string
-): Promise<boolean> {
-  if (existing.merged_to_entity_id) return false;
-  const entityCreated = Date.parse(existing.created_at ?? "");
-  if (Number.isNaN(entityCreated)) return false;
-  const { data: sourceRow, error: sourceError } = await db
-    .from("sources")
-    .select("created_at")
-    .eq("id", sourceId)
-    .maybeSingle();
-  if (sourceError || !sourceRow) return false;
-  const sourceCreated = Date.parse((sourceRow as { created_at?: string | null }).created_at ?? "");
-  if (Number.isNaN(sourceCreated) || entityCreated < sourceCreated) return false;
-  return !(await entityHasObservationFromOtherSource(existing.id, sourceId));
-}
-
-/**
  * Resolve entity (get or create) and return a rich trace describing which
  * rule produced the canonical_name and whether the entity was created or
  * matched.
@@ -1129,16 +1056,7 @@ async function resumeOwnsExistingEntity(
 export async function resolveEntityWithTrace(
   options: ResolveEntityOptions
 ): Promise<ResolveEntityResult> {
-  const {
-    entityType,
-    userId,
-    fields,
-    commit = true,
-    targetId,
-    strict,
-    resumeSourceId,
-    resumeClaimedEntityIds,
-  } = options;
+  const { entityType, userId, fields, commit = true, targetId, strict } = options;
 
   let schema = options.schema;
   if (schema === undefined) {
@@ -1291,24 +1209,7 @@ export async function resolveEntityWithTrace(
           step === "name_key:email" ||
           step.startsWith("id_key:")
       );
-    const collisionPolicy =
-      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ?? "merge";
-    // Resuming this write's own interrupted attempt (#2144): the row found
-    // here was created by that attempt, so it is not a merge into a
-    // pre-existing entity and the identity refusals below do not apply to it.
-    // Only looked up when a refusal would otherwise fire.
-    const refusalPossible =
-      !schemaDeterministic &&
-      ((strict && !naturalKeyMatch) || collisionPolicy === "reject" || collisionPolicy === "warn");
-    const resumingOwnEntity =
-      refusalPossible &&
-      resumeSourceId !== undefined &&
-      !resumeClaimedEntityIds?.has(entityId) &&
-      (await resumeOwnsExistingEntity(
-        existing as { id: string; created_at?: string | null; merged_to_entity_id?: string | null },
-        resumeSourceId
-      ));
-    if (strict && !schemaDeterministic && !naturalKeyMatch && !resumingOwnEntity) {
+    if (strict && !schemaDeterministic && !naturalKeyMatch) {
       throw new MergeRefusedError({
         entityType,
         entityId,
@@ -1321,8 +1222,10 @@ export async function resolveEntityWithTrace(
     // heuristic merges without needing per-call `strict`. `warn` lets the
     // merge proceed but attaches a non-fatal warning to the trace. `merge`
     // (default) preserves legacy behavior.
+    const collisionPolicy =
+      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ?? "merge";
     const warnings: ResolverWarning[] = [];
-    if (!schemaDeterministic && !resumingOwnEntity) {
+    if (!schemaDeterministic) {
       if (collisionPolicy === "reject") {
         throw new MergeRefusedError({
           entityType,

@@ -114,10 +114,8 @@ describe("buildObservationRow", () => {
     expect(row.fields).toBe(fields);
   });
 
-  it("exposes the unspecified default observation source (#2241)", () => {
-    // Was `llm_summary` before #2241, which recorded omission as a claim of
-    // LLM authorship.
-    expect(DEFAULT_OBSERVATION_SOURCE).toBe("unspecified");
+  it("exposes the same default observation source the service has always applied", () => {
+    expect(DEFAULT_OBSERVATION_SOURCE).toBe("llm_summary");
   });
 });
 

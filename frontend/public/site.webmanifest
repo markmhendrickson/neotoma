@@ -1,12 +1,12 @@
 {
   "name": "Neotoma",
   "short_name": "Neotoma",
-  "description": "Neotoma is the system of record for AI agents. A record, not recall.",
+  "description": "Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f2ecdf",
-  "theme_color": "#172b39",
+  "background_color": "#130918",
+  "theme_color": "#130918",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

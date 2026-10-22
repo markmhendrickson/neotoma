@@ -25,11 +25,11 @@ MCP is the primary integration protocol. Every host below speaks MCP either over
 | ChatGPT | MCP App (connector), Custom GPT Actions (OpenAPI) | Manual HTTPS + OAuth | [chatgpt_apps_setup.md](../developer/chatgpt_apps_setup.md), [chatgpt_actions_setup.md](../developer/chatgpt_actions_setup.md) | Stable |
 | Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` | [neotoma-with-codex](https://neotoma.io/neotoma-with-codex), [stdio](https://neotoma.io/neotoma-with-codex-connect-local-stdio), [remote](https://neotoma.io/neotoma-with-codex-connect-remote-http-oauth) | Stable |
 | OpenClaw | Native plugin (`kind: memory`) + MCP | `neotoma setup --tool openclaw --yes` | [mcp_openclaw_setup.md](../developer/mcp_openclaw_setup.md), [openclaw.md](openclaw.md) | Stable |
-| IronClaw | MCP | `ironclaw mcp add` (no `neotoma setup --tool ironclaw`) | [mcp_ironclaw_setup.md](../developer/mcp_ironclaw_setup.md) | Stable |
+| IronClaw | MCP | `neotoma setup --tool ironclaw --yes` | [mcp_ironclaw_setup.md](../developer/mcp_ironclaw_setup.md) | Stable |
 | Smithery | External URL registry | Manual registration | [smithery_external_url.md](smithery_external_url.md) | Stable |
-| Windsurf | MCP | Manual MCP config (`neotoma setup --help` does not list Windsurf) | [mcp_windsurf_setup.md](../developer/mcp_windsurf_setup.md) | Stable |
-| Continue | MCP | Manual MCP config (`neotoma setup --help` does not list Continue) | [mcp_continue_setup.md](../developer/mcp_continue_setup.md) | Stable |
-| VS Code (Copilot Chat) | MCP | Manual MCP config (`neotoma setup --help` does not list VS Code) | [mcp_vscode_setup.md](../developer/mcp_vscode_setup.md) | Stable |
+| Windsurf | MCP | `neotoma setup --tool windsurf --yes` | [mcp_windsurf_setup.md](../developer/mcp_windsurf_setup.md) | Stable |
+| Continue | MCP | `neotoma setup --tool continue --yes` | [mcp_continue_setup.md](../developer/mcp_continue_setup.md) | Stable |
+| VS Code (Copilot Chat) | MCP | `neotoma setup --tool vscode --yes` | [mcp_vscode_setup.md](../developer/mcp_vscode_setup.md) | Stable |
 | Letta | MCP (streamable HTTP, SSE, stdio) | Manual SDK setup | [mcp_letta_setup.md](../developer/mcp_letta_setup.md) | Stable |
 
 ## Supported (hooks)

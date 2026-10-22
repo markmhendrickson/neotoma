@@ -237,9 +237,9 @@ export function InspectorEntitiesPage() {
         The Observations tab is the immutable history. Every store / <code>correct</code> / merge
         that touched this entity appears here, oldest first, including overwritten or losing
         observations. Observations are <em>never</em> deleted; corrections layer on top via a higher{" "}
-        <code>source_priority</code> or <code>observation_source</code> tie-break (sensor first,
-        then workflow_state, then llm_summary and unspecified level with each other, then human,
-        import, sync). The reducer column shows which observation currently "wins" for each field.
+        <code>source_priority</code> or <code>observation_source</code> tie-break (sensor &lt;
+        workflow_state &lt; llm_summary &lt; human &lt; import). The reducer column shows which
+        observation currently "wins" for each field.
       </p>
 
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Relationships tab</h2>

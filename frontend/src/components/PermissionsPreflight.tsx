@@ -139,12 +139,7 @@ export function PermissionsPreflight(): React.ReactElement {
             <span className="ml-1.5 text-fine">{copied ? "Copied" : "Copy"}</span>
           </Button>
         </div>
-        <pre
-          tabIndex={0}
-          role="region"
-          aria-label="Permissions pre-flight snippet. Scroll sideways if a line is clipped."
-          className="max-h-72 overflow-x-auto rounded-md bg-muted/40 p-3 font-mono text-fine leading-5 whitespace-pre-wrap break-words"
-        >
+        <pre className="max-h-72 overflow-x-auto rounded-md bg-muted/40 p-3 font-mono text-fine leading-5 whitespace-pre-wrap break-words">
           <code>{active.snippet}</code>
         </pre>
       </div>

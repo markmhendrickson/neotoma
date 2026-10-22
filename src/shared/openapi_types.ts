@@ -1095,15 +1095,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /**
-     * Create observation
-     * @description Low-level single-observation write. Accepts the same
-     *     `observation_source` enum as `/store`. When the field is omitted
-     *     the observation is stored with `unspecified`, but unlike `/store`
-     *     this endpoint returns no `OBSERVATION_SOURCE_OMITTED` warning
-     *     (its response carries no `store_warnings`). Send
-     *     `observation_source` explicitly to record lineage.
-     */
+    /** Create observation */
     post: operations["createObservation"];
     delete?: never;
     options?: never;
@@ -3704,18 +3696,6 @@ export interface components {
       provenance?: {
         [key: string]: unknown;
       };
-      /**
-       * @description Caller-claimed data origins (#2242) of the observations this
-       *     snapshot's `provenance` cites: `observation_id → DataOrigin`.
-       *     Join a field through `provenance` to its observation id, then
-       *     here, to see where that value came from. Returned by
-       *     `get_entity_snapshot` / MCP `retrieve_entity_snapshot`. Omitted
-       *     entirely when no cited observation carries an origin; withheld
-       *     from guest-token reads.
-       */
-      data_origins?: {
-        [key: string]: components["schemas"]["DataOrigin"];
-      };
       /** Format: date-time */
       computed_at?: string;
       observation_count?: number;
@@ -3798,22 +3778,10 @@ export interface components {
        *       Inspector edit, `entities correct`, manual annotation).
        *     - `import` — batch ingestion / ETL / scheduled imports.
        *     - `sync` — cross-instance replication from a configured Neotoma peer.
-       *     - `unspecified` — the caller did not say what kind of write this
-       *       was. Applied by the write path when a store request omits
-       *       `observation_source` (and accepted when sent explicitly). It is
-       *       a lineage sentinel, not a provenance class: it makes no claim
-       *       about origin, and it is distinct from an explicit
-       *       `llm_summary`. A store that omits the field also returns an
-       *       `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. In the
-       *       reducer tie-break it shares `llm_summary`'s rank unless the
-       *       schema's `observation_source_priority` names it, so recency
-       *       decides between the two.
        *
        *     Null / missing for legacy rows written before the field
-       *     existed. Rows written before `unspecified` was introduced carry
-       *     `llm_summary` when their caller omitted the field, so a legacy
-       *     `llm_summary` is not by itself evidence that a language model
-       *     produced the value; only explicit values written since are.
+       *     existed; writes default to `llm_summary` when unspecified
+       *     because MCP callers are LLM-driven by construction.
        * @enum {string|null}
        */
       observation_source?:
@@ -3823,7 +3791,6 @@ export interface components {
         | "human"
         | "import"
         | "sync"
-        | "unspecified"
         | null;
       fields?: {
         [key: string]: unknown;
@@ -3835,18 +3802,11 @@ export interface components {
        * @description Write-time agent attribution for this observation. Carries the
        *     `AgentAttribution` keys stamped by the AAuth middleware and
        *     MCP `initialize.clientInfo` fallback. Coexists with any
-       *     free-form provenance keys supplied at write time, including
-       *     `data_origin` (#2242): the caller-claimed origin of the data
-       *     (file, URL, message, API), present only when the store request
-       *     supplied one. `data_origin` is never merged into the attribution
-       *     keys and is withheld from guest-token reads.
+       *     free-form provenance keys supplied at write time.
        */
-      provenance?: ({
-        data_origin?: components["schemas"]["DataOrigin"];
-      } & {
+      provenance?: {
         [key: string]: unknown;
-      }) &
-        components["schemas"]["AgentAttribution"];
+      } & components["schemas"]["AgentAttribution"];
     };
     RelationshipSnapshot: {
       relationship_key?: string;
@@ -4185,47 +4145,6 @@ export interface components {
           };
         };
     /**
-     * @description Where stored data came from (#2242) — the file, sheet row, URL,
-     *     message, or API endpoint — as opposed to who wrote it (attribution,
-     *     `external_actor`). A caller claim, never verified: the server does not
-     *     fetch, open, or validate `locator` or `url`. Persisted on each created
-     *     observation as `provenance.data_origin`. `locator` is required unless
-     *     `kind` is `manual`. Every text field is single-line: control
-     *     characters, including newlines, are refused. Strip credentials,
-     *     signatures, and auth query parameters from `locator` and `url` before
-     *     sending; a `url` with embedded `user:pass@` is refused.
-     */
-    DataOrigin: {
-      /**
-       * @description Category of origin. `manual` = typed or confirmed by a person.
-       * @enum {string}
-       */
-      kind: "file" | "url" | "email" | "message" | "api" | "manual" | "other";
-      /**
-       * @description Primary pointer to the origin: a file path or name, URL, email or
-       *     chat message id, or API endpoint. Required unless `kind` is `manual`.
-       */
-      locator?: string;
-      /** @description Position within the locator, e.g. `sheet=Tickets;row=97`, `page=3`, `attachment=2`. */
-      part?: string;
-      /** @description System that holds the origin, e.g. `gmail`, `google_sheets`, `stripe`, `local_fs`. */
-      system?: string;
-      /**
-       * Format: uri
-       * @description Absolute http(s) link to the original, when `locator` is not itself a URL. Must not embed credentials (`user:pass@`).
-       */
-      url?: string;
-      /** @description Code or agent that shaped the value, with revision, e.g. `tools/derive_all.py@4a5409c`. */
-      producer?: string;
-      /**
-       * Format: date-time
-       * @description When the data was read from the origin (ISO 8601).
-       */
-      retrieved_at?: string;
-      /** @description Short free-text note about the derivation. */
-      notes?: string;
-    };
-    /**
      * @description Upstream artifact author (e.g. GitHub user) stamped into observation
      *     provenance alongside AAuth agent attribution. Matches
      *     `ExternalActorInputSchema` in `action_schemas.ts`.
@@ -4292,12 +4211,9 @@ export interface components {
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
        *     `source_priority`. See `Observation.observation_source` for
-       *     the full semantic contract. When omitted, observations are
-       *     stored with `unspecified` and the response carries one
-       *     `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
-       *     field explicitly (for example `llm_summary` for model-authored
-       *     content, `import` for ETL) to record lineage. Applies to every
-       *     observation created by this request.
+       *     the full semantic contract. Defaults to `llm_summary` when
+       *     unspecified. Applies to every observation created by this
+       *     request.
        * @enum {string}
        */
       observation_source?:
@@ -4306,26 +4222,13 @@ export interface components {
         | "workflow_state"
         | "human"
         | "import"
-        | "sync"
-        | "unspecified";
+        | "sync";
       /**
        * @description Optional upstream author (e.g. GitHub user for issue submission).
        *     Stamped into observation provenance; must align with
        *     `ExternalActorInputSchema` (strict — no extra keys).
        */
       external_actor?: components["schemas"]["ExternalActorInput"];
-      /**
-       * @description Optional (#2242). Where the entities in this request came from.
-       *     Applies to every entity; an entity's own `data_origin` key
-       *     overrides it (precedence: entity → request → none). Stamped on
-       *     each created observation as `provenance.data_origin` and included
-       *     in the request's stored payload, so reusing an `idempotency_key`
-       *     with a different origin is `ERR_IDEMPOTENCY_MISMATCH`. Requires
-       *     `entities` (a file-only store is refused: the stored file is its
-       *     own origin record). A claim, not proof; separate from attribution
-       *     and from `observation_source`.
-       */
-      data_origin?: components["schemas"]["DataOrigin"];
       /** @description Required for structured path, optional for unstructured-only path. */
       idempotency_key?: string;
       /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */
@@ -4403,12 +4306,9 @@ export interface components {
       /**
        * @description Classifies the *kind* of write being performed, orthogonal to
        *     `source_priority`. See `Observation.observation_source` for
-       *     the full semantic contract. When omitted, observations are
-       *     stored with `unspecified` and the response carries one
-       *     `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`; set the
-       *     field explicitly (for example `llm_summary` for model-authored
-       *     content, `import` for ETL) to record lineage. Applies to every
-       *     observation created by this request.
+       *     the full semantic contract. Defaults to `llm_summary` when
+       *     unspecified. Applies to every observation created by this
+       *     request.
        * @enum {string}
        */
       observation_source?:
@@ -4417,8 +4317,7 @@ export interface components {
         | "workflow_state"
         | "human"
         | "import"
-        | "sync"
-        | "unspecified";
+        | "sync";
       idempotency_key: string;
       user_id?: string;
       /**
@@ -4638,15 +4537,7 @@ export interface components {
          *     non-default `source_priority` but no field on the entity type
          *     uses a merge strategy that honours it — all fields effectively
          *     use `last_write`, so the priority value has no effect on the
-         *     stored snapshot), and `OBSERVATION_SOURCE_OMITTED` (fired
-         *     once per store request that omits `observation_source`;
-         *     every observation in the request was stored as
-         *     `unspecified`. `observation_index`/`entity_id` name the
-         *     first stored entity only as a nominal pointer: the warning
-         *     is request-scoped, not about that entity. Not fired when
-         *     the caller sends any value explicitly, including
-         *     `unspecified`, which a caller that cannot classify the
-         *     write should send to suppress it).
+         *     stored snapshot).
          */
         code: string;
         /** @description Human-readable description from the schema rule. */
@@ -7419,26 +7310,6 @@ export interface operations {
        *     or an ordinary idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
        *     idempotency_key was already used for a store call with different
        *     content. Use a new idempotency_key to write the updated payload.
-       *
-       *     `ERR_STORE_WRITE_INCOMPLETE` (an `ErrorEnvelope` with
-       *     `error_code: ERR_STORE_WRITE_INCOMPLETE`): the idempotency_key
-       *     belongs to a store that did not finish writing, and the request
-       *     carries an `interpretation`, so it cannot be resumed under that
-       *     key. `details` carries `hint`, `source_id`, `entities_requested`,
-       *     `entities_written` and `missing_entity_indexes` (zero-based
-       *     positions in the request's `entities` array that have no
-       *     observation yet; when the list is empty every entity is stored
-       *     and only relationships may be missing). Resend ONLY those
-       *     entities under a new idempotency_key; resending the full payload
-       *     under a new key writes a second set of observations to the
-       *     entities already written. The original request's relationships
-       *     were not written: recreate them separately, referencing the
-       *     entities by entity id (the error does not return the ids; look
-       *     each one up by the entity's identifying fields). Not retryable
-       *     under the same key. A
-       *     replay without an `interpretation` never returns this: it
-       *     finishes the interrupted write, and a replay of a finished write
-       *     is unchanged (`replayed: true`).
        */
       409: {
         headers: {

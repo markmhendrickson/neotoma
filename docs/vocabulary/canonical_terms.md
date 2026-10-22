@@ -1,351 +1,319 @@
-# Neotoma canonical vocabulary
+# Neotoma Canonical Vocabulary
 
-This page defines the terms Neotoma's code, docs, and UI text use, the synonyms to avoid, and the retired category nouns.
-
-Applies to v0.25.0 and main.
-
-## Core terms
-
-### System of Record
-
-**Definition:** The role Neotoma plays: it keeps observations with their sources and computes the current value of each field, for connected agents to read. The full category line is "the system of record for AI agents".
-
-**Use:** "Neotoma is the system of record beneath agents, pipelines, and applications. They read the record, act outside it, and write their results back as observations."
-
-**Example:** "An agent stores an invoice and its vendor. Neotoma keeps both observations with their source, and any agent connected later reads the same current values and can see which observation set each field."
-
-**Forbidden synonyms:**
-
-- "state layer" (retired category noun)
-- "memory layer" (retired category noun)
-- "truth layer" (retired category noun)
-- "deterministic state" (retired category noun; the reducer is deterministic, the category is not named after it)
-- "data layer" (too generic)
-- "knowledge base" (implies semantic reasoning)
-
-The phrase "your agents forget" is also retired as a framing. The contrast to use is "a record, not recall".
+## Core Terms
 
 ### Canonicalization Rules
 
-**Definition:** The rules that normalize an entity's identity so the same thing resolves to the same [entity](#entity) id. In current [entity schemas](#entity-schema) these are the `canonical_name_fields` rules: the fields, single or composite, that form the canonical name. Values are normalized before hashing.
+**Definition:** Rules for normalizing structured [source](#source) data for deterministic deduplication (field selection, string normalization, array sorting). [Canonicalization rules](#canonicalization-rules) are part of [entity schemas](#entity-schema).
 
-**Use:** "The built-in invoice schema's canonicalization rule is the composite of `invoice_number`, `vendor_name`, and `invoice_date`."
+**Use:** "[Entity schemas](#entity-schema) define [canonicalization rules](#canonicalization-rules) to ensure same [source](#source) produces same content_id."
 
-**Example:** "Two stores of a company named 'Acme Corp' and 'acme corp' normalize to the same canonical name and resolve to one entity id."
+**Example:** "The invoice [entity schema](#entity-schema) defines [canonicalization rules](#canonicalization-rules): include only `invoice_number`, `amount`, `vendor_name`; normalize strings to lowercase; sort arrays. Structured [source](#source) `{invoice_number: 'INV-001', vendor_name: 'Acme Corp'}` and `{invoice_number: 'INV-001', vendor_name: 'acme corp'}` produce the same `content_id`."
 
-**Forbidden synonyms:**
-
-- "normalization" (canonicalization is the specific normalization used for identity)
-- "standardization" (too generic)
+**Forbidden Synonyms:**
+- ❌ "normalization" (canonicalization is specific type of normalization for deduplication)
+- ❌ "standardization" (too generic)
 
 ### Entity
 
-**Definition:** One person, company, task, invoice, or other thing that [observations](#observation) are about. Its id is `ent_` followed by a hash of the [entity type](#entity-type) and its identity fields.
+**Definition:** A canonical representation of a person, company, or location with deterministic ID.
 
-**Use:** "Entity resolution maps each stored item to its canonical entity id."
+**Use:** "[Entity](#entity) resolution generates canonical [entity](#entity) IDs."
 
-**Example:** "Observations from two invoices that name 'Acme Corp' and 'ACME CORP' resolve to the same company entity."
+**Example:** "The [entity](#entity) `ent_acme_corp` represents Acme Corporation, merging [observations](#observation) from multiple invoices and contracts that reference 'Acme Corp', 'Acme Corporation', and 'ACME CORP'."
 
-**Forbidden synonyms:**
-
-- "object" (programming term)
-- "item" (too generic)
-
-### Entity Schema
-
-**Definition:** The versioned definition for an [entity type](#entity-type), stored in the schema registry: fields and their types, the merge policy for each field, [canonicalization rules](#canonicalization-rules), and which fields produce timeline [events](#event). The [reducer](#reducer) uses it to compute [entity snapshots](#entity-snapshot).
-
-**Use:** "Each entity type has an entity schema that defines its fields, merge policies, and identity rules."
-
-**Example:** "The built-in invoice entity schema declares fields such as `invoice_number`, `invoice_date`, `amount_due`, and `vendor_name`, uses the composite of `invoice_number`, `vendor_name`, and `invoice_date` as its identity, and lists its temporal fields."
-
-**Forbidden synonyms:**
-
-- "schema" (too generic; say "entity schema")
-- "capability" (legacy; see [Capability](#capability))
-- "record type" (entity schemas apply to entity types)
-- "database schema" (an entity schema defines domain fields, not database tables)
-
-### Entity Type
-
-**Definition:** The classification of an [entity](#entity) that selects its [entity schema](#entity-schema) and identity rules, for example `person`, `company`, `invoice`, `transaction`, or `release`.
-
-**Use:** "Each entity has an `entity_type` that determines which entity schema applies."
-
-**Example:** "An entity with `entity_type: 'company'` resolves by the company identity fields, while an `invoice` entity resolves by invoice number, vendor name, and invoice date together."
-
-**Forbidden synonyms:**
-
-- "record type" (legacy term; see [Record Type](#record-type))
-- "schema type" (the entity type is the classification; the entity schema is the definition)
-- "type" (too generic)
-- "category" (too informal)
-
-### Event
-
-**Definition:** A timeline event derived from a date field on an [entity snapshot](#entity-snapshot). An event carries `source_id`, `entity_id`, and the `source_field` that held the date.
-
-**Use:** "Timeline events are derived from date fields, and the entity schema can name which fields count."
-
-**Example:** "An invoice with `invoice_date: '2025-01-15'` produces an event with `event_type: 'InvoiceIssued'`, `event_timestamp: '2025-01-15T00:00:00Z'`, and `source_field: 'invoice_date'`."
-
-**Forbidden synonyms:**
-
-- "activity" (too informal)
-- "occurrence" (verbose)
-
-### Retrieving
-
-**Definition:** Reading [entities](#entity), [observations](#observation), [entity snapshots](#entity-snapshot), and [relationships](#relationship) from the record: querying entities by type or identifier, reading a snapshot with its [provenance](#provenance), listing an entity's observations, and traversing relationships.
-
-**Use:** "Use `retrieve_entities` to query entities by type, or `retrieve_entity_snapshot` to read the current values of one entity."
-
-**Example:** "`retrieve_entities` with `entity_type: 'invoice'` returns invoice entities with their snapshots. `retrieve_entity_snapshot` returns one entity's current values and, for each field, the observation that set it."
-
-**Forbidden synonyms:**
-
-- "fetch" (too generic)
-- "load" (implies loading into memory)
-- "get" (too generic; use the specific action name)
-
-### Extraction
-
-**Definition:** Turning the content of a [source](#source) into fields. For a structured payload the caller supplies the fields. For a file, the agent or client extracts the fields and records them as an [interpretation](#interpretation); Neotoma does not run an extraction model over stored files.
-
-**Use:** "The agent extracted the invoice fields from the PDF and stored them with an interpretation block."
-
-**Example:** "A client reads `invoice.pdf`, extracts `invoice_number: 'INV-001'` and the vendor name, and stores them linked to the file's source."
-
-**Forbidden synonyms:**
-
-- "parsing" (too generic)
-- "analysis" (implies inference)
-
-### Storing
-
-**Definition:** Writing data into Neotoma with the `store` action (MCP tool, `POST /store`, or `neotoma store`). A store takes structured entities (`entities`) or a file (`file_content` with `mime_type`, or `file_path` on the server's own filesystem). Files are kept as [sources](#source). Structured entities are resolved to [entities](#entity) and written as [observations](#observation); fields the [entity schema](#entity-schema) does not declare are kept as [raw fragments](#raw-fragment).
-
-**Use:** "Storing writes observations; the reducer then recomputes each affected entity's snapshot."
-
-**Example:** "An agent stores `{entities: [{entity_type: 'invoice', invoice_number: 'INV-001', vendor_name: 'Acme Corp'}]}`. Neotoma records the source, resolves the invoice entity, writes one observation, and derives a timeline event from the invoice date."
-
-**Forbidden synonyms:**
-
-- "import" (ambiguous)
-- "upload" (only one step)
-- "processing" (too vague)
-- "ingestion" (replaced by "storing"; see [Ingestion](#ingestion))
-
-### Interpretation
-
-**Definition:** A record of one extraction over a stored [source](#source): the entities a client extracted from it and the configuration the client reports (provider, model, temperature, and a prompt hash). Observations written from an interpretation carry its `interpretation_id`.
-
-**Use:** "Each new interpretation of a source adds new observations and leaves the earlier ones in place."
-
-**Example:** "A client extracts an invoice from `invoice.pdf` with one model and stores it with an interpretation. Extracting again with a different model adds a second interpretation and new observations; the first set stays listed."
-
-**Forbidden synonyms:**
-
-- "interpretation run" (say "interpretation")
-- "analysis" (implies inference)
-- "processing" (too vague)
-
-### Entity Graph
-
-**Definition:** The connected set of [sources](#source), [observations](#observation), [entities](#entity), [relationships](#relationship), and [events](#event), joined by typed links.
-
-**Use:** "The entity graph links each observation to its source and to the entity it describes."
-
-**Example:** "Source `src_invoice_pdf` links to an observation of the invoice entity, and the payment entity has a `SETTLES` relationship to that invoice."
-
-**Forbidden synonyms:**
-
-- "memory graph" (retired)
-- "knowledge graph" (implies semantic reasoning)
-- "data graph" (too generic)
-
-### Observation
-
-**Definition:** A set of field values about one [entity](#entity), written at one time. Observations from a store or an [interpretation](#interpretation) are linked to their [source](#source); a correction observation has no source. The [reducer](#reducer) merges an entity's observations into its [entity snapshot](#entity-snapshot). A fact enters Neotoma as an observation.
-
-**Use:** "Each observation records where it came from, when it was observed, and its source priority."
-
-**Example:** "An observation of the company entity carries `fields: {name: 'Acme Corp', address: '123 Main St'}`, `source_id: 'src_001'`, `observed_at: '2025-01-15T10:30:00Z'`, and `source_priority: 0`."
-
-**Forbidden synonyms:**
-
-- "datum" (too technical)
-- "extraction" (the observation is the result; extraction is the process)
-
-### Provenance
-
-**Definition:** Where a value came from: the [observation](#observation) that set it, that observation's [source](#source) and [interpretation](#interpretation) when it has them, when it was observed, and the user it belongs to. Each field of an [entity snapshot](#entity-snapshot) names the observation that set it.
-
-**Use:** "Provenance lets an agent trace a current value back to the observation and source behind it."
-
-**Example:** "The `vendor_name` field of an invoice snapshot names observation `obs_123`, which links to `source_id: 'src_abc123'` (the uploaded PDF) and `interpretation_id: 'int_xyz789'`, with `observed_at: '2025-01-15T10:30:00Z'`. A value set by a correction names the correction observation, which has no source."
-
-**Forbidden synonyms:**
-
-- "metadata" (provenance is a specific kind of metadata)
-- "origin" (informal)
-
-### Raw Fragment
-
-**Definition:** A field value that arrived with an [observation](#observation) but is not declared in the [entity schema](#entity-schema). Raw fragments are kept with the entity, source, and interpretation they came from, so a schema can declare the field later.
-
-**Use:** "Undeclared fields are kept as raw fragments rather than dropped."
-
-**Example:** "An invoice stored with an undeclared `po_reference` field keeps that value as a raw fragment of the invoice entity."
-
-**Forbidden synonyms:**
-
-- "extra fields" (informal)
-- "junk data" (the values are kept on purpose)
-
-### Reducer
-
-**Definition:** The function that merges an entity's [observations](#observation) into its [entity snapshot](#entity-snapshot), field by field, using the merge policy in the [entity schema](#entity-schema). The same observations and merge policies always produce the same snapshot.
-
-**Use:** "The reducer recomputes the snapshot after every write to the entity."
-
-**Example:** "Given observations `{name: 'Acme'}` with priority 0 and `{name: 'Acme Corp'}` with priority 100, the `highest_priority` policy produces `{name: 'Acme Corp'}`."
-
-**Forbidden synonyms:**
-
-- "merger" (too generic)
-- "aggregator" (implies accumulation)
-- "combiner" (too generic)
-
-### Relationship
-
-**Definition:** A typed connection between two [entities](#entity), for example `PART_OF` or `SETTLES`. The type vocabulary is a runtime registry read with `list_relationship_types`. Relationships are stored as relationship observations with [provenance](#provenance) and reduced to relationship snapshots. Deleting a relationship adds an observation that marks it deleted, and `restore_relationship` restores it; neither edits the earlier observations.
-
-**Use:** "Relationships connect entities in the entity graph with typed links."
-
-**Example:** "The relationship `{relationship_type: 'SETTLES', source_entity_id: 'ent_payment_456', target_entity_id: 'ent_invoice_123'}` records that the payment settles the invoice, with metadata `{amount: 1500.00}`."
-
-**Forbidden synonyms:**
-
-- "link" (too generic)
-- "connection" (too generic)
-- "edge" (implementation detail; "relationship" is the domain term)
-
-### Entity Snapshot
-
-**Definition:** The [reducer](#reducer)'s output for one [entity](#entity): the current value of each field, computed from all of its [observations](#observation), with each field naming the observation that set it. "Current state" is fine in prose for what a snapshot shows.
-
-**Use:** "Entity snapshots are recomputed from observations whenever the entity changes."
-
-**Example:** "The snapshot of the company entity merges `{name: 'Acme Corp'}`, `{address: '123 Main St'}`, and `{tax_id: '12-3456789'}` into one set of fields, and its provenance names the observation behind each."
-
-**Forbidden synonyms:**
-
-- "merged data" (the snapshot is the computed result)
-- "aggregate" (implies accumulation)
-
-### Snapshot
-
-Short form of [entity snapshot](#entity-snapshot), used where the context is clear. Relationships have relationship snapshots, computed the same way.
-
-### Source
-
-**Definition:** The input a write arrived with: a file, raw text, or a structured payload. Files are stored with SHA-256 content hashing, unique per user, so the same file stored twice reuses one source. Observations link to their source through `source_id`.
-
-**Use:** "Every observation from a store traces to its source."
-
-**Example:** "A source can be `invoice.pdf`, a pasted text, or the JSON payload of a `store` call. An agent that extracts entities from the PDF stores them linked to the PDF's source."
-
-**Source origin for MCP stores:**
-
-- **Conversation-sourced:** data the user said in chat or that comes from the agent's dialogue; store it through the structured path (`store` with `entities`).
-- **File-sourced or resource-sourced:** a user-attached file or another artifact to keep; store it through the file path (`store` with `file_content` or `file_path`) so the artifact is kept as a source.
-
-**Forbidden synonyms:**
-
-- "content" (say "source")
-- "data" (too generic)
-- "file" (a source can also be text or a structured payload)
-- "document" (ambiguous)
-- "source material" (older term; say "source")
-
-## Legacy terms
-
-These terms belong to the earlier record-based design. They are listed so older docs and code comments can be read. Do not use them in new code or docs.
-
-### Capability
-
-**Definition:** Legacy processing specification from the capability registry (`src/services/capability_registry.ts`), which carried canonicalization and entity extraction rules per intent. Entity schemas replaced it; the store path does not use it.
-
-**Forbidden synonyms:**
-
-- "schema" (say "entity schema")
-- "type" (say "entity type")
-- "handler" (implementation detail)
+**Forbidden Synonyms:**
+- ❌ "object" (programming term)
+- ❌ "item" (too generic)
 
 ### Entity Extraction Rule
 
-**Definition:** Legacy capability rule (`field_value`, `payload_self`, or `array_items`) that derived several entities from one structured payload. In the current store path the caller sends one entry per entity in `entities` and links them with relationships.
+**Definition:** Rule defining how [entities](#entity) are [extracted](#extraction) from structured [source](#source) (material_self, field_value, or array_items [extraction](#extraction) types). [Entity extraction rules](#entity-extraction-rule) are part of [entity schemas](#entity-schema).
 
-**Forbidden synonyms:**
+**Use:** "[Entity schemas](#entity-schema) define [entity extraction rules](#entity-extraction-rule) for multi-[entity](#entity) [extraction](#extraction) from structured [source](#source)."
 
-- "extraction rule" (too generic)
-- "mapping" (too generic)
+**Example:** "The note [entity schema](#entity-schema) defines: `{extraction_type: 'material_self', entity_type: 'note'}` [extracts](#extraction) the note [entity](#entity), and `{extraction_type: 'array_items', source_field: 'tasks', entity_type: 'task'}` [extracts](#extraction) task [entities](#entity) from the tasks array in structured [source](#source)."
 
-### Ingestion
+**Forbidden Synonyms:**
+- ❌ "extraction rule" (too generic, must specify entity extraction)
+- ❌ "mapping" (too generic)
 
-Older name for [storing](#storing). Docs that still say "ingestion" mean storing.
+### Entity Schema
+
+**Definition:** Versioned definition of fields, types, validators, merge policies, [canonicalization rules](#canonicalization-rules), and [entity extraction rules](#entity-extraction-rule) for an [entity type](#entity-type), stored in the schema registry. Defines how structured [source](#source) is normalized, deduplicated, and processed into [observations](#observation) and [entity snapshots](#entity-snapshot).
+
+**Use:** "Each [entity type](#entity-type) has an [entity schema](#entity-schema) that defines its field structure, validation rules, normalization for deduplication, and extraction of related [entities](#entity)."
+
+**Example:** "The invoice [entity schema](#entity-schema) defines: fields like `invoice_number` (string, required), `amount` (number, required), `date_issued` (date, required); merge policies like 'highest_priority' for vendor_name; [canonicalization rules](#canonicalization-rules) that include only `invoice_number`, `amount`, `vendor_name` for deduplication; and [entity extraction rules](#entity-extraction-rule) that extract company [entities](#entity) from `vendor_name` and `customer_name` fields."
+
+**Forbidden Synonyms:**
+- ❌ "schema" (too generic - use "[entity schema](#entity-schema)" for clarity)
+- ❌ "capability" (deprecated - [entity schemas](#entity-schema) now include normalization and extraction rules directly)
+- ❌ "record type" ([entity schemas](#entity-schema) apply to [entity types](#entity-type), not [record types](#record-type))
+- ❌ "database schema" (entity schema refers to domain field definitions, not PostgreSQL table structure)
+
+### Entity Type
+
+**Definition:** Classification of an [entity](#entity) that determines its [entity schema](#entity-schema) and resolution rules (e.g., `person`, `company`, `invoice`, `transaction`, `release`).
+
+**Use:** "Each [entity](#entity) has an entity_type that determines which [entity schema](#entity-schema) applies."
+
+**Example:** "An [entity](#entity) with `entity_type: 'company'` uses the company [entity schema](#entity-schema) and resolves by normalized company name, while an [entity](#entity) with `entity_type: 'invoice'` uses the invoice [entity schema](#entity-schema) and resolves by invoice number."
+
+**Forbidden Synonyms:**
+- ❌ "record type" ([entity type](#entity-type) classifies [entities](#entity), [record type](#record-type) classifies documents)
+- ❌ "schema type" ([entity type](#entity-type) is the classification, [entity schema](#entity-schema) is the field definition)
+- ❌ "type" (too generic)
+- ❌ "category" (too informal)
+
+### Event
+
+**Definition:** A timeline [event](#event) derived from extracted date fields in [source](#source). [Events](#event) reference their [source](#source) via `source_material_id` and include the field name that contained the date.
+
+**Use:** "[Events](#event) appear on the timeline view and are generated from date fields in [source](#source)."
+
+**Example:** "An invoice [source](#source) with `date_issued: '2025-01-15'` generates an [event](#event) with `event_type: 'InvoiceIssued'`, `event_timestamp: '2025-01-15T00:00:00Z'`, and `source_field: 'date_issued'`."
+
+**Forbidden Synonyms:**
+- ❌ "activity" (too informal)
+- ❌ "occurrence" (verbose)
+
+### Retrieving
+
+**Definition:** The process of querying and retrieving [entities](#entity), [observations](#observation), [entity snapshots](#entity-snapshot), and related data from the [memory graph](#memory-graph). [Retrieving](#retrieving) operations include querying [entities](#entity) by type or identifier, getting [entity snapshots](#entity-snapshot) with [provenance](#provenance), listing [observations](#observation) for an [entity](#entity), and traversing [relationships](#relationship).
+
+**Use:** "[Retrieving](#retrieving) operations query the state layer to access stored [entities](#entity) and [observations](#observation). Use `retrieve_entities` to query [entities](#entity) by type, or `retrieve_entity_snapshot` to retrieve current truth for an [entity](#entity)."
+
+**Example:** "The `retrieve_entities` action queries [entities](#entity) with filters like `entity_type: 'invoice'` and returns [entities](#entity) with their [entity snapshots](#entity-snapshot). The `retrieve_entity_snapshot` action retrieves the current truth for a specific [entity](#entity), computed by merging all [observations](#observation) about that [entity](#entity)."
+
+**Forbidden Synonyms:**
+- ❌ "fetch" (too generic)
+- ❌ "load" (implies loading into memory, retrieving is querying)
+- ❌ "get" (too generic, use specific action names)
+
+### Extraction
+
+**Definition:** Deterministic rule-based field [extraction](#extraction) from [source](#source).
+
+**Use:** "[Extraction](#extraction) uses regex to find invoice numbers."
+
+**Example:** "[Extraction](#extraction) applies the regex pattern `/INV-(\d+)/i` to find invoice numbers, always producing 'INV-001' from [source](#source) containing 'Invoice #INV-001' or 'invoice inv-001'."
+
+**Forbidden Synonyms:**
+- ❌ "parsing" (too generic)
+- ❌ "analysis" (implies inference)
+
+### Storing
+
+**Definition:** The process of uploading, [extracting](#extraction), and inserting [source](#source) into the [memory graph](#memory-graph). [Storing](#storing) handles both unstructured [source](#source) (files, raw text, URLs) and structured [source](#source) (JSON with entity types) via a unified `store` MCP action. Unstructured [source](#source) is stored → [interpretation](#interpretation) → structured [source](#source) → processed via [entity schema](#entity-schema) → [observations](#observation). Structured [source](#source) is stored → processed via [entity schema](#entity-schema) → [observations](#observation).
+
+**Use:** "[Storing](#storing) pipeline processes [source](#source) deterministically. Unstructured [source](#source) is interpreted into structured [source](#source), which is then processed to create [observations](#observation)."
+
+**Example:** "The unified `store` action accepts either unstructured [source](#source) (e.g., `{file_content: '...', mime_type: 'application/pdf'}`) or structured [source](#source) (e.g., `{entities: [{entity_type: 'invoice', ...}]}`). Uploading invoice.pdf triggers [storing](#storing): the unstructured [source](#source) is stored, an [interpretation](#interpretation) transforms it into structured [source](#source) with entity types, then the structured [source](#source) is processed using [entity schemas](#entity-schema) to create [observations](#observation) for the invoice [entity](#entity) and vendor company [entity](#entity), and [events](#event) are generated from date fields. Alternatively, structured [source](#source) with `entity_type: 'invoice'` submitted directly is stored and processed using the invoice [entity schema](#entity-schema) for normalization and [entity extraction](#entity-extraction-rule) to create [observations](#observation)."
+
+**Forbidden Synonyms:**
+- ❌ "import" (ambiguous)
+- ❌ "upload" (only one step)
+- ❌ "processing" (too vague)
+- ❌ "ingestion" (replaced by [storing](#storing) for clarity)
+
+### Interpretation
+
+**Definition:** Versioned interpretation attempt on unstructured [source](#source), with config logging (provider, model, temperature, prompt_hash). Transforms unstructured [source](#source) into structured [source](#source) (with entity types) that is then processed using [entity schemas](#entity-schema) for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation.
+
+**Use:** "Each [interpretation](#interpretation) creates new structured [source](#source) without modifying existing ones. The structured [source](#source) is then processed using [entity schemas](#entity-schema) for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation, just like directly submitted structured [source](#source)."
+
+**Example:** "An [interpretation](#interpretation) on unstructured [source](#source) `src_invoice_pdf` with config `{provider: 'openai', model_id: 'gpt-4', temperature: 0}` extracts structured data with entity types (e.g., `entity_type: 'invoice'`, `entity_type: 'company'`) and creates structured [source](#source). This structured [source](#source) is then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule) (to identify related entities), and [observation](#observation) creation `obs_001`, `obs_002`. Re-running with a different model creates new structured [source](#source) and new [observations](#observation) `obs_003`, `obs_004` without modifying the original ones."
+
+**Forbidden Synonyms:**
+- ❌ "interpretation run" (simplified to [interpretation](#interpretation))
+- ❌ "analysis" (implies inference, interpretation is deterministic [extraction](#extraction))
+- ❌ "processing" (too vague)
+
+### Memory Graph
+
+**Definition:** The interconnected graph of [source](#source), [observations](#observation), [entities](#entity), [relationships](#relationship), and [events](#event) with typed edges.
+
+**Use:** "The [memory graph](#memory-graph) connects [source](#source) to [observations](#observation) to [entities](#entity)."
+
+**Example:** "The [memory graph](#memory-graph) shows: [source](#source) `src_invoice_pdf` → [observation](#observation) `obs_001` → [entity](#entity) `ent_acme_corp`, and [entity](#entity) `ent_invoice_123` has a SETTLES [relationship](#relationship) to [entity](#entity) `ent_payment_456`."
+
+**Forbidden Synonyms:**
+- ❌ "knowledge graph" (implies semantic reasoning)
+- ❌ "data graph" (too generic)
+
+### Observation
+
+**Definition:** Granular facts [extracted](#extraction) from [source](#source). [Observations](#observation) are merged via [reducers](#reducer) to compute [entity](#entity) [entity snapshots](#entity-snapshot).
+
+**Use:** "Each [observation](#observation) traces to its [source](#source), and optionally to the [interpretation](#interpretation) that created the structured [source](#source)."
+
+**Example:** "An [observation](#observation) for [entity](#entity) `ent_acme_corp` contains `fields: {name: 'Acme Corp', address: '123 Main St'}`, `source_material_id: 'src_001'`, `observed_at: '2025-01-15T10:30:00Z'`, and `source_priority: 0`."
+
+**Forbidden Synonyms:**
+- ❌ "fact" (too generic)
+- ❌ "datum" (too technical)
+- ❌ "extraction" ([observation](#observation) is the result, [extraction](#extraction) is the process)
+
+
+### Provenance
+
+**Definition:** Metadata tracking the origin of data, including [source](#source), timestamp, user, and [interpretation](#interpretation). [Source](#source) is [stored](#storing) and tracked, and [provenance](#provenance) tracks these stored artifacts. Enables full traceability from [entity snapshots](#entity-snapshot) back to original [source](#source).
+
+**Use:** "[Provenance](#provenance) ensures every [observation](#observation) traces to its [source](#source)."
+
+**Example:** "An [observation](#observation)'s [provenance](#provenance) from unstructured [source](#source) includes `source_id: 'src_abc123'` (the uploaded PDF), `interpretation_id: 'run_xyz789'` (which AI model transformed it into structured [source](#source)), `extracted_at: '2025-01-15T10:30:00Z'`, and `user_id: 'user_001'`. An [observation](#observation)'s [provenance](#provenance) from directly submitted structured [source](#source) includes `source_id: 'src_def456'` (the structured JSON), `extracted_at: '2025-01-15T10:30:00Z'`, and `user_id: 'user_001'` (no `interpretation_id` since no [interpretation](#interpretation) was performed)."
+
+**Forbidden Synonyms:**
+- ❌ "metadata" (provenance is specific type of metadata)
+- ❌ "origin" (informal)
+
+### Reducer
+
+**Definition:** Deterministic function that merges [observations](#observation) into [entity](#entity) [entity snapshots](#entity-snapshot). Same [observations](#observation) always produce the same [entity snapshot](#entity-snapshot).
+
+**Use:** "[Reducers](#reducer) compute [entity snapshots](#entity-snapshot) deterministically from [observation](#observation) history."
+
+**Example:** "Given [observations](#observation) `[{name: 'Acme'}, {name: 'Acme Corp', priority: 100}]`, the [reducer](#reducer) applies merge policy 'highest_priority' to produce [entity snapshot](#entity-snapshot) `{name: 'Acme Corp'}`. The same [observations](#observation) always produce the same [entity snapshot](#entity-snapshot)."
+
+**Forbidden Synonyms:**
+- ❌ "merger" (too generic)
+- ❌ "aggregator" (implies accumulation, reducer is deterministic computation)
+- ❌ "combiner" (too generic)
+
+### Relationship
+
+**Definition:** Typed connection between two [entities](#entity) (for example `PART_OF`). The type vocabulary is a runtime registry read via `list_relationship_types`. [Relationships](#relationship) are immutable and include [provenance](#provenance) metadata.
+
+**Use:** "[Relationships](#relationship) connect [entities](#entity) in the [memory graph](#memory-graph) with typed edges."
+
+**Example:** "A [relationship](#relationship) `{relationship_type: 'SETTLES', source_entity_id: 'ent_payment_456', target_entity_id: 'ent_invoice_123'}` indicates that payment [entity](#entity) 456 settles invoice [entity](#entity) 123, with metadata `{amount: 1500.00, payment_method: 'bank_transfer'}`."
+
+**Forbidden Synonyms:**
+- ❌ "link" (too generic)
+- ❌ "connection" (too generic)
+- ❌ "edge" (implementation detail, relationship is the semantic concept)
+
+### Entity Snapshot
+
+**Definition:** Deterministic [reducer](#reducer) output representing current truth for an [entity](#entity). Computed by merging all [observations](#observation) about an [entity](#entity).
+
+**Use:** "[Entity](#entity) [entity snapshots](#entity-snapshot) are computed deterministically from [observations](#observation)."
+
+**Example:** "The [entity snapshot](#entity-snapshot) for `ent_acme_corp` merges three [observations](#observation): `{name: 'Acme Corp'}`, `{address: '123 Main St'}`, and `{tax_id: '12-3456789'}` into `{name: 'Acme Corp', address: '123 Main St', tax_id: '12-3456789'}` with [provenance](#provenance) tracking which [observation](#observation) contributed each field."
+
+**Forbidden Synonyms:**
+- ❌ "current state" (too generic)
+- ❌ "merged data" (entity snapshot is the computed result)
+- ❌ "aggregate" (implies accumulation, entity snapshot is deterministic computation)
+
+### Source
+
+**Definition:** Raw data (structured or unstructured) that gets [stored](#storing) into Neotoma with content-addressed deduplication. [Sources](#source) can be unstructured (files, raw text, external URLs) or structured (JSON with entity type metadata). The same term applies both at submission time and when stored in the backend. If structured, [sources](#source) include entity type(s) that they represent.
+
+**Use:** "[Sources](#source) are [stored](#storing) with SHA-256 hashing. Structured [sources](#source) include entity type metadata for processing."
+
+**Example:** "A [source](#source) can be a PDF file (invoice.pdf), raw text string, external URL, or structured JSON with `entity_type: 'invoice'`. All [sources](#source) are stored with content-addressed deduplication. Unstructured [sources](#source) undergo [interpretation](#interpretation) to transform them into structured [sources](#source) with entity types, which are then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule), and [observation](#observation) creation. Directly submitted structured [sources](#source) undergo the same [entity schema](#entity-schema) processing for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation."
+
+**Source origin (for MCP storage path):**
+- **Conversation-sourced:** Data from what the user said in chat or from the agent's dialogue context; store via the structured path (`store` with `entities`).
+- **File-sourced / resource-sourced:** Data that is a user-attached file or another artifact (file/blob) to preserve; store via the unstructured path (`store` with `file_content`/`file_path`) so the server can store the artifact and optionally run [interpretation](#interpretation).
+
+**Forbidden Synonyms:**
+- ❌ "content" (replaced by [source](#source) for clarity)
+- ❌ "data" (too generic)
+- ❌ "file" ([source](#source) includes files but also text, URLs, structured data)
+- ❌ "document" (ambiguous)
+- ❌ "source" ([source](#source) is the unified term; "source" was the old term for unstructured only)
+
+### State Layer
+
+**Definition:** Neotoma's architectural role — deterministic, immutable structured memory substrate.
+
+**Use:** "Neotoma is the state layer beneath any operational layer — agents, pipelines, orchestrators, custom apps. Agentic Portfolio (reasoning-style) and Agentic Wallet (effect-style) are illustrative example operational systems."
+
+**Example:** "The state layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source](#source) (files) or structured [source](#source) (JSON with entity types), enabling operational layers above it to make decisions based on accurate historical data."
+
+**Forbidden Synonyms:**
+- ❌ "truth layer" (deprecated; use "state layer")
+- ❌ "data layer" (too generic)
+- ❌ "memory layer" (ambiguous)
+- ❌ "knowledge base" (implies semantic search)
+
+## Legacy Terms (Deprecated)
+
+These terms refer to the legacy record-based architecture that is being phased out in favor of [source](#source)-based architecture. They are documented here for reference during the migration period but should not be used in new code or documentation.
+
+### Capability
+
+**Definition:** **DEPRECATED** - Legacy term for processing specification. Will be removed in v0.2.15. Normalization rules and [entity extraction rules](#entity-extraction-rule) are now part of [entity schemas](#entity-schema). Use [entity type](#entity-type) instead.
+
+**Status:** Will be removed in v0.2.15. [Entity schemas](#entity-schema) now include normalization and extraction rules directly.
+
+**Example:** "Legacy: A [capability](#capability) defined normalization and extraction rules for processing structured data. Modern: Use [entity schemas](#entity-schema) which include normalization and extraction rules directly for each [entity type](#entity-type)."
+
+**Forbidden Synonyms:**
+- ❌ "schema" (use "[entity schema](#entity-schema)" instead)
+- ❌ "type" (use "[entity type](#entity-type)" instead)
+- ❌ "handler" (implementation detail)
 
 ### Record
 
-**Definition:** In the earlier design, a record was one stored document with its extracted properties. That data type is retired; say [source](#source) for the input and [observation](#observation) for what was extracted from it. "The record" in "system of record" means Neotoma's stored observations and snapshots as a whole, which is a different sense.
+**Definition:** Legacy term for a single [stored](#storing) document with [extracted](#extraction) truth (metadata + properties + [provenance](#provenance)). Deprecated in favor of [source](#source).
 
-**Forbidden synonyms:**
+**Status:** Will be removed in v0.2.15. Use "[source](#source)" for all data (structured or unstructured) instead.
 
-- "document" (ambiguous with a source file)
-- "memory" (too vague)
-- "entry" (too generic)
+**Example:** "Legacy: A [record](#record) stored `{id: 'rec_001', type: 'invoice', properties: {invoice_number: 'INV-001'}}`. Modern: Use [source](#source) for all data, with entity type metadata for structured data."
+
+**Forbidden Synonyms:**
+- ❌ "document" (ambiguous with source file)
+- ❌ "memory" (too vague)
+- ❌ "entry" (too generic)
 
 ### Record Type
 
-**Definition:** Legacy classification of a record that chose its extraction rules. Say [entity type](#entity-type) for the classification of entities.
+**Definition:** Legacy term for classification of a [record](#record) or document that determines [extraction](#extraction) rules and field mappings. Deprecated in favor of [entity types](#entity-type).
 
-**Forbidden synonyms:**
+**Status:** Will be removed in v0.2.15. Use "[entity type](#entity-type)" for [entity](#entity) classification. [Entity schemas](#entity-schema) now include all processing rules.
 
-- "schema type" (schemas apply to entity types)
-- "entity type" (a record type classified documents, not entities)
-- "category" (too informal)
-- "class" (programming term)
+**Example:** "Legacy: [Record type](#record-type) `invoice` determined which fields to [extract](#extraction). Modern: Use [entity type](#entity-type) `invoice` for [entity](#entity) classification. The invoice [entity schema](#entity-schema) defines normalization and extraction rules for processing structured [source](#source)."
 
-## Forbidden terms in code and docs
+**Forbidden Synonyms:**
+- ❌ "schema type" (confusing - schemas apply to entity types, not record types)
+- ❌ "entity type" (record type classifies documents, entity type classifies entities)
+- ❌ "category" (too informal)
+- ❌ "class" (programming term confusion)
 
-- "dapp": say "app"
-- "smart": marketing language
-- "intelligent": implies inference
-- "learn": Neotoma does not learn; it records observations
-- "understand": Neotoma does not understand content; it stores fields
-- "memory layer", "state layer", "truth layer", and "deterministic state" as names for what Neotoma is: say "system of record"
+## Forbidden Terms (Never Use)
 
-## Usage examples
+### In Code or Docs:
 
-Use:
+- ❌ "dapp" → Use "app" (per user rules)
+- ❌ "smart" (marketing language)
+- ❌ "intelligent" (implies non-determinism)
+- ❌ "learn" (Neotoma doesn't learn, it extracts)
+- ❌ "understand" (Neotoma doesn't understand, it structures)
 
-- "Neotoma stores the fields an agent extracted from an uploaded file, linked to the file."
-- "Entity resolution gives each vendor one canonical id."
-- "The timeline shows events derived from date fields."
+## Correct Usage Examples
 
-Avoid:
+**✅ Good:**
+
+- "Neotoma [extracts](#extraction) structured fields from uploaded files."
+- "[Entity](#entity) resolution generates canonical IDs for vendors."
+- "The timeline displays [events](#event) derived from date fields."
+
+**❌ Bad:**
 
 - "Neotoma understands your documents using AI."
 - "Smart extraction learns from your data."
-- "Neotoma is the memory layer for your agents."
+- "Our intelligent system analyzes your files."
 
 ## Agent Instructions
 
-Load this page when writing code, documentation, or UI text.
+Load when writing code, documentation, or UI text.
 
 Constraints:
 
-- MUST use the canonical terms on this page
-- MUST NOT use the forbidden synonyms or the retired category nouns
-- MUST follow the usage examples
+- MUST use canonical terms
+- MUST NOT use forbidden synonyms
+- MUST follow usage examples

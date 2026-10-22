@@ -752,7 +752,7 @@ Load `docs/subsystems/ingestion/ingestion.md` when:
 2. **System-level idempotence** enforced (canonicalization + hashing)
 3. **Entity IDs MUST be hash-based**
 4. **Event IDs MUST be hash-based**
-5. **All ingestion MUST be transactional**, except structured `/store` and MCP `store`: that write loop interleaves reads, snapshot recompute, embedding work and event emission and is not one transaction. It is made safe to retry by a completion marker on the source row (`provenance.store_write`) and deterministic observation ids, so a same-key replay finishes an interrupted write instead of reporting it done. See `docs/architecture/idempotence_pattern.md` § Store write completion (#2144).
+5. **All ingestion MUST be transactional**
 6. **Same file → same source_id** (via content hash; deduplication)
 7. **All errors MUST use ErrorEnvelope**
 ### Forbidden Patterns

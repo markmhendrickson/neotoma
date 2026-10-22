@@ -605,10 +605,6 @@ export const OBSERVATION_SOURCE_RANK_VALUES = [
   "human",
   "import",
   "sync",
-  // #2241: a schema MAY rank `unspecified` explicitly. When a priority list
-  // does not name it, buildObservationSourceRankMap
-  // (observation_source_rank.ts) ranks it level with `llm_summary`.
-  "unspecified",
 ] as const;
 
 export type ObservationSourceRankValue = (typeof OBSERVATION_SOURCE_RANK_VALUES)[number];

@@ -87,17 +87,19 @@ export function SiteTailpiece() {
   const productLinks = useMemo(
     () => [
       { label: dict.install, href: "/install" },
-      { label: dict.architecture, href: "https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/architecture.md" },
+      { label: dict.architecture, href: "/architecture" },
+      { label: dict.footerLinkMemoryGuarantees, href: "/memory-guarantees" },
+      { label: subpage.faq.title, href: "/faq" },
     ],
-    [dict.install, dict.architecture],
+    [dict.install, dict.architecture, dict.footerLinkMemoryGuarantees, subpage.faq.title],
   );
 
   const docLinks = useMemo(
     () => [
-      { label: dict.docs, href: "https://github.com/markmhendrickson/neotoma/tree/main/docs" },
-      { label: "API", href: "https://github.com/markmhendrickson/neotoma/blob/main/docs/api/rest_api.md" },
-      { label: "MCP", href: "https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp_overview.md" },
-      { label: "CLI", href: "https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/cli_reference.md" },
+      { label: dict.docs, href: "/docs" },
+      { label: "API", href: "/api" },
+      { label: "MCP", href: "/mcp" },
+      { label: "CLI", href: "/cli" },
     ],
     [dict.docs],
   );

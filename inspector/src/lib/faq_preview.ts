@@ -19,7 +19,7 @@ export const FAQ_PREVIEW_ITEMS: FaqPreviewItem[] = [
   {
     question: "Is this production-ready?",
     answer:
-      "Neotoma is used daily by real agent workflows. The project moves fast, and APIs or storage formats can change between versions. Install it and let your agent evaluate the fit.",
+      "Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
   },
   {
     question: "Does Neotoma replace Claude's memory or ChatGPT's?",
@@ -29,7 +29,7 @@ export const FAQ_PREVIEW_ITEMS: FaqPreviewItem[] = [
   {
     question: "Does Neotoma send my data to the cloud?",
     answer:
-      "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync and no training on your data unless you choose to expose the API (for example for remote MCP clients). No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address.",
+      "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API (for example for remote MCP clients).",
   },
   {
     question: "What's the difference between RAG memory and deterministic memory?",

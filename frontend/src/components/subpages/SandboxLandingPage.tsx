@@ -193,7 +193,7 @@ export function SandboxLandingPageBody() {
           locally:
         </p>
         <ul className="list-disc pl-5 space-y-1 text-[14px] leading-6 text-muted-foreground mb-3">
-          <li>You want your record to persist past Sunday.</li>
+          <li>You want your memory to persist past Sunday.</li>
           <li>You have private data (clients, finances, personal correspondence, code context).</li>
           <li>You need destructive admin operations (merge, split, full recompute).</li>
           <li>You want deterministic latency and a private Inspector.</li>

@@ -232,25 +232,29 @@ describe("native conditional store effects", () => {
       .single();
     expect(originalSnapshot.error).toBeNull();
     const policyId = "test-combined-replay-policy";
-    const inserted = await db.from("entities").upsert({
-      id: policyId,
-      entity_type: "instance_policy",
-      canonical_name: policyId,
-      aliases: [],
-      user_id: owner,
-    });
+    const inserted = await db
+      .from("entities")
+      .upsert({
+        id: policyId,
+        entity_type: "instance_policy",
+        canonical_name: policyId,
+        aliases: [],
+        user_id: owner,
+      });
     expect(inserted.error).toBeNull();
-    const policy = await db.from("entity_snapshots").upsert({
-      entity_id: policyId,
-      entity_type: "instance_policy",
-      snapshot: { enforcement: "enforced", out_of_scope_entity_types: [schema.entity_type] },
-      provenance: {},
-      observation_count: 1,
-      user_id: owner,
-      schema_version: "1.0",
-      last_observation_at: new Date().toISOString(),
-      computed_at: new Date().toISOString(),
-    });
+    const policy = await db
+      .from("entity_snapshots")
+      .upsert({
+        entity_id: policyId,
+        entity_type: "instance_policy",
+        snapshot: { enforcement: "enforced", out_of_scope_entity_types: [schema.entity_type] },
+        provenance: {},
+        observation_count: 1,
+        user_id: owner,
+        schema_version: "1.0",
+        last_observation_at: new Date().toISOString(),
+        computed_at: new Date().toISOString(),
+      });
     expect(policy.error).toBeNull();
     const api = `http://127.0.0.1:${process.env.NEOTOMA_SESSION_DEV_PORT ?? "19080"}`;
     const body = (key: string, fileKey: string) => ({
@@ -728,92 +732,5 @@ describe("native conditional store effects", () => {
       code: "STORE_RECEIPT_UNCERTAIN",
     });
     expect(await counts()).toEqual(before);
-  });
-});
-
-describe("conditional store data_origin (#2242)", () => {
-  const origin = { kind: "file", locator: "codes.xlsx", part: "sheet=A;row=2" } as const;
-
-  it("stamps the origin, replays it exactly, and treats a changed origin as a different request", async () => {
-    const first = await storeConditionalStructured({ ...request("origin"), dataOrigin: origin });
-    expect(first.operation_receipt.status).toBe("applied");
-    const { data: row } = await db
-      .from("observations")
-      .select("provenance")
-      .eq("id", first.operation_receipt.observation_id)
-      .single();
-    const provenance =
-      typeof row!.provenance === "string" ? JSON.parse(row!.provenance) : row!.provenance;
-    expect(provenance.data_origin).toEqual(origin);
-    expect(provenance.store_operation_receipt).toBeDefined();
-
-    const before = await counts();
-    const replay = await storeConditionalStructured({ ...request("origin"), dataOrigin: origin });
-    expect(replay.operation_receipt).toEqual({ ...first.operation_receipt, status: "replayed" });
-    await expect(
-      storeConditionalStructured({
-        ...request("origin"),
-        dataOrigin: { kind: "url", locator: "https://example.com/codes" },
-      })
-    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    expect(await counts()).toEqual(before);
-  });
-
-  it("omitted observation_source + data_origin: one OBSERVATION_SOURCE_OMITTED warning, stored unspecified, origin kept (#2241 x #2242)", async () => {
-    // request() carries no observationSource, so this is the omitted case.
-    const first = await storeConditionalStructured({
-      ...request("omitted-source-origin"),
-      dataOrigin: origin,
-    });
-    expect(first.operation_receipt.status).toBe("applied");
-    const warnings = (
-      (first as { store_warnings?: Array<{ code: string; entity_id: string }> }).store_warnings ??
-      []
-    ).filter((w) => w.code === "OBSERVATION_SOURCE_OMITTED");
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]!.entity_id).toBe(first.operation_receipt.entity_id);
-    const { data: row } = await db
-      .from("observations")
-      .select("observation_source, provenance")
-      .eq("id", first.operation_receipt.observation_id)
-      .single();
-    expect(row!.observation_source).toBe("unspecified");
-    const provenance =
-      typeof row!.provenance === "string" ? JSON.parse(row!.provenance) : row!.provenance;
-    expect(provenance.data_origin).toEqual(origin);
-
-    // The receipt check compares observation_source AND data_origin: the
-    // identical retry verifies and replays (repeating no warning), while
-    // changing either one under the same key is a different request.
-    const before = await counts();
-    const replay = await storeConditionalStructured({
-      ...request("omitted-source-origin"),
-      dataOrigin: origin,
-    });
-    expect(replay.operation_receipt).toEqual({ ...first.operation_receipt, status: "replayed" });
-    expect((replay as { store_warnings?: unknown[] }).store_warnings).toBeUndefined();
-    await expect(
-      storeConditionalStructured({
-        ...request("omitted-source-origin"),
-        observationSource: "llm_summary",
-        dataOrigin: origin,
-      })
-    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    await expect(
-      storeConditionalStructured({ ...request("omitted-source-origin") })
-    ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    expect(await counts()).toEqual(before);
-  });
-
-  it("writes no data_origin key when none is supplied", async () => {
-    const first = await storeConditionalStructured(request("no-origin"));
-    const { data: row } = await db
-      .from("observations")
-      .select("provenance")
-      .eq("id", first.operation_receipt.observation_id)
-      .single();
-    const provenance =
-      typeof row!.provenance === "string" ? JSON.parse(row!.provenance) : row!.provenance;
-    expect("data_origin" in (provenance ?? {})).toBe(false);
   });
 });

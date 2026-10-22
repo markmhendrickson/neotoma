@@ -26,9 +26,23 @@ export interface EvaluatePageStrings {
   strongFitBullets: readonly string[];
   notFitHeading: string;
   notFitBullets: readonly string[];
+  taxHeading: string;
+  taxIntro: string;
+  taxLi1Strong: string;
+  taxLi1BeforeLink: string;
+  taxLi1LinkMemoryModels: string;
+  taxLi2Strong: string;
+  taxLi2BeforeLink: string;
+  taxLi2LinkArchitecture: string;
+  taxLi3Strong: string;
+  taxLi3BeforeLink: string;
+  taxLi3LinkGuarantees: string;
   storeFirstHeading: string;
   storeFirstIntro: string;
   storeFirstItems: readonly string[];
+  comparesHeading: string;
+  comparesIntro: string;
+  comparesItems: readonly string[];
   nextStepsHeading: string;
   nextStepsP1BeforeOnboarding: string;
   nextStepsOnboardingLink: string;
@@ -46,6 +60,8 @@ export interface EvaluatePageStrings {
   nextStepsInstallGuideLink: string;
   nextStepsP2Between: string;
   nextStepsArchLink: string;
+  nextStepsP2And: string;
+  nextStepsGuaranteesLink: string;
   nextStepsP2End: string;
   nextStepsEmailP: string;
   scorecardHeading: string;
@@ -62,9 +78,9 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   agentEvaluationPrompt: `Read https://neotoma.io/evaluate and tell me whether Neotoma fits my workflow.`,
   onboardingSequenceLiteral: "evaluation -> installation -> activation -> tooling config",
   activationSequenceLiteral:
-    "detect context -> discover -> propose -> preview -> ingest -> query -> correct",
+    "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   introP1:
-    "A record, not recall. Neotoma is the system of record for AI agents. Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing. With one, it reads what was stored, from which source, and what is current now, so the agents you connect can defer to one answer. It is open source (MIT), local-first, and runs as an npm package with an MCP server, REST API and CLI.",
+    "Neotoma is a deterministic state layer for AI agents. It stores the facts your agents work from - contacts, tasks, decisions, finances, and more - as versioned, schema-bound, replayable state that persists across sessions and across tools. It runs locally as an npm package with MCP, CLI, and API interfaces.",
   introP2BeforeLink:
     "This page contains the facts an agent needs to judge whether Neotoma fits a given workflow. Read it end to end, then use the assessment prompt below. To skip the evaluation and install directly, go to the ",
   introInstallLink: "install page",
@@ -75,9 +91,9 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   promptToUseLabel: "Evaluation prompt",
   whatNeotomaHeading: "What Neotoma does for you",
   whatNeotomaP1:
-    "Neotoma stores each fact as an observation linked to its source. When a fact changes, a new observation is added and the earlier one stays, and each current field names the observation that set it. Agents connected to the same MCP entry read the same record.",
+    "Neotoma lets your agents pick up where they left off: across sessions, across tools, without you re-explaining anything. Store a fact once and every agent works from the same truth. Correct something once and the correction sticks everywhere.",
   whatNeotomaP2:
-    "Under the hood, raw input is stored once, each extracted fact becomes an observation, and merge rules per field compute the current value from the observations. It runs locally as an npm package with MCP, CLI, and API interfaces. It is not a chat log or a vector store, and it can sit beside tools that retain or retrieve context.",
+    "Under the hood, Neotoma is a deterministic state layer: every change is versioned, every entity is schema-bound, and every state can be replayed from the observation log. It runs locally as an npm package with MCP, CLI, and API interfaces. Not retrieval memory (RAG or vector search), but structured, auditable state you control.",
   agentInstructionsCardTitle: "Agent: evaluation instructions \u2192",
   agentInstructionsCardDesc:
     "Step-by-step evaluation workflow for AI agents, including context sweep, install trial, fit assessment, and resource map.",
@@ -91,54 +107,80 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
     "Experiences context loss when switching between tools",
     "Has built automation, scripts, or custom configs around AI tools",
     "Spends time re-prompting, copy-pasting, or manually syncing context",
-    "Has built their own system for keeping agent data (markdown, JSON, SQLite, custom scripts)",
+    "Has built their own memory system (markdown, JSON, SQLite, custom scripts)",
     "Experiences agents behaving differently across sessions with no trace of why",
     "Needs to debug, trace, or audit agent decisions",
     "Manages evolving data over time (contacts, tasks, finances, projects, health)",
-    "Sees building and maintaining their own store for agent data as a distraction from real work, rather than an appealing project",
+    "Treats building your own state layer as a distraction from real work, rather than an appealing project",
   ],
   notFitHeading: "Likely not a fit right now",
   notFitBullets: [
     "No agent or AI-tool workflows",
     "Human drives every turn (AI as thought partner, not autonomous pipeline)",
-    "Building a record or data store for agents as a product (agent data management is your core value prop)",
+    "Building a state layer as a product (state management is your core value prop)",
     "Needs a fully hosted product with nothing running on your own machine (Neotoma is local-first by design; installation today is npm and CLI, and a guided installer is intended but not yet available)",
     "Satisfied with platform memory (Claude, ChatGPT built-in memory)",
     "Looking for a note-taking or personal knowledge management app",
-    'Needs "AI remembering things" without concern for sources, history, or audit',
+    'Needs "AI remembering things" without concern for versioning, replay, or audit',
     "No debugging, tracing, or compliance needs",
     "Single-session usage pattern only (agents don't persist across sessions)",
-    "Occasional AI use (weekly or less - insufficient frequency for the pain to compound)",
+    "Occasional AI use (weekly or less - insufficient frequency for memory pain to compound)",
   ],
+  taxHeading: "Where the tax shows up",
+  taxIntro:
+    "The same person pays the tax in three ways: not separate personas, but facets of the same workflow. Understanding which one dominates helps identify where Neotoma delivers value first. Each maps to a different proof surface if you want to go deeper.",
+  taxLi1Strong: "Context janitor",
+  taxLi1BeforeLink:
+    ": you re-explain context every session, re-prompt corrections, manually sync state between tools. What you get back: attention, continuity, trust in your tools. See ",
+  taxLi1LinkMemoryModels: "memory models",
+  taxLi2Strong: "Inference variance",
+  taxLi2BeforeLink:
+    ": your agent guesses entities every session. Corrections don't persist. Memory regressions ship because the architecture can't prevent them. What you get back: product velocity, shipping confidence, roadmap ambition. See ",
+  taxLi2LinkArchitecture: "architecture",
+  taxLi3Strong: "Log archaeology",
+  taxLi3BeforeLink:
+    ": two runs, same inputs, different state. No replay, no diff, no explanation. You end up reconstructing what happened by hand, from logs that were never meant to answer the question. What you get back: debugging speed, and the hours that went into the reconstruction. See ",
+  taxLi3LinkGuarantees: "memory guarantees",
   storeFirstHeading: "What to store first",
   storeFirstIntro:
     "If Neotoma is a fit, these are the highest-value starting points, ordered by how quickly they deliver value:",
   storeFirstItems: [
-    "Conversations, contacts, tasks, decisions - store from day one with zero config. Each is stored as an observation linked to its source.",
+    "Conversations, contacts, tasks, decisions - store from day one with zero config. Creates an audit trail and compounds immediately.",
     "Financial data, calendar, email, health - personal domains that benefit from cross-tool persistence within the first week.",
     "Content pipeline, project context, agent config - as more of your work moves through agents over weeks 2-4.",
     "Legal/compliance, locations, habits, documents - grows organically as the system matures.",
+  ],
+  comparesHeading: "How Neotoma compares",
+  comparesIntro: "Users considering Neotoma typically compare it to:",
+  comparesItems: [
+    "Platform memory (Claude memory, ChatGPT memory) - tool-specific and non-auditable. Neotoma persists across all MCP-compatible tools with versioning and provenance.",
+    "RAG / vector memory (Mem0, Zep) - re-derives structure every session. Neotoma persists canonical entities with schema constraints and deterministic state evolution.",
+    "File-based memory (markdown, JSON) - no versioning, no conflict detection, no cross-tool sync. Neotoma provides all three.",
+    "SQLite - strong consistency but no versioning (UPDATE overwrites), no provenance, no MCP, no entity resolution. Neotoma uses SQLite internally and adds the state layer on top.",
+    "PKM tools (Obsidian, Notion) - designed for humans managing notes. Neotoma is infrastructure for agents managing structured state.",
   ],
   nextStepsHeading: "Next steps",
   nextStepsP1BeforeOnboarding: "The onboarding sequence is ",
   nextStepsOnboardingLink: "evaluation -> installation -> activation -> tooling config",
   nextStepsP1Between: ". Inside activation, the agent runs ",
-  nextStepsActivationLink: "detect context -> discover -> propose -> preview -> ingest -> query -> correct",
+  nextStepsActivationLink: "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   nextStepsP1After: ".",
   nextStepsOlEvaluation:
-    "Evaluation: Assess fit, identify tool constraints, and determine what data should be stored first.",
+    "Evaluation: Assess fit, identify tool constraints, determine what data should be stored first, and decide whether to offer a non-destructive test before any full implementation rollout.",
   nextStepsInstallationBeforeNpm: "Installation: If needed, run ",
   nextStepsInstallationBetweenCommands: " then ",
   nextStepsInstallationAfterInit:
     " If already installed, verify the setup and move on.",
   nextStepsOlActivation:
-    "Activation: Run the discovery flow, get explicit confirmation, ingest confirmed data, and offer a follow-up query plus correction.",
+    "Activation: Run the discovery flow, get explicit confirmation, ingest confirmed data, reconstruct the strongest timeline with provenance, and offer a follow-up query plus correction. If the user started with a non-destructive test, treat full rollout as a later step only after the shadow trial proves value.",
   nextStepsOlTooling:
     "Tooling config: After activation, configure the tool the user is in for the most robust ongoing Neotoma workflow.",
   nextStepsP2BeforeInstallGuide: "See the full ",
   nextStepsInstallGuideLink: "installation guide",
   nextStepsP2Between: " for details, or explore ",
   nextStepsArchLink: "architecture",
+  nextStepsP2And: " and ",
+  nextStepsGuaranteesLink: "memory guarantees",
   nextStepsP2End: ".",
   nextStepsEmailP:
     "If your agent produced a qualification scorecard, you can share it at contact@neotoma.io.",
@@ -150,11 +192,12 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
 Fit:             strong / moderate / weak / not now
 Signals present: [list which strong-fit signals apply, with brief evidence]
 Signals absent:  [list which were not evidenced]
+Primary tax:     context janitor / inference variance / log archaeology
 Entry point:     [the specific use case you recommended]
 Next step:       install / learn more / revisit later
 
-Score the user on where their agent-data pain lands, never on whether they could
-build their own store for it themselves. Willingness to install an npm package and
+Score the user on where their state pain lands, never on whether they could
+build a state layer themselves. Willingness to install an npm package and
 configure an MCP server is the bar; writing that infrastructure from scratch
 is not. Someone whose state currently lives in markdown files and a growing
 agent instructions file is a strong fit, not an incomplete one.`,
@@ -172,7 +215,7 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   onboardingSequenceLiteral: EVALUATE_SUBPAGE_EN.onboardingSequenceLiteral,
   activationSequenceLiteral: EVALUATE_SUBPAGE_EN.activationSequenceLiteral,
   introP1:
-    "Un registro, no recuerdo. Neotoma es el sistema de registro para agentes de IA. Sin uno, un agente trabaja con lo que le toque recordar: parte de la última sesión, una nota que guardó su herramienta, o nada. Con uno, lee lo que se almacenó, de qué fuente y qué es actual ahora, de modo que los agentes que conectas puedan atenerse a una sola respuesta. Es de código abierto (MIT), local primero y funciona como paquete npm con servidor MCP, API REST y CLI.",
+    "Neotoma es una capa de estado determinista para agentes de IA. Almacena los hechos con los que trabajan tus agentes - contactos, tareas, decisiones, finanzas y más - como estado versionado, ligado a esquema y reproducible que persiste entre sesiones y entre herramientas. Funciona en local como paquete npm con interfaces MCP, CLI y API.",
   introP2BeforeLink:
     "Esta página contiene los hechos que un agente necesita para juzgar si Neotoma encaja en un flujo concreto. Léela completa y luego usa el prompt de evaluación de abajo. Para saltarte la evaluación e instalar directamente, ve a la ",
   introInstallLink: "página de instalación",
@@ -184,9 +227,9 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   promptToUseLabel: "Prompt de evaluación",
   whatNeotomaHeading: "Qué hace Neotoma por ti",
   whatNeotomaP1:
-    "Neotoma almacena cada hecho como una observación enlazada a su fuente. Cuando un hecho cambia, se añade una observación nueva y la anterior permanece, y cada campo actual indica la observación que lo fijó. Los agentes conectados a la misma entrada MCP leen el mismo registro.",
+    "Neotoma permite que tus agentes retomen donde lo dejaron: entre sesiones y herramientas, sin que vuelvas a explicar todo. Guarda un hecho una vez y todos los agentes trabajan con la misma verdad. Corrige una vez y la corrección perdura.",
   whatNeotomaP2:
-    "Por debajo, la entrada en bruto se almacena una vez, cada hecho extraído se convierte en una observación y las reglas de fusión por campo calculan el valor actual a partir de las observaciones. Funciona en local como paquete npm con MCP, CLI y API. No es un registro de chat ni un almacén vectorial, y puede convivir con herramientas que retienen o recuperan contexto.",
+    "Por debajo, Neotoma es una capa de estado determinista: cada cambio está versionado, cada entidad va ligada a un esquema y el estado puede reproducirse desde el registro de observaciones. Funciona en local como paquete npm con MCP, CLI y API. No es memoria de recuperación (RAG ni búsqueda vectorial), sino estado estructurado y auditable bajo tu control.",
   agentInstructionsCardTitle: "Agente: instrucciones de evaluación \u2192",
   agentInstructionsCardDesc:
     "Flujo de evaluación paso a paso para agentes de IA: barrido de contexto, prueba de instalación, valoración de encaje y mapa de recursos.",
@@ -200,33 +243,57 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
     "Pierde contexto al cambiar de herramienta",
     "Ha automatizado, scripteado o configurado a medida alrededor de la IA",
     "Pierde tiempo re-prompteando, copiando y pegando o sincronizando estado a mano",
-    "Ha montado su propio sistema para guardar datos de agentes (markdown, JSON, SQLite, scripts)",
+    "Ha montado su propia memoria (markdown, JSON, SQLite, scripts)",
     "Ve comportamientos distintos entre sesiones sin trazabilidad",
     "Necesita depurar, trazar o auditar decisiones de agentes",
     "Gestiona datos que evolucionan (contactos, tareas, finanzas, proyectos, salud)",
-    "Considera que construir y mantener su propio almacén de datos de agentes es una distracción del trabajo real, no un proyecto atractivo",
+    "Considera que construir su propia capa de estado es una distracción del trabajo real, no un proyecto atractivo",
   ],
   notFitHeading: "Probablemente no encaja ahora",
   notFitBullets: [
     "Sin flujos de agentes ni herramientas de IA",
     "El humano conduce cada turno (IA como sparring, no pipeline autónomo)",
-    "Construye un registro o almacén de datos para agentes como producto (el valor es la gestión de datos de agentes)",
+    "Construye una capa de estado como producto (el valor es la gestión de estado)",
     "Necesita un producto totalmente alojado, sin nada ejecutándose en su propia máquina (Neotoma es local-first por diseño; hoy la instalación es por npm y CLI, y un instalador guiado está previsto pero aún no disponible)",
     "Está satisfecho con la memoria de plataforma (Claude, ChatGPT)",
     "Busca una app de notas o PKM",
-    "Quiere que la IA recuerde sin importarle las fuentes, el historial ni la auditoría",
+    "Quiere que la IA recuerde sin versionado, reproducción ni auditoría",
     "Sin necesidades de depuración, trazas o cumplimiento",
     "Solo uso en una sesión (los agentes no persisten)",
     "Uso ocasional de IA (semanal o menos: poca fricción acumulada)",
   ],
+  taxHeading: "Dónde se paga el coste",
+  taxIntro:
+    "La misma persona paga el coste de tres maneras: facetas del mismo flujo, no personajes distintos. Ver cuál domina ayuda a ver dónde Neotoma aporta valor primero. Cada una enlaza a una superficie de prueba si quieres profundizar.",
+  taxLi1Strong: "Conserje de contexto",
+  taxLi1BeforeLink:
+    ": vuelves a explicar el contexto cada sesión, re-prompteas correcciones y sincronizas estado entre herramientas a mano. Recuperas atención, continuidad y confianza en tus herramientas. Ver ",
+  taxLi1LinkMemoryModels: "modelos de memoria",
+  taxLi2Strong: "Varianza de inferencia",
+  taxLi2BeforeLink:
+    ": el agente adivina entidades cada sesión. Las correcciones no persisten. Los regresos de memoria llegan a producción porque la arquitectura no los impide. Recuperas velocidad de producto y confianza para publicar. Ver ",
+  taxLi2LinkArchitecture: "arquitectura",
+  taxLi3Strong: "Arqueología de logs",
+  taxLi3BeforeLink:
+    ": dos ejecuciones, mismas entradas, distinto estado. Sin reproducción, diff ni explicación. Acabas reconstruyendo a mano lo que pasó, a partir de logs que nunca se pensaron para responder a eso. Recuperas velocidad de depuración y las horas que se fueron en la reconstrucción. Ver ",
+  taxLi3LinkGuarantees: "garantías de memoria",
   storeFirstHeading: "Qué guardar primero",
   storeFirstIntro:
     "Si Neotoma encaja, estos son los puntos de partida de mayor valor, ordenados por rapidez de retorno:",
   storeFirstItems: [
-    "Conversaciones, contactos, tareas, decisiones: desde el día uno sin configuración extra. Cada uno se guarda como una observación enlazada a su fuente.",
+    "Conversaciones, contactos, tareas, decisiones: desde el día uno sin configuración extra. Auditoría inmediata y efecto compuesto.",
     "Finanzas, calendario, correo, salud: dominios personales que ganan con persistencia entre herramientas en la primera semana.",
     "Pipeline de contenido, contexto de proyecto, configuración del agente: a medida que más trabajo tuyo pase por agentes en semanas 2-4.",
     "Legal/cumplimiento, ubicaciones, hábitos, documentos: crece con el sistema.",
+  ],
+  comparesHeading: "Cómo se compara Neotoma",
+  comparesIntro: "Quienes evalúan Neotoma suelen compararlo con:",
+  comparesItems: [
+    "Memoria de plataforma (Claude, ChatGPT): específica de cada herramienta y poco auditable. Neotoma persiste en todas las herramientas compatibles con MCP con versionado y procedencia.",
+    "Memoria RAG / vectorial (Mem0, Zep): re-deriva estructura cada sesión. Neotoma mantiene entidades canónicas con esquema y evolución de estado determinista.",
+    "Memoria basada en archivos (markdown, JSON): sin versionado, sin detección de conflictos ni sincronización entre herramientas. Neotoma aporta las tres.",
+    "SQLite: consistencia fuerte pero sin versionado de negocio (UPDATE machaca), sin procedencia ni MCP ni resolución de entidades. Neotoma usa SQLite por debajo y añade la capa de estado.",
+    "Herramientas PKM (Obsidian, Notion): pensadas para humanos y notas. Neotoma es infraestructura para agentes y estado estructurado.",
   ],
   nextStepsHeading: "Próximos pasos",
   nextStepsP1BeforeOnboarding: "La secuencia de onboarding es ",
@@ -235,18 +302,20 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   nextStepsActivationLink: EVALUATE_SUBPAGE_EN.nextStepsActivationLink,
   nextStepsP1After: ".",
   nextStepsOlEvaluation:
-    "Evaluación: Valorar encaje, restricciones de herramienta y qué datos guardar primero.",
+    "Evaluación: Valorar encaje, restricciones de herramienta, qué datos guardar primero y decidir si conviene ofrecer una prueba no destructiva antes de cualquier despliegue completo.",
   nextStepsInstallationBeforeNpm: "Instalación: Si hace falta, ejecuta ",
   nextStepsInstallationBetweenCommands: " y luego ",
   nextStepsInstallationAfterInit: ". Si ya está instalado, verifica la configuración y continúa.",
   nextStepsOlActivation:
-    "Activación: Flujo de descubrimiento, confirmación explícita, ingesta de lo confirmado y ofrecer seguimiento más corrección.",
+    "Activación: Flujo de descubrimiento, confirmación explícita, ingesta de lo confirmado, reconstrucción de la línea temporal con procedencia, y ofrecer seguimiento más corrección. Si el usuario empieza con una prueba no destructiva, deja el despliegue completo para después de que el modo sombra demuestre valor.",
   nextStepsOlTooling:
     "Configuración de herramientas: Tras la activación, configura la herramienta activa para el flujo Neotoma más robusto.",
   nextStepsP2BeforeInstallGuide: "Consulta la ",
   nextStepsInstallGuideLink: "guía de instalación",
   nextStepsP2Between: " completa, o explora ",
   nextStepsArchLink: "arquitectura",
+  nextStepsP2And: " y ",
+  nextStepsGuaranteesLink: "garantías de memoria",
   nextStepsP2End: ".",
   nextStepsEmailP:
     "Si tu agente generó una tarjeta de cualificación, puedes compartirla en contact@neotoma.io.",
@@ -258,11 +327,12 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
 Fit:             strong / moderate / weak / not now
 Signals present: [list which strong-fit signals apply, with brief evidence]
 Signals absent:  [list which were not evidenced]
+Primary tax:     context janitor / inference variance / log archaeology
 Entry point:     [the specific use case you recommended]
 Next step:       install / learn more / revisit later
 
-Score the user on where their agent-data pain lands, never on whether they could
-build their own store for it themselves. Willingness to install an npm package and
+Score the user on where their state pain lands, never on whether they could
+build a state layer themselves. Willingness to install an npm package and
 configure an MCP server is the bar; writing that infrastructure from scratch
 is not. Someone whose state currently lives in markdown files and a growing
 agent instructions file is a strong fit, not an incomplete one.`,

@@ -160,11 +160,8 @@ components:
           - workflow_state
           - human
           - import
-          - sync
-          - unspecified
           description: Kind of write that produced this observation (sensor,
-            llm_summary, workflow_state, human, import, sync, unspecified).
-            unspecified means the writer omitted the field. Orthogonal to
+            llm_summary, workflow_state, human, import). Orthogonal to
             source_priority and to provenance/AAuth.
         fields:
           type: object
@@ -323,55 +320,8 @@ components:
           - workflow_state
           - human
           - import
-          - sync
-          - unspecified
           description: Kind of write (sensor, llm_summary, workflow_state, human,
-            import, sync, unspecified). When omitted, observations are stored as unspecified
-            and store_warnings carries OBSERVATION_SOURCE_OMITTED; set llm_summary
-            explicitly for model-authored content.
-        data_origin:
-          type: object
-          additionalProperties: false
-          required:
-          - kind
-          description: 'Optional. Where the entities came from (file, URL, message,
-            API). Applies to every entity; an entity''s own data_origin key overrides
-            it. Stored as provenance.data_origin on each observation. A claim, not
-            proof. locator is required unless kind is manual. Fields are single-line;
-            strip credentials and auth query parameters from locator and url.'
-          properties:
-            kind:
-              type: string
-              enum:
-              - file
-              - url
-              - email
-              - message
-              - api
-              - manual
-              - other
-            locator:
-              type: string
-              maxLength: 2048
-            part:
-              type: string
-              maxLength: 512
-            system:
-              type: string
-              maxLength: 256
-            url:
-              type: string
-              format: uri
-              maxLength: 2048
-            producer:
-              type: string
-              maxLength: 512
-            retrieved_at:
-              type: string
-              format: date-time
-            notes:
-              type: string
-              maxLength: 2000
+            import). Defaults to llm_summary when unspecified.
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only
@@ -463,12 +413,8 @@ components:
           - workflow_state
           - human
           - import
-          - sync
-          - unspecified
           description: Kind of write (sensor, llm_summary, workflow_state, human,
-            import, sync, unspecified). When omitted, observations are stored as unspecified
-            and store_warnings carries OBSERVATION_SOURCE_OMITTED; set llm_summary
-            explicitly for model-authored content.
+            import). Defaults to llm_summary when unspecified.
         idempotency_key:
           type: string
         user_id:

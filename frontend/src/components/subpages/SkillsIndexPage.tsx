@@ -94,11 +94,11 @@ export function SkillsIndexPage() {
               Skills
             </p>
             <h1 className="text-[32px] md:text-[40px] font-medium tracking-[-0.02em] leading-tight">
-              Guided workflows for storing data in Neotoma
+              Guided workflows that teach your agent to remember
             </h1>
             <p className="text-[17px] leading-8 text-muted-foreground max-w-3xl">
               Skills are step-by-step workflows your AI agent follows to import,
-              extract, and store data in Neotoma. Each skill handles
+              extract, and persist data into Neotoma memory. Each skill handles
               a specific data source: email, chat history, financial documents,
               calendar events, and produces structured, queryable entities with
               full provenance.
@@ -150,7 +150,7 @@ export function SkillsIndexPage() {
               <p className="text-[14px] text-muted-foreground">
                 Browse the <code className="text-[13px]">SKILL.md</code> files in the{" "}
                 <a
-                  href="https://github.com/markmhendrickson/neotoma/tree/main/skills"
+                  href="https://github.com/markNZed/neotoma/tree/main/skills"
                   target="_blank"
                   rel="noreferrer"
                   className="text-foreground underline underline-offset-2 hover:no-underline"

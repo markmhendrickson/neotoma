@@ -26,8 +26,6 @@ import {
   WorkerDbTimeoutError,
   WorkerDbAbortError,
   withDbAbortSignal,
-  detachDbAbortSignal,
-  currentDbAbortSignal,
 } from "../../src/repositories/worker/worker_file_database.js";
 
 const workDir = mkdtempSync(path.join(tmpdir(), "neotoma-worker-db-"));
@@ -336,41 +334,6 @@ describe("WorkerFileDatabase reader pool (#2217)", () => {
       await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
       const controller = new AbortController();
       controller.abort();
-      await expect(
-        withDbAbortSignal(controller.signal, () => db.prepare("SELECT 1 AS ok").get())
-      ).rejects.toBeInstanceOf(WorkerDbAbortError);
-    } finally {
-      await db.close();
-    }
-  }, 30_000);
-
-  it("does not abandon reads issued inside detachDbAbortSignal, even after the signal fired (#2144)", async () => {
-    // A write loop is read -> write -> read -> write. Its reads must not be
-    // cancellable by the request's signal, or a client hang-up ends the loop
-    // between two writes and leaves the batch half applied.
-    const db = makeDb(1);
-    try {
-      await db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
-      const controller = new AbortController();
-      controller.abort();
-
-      const outcome = await withDbAbortSignal(controller.signal, async () => {
-        expect(currentDbAbortSignal()).toBe(controller.signal);
-        const detached = await detachDbAbortSignal(async () => {
-          expect(currentDbAbortSignal()).toBeUndefined();
-          // Reads survive across several awaits, as the store loop's do.
-          const first = await db.prepare("SELECT 1 AS ok").get();
-          await db.prepare("INSERT INTO t (id) VALUES (1)").run();
-          const second = await db.prepare("SELECT COUNT(*) AS n FROM t").get();
-          return { first, second };
-        });
-        // The ambient signal is restored for the caller afterwards.
-        expect(currentDbAbortSignal()).toBe(controller.signal);
-        return detached;
-      });
-
-      expect(outcome).toEqual({ first: { ok: 1 }, second: { n: 1 } });
-      // Control: the same read outside the detach is still abandoned.
       await expect(
         withDbAbortSignal(controller.signal, () => db.prepare("SELECT 1 AS ok").get())
       ).rejects.toBeInstanceOf(WorkerDbAbortError);

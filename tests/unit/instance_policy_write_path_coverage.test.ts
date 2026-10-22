@@ -208,24 +208,24 @@ describe("instance store-policy is enforced on every write path", () => {
     // names the write calls it must precede, and matching that prose would
     // report a false ordering violation against correct code.
     const actionsCore = stripComments(
-      sliceFunctionBody(read("src/actions.ts"), "async function storeStructuredForApiUnguarded")
+      sliceFunctionBody(read("src/actions.ts"), "export async function storeStructuredForApi")
     );
     const actionsGate = actionsCore.indexOf(ENFORCE_CALL);
     // In this core the source row is written via storeRawContent; observations
     // follow it. The gate must come first.
     const actionsFirstWrite = actionsCore.indexOf("storeRawContent");
-    expect(actionsGate, "gate not found inside storeStructuredForApiUnguarded").toBeGreaterThan(-1);
+    expect(actionsGate, "gate not found inside storeStructuredForApi").toBeGreaterThan(-1);
     expect(
       actionsFirstWrite,
-      "source write not found inside storeStructuredForApiUnguarded"
+      "source write not found inside storeStructuredForApi"
     ).toBeGreaterThan(-1);
     expect(
       actionsGate,
-      "policy gate must run before the source row is written in storeStructuredForApiUnguarded"
+      "policy gate must run before the source row is written in storeStructuredForApi"
     ).toBeLessThan(actionsFirstWrite);
 
     const mcpCore = stripComments(
-      sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternalUnguarded")
+      sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternal")
     );
     const mcpGate = mcpCore.indexOf(ENFORCE_CALL);
     // The structured-store core issues its observation insert through the
@@ -233,34 +233,15 @@ describe("instance store-policy is enforced on every write path", () => {
     // that call and a raw insert is measured, so reintroducing a raw insert
     // before the gate still fails.
     const mcpObservationInsert = earliestObservationInsertOffset(mcpCore);
-    expect(mcpGate, "gate not found inside storeStructuredInternalUnguarded").toBeGreaterThan(-1);
+    expect(mcpGate, "gate not found inside storeStructuredInternal").toBeGreaterThan(-1);
     expect(
       mcpObservationInsert,
-      "observation insert not found inside storeStructuredInternalUnguarded"
+      "observation insert not found inside storeStructuredInternal"
     ).toBeGreaterThan(-1);
     expect(
       mcpGate,
-      "policy gate must run before the raw observation insert in storeStructuredInternalUnguarded"
+      "policy gate must run before the raw observation insert in storeStructuredInternal"
     ).toBeLessThan(mcpObservationInsert);
-  });
-
-  it("both store cores are reached only through the keyed, non-cancellable write wrapper (#2144)", () => {
-    // The gates above are asserted inside the `...Unguarded` cores. This pins
-    // the other half: the public entry points must hand those cores to
-    // runKeyedStoreWrite, which detaches the request's abort signal and
-    // serialises a same-key replay behind the original write. Without it a
-    // client hang-up can end the write loop between two observations.
-    const apiEntry = stripComments(
-      sliceFunctionBody(read("src/actions.ts"), "export async function storeStructuredForApi")
-    );
-    expect(apiEntry).toContain("runKeyedStoreWrite(");
-    expect(apiEntry).toContain("storeStructuredForApiUnguarded(");
-
-    const mcpEntry = stripComments(
-      sliceFunctionBody(read("src/server.ts"), "private async storeStructuredInternal(")
-    );
-    expect(mcpEntry).toContain("runKeyedStoreWrite(");
-    expect(mcpEntry).toContain("storeStructuredInternalUnguarded(");
   });
 
   it("an observation insert placed before the gate is detected, whichever form it takes", () => {

@@ -96,7 +96,7 @@ const LOCALES: readonly LocaleCase[] = [
     path: "/evaluate",
     strongFitHeading: "Strong fit signals",
     notFitHeading: "Likely not a fit right now",
-    buildingIsADistraction: /building and maintaining their own store for agent data.*distraction from real work/i,
+    buildingIsADistraction: /building your own state layer.*distraction from real work/i,
     fullyHostedScreen: /fully hosted product with nothing running on your own machine/i,
     currentInstallPath: /installation today is npm and CLI/i,
     // Both halves, in one regex: naming the intent alone reads as a shipped
@@ -113,7 +113,7 @@ const LOCALES: readonly LocaleCase[] = [
     path: "/es/evaluate",
     strongFitHeading: "Señales de buen encaje",
     notFitHeading: "Probablemente no encaja ahora",
-    buildingIsADistraction: /construir y mantener su propio almacén de datos de agentes.*distracción del trabajo real/i,
+    buildingIsADistraction: /construir su propia capa de estado.*distracción del trabajo real/i,
     fullyHostedScreen: /producto totalmente alojado, sin nada ejecutándose en su propia máquina/i,
     currentInstallPath: /hoy la instalación es por npm y CLI/i,
     guidedNotShipped: /instalador guiado está previsto pero aún no disponible/i,
@@ -151,7 +151,7 @@ describe.each(LOCALES)(
       ).toEqual([]);
     });
 
-    it("POSITIVE: the visitor is scored a strong fit for treating building their own agent-data store as a distraction", () => {
+    it("POSITIVE: the visitor is scored a strong fit for treating state-layer building as a distraction", () => {
       visitEvaluate(tc.path);
       expect(bulletsUnderHeading(tc.strongFitHeading)).toEqual(
         expect.arrayContaining([expect.stringMatching(tc.buildingIsADistraction)]),

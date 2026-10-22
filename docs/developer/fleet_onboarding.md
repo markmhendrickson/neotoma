@@ -5,7 +5,7 @@
 **Goal:** After following this page your fleet writes are:
 
 - Cryptographically attributed (AAuth — `hardware` / `software` tier, not `anonymous`).
-- Classified by the kind of write (`observation_source`: `sensor`, `llm_summary`, `workflow_state`, `human`, `import`, `sync`).
+- Classified by the kind of write (`observation_source`: `sensor`, `llm_summary`, `workflow_state`, `human`, `import`).
 - Bucketed into the fleet-general `agent_*` schemas (`agent_task`, `agent_attempt`, `agent_outcome`, `agent_artifact`, `agent_sensor_signal`, `agent_cycle_summary`).
 - Exportable as canonical JSON and diff-able against whatever state your fleet already keeps on disk (MEMORY.md, shadow SQLite, vector store, …).
 
@@ -38,13 +38,12 @@ Set `observation_source` on every structured write. The value is orthogonal to A
 | ---------------- | ------------------------------------------------------------------------------------------------- |
 | `sensor`         | Ground-truth tool events, telemetry, env probes. The reducer ranks these above LLM summaries.    |
 | `workflow_state` | Deterministic state-machine transitions (task started, attempt succeeded, …).                     |
-| `llm_summary`    | LLM-authored summaries / extractions. Set it explicitly; it is no longer the default (#2241).     |
+| `llm_summary`    | LLM-authored summaries / extractions. **Default** when `observation_source` is unspecified.       |
 | `human`          | Direct human edits, acceptances, corrections.                                                     |
 | `import`         | Batch / ETL ingestion. Ranked last by default because provenance is typically second-hand.        |
 | `sync`           | Writes replayed from a peer during fleet sync (Phase 5 loop prevention). Set automatically by the sync path; rarely supplied by hand. |
-| `unspecified`    | No claim about the kind of write. **Default** when `observation_source` is omitted; such a store also returns an `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Ranked level with `llm_summary` unless a schema ranks it explicitly, so recency decides between them. Send it explicitly when you cannot classify a write; that suppresses the warning. |
 
-`sensor`, `llm_summary`, `workflow_state`, `human`, `import`, `sync`, and `unspecified` are the **only** accepted values — this is a closed enum (see the v0.17→v0.18 migration note below). Before #2241 an omitted value was stored as `llm_summary`; rows written that way are unchanged, so a legacy `llm_summary` does not by itself prove model authorship.
+`sensor`, `llm_summary`, `workflow_state`, `human`, `import`, and `sync` are the **only** accepted values — this is a closed enum (see the v0.17→v0.18 migration note below).
 
 Reducer tie-breaking proceeds `source_priority → observation_source_priority → observed_at`. Per-schema overrides (e.g. `agent_sensor_signal` locks `observation_source_priority` so sensor rows always win) live on `SchemaDefinition.reducer_config.observation_source_priority`.
 
@@ -78,10 +77,10 @@ See the applied rules in [`.cursor/rules/neotoma_cli.mdc`](../../.cursor/rules/n
 **Breaking change (v0.18.x, [#1841](https://github.com/markmhendrickson/neotoma/issues/1841)).** In v0.17, `observation_source` (and the `--observation-source` CLI flag) accepted arbitrary strings — e.g. `cboe_live`, `stale_cache`, `computed_greeks`. v0.18 restricts it to the closed enum above. Stores and `--observation-source` flags carrying a custom string now fail with:
 
 ```
-Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, workflow_state, human, import, sync, unspecified. Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.
+Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, workflow_state, human, import, sync. Custom v0.17 observation_source labels are no longer accepted — put them in the free-form "data_source" field instead.
 ```
 
-`observation_source` is a *fixed classification* of the kind of write (it drives reducer tie-breaking); the descriptive label of *where* a value came from belongs in the free-form `data_source` field, which remains unconstrained. For a typed, machine-readable record of the origin (file, sheet row, URL, message, or API call), also pass `data_origin` on `store`; it complements `data_source` and does not replace it (see [`agent_attribution_integration.md` § 8a](../subsystems/agent_attribution_integration.md#8a-data-origin-provenance-2242)). To migrate, map each custom string to the closest enum value and move the original label into `data_source`:
+`observation_source` is a *fixed classification* of the kind of write (it drives reducer tie-breaking); the descriptive label of *where* a value came from belongs in the free-form `data_source` field, which remains unconstrained. To migrate, map each custom string to the closest enum value and move the original label into `data_source`:
 
 | v0.17 custom string (examples) | v0.18 `observation_source` | `data_source` (free-form) |
 | ------------------------------ | -------------------------- | ------------------------- |
@@ -91,7 +90,7 @@ Invalid --observation-source "cboe_live". Expected one of: sensor, llm_summary, 
 | `analyst_note`, manual edits / acceptances | `human` | `analyst_note` |
 | `stale_cache`, `nightly_etl`, batch / backfill ingestion | `import` | `stale_cache` |
 
-If no enum value fits the *kind* of write, use `import` (second-hand provenance), or `unspecified` when you genuinely cannot say, and preserve the original string in `data_source`. There is no back-compat shim — the enum is enforced at the parse boundary on both the CLI and the API.
+If no enum value fits the *kind* of write, default to `import` (second-hand provenance) or `llm_summary` (the system default) and preserve the original string in `data_source`. There is no back-compat shim — the enum is enforced at the parse boundary on both the CLI and the API.
 
 ## 3. Use the fleet-general `agent_*` schemas
 

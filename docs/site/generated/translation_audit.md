@@ -93,7 +93,6 @@
 | `/schema-constraints` | en | 2026-05-07 | canonical |
 | `/schema-management` | en | 2026-05-07 | canonical |
 | `/schemas` | en, es | 2026-05-07 | canonical, machine_draft |
-| `/schemas/locked-vs-evolving` | en | 2026-05-20 | canonical |
 | `/schemas/merge-policies` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/registry` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/storage-layers` | en, es | 2026-05-07 | canonical, machine_draft |

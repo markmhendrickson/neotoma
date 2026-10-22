@@ -72,31 +72,6 @@ export type AssertionPredicate =
       entity_type: string;
       field: string;
       where?: Record<string, unknown>;
-    }
-  | {
-      /**
-       * Assert that NO request to `endpoint` carries a value at body
-       * `path` (dot path). The negative counterpart of
-       * `request_field_eq`: use it to prove a run never sent a field,
-       * e.g. that no `/store` carried `file_path` or `file_content`.
-       */
-      type: "request_field_absent";
-      endpoint: string;
-      path: string;
-    }
-  | {
-      /**
-       * Assert that at least one stored entity of `entity_type` matches
-       * `where`, and that NONE of those entities has a string value at
-       * `field` matching the regex `matches`. Non-vacuous: fails when no
-       * candidate entity exists, so a run that never recorded the thing
-       * being checked cannot pass by omission.
-       */
-      type: "field_not_matches";
-      entity_type: string;
-      field: string;
-      matches: string;
-      where?: Record<string, unknown>;
     };
 
 export interface FixtureAssertions {

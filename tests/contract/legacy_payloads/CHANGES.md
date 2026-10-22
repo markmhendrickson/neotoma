@@ -4,11 +4,6 @@ One entry per payload whose declared `outcome` changed in a release. The release
 
 Format: one bullet per flip, keyed by the Neotoma version that introduced the new outcome. Name the fixture path and the before/after state.
 
-## Unreleased (next minor after v0.25.x)
-
-- `v0.25.x/store_entity_field_named_data_origin` seeded as `rejected` (#2242). `data_origin` inside an `entities[]` item is now a reserved per-entity origin override (an object with at least `kind`), peeled off before field validation like `target_id` / `intent`. An entity whose own free-form field was named `data_origin` now gets `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, with a structured `details.hint` to rename the field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this. Request-level `data_origin` is additive.
-- `v0.25.x/create_interpretation_entity_field_named_data_origin` seeded as `rejected` (#2242). `create_interpretation` does not apply a per-entity origin yet, so it now refuses a `data_origin` key inside an `entities[]` item with `400 VALIDATION_INVALID_FORMAT` at `entities[i].data_origin`, instead of storing it as an unknown field. The structured `details.hint` points the caller at `store` with `data_origin`, or at renaming its own field (e.g. to `origin_label`). The release supplement's "Breaking changes" section must name this too.
-
 ## v0.25.0
 
 - `tests/contract/fixtures/legacy_relationship_grant_without_scope.json` records an authorization-seam tightening for pre-`relationship_types` `create_relationship` grants. The grant record remains accepted, but its edge-write outcome changes from admitted by `op` + `entity_types` to `capability_denied` unless one entry also covers the relationship type and both endpoint entity types. Missing or empty `relationship_types` denies the write, and the structured hint names the complete replacement entry. This is an authorization outcome change rather than an HTTP payload-validation flip, so the fixture is exercised by `tests/contract/relationship_write_grant_contract.test.ts` instead of the unauthenticated legacy-payload replay runner.

@@ -12,7 +12,6 @@ import {
   type ObservationSourceRankValue,
   DEFAULT_OBSERVATION_SOURCE_PRIORITY,
 } from "../services/schema_registry.js";
-import { buildObservationSourceRankMap } from "../services/observation_source_rank.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
@@ -69,13 +68,15 @@ export interface Observation {
  * the shipped default) into a rank lookup where lower numbers win.
  * Unknown or missing values fall to `Number.MAX_SAFE_INTEGER` so they
  * sort last within their `source_priority` bucket without bypassing the
- * normal observed_at / id tie-break downstream. An unlisted `unspecified`
- * shares `llm_summary`'s rank (#2241, see buildObservationSourceRankMap).
+ * normal observed_at / id tie-break downstream.
  */
 function buildObservationSourceRank(reducerConfig?: ReducerConfig): Map<string, number> {
-  return buildObservationSourceRankMap(
-    reducerConfig?.observation_source_priority ?? DEFAULT_OBSERVATION_SOURCE_PRIORITY
-  );
+  const order = reducerConfig?.observation_source_priority ?? DEFAULT_OBSERVATION_SOURCE_PRIORITY;
+  const rank = new Map<string, number>();
+  order.forEach((value, index) => {
+    rank.set(value, index);
+  });
+  return rank;
 }
 
 function rankForObservationSource(

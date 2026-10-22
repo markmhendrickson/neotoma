@@ -7,7 +7,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runDocsViewer } from "./docs_viewer/build";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -21,8 +20,6 @@ interface Violation {
 const FILES_RELATIVE = [
   join("frontend", "src", "components", "SitePage.tsx"),
   join("frontend", "src", "components", "SeoHead.tsx"),
-  join("frontend", "src", "components", "onepager", "NeotomaOnePager.tsx"),
-  join("frontend", "src", "components", "onepager", "onepager_copy.ts"),
   join("frontend", "src", "site", "seo_metadata.ts"),
 ] as const;
 
@@ -139,12 +136,6 @@ function main(): void {
   const all: Violation[] = [];
   for (const f of files) {
     all.push(...lintFile(f));
-  }
-  // Repository markdown published as docs viewer pages (frontend/src/site/docs_viewer_manifest.ts):
-  // an included file that fails the docs lint is a violation. `npm run lint:docs-viewer` prints
-  // the full per-file report, including pending candidates.
-  for (const failure of runDocsViewer({ repoRoot: REPO_ROOT }).failures) {
-    all.push({ file: "frontend/src/site/docs_viewer_manifest.ts", line: 0, message: failure });
   }
 
   if (all.length === 0) {

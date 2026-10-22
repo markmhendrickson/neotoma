@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **741**
-- Backend and repo Vitest files: **705**
+- Total automated test files: **722**
+- Backend and repo Vitest files: **686**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 206 |
+| Vitest unit tests | 195 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 222 |
-| Vitest CLI tests | 88 |
+| Vitest integration tests | 217 |
+| Vitest CLI tests | 85 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (206):**
+**Files (195):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -174,11 +174,7 @@ flowchart TD
 - `tests/unit/db_libsql_remote_class.test.ts`
 - `tests/unit/db_url_misconfig_guard.test.ts`
 - `tests/unit/db_worker_file_database.test.ts`
-- `tests/unit/docs_hygiene.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
-- `tests/unit/docs_viewer_build.test.ts`
-- `tests/unit/docs_viewer_lint.test.ts`
-- `tests/unit/docs_viewer_render.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
@@ -215,7 +211,6 @@ flowchart TD
 - `tests/unit/issue_spec_schema.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
 - `tests/unit/list_timeline_events_unknown_type.test.ts`
-- `tests/unit/llms_txt_claims.test.ts`
 - `tests/unit/manage_bundles_tool.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
@@ -251,7 +246,6 @@ flowchart TD
 - `tests/unit/observation_reducer_observation_source.test.ts`
 - `tests/unit/observation_reducer_projection.test.ts`
 - `tests/unit/observation_reducer_provenance.test.ts`
-- `tests/unit/observation_source_omitted_warning.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
 - `tests/unit/patch_array_item_store_policy_envelope.test.ts`
@@ -288,10 +282,7 @@ flowchart TD
 - `tests/unit/session_info.test.ts`
 - `tests/unit/shared_environment.test.ts`
 - `tests/unit/sign_in_session_wiring.test.ts`
-- `tests/unit/site_onepager_copy.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
-- `tests/unit/site_route_retirement.test.ts`
-- `tests/unit/site_served_claims.test.ts`
 - `tests/unit/skill_deprecation.test.ts`
 - `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
@@ -300,7 +291,6 @@ flowchart TD
 - `tests/unit/sqlite_schema_init_concurrency.test.ts`
 - `tests/unit/standing_rules.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
-- `tests/unit/store_data_origin.test.ts`
 - `tests/unit/store_strict_and_consistency.test.ts`
 - `tests/unit/store_warning_rule.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
@@ -315,7 +305,6 @@ flowchart TD
 - `tests/unit/usage_digest_schema.test.ts`
 - `tests/unit/usage_stats.test.ts`
 - `tests/unit/webhook_url_allowed.test.ts`
-- `tests/unit/workflow_playwright_runner_pin.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
@@ -465,7 +454,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (222):**
+**Files (217):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -529,7 +518,6 @@ flowchart TD
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
 - `tests/integration/field_converters.test.ts`
-- `tests/integration/field_provenance_corrected_and_merged.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/gdpr_deletion.test.ts`
 - `tests/integration/get_authenticated_user_environment.test.ts`
@@ -614,7 +602,6 @@ flowchart TD
 - `tests/integration/observation_insert_sites_characterization.test.ts`
 - `tests/integration/observation_insert_sites_routing.test.ts`
 - `tests/integration/observation_source_round_trip.test.ts`
-- `tests/integration/observation_source_unspecified_default.test.ts`
 - `tests/integration/override_policy_enforcement.test.ts`
 - `tests/integration/payload_compiler.test.ts`
 - `tests/integration/payload/payload_submission.test.ts`
@@ -649,18 +636,15 @@ flowchart TD
 - `tests/integration/snapshot_seam_callers.test.ts`
 - `tests/integration/ssrf_guard_cross_surface_parity.test.ts`
 - `tests/integration/standing_rules_initialize_effect.test.ts`
-- `tests/integration/store_abort_context_2144.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_canonical_name_recompute.test.ts`
 - `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
-- `tests/integration/store_data_origin.test.ts`
 - `tests/integration/store_dedup_snapshot_after.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
 - `tests/integration/store_null_cleared_field_warning.test.ts`
-- `tests/integration/store_partial_write_2144.test.ts`
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_reference_source_parity.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
@@ -694,7 +678,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (88):**
+**Files (85):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -738,9 +722,7 @@ flowchart TD
 - `tests/cli/cli_stats_commands.test.ts`
 - `tests/cli/cli_status_doctor_alias.test.ts`
 - `tests/cli/cli_store_commands.test.ts`
-- `tests/cli/cli_store_data_origin.test.ts`
 - `tests/cli/cli_store_file_vs_entities_parity.test.ts`
-- `tests/cli/cli_store_observation_source.test.ts`
 - `tests/cli/cli_store_plan_mode_no_writes.test.ts`
 - `tests/cli/cli_timeline_commands.test.ts`
 - `tests/cli/cli_user_id_propagation.test.ts`
@@ -753,7 +735,6 @@ flowchart TD
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_codex_sessions.test.ts`
 - `tests/cli/discovery_harness.test.ts`
-- `tests/cli/docs_cli_commands.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
 - `tests/cli/ingest_agent_sessions.test.ts`
 - `tests/cli/instance_scripts.test.ts`

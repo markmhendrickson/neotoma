@@ -146,7 +146,6 @@ export const OBSERVATION_SOURCE_CLI_VALUES = [
   "human",
   "import",
   "sync",
-  "unspecified",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
@@ -160,28 +159,6 @@ export function normalizeObservationSourceFlag(raw: string): ObservationSourceFl
     );
   }
   return normalized as ObservationSourceFlag;
-}
-
-/**
- * Parse `store --data-origin <json>` (#2242). Only checks that the value is a
- * JSON object; the server validates the shape (kind enum, locator rules) with
- * the same schema on every transport, so the CLI does not fork that contract.
- */
-export function parseDataOriginFlag(raw: string): Record<string, unknown> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      'Invalid --data-origin: expected a JSON object such as \'{"kind":"file","locator":"report.xlsx"}\'.'
-    );
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(
-      'Invalid --data-origin: expected a JSON object such as \'{"kind":"url","locator":"https://example.com/page"}\'.'
-    );
-  }
-  return parsed as Record<string, unknown>;
 }
 
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
@@ -1953,24 +1930,6 @@ export function classifyBackupIntegrityCheck(rows: unknown): BackupIntegrityVeri
     return { kind: "integrity_failed" };
   }
   return { kind: "verify_instrument_failure" };
-}
-
-async function verifyBackupDatabaseIntegrity(
-  databasePath: string
-): Promise<BackupIntegrityVerification> {
-  let database: AsyncSqliteDatabase | null = null;
-  try {
-    database = new AsyncSqliteDatabase(databasePath, { existing: true, readOnly: true });
-    return classifyBackupIntegrityCheck(await database.pragma("integrity_check"));
-  } catch (error) {
-    return {
-      kind: isStructuredSqliteCorruptionError(error)
-        ? "integrity_failed"
-        : "verify_instrument_failure",
-    };
-  } finally {
-    await database?.close().catch(() => {});
-  }
 }
 
 /** Wait for session port file written by API when it binds; returns actual port or preferred on timeout. */
@@ -11252,89 +11211,6 @@ async function backupFileOperation<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Resolve a manifest member without allowing its path or symlinks to leave the selected root. */
-async function containedBackupPath(root: string, member: string): Promise<string | null> {
-  if (
-    !member ||
-    path.isAbsolute(member) ||
-    path.win32.isAbsolute(member) ||
-    member.includes("\0")
-  ) {
-    return null;
-  }
-  const realRoot = await fs.realpath(root);
-  const candidate = path.resolve(realRoot, member);
-  const relative = path.relative(realRoot, candidate);
-  if (
-    !relative ||
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
-    return null;
-  }
-
-  let current = realRoot;
-  for (const component of relative.split(path.sep)) {
-    current = path.join(current, component);
-    try {
-      const stat = await fs.lstat(current);
-      if (stat.isSymbolicLink()) return null;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
-      return null;
-    }
-  }
-  return candidate;
-}
-
-async function resolveManifestContents(
-  root: string,
-  contents: Record<string, unknown>
-): Promise<{ paths: Record<string, string>; issues: string[] }> {
-  const paths: Record<string, string> = Object.create(null) as Record<string, string>;
-  const issues: string[] = [];
-  for (const [key, member] of Object.entries(contents)) {
-    const resolved = typeof member === "string" ? await containedBackupPath(root, member) : null;
-    if (resolved === null) issues.push(`${key} path outside backup directory or invalid`);
-    else paths[key] = resolved;
-  }
-  return { paths, issues };
-}
-
-async function backupDirectoryContainsSymlink(dir: string): Promise<boolean> {
-  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
-    if (entry.isSymbolicLink()) return true;
-    if (entry.isDirectory() && (await backupDirectoryContainsSymlink(path.join(dir, entry.name)))) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** An absent optional directory is valid; an unreadable or unsupported one is not. */
-async function copyOptionalBackupDirectory(source: string, destination: string): Promise<boolean> {
-  let stat: Stats;
-  try {
-    stat = await fs.lstat(source);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    throw new Error("Backup create refused: optional input is not a real directory.");
-  }
-  if (await backupDirectoryContainsSymlink(source)) {
-    throw new Error("Backup create refused: optional input directory contains a symlink.");
-  }
-  await fs.cp(source, destination, { recursive: true });
-  // Verify what was actually copied, since fs.cp preserves symlinks on supported Node versions.
-  if (await backupDirectoryContainsSymlink(destination)) {
-    throw new Error("Backup create refused: copied directory contains a symlink.");
-  }
-  return true;
-}
-
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -11425,7 +11301,22 @@ backupCommand
       // Verify the snapshot is a usable database, not merely a plausible-sized file.
       // The old >1KB check passed happily on corrupt output, which is what made the
       // #2075 failure silent.
-      const integrity = await verifyBackupDatabaseIntegrity(destDb);
+      let integrity: BackupIntegrityVerification = {
+        kind: "verify_instrument_failure",
+      };
+      let verifyDb: AsyncSqliteDatabase | null = null;
+      try {
+        verifyDb = new AsyncSqliteDatabase(destDb);
+        integrity = classifyBackupIntegrityCheck(await verifyDb.pragma("integrity_check"));
+      } catch (err) {
+        integrity = {
+          kind: isStructuredSqliteCorruptionError(err)
+            ? "integrity_failed"
+            : "verify_instrument_failure",
+        };
+      } finally {
+        await verifyDb?.close().catch(() => {});
+      }
 
       if (integrity.kind !== "verified") {
         const instrumentFailure = integrity.kind === "verify_instrument_failure";
@@ -11455,19 +11346,8 @@ backupCommand
       const dbBuf = await fs.readFile(destDb);
       checksums[path.basename(sqlitePath)] =
         "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-    } catch (error) {
+    } catch {
       if (!dbCopied) {
-        if (isStructuredSqliteCorruptionError(error)) {
-          writeCliError(
-            new CliHintError(
-              "Backup failed: the source database integrity check failed. " +
-                "No usable snapshot was created.",
-              { code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" }
-            )
-          );
-          process.exitCode = 1;
-          return;
-        }
         writeCliError(
           "SQLite database not found, not readable, or could not be snapshotted at " + sqlitePath,
           { suppressRecoveryHint: true }
@@ -11477,26 +11357,24 @@ backupCommand
       }
     }
 
-    // Copy optional directories. Only ENOENT means absent; copy and validation
-    // failures must never become a successful but incomplete backup.
+    // Copy sources directory
     try {
-      if (await copyOptionalBackupDirectory(rawStorageDir, path.join(backupDir, "sources"))) {
-        contents.sources = "sources/";
-      }
+      await fs.access(rawStorageDir);
+      const destSources = path.join(backupDir, "sources");
+      await fs.cp(rawStorageDir, destSources, { recursive: true });
+      contents.sources = "sources/";
+    } catch {
+      // No sources directory — acceptable for minimal installs
+    }
+
+    // Copy logs directory (includes events.log and other log files)
+    try {
+      await fs.access(logsDir);
       const dirName = path.basename(logsDir);
-      if (await copyOptionalBackupDirectory(logsDir, path.join(backupDir, dirName))) {
-        contents[dirName] = dirName + "/";
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      writeCliError(
-        message.startsWith("Backup create refused:")
-          ? message
-          : "Backup create failed while copying or inspecting files. Check paths and permissions.",
-        { suppressRecoveryHint: true }
-      );
-      process.exitCode = 1;
-      return;
+      await fs.cp(logsDir, path.join(backupDir, dirName), { recursive: true });
+      contents[dirName] = dirName + "/";
+    } catch {
+      // Directory does not exist — acceptable
     }
 
     // Write manifest
@@ -11734,100 +11612,36 @@ backupCommand
       return;
     }
 
-    const rawContents = manifest.contents;
-    if (rawContents === null || typeof rawContents !== "object" || Array.isArray(rawContents)) {
-      writeCliError("Backup restore refused: invalid manifest contents.", {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    const contents = rawContents as Record<string, string>;
-    if (typeof contents.neotoma_db !== "string" || contents.neotoma_db.length === 0) {
-      writeCliError("Backup restore refused: manifest does not reference a database file.", {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    const source = await resolveManifestContents(opts.from, contents);
-    if (source.issues.length > 0) {
-      writeCliError(`Backup restore refused: ${source.issues.join("; ")}.`, {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    try {
-      const dbStat = await fs.stat(source.paths.neotoma_db);
-      if (!dbStat.isFile()) throw new Error("not a file");
-      if (contents.wal) {
-        const walStat = await fs.stat(source.paths.wal);
-        if (!walStat.isFile()) throw new Error("WAL is not a file");
-      }
-      for (const [key, member] of Object.entries(contents)) {
-        if (typeof member !== "string" || !member.endsWith("/")) continue;
-        const directoryStat = await fs.stat(source.paths[key]);
-        if (!directoryStat.isDirectory()) throw new Error("not a directory");
-      }
-    } catch {
-      writeCliError(
-        "Backup restore refused: referenced database, WAL, or directory is missing or invalid.",
-        {
-          suppressRecoveryHint: true,
-        }
-      );
-      process.exitCode = 1;
-      return;
-    }
+    const contents = (manifest.contents || {}) as Record<string, string>;
     await backupFileOperation(() => fs.mkdir(targetDir, { recursive: true }));
-    const destination = await resolveManifestContents(targetDir, contents);
-    if (destination.issues.length > 0) {
-      writeCliError(`Backup restore refused: ${destination.issues.join("; ")}.`, {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
+
+    // Restore DB
+    if (contents.neotoma_db) {
+      await backupFileOperation(() =>
+        fs.copyFile(
+          path.join(opts.from, contents.neotoma_db),
+          path.join(targetDir, contents.neotoma_db)
+        )
+      );
     }
-    for (const [key, member] of Object.entries(contents)) {
-      if (typeof member !== "string" || !member.endsWith("/")) continue;
-      for (const directory of [source.paths[key], destination.paths[key]]) {
-        try {
-          if (await backupDirectoryContainsSymlink(directory)) {
-            writeCliError("Backup restore refused: referenced directory contains a symlink.", {
-              suppressRecoveryHint: true,
-            });
-            process.exitCode = 1;
-            return;
-          }
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-            writeCliError("Backup restore refused: referenced directory cannot be inspected.", {
-              suppressRecoveryHint: true,
-            });
-            process.exitCode = 1;
-            return;
-          }
-        }
-      }
+    if (contents.wal) {
+      await backupFileOperation(() =>
+        fs.copyFile(path.join(opts.from, contents.wal), path.join(targetDir, contents.wal))
+      );
     }
 
-    try {
-      await fs.copyFile(source.paths.neotoma_db, destination.paths.neotoma_db);
-      if (contents.wal) {
-        await fs.copyFile(source.paths.wal, destination.paths.wal);
-      }
-      for (const [key, val] of Object.entries(contents)) {
-        if (typeof val === "string" && val.endsWith("/")) {
-          await fs.cp(source.paths[key], destination.paths[key], { recursive: true });
+    // Restore directories
+    for (const [, val] of Object.entries(contents)) {
+      if (typeof val === "string" && val.endsWith("/")) {
+        const srcDir = path.join(opts.from, val);
+        const destDir = path.join(targetDir, val);
+        try {
+          await fs.access(srcDir);
+          await fs.cp(srcDir, destDir, { recursive: true });
+        } catch {
+          // skip missing dirs
         }
       }
-    } catch {
-      writeCliError("Backup restore failed while copying files. Check paths and permissions.", {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
     }
 
     const result = {
@@ -11877,33 +11691,18 @@ backupCommand
       return;
     }
 
-    const rawContents = manifest.contents ?? {};
-    if (typeof rawContents !== "object" || Array.isArray(rawContents)) {
-      writeCliError("Backup verification failed: invalid manifest contents.", {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    const contents = rawContents as Record<string, string>;
+    const contents = (manifest.contents || {}) as Record<string, string>;
     const checksums = (manifest.checksums || {}) as Record<string, string>;
-    const resolved = await resolveManifestContents(dir, contents);
-    issues.push(...resolved.issues);
-    let databaseIsLargeEnoughToInspect = false;
 
     // Verify DB file exists and has reasonable size
     if (!contents.neotoma_db) {
       issues.push("manifest does not reference a database file");
-    } else if (resolved.paths.neotoma_db) {
-      const dbPath = resolved.paths.neotoma_db;
+    } else {
+      const dbPath = path.join(dir, contents.neotoma_db);
       try {
         const stat = await fs.stat(dbPath);
-        if (!stat.isFile()) {
-          issues.push("database reference is not a file in backup directory");
-        } else if (stat.size < 1024) {
+        if (stat.size < 1024) {
           issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
-        } else {
-          databaseIsLargeEnoughToInspect = true;
         }
 
         // Verify checksum if available
@@ -11919,53 +11718,16 @@ backupCommand
       } catch {
         issues.push("database file missing from backup directory: " + contents.neotoma_db);
       }
-
-      const integrity = databaseIsLargeEnoughToInspect
-        ? await verifyBackupDatabaseIntegrity(dbPath)
-        : null;
-      if (integrity !== null && integrity.kind !== "verified") {
-        const instrumentFailure = integrity.kind === "verify_instrument_failure";
-        const message = instrumentFailure
-          ? "Backup verification could not obtain an integrity result. " +
-            "The snapshot has been left in place for inspection at " +
-            dbPath +
-            `. Run \`sqlite3 ${quotePosixShellArgument(dbPath)} "PRAGMA integrity_check;"\` directly; ` +
-            'if it returns "ok", this is a tooling or driver issue.'
-          : "Backup verification failed: the snapshot integrity check failed. " +
-            "The backup is NOT usable and has been left in place for inspection at " +
-            dbPath;
-        writeCliError(
-          new CliHintError(message, {
-            code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
-            failure_kind: integrity.kind,
-          })
-        );
-        process.exitCode = 1;
-        return;
-      }
     }
 
     // Verify referenced directories exist
     for (const [key, val] of Object.entries(contents)) {
-      if (typeof val === "string" && val.endsWith("/") && resolved.paths[key]) {
+      if (typeof val === "string" && val.endsWith("/")) {
         try {
-          const stat = await fs.stat(resolved.paths[key]);
-          if (!stat.isDirectory()) issues.push(`referenced directory is not a directory: ${key}`);
-          else if (await backupDirectoryContainsSymlink(resolved.paths[key])) {
-            issues.push(`referenced directory contains a symlink: ${key}`);
-          }
+          await fs.access(path.join(dir, val));
         } catch {
           issues.push(`referenced directory missing: ${key} (${val})`);
         }
-      }
-    }
-
-    if (contents.wal && resolved.paths.wal) {
-      try {
-        const stat = await fs.stat(resolved.paths.wal);
-        if (!stat.isFile()) issues.push("referenced WAL is not a file in backup directory");
-      } catch {
-        issues.push("referenced WAL missing from backup directory");
       }
     }
 
@@ -15436,14 +15198,9 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
-  .option(
-    "--data-origin <json>",
-    'Where the entities came from (#2242), e.g. \'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}\'. ' +
-      "Applies to every entity; an entity's own data_origin key overrides it. A claim, not proof."
-  )
   .option(
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
@@ -15478,7 +15235,6 @@ program
     let entities: unknown;
     let fileRelationships: unknown[] | undefined;
     let fileIdempotencyKey: string | undefined;
-    let fileDataOrigin: unknown;
     if (opts.entities) {
       entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
@@ -15491,9 +15247,6 @@ program
         }
         if (typeof envelope.idempotency_key === "string") {
           fileIdempotencyKey = envelope.idempotency_key;
-        }
-        if (envelope.data_origin !== undefined) {
-          fileDataOrigin = envelope.data_origin;
         }
         if (Array.isArray(envelope.entities)) {
           entities = envelope.entities;
@@ -15575,13 +15328,6 @@ program
         structuredBody.observation_source = normalizeObservationSourceFlag(
           opts.observationSource as string
         );
-      }
-      const dataOrigin =
-        opts.dataOrigin !== undefined
-          ? parseDataOriginFlag(opts.dataOrigin as string)
-          : fileDataOrigin;
-      if (dataOrigin !== undefined) {
-        structuredBody.data_origin = dataOrigin;
       }
       if (opts.file && !hasUnstructured) {
         const resolvedFile = path.isAbsolute(opts.file)
@@ -15705,7 +15451,7 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
   )
   .option(
     "--source-upload",
@@ -17164,7 +16910,7 @@ snapshotsCommand
   )
   .option(
     "--observation-source <kind>",
-    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync | unspecified (custom v0.17 values → use data_source)"
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync (custom v0.17 values → use data_source)"
   )
   .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
   .option("--limit <n>", "Cap on returned entities (default: 500)")

@@ -21,8 +21,6 @@
  * These invariants back the public KV-cache stability claim for Neotoma text
  * output to LLMs.
  */
-import { formatDataOriginCompact } from "./provenance_data_origin.js";
-import type { DataOrigin } from "../shared/action_schemas.js";
 import { getEntityDisplayName, type EntityDisplayInput } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
 
@@ -40,12 +38,6 @@ export interface RenderEntityInput {
   last_observation_at?: string | null;
   /** Field → observation_id. Only used when opts.includeProvenance is true. */
   provenance?: Record<string, string>;
-  /**
-   * Observation_id → caller-claimed data origin (#2242) for the observations
-   * `provenance` cites. Rendered only when opts.includeProvenance is true and
-   * the map is non-empty.
-   */
-  data_origins?: Record<string, DataOrigin>;
 }
 
 export interface RenderSchemaFieldDef {
@@ -371,20 +363,6 @@ export function renderEntityCompactText(
     const sortedFields = Object.keys(entity.provenance).sort();
     for (const f of sortedFields) {
       lines.push(`  ${f}: ${entity.provenance[f]}`);
-    }
-  }
-
-  if (
-    opts.includeProvenance &&
-    entity.data_origins &&
-    Object.keys(entity.data_origins).length > 0
-  ) {
-    lines.push("");
-    lines.push("data_origins:");
-    for (const observationId of Object.keys(entity.data_origins).sort()) {
-      lines.push(
-        `  ${observationId}: ${formatDataOriginCompact(entity.data_origins[observationId]!)}`
-      );
     }
   }
 

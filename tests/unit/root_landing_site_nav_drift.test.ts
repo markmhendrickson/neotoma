@@ -99,18 +99,4 @@ describe("root landing site nav drift", () => {
       }
     }
   });
-
-  it("offers no entry that only lands on a redirect stub for the retired architecture and hosted pages", () => {
-    const retired = new Set(["/memory-guarantees", "/memory-models", "/hosted"]);
-    for (const cat of frontend) {
-      for (const item of cat.items) {
-        expect(retired.has(item.href), `frontend nav still lists ${item.href}`).toBe(false);
-      }
-    }
-    for (const cat of ROOT_LANDING_SITE_NAV) {
-      for (const item of cat.items) {
-        expect(retired.has(item.href), `server nav still lists ${item.href}`).toBe(false);
-      }
-    }
-  });
 });

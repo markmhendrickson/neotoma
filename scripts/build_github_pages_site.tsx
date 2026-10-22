@@ -13,9 +13,6 @@
  *      `npm run validate:site-export` to verify the HTML was emitted.
  *
  * CI runs both validations before deploying; a mismatch blocks the deploy.
- *
- * Docs viewer pages (/docs/<slug>/) are not app routes: they are rendered here from repository
- * markdown listed in frontend/src/site/docs_viewer_manifest.ts (see scripts/docs_viewer/).
  */
 import fs from "node:fs";
 import http from "node:http";
@@ -28,19 +25,6 @@ import {
   type SupportedLocale,
 } from "../frontend/src/i18n/config";
 import { localizePath } from "../frontend/src/i18n/routing";
-import {
-  RETIRED_DESTINATIONS,
-  buildRedirectStub,
-  isRetiredRoute,
-} from "../frontend/src/site/route_retirement";
-import { isDocsViewerRoute } from "../frontend/src/site/docs_viewer_manifest";
-import {
-  appendSitemapUrls,
-  docsViewerSitemapUrls,
-  formatReport,
-  runDocsViewer,
-} from "./docs_viewer/build";
-import { dedupeJsonLd } from "./site_html";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -218,13 +202,13 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
     for (const routePath of routePaths) {
       const targetUrl = `${server.origin}${routePath}`;
       await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-      const renderedHtml = dedupeJsonLd(normalizeBundledAssetPaths(await page.content()));
+      const renderedHtml = normalizeBundledAssetPaths(await page.content());
       fs.writeFileSync(getOutputPathForRoute(routePath), `<!DOCTYPE html>\n${renderedHtml}\n`, "utf-8");
     }
 
     await page.goto(`${server.origin}/404`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(250);
-    const notFoundHtml = dedupeJsonLd(normalizeBundledAssetPaths(await page.content()));
+    const notFoundHtml = normalizeBundledAssetPaths(await page.content());
     fs.writeFileSync(notFoundFile, `<!DOCTYPE html>\n${notFoundHtml}\n`, "utf-8");
   } finally {
     await page.close();
@@ -235,12 +219,6 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
 
 
 async function main() {
-  // Docs viewer: lint the whitelist first, so an included file that fails stops the build early.
-  const docsViewer = runDocsViewer({ repoRoot });
-  console.log(formatReport(docsViewer));
-  if (docsViewer.failures.length) {
-    throw new Error(`Docs viewer lint failed:\n${docsViewer.failures.join("\n")}`);
-  }
   fs.mkdirSync(outputDir, { recursive: true });
   const legacyCssFile = path.join(outputDir, "site.css");
   if (fs.existsSync(legacyCssFile)) {
@@ -255,18 +233,6 @@ async function main() {
   }
   fs.cpSync(publicAssetsDir, outputAssetsDir, { recursive: true });
 
-  // The checked-in site_pages tree can hold stale HTML for routes that no longer exist. Remove every
-  // route directory that contains HTML (non-HTML asset folders such as og/ are kept); all live,
-  // held and retired routes are regenerated below.
-  const dirHasHtml = (dir: string): boolean =>
-    fs.readdirSync(dir, { withFileTypes: true }).some((e) =>
-      e.isDirectory() ? dirHasHtml(path.join(dir, e.name)) : e.name.endsWith(".html"),
-    );
-  for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
-    const full = path.join(outputDir, entry.name);
-    if (entry.isDirectory() && dirHasHtml(full)) fs.rmSync(full, { recursive: true, force: true });
-  }
-
   const rootHtml = readPublicHtml();
 
   // Seed static route files with route-specific metadata.
@@ -280,35 +246,17 @@ async function main() {
     }
   }
 
-  // Every retired route gets a stub, including routes that were never in the sitemap and their
-  // locale variants, so no stale committed page for a retired route can be deployed.
-  const retiredStubPaths = Object.keys(RETIRED_DESTINATIONS).flatMap((route) => [
-    route,
-    ...NON_DEFAULT_LOCALES.map((loc) => localizePath(route, loc)),
-  ]);
-  const allStaticRoutePaths = [
-    ...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths(), ...retiredStubPaths]),
-  ];
-
-  // neotoma.io is a one-pager: retired routes (every locale route and every old page that is not
-  // live or held, see frontend/src/site/route_retirement.ts) become static redirect stubs. They
-  // are written directly and are never pre-rendered.
-  const retiredRoutePaths = allStaticRoutePaths.filter((r) => r !== "/" && isRetiredRoute(r));
-  const renderedRoutePaths = allStaticRoutePaths.filter(
-    (r) => r === "/" || (!isRetiredRoute(r) && !isDocsViewerRoute(r)),
-  );
+  const allStaticRoutePaths = [...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths()])];
 
   let routeCount = 0;
   for (const routePath of allStaticRoutePaths) {
-    if (routePath === "/" || isDocsViewerRoute(routePath)) continue; // written by the docs viewer
+    if (routePath === "/") continue;
     const slug = routePath.replace(/^\//, "");
     const routeDir = path.join(outputDir, slug);
     fs.mkdirSync(routeDir, { recursive: true });
     fs.writeFileSync(
       path.join(routeDir, "index.html"),
-      isRetiredRoute(routePath)
-        ? buildRedirectStub(routePath)
-        : buildHtmlForRoute(rootHtml, routePath),
+      buildHtmlForRoute(rootHtml, routePath),
       "utf-8",
     );
     routeCount++;
@@ -337,34 +285,17 @@ async function main() {
     fs.copyFileSync(wordmarkSrc, wordmarkDest);
     console.log(`Copied wordmark: ${path.relative(repoRoot, wordmarkDest)}`);
   }
-  const brandSrc = path.join(publicRootDir, "brand");
-  if (fs.existsSync(brandSrc)) {
-    fs.cpSync(brandSrc, path.join(outputDir, "brand"), { recursive: true });
-    console.log("Copied brand assets: site_pages/brand");
-  }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
-  fs.writeFileSync(
-    sitemapFile,
-    appendSitemapUrls(
-      buildSitemapXml(SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p))),
-      docsViewerSitemapUrls(docsViewer.published),
-    ),
-    "utf-8",
-  );
+  fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");
   if (fs.existsSync(llmsTxtSrc)) {
     fs.copyFileSync(llmsTxtSrc, llmsTxtDest);
     console.log(`Copied llms.txt: ${path.relative(repoRoot, llmsTxtDest)}`);
   }
-  await prerenderHtmlRoutes(renderedRoutePaths);
-  const docsViewerWrite = runDocsViewer({ repoRoot, outDir: outputDir, write: true });
-  if (docsViewerWrite.failures.length) {
-    throw new Error(`Docs viewer build failed:\n${docsViewerWrite.failures.join("\n")}`);
-  }
-  console.log(`Built ${docsViewerWrite.published.length} docs viewer pages`);
+  await prerenderHtmlRoutes(allStaticRoutePaths);
   finalizeBundledAssetPathsInAllHtml();
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);
-  console.log(`Built ${routeCount} route pages (${renderedRoutePaths.length - 1} pre-rendered, ${retiredRoutePaths.length} redirect stubs)`);
+  console.log(`Built ${routeCount} route pages (fully pre-rendered HTML)`);
   console.log(`Built 404.html (pre-rendered fallback)`);
   console.log(`Copied assets: ${path.relative(repoRoot, outputAssetsDir)}`);
   console.log(`Built robots: ${path.relative(repoRoot, robotsFile)}`);

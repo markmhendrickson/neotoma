@@ -245,11 +245,9 @@ import {
   RetrieveRelatedEntitiesSchema,
   RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
   RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
-  ObservationSourceSchema,
   StoreRequestSchema,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
-import { DEFAULT_OBSERVATION_SOURCE } from "./services/observation_insert.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
@@ -7621,9 +7619,9 @@ app.post("/observations/create", async (req, res) => {
     entity_identifier: z.string(),
     fields: z.record(z.unknown()),
     source_priority: z.number().optional().default(100),
-    // Shared enum (#2241): an inline copy here had drifted from the store
-    // schema's once already; reuse the single source instead.
-    observation_source: ObservationSourceSchema.optional(),
+    observation_source: z
+      .enum(["sensor", "llm_summary", "workflow_state", "human", "import", "sync"])
+      .optional(),
     source_peer_id: z.string().min(1).optional(),
     user_id: z.string().uuid(),
   });
@@ -7750,26 +7748,7 @@ async function completeInterpretationRun(params: {
     .eq("id", params.interpretationId);
 }
 
-/**
- * Structured store entry point.
- *
- * A committing store is a write: once it starts it runs to completion and is
- * not cancelled by the caller's abort signal, and a second call for the same
- * idempotency key waits for the first (#2144). See `runKeyedStoreWrite`.
- * Plan mode (`commit: false`) writes nothing and the conditional path is its
- * own atomic transaction, so both run as before.
- */
 export async function storeStructuredForApi(params: StructuredStoreApiParams) {
-  if (params.commit === false || params.expectedEntityAbsent === true) {
-    return storeStructuredForApiUnguarded(params);
-  }
-  const { runKeyedStoreWrite } = await import("./services/store_write_state.js");
-  return runKeyedStoreWrite(params.userId, params.idempotencyKey, () =>
-    storeStructuredForApiUnguarded(params)
-  );
-}
-
-async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) {
   const {
     userId,
     entities,
@@ -7783,7 +7762,6 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
     interpretationSourceId,
     commit: commitInput,
     strict: strictInput,
-    dataOrigins,
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
@@ -7808,18 +7786,12 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
       idempotencyKey,
       originalFilename,
       strict,
-      dataOrigin: dataOrigins?.[0],
     });
   }
 
   // Compute hash of incoming content before querying so we can detect
-  // idempotency-key reuse with different content (issue #186). Each entity's
-  // effective data_origin (#2242) is part of the stored payload, so a replay
-  // with a different origin is a mismatch rather than a silent drop; with no
-  // origin the stored JSON is unchanged.
-  const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
-  const storedEntities = entitiesWithStoredDataOrigins(entities, dataOrigins);
-  const incomingJsonContent = JSON.stringify(storedEntities, (key, value) => {
+  // idempotency-key reuse with different content (issue #186).
+  const incomingJsonContent = JSON.stringify(entities, (key, value) => {
     if (typeof value === "bigint") {
       return Number(value);
     }
@@ -7836,7 +7808,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
 
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
-    .select("id, content_hash, provenance")
+    .select("id, content_hash")
     .eq("user_id", userId)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
@@ -7860,57 +7832,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         "To update an entity, omit the idempotency_key or use a new one.";
       throw mismatchErr;
     }
-  }
 
-  // A recorded key is not a finished write (#2144): the source row is created
-  // before any observation, so a loop that stopped part way leaves a key that
-  // looks done. `resumeIncompleteWrite` is true when the earlier attempt did
-  // not finish; the replay branch below is then skipped and the ordinary write
-  // path runs again over the same source. That is safe because observation ids
-  // are deterministic (source, entity, fields), so entities already written
-  // resolve to their existing observation and only the missing ones are added.
-  let resumeIncompleteWrite = false;
-  if (existingSource && commit) {
-    const storeWriteState = await import("./services/store_write_state.js");
-    const recordedState = storeWriteState.readStoreWriteState(existingSource.provenance);
-    const incomplete =
-      recordedState === "in_progress" ||
-      (recordedState === undefined &&
-        storeWriteState.legacyWriteLooksIncomplete({
-          entities,
-          observationCount: (
-            await (
-              await import("./services/observation_storage.js")
-            ).listObservationsForSource(existingSource.id, userId)
-          ).length,
-          observationsOnKeyedSource: !interpretation?.source_id && !interpretationSourceId,
-        }));
-    if (incomplete) {
-      if (interpretation) {
-        // A resumed write would open a fresh interpretation run, whose id is
-        // part of each observation id, so the entities already written would
-        // be written a second time. Report the incomplete write instead.
-        const summary = await storeWriteState.summarizeUnfinishedStore({
-          userId,
-          sourceId: existingSource.id,
-          entities: entities as Array<Record<string, unknown>>,
-        });
-        const incompleteErr = new Error(
-          `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
-            `that did not finish writing (${summary.entities_written} of ` +
-            `${summary.entities_requested} entities have an observation). It cannot be resumed ` +
-            "under the same key because the request carries an interpretation."
-        ) as Error & { code: string; hint: string; details: Record<string, unknown> };
-        incompleteErr.code = "ERR_STORE_WRITE_INCOMPLETE";
-        incompleteErr.hint = storeWriteState.incompleteStoreHint(summary);
-        incompleteErr.details = { ...summary };
-        throw incompleteErr;
-      }
-      resumeIncompleteWrite = true;
-    }
-  }
-
-  if (existingSource && !resumeIncompleteWrite) {
     const { listObservationsForSource } = await import("./services/observation_storage.js");
     const existingObs = await listObservationsForSource(existingSource.id, userId);
 
@@ -8026,7 +7948,6 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
           upload_method: "api_store",
           client: "api",
           source_priority: sourcePriority,
-          ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
         },
       })
     : null;
@@ -8128,11 +8049,6 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
 
   const resolved: ResolvedEntity[] = [];
   const issues: ResolutionIssue[] = [];
-  // One fresh set per resolution pass when resuming (#2144): an entity an
-  // earlier payload of this request already resolved to is a collision between
-  // two payloads, not this write's own row, so a later payload landing on it is
-  // judged by the ordinary strict / collision rules.
-  const resumeClaimedEntityIds = resumeIncompleteWrite ? new Set<string>() : undefined;
 
   for (let observation_index = 0; observation_index < entities.length; observation_index++) {
     const entityData = entities[observation_index];
@@ -8196,12 +8112,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         commit,
         strict: effectiveStrict,
         targetId,
-        // Resuming this key's own interrupted write: entity rows it created
-        // are not merge targets (#2144).
-        resumeSourceId: resumeIncompleteWrite ? existingSource?.id : undefined,
-        resumeClaimedEntityIds,
       });
-      resumeClaimedEntityIds?.add(result.entityId);
       resolved.push({
         observation_index,
         entity_type,
@@ -8564,7 +8475,6 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         user_id: userId,
         identity_basis: r.trace.identity_basis,
         identity_rule: r.trace.identity_rule,
-        data_origin: dataOrigins?.[r.observation_index],
       });
       observation_id = obsData.id;
 
@@ -8582,7 +8492,7 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
       const emitTs = obsRow.observed_at ?? new Date().toISOString();
       const obsSourceLabel =
         observationSource === undefined || observationSource === null
-          ? DEFAULT_OBSERVATION_SOURCE
+          ? "llm_summary"
           : String(observationSource);
       emitObservationCreated({
         user_id: userId,
@@ -8780,15 +8690,6 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         );
       }
     }
-  }
-
-  // Every observation (and the request's relationships) is written. Record
-  // that on the keyed source so a replay of this key knows the write finished
-  // (#2144). Before this point a replay resumes the write instead of reporting
-  // whatever happened to land.
-  if (commit && storageResult) {
-    const { markStoreWriteComplete } = await import("./services/store_write_state.js");
-    await markStoreWriteComplete(storageResult.sourceId, userId);
   }
 
   // R3: aggregate non-fatal resolver warnings across the batch so callers
@@ -9055,21 +8956,6 @@ async function storeStructuredForApiUnguarded(params: StructuredStoreApiParams) 
         }
       }
     }
-  }
-
-  // #2241: OBSERVATION_SOURCE_OMITTED — the request did not say what kind of
-  // write this was, so every observation was stored as `unspecified`. Judged
-  // on the raw request value (an explicit `unspecified` does not warn) and
-  // emitted once per request, because observation_source is request-scoped.
-  {
-    const { buildObservationSourceOmittedWarning } =
-      await import("./services/observation_source_warning.js");
-    const firstStored = [...resolved].sort((a, b) => a.observation_index - b.observation_index)[0];
-    const obsSourceWarn = buildObservationSourceOmittedWarning({
-      rawObservationSource: observationSource,
-      firstStored,
-    });
-    if (obsSourceWarn) schemaStoreWarnings.push(obsSourceWarn);
   }
 
   // #1963: surface auto-link edge retractions on the store response so a
@@ -9387,17 +9273,6 @@ async function handleStorePost(
     return sendStoreValidationError(res, parsed.error.issues);
   }
 
-  let storeDataOrigins: StructuredStoreApiParams["dataOrigins"];
-  // #2242: peel the reserved per-entity `data_origin` key off every entity and
-  // resolve each entity's effective origin (entity → request → none) before
-  // anything else reads the entities, so no downstream path sees it as a field.
-  if (parsed.data.entities?.length) {
-    const { splitEntityDataOrigins } = await import("./services/provenance_data_origin.js");
-    const split = splitEntityDataOrigins(parsed.data.entities, parsed.data.data_origin);
-    parsed.data.entities = split.entities;
-    storeDataOrigins = split.origins;
-  }
-
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
@@ -9543,7 +9418,6 @@ async function handleStorePost(
               : undefined,
           commit: (parsed.data as { commit?: boolean }).commit,
           strict: (parsed.data as { strict?: boolean }).strict,
-          dataOrigins: storeDataOrigins,
         });
 
       // A request body can only claim an external actor; verified tiers are
@@ -9628,16 +9502,6 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       logWarn("IdempotencyCollision:store", req, { message });
       return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
-    }
-    if (error && typeof error === "object" && errCode === "ERR_STORE_WRITE_INCOMPLETE") {
-      const message = error instanceof Error ? error.message : String(error);
-      const hint = (error as { hint?: string }).hint;
-      logWarn("StoreWriteIncomplete:store", req, { message });
-      const incompleteDetails = (error as { details?: Record<string, unknown> }).details;
-      return sendError(res, 409, "ERR_STORE_WRITE_INCOMPLETE", message, {
-        ...(hint ? { hint } : {}),
-        ...(incompleteDetails ?? {}),
-      });
     }
     if (error && typeof error === "object" && errCode === "ERR_STORE_POLICY_DENIED") {
       const err = error as {
@@ -10321,7 +10185,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
         return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
       }
       logDebug("Success:get_entity_snapshot:at_time", req, { entity_id, at, at_ingested });
-      return res.json(await withSnapshotDataOrigins(result, userId));
+      return res.json(result);
     } catch (err) {
       logError("Error:get_entity_snapshot:at_time", req, err);
       return sendError(res, 500, "DB_QUERY_FAILED", (err as Error).message);
@@ -10362,25 +10226,8 @@ app.post("/get_entity_snapshot", async (req, res) => {
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
-  return res.json(await withSnapshotDataOrigins(data, userId));
+  return res.json(data);
 });
-
-/**
- * #2242: attach `data_origins` (observation_id → caller-claimed origin) for the
- * observations a snapshot's field provenance cites. The key is omitted when no
- * cited observation carries an origin, so pre-#2242 responses are unchanged.
- * Mirrors MCP `retrieve_entity_snapshot`.
- */
-async function withSnapshotDataOrigins<T extends { provenance?: unknown } | null>(
-  snapshot: T,
-  userId: string
-): Promise<T> {
-  if (!snapshot || typeof snapshot !== "object") return snapshot;
-  const { collectSnapshotDataOrigins } = await import("./services/provenance_data_origin.js");
-  const dataOrigins = await collectSnapshotDataOrigins(snapshot.provenance, userId);
-  if (Object.keys(dataOrigins).length === 0) return snapshot;
-  return { ...snapshot, data_origins: dataOrigins };
-}
 
 // List observations for entity
 app.post("/list_observations", async (req, res) => {

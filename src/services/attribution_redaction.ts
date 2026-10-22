@@ -17,24 +17,10 @@
 
 import { AUTHENTICATED_ACTOR_PROVENANCE_KEY } from "../crypto/agent_identity.js";
 
-/**
- * Keys withheld from guest-token responses:
- *   - `authenticated_actor_id` — member write-attribution (#2240).
- *   - `data_origin` / `data_origins` — caller-claimed data origin (#2242).
- *     Locators routinely carry local paths, mailbox/message ids, and URL query
- *     tokens: metadata for members of the graph, not a single-entity share.
- *     `data_origin` is a reserved per-entity store key, so since #2242 it is
- *     never written as an entity field and removing it by name drops no
- *     entity data written after that change.
- */
-const REDACTED_KEYS: ReadonlySet<string> = new Set([
-  AUTHENTICATED_ACTOR_PROVENANCE_KEY,
-  "data_origin",
-  "data_origins",
-]);
+const REDACTED_KEYS: ReadonlySet<string> = new Set([AUTHENTICATED_ACTOR_PROVENANCE_KEY]);
 
 function redactProvenanceString(value: string): string {
-  if (![...REDACTED_KEYS].some((key) => value.includes(key))) return value;
+  if (!value.includes(AUTHENTICATED_ACTOR_PROVENANCE_KEY)) return value;
   try {
     const parsed = JSON.parse(value) as unknown;
     if (parsed && typeof parsed === "object") {
