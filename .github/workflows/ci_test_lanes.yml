@@ -424,6 +424,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build server and generic CLI for replay scenarios
+        run: npm run build:server
+
       - name: Run eval-harness scenarios (replay)
         run: npm run eval:scenarios
 
@@ -459,6 +462,9 @@ jobs:
         run: |
           npm ci --prefix writ
           npm run build --prefix writ
+
+      - name: Build server and generic CLI for replay scenarios
+        run: npm run build:server
 
       - name: Run combined WRIT + Tier-2 matrix
         run: npm run eval:combined

@@ -10,6 +10,7 @@
 import { readCassette, type CassetteFile } from "../cassette.js";
 import { createHostToolRegistry, type HostToolRegistry } from "../host_tools.js";
 import type { DriverInvocation, DriverResult, ToolCall } from "../types.js";
+import { replayCliRequest } from "./cli_request.js";
 
 /**
  * Map MCP tool name → HTTP endpoint we POST to on the isolated server.
@@ -165,7 +166,10 @@ export async function replayCassetteAgainstServer(
   const replayedCalls: ToolCall[] = [];
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };
-    if (NEOTOMA_TOOL_NAMES.has(call.name)) {
+    const declaredTransport = Object.prototype.hasOwnProperty.call(call, "transport");
+    if (declaredTransport) {
+      result = await replayCliRequest(invocation, call, replayedCalls);
+    } else if (NEOTOMA_TOOL_NAMES.has(call.name)) {
       result = await postNeotomaTool(
         invocation.neotomaBaseUrl,
         call.name,
@@ -178,9 +182,10 @@ export async function replayCassetteAgainstServer(
     }
     replayedCalls.push({
       name: call.name,
+      ...(declaredTransport ? { transport: call.transport, omit_auth: call.omit_auth } : {}),
       input: call.input,
-      output: result.output ?? call.output,
-      error: result.error ?? call.error,
+      output: declaredTransport ? result.output : (result.output ?? call.output),
+      error: declaredTransport ? result.error : (result.error ?? call.error),
       sequence: replayedCalls.length,
     });
   }

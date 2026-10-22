@@ -1,0 +1,49 @@
+meta:
+  id: owner_token_administration
+  description: Deterministic workflow replay through the actual built generic CLI,
+    isolated HTTP server and SQLite. The existing local submission factory creates
+    the token; runtime metadata binds revocation, replay and refusal requests.
+  tags: [tier2, cli, owner-administration, idempotency, refusal]
+seed_strategy: generated
+source_pattern: An agent binds original metadata before an owner administration request,
+  safely retries an uncertain response, and verifies refusals have no extra effects.
+privacy_transform: Synthetic titles, keys and nonce-owned fixture capabilities only.
+user_prompt: Create an isolated submission, bind its original token observation,
+  revoke, replay and refuse invalid requests without extra writes. Read back owner metadata.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: tool_result.matches
+    tool_name: issuesSubmit
+    result_subset: { exit_code: 0 }
+  - type: tool_result.matches
+    tool_name: revokeGuestAccessToken
+    which: 0
+    result_subset: { exit_code: 0, response: { revoked: true, replayed: false } }
+  - type: tool_result.matches
+    tool_name: revokeGuestAccessToken
+    which: 1
+    result_subset: { exit_code: 0, response: { revoked: true, replayed: true } }
+  - type: tool_result.matches
+    tool_name: revokeGuestAccessToken
+    which: 2
+    result_subset: { exit_code: 1 }
+  - type: tool_result.matches
+    tool_name: revokeGuestAccessToken
+    which: 3
+    result_subset: { exit_code: 1 }
+  - type: tool_result.matches
+    tool_name: revokeGuestAccessToken
+    which: 4
+    # The existing loopback fixture admits no-bearer requests as local owner.
+    # This is a positive local-profile characterization, not an anonymous denial.
+    result_subset: { exit_code: 0, response: { revoked: true, replayed: true } }
+  - type: tool_result.matches
+    tool_name: queryObservations
+    which: 1
+    result_subset: { exit_code: 0, response: { total: 2 } }
+  - type: tool_result.matches
+    tool_name: getEntityById
+    result_subset: { exit_code: 0 }

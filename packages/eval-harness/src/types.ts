@@ -212,6 +212,8 @@ export interface ScenarioFile {
 }
 
 export interface DriverInvocation {
+  /** Actual live fixture handle; required only for real CLI cassette steps. */
+  isolatedServer?: import("./isolated_server.js").IsolatedServer;
   scenario: ScenarioFile;
   model: ModelEntry;
   /** MCP base URL of the isolated Neotoma server (the agent registers it). */
@@ -228,6 +230,10 @@ export interface DriverInvocation {
 }
 
 export interface ToolCall {
+  /** Optional real built generic CLI transport; omitted retains existing replay. */
+  transport?: "cli";
+  /** CLI-only: explicitly use the supported request --skip-auth option. */
+  omit_auth?: boolean;
   name: string;
   input: unknown;
   output?: unknown;

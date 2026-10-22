@@ -6638,6 +6638,49 @@ async function setGrantStatusRoute(
   }
 }
 
+app.post("/guest-access-tokens/:id/revoke", async (req, res) => {
+  try {
+    if (requestPrincipal(req)?.kind === "guest")
+      return res
+        .status(403)
+        .json(buildErrorEnvelope("FORBIDDEN", "Owner authentication is required."));
+    const userId = await getAuthenticatedUserId(req);
+    const { revokeGuestAccessToken, GuestTokenRevocationError } =
+      await import("./services/guest_access_token.js");
+    try {
+      if (Object.keys(req.query).length)
+        throw new GuestTokenRevocationError(400, "Query parameters are not accepted.");
+      return res.json(await revokeGuestAccessToken(userId, req.params.id, req.body));
+    } catch (error) {
+      if (error instanceof GuestTokenRevocationError)
+        return res
+          .status(error.status)
+          .json(
+            buildErrorEnvelope(
+              error.status === 400
+                ? "VALIDATION_ERROR"
+                : error.status === 404
+                  ? "NOT_FOUND"
+                  : error.status === 409
+                    ? "CONFLICT"
+                    : "SERVICE_UNAVAILABLE",
+              error.message
+            )
+          );
+      throw error;
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Guest token revocation failed.",
+      "DB_QUERY_FAILED",
+      "APIError:guest_token_revoke"
+    );
+  }
+});
+
 app.post("/agents/grants/:id/suspend", (req, res) => setGrantStatusRoute(req, res, "suspended"));
 app.post("/agents/grants/:id/revoke", (req, res) => setGrantStatusRoute(req, res, "revoked"));
 app.post("/agents/grants/:id/restore", (req, res) => setGrantStatusRoute(req, res, "active"));
