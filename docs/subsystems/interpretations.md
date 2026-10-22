@@ -67,22 +67,22 @@ For the live DDL (and any deferred columns such as `timeout_at` / `heartbeat_at`
 
 ### 2.2 Field Semantics
 
-| Field                     | Purpose                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| `id`                      | Unique interpretation identifier; referenced by `observations.interpretation_id`              |
-| `source_id`               | The [source](../vocabulary/canonical_terms.md#source) that was interpreted                    |
-| `interpretation_config`   | JSONB block describing model / extractor / prompt version (see §3)                            |
-| `status`                  | State machine value (`pending` / `running` / `completed` / `failed`)                          |
-| `error_message`           | Set when `status = 'failed'`; null otherwise                                                  |
-| `extracted_entities`      | JSONB array summarising what was produced (entity types, counts) — convenience for read paths |
-| `confidence`              | Aggregate model self-reported confidence in `[0.00, 1.00]` (advisory, not authoritative)      |
-| `unknown_field_count`     | Number of extracted fields routed to `raw_fragments` because they were not in the schema      |
-| `extraction_completeness` | `complete` / `partial` / `unknown` — coverage signal for the source                           |
-| `started_at`              | When the interpreter actually began work                                                      |
-| `completed_at`            | When the interpreter terminated (success or failure)                                          |
-| `created_at`              | When the row was written                                                                      |
-| `archived_at`             | When the interpretation was retired in favour of a newer one                                  |
-| `user_id`                 | Owner; redundant with `sources.user_id` but indexed directly for read paths                   |
+| Field                      | Purpose                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `id`                       | Unique interpretation identifier; referenced by `observations.interpretation_id`              |
+| `source_id`                | The [source](../vocabulary/canonical_terms.md#source) that was interpreted                    |
+| `interpretation_config`    | JSONB block describing model / extractor / prompt version (see §3)                            |
+| `status`                   | State machine value (`pending` / `running` / `completed` / `failed`)                          |
+| `error_message`            | Set when `status = 'failed'`; null otherwise                                                  |
+| `extracted_entities`       | JSONB array summarising what was produced (entity types, counts) — convenience for read paths |
+| `confidence`               | Aggregate model self-reported confidence in `[0.00, 1.00]` (advisory, not authoritative)      |
+| `unknown_field_count`      | Number of extracted fields routed to `raw_fragments` because they were not in the schema      |
+| `extraction_completeness`  | `complete` / `partial` / `unknown` — coverage signal for the source                           |
+| `started_at`               | When the interpreter actually began work                                                      |
+| `completed_at`             | When the interpreter terminated (success or failure)                                          |
+| `created_at`               | When the row was written                                                                      |
+| `archived_at`              | When the interpretation was retired in favour of a newer one                                  |
+| `user_id`                  | Owner; redundant with `sources.user_id` but indexed directly for read paths                   |
 
 ### 2.3 Row-Level Security
 
@@ -108,15 +108,15 @@ The `interpretation_config` JSONB field stores everything needed to understand h
 }
 ```
 
-| Key                 | Purpose                                                                                           |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| `model`             | LLM identifier (when AI extraction is involved)                                                   |
-| `model_version`     | Version pin (where the provider exposes one)                                                      |
-| `extractor_type`    | `ai`, `rule_based`, `parser`, `mixed` — the high-level extraction strategy                        |
-| `extractor_version` | Internal extractor version string                                                                 |
-| `prompt_version`    | Prompt or template version used for this run                                                      |
-| `temperature`       | LLM sampling temperature when applicable                                                          |
-| `schema_version`    | Active [entity schema](../vocabulary/canonical_terms.md#entity-schema) version at extraction time |
+| Key                  | Purpose                                                                       |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `model`              | LLM identifier (when AI extraction is involved)                               |
+| `model_version`      | Version pin (where the provider exposes one)                                  |
+| `extractor_type`     | `ai`, `rule_based`, `parser`, `mixed` — the high-level extraction strategy    |
+| `extractor_version`  | Internal extractor version string                                             |
+| `prompt_version`     | Prompt or template version used for this run                                  |
+| `temperature`        | LLM sampling temperature when applicable                                      |
+| `schema_version`     | Active [entity schema](../vocabulary/canonical_terms.md#entity-schema) version at extraction time |
 
 Implementations may add fields; readers MUST treat unknown keys as opaque audit metadata and MUST NOT change behaviour based on them.
 
@@ -150,12 +150,12 @@ For the broader determinism doctrine see [`docs/subsystems/sources.md §4`](./so
             └──────────┘  └────────┘
 ```
 
-| Status      | Meaning                                                                   | Writable Fields                                                                                   |
-| ----------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `pending`   | Row has been created but the extractor has not started                    | `started_at` (on transition to `running`)                                                         |
-| `running`   | Extractor has begun work; observations may not exist yet                  | `completed_at`, terminal `status`, `confidence`, `unknown_field_count`, `extraction_completeness` |
-| `completed` | Extractor finished successfully; observations and raw fragments persisted | `archived_at` (when superseded)                                                                   |
-| `failed`    | Extractor terminated without producing observations; `error_message` set  | `archived_at` (when superseded)                                                                   |
+| Status      | Meaning                                                                  | Writable Fields                                                                            |
+| ----------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `pending`   | Row has been created but the extractor has not started                   | `started_at` (on transition to `running`)                                                  |
+| `running`   | Extractor has begun work; observations may not exist yet                 | `completed_at`, terminal `status`, `confidence`, `unknown_field_count`, `extraction_completeness` |
+| `completed` | Extractor finished successfully; observations and raw fragments persisted | `archived_at` (when superseded)                                                            |
+| `failed`    | Extractor terminated without producing observations; `error_message` set  | `archived_at` (when superseded)                                                            |
 
 Terminal states (`completed`, `failed`) MUST NOT be transitioned back to `pending` or `running`. Reruns create new rows.
 
@@ -204,11 +204,11 @@ Increment for every field the extractor produced that was not in the active [ent
 
 ### 6.2 `extraction_completeness`
 
-| Value      | Meaning                                                              |
-| ---------- | -------------------------------------------------------------------- |
-| `complete` | Every required field for the matched entity schema was extracted     |
-| `partial`  | At least one required field is missing                               |
-| `unknown`  | Default; the extractor did not (or could not) determine completeness |
+| Value      | Meaning                                                                                |
+| ---------- | -------------------------------------------------------------------------------------- |
+| `complete` | Every required field for the matched entity schema was extracted                       |
+| `partial`  | At least one required field is missing                                                 |
+| `unknown`  | Default; the extractor did not (or could not) determine completeness                   |
 
 This is set by the extractor at the end of the run; readers MUST treat it as advisory.
 

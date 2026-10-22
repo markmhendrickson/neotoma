@@ -15991,7 +15991,7 @@ const correctionsCommand = program.command("corrections").description("Correctio
 correctionsCommand
   .command("create")
   .description(
-    "Create a correction-sourced observation. Corrections are durable: a correction always outranks a later routine write on the same field, on every merge strategy, not just merge_array."
+    "Create a correction-sourced observation. Under the default last_write strategy, a correction survives later ordinary writes to the same field. Other configured merge strategies keep their existing priority rules."
   )
   .argument("[entityId]", "Entity ID to correct (or use --entity-id)")
   .option("--entity-id <id>", "Entity ID to correct")
