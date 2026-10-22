@@ -17,7 +17,14 @@ import {
   createAcceptedIdentityBinding,
   deriveExactEntityIdentity,
 } from "../../src/services/entity_identity_contract.js";
-import { generateEntityId } from "../../src/services/entity_resolution.js";
+import {
+  generateEntityId,
+  prepareExactEntityResolution,
+  resolveEntityWithTrace,
+} from "../../src/services/entity_resolution.js";
+import { loadAcceptedIdentityState } from "../../src/services/entity_identity_admission.js";
+import { deriveConditionalStoreIdentity } from "../../src/services/store_condition_identity.js";
+import { maybeRederiveCanonicalName } from "../../src/services/snapshot_computation.js";
 import { createObservation } from "../../src/services/observation_storage.js";
 import {
   PARITY_USER_ID,
@@ -70,7 +77,7 @@ const config = (entity_type: string) => ({
   activate: false,
 });
 
-function cliRequest(base: string, body: Record<string, unknown>) {
+function cliRequest(base: string, body: Record<string, unknown>, operation = "registerSchema") {
   return execFileAsync(
     process.execPath,
     [
@@ -82,7 +89,7 @@ function cliRequest(base: string, body: Record<string, unknown>) {
       base,
       "request",
       "--operation",
-      "registerSchema",
+      operation,
       "--skip-auth",
       "--body",
       JSON.stringify(body),
@@ -181,6 +188,222 @@ describe("immutable exact-identity admission in the existing registry", () => {
       }
     } finally {
       await stopServer(server.server);
+    }
+  });
+
+  it("prepares original exact strings from the retained registry anchor without granting mutation", async () => {
+    const entityType = type("private_preparation");
+    const previous = process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS;
+    try {
+      process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS = "true";
+      const registered = await schemaRegistry.register(config(entityType));
+      process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS = "false";
+      const accepted = await loadAcceptedIdentityState(await getDb(), entityType, PARITY_USER_ID);
+      expect(accepted?.binding).toEqual(registered.identity_binding);
+      expect(Object.isFrozen(accepted?.binding.contract)).toBe(true);
+      const codes = [
+        "SR-cli",
+        "sr-cli",
+        " sr-cli",
+        "sr-cli ",
+        "sr_cli",
+        "sr.cli",
+        "é",
+        "e\u0301",
+        "\u2003SR-cli",
+        "SR-cli\u00a0",
+      ];
+      const identities: string[] = [];
+      for (const code of codes) {
+        const options = { entityType, userId: PARITY_USER_ID, fields: { code } };
+        const prepared = await prepareExactEntityResolution(options);
+        expect(prepared?.components).toEqual([["code", code]]);
+        const conditional = deriveConditionalStoreIdentity(registered, { code }, PARITY_USER_ID);
+        expect(conditional.entityId).toBe(prepared?.entityId);
+        identities.push(prepared!.entityId);
+      }
+      expect(new Set(identities).size).toBe(codes.length);
+      await expect(
+        maybeRederiveCanonicalName({
+          entityId: "ent_unadmitted_target",
+          entityType,
+          userId: PARITY_USER_ID,
+          snapshot: {},
+          schema: registered.schema_definition,
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION_INVALID_FORMAT" });
+      const first = await prepareExactEntityResolution({
+        entityType,
+        userId: PARITY_USER_ID,
+        fields: { code: "SR-cli" },
+      });
+      expect(first?.entityId).toBe(
+        deriveExactEntityIdentity(registered.identity_binding!, { code: "SR-cli" }, PARITY_USER_ID)
+          .entityId
+      );
+      await expect(
+        prepareExactEntityResolution({
+          entityType,
+          userId: PARITY_USER_ID,
+          fields: { title: "display" },
+        })
+      ).rejects.toMatchObject({
+        code: "VALIDATION_INVALID_FORMAT",
+        hint: expect.stringContaining("code"),
+      });
+      for (const fields of [{ code: "\ud800" }, { code: 42 }])
+        await expect(
+          prepareExactEntityResolution({ entityType, userId: PARITY_USER_ID, fields })
+        ).rejects.toMatchObject({
+          code: "VALIDATION_INVALID_FORMAT",
+          hint: expect.stringContaining("code"),
+        });
+      await expect(
+        prepareExactEntityResolution({
+          entityType,
+          userId: PARITY_USER_ID,
+          fields: { code: "SR-cli" },
+          targetId: "ent_unadmitted_target",
+        })
+      ).rejects.toThrow(/immutable original components/);
+      await expect(
+        resolveEntityWithTrace({
+          entityType,
+          userId: PARITY_USER_ID,
+          fields: { code: "SR-cli" },
+          commit: true,
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION_INVALID_FORMAT" });
+      expect((await db.from("entities").select("id").eq("entity_type", entityType)).data).toEqual(
+        []
+      );
+    } finally {
+      if (previous === undefined) delete process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS;
+      else process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS = previous;
+    }
+  });
+
+  it("refuses missing or changed authority from an unsupported restored registry instead of falling back", async () => {
+    const entityType = type("restored_metadata");
+    const registered = await schemaRegistry.register(config(entityType));
+    // A deliberately unsupported metadata-only restore fixture. No guards are
+    // removed and no exact entities are created; this tests reads of bad state.
+    const database = new AsyncSqliteDatabase(":memory:");
+    try {
+      await database.exec(
+        "CREATE TABLE schema_registry (id TEXT,entity_type TEXT,schema_version TEXT,schema_definition TEXT,scope TEXT,user_id TEXT,active INTEGER,identity_binding TEXT)"
+      );
+      const insert = database.prepare("INSERT INTO schema_registry VALUES(?,?,?,?,?,?,?,?)");
+      const values = [
+        registered.id,
+        entityType,
+        registered.schema_version,
+        JSON.stringify(registered.schema_definition),
+        registered.scope,
+        registered.user_id,
+        0,
+        JSON.stringify(registered.identity_binding),
+      ];
+      await insert.run(...values);
+      expect(
+        (await loadAcceptedIdentityState(database, entityType, PARITY_USER_ID))?.binding
+      ).toEqual(registered.identity_binding);
+      for (const update of [
+        "UPDATE schema_registry SET id = 'synthetic_missing_anchor'",
+        "UPDATE schema_registry SET identity_binding = NULL",
+        "UPDATE schema_registry SET identity_binding = json_set(identity_binding,'$.tenant_scoped_entity_ids',json('false'))",
+        "UPDATE schema_registry SET identity_binding = json_set(identity_binding,'$.contract_id','invalid')",
+        "UPDATE schema_registry SET schema_definition = json_set(schema_definition,'$.identity_contract.version','999')",
+      ]) {
+        await database.exec("DELETE FROM schema_registry");
+        await insert.run(...values);
+        // Make the owner-policy mutation deterministic regardless of ambient default.
+        const statement =
+          update.includes("tenant_scoped_entity_ids") &&
+          !registered.identity_binding!.tenant_scoped_entity_ids
+            ? update.replace("json('false')", "json('true')")
+            : update;
+        await database.exec(statement);
+        await expect(
+          loadAcceptedIdentityState(database, entityType, PARITY_USER_ID)
+        ).rejects.toMatchObject({ code: "VALIDATION_INVALID_FORMAT" });
+      }
+    } finally {
+      await database.close();
+    }
+  });
+
+  it("preserves canonical typed lookup refusal through real HTTP, registered MCP and compiled CLI", async () => {
+    const entityType = type("lookup_refusal");
+    await schemaRegistry.register(config(entityType));
+    const server = await startOfflineServer();
+    try {
+      const request = { identifier: "SR-cli", entity_type: entityType };
+      const http = await callHttp(server.base, "/retrieve_entity_by_identifier", request);
+      expect(http.status).toBe(400);
+      expect(http.json).toMatchObject({
+        error_code: "VALIDATION_INVALID_FORMAT",
+        details: { hint: expect.any(String) },
+      });
+      const error = (await callRegisteredMcp(request, "retrieve_entity_by_identifier").catch(
+        (failure: unknown) => failure
+      )) as { code: number; data: Record<string, unknown> };
+      expect(error.code).toBe(-32602);
+      expect(domainEnvelope(error.data)).toEqual(domainEnvelope(http.json));
+      const failure = (await cliRequest(server.base, request, "retrieveEntityByIdentifier").catch(
+        (error: unknown) => error
+      )) as { code: number; stderr: string };
+      expect(failure.code).toBe(1);
+      const line = failure.stderr.split("\n").find((text) => text.startsWith('{"error":'));
+      expect(line).toBeTruthy();
+      expect(JSON.parse(line!).hint).toMatchObject({
+        code: http.json.error_code,
+        hint: (http.json.details as Record<string, unknown>).hint,
+      });
+      expect((await db.from("entities").select("id").eq("entity_type", entityType)).data).toEqual(
+        []
+      );
+    } finally {
+      await stopServer(server.server);
+    }
+  });
+
+  it("blocks native reclassification into a reserved identity namespace before changing either row", async () => {
+    const entityType = type("reclassification");
+    await schemaRegistry.register(config(entityType));
+    const database = await getDb();
+    const legacyType = type("reclassification_control");
+    const entityId = generateEntityId(legacyType, "control");
+    const inserted = await db.from("entities").insert({
+      id: entityId,
+      entity_type: legacyType,
+      canonical_name: "control",
+      user_id: PARITY_USER_ID,
+    });
+    expect(inserted.error).toBeNull();
+    const observation = await createObservation({
+      entity_id: entityId,
+      entity_type: legacyType,
+      schema_version: "1",
+      source_id: null,
+      interpretation_id: null,
+      user_id: PARITY_USER_ID,
+      observed_at: "2026-10-20T00:00:00Z",
+      fields: { code: "control" },
+      specificity_score: 1,
+      source_priority: 100,
+      idempotency_key: `reclassify-${suffix}`,
+    });
+    for (const [table, id] of [
+      ["entities", entityId],
+      ["observations", observation.id],
+    ]) {
+      const before = await database.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+      expect(before).toBeTruthy();
+      await expect(
+        database.prepare(`UPDATE ${table} SET entity_type = ? WHERE id = ?`).run(entityType, id)
+      ).rejects.toThrow(/EXACT_IDENTITY_ACTIVATION_UNAVAILABLE/);
+      expect(await database.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id)).toEqual(before);
     }
   });
 
@@ -292,6 +515,21 @@ describe("immutable exact-identity admission in the existing registry", () => {
           fields: { code: "SR-cli" },
         })
       ).rejects.toMatchObject({ code: "VALIDATION_INVALID_FORMAT" });
+      const conditional = {
+        ...store,
+        expected_entity_absent: true,
+        idempotency_key: `reserved-conditional-${suffix}`,
+      };
+      const refusedConditional = await callHttp(server.base, "/store", conditional);
+      expect(refusedConditional.status).toBe(400);
+      await expect(callRegisteredMcp(conditional, "store")).rejects.toMatchObject({
+        code: -32602,
+        data: {
+          error_code: refusedConditional.json.error_code,
+          message: refusedConditional.json.message,
+          details: refusedConditional.json.details,
+        },
+      });
       expect(await counts()).toEqual(before);
       expect((await stored(entityType))[0].active).toBe(false);
     } finally {

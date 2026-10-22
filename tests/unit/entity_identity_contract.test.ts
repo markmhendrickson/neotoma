@@ -70,10 +70,14 @@ describe("admitted exact identity bytes", () => {
   });
 
   it("uses ordered mixed rules without display fallback or implicit coercion", () => {
-    const ordered = {
-      ...binding,
+    const ordered = createAcceptedIdentityBinding({
+      anchorSchemaId: binding.anchor_schema_id,
+      entityType: binding.entity_type,
+      scope: binding.scope,
+      userId: binding.user_id,
+      tenantScopedEntityIds: binding.tenant_scoped_entity_ids,
       contract: { ...contract, canonical_name_fields: [{ composite: ["code", "extra"] }, "code"] },
-    };
+    });
     expect(deriveExactEntityIdentity(ordered, { code: "x" }, "synthetic-owner").ruleIndex).toBe(1);
     for (const value of [undefined, null, "", 1, false, ["x"], { code: "x" }, "\ud800", "\udc00"]) {
       expect(() =>
@@ -83,6 +87,18 @@ describe("admitted exact identity bytes", () => {
     expect(() =>
       deriveExactEntityIdentity(binding, { name: "display" }, "synthetic-owner")
     ).toThrow(/complete declared/);
+  });
+
+  it("refuses caller-mutated accepted bytes rather than treating helper arguments as authority", () => {
+    for (const changed of [
+      { ...binding, tenant_scoped_entity_ids: false },
+      { ...binding, entity_type: "synthetic_other_type" },
+      { ...binding, contract_id: "0".repeat(64) },
+      { ...binding, contract: { ...contract, namespace: "synthetic:rebound:v2" } },
+    ])
+      expect(() =>
+        deriveExactEntityIdentity(changed, { code: "SR-cli" }, "synthetic-owner")
+      ).toThrow(EntityIdentityContractError);
   });
 
   it("canonicalizes declaration key order and refuses unsupported declarations before encoding", () => {

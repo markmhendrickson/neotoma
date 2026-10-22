@@ -4933,6 +4933,8 @@ function handleApiError(
   errorCode: string = "DB_QUERY_FAILED",
   logContext?: string
 ): express.Response {
+  if (error instanceof EntityIdentityContractError)
+    return sendError(res, 400, error.code, error.message, { hint: error.hint });
   if (error instanceof Error && error.message.includes("Not authenticated")) {
     return res.status(401).json(
       buildErrorEnvelope("AUTH_REQUIRED", "Authentication required.", {

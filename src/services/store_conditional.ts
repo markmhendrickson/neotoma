@@ -5,6 +5,7 @@ import { getDb } from "../repositories/db/connection.js";
 import type { DbConnection } from "../repositories/db/driver.js";
 import { schemaRegistry, type SchemaRegistryEntry } from "./schema_registry.js";
 import { deriveConditionalStoreIdentity } from "./store_condition_identity.js";
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import { assertConditionalStoreRequest } from "./store_condition_request.js";
 import {
   canonicalObservationValidity,
@@ -196,6 +197,7 @@ export async function storeConditionalStructured(options: ConditionalStoreOption
       key: options.idempotencyKey,
       request,
       beforeClaim: async (tx) => {
+        await assertIdentityResolutionAvailable(tx, entityType, options.userId);
         schema = await schemaRegistry.loadActiveSchemaInTransaction(tx, entityType, options.userId);
         prepared = deriveConditionalStoreIdentity(schema, fields, options.userId);
         schemaDigest = storeConditionRequestHash({

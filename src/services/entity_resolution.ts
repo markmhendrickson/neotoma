@@ -10,7 +10,15 @@ import { logger } from "../utils/logger.js";
 import { isSandboxMode } from "./sandbox_mode.js";
 import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
-import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
+import {
+  assertIdentityResolutionAvailable,
+  loadAcceptedIdentityState,
+} from "./entity_identity_admission.js";
+import {
+  assertAcceptedIdentityDefinition,
+  deriveExactEntityIdentity,
+  EntityIdentityContractError,
+} from "./entity_identity_contract.js";
 import {
   schemaRegistry,
   type CanonicalNameRule,
@@ -842,7 +850,10 @@ export interface ResolveEntityOptions {
   entityType: string;
   fields: Record<string, unknown>;
   userId?: string;
-  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null;
+  schema?:
+    | (Pick<SchemaDefinition, "canonical_name_fields"> &
+        Partial<Pick<SchemaDefinition, "fields" | "identity_contract" | "identity_opt_out">>)
+    | null;
   /**
    * When false, resolve and check existence without writing to the entities
    * table. Used by `store --plan` / `--dry-run`. Defaults to true.
@@ -1123,6 +1134,46 @@ async function resumeOwnsExistingEntity(
   return !(await entityHasObservationFromOtherSource(existing.id, sourceId));
 }
 
+/** Internal read-only preparation. It does not grant activation or mutation. */
+export async function prepareExactEntityResolution(
+  options: Pick<ResolveEntityOptions, "entityType" | "userId" | "fields" | "schema" | "targetId">
+) {
+  const accepted = await loadAcceptedIdentityState(
+    await getDb(),
+    options.entityType,
+    options.userId
+  );
+  if (!accepted) {
+    if (options.schema?.identity_contract !== undefined)
+      throw new EntityIdentityContractError(
+        "Exact identity declaration has no accepted registry binding."
+      );
+    return null;
+  }
+  if (options.schema !== undefined) {
+    if (!options.schema)
+      throw new EntityIdentityContractError(
+        "A caller schema cannot override accepted exact identity."
+      );
+    assertAcceptedIdentityDefinition(accepted.binding, {
+      ...options.schema,
+      fields: options.schema.fields ?? accepted.definition.fields,
+    });
+  }
+  if (options.targetId)
+    throw new EntityIdentityContractError(
+      "Exact targeted writes require immutable original components; this combination is not supported yet."
+    );
+  const exact = deriveExactEntityIdentity(accepted.binding, options.fields, options.userId ?? "");
+  return {
+    ...exact,
+    binding: accepted.binding,
+    // Presentation only: this joined label never feeds back into the ID.
+    canonicalName: `${options.entityType}:${exact.components.map((component) => component[1]).join("|")}`,
+    identityRule: `composite:${exact.components.map((component) => component[0]).join("+")}`,
+  };
+}
+
 /**
  * Resolve entity (get or create) and return a rich trace describing which
  * rule produced the canonical_name and whether the entity was created or
@@ -1136,6 +1187,7 @@ async function resumeOwnsExistingEntity(
  * entity owned by a different, non-null user — see
  * {@link assertNoOwnerConflict}.
  */
+
 export async function resolveEntityWithTrace(
   options: ResolveEntityOptions
 ): Promise<ResolveEntityResult> {
@@ -1151,6 +1203,9 @@ export async function resolveEntityWithTrace(
   } = options;
 
   let schema = options.schema;
+  // Validate accepted bytes and raw identifiers before any legacy fallback.
+  // The existing activation barrier remains closed after private preparation.
+  await prepareExactEntityResolution(options);
   await assertIdentityResolutionAvailable(await getDb(), entityType, userId);
   if (schema === undefined) {
     // Load the active schema so canonical_name derivation is schema-driven.

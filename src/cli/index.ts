@@ -17091,7 +17091,8 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
-      if (opts.operation === "registerSchema") throw cliApiError(error);
+      if (opts.operation === "registerSchema" || opts.operation === "retrieveEntityByIdentifier")
+        throw cliApiError(error);
       throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);

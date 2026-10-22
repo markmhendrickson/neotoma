@@ -6,6 +6,8 @@
  */
 
 import { db } from "../db.js";
+import { getDb } from "../repositories/db/connection.js";
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import { logger } from "../utils/logger.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import {
@@ -83,6 +85,10 @@ export async function recomputeSnapshot(
     await isEntityDeleted(entityId, userId);
     return null;
   }
+
+  // Exact display/collision derivation may not use the legacy snapshot name.
+  // Refuse before reducer, projection, timeline or canonical-name effects.
+  await assertIdentityResolutionAvailable(await getDb(), observations[0].entity_type, userId);
 
   const computed = await observationReducer.computeSnapshot(entityId, observations);
   if (!computed) {
@@ -172,6 +178,7 @@ export async function maybeRederiveCanonicalName(params: {
   schema: SchemaDefinition | null;
 }): Promise<void> {
   const { entityId, entityType, userId, snapshot, schema } = params;
+  await assertIdentityResolutionAvailable(await getDb(), entityType, userId);
   if (!snapshot || Object.keys(snapshot).length === 0) return;
 
   let derived;

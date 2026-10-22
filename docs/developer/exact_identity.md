@@ -44,3 +44,37 @@ authority. These primitive guarantees are narrower than public write/read suppor
 No migration of old identities or reconstruction of previously collapsed records
 is provided. Such a migration requires a separate inventory and explicit mapping
 and ambiguity policy.
+
+## Consumer conversion checkpoint
+
+The registry loader validates every visible version against the retained original
+anchor and the accepted declaration, including inactive versions. Missing anchors,
+missing bindings, changed owner policies and unsupported declarations refuse;
+there is no legacy fallback for an explicit exact declaration. Returned internal
+metadata is copied and frozen. A valid checksum alone does not confer authority:
+central preparation reads the binding from the registry.
+
+Internal central and conditional preparation now select the same raw declared
+strings and framing primitive. Case, punctuation, leading/trailing whitespace,
+Unicode whitespace and composed/decomposed strings remain distinct. Preparation
+is read-only and does not authorize persistence. Targeted writes refuse until
+immutable original per-entity components are supported. Snapshot-derived names
+cannot replace original exact identifiers.
+
+| Consumer                                                        | Current exact-namespace boundary                                                          | Work before activation                                                           |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Central object/positional resolution and structured store       | Accepted declaration validated; public mutation refused                                   | Persist immutable original components and use them for matching/replay           |
+| Conditional store                                               | Refuses before claiming its operation key; internal preparation uses raw strings          | Bind persisted components and conditional receipts atomically                    |
+| Typed identifier lookup (HTTP, MCP, generic CLI)                | Canonical refusal before legacy folding, aliases or fuzzy matching                        | Match admitted original components and the selected rule                         |
+| Untyped/raw-ID identifier lookup                                | Reserved candidate types refuse before return; ordinary candidates retain legacy behavior | Prove complete exact candidate acquisition without display-derived identity      |
+| Snapshot computation/canonical-name recomputation               | Reserved types refuse before projection or name effects                                   | Read immutable original components; keep display separate                        |
+| Company normalization/fuzzy helpers and signal lookup           | Not converted                                                                             | Use the same admitted binding or refuse before any relaxed matching              |
+| Targeted correction, merge, split and type repair               | Not converted; native reserved writes remain closed                                       | Explicit preflight and canonical refusal or settled original-component semantics |
+| Interpretation, raw-fragment promotion and file/model ingestion | Not converted end to end                                                                  | Preflight before source/run/claim effects, including inferred/aliased types      |
+| Import/sync and specialized internal entity writers             | No separate exact import contract                                                         | Inventory entrypoints and prove the shared resolver or explicit refusal          |
+
+Native guards also reject reclassification of an ordinary entity or observation
+into a reserved namespace. They are a persistence boundary, not evidence that an
+unconverted API has canonical errors or rolls back earlier side effects. Exact
+activation remains unavailable until all supported consumers are converted or
+explicitly refused and natural-interface acceptance covers their effects.

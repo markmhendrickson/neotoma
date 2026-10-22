@@ -100,4 +100,16 @@ export const ENTITY_IDENTITY_CONTRACT_SCHEMA = [
        s.identity_binding IS NOT NULL AND
        (s.scope = 'global' OR s.user_id IS NEW.user_id OR NEW.user_id IS NULL)
    ) BEGIN SELECT RAISE(ABORT, 'EXACT_IDENTITY_ACTIVATION_UNAVAILABLE'); END`,
+  `CREATE TRIGGER IF NOT EXISTS identity_reserved_entity_update_guard
+   BEFORE UPDATE OF entity_type, user_id ON entities WHEN EXISTS (
+     SELECT 1 FROM schema_registry s WHERE s.entity_type = NEW.entity_type AND
+       s.identity_binding IS NOT NULL AND
+       (s.scope = 'global' OR s.user_id IS NEW.user_id OR NEW.user_id IS NULL)
+   ) BEGIN SELECT RAISE(ABORT, 'EXACT_IDENTITY_ACTIVATION_UNAVAILABLE'); END`,
+  `CREATE TRIGGER IF NOT EXISTS identity_reserved_observation_update_guard
+   BEFORE UPDATE OF entity_type, user_id, entity_id ON observations WHEN EXISTS (
+     SELECT 1 FROM schema_registry s WHERE s.entity_type = NEW.entity_type AND
+       s.identity_binding IS NOT NULL AND
+       (s.scope = 'global' OR s.user_id IS NEW.user_id OR NEW.user_id IS NULL)
+   ) BEGIN SELECT RAISE(ABORT, 'EXACT_IDENTITY_ACTIVATION_UNAVAILABLE'); END`,
 ];

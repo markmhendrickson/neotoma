@@ -7,6 +7,11 @@ import {
   generateEntityId,
 } from "./entity_resolution.js";
 import { canonicalStoreRequest, StoreConditionError } from "./store_condition_keys.js";
+import {
+  assertAcceptedIdentityDefinition,
+  deriveExactEntityIdentity,
+  EntityIdentityContractError,
+} from "./entity_identity_contract.js";
 
 export function deriveConditionalStoreIdentity(
   schema: SchemaRegistryEntry,
@@ -44,6 +49,33 @@ export function deriveConditionalStoreIdentity(
       throw new StoreConditionError("VALIDATION_ERROR", "The declared identity is invalid.");
   }
   const validated = validateFieldsWithConverters(fields, schema.schema_definition.fields);
+  if (schema.schema_definition.identity_contract !== undefined || schema.identity_binding != null) {
+    const binding = schema.identity_binding;
+    if (!binding)
+      throw new EntityIdentityContractError(
+        "Conditional exact identity requires an accepted binding."
+      );
+    assertAcceptedIdentityDefinition(binding, schema.schema_definition);
+    if (
+      binding.entity_type !== schema.entity_type ||
+      binding.scope !== schema.scope ||
+      binding.user_id !== schema.user_id
+    )
+      throw new EntityIdentityContractError(
+        "Conditional exact identity scope is unavailable or invalid."
+      );
+    const exact = deriveExactEntityIdentity(binding, fields, owner);
+    if (exact.components.some(([name, value]) => validated.validFields[name] !== value))
+      throw new EntityIdentityContractError(
+        "Conditional exact identity cannot normalize its original identifiers."
+      );
+    return {
+      ...validated,
+      entityId: exact.entityId,
+      canonicalName: `${schema.entity_type}:${exact.components.map((component) => component[1]).join("|")}`,
+      identityRule: `composite:${exact.components.map((component) => component[0]).join("+")}`,
+    };
+  }
   let derivation;
   try {
     derivation = deriveCanonicalNameFromFieldsWithTrace(schema.entity_type, validated.validFields, {

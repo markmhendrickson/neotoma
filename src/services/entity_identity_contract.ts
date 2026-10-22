@@ -24,8 +24,12 @@ export interface AcceptedIdentityBinding {
 
 export class EntityIdentityContractError extends Error {
   readonly code = "VALIDATION_INVALID_FORMAT";
-  readonly hint =
-    "Use the immutable identity declaration of a fresh schema namespace; do not migrate existing identities by editing a schema.";
+  constructor(
+    message: string,
+    readonly hint = "Use the immutable identity declaration of a fresh schema namespace; do not migrate existing identities by editing a schema."
+  ) {
+    super(message);
+  }
   toErrorEnvelope(): components["schemas"]["ErrorEnvelope"] {
     return {
       error_code: this.code,
@@ -35,8 +39,8 @@ export class EntityIdentityContractError extends Error {
   }
 }
 
-function refuse(message: string): never {
-  throw new EntityIdentityContractError(message);
+function refuse(message: string, hint?: string): never {
+  throw new EntityIdentityContractError(message, hint);
 }
 
 /** Buffer.from replaces unpaired surrogates; identity encoding must refuse them. */
@@ -125,8 +129,16 @@ export function createAcceptedIdentityBinding(params: {
   tenantScopedEntityIds: boolean;
   contract: ExactIdentityContract;
 }): AcceptedIdentityBinding {
-  if (params.scope === "user" && !params.userId)
-    refuse("User-scoped exact identity admission requires an owner.");
+  text(params.anchorSchemaId);
+  text(params.entityType);
+  if (params.scope !== "global" && params.scope !== "user")
+    refuse("Exact identity requires the admitted registry scope.");
+  if (params.scope === "global" && params.userId !== null)
+    refuse("Global exact identity admission cannot change its registry owner.");
+  if (params.scope === "user") {
+    if (!params.userId) refuse("User-scoped exact identity admission requires an owner.");
+    text(params.userId);
+  }
   if (typeof params.tenantScopedEntityIds !== "boolean")
     refuse("Exact identity admission requires an explicit owner policy.");
   const descriptor = frame([
@@ -173,13 +185,43 @@ export function assertAcceptedIdentityDefinition(
     refuse("The accepted exact identity binding is unavailable or invalid.");
 }
 
+/** Validate internal copies too; changing a helper argument is not new authority. */
+export function assertAcceptedIdentityBinding(binding: AcceptedIdentityBinding): void {
+  if (!binding || typeof binding !== "object" || !binding.contract)
+    refuse("The accepted exact identity binding is unavailable or invalid.");
+  const fields: SchemaDefinition["fields"] = Object.create(null);
+  const rules = binding.contract.canonical_name_fields;
+  if (Array.isArray(rules)) {
+    for (const rule of rules) {
+      const names = typeof rule === "string" ? [rule] : rule?.composite;
+      if (Array.isArray(names))
+        for (const name of names) if (typeof name === "string") fields[name] = { type: "string" };
+    }
+  }
+  assertAcceptedIdentityDefinition(binding, {
+    fields,
+    identity_contract: binding.contract,
+    canonical_name_fields: rules,
+  });
+}
+
+export function exactIdentityInputHint(binding: AcceptedIdentityBinding): string {
+  const rules = binding.contract.canonical_name_fields;
+  const alternatives = rules.every((rule) => typeof rule === "string")
+    ? [(rules as string[]).join(" + ")]
+    : rules.map((rule) => (typeof rule === "string" ? rule : rule.composite.join(" + ")));
+  return `Supply the declared exact string identifiers (${alternatives.join("; or ")}); do not substitute a display name or normalize their bytes.`;
+}
+
 export function deriveExactEntityIdentity(
   binding: AcceptedIdentityBinding,
   fields: Record<string, unknown>,
   owner: string
 ): { entityId: string; components: Array<[string, string]>; ruleIndex: number } {
+  assertAcceptedIdentityBinding(binding);
   if (!owner || (binding.scope === "user" && binding.user_id !== owner))
     refuse("Exact identity requires the admitted owner scope.");
+  assertIdentityUtf8(owner);
   const declared = binding.contract.canonical_name_fields;
   // Preserve the existing declaration grammar: a flat string[] is ONE composite.
   const rules = declared.every((rule) => typeof rule === "string")
@@ -189,8 +231,17 @@ export function deriveExactEntityIdentity(
     if (names.some((name) => fields[name] === undefined || fields[name] === null)) continue;
     const components = names.map((name): [string, string] => {
       const value = fields[name];
-      assertIdentityUtf8(value);
-      if (!value.length) refuse("Exact identity requires non-empty declared identifiers.");
+      try {
+        assertIdentityUtf8(value);
+      } catch (error) {
+        if (!(error instanceof EntityIdentityContractError)) throw error;
+        refuse(error.message, exactIdentityInputHint(binding));
+      }
+      if (!value.length)
+        refuse(
+          "Exact identity requires non-empty declared identifiers.",
+          exactIdentityInputHint(binding)
+        );
       return [name, value];
     });
     const bytes = frame([
@@ -210,6 +261,7 @@ export function deriveExactEntityIdentity(
     };
   }
   refuse(
-    "Exact identity requires a complete declared identifier; display fallback is unavailable."
+    "Exact identity requires a complete declared identifier; display fallback is unavailable.",
+    exactIdentityInputHint(binding)
   );
 }

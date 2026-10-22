@@ -1,4 +1,6 @@
 import { db } from "../../db.js";
+import { getDb } from "../../repositories/db/connection.js";
+import { assertIdentityResolutionAvailable } from "../../services/entity_identity_admission.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import { queryEntities } from "../../services/entity_queries.js";
 import {
@@ -181,6 +183,21 @@ async function attachObservations(
 }
 
 export async function retrieveEntityByIdentifierWithFallback(
+  params: RetrieveEntityByIdentifierParams
+): Promise<RetrieveEntityByIdentifierResult> {
+  const database = await getDb();
+  // A typed exact lookup cannot enter lowercase/alias/fuzzy legacy passes.
+  if (params.entityType)
+    await assertIdentityResolutionAvailable(database, params.entityType, params.userId);
+  const result = await retrieveLegacyEntityByIdentifier(params);
+  // Untyped and raw-ID lookups retain legacy behavior, but cannot surface an
+  // exact namespace through a legacy matching path, including snapshot-only rows.
+  for (const entityType of new Set(result.entities.map((entity) => entity.entity_type)))
+    await assertIdentityResolutionAvailable(database, entityType, params.userId);
+  return result;
+}
+
+async function retrieveLegacyEntityByIdentifier(
   params: RetrieveEntityByIdentifierParams
 ): Promise<RetrieveEntityByIdentifierResult> {
   const {
