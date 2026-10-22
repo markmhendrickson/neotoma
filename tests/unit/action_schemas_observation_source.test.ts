@@ -34,6 +34,7 @@ describe("ObservationSource enum contract", () => {
       // #2241: appended last; the write-path default when the caller omits
       // the field. Deliberately absent from DEFAULT_OBSERVATION_SOURCE_PRIORITY.
       "unspecified",
+      "correction",
     ]);
   });
 
@@ -45,7 +46,15 @@ describe("ObservationSource enum contract", () => {
   });
 
   it("rejects unknown kinds and case variants", () => {
-    for (const value of ["agent", "human_input", "Sensor", "LLM_SUMMARY", "Unspecified", "unknown", ""]) {
+    for (const value of [
+      "agent",
+      "human_input",
+      "Sensor",
+      "LLM_SUMMARY",
+      "Unspecified",
+      "unknown",
+      "",
+    ]) {
       expect(ObservationSourceSchema.safeParse(value).success).toBe(false);
     }
   });
@@ -99,9 +108,7 @@ describe("StoreRequestSchema observation_source", () => {
     if (parsed.success) {
       // StoreRequestSchema is a discriminated-ish union; just confirm the
       // field round-trips when supplied.
-      expect((parsed.data as { observation_source?: string }).observation_source).toBe(
-        "sensor",
-      );
+      expect((parsed.data as { observation_source?: string }).observation_source).toBe("sensor");
     }
   });
 

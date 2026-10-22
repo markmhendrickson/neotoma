@@ -1,0 +1,5 @@
+{
+  "idempotency_key": "legacy-v0.25-store-reserved-correction-priority",
+  "source_priority": 1000,
+  "entities": [{ "entity_type": "note", "title": "Client-claimed correction priority" }]
+}

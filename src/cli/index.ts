@@ -147,6 +147,9 @@ export const OBSERVATION_SOURCE_CLI_VALUES = [
   "import",
   "sync",
   "unspecified",
+  // Listed for wire-enum lockstep; store rejects client-supplied
+  // observation_source=correction with RESERVED_OBSERVATION_SOURCE (#2033).
+  "correction",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
@@ -15987,7 +15990,9 @@ const correctionsCommand = program.command("corrections").description("Correctio
 
 correctionsCommand
   .command("create")
-  .description("Create high-priority correction observation")
+  .description(
+    "Create a correction-sourced observation. Under the default last_write strategy, a correction survives later ordinary writes to the same field. Other configured merge strategies keep their existing priority rules."
+  )
   .argument("[entityId]", "Entity ID to correct (or use --entity-id)")
   .option("--entity-id <id>", "Entity ID to correct")
   .option("--entity-type <type>", "Entity type (optional, looked up if not provided)")

@@ -134,6 +134,10 @@ import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
+  ReservedObservationSourceError,
+  assertClientObservationSourceAllowed,
+} from "./services/reserved_observation_source.js";
+import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
@@ -2594,6 +2598,11 @@ export class NeotomaServer {
           // error itself, so both surfaces stay identical by construction.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
+        if (error instanceof ReservedObservationSourceError) {
+          // #2033: reserved correction authority on generic store must surface
+          // as InvalidRequest with the ErrorEnvelope in MCP `data`, matching REST.
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
         if (error instanceof StorePolicyUnavailableError) {
           // Distinct from the denial above, and the distinction is the point:
           // an agent must be able to tell "policy forbids this" from "policy
@@ -3695,12 +3704,13 @@ export class NeotomaServer {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
     }
 
-    // If 'at' (event-time) or 'at_ingested' (ingestion-time) cutoff is provided,
+    // If 'at' (observation-time) or 'at_ingested' (ingestion-time) cutoff is provided,
     // compute a point-in-time snapshot via the shared helper so this path and
     // the offline/HTTP path (actions.ts) stay in sync.
     //
-    // - `at`          filters on `observed_at`  (event time): "what had happened by T"
-    // - `at_ingested` filters on `created_at`   (row time):   "what did we know by T"
+    // - `at`          filters on `observed_at` (assertion time, stamped by the server on
+    //                 public store/correct): "what had been asserted by T"
+    // - `at_ingested` filters on `created_at`  (row-insertion time)
     //
     // When both are supplied, both bounds are applied (AND): an observation must
     // satisfy observed_at ≤ at AND created_at ≤ at_ingested. This is the most
@@ -5795,6 +5805,13 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    // #2033: reject-not-strip reserved correction authority at the MCP
+    // transport boundary, before overflow intake, file storage, or any
+    // observation write. Mirrors the HTTP /store guard in actions.ts.
+    assertClientObservationSourceAllowed({
+      observationSource: parsed.observation_source,
+      sourcePriority: parsed.source_priority,
+    });
     // #2242: peel the reserved per-entity `data_origin` key off every entity and
     // resolve each entity's effective origin (entity → request → none) before
     // anything else reads the entities. Mirrors the REST boundary in actions.ts.
@@ -6409,6 +6426,7 @@ export class NeotomaServer {
     const observationSource = options.observationSource;
     const sourcePeerId = options.sourcePeerId;
     const interpretation = options.interpretation;
+
     const { storeRawContent } = await import("./services/raw_storage.js");
     const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
       await import("./services/entity_resolution.js");

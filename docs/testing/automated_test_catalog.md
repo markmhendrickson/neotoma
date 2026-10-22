@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **739**
-- Backend and repo Vitest files: **703**
+- Total automated test files: **745**
+- Backend and repo Vitest files: **709**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 205 |
+| Vitest unit tests | 206 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 222 |
-| Vitest CLI tests | 88 |
-| Vitest contract tests | 25 |
+| Vitest integration tests | 225 |
+| Vitest CLI tests | 89 |
+| Vitest contract tests | 26 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (205):**
+**Files (206):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -245,6 +245,7 @@ flowchart TD
 - `tests/unit/observation_reducer_comparator.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_highest_priority_tiebreak.test.ts`
+- `tests/unit/observation_reducer_last_write_correction_durability.test.ts`
 - `tests/unit/observation_reducer_merge_array_by_key.test.ts`
 - `tests/unit/observation_reducer_merge_array_correction.test.ts`
 - `tests/unit/observation_reducer_merge_array_stringified.test.ts`
@@ -464,7 +465,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (222):**
+**Files (225):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -498,6 +499,8 @@ flowchart TD
 - `tests/integration/conversation_turn_index.test.ts`
 - `tests/integration/correct_http_mcp_parity.test.ts`
 - `tests/integration/correct_unknown_field_append.test.ts`
+- `tests/integration/correction_durability_last_write.test.ts`
+- `tests/integration/correction_durability_surfaces.test.ts`
 - `tests/integration/correction_scalar_tiebreak_surfaces.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/csp_local_http.test.ts`
@@ -674,6 +677,7 @@ flowchart TD
 - `tests/integration/subscription_unsubscribe.test.ts`
 - `tests/integration/sync_issues_handler_passthrough.test.ts`
 - `tests/integration/sync_webhook_inbound.test.ts`
+- `tests/integration/temporal_natural_surface_acceptance.test.ts`
 - `tests/integration/transcription_contract.test.ts`
 - `tests/integration/transport_parity_store_snapshot_auth.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
@@ -693,7 +697,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (88):**
+**Files (89):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -705,6 +709,7 @@ flowchart TD
 - `tests/cli/cli_auth_commands.test.ts`
 - `tests/cli/cli_command_coverage_guard.test.ts`
 - `tests/cli/cli_correction_commands.test.ts`
+- `tests/cli/cli_correction_durability.test.ts`
 - `tests/cli/cli_cursor_offset_conflict.test.ts`
 - `tests/cli/cli_direct_invocation_parity.test.ts`
 - `tests/cli/cli_doctor_setup.test.ts`
@@ -788,7 +793,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (25):**
+**Files (26):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -810,6 +815,7 @@ flowchart TD
 - `tests/contract/schema_tools_force_input_schema_2197.test.ts`
 - `tests/contract/sdk_client_store_shape.test.ts`
 - `tests/contract/security_gates_ci_wiring.test.ts`
+- `tests/contract/snapshot_temporal_cutoff_wording.test.ts`
 - `tests/contract/store_plan_mode_response_schema.test.ts`
 - `tests/contract/sync_issues_contract.test.ts`
 - `tests/contract/update_schema_incremental_canonical_parity_2018.test.ts`

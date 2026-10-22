@@ -133,9 +133,11 @@ describe("HTTP /correct ↔ MCP correct response parity (#1540)", () => {
     const sharedKeys = [
       "observation_id",
       "entity_id",
+      "entity_version",
       "field",
       "value",
       "message",
+      "replayed",
       "unknown_field",
       "hint",
       "details",
@@ -146,6 +148,10 @@ describe("HTTP /correct ↔ MCP correct response parity (#1540)", () => {
       .sort();
     expect(mcpKeys).toEqual(sharedKeys);
     expect(httpKeys).toEqual(sharedKeys);
+    expect(mcpBody.replayed).toBe(false);
+    expect(httpBody.replayed).toBe(false);
+    expect(mcpBody.entity_version).toEqual(expect.any(String));
+    expect(httpBody.entity_version).toEqual(expect.any(String));
 
     // Hint is generic (no interpolated identifiers); details carries them.
     expect(String(mcpBody.hint)).toBe(String(httpBody.hint));
@@ -181,13 +187,25 @@ describe("HTTP /correct ↔ MCP correct response parity (#1540)", () => {
     expect(mcpBody.unknown_field).toBeUndefined();
     expect(httpBody.unknown_field).toBeUndefined();
 
-    const sharedKeys = ["observation_id", "entity_id", "field", "value", "message"].sort();
+    const sharedKeys = [
+      "observation_id",
+      "entity_id",
+      "entity_version",
+      "field",
+      "value",
+      "message",
+      "replayed",
+    ].sort();
     expect(Object.keys(mcpBody).sort()).toEqual(sharedKeys);
     expect(
       Object.keys(httpBody)
         .filter((k) => k !== "success" && k !== "snapshot")
         .sort()
     ).toEqual(sharedKeys);
+    expect(mcpBody.replayed).toBe(false);
+    expect(httpBody.replayed).toBe(false);
+    expect(mcpBody.entity_version).toEqual(expect.any(String));
+    expect(httpBody.entity_version).toEqual(expect.any(String));
     expect(String(mcpBody.message)).toBe(String(httpBody.message));
   });
 

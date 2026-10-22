@@ -1,0 +1,77 @@
+meta:
+  id: correct_survives_later_last_write
+  description: >
+    A task is pre-seeded with status="todo". The agent corrects status to
+    "done", then a later generic store re-ingests status="todo". Validates
+    #2033 durability: the correction-sourced observation must WIN the
+    recomputed snapshot under default last_write (status remains done; no
+    entity still reads todo). Distinct from correct_overrides_snapshot,
+    which only asserts the immediate correct-win.
+  tags:
+    - tier2
+    - correct
+    - eval-coverage
+    - writ:correction
+    - issue-2033
+
+seed_strategy: generated
+source_pattern: "No agentic eval exercised correct() durability against a later non-correction store; a regression that only honoured immediate correct-win would stay green."
+privacy_transform: "Fully synthetic task; no PII."
+
+seed_entities:
+  - entity_type: task
+    title: Correction durability last-write target
+    status: todo
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When the
+  user asks you to change a field on an existing entity, use the correct tool
+  with the entity_id, entity_type, field, and value. Persist the conversation
+  and user message via the store tool with PART_OF relationships. If later
+  asked to re-store the same task at an older status via ordinary store
+  (not correct), do that as a generic store of the task entity.
+
+user_prompt: |
+  Mark the task "Correction durability last-write target" as done with
+  correct(). Then re-store that same task with status todo via ordinary
+  store (not correct) — a later routine write that must not overwrite the
+  correction.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+expected:
+  - type: mcp_tool.invocations
+    tool_name: correct
+    op: gte
+    value: 1
+    arg_subset:
+      field: status
+      value: done
+  - type: mcp_tool.invocations
+    tool_name: store
+    op: gte
+    value: 2
+  # The re-store carries a new `notes` value so it lands as a genuinely
+  # later observation on the same task (an identical re-store would be a
+  # content-addressed replay and could not revert anything). The task must
+  # show both the later write and the corrected status.
+  - type: entity.exists
+    entity_type: task
+    where:
+      status: done
+      notes: re-imported by routine sync
+  - type: entity.count
+    entity_type: task
+    where:
+      status: todo
+    op: eq
+    value: 0
+  - type: snapshot.field_present
+    entity_type: task
+    where:
+      status: done
+    field: status

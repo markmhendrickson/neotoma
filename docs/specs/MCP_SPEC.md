@@ -200,7 +200,7 @@ Implementation: `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts` is spread
 
 ## 3. Complete MCP Action Catalog
 
-Catalog tables below list **every** MCP tool name registered by the server (see `NEOTOMA_TOOL_NAMES` in `src/tool_definitions.ts`). **§3 *Action Specifications*** documents request/response shapes in depth for the original core tools through **`split_entity`**; tools without a dedicated §3 subsection are specified in **§3.30** and in **`openapi.yaml`** (for operations wired from OpenAPI).
+Catalog tables below list **every** MCP tool name registered by the server (see `NEOTOMA_TOOL_NAMES` in `src/tool_definitions.ts`). **§3 _Action Specifications_** documents request/response shapes in depth for the original core tools through **`split_entity`**; tools without a dedicated §3 subsection are specified in **§3.30** and in **`openapi.yaml`** (for operations wired from OpenAPI).
 
 ### 2.1 Core [Storing](../vocabulary/canonical_terms.md#storing) Operations
 
@@ -687,7 +687,7 @@ Clients can subscribe to resource updates:
   entities?: Array<Record<string, unknown>>;
   relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
   source_priority?: number;
-  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync" | "unspecified";
+  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync" | "unspecified" | "correction";
   source_peer_id?: string;
   external_actor?: { kind: "github_user"; login: string; html_url?: string };
   file_content?: string;
@@ -702,9 +702,9 @@ Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_
 
 **Write-classification, sync, and external attribution (v0.12+):**
 
-- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` (default order `sensor` > `workflow_state` > `llm_summary` = `unspecified` > `human` > `import` > `sync`; legacy null rows last). Every writer should set it: agent extraction and summaries send `llm_summary`; sensor / state-machine / human / import / sync writes send their own value. When the field is omitted the observations are stored as `unspecified` (a lineage sentinel that makes no claim about origin; unless a schema ranks it explicitly it shares `llm_summary`'s rank, so recency decides between the two, because legacy omitted writes were stored as `llm_summary`) and the response carries one `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Before #2241 omission was stored as `llm_summary`, so a legacy `llm_summary` row is not by itself evidence of model authorship.
+- `observation_source` classifies the _kind_ of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` (default order `sensor` > `workflow_state` > `llm_summary` = `unspecified` > `human` > `import` > `sync`; legacy null rows last). Every writer should set it: agent extraction and summaries send `llm_summary`; sensor / state-machine / human / import / sync writes send their own value. When the field is omitted the observations are stored as `unspecified` (a lineage sentinel that makes no claim about origin; unless a schema ranks it explicitly it shares `llm_summary`'s rank, so recency decides between the two, because legacy omitted writes were stored as `llm_summary`) and the response carries one `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Before #2241 omission was stored as `llm_summary`, so a legacy `llm_summary` row is not by itself evidence of model authorship.
 - `source_peer_id` stamps observations with the peer that produced them. Used for loop prevention on subscriptions whose `sync_peer_id` matches, and for the `Inspector → peers` audit view. Always pairs with `observation_source: "sync"`.
-- `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the *signing agent*, `external_actor` identifies the *human or account on whose behalf* the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
+- `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the _signing agent_, `external_actor` identifies the _human or account on whose behalf_ the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
 
 See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) for `source_peer_id` / `observation_source: "sync"` semantics, and [`docs/subsystems/issues.md`](../subsystems/issues.md) `## Reporter provenance` for the `external_actor` usage on issue mirrors.
 
@@ -763,7 +763,6 @@ The server handles all interpretation automatically. Agents should only pass the
 - **Use `file_content`** in web-based environments (claude.ai, chatgpt.com) where files are uploaded to the AI service's servers
 - `file_path` is more efficient for large files (no base64 encoding overhead)
 - `file_content` works universally across all environments
-
 
 **Request Schema (Structured):**
 
@@ -1413,7 +1412,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.12 `correct`
 
-**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
+**Purpose:** Create a priority-1000 correction-sourced [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. New correction-sourced observations survive later routine writes under default `last_write`. Other declared strategies retain their own comparison rules; unmarked historical rows are not inferred to be corrections. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
 
 **Request Schema:**
 

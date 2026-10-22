@@ -173,7 +173,7 @@ Source A
        └─ Observations linked to Entity E (same entity, new observations)
 ```
 
-The [reducer](../vocabulary/canonical_terms.md#reducer) chooses between competing observations using `source_priority`, `specificity_score`, and `observed_at`; corrections (`source_priority = 1000`) always win. This means a reinterpretation can update a snapshot without retracting prior history — the prior history stays queryable through `list_observations`.
+The [reducer](../vocabulary/canonical_terms.md#reducer) chooses between competing observations using `source_priority`, `specificity_score`, and `observed_at`; correction-sourced observations (`observation_source = "correction"`, also `source_priority = 1000`) survive later routine writes under default `last_write`; other declared strategies retain their own comparison rules. Historical unmarked rows are not classified by shape. This means a reinterpretation can update a snapshot without retracting prior history — the prior history stays queryable through `list_observations`.
 
 ### 5.2 Archival of Prior Interpretations
 
