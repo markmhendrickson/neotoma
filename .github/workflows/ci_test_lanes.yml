@@ -330,6 +330,9 @@ jobs:
       - name: Build Inspector prod bundle (render bugs reproduce only in the built bundle)
         run: npm run build:inspector
 
+      - name: Test packed production consumer and causal controls
+        run: npm run simulate:install -- --skip-build --verify-controls
+
       - name: Install Playwright browser (Chromium)
         run: npx playwright install --with-deps chromium
 
