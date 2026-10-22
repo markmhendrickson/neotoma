@@ -47,6 +47,9 @@ components:
     ErrorEnvelope:
       type: object
       properties:
+        hint:
+          type: string
+          description: Actionable recovery guidance.
         error_code:
           type: string
         message:
@@ -1155,6 +1158,12 @@ paths:
                 include_entities:
                   type: boolean
                   default: true
+                limit:
+                  type: integer
+                  default: 50
+                  minimum: 1
+                  maximum: 500
+                  description: Maximum relationships returned and entities hydrated.
       responses:
         '200':
           description: Related entities
@@ -1163,7 +1172,29 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-                properties: {}
+                properties:
+                  relationships:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  entities:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  truncated:
+                    type: boolean
+                    description: True when more matching relationships exist than the limit allows.
+                  limit:
+                    type: integer
+                    description: Effective relationship limit when truncated.
+                  matched_entity_count:
+                    type: integer
+                    description: Number of distinct matched entities in the returned relationships.
+                  truncation_hint:
+                    type: string
+                    description: How to narrow the request or raise the limit when truncated.
   /retrieve_graph_neighborhood:
     post:
       summary: Retrieve graph neighborhood

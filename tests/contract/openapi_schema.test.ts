@@ -7,9 +7,47 @@ import {
 import { resolveOpenApiPath } from "../../src/shared/openapi_file.js";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 describe("OpenAPI tool schemas", () => {
+  it("advertises the related-entity cap and incomplete-result fields in both public specs", () => {
+    type RelatedSpec = {
+      paths: Record<
+        string,
+        {
+          post: {
+            requestBody: {
+              content: {
+                "application/json": {
+                  schema: { properties: Record<string, { default?: number; maximum?: number }> };
+                };
+              };
+            };
+            responses: {
+              "200": {
+                content: {
+                  "application/json": { schema: { properties: Record<string, unknown> } };
+                };
+              };
+            };
+          };
+        }
+      >;
+    };
+    for (const file of ["openapi.yaml", "openapi_actions.yaml"]) {
+      const spec = load(
+        readFileSync(join(dirname(resolveOpenApiPath()), file), "utf8")
+      ) as RelatedSpec;
+      const operation = spec.paths["/retrieve_related_entities"].post;
+      const request = operation.requestBody.content["application/json"].schema.properties.limit;
+      const response = operation.responses["200"].content["application/json"].schema.properties;
+      expect(request).toMatchObject({ default: 50, maximum: 500 });
+      expect(response).toHaveProperty("truncated");
+      expect(response).toHaveProperty("matched_entity_count");
+      expect(response).toHaveProperty("truncation_hint");
+    }
+  });
+
   it("returns schemas for all mapped MCP tools", () => {
     for (const toolName of listOpenApiMappedMcpTools()) {
       const schema = getOpenApiInputSchemaForTool(toolName);
