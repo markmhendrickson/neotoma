@@ -17,9 +17,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const execFileAsync = promisify(execFile);
 type Json = Record<string, any>;
 
-describe.each(["offline", "http"] as const)(
-  "CLI correction durability (#2033), %s",
-  (transport) => {
+describe.each([
+  { transport: "offline", parentEnvironment: undefined },
+  { transport: "http", parentEnvironment: undefined },
+  { transport: "offline", parentEnvironment: "production" },
+  { transport: "http", parentEnvironment: "production" },
+])(
+  "CLI correction durability (#2033), $transport / parent environment $parentEnvironment",
+  ({ transport, parentEnvironment }) => {
     const entityType = `cli_durability_${randomUUID().replaceAll("-", "")}`;
     let home: string;
     let childEnv: NodeJS.ProcessEnv;
@@ -30,6 +35,8 @@ describe.each(["offline", "http"] as const)(
         process.execPath,
         [
           resolve("dist/cli/index.js"),
+          "--env",
+          "dev",
           ...(transport === "offline" ? ["--offline"] : ["--api-only", "--base-url", baseUrl]),
           ...args,
           "--json",
@@ -90,8 +97,12 @@ describe.each(["offline", "http"] as const)(
         HOME: home,
         USERPROFILE: home,
         NODE_ENV: "test",
+        NEOTOMA_ENV: "development",
         OPENAI_API_KEY: "test-openai-key",
       };
+      // Exercise absent and conflicting upstream selection without changing
+      // the shared API server's environment. The fixture owns its child choice.
+      const parentEnv: NodeJS.ProcessEnv = { ...process.env, NEOTOMA_ENV: parentEnvironment };
       // No inherited bearer/API credentials or operator CLI configuration. Keep
       // an externally installed network guard active in every child, when set.
       for (const key of [
@@ -99,7 +110,6 @@ describe.each(["offline", "http"] as const)(
         "TMPDIR",
         "LANG",
         "NODE_OPTIONS",
-        "NEOTOMA_ENV",
         "NEOTOMA_DATA_DIR",
         "NEOTOMA_SQLITE_PATH",
         "NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR",
@@ -108,8 +118,9 @@ describe.each(["offline", "http"] as const)(
         "SCHEMA_GATE_NETWORK_JOURNAL",
         "SCHEMA_GATE_IPC_ROOT",
       ]) {
-        if (process.env[key] !== undefined) childEnv[key] = process.env[key];
+        if (parentEnv[key] !== undefined) childEnv[key] = parentEnv[key];
       }
+      expect(childEnv.NEOTOMA_ENV).toBe("development");
       if (transport === "offline") {
         childEnv.NEOTOMA_DATA_DIR = join(home, "data");
         childEnv.NEOTOMA_SQLITE_PATH = join(home, "data", "neotoma.db");
