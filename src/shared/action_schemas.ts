@@ -1075,6 +1075,8 @@ export const CorrectEntityRequestSchema = z.object({
   entity_type: z.string().optional().default("unknown"),
   field: z.string(),
   value: z.unknown(),
+  valid_from: z.string().nullable().optional(),
+  valid_to: z.string().nullable().optional(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
   /**

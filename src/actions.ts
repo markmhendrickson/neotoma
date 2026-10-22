@@ -12419,6 +12419,8 @@ app.post("/correct", async (req, res) => {
       entity_type,
       field,
       value,
+      valid_from: parsed.data.valid_from,
+      valid_to: parsed.data.valid_to,
       schema_version: correctionSchemaVersion,
       user_id: userId,
       idempotency_key,
@@ -12473,6 +12475,9 @@ app.post("/correct", async (req, res) => {
       }),
     });
   } catch (error) {
+    const { ObservationValidityError } = await import("./services/observation_validity.js");
+    if (error instanceof ObservationValidityError)
+      return sendError(res, 400, error.code, error.message);
     // Parity with the MCP correct() path: a missing schema is a client error
     // (ERR_NO_SCHEMA_FOR_ENTITY_TYPE), not an internal failure. A schema-registry
     // IO failure is NOT swallowed here — it falls through to the generic 500

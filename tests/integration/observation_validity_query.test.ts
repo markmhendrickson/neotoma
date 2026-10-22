@@ -1,5 +1,5 @@
 /** Public validity selection must compose with knowledge cutoffs and lifecycle authority. */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "../../src/db.js";
 import { createOperations } from "../../src/core/operations.js";
@@ -79,6 +79,129 @@ async function both(id: string, query: Record<string, string>) {
 }
 
 describe("public snapshot valid_at selection", () => {
+  it("writes correction validity through core/MCP and HTTP, replays canonical bounds, and reduces only eligible assertions", async () => {
+    const id = await entity();
+    const original = await assertion(id, "original", "2010-01-01T00:00:00Z");
+    const input = {
+      entity_id: id,
+      entity_type: type,
+      field: "status",
+      value: "temporary correction",
+      idempotency_key: randomUUID(),
+      valid_from: "2026-01-01T01:00:00.123456789+01:00",
+      valid_to: "2026-02-01T00:00:00Z",
+    };
+    const corrected = (await core.correct(input)) as Record<string, any>;
+    expect(corrected.observation_id).toBeTypeOf("string");
+    const retry = await callHttp(http.base, "/correct", {
+      ...input,
+      valid_from: "2026-01-01T00:00:00.123456789Z",
+      expected_version: "stale-but-replayed",
+    });
+    expect(retry.status).toBe(200);
+    expect(retry.json.observation_id).toBe(corrected.observation_id);
+    expect(retry.json.replayed).toBe(true);
+    const history = (await core.listObservations({ entity_id: id })) as Record<string, any>;
+    expect(
+      history.observations.find((row: Record<string, any>) => row.id === corrected.observation_id)
+    ).toMatchObject({
+      valid_from: "2026-01-01T00:00:00.123456789Z",
+      valid_to: "2026-02-01T00:00:00.000Z",
+      observation_source: "correction",
+    });
+    for (const result of await both(id, { valid_at: "2026-01-01T00:00:00.123456789Z" })) {
+      expect(result.snapshot.status).toBe(input.value);
+      expect(result.provenance.status).toBe(corrected.observation_id);
+    }
+    for (const result of await both(id, { valid_at: "2026-02-01T00:00:00Z" })) {
+      expect(result.snapshot.status).toBe("original");
+      expect(result.provenance.status).toBe(original.id);
+    }
+    for (const result of await both(id, {})) expect(result.snapshot.status).toBe(input.value);
+    const mismatch = await callHttp(http.base, "/correct", { ...input, valid_to: null });
+    expect(mismatch.status).toBe(400);
+    expect(mismatch.json.error_code).toBe("ERR_IDEMPOTENCY_MISMATCH");
+    await expect(core.correct({ ...input, valid_from: null })).rejects.toThrow(/different payload/);
+    const rows = await db
+      .from("observations")
+      .select("id")
+      .eq("idempotency_key", input.idempotency_key);
+    expect(rows.data).toHaveLength(1);
+  });
+
+  it("HTTP correction inputs survive transport parsing and explicit null retains ordinary-row fallback", async () => {
+    const id = await entity();
+    await assertion(id, "original", "2010-01-01T00:00:00Z");
+    const response = await callHttp(http.base, "/correct", {
+      entity_id: id,
+      entity_type: type,
+      field: "status",
+      value: "ordinary fallback",
+      idempotency_key: randomUUID(),
+      valid_from: null,
+      valid_to: null,
+    });
+    expect(response.status).toBe(200);
+    const rows = await db
+      .from("observations")
+      .select("observed_at,valid_from,valid_to")
+      .eq("id", response.json.observation_id)
+      .single();
+    expect(rows.data).toMatchObject({ valid_from: null, valid_to: null });
+    for (const result of await both(id, { valid_at: "2010-01-01T00:00:00Z" }))
+      expect(result.snapshot.status).toBe("original");
+    for (const result of await both(id, { valid_at: rows.data!.observed_at }))
+      expect(result.snapshot.status).toBe("ordinary fallback");
+  });
+
+  it("replays an end-only correction using its original clock after the interval has ended", async () => {
+    const id = await entity();
+    const input = {
+      entity_id: id,
+      entity_type: type,
+      field: "status",
+      value: "bounded",
+      idempotency_key: randomUUID(),
+      valid_to: "2090-01-01T00:00:00Z",
+    };
+    const first = (await core.correct(input)) as Record<string, any>;
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2091-01-01T00:00:00Z"));
+      const retry = (await core.correct(input)) as Record<string, any>;
+      expect(retry.observation_id).toBe(first.observation_id);
+      expect(retry.replayed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+    const rows = await db.from("observations").select("observed_at").eq("id", first.observation_id);
+    expect(rows.data).toHaveLength(1);
+    expect(rows.data![0].observed_at).not.toMatch(/^2091-/);
+  });
+
+  it("refuses malformed/empty correction intervals without appending an observation", async () => {
+    const id = await entity();
+    const before = await db.from("observations").select("id").eq("entity_id", id);
+    for (const bounds of [
+      { valid_from: "2026-02-30T00:00:00Z" },
+      { valid_from: "2026-01-01T00:00:00Z", valid_to: "2026-01-01T00:00:00Z" },
+      { valid_to: "2000-01-01T00:00:00Z" },
+    ]) {
+      const input = {
+        entity_id: id,
+        entity_type: type,
+        field: "status",
+        value: "refused",
+        idempotency_key: randomUUID(),
+        ...bounds,
+      };
+      expect((await callHttp(http.base, "/correct", input)).status).toBe(400);
+      await expect(core.correct(input)).rejects.toThrow(/Invalid valid_/);
+    }
+    const after = await db.from("observations").select("id").eq("entity_id", id);
+    expect(after.data).toEqual(before.data);
+  });
+
   it("selects inclusive/exclusive bounds without rounding fractional precision and retains provenance", async () => {
     const id = await entity();
     const old = await assertion(id, "old", "2026-10-10T00:00:00Z", {

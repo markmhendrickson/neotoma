@@ -28,8 +28,13 @@ import {
 } from "../events/substrate_store_emit.js";
 import { computeEntityVersion } from "./entity_version.js";
 import { stableSerialize } from "./stable_serialize.js";
+import {
+  canonicalObservationValidity,
+  normalizeObservationValidity,
+  type ObservationValidity,
+} from "./observation_validity.js";
 
-export interface CreateCorrectionParams {
+export interface CreateCorrectionParams extends ObservationValidity {
   entity_id: string;
   entity_type: string;
   field: string;
@@ -126,12 +131,14 @@ interface ExistingCorrectionObservation {
 }
 
 function correctionIdempotencyPayload(params: CreateCorrectionParams): unknown {
+  const validity = canonicalObservationValidity(params);
   return (
     params.idempotency_payload ?? {
       entity_id: params.entity_id,
       entity_type: params.entity_type,
       field: params.field,
       value: params.value,
+      ...(Object.keys(validity).length ? { validity } : {}),
     }
   );
 }
@@ -167,6 +174,9 @@ function legacyCorrectionMatches(
   params: CreateCorrectionParams
 ): boolean {
   if ((params.idempotency_operation ?? "correct") !== "correct") return false;
+  // Legacy receipts never included validity request bytes. Do not guess that
+  // nullable storage columns prove that a supplied interval was committed.
+  if (Object.keys(canonicalObservationValidity(params)).length) return false;
   return (
     existing.entity_id === params.entity_id &&
     existing.entity_type === params.entity_type &&
@@ -365,13 +375,16 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
   }
 
   const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
+  const observedAt = new Date().toISOString();
+  const validity = normalizeObservationValidity(params, observedAt);
 
   const observationId = generateObservationId(
     null,
     null,
     entity_id,
     { [field]: value },
-    idempotency_key
+    idempotency_key,
+    validity
   );
 
   const row = buildObservationRow({
@@ -381,7 +394,8 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     schema_version,
     source_id: null,
     interpretation_id: null,
-    observed_at: new Date().toISOString(),
+    observed_at: observedAt,
+    ...validity,
     specificity_score: 1.0,
     source_priority: 1000,
     // #2033: durable correction-sourced observation marker. Stamped ONLY

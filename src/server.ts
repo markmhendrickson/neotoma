@@ -8286,6 +8286,8 @@ export class NeotomaServer {
         entity_type: parsed.entity_type,
         field: parsed.field,
         value: parsed.value,
+        valid_from: parsed.valid_from,
+        valid_to: parsed.valid_to,
         schema_version: schemaVersion,
         user_id: userId,
         idempotency_key: parsed.idempotency_key,
@@ -8337,6 +8339,9 @@ export class NeotomaServer {
         })
       );
     } catch (corrErr) {
+      const { ObservationValidityError } = await import("./services/observation_validity.js");
+      if (corrErr instanceof ObservationValidityError)
+        throw new McpError(ErrorCode.InvalidParams, corrErr.message);
       if (corrErr instanceof FieldVersionConflictError) {
         throw new McpError(ErrorCode.InvalidRequest, corrErr.message, {
           ...corrErr.toErrorEnvelope(),

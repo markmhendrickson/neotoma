@@ -410,7 +410,15 @@ own assertion clock lies outside the requested validity interval. Offset-equival
 instants compare identically and fractional precision is retained. Omitting
 `valid_at` preserves the existing materialized/current and historical behavior.
 
-Public store/correct validity inputs, protected occurrence lineage/inheritance and
-exact entity-identity namespaces remain separate implementation slices. Storage
+`correct` accepts optional nullable `valid_from` / `valid_to` metadata. UTC-normalized
+endpoints (including presence versus explicit null) participate in keyed request
+identity; equivalent offsets replay the immutable observation, while a changed
+interval under the same key is refused. Replay precedes CAS and preserves the
+original assertion clock, including an end-only interval retried after its end.
+For ordinary corrections a missing/null start falls back to the new correction's
+own `observed_at`; it does not inherit an occurrence base interval.
+
+Public store validity inputs, protected occurrence lineage/inheritance and exact
+entity-identity namespaces remain separate implementation slices. Storage
 metadata and this point query do not imply protected occurrences or full-series
 historical views.

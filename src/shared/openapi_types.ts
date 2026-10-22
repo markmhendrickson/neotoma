@@ -3779,9 +3779,9 @@ export interface components {
       interpretation_id?: string | null;
       /** Format: date-time */
       observed_at?: string;
-      /** @description Optional canonical UTC state-validity start metadata. Null on legacy rows means the observation clock is the compatibility fallback, not evidence of when the fact became true. This storage foundation does not yet add validity arguments to public writes or queries. */
+      /** @description Optional canonical UTC state-validity start metadata. Null on legacy rows means the observation clock is the compatibility fallback, not evidence of when the fact became true. `valid_at` selects factual assertions by this interval after knowledge and lifecycle selection. */
       readonly valid_from?: string | null;
-      /** @description Optional canonical UTC exclusive state-validity end metadata. Null means open end. Independent of observed_at, created_at and any domain event date field. Public validity queries remain unsupported. */
+      /** @description Optional canonical UTC exclusive state-validity end metadata. Null means open end. Independent of observed_at, created_at and any domain event date field. `valid_at` treats the endpoint as exclusive. */
       readonly valid_to?: string | null;
       specificity_score?: number;
       /** @description Trust/priority of this observation's source. Only affects snapshot resolution for fields whose merge strategy is highest_priority (set via register_schema reducer_config); under the default last_write strategy it is stored but ignored. */
@@ -9315,6 +9315,16 @@ export interface operations {
           entity_type: string;
           field: string;
           value: unknown;
+          /**
+           * Format: date-time
+           * @description Optional inclusive state-validity start for this field assertion. Omitted/null uses this correction's observed_at; this does not inherit a protected occurrence's base interval.
+           */
+          valid_from?: string | null;
+          /**
+           * Format: date-time
+           * @description Optional exclusive state-validity end; omitted/null is open-ended. Canonical endpoints participate in keyed replay identity. Invalid/empty intervals are refused before mutation.
+           */
+          valid_to?: string | null;
           idempotency_key: string;
           user_id?: string;
           /**

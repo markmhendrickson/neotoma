@@ -58,17 +58,30 @@ export function normalizeObservationValidity(
   input: ObservationValidity,
   observedAt: string
 ): ObservationValidity {
+  const output = canonicalObservationValidity(input);
+  if (typeof output.valid_to === "string") {
+    const start = output.valid_from ?? canonicalValidityInstant(observedAt, "valid_from");
+    if (compareInstants(start, output.valid_to) >= 0) {
+      throw new ObservationValidityError("valid_to");
+    }
+  }
+  return output;
+}
+
+/** Canonical request identity without re-stamping an existing replay's fallback clock. */
+export function canonicalObservationValidity(input: ObservationValidity): ObservationValidity {
   const output: ObservationValidity = {};
   for (const field of ["valid_from", "valid_to"] as const) {
     if (input[field] !== undefined) {
       output[field] = input[field] === null ? null : canonicalValidityInstant(input[field], field);
     }
   }
-  if (typeof output.valid_to === "string") {
-    const start = output.valid_from ?? canonicalValidityInstant(observedAt, "valid_from");
-    if (compareInstants(start, output.valid_to) >= 0) {
-      throw new ObservationValidityError("valid_to");
-    }
+  if (
+    typeof output.valid_from === "string" &&
+    typeof output.valid_to === "string" &&
+    compareInstants(output.valid_from, output.valid_to) >= 0
+  ) {
+    throw new ObservationValidityError("valid_to");
   }
   return output;
 }

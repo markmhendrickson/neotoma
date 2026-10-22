@@ -166,6 +166,8 @@ export interface Operations {
     entity_type?: string;
     field: string;
     value: unknown;
+    valid_from?: string | null;
+    valid_to?: string | null;
     idempotency_key: string;
     user_id?: string;
   }): Promise<unknown>;
