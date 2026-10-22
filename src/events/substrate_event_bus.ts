@@ -5,6 +5,7 @@
 
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 
 import { logger } from "../utils/logger.js";
 import type { SubstrateEvent } from "./types.js";
@@ -58,16 +59,49 @@ class SubstrateEventBus extends EventEmitter {
   }
 }
 
-export const substrateEventBus = new SubstrateEventBus();
+const legacyEventBus = new SubstrateEventBus();
+const runtimeEventBuses = new WeakMap<object, SubstrateEventBus>();
+let legacyDebugInitialized = false;
 
-if (process.env.NEOTOMA_DEBUG_SUBSTRATE_EVENTS === "1") {
-  substrateEventBus.onSubstrateEvent((ev) => {
-    logger.debug("[substrate_event]", {
-      event_id: ev.event_id,
-      event_type: ev.event_type,
-      entity_id: ev.entity_id,
-      entity_type: ev.entity_type,
-      action: ev.action,
-    });
-  });
+function currentEventBus(): SubstrateEventBus {
+  const runtime = getEmbeddedRuntimeContext();
+  if (runtime) {
+    let bus = runtimeEventBuses.get(runtime);
+    if (!bus) {
+      bus = new SubstrateEventBus();
+      runtimeEventBuses.set(runtime, bus);
+    }
+    return bus;
+  }
+  if (!legacyDebugInitialized) {
+    legacyDebugInitialized = true;
+    if (process.env.NEOTOMA_DEBUG_SUBSTRATE_EVENTS === "1") {
+      legacyEventBus.onSubstrateEvent((ev) => {
+        logger.debug("[substrate_event]", {
+          event_id: ev.event_id,
+          event_type: ev.event_type,
+          entity_id: ev.entity_id,
+          entity_type: ev.entity_type,
+          action: ev.action,
+        });
+      });
+    }
+  }
+  return legacyEventBus;
 }
+
+// Resolve at invocation, including a saved method reference. Returning the
+// facade from chaining methods prevents retaining a runtime's underlying bus.
+export const substrateEventBus: SubstrateEventBus = new Proxy(legacyEventBus, {
+  get(_target, key) {
+    const value = Reflect.get(currentEventBus(), key);
+    if (typeof value !== "function") return value;
+    return (...args: unknown[]) => {
+      const bus = currentEventBus();
+      const result: unknown = Reflect.apply(Reflect.get(bus, key), bus, args);
+      return result === bus ? substrateEventBus : result;
+    };
+  },
+});
+
+if (!getEmbeddedRuntimeContext()) currentEventBus();

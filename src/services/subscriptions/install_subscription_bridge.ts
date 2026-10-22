@@ -1,3 +1,4 @@
+import { getEmbeddedRuntimeContext } from "../../core/runtime_context.js";
 import { substrateEventBus } from "../../events/substrate_event_bus.js";
 import { logger } from "../../utils/logger.js";
 import { handleSubstrateEventForSubscriptions } from "./subscription_bridge.js";
@@ -9,6 +10,8 @@ let installed = false;
 const EVENT_LOG_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 
 export function installSubscriptionBridge(): void {
+  // Explicit runtimes do not inherit hosted delivery or background pruning.
+  if (getEmbeddedRuntimeContext()) return;
   if (installed) return;
   installed = true;
   void rebuildSubscriptionIndex();

@@ -9,6 +9,7 @@ import path from "path";
 import { clearDbCache, getDb } from "../db/connection.js";
 import type { DbDatabase } from "../db/driver.js";
 import { config } from "../../config.js";
+import { getEmbeddedRuntimeContext } from "../../core/runtime_context.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
 
@@ -71,6 +72,7 @@ const ENCRYPTED_COLUMNS: Record<string, Set<string>> = {
 
 /** Cached data encryption key (lazy-loaded on first use) */
 let cachedDataKey: Uint8Array | null = null;
+const runtimeDataKeys = new WeakMap<object, Uint8Array>();
 
 /**
  * Load the data encryption key from config (key file or mnemonic).
@@ -82,17 +84,21 @@ export function getDataKey(): Uint8Array | null {
   if (!config.encryption.enabled) {
     return null;
   }
-  if (cachedDataKey) {
-    return cachedDataKey;
-  }
+  const runtime = getEmbeddedRuntimeContext();
+  const cached = runtime ? runtimeDataKeys.get(runtime) : cachedDataKey;
+  if (cached) return cached;
+  const remember = (key: Uint8Array): Uint8Array => {
+    if (runtime) runtimeDataKeys.set(runtime, key);
+    else cachedDataKey = key;
+    return key;
+  };
 
   // Priority: key file > mnemonic
   if (config.encryption.keyFilePath) {
     const raw = readFileSync(config.encryption.keyFilePath, "utf8").trim();
     const keyBytes = hexToKey(raw);
     const derived = deriveKeys(keyBytes);
-    cachedDataKey = derived.dataKey;
-    return cachedDataKey;
+    return remember(derived.dataKey);
   }
 
   if (config.encryption.mnemonic) {
@@ -100,8 +106,7 @@ export function getDataKey(): Uint8Array | null {
       config.encryption.mnemonic,
       config.encryption.mnemonicPassphrase
     );
-    cachedDataKey = derived.dataKey;
-    return cachedDataKey;
+    return remember(derived.dataKey);
   }
 
   throw new Error(
@@ -114,7 +119,9 @@ export function getDataKey(): Uint8Array | null {
  * Clear the cached data key. Call after key rotation or for testing.
  */
 export function clearCachedDataKey(): void {
-  cachedDataKey = null;
+  const runtime = getEmbeddedRuntimeContext();
+  if (runtime) runtimeDataKeys.delete(runtime);
+  else cachedDataKey = null;
 }
 
 const TABLES_WITH_ID = new Set([

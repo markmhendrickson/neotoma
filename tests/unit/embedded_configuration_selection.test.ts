@@ -119,4 +119,54 @@ describe("contextual configuration selection", () => {
       rmSync(temporary, { recursive: true, force: true });
     }
   });
+
+  it("interleaves built guarded writes, corrections, replay and reads across two databases and legacy", () => {
+    const temporary = mkdtempSync(join(tmpdir(), "neotoma-dual-store-"));
+    try {
+      const home = join(temporary, "home");
+      const cwd = join(temporary, "cwd");
+      mkdirSync(join(home, ".config", "neotoma"), { recursive: true });
+      mkdirSync(cwd);
+      writeFileSync(join(cwd, "package.json"), JSON.stringify({ name: "neotoma" }));
+      writeFileSync(join(cwd, ".env"), "NEOTOMA_IMPORT_CANARY=project\n");
+      writeFileSync(join(home, ".config", "neotoma", ".env"), "NEOTOMA_IMPORT_CANARY=home\n");
+      const journal = join(temporary, "network-journal");
+      writeFileSync(journal, "");
+      const fixture = fileURLToPath(
+        new URL("../fixtures/embedded_runtime/dual_store.mjs", import.meta.url)
+      );
+      const guard = fileURLToPath(
+        new URL("../fixtures/schema_release_gate/network.cjs", import.meta.url)
+      );
+      for (const mode of ["explicit-only", "legacy-interleaved"]) {
+        const child = spawnSync(process.execPath, [fixture, join(temporary, mode), mode], {
+          cwd,
+          encoding: "utf8",
+          timeout: 15000,
+          env: {
+            PATH: process.env.PATH,
+            HOME: home,
+            USERPROFILE: home,
+            TMPDIR: temporary,
+            NODE_ENV: mode === "explicit-only" ? "development" : "test",
+            NEOTOMA_ENV: "development",
+            NEOTOMA_DATA_DIR: join(temporary, "legacy-data"),
+            NEOTOMA_DB_BACKEND: "sqlite",
+            NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR: "1",
+            OPENAI_API_KEY: "",
+            NEOTOMA_ICON_GENERATION_ENABLED: "false",
+            NODE_OPTIONS: `--require=${JSON.stringify(guard)}`,
+            SCHEMA_GATE_NETWORK_JOURNAL: journal,
+            SCHEMA_GATE_IPC_ROOT: temporary,
+          },
+        });
+        expect(child.error, child.stderr).toBeUndefined();
+        expect(child.status, child.stderr).toBe(0);
+        expect(child.stdout).toBe("GUARDED_DUAL_STORE_OK\n");
+        expect(readFileSync(journal, "utf8")).toBe("");
+      }
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
 });

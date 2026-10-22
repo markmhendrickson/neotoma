@@ -6,6 +6,7 @@ import { entityHasObservationValidityIntent } from "./observation_validity.js";
  */
 
 import { db } from "../db.js";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 import type { DbConnection } from "../repositories/db/driver.js";
 import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
@@ -3337,6 +3338,7 @@ export class SchemaRegistryService {
    * Generate icon for a schema asynchronously (non-blocking)
    */
   private async generateIconAsync(entityType: string, metadata?: SchemaMetadata): Promise<void> {
+    if (getEmbeddedRuntimeContext()) return;
     // Only generate if icon doesn't already exist
     if (metadata?.icon) {
       return;
@@ -3362,6 +3364,7 @@ export class SchemaRegistryService {
    * Automatically exports snapshots after schema changes without blocking operations
    */
   private exportSnapshotsAsync(): void {
+    if (getEmbeddedRuntimeContext()) return;
     // Only export if we're in a Node.js environment (not browser)
     if (typeof process === "undefined" || !process.env) {
       return;

@@ -29,6 +29,8 @@
  */
 
 import { db } from "../db.js";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
+import type { DbDatabase } from "../repositories/db/driver.js";
 import {
   currentDbAbortSignal,
   detachDbAbortSignal,
@@ -217,7 +219,19 @@ export function incompleteStoreHint(summary: UnfinishedStoreSummary): string {
   );
 }
 
-const inFlightWrites = new Map<string, Promise<unknown>>();
+const legacyInFlightWrites = new Map<string, Promise<unknown>>();
+const runtimeInFlightWrites = new WeakMap<DbDatabase, Map<string, Promise<unknown>>>();
+
+function currentInFlightWrites(): Map<string, Promise<unknown>> {
+  const runtime = getEmbeddedRuntimeContext();
+  if (!runtime) return legacyInFlightWrites;
+  let writes = runtimeInFlightWrites.get(runtime.database);
+  if (!writes) {
+    writes = new Map();
+    runtimeInFlightWrites.set(runtime.database, writes);
+  }
+  return writes;
+}
 
 function abortReason(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException("The operation was aborted", "AbortError");
@@ -270,6 +284,7 @@ export async function runKeyedStoreWrite<T>(
   write: () => Promise<T>
 ): Promise<T> {
   // JSON-encoded pair: no (user, key) pair of strings can collide with another.
+  const inFlightWrites = currentInFlightWrites();
   const flightKey = JSON.stringify([userId, idempotencyKey]);
   const callerSignal = currentDbAbortSignal();
   let waited = false;
