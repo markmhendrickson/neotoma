@@ -37,6 +37,7 @@ const files = [
   "InterfaceExplorer.tsx",
   "InspectorPreview.tsx",
   "VisionGallery.tsx",
+  "PaperScene.tsx",
 ].map((f) => readFileSync(join(dir, f), "utf-8"));
 // Doc comments list what is deliberately not claimed; only shipped copy is checked.
 const all = [...files, readFileSync(join(dir, "onepager_plate.tsx"), "utf-8")]
@@ -261,8 +262,13 @@ describe("October visual variant", () => {
       expect(image.format, name).toBe("webp");
       expect([image.width, image.height], name).toEqual([render.width, render.height]);
     }
-    expect(page).toContain('loading="eager"');
-    expect(page).toContain('fetchPriority="high"');
+    // Authored SVG counterparts are present in the server HTML without a raster fetch.
+    expect(page).toContain('<PaperScene scene="hero"');
+    const home = renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    );
+    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(10);
+    expect(home).not.toMatch(/<img[^>]+brand\/october/);
     const cards = page.slice(
       page.indexOf('className="plan-contrast"'),
       page.indexOf('className="plan-table-wrap"')
@@ -939,7 +945,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     const page = files[0];
     expect(page).not.toContain("<RecordPlate />");
     expect(page).toContain("FIGURE_LEGEND.map");
-    expect(page).toContain("OCTOBER_RENDERS.hero");
+    expect(page).toContain('<PaperScene scene="hero"');
     expect(read("frontend/src/components/onepager/october_renders.ts")).toContain(
       'render("N-hero"'
     );
