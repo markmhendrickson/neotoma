@@ -166,7 +166,12 @@ describe("October visual variant", () => {
       "N-hero", "N-before", "N-after", "N-capture", "N-structure", "N-change",
       "N-current", "N-basis", "N-self-host",
     ]) {
-      expect(page, name).toContain(`${name}.webp`);
+      if (["N-hero", "N-before", "N-after", "N-self-host"].includes(name)) {
+        expect(page, name).toContain(`${name}.webp`);
+      } else {
+        expect(page).toContain("N-${RECORD_IMAGES[i]}.webp");
+        expect(page).toContain(name.slice(2));
+      }
       const info = provenance.files[`${name}.webp`];
       expect(info.source_sha256, name).toMatch(/^[a-f0-9]{64}$/);
       const image = await sharp(join(brand, `${name}.webp`)).metadata();
@@ -175,7 +180,10 @@ describe("October visual variant", () => {
     }
     expect(page).toContain("<SolidLockup />");
     expect(page).not.toContain("<TitleBlock");
+    expect(page).not.toContain("<ServicePlan");
     expect(page).not.toMatch(/N-(cloud|managed)/i);
+    const css = readFileSync(join(dir, "onepager.css"), "utf-8");
+    expect(css).toMatch(/\.plan-sheet::before \{\s*display: none;/);
   });
 });
 
@@ -799,7 +807,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     expect(css).not.toMatch(/photograph/i);
   });
 
-  it("keeps the four legend items word for word and adds item 5 with the MCP-only, self-reported attribution limit", () => {
+  it("keeps the invoice example and the MCP-only, self-reported attribution limit", () => {
     const page = files[0];
     expect(page).not.toContain("<RecordPlate />");
     expect(page).toContain("FIGURE_LEGEND.map");
@@ -815,6 +823,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     expect(items[3]).toBe(
       "The amount still comes from the first observation. Both observations stay on record."
     );
+    expect(items[2]).toBe("The due date now reads 29 October. The changed field points to the later observation.");
     expect(items[4]).toBe(
       "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports."
     );
@@ -834,7 +843,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     }
     expect(page).toContain("{PLATE_CAPTION}");
     expect(copyConst("PLATE_CAPTION")).toBe(
-      "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03."
+      "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in the CLI transcript below."
     );
   });
 });

@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
-import { ServicePlan } from "./onepager_figures";
 import {
   CLI_TRANSCRIPT,
   DEEPER_MATERIAL,
@@ -213,7 +212,6 @@ export function NeotomaOnePager() {
           </pre>
         </section>
 
-        {/* Sheet 04 */}
         <section className="plan-sheet" aria-labelledby="s4">
           <SheetHead
             id="s4"
@@ -221,8 +219,15 @@ export function NeotomaOnePager() {
             title="One local service, read by the tools you connect"
           />
           <div className="plan-split">
-            <figure className="plan-figure plan-figure-small">
-              <ServicePlan />
+            <figure className="plan-scene plan-local-scene">
+              <img
+                src="/brand/october/N-self-host.webp"
+                width="960"
+                height="640"
+                loading="lazy"
+                alt="Local server connected to a computer"
+              />
+              <figcaption>Run the service locally and connect the tools you use.</figcaption>
             </figure>
             <p className="plan-body">
               Neotoma runs as a local service. Agents reach it through an MCP server, a REST API or
@@ -230,16 +235,6 @@ export function NeotomaOnePager() {
               entry read and write the same record.
             </p>
           </div>
-          <figure className="plan-scene plan-local-scene">
-            <img
-              src="/brand/october/N-self-host.webp"
-              width="1200"
-              height="800"
-              loading="lazy"
-              alt="Local server connected to a computer"
-            />
-            <figcaption>Run the service locally and connect the tools you use.</figcaption>
-          </figure>
           <div className="plan-table-wrap">
             <table className="plan-table plan-table-hosts">
               <caption>Hosts with a one-command setup</caption>
@@ -274,7 +269,6 @@ export function NeotomaOnePager() {
           </p>
         </section>
 
-        {/* Sheet 05 */}
         <section className="plan-sheet" aria-labelledby="s5">
           <SheetHead id="s5" mark="04 · Install" title="Install in a few minutes" />
           <pre className="plan-pre" tabIndex={0} aria-label="Install commands">
@@ -299,7 +293,6 @@ export function NeotomaOnePager() {
           </div>
         </section>
 
-        {/* Sheet 06 */}
         <section className="plan-sheet" aria-labelledby="s6">
           <SheetHead id="s6" mark="05 · Limits" title="What to expect, and what is not built yet" />
           <p className="plan-label">What to expect</p>
@@ -329,7 +322,6 @@ export function NeotomaOnePager() {
           </p>
         </section>
 
-        {/* Sheet 07 */}
         <section className="plan-sheet" aria-labelledby="s7">
           <SheetHead id="s7" mark="06 · Deeper material" title="Everything else lives on GitHub" />
           <p className="plan-body">

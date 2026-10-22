@@ -237,7 +237,7 @@ if (englishHomeSentinelHits === 0) {
 const HOME_REQUIRED = [
   "A record, not recall.",
   "the system of record for AI agents",
-  "Sheet 07 · Deeper material",
+  "06 · Deeper material",
 ] as const;
 const HOME_FORBIDDEN = [
   "Your agents forget",
@@ -245,6 +245,7 @@ const HOME_FORBIDDEN = [
   "state layer for AI agents",
   "Memory guarantees",
   'id="site-footer"',
+  "plan-titleblock",
 ] as const;
 let homeFailures = 0;
 {
@@ -264,7 +265,7 @@ let homeFailures = 0;
 }
 if (homeFailures === 0) {
   pass(
-    "Home page is the one-pager: current category, deeper-material sheet, no old header or footer"
+    "Home page is the one-pager: current category, deeper material, no old header, footer or title blocks"
   );
 }
 
@@ -624,7 +625,7 @@ if (fs.existsSync(installHtmlForHowTo)) {
     servedPageFailures++;
   }
 }
-// Sheet 06 of the one-pager states the four gaps in plain words, and one operator per instance as scope.
+// The limits section states the four gaps in plain words, and one operator per instance as scope.
 const homeForLimits = path.join(siteDir, "index.html");
 if (fs.existsSync(homeForLimits)) {
   const homeText = servedText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
@@ -638,12 +639,12 @@ if (fs.existsSync(homeForLimits)) {
     "A local install serves one operator; there are no organizations, workspaces, or rules for who may correct what.",
   ]) {
     if (!homeText.includes(needle)) {
-      fail(`site_pages/index.html sheet 06 no longer says "${needle}"`);
+      fail(`site_pages/index.html limits section no longer says "${needle}"`);
       servedPageFailures++;
     }
   }
   if (/Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants/i.test(homeText)) {
-    fail("site_pages/index.html sheet 06 still carries the retired authority limit");
+    fail("site_pages/index.html limits section still carries the retired authority limit");
     servedPageFailures++;
   }
 }

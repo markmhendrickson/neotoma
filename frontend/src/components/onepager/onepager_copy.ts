@@ -14,7 +14,7 @@
 export const FIGURE_LEGEND: readonly string[] = [
   "Two sources say different things about one invoice: the PDF says due 22 October, a later email says 29 October.",
   "Each source becomes an observation. A rule, last write per field here, computes the current value from them.",
-  "The due date now reads 29 October. The revision cloud marks the field that changed, and it points to the later observation.",
+  "The due date now reads 29 October. The changed field points to the later observation.",
   "The amount still comes from the first observation. Both observations stay on record.",
   "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports.",
 ];
@@ -34,9 +34,9 @@ export const PLATE_NOTE: readonly string[] = [
   "Keys 1 to 5 match the legend.",
 ];
 
-/** Caption line under the sheet 01 legend. */
+/** Caption line under the synthetic example. */
 export const PLATE_CAPTION =
-  "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in sheet 03.";
+  "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in the CLI transcript below.";
 
 export const RECALL_VS_RECORD: readonly {
   question: string;

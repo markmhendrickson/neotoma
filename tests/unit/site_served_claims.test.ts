@@ -43,7 +43,7 @@ describe("one-pager sheets 02 to 04", () => {
     expect(page).not.toMatch(/ids are from one run/i);
   });
   it("limits the shared record to agents on the same MCP entry", () => {
-    expect(page).toContain("Agents connected to the same MCP entry");
+    expect(page.replace(/\s+/g, " ")).toContain("Agents connected to the same MCP entry");
     expect(copy).toContain("when it is connected to the same MCP entry");
     expect(page + copy).not.toMatch(/what one agent stored is what the next one reads/i);
     expect(page + copy).not.toMatch(/same instance/i);
