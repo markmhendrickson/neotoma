@@ -633,6 +633,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--updated-since <iso>` / `--since <iso>`: Return only entities whose `updated_at` is >= this ISO 8601 timestamp.
   - `--created-since <iso>`: Return only entities whose `created_at` is >= this ISO 8601 timestamp.
 - `neotoma entities get <id>`
+- `neotoma entities related <entityId> --limit <n>`: Traverse relationships with a default limit of 50 and maximum of 500. When `truncated` is true, the returned list is incomplete; `matched_entity_count` counts distinct returned entities and `truncation_hint` gives a retry path.
 - `neotoma entities search [identifier]`:
   - Preferred: positional `identifier` or `--identifier <id>`
   - Compatibility alias: `--query <id>` (equivalent to `--identifier`)

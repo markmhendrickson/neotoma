@@ -10888,6 +10888,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
       direction = "both",
       max_hops = 1,
       include_entities = true,
+      limit = 50,
     } = parsed.data;
     const userId = await getAuthenticatedUserId(req, undefined);
 
@@ -10900,7 +10901,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
     const relatedIds = new Set<string>();
     let currentLevel = [entity_id];
 
-    for (let hop = 0; hop < max_hops; hop++) {
+    traversal: for (let hop = 0; hop < max_hops; hop++) {
       const nextLevel: string[] = [];
 
       for (const currentId of currentLevel) {
@@ -10911,7 +10912,8 @@ app.post("/retrieve_related_entities", async (req, res) => {
             .select("*")
             .eq("source_entity_id", currentId)
             .eq("user_id", userId)
-            .order("relationship_key", { ascending: true });
+            .order("relationship_key", { ascending: true })
+            .limit(Math.max(1, limit - relationships.length + 1));
 
           if (relationship_types && relationship_types.length > 0) {
             query = query.in("relationship_type", relationship_types);
@@ -10927,6 +10929,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
                 nextLevel.push(rel.target_entity_id);
               }
             }
+            if (relationships.length > limit) break traversal;
           }
         }
 
@@ -10937,7 +10940,8 @@ app.post("/retrieve_related_entities", async (req, res) => {
             .select("*")
             .eq("target_entity_id", currentId)
             .eq("user_id", userId)
-            .order("relationship_key", { ascending: true });
+            .order("relationship_key", { ascending: true })
+            .limit(Math.max(1, limit - relationships.length + 1));
 
           if (relationship_types && relationship_types.length > 0) {
             query = query.in("relationship_type", relationship_types);
@@ -10953,6 +10957,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
                 nextLevel.push(rel.source_entity_id);
               }
             }
+            if (relationships.length > limit) break traversal;
           }
         }
       }
@@ -10961,16 +10966,34 @@ app.post("/retrieve_related_entities", async (req, res) => {
       currentLevel = nextLevel;
     }
 
+    // Queries fetch at most the remaining rows plus one lookahead row.
+    const relationshipsTruncated = relationships.length > limit;
+    const cappedRelationships = relationshipsTruncated
+      ? relationships.slice(0, limit)
+      : relationships;
+
+    // Hydrate only the entities the RETAINED relationships reference, so the
+    // cap bounds the entity payload too and not only the edge list.
+    const retainedIds = relationshipsTruncated
+      ? new Set(
+          cappedRelationships.flatMap((rel) =>
+            [rel.source_entity_id, rel.target_entity_id].filter(
+              (id: string) => id !== entity_id && relatedIds.has(id)
+            )
+          )
+        )
+      : relatedIds;
+
     // Get entities if requested
     let entities: any[] = [];
-    if (include_entities && relatedIds.size > 0) {
+    if (include_entities && retainedIds.size > 0) {
       const { data, error } = await db
         .from("entities")
         .select("*")
         .eq("user_id", userId)
         .order("canonical_name", { ascending: true })
         .order("id", { ascending: true })
-        .in("id", Array.from(relatedIds));
+        .in("id", Array.from(retainedIds));
 
       if (!error && data) {
         entities = data;
@@ -10979,10 +11002,26 @@ app.post("/retrieve_related_entities", async (req, res) => {
 
     logDebug("Success:retrieve_related_entities", req, {
       entity_id,
-      count: relationships.length,
+      count: cappedRelationships.length,
       max_hops,
+      truncated: relationshipsTruncated,
     });
-    return res.json({ relationships, entities });
+    return res.json({
+      relationships: cappedRelationships,
+      entities,
+      // State truncation explicitly (#2432): a silently capped list reads as a
+      // complete one.
+      truncated: relationshipsTruncated,
+      ...(relationshipsTruncated
+        ? {
+            limit,
+            matched_entity_count: retainedIds.size,
+            truncation_hint:
+              "More relationships exist than the limit allows. Raise `limit`, narrow " +
+              "`relationship_types`, or set `direction` to one side.",
+          }
+        : {}),
+    });
   } catch (error) {
     return handleApiError(
       req,

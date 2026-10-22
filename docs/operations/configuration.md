@@ -74,6 +74,8 @@ This does not change `NEOTOMA_ENV`'s own resolution for data locality (data dire
 | `NEOTOMA_LOGS_DIR` / `NEOTOMA_EVENT_LOG_PATH`  | Log directory and event log file                                                                                                                                                                                                                                                                                           | under `{dataDir}/logs`       |
 | `NEOTOMA_HOST_URL` / `NEOTOMA_PUBLIC_BASE_URL` | Public URL of this instance                                                                                                                                                                                                                                                                                                | auto-discovered or unset     |
 
+**MCP result budget:** `NEOTOMA_MCP_RESPONSE_MAX_BYTES` sets the UTF-8 byte ceiling for JSON tool results serialized by `buildTextResponse` (default `65536`). An absent, malformed, or value below `1000` uses the bounded default. Oversized results return a `RESPONSE_TOO_LARGE` error envelope with size details and a narrowing hint.
+
 ### When to opt into `NEOTOMA_DB_BACKEND=libsql`
 
 Stay on the default `sqlite` backend until you have a concrete reason to switch. Switch to `libsql` when **either** of these is true:

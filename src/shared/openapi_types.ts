@@ -2738,6 +2738,8 @@ export interface components {
       error?: string;
     };
     ErrorEnvelope: {
+      /** @description Actionable recovery guidance. */
+      hint?: string;
       error_code?: string;
       message?: string;
       details?: {
@@ -8105,6 +8107,11 @@ export interface operations {
           max_hops?: number;
           /** @default true */
           include_entities?: boolean;
+          /**
+           * @description Maximum relationships to traverse and return. Bounds both the edge list and the entities hydrated from it. When more exist than the limit allows, the response sets `truncated: true` and carries `matched_entity_count` plus a narrowing hint.
+           * @default 50
+           */
+          limit?: number;
         };
       };
     };
@@ -8116,6 +8123,21 @@ export interface operations {
         };
         content: {
           "application/json": {
+            relationships?: {
+              [key: string]: unknown;
+            }[];
+            entities?: {
+              [key: string]: unknown;
+            }[];
+            /** @description True when more matching relationships exist than the limit allows. */
+            truncated?: boolean;
+            /** @description Effective relationship limit when truncated. */
+            limit?: number;
+            /** @description Number of distinct matched entities in the returned relationships. */
+            matched_entity_count?: number;
+            /** @description How to narrow the request or raise the limit when truncated. */
+            truncation_hint?: string;
+          } & {
             [key: string]: unknown;
           };
         };

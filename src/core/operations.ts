@@ -144,6 +144,12 @@ export interface Operations {
     direction?: "inbound" | "outbound" | "both";
     max_hops?: number;
     include_entities?: boolean;
+    /**
+     * Maximum relationships to traverse and return (#2432). Defaults to 200
+     * server-side. Omitting it is the bounded case; a caller that genuinely
+     * needs more asks for it explicitly.
+     */
+    limit?: number;
   }): Promise<unknown>;
 
   /** Create a relationship between two existing entities. */

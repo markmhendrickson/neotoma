@@ -285,6 +285,39 @@ describe("CLI entity subcommands", () => {
   // ── entities related (mock-fetch) ────────────────────────────────────────────
 
   describe("entities related", () => {
+    it("passes --limit and displays the incomplete result unchanged", async () => {
+      await withTempHome(async (homeDir) => {
+        await setupConfig(homeDir);
+        const response = {
+          relationships: [{ relationship_key: "REFERS_TO:one:two" }],
+          entities: [{ id: "two" }],
+          truncated: true,
+          limit: 1,
+          matched_entity_count: 1,
+          truncation_hint: "Raise `limit` or narrow relationship_types.",
+        };
+        let capturedBody: Record<string, unknown> = {};
+        vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
+          const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body
+            ? await (input as Request).clone().text() : undefined);
+          if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string"
+            ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
+          return new Response(JSON.stringify(response), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          });
+        }));
+        const { runCli } = await loadCli();
+        const stdout = captureStdout();
+        try {
+          await runCli(["node", "cli", "entities", "related", FAKE_ENTITY_ID, "--limit", "1", "--json"]);
+        } finally {
+          stdout.restore();
+        }
+        expect(capturedBody).toMatchObject({ entity_id: FAKE_ENTITY_ID, limit: 1 });
+        expect(JSON.parse(stdout.output.join(""))).toMatchObject(response);
+      });
+    });
+
     it("should call retrieve_related_entities with entity ID", async () => {
       await withTempHome(async (homeDir) => {
         await setupConfig(homeDir);

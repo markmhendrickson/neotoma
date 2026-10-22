@@ -21,6 +21,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
+import { applyResponseBudget } from "./mcp_response_budget.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
 import { NON_SCHEMA_META_KEYS } from "./shared/schema_meta_keys.js";
@@ -196,7 +197,7 @@ const ADVISORY_VISIBILITY_DEPRECATION =
  */
 const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "Every turn, do the following in order — do not skip steps:",
-  "1. Bounded retrieval: for entities implied by the user message, use retrieve_entity_by_identifier for concrete identifiers and retrieve_entities for category/list queries.",
+  "1. Bounded retrieval: use retrieve_entity_by_identifier for exact identifiers and retrieve_entities for category queries. retrieve_related_entities defaults to limit 50 (max 500); truncated: true means incomplete, so raise limit or narrow. On error.error_code RESPONSE_TOO_LARGE, the result was withheld; narrow and retry.",
   '2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE **`store`** call (deprecated alias: store_structured). entities = [ { entity_type: "conversation", conversation_id, target_id? when bounded retrieval found the existing conversation, title?, thread_kind?, client_name?/harness?, repository_name?/repository_root?/repository_remote?, scope_summary? }, { entity_type: "conversation_message", role: "user", sender_kind: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. Context fields are optional and never identity-bearing; do not store raw git status, terminal output, file contents, secrets, or large open-file lists by default. MUST NOT skip for greetings or minimal messages.',
   "3. Other actions: host IDE tools and other MCP tools may run only after steps 1 and 2.",
   "4. Compose reply: synthesize the answer using retrieval results and tool output.",
@@ -215,7 +216,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and source extraction mistakes. Repair safe gaps in-turn; otherwise list Issues with immediate meaning, risk if unresolved, and recommended resolution.",
   "",
-  "Product-bug repair escalation: when a Neotoma MCP/API/tooling call fails during compliance or QA repair, classify before stopping. Fix caller payload/procedure issues and retry. If it appears to be a deterministic Neotoma product bug and you are inside the Neotoma source checkout, proactively inspect tool docs, trace code, read canonical docs, add or find focused tests, apply the smallest safe fix, and run targeted validation. Stop and ask before schema migrations, auth/security, foundation docs, or destructive data repair. Outside the repo, submit_issue with redacted reproduction instead of editing the consumer project.",
+  "Product-bug repair escalation: on a failed Neotoma MCP/API/tool call, fix the payload or procedure and retry. For a deterministic Neotoma product bug inside the source checkout, inspect docs/code, add a focused test, fix and run targeted validation. Ask before schema migrations, auth/security, foundation docs, or destructive repair. Outside this repo, submit_issue with redacted reproduction.",
   "",
   "Issue reporting QA: every Issues item about Neotoma product/tooling/doc behavior needs a local fix (inside the repo) or submit_issue (outside). Show skipped-filing decisions in the Issues group.",
   "",
@@ -3256,8 +3257,21 @@ export class NeotomaServer {
       return value;
     };
     // Use compact JSON (no indentation) to reduce response size and avoid Cursor file-writing threshold
+    const serialized = JSON.stringify(data, replacer);
+
+    // Bound JSON tool results at their shared serialization point (#2432).
+    // MCP results persist in client context, so an oversized result compounds
+    // on later turns. Direct-text and resource responses use other paths.
+    const budgeted = applyResponseBudget(serialized, config.mcpMaxResponseBytes);
+    if (budgeted.truncated) {
+      logger.warn(
+        `[mcp] response withheld: ${budgeted.originalBytes} bytes exceeds the ` +
+          `${config.mcpMaxResponseBytes}-byte limit (NEOTOMA_MCP_RESPONSE_MAX_BYTES)`
+      );
+    }
+
     return {
-      content: [{ type: "text", text: JSON.stringify(data, replacer) }],
+      content: [{ type: "text", text: budgeted.text }],
     };
   }
 
@@ -4584,7 +4598,8 @@ export class NeotomaServer {
     let hopsTraversed = 0;
 
     // Traverse relationships up to max_hops
-    for (let hop = 0; hop < parsed.max_hops; hop++) {
+    traversal: for (let hop = 0; hop < parsed.max_hops; hop++) {
+      hopsTraversed = hop + 1;
       const nextLevel: string[] = [];
 
       for (const entityId of currentLevel) {
@@ -4595,7 +4610,8 @@ export class NeotomaServer {
             .select("*")
             .eq("source_entity_id", entityId)
             .eq("user_id", userId)
-            .order("relationship_key", { ascending: true });
+            .order("relationship_key", { ascending: true })
+            .limit(Math.max(1, parsed.limit - allRelationships.length + 1));
 
           if (parsed.relationship_types && parsed.relationship_types.length > 0) {
             outboundQuery = outboundQuery.in("relationship_type", parsed.relationship_types);
@@ -4612,6 +4628,7 @@ export class NeotomaServer {
                 nextLevel.push(rel.target_entity_id);
               }
             }
+            if (allRelationships.length > parsed.limit) break traversal;
           }
         }
 
@@ -4622,7 +4639,8 @@ export class NeotomaServer {
             .select("*")
             .eq("target_entity_id", entityId)
             .eq("user_id", userId)
-            .order("relationship_key", { ascending: true });
+            .order("relationship_key", { ascending: true })
+            .limit(Math.max(1, parsed.limit - allRelationships.length + 1));
 
           if (parsed.relationship_types && parsed.relationship_types.length > 0) {
             inboundQuery = inboundQuery.in("relationship_type", parsed.relationship_types);
@@ -4639,27 +4657,43 @@ export class NeotomaServer {
                 nextLevel.push(rel.source_entity_id);
               }
             }
+            if (allRelationships.length > parsed.limit) break traversal;
           }
         }
       }
 
-      // This hop produced at least one relationship lookup over a non-empty
-      // frontier, so count it as traversed.
-      hopsTraversed = hop + 1;
       if (nextLevel.length === 0) break;
       currentLevel = nextLevel;
     }
 
+    // Each query fetches at most the remaining rows plus one lookahead row.
+    const relationshipsTruncated = allRelationships.length > parsed.limit;
+    const relationships = relationshipsTruncated
+      ? allRelationships.slice(0, parsed.limit)
+      : allRelationships;
+
+    // Hydrate only the entities the RETAINED relationships actually reference,
+    // so the cap bounds the entity payload too rather than only the edge list.
+    const retainedEntityIds = relationshipsTruncated
+      ? new Set(
+          relationships.flatMap((rel) =>
+            [rel.source_entity_id, rel.target_entity_id].filter(
+              (id: string) => id !== parsed.entity_id && relatedEntityIds.has(id)
+            )
+          )
+        )
+      : relatedEntityIds;
+
     // Get entity details if requested
     let entities: any[] = [];
-    if (parsed.include_entities && relatedEntityIds.size > 0) {
+    if (parsed.include_entities && retainedEntityIds.size > 0) {
       const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
         .eq("user_id", userId)
         .order("canonical_name", { ascending: true })
         .order("id", { ascending: true })
-        .in("id", Array.from(relatedEntityIds));
+        .in("id", Array.from(retainedEntityIds));
 
       if (!entityError && entityData) {
         entities = entityData;
@@ -4669,7 +4703,7 @@ export class NeotomaServer {
           .from("entity_snapshots")
           .select("*")
           .eq("user_id", userId)
-          .in("entity_id", Array.from(relatedEntityIds));
+          .in("entity_id", Array.from(retainedEntityIds));
 
         if (!snapError && snapshots) {
           const snapshotMap = new Map(
@@ -4685,10 +4719,23 @@ export class NeotomaServer {
 
     return this.buildTextResponse({
       entities,
-      relationships: allRelationships,
+      relationships,
       total_entities: entities.length,
-      total_relationships: allRelationships.length,
+      total_relationships: relationships.length,
       hops_traversed: hopsTraversed,
+      // State truncation explicitly (#2432). A silently capped list reads as a
+      // complete one, which is how a caller concludes an entity has 50 edges
+      // when it has thousands.
+      truncated: relationshipsTruncated,
+      ...(relationshipsTruncated
+        ? {
+            limit: parsed.limit,
+            matched_entity_count: retainedEntityIds.size,
+            truncation_hint:
+              "More relationships exist than the limit allows. Raise `limit`, narrow " +
+              "`relationship_types`, or set `direction` to one side.",
+          }
+        : {}),
     });
   }
 
