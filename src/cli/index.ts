@@ -11252,6 +11252,66 @@ async function backupFileOperation<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Resolve a manifest member without allowing its path or symlinks to leave the selected root. */
+async function containedBackupPath(root: string, member: string): Promise<string | null> {
+  if (
+    !member ||
+    path.isAbsolute(member) ||
+    path.win32.isAbsolute(member) ||
+    member.includes("\0")
+  ) {
+    return null;
+  }
+  const realRoot = await fs.realpath(root);
+  const candidate = path.resolve(realRoot, member);
+  const relative = path.relative(realRoot, candidate);
+  if (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    return null;
+  }
+
+  let current = realRoot;
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component);
+    try {
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink()) return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+      return null;
+    }
+  }
+  return candidate;
+}
+
+async function resolveManifestContents(
+  root: string,
+  contents: Record<string, unknown>
+): Promise<{ paths: Record<string, string>; issues: string[] }> {
+  const paths: Record<string, string> = Object.create(null) as Record<string, string>;
+  const issues: string[] = [];
+  for (const [key, member] of Object.entries(contents)) {
+    const resolved = typeof member === "string" ? await containedBackupPath(root, member) : null;
+    if (resolved === null) issues.push(`${key} path outside backup directory or invalid`);
+    else paths[key] = resolved;
+  }
+  return { paths, issues };
+}
+
+async function backupDirectoryContainsSymlink(dir: string): Promise<boolean> {
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) return true;
+    if (entry.isDirectory() && (await backupDirectoryContainsSymlink(path.join(dir, entry.name)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -11649,29 +11709,70 @@ backupCommand
       return;
     }
 
-    const contents = (manifest.contents || {}) as Record<string, string>;
+    const rawContents = manifest.contents ?? {};
+    if (typeof rawContents !== "object" || Array.isArray(rawContents)) {
+      writeCliError("Backup restore refused: invalid manifest contents.", {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
+    }
+    const contents = rawContents as Record<string, string>;
+    const source = await resolveManifestContents(opts.from, contents);
+    if (source.issues.length > 0) {
+      writeCliError(`Backup restore refused: ${source.issues.join("; ")}.`, {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
+    }
     await backupFileOperation(() => fs.mkdir(targetDir, { recursive: true }));
+    const destination = await resolveManifestContents(targetDir, contents);
+    if (destination.issues.length > 0) {
+      writeCliError(`Backup restore refused: ${destination.issues.join("; ")}.`, {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
+    }
+    for (const [key, member] of Object.entries(contents)) {
+      if (typeof member !== "string" || !member.endsWith("/")) continue;
+      for (const directory of [source.paths[key], destination.paths[key]]) {
+        try {
+          if (await backupDirectoryContainsSymlink(directory)) {
+            writeCliError("Backup restore refused: referenced directory contains a symlink.", {
+              suppressRecoveryHint: true,
+            });
+            process.exitCode = 1;
+            return;
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            writeCliError("Backup restore refused: referenced directory cannot be inspected.", {
+              suppressRecoveryHint: true,
+            });
+            process.exitCode = 1;
+            return;
+          }
+        }
+      }
+    }
 
     // Restore DB
     if (contents.neotoma_db) {
       await backupFileOperation(() =>
-        fs.copyFile(
-          path.join(opts.from, contents.neotoma_db),
-          path.join(targetDir, contents.neotoma_db)
-        )
+        fs.copyFile(source.paths.neotoma_db, destination.paths.neotoma_db)
       );
     }
     if (contents.wal) {
-      await backupFileOperation(() =>
-        fs.copyFile(path.join(opts.from, contents.wal), path.join(targetDir, contents.wal))
-      );
+      await backupFileOperation(() => fs.copyFile(source.paths.wal, destination.paths.wal));
     }
 
     // Restore directories
-    for (const [, val] of Object.entries(contents)) {
+    for (const [key, val] of Object.entries(contents)) {
       if (typeof val === "string" && val.endsWith("/")) {
-        const srcDir = path.join(opts.from, val);
-        const destDir = path.join(targetDir, val);
+        const srcDir = source.paths[key];
+        const destDir = destination.paths[key];
         try {
           await fs.access(srcDir);
           await fs.cp(srcDir, destDir, { recursive: true });
@@ -11728,18 +11829,30 @@ backupCommand
       return;
     }
 
-    const contents = (manifest.contents || {}) as Record<string, string>;
+    const rawContents = manifest.contents ?? {};
+    if (typeof rawContents !== "object" || Array.isArray(rawContents)) {
+      writeCliError("Backup verification failed: invalid manifest contents.", {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
+    }
+    const contents = rawContents as Record<string, string>;
     const checksums = (manifest.checksums || {}) as Record<string, string>;
+    const resolved = await resolveManifestContents(dir, contents);
+    issues.push(...resolved.issues);
     let databaseIsLargeEnoughToInspect = false;
 
     // Verify DB file exists and has reasonable size
     if (!contents.neotoma_db) {
       issues.push("manifest does not reference a database file");
-    } else {
-      const dbPath = path.join(dir, contents.neotoma_db);
+    } else if (resolved.paths.neotoma_db) {
+      const dbPath = resolved.paths.neotoma_db;
       try {
         const stat = await fs.stat(dbPath);
-        if (stat.size < 1024) {
+        if (!stat.isFile()) {
+          issues.push("database reference is not a file in backup directory");
+        } else if (stat.size < 1024) {
           issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
         } else {
           databaseIsLargeEnoughToInspect = true;
@@ -11786,12 +11899,25 @@ backupCommand
 
     // Verify referenced directories exist
     for (const [key, val] of Object.entries(contents)) {
-      if (typeof val === "string" && val.endsWith("/")) {
+      if (typeof val === "string" && val.endsWith("/") && resolved.paths[key]) {
         try {
-          await fs.access(path.join(dir, val));
+          const stat = await fs.stat(resolved.paths[key]);
+          if (!stat.isDirectory()) issues.push(`referenced directory is not a directory: ${key}`);
+          else if (await backupDirectoryContainsSymlink(resolved.paths[key])) {
+            issues.push(`referenced directory contains a symlink: ${key}`);
+          }
         } catch {
           issues.push(`referenced directory missing: ${key} (${val})`);
         }
+      }
+    }
+
+    if (contents.wal && resolved.paths.wal) {
+      try {
+        const stat = await fs.stat(resolved.paths.wal);
+        if (!stat.isFile()) issues.push("referenced WAL is not a file in backup directory");
+      } catch {
+        issues.push("referenced WAL missing from backup directory");
       }
     }
 
