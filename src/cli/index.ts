@@ -11289,6 +11289,29 @@ async function backupDirectoryContainsSymlink(dir: string): Promise<boolean> {
   return false;
 }
 
+/** An absent optional directory is valid; an unreadable or unsupported one is not. */
+async function copyOptionalBackupDirectory(source: string, destination: string): Promise<boolean> {
+  let stat: Stats;
+  try {
+    stat = await fs.lstat(source);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error("Backup create refused: optional input is not a real directory.");
+  }
+  if (await backupDirectoryContainsSymlink(source)) {
+    throw new Error("Backup create refused: optional input directory contains a symlink.");
+  }
+  await fs.cp(source, destination, { recursive: true });
+  // Verify what was actually copied, since fs.cp preserves symlinks on supported Node versions.
+  if (await backupDirectoryContainsSymlink(destination)) {
+    throw new Error("Backup create refused: copied directory contains a symlink.");
+  }
+  return true;
+}
+
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -11431,24 +11454,26 @@ backupCommand
       }
     }
 
-    // Copy sources directory
+    // Copy optional directories. Only ENOENT means absent; copy and validation
+    // failures must never become a successful but incomplete backup.
     try {
-      await fs.access(rawStorageDir);
-      const destSources = path.join(backupDir, "sources");
-      await fs.cp(rawStorageDir, destSources, { recursive: true });
-      contents.sources = "sources/";
-    } catch {
-      // No sources directory — acceptable for minimal installs
-    }
-
-    // Copy logs directory (includes events.log and other log files)
-    try {
-      await fs.access(logsDir);
+      if (await copyOptionalBackupDirectory(rawStorageDir, path.join(backupDir, "sources"))) {
+        contents.sources = "sources/";
+      }
       const dirName = path.basename(logsDir);
-      await fs.cp(logsDir, path.join(backupDir, dirName), { recursive: true });
-      contents[dirName] = dirName + "/";
-    } catch {
-      // Directory does not exist — acceptable
+      if (await copyOptionalBackupDirectory(logsDir, path.join(backupDir, dirName))) {
+        contents[dirName] = dirName + "/";
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      writeCliError(
+        message.startsWith("Backup create refused:")
+          ? message
+          : "Backup create failed while copying or inspecting files. Check paths and permissions.",
+        { suppressRecoveryHint: true }
+      );
+      process.exitCode = 1;
+      return;
     }
 
     // Write manifest
@@ -11686,8 +11711,8 @@ backupCommand
       return;
     }
 
-    const rawContents = manifest.contents ?? {};
-    if (typeof rawContents !== "object" || Array.isArray(rawContents)) {
+    const rawContents = manifest.contents;
+    if (rawContents === null || typeof rawContents !== "object" || Array.isArray(rawContents)) {
       writeCliError("Backup restore refused: invalid manifest contents.", {
         suppressRecoveryHint: true,
       });
@@ -11695,11 +11720,40 @@ backupCommand
       return;
     }
     const contents = rawContents as Record<string, string>;
+    if (typeof contents.neotoma_db !== "string" || contents.neotoma_db.length === 0) {
+      writeCliError("Backup restore refused: manifest does not reference a database file.", {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
+    }
     const source = await resolveManifestContents(opts.from, contents);
     if (source.issues.length > 0) {
       writeCliError(`Backup restore refused: ${source.issues.join("; ")}.`, {
         suppressRecoveryHint: true,
       });
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const dbStat = await fs.stat(source.paths.neotoma_db);
+      if (!dbStat.isFile()) throw new Error("not a file");
+      if (contents.wal) {
+        const walStat = await fs.stat(source.paths.wal);
+        if (!walStat.isFile()) throw new Error("WAL is not a file");
+      }
+      for (const [key, member] of Object.entries(contents)) {
+        if (typeof member !== "string" || !member.endsWith("/")) continue;
+        const directoryStat = await fs.stat(source.paths[key]);
+        if (!directoryStat.isDirectory()) throw new Error("not a directory");
+      }
+    } catch {
+      writeCliError(
+        "Backup restore refused: referenced database, WAL, or directory is missing or invalid.",
+        {
+          suppressRecoveryHint: true,
+        }
+      );
       process.exitCode = 1;
       return;
     }
@@ -11735,28 +11789,22 @@ backupCommand
       }
     }
 
-    // Restore DB
-    if (contents.neotoma_db) {
-      await backupFileOperation(() =>
-        fs.copyFile(source.paths.neotoma_db, destination.paths.neotoma_db)
-      );
-    }
-    if (contents.wal) {
-      await backupFileOperation(() => fs.copyFile(source.paths.wal, destination.paths.wal));
-    }
-
-    // Restore directories
-    for (const [key, val] of Object.entries(contents)) {
-      if (typeof val === "string" && val.endsWith("/")) {
-        const srcDir = source.paths[key];
-        const destDir = destination.paths[key];
-        try {
-          await fs.access(srcDir);
-          await fs.cp(srcDir, destDir, { recursive: true });
-        } catch {
-          // skip missing dirs
+    try {
+      await fs.copyFile(source.paths.neotoma_db, destination.paths.neotoma_db);
+      if (contents.wal) {
+        await fs.copyFile(source.paths.wal, destination.paths.wal);
+      }
+      for (const [key, val] of Object.entries(contents)) {
+        if (typeof val === "string" && val.endsWith("/")) {
+          await fs.cp(source.paths[key], destination.paths[key], { recursive: true });
         }
       }
+    } catch {
+      writeCliError("Backup restore failed while copying files. Check paths and permissions.", {
+        suppressRecoveryHint: true,
+      });
+      process.exitCode = 1;
+      return;
     }
 
     const result = {

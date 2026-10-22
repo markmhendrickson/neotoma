@@ -172,7 +172,13 @@ describe("CLI backup verify (smoke)", () => {
     backupRoots.push(parent);
     const source = path.join(parent, "source");
     await fs.mkdir(source);
-    await fs.writeFile(path.join(source, "manifest.json"), JSON.stringify({ contents: {} }));
+    const db = createFixtureSqliteDatabase(path.join(source, "neotoma.db"));
+    db.exec("create table test_data(value text)");
+    db.close();
+    await fs.writeFile(
+      path.join(source, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+    );
     const targetFile = path.join(parent, "sqlite_corrupt-target");
     await fs.writeFile(targetFile, "not a directory");
 
@@ -214,6 +220,153 @@ describe("CLI backup verify (smoke)", () => {
     expect(verify.exitCode, verify.stderr + verify.stdout).toBe(0);
     const report = JSON.parse(verify.stdout) as { status?: string };
     expect(report.status).toBe("valid");
+  });
+
+  it.each(["sources", "logs"] as const)(
+    "rejects a %s symlink at the input root before certifying a backup",
+    async (directory) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-create-root-link-");
+      const outside = path.join(parent, "outside");
+      await fs.mkdir(outside);
+      await fs.writeFile(path.join(outside, "outside.txt"), "outside");
+      await fs.symlink(outside, path.join(dataDir, directory));
+
+      const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+        NEOTOMA_ENV: "development",
+      });
+      expect(created.exitCode, created.stdout + created.stderr).toBe(1);
+      expect(created.stdout).not.toContain('"verified": true');
+      expect(created.stderr).not.toContain("SQLite may be corrupted");
+    }
+  );
+
+  it.each(["sources", "logs"] as const)(
+    "rejects a symlink nested under input %s before certifying a backup",
+    async (directory) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-create-nested-link-");
+      const input = path.join(dataDir, directory);
+      await fs.mkdir(path.join(input, "nested"), { recursive: true });
+      await fs.writeFile(path.join(input, "healthy.txt"), "healthy");
+      const outside = path.join(parent, "outside.txt");
+      await fs.writeFile(outside, "outside");
+      await fs.symlink(outside, path.join(input, "nested", "external.txt"));
+
+      const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+        NEOTOMA_ENV: "development",
+      });
+      expect(created.exitCode, created.stdout + created.stderr).toBe(1);
+      expect(created.stdout).not.toContain('"verified": true');
+      expect(created.stderr).not.toContain("SQLite may be corrupted");
+    }
+  );
+
+  it.each(["sources", "logs"] as const)(
+    "rejects a %s input that is not a directory",
+    async (directory) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-create-not-directory-");
+      await fs.writeFile(path.join(dataDir, directory), "not a directory");
+      const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+        NEOTOMA_ENV: "development",
+      });
+      expect(created.exitCode, created.stdout + created.stderr).toBe(1);
+      expect(created.stderr).toContain("not a real directory");
+    }
+  );
+
+  it("creates, verifies, and restores real source and log directories", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-create-directories-");
+    await fs.mkdir(path.join(dataDir, "sources", "nested"), { recursive: true });
+    await fs.mkdir(path.join(dataDir, "logs"), { recursive: true });
+    await fs.writeFile(path.join(dataDir, "sources", "nested", "source.txt"), "source");
+    await fs.writeFile(path.join(dataDir, "logs", "events.log"), "event");
+
+    const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+      NEOTOMA_DATA_DIR: dataDir,
+      NEOTOMA_ENV: "development",
+    });
+    expect(created.exitCode, created.stdout + created.stderr).toBe(0);
+    const backup = JSON.parse(created.stdout) as {
+      backup_dir: string;
+      verified: boolean;
+      contents: Record<string, string>;
+    };
+    expect(backup.verified).toBe(true);
+    expect(backup.contents.sources).toBe("sources/");
+    expect(backup.contents.logs).toBe("logs/");
+    const verified = await runNeotomaCli(["--json", "backup", "verify", backup.backup_dir], {});
+    expect(verified.exitCode, verified.stdout + verified.stderr).toBe(0);
+    expect((JSON.parse(verified.stdout) as { status: string }).status).toBe("valid");
+    const target = path.join(parent, "restored");
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backup.backup_dir, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(0);
+    expect(await fs.readFile(path.join(target, "sources", "nested", "source.txt"), "utf8")).toBe(
+      "source"
+    );
+    expect(await fs.readFile(path.join(target, "logs", "events.log"), "utf8")).toBe("event");
+  });
+
+  it.each([undefined, null, {}])(
+    "refuses restore when manifest contents have no database (%s)",
+    async (contents) => {
+      const parent = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-backup-restore-empty-"));
+      backupRoots.push(parent);
+      const backup = path.join(parent, "backup");
+      await fs.mkdir(backup);
+      await fs.writeFile(path.join(backup, "manifest.json"), JSON.stringify({ contents }));
+      const target = path.join(parent, "target");
+      const restored = await runNeotomaCli(
+        ["--json", "backup", "restore", "--from", backup, "--target", target],
+        {}
+      );
+      expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+      expect(restored.stdout).not.toContain('"status":"restored"');
+      await expect(fs.access(target)).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  );
+
+  it("refuses restore when a referenced directory is missing", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-restore-missing-dir-");
+    const backup = path.join(parent, "backup");
+    await fs.mkdir(backup);
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db", sources: "sources/" } })
+    );
+    const target = path.join(parent, "target");
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backup, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(restored.stdout).not.toContain('"status":"restored"');
+    await expect(fs.access(target)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports a failed restore copy instead of restored", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-restore-copy-error-");
+    const backup = path.join(parent, "backup");
+    await fs.mkdir(backup);
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+    );
+    const target = path.join(parent, "target");
+    await fs.mkdir(path.join(target, "neotoma.db"), { recursive: true });
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backup, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(restored.stderr).toContain("Backup restore failed while copying files");
+    expect(restored.stdout).not.toContain('"status":"restored"');
   });
 
   it.each(["traversal", "absolute", "symlink"] as const)(
