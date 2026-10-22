@@ -312,6 +312,114 @@ describe("CLI backup verify (smoke)", () => {
     expect(report.status).toBe("valid");
   });
 
+  it.each(["corrupt", "checksum", "undersized", "missing-member", "malformed-manifest"] as const)(
+    "refuses a %s backup before creating or changing a restore target",
+    async (defect) => {
+      const { parent, dataDir } = await createBackupInput(`neotoma-backup-restore-${defect}-`);
+      const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+      });
+      expect(created.exitCode, created.stderr + created.stdout).toBe(0);
+      const backupDir = (JSON.parse(created.stdout) as { backup_dir: string }).backup_dir;
+      const snapshotPath = path.join(backupDir, "neotoma.db");
+      const manifestPath = path.join(backupDir, "manifest.json");
+      const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as {
+        contents: Record<string, string>;
+        checksums: Record<string, string>;
+      };
+      if (defect === "corrupt") {
+        await fs.truncate(snapshotPath, 4096);
+        const bytes = await fs.readFile(snapshotPath);
+        manifest.checksums["neotoma.db"] =
+          "sha256:" + createHash("sha256").update(bytes).digest("hex");
+      } else if (defect === "checksum") {
+        manifest.checksums["neotoma.db"] = `sha256:${"0".repeat(64)}`;
+      } else if (defect === "undersized") {
+        await fs.truncate(snapshotPath, 512);
+      } else if (defect === "missing-member") {
+        manifest.contents.sources = "sources/";
+      } else {
+        await fs.writeFile(manifestPath, JSON.stringify({ contents: null }));
+      }
+      if (defect !== "malformed-manifest") {
+        await fs.writeFile(manifestPath, JSON.stringify(manifest));
+      }
+
+      const verify = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+      expect(verify.exitCode, verify.stderr + verify.stdout).toBe(1);
+      if (defect === "corrupt") {
+        expect(JSON.parse(verify.stderr)).toMatchObject({
+          hint: { code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" },
+        });
+        expect(verify.stderr).toContain("SQLite may be corrupted");
+      }
+
+      const freshTarget = path.join(parent, "fresh-target");
+      const fresh = await runNeotomaCli(
+        ["--json", "backup", "restore", "--from", backupDir, "--target", freshTarget],
+        {}
+      );
+      expect(fresh.exitCode, fresh.stderr + fresh.stdout).toBe(1);
+      expect(fresh.stdout).not.toContain('"status":"restored"');
+      if (defect === "corrupt") {
+        expect(JSON.parse(fresh.stderr)).toMatchObject({
+          hint: { code: "INTEGRITY_FAILED", failure_kind: "integrity_failed" },
+        });
+        expect(fresh.stderr).toContain("SQLite may be corrupted");
+      }
+      await expect(fs.access(freshTarget)).rejects.toMatchObject({ code: "ENOENT" });
+
+      const existingTarget = path.join(parent, "existing-target");
+      await fs.mkdir(existingTarget);
+      const originalDb = await fs.readFile(path.join(dataDir, "neotoma.db"));
+      await fs.writeFile(path.join(existingTarget, "neotoma.db"), originalDb);
+      await fs.writeFile(path.join(existingTarget, "sentinel"), "keep me");
+      const existing = await runNeotomaCli(
+        ["--json", "backup", "restore", "--from", backupDir, "--target", existingTarget],
+        {}
+      );
+      expect(existing.exitCode, existing.stderr + existing.stdout).toBe(1);
+      expect(await fs.readFile(path.join(existingTarget, "neotoma.db"))).toEqual(originalDb);
+      expect(await fs.readFile(path.join(existingTarget, "sentinel"), "utf8")).toBe("keep me");
+    }
+  );
+
+  it.each([[], [{ wrong_column: "ok" }]])(
+    "refuses restore when the integrity instrument returns %j without claiming corruption",
+    async (rows) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-restore-instrument-");
+      const created = await runNeotomaCli(["--json", "backup", "create", "--output", parent], {
+        NEOTOMA_DATA_DIR: dataDir,
+      });
+      expect(created.exitCode, created.stderr + created.stdout).toBe(0);
+      const backupDir = (JSON.parse(created.stdout) as { backup_dir: string }).backup_dir;
+      const target = path.join(parent, "target");
+      const pragma = vi.spyOn(AsyncSqliteDatabase.prototype, "pragma").mockResolvedValue(rows);
+      try {
+        for (const command of ["verify", "restore"] as const) {
+          const argv =
+            command === "verify"
+              ? ["--json", "backup", "verify", backupDir]
+              : ["--json", "backup", "restore", "--from", backupDir, "--target", target];
+          const run = await runNeotomaCli(argv, {});
+          expect(run.exitCode, run.stderr + run.stdout).toBe(1);
+          const envelope = JSON.parse(run.stderr) as {
+            hint?: { code?: string; failure_kind?: string };
+          };
+          expect(envelope.hint).toMatchObject({
+            code: "VERIFY_INSTRUMENT_FAILURE",
+            failure_kind: "verify_instrument_failure",
+          });
+          expect(run.stderr).not.toContain("SQLite may be corrupted");
+          expect(run.stderr).not.toContain("recover-db");
+        }
+        await expect(fs.access(target)).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        pragma.mockRestore();
+      }
+    }
+  );
+
   it.each(["sources", "logs"] as const)(
     "rejects a %s symlink at the input root before certifying a backup",
     async (directory) => {

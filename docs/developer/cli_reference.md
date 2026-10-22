@@ -1115,6 +1115,7 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
 - `neotoma backup restore`: Restore a backup into the data directory.
   - `--from <dir>`: Backup directory to restore from (required).
   - `--target <dir>`: Target data directory (default: `NEOTOMA_DATA_DIR` or `./data`).
+  - Before creating or changing the target, restore applies the same manifest, contained-member, database-size, recorded-checksum, and SQLite integrity checks as `backup verify`. Invalid backups exit non-zero and leave the target untouched. A genuine integrity failure retains the database-recovery guidance; an unreadable integrity result fails as `VERIFY_INSTRUMENT_FAILURE` without claiming corruption. Legacy file-copy backups with a valid database and WAL remain supported.
 
 ### Logs
 

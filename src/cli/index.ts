@@ -11312,6 +11312,133 @@ async function copyOptionalBackupDirectory(source: string, destination: string):
   return true;
 }
 
+type BackupInspection = {
+  manifest?: Record<string, unknown>;
+  contents: Record<string, string>;
+  paths: Record<string, string>;
+  issues: string[];
+  integrity?: BackupIntegrityVerification;
+  manifestError?: string;
+};
+
+/** The shared source preflight for verify and restore. No target is touched here. */
+async function inspectBackupDirectory(dir: string): Promise<BackupInspection> {
+  const result: BackupInspection = { contents: {}, paths: {}, issues: [] };
+  try {
+    const parsed: unknown = JSON.parse(await fs.readFile(path.join(dir, "manifest.json"), "utf-8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      result.manifestError = "Backup verification failed: invalid manifest.";
+      return result;
+    }
+    result.manifest = parsed as Record<string, unknown>;
+  } catch {
+    result.manifestError = "No manifest.json found in backup directory: " + dir;
+    return result;
+  }
+
+  const rawContents = result.manifest.contents;
+  if (rawContents === null || typeof rawContents !== "object" || Array.isArray(rawContents)) {
+    result.manifestError = "Backup verification failed: invalid manifest contents.";
+    return result;
+  }
+  result.contents = rawContents as Record<string, string>;
+  const rawChecksums = result.manifest.checksums;
+  if (
+    rawChecksums !== undefined &&
+    (rawChecksums === null || typeof rawChecksums !== "object" || Array.isArray(rawChecksums))
+  ) {
+    result.manifestError = "Backup verification failed: invalid manifest checksums.";
+    return result;
+  }
+  const checksums = (rawChecksums ?? {}) as Record<string, unknown>;
+  try {
+    const resolved = await resolveManifestContents(dir, result.contents);
+    result.paths = resolved.paths;
+    result.issues.push(...resolved.issues);
+  } catch {
+    result.issues.push("backup directory cannot be inspected");
+    return result;
+  }
+
+  const dbName = result.contents.neotoma_db;
+  if (typeof dbName !== "string" || dbName.length === 0) {
+    result.issues.push("manifest does not reference a database file");
+  } else if (result.paths.neotoma_db) {
+    const dbPath = result.paths.neotoma_db;
+    let inspectIntegrity = false;
+    try {
+      const stat = await fs.stat(dbPath);
+      if (!stat.isFile())
+        result.issues.push("database reference is not a file in backup directory");
+      else if (stat.size < 1024) {
+        result.issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
+      } else inspectIntegrity = true;
+    } catch {
+      result.issues.push("database file missing from backup directory: " + dbName);
+    }
+    if (inspectIntegrity) result.integrity = await verifyBackupDatabaseIntegrity(dbPath);
+  }
+
+  for (const [key, member] of Object.entries(result.contents)) {
+    if (typeof member !== "string" || !result.paths[key]) continue;
+    if (member.endsWith("/")) {
+      try {
+        const stat = await fs.stat(result.paths[key]);
+        if (!stat.isDirectory())
+          result.issues.push(`referenced directory is not a directory: ${key}`);
+        else if (await backupDirectoryContainsSymlink(result.paths[key])) {
+          result.issues.push(`referenced directory contains a symlink: ${key}`);
+        }
+      } catch {
+        result.issues.push(`referenced directory missing: ${key} (${member})`);
+      }
+    } else if (key === "wal") {
+      try {
+        const stat = await fs.stat(result.paths[key]);
+        if (!stat.isFile()) result.issues.push("referenced WAL is not a file in backup directory");
+      } catch {
+        result.issues.push("referenced WAL missing from backup directory");
+      }
+    }
+    if (Object.hasOwn(checksums, member)) {
+      if (typeof checksums[member] !== "string" || member.endsWith("/")) {
+        result.issues.push(`invalid checksum for referenced member: ${key}`);
+      } else {
+        try {
+          const bytes = await fs.readFile(result.paths[key]);
+          const computed = "sha256:" + createHash("sha256").update(bytes).digest("hex");
+          if (computed !== checksums[member]) {
+            result.issues.push(`checksum mismatch: expected ${checksums[member]}, got ${computed}`);
+          }
+        } catch {
+          result.issues.push(`referenced file missing or unreadable: ${key}`);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function backupIntegrityError(
+  databasePath: string,
+  integrity: BackupIntegrityVerification
+): CliHintError {
+  const instrumentFailure = integrity.kind === "verify_instrument_failure";
+  const message = instrumentFailure
+    ? "Backup verification could not obtain an integrity result. " +
+      "The snapshot has been left in place for inspection at " +
+      databasePath +
+      `. Run \`sqlite3 ${quotePosixShellArgument(databasePath)} "PRAGMA integrity_check;"\` directly; ` +
+      'if it returns "ok", this is a tooling or driver issue.'
+    : "Backup verification failed: the snapshot integrity check failed. " +
+      "The backup is NOT usable and has been left in place for inspection at " +
+      databasePath;
+  return new CliHintError(message, {
+    code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
+    failure_kind: integrity.kind,
+  });
+}
+
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -11699,65 +11826,27 @@ backupCommand
       process.env.NEOTOMA_DATA_DIR ||
       (projectRoot ? path.join(projectRoot, "data") : "data");
 
-    // Read manifest
-    const manifestPath = path.join(opts.from, "manifest.json");
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
-    } catch {
-      writeCliError("No manifest.json found in backup directory: " + opts.from, {
+    const inspection = await inspectBackupDirectory(opts.from);
+    if (inspection.manifestError) {
+      writeCliError(inspection.manifestError, { suppressRecoveryHint: true });
+      process.exitCode = 1;
+      return;
+    }
+    if (inspection.integrity && inspection.integrity.kind !== "verified") {
+      writeCliError(backupIntegrityError(inspection.paths.neotoma_db, inspection.integrity));
+      process.exitCode = 1;
+      return;
+    }
+    if (inspection.issues.length > 0) {
+      writeCliError(`Backup restore refused: ${inspection.issues.join("; ")}.`, {
         suppressRecoveryHint: true,
       });
       process.exitCode = 1;
       return;
     }
-
-    const rawContents = manifest.contents;
-    if (rawContents === null || typeof rawContents !== "object" || Array.isArray(rawContents)) {
-      writeCliError("Backup restore refused: invalid manifest contents.", {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    const contents = rawContents as Record<string, string>;
-    if (typeof contents.neotoma_db !== "string" || contents.neotoma_db.length === 0) {
-      writeCliError("Backup restore refused: manifest does not reference a database file.", {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    const source = await resolveManifestContents(opts.from, contents);
-    if (source.issues.length > 0) {
-      writeCliError(`Backup restore refused: ${source.issues.join("; ")}.`, {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    try {
-      const dbStat = await fs.stat(source.paths.neotoma_db);
-      if (!dbStat.isFile()) throw new Error("not a file");
-      if (contents.wal) {
-        const walStat = await fs.stat(source.paths.wal);
-        if (!walStat.isFile()) throw new Error("WAL is not a file");
-      }
-      for (const [key, member] of Object.entries(contents)) {
-        if (typeof member !== "string" || !member.endsWith("/")) continue;
-        const directoryStat = await fs.stat(source.paths[key]);
-        if (!directoryStat.isDirectory()) throw new Error("not a directory");
-      }
-    } catch {
-      writeCliError(
-        "Backup restore refused: referenced database, WAL, or directory is missing or invalid.",
-        {
-          suppressRecoveryHint: true,
-        }
-      );
-      process.exitCode = 1;
-      return;
-    }
+    const manifest = inspection.manifest!;
+    const contents = inspection.contents;
+    const source = { paths: inspection.paths };
     await backupFileOperation(() => fs.mkdir(targetDir, { recursive: true }));
     const destination = await resolveManifestContents(targetDir, contents);
     if (destination.issues.length > 0) {
@@ -11840,113 +11929,18 @@ backupCommand
   .argument("<dir>", "Backup directory to verify")
   .action(async (dir: string) => {
     const outputMode = resolveOutputMode();
-    const issues: string[] = [];
-
-    // Check manifest exists
-    const manifestPath = path.join(dir, "manifest.json");
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
-    } catch {
-      writeCliError("No manifest.json found in backup directory: " + dir, {
-        suppressRecoveryHint: true,
-      });
+    const inspection = await inspectBackupDirectory(dir);
+    if (inspection.manifestError) {
+      writeCliError(inspection.manifestError, { suppressRecoveryHint: true });
       process.exitCode = 1;
       return;
     }
-
-    const rawContents = manifest.contents ?? {};
-    if (typeof rawContents !== "object" || Array.isArray(rawContents)) {
-      writeCliError("Backup verification failed: invalid manifest contents.", {
-        suppressRecoveryHint: true,
-      });
+    if (inspection.integrity && inspection.integrity.kind !== "verified") {
+      writeCliError(backupIntegrityError(inspection.paths.neotoma_db, inspection.integrity));
       process.exitCode = 1;
       return;
     }
-    const contents = rawContents as Record<string, string>;
-    const checksums = (manifest.checksums || {}) as Record<string, string>;
-    const resolved = await resolveManifestContents(dir, contents);
-    issues.push(...resolved.issues);
-    let databaseIsLargeEnoughToInspect = false;
-
-    // Verify DB file exists and has reasonable size
-    if (!contents.neotoma_db) {
-      issues.push("manifest does not reference a database file");
-    } else if (resolved.paths.neotoma_db) {
-      const dbPath = resolved.paths.neotoma_db;
-      try {
-        const stat = await fs.stat(dbPath);
-        if (!stat.isFile()) {
-          issues.push("database reference is not a file in backup directory");
-        } else if (stat.size < 1024) {
-          issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
-        } else {
-          databaseIsLargeEnoughToInspect = true;
-        }
-
-        // Verify checksum if available
-        if (checksums[contents.neotoma_db]) {
-          const dbBuf = await fs.readFile(dbPath);
-          const computed = "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
-          if (computed !== checksums[contents.neotoma_db]) {
-            issues.push(
-              `checksum mismatch: expected ${checksums[contents.neotoma_db]}, got ${computed}`
-            );
-          }
-        }
-      } catch {
-        issues.push("database file missing from backup directory: " + contents.neotoma_db);
-      }
-
-      const integrity = databaseIsLargeEnoughToInspect
-        ? await verifyBackupDatabaseIntegrity(dbPath)
-        : null;
-      if (integrity !== null && integrity.kind !== "verified") {
-        const instrumentFailure = integrity.kind === "verify_instrument_failure";
-        const message = instrumentFailure
-          ? "Backup verification could not obtain an integrity result. " +
-            "The snapshot has been left in place for inspection at " +
-            dbPath +
-            `. Run \`sqlite3 ${quotePosixShellArgument(dbPath)} "PRAGMA integrity_check;"\` directly; ` +
-            'if it returns "ok", this is a tooling or driver issue.'
-          : "Backup verification failed: the snapshot integrity check failed. " +
-            "The backup is NOT usable and has been left in place for inspection at " +
-            dbPath;
-        writeCliError(
-          new CliHintError(message, {
-            code: instrumentFailure ? "VERIFY_INSTRUMENT_FAILURE" : "INTEGRITY_FAILED",
-            failure_kind: integrity.kind,
-          })
-        );
-        process.exitCode = 1;
-        return;
-      }
-    }
-
-    // Verify referenced directories exist
-    for (const [key, val] of Object.entries(contents)) {
-      if (typeof val === "string" && val.endsWith("/") && resolved.paths[key]) {
-        try {
-          const stat = await fs.stat(resolved.paths[key]);
-          if (!stat.isDirectory()) issues.push(`referenced directory is not a directory: ${key}`);
-          else if (await backupDirectoryContainsSymlink(resolved.paths[key])) {
-            issues.push(`referenced directory contains a symlink: ${key}`);
-          }
-        } catch {
-          issues.push(`referenced directory missing: ${key} (${val})`);
-        }
-      }
-    }
-
-    if (contents.wal && resolved.paths.wal) {
-      try {
-        const stat = await fs.stat(resolved.paths.wal);
-        if (!stat.isFile()) issues.push("referenced WAL is not a file in backup directory");
-      } catch {
-        issues.push("referenced WAL missing from backup directory");
-      }
-    }
-
+    const { manifest, contents, issues } = inspection;
     const valid = issues.length === 0;
     const walk = await backupFileOperation(() => directorySizeAndFileCount(dir));
     const backup_size = {
@@ -11957,7 +11951,7 @@ backupCommand
     const result = {
       status: valid ? "valid" : "invalid",
       backup_dir: dir,
-      created_at: manifest.created_at,
+      created_at: manifest?.created_at,
       contents,
       backup_size,
       issues: issues.length > 0 ? issues : undefined,
