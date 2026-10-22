@@ -41,7 +41,7 @@ const JSON_COLUMNS: Record<string, Set<string>> = {
   relationship_observations: new Set(["metadata", "provenance"]),
   relationship_snapshots: new Set(["snapshot", "provenance"]),
   raw_fragments: new Set(["fragment_value", "fragment_envelope"]),
-  schema_registry: new Set(["schema_definition", "reducer_config", "metadata"]),
+  schema_registry: new Set(["schema_definition", "reducer_config", "metadata", "identity_binding"]),
   schema_recommendations: new Set([
     "fields_to_add",
     "fields_to_remove",

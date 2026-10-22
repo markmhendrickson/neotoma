@@ -2320,10 +2320,76 @@ components:
           additionalProperties: true
           allOf:
             - $ref: "#/components/schemas/AgentAttribution"
+    ExactEntityIdentityContract:
+      type: object
+      additionalProperties: false
+      required: [version, mode, namespace, canonical_name_fields]
+      description: |
+        Immutable, opt-in identity declaration for a fresh schema namespace.
+        Identifier values preserve exact UTF-8 bytes; display names and legacy
+        normalization are not identity authority. Flat string arrays retain
+        their existing all-required composite meaning. Registration does not
+        migrate existing entities. Exact-mode activation is currently refused
+        until all identity consumers support the admitted declaration.
+      properties:
+        version:
+          type: string
+          enum: ["2"]
+        mode:
+          type: string
+          enum: [exact_utf8]
+        namespace:
+          type: string
+          minLength: 1
+        canonical_name_fields:
+          type: array
+          minItems: 1
+          items:
+            oneOf:
+              - type: string
+                minLength: 1
+              - type: object
+                additionalProperties: false
+                required: [composite]
+                properties:
+                  composite:
+                    type: array
+                    minItems: 1
+                    items:
+                      type: string
+                      minLength: 1
+    AcceptedEntityIdentityBinding:
+      type: object
+      readOnly: true
+      description: Server-admitted immutable identity metadata; never a registration input.
+      properties:
+        version:
+          type: string
+          enum: ["1"]
+        anchor_schema_id:
+          type: string
+        contract_id:
+          type: string
+        entity_type:
+          type: string
+        scope:
+          type: string
+          enum: [global, user]
+        user_id:
+          type: string
+          nullable: true
+        tenant_scoped_entity_ids:
+          type: boolean
+        contract:
+          $ref: "#/components/schemas/ExactEntityIdentityContract"
     EntitySchema:
       type: object
       additionalProperties: true
       properties:
+        identity_binding:
+          allOf:
+            - $ref: "#/components/schemas/AcceptedEntityIdentityBinding"
+          nullable: true
         entity_type:
           type: string
         schema_version:
@@ -2345,6 +2411,8 @@ components:
             agents can read field names, types, and required flags before
             storing.
           properties:
+            identity_contract:
+              $ref: "#/components/schemas/ExactEntityIdentityContract"
             fields:
               type: object
               additionalProperties:
@@ -8754,6 +8822,9 @@ paths:
                 schema_definition:
                   type: object
                   additionalProperties: true
+                  properties:
+                    identity_contract:
+                      $ref: "#/components/schemas/ExactEntityIdentityContract"
                 reducer_config:
                   type: object
                   additionalProperties: true
@@ -8791,6 +8862,8 @@ paths:
                   - schema_id
                   - name_lint_warnings
                 properties:
+                  schema:
+                    $ref: "#/components/schemas/EntitySchema"
                   success:
                     type: boolean
                   entity_type:

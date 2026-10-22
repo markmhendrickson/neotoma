@@ -1,6 +1,7 @@
 /** Read-only ownership refusal before fresh legacy claims or raw storage. */
 import { EntityOwnerConflictError, resolveEntityWithTrace } from "./entity_resolution.js";
 import { schemaRegistry } from "./schema_registry.js";
+import { EntityIdentityContractError } from "./entity_identity_contract.js";
 import type { StructuredStoreApiParams } from "./store_admission.js";
 
 export async function preflightStructuredStoreOwnership(
@@ -40,6 +41,7 @@ export async function preflightStructuredStoreOwnership(
         commit: false,
       });
     } catch (error) {
+      if (error instanceof EntityIdentityContractError) throw error;
       if (!(error instanceof EntityOwnerConflictError)) continue;
       if (surface === "mcp") throw error;
       issues.push({

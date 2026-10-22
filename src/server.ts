@@ -20,6 +20,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { db } from "./db.js";
+import { EntityIdentityContractError } from "./services/entity_identity_contract.js";
 import { isValidSnapshotFieldName } from "./services/entity_queries.js";
 import { logger } from "./utils/logger.js";
 import { connectionIdForLog } from "./utils/connection_id_log.js";
@@ -2554,6 +2555,8 @@ export class NeotomaServer {
           throw error;
         }
         if (error instanceof ObservationValidityError)
+          throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
+        if (error instanceof EntityIdentityContractError)
           throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
         const { StoreConditionError } = await import("./services/store_condition_keys.js");
         if (error instanceof StoreConditionError) {
@@ -5483,6 +5486,8 @@ export class NeotomaServer {
         name_lint_warnings: nameLintWarnings,
       });
     } catch (error: any) {
+      if (error instanceof EntityIdentityContractError)
+        throw new McpError(ErrorCode.InvalidParams, error.message, error.toErrorEnvelope());
       throw new McpError(ErrorCode.InternalError, `Failed to register schema: ${error.message}`);
     }
   }

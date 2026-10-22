@@ -7,6 +7,8 @@
  */
 
 import { db } from "../db.js";
+import { getDb } from "../repositories/db/connection.js";
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import { generateObservationId } from "./observation_identity.js";
 import {
   getCurrentAAuthAdmission,
@@ -104,6 +106,7 @@ export async function createObservation(
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
+  await assertIdentityResolutionAvailable(await getDb(), params.entity_type, params.user_id);
   // Pre-persist shape guard for agent_grant fields (no-op for every other
   // entity_type). Throws before any row is written — see
   // assertAgentGrantFieldValid's doc comment for why this must sit at this

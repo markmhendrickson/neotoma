@@ -4037,7 +4037,42 @@ export interface components {
         [key: string]: unknown;
       } & components["schemas"]["AgentAttribution"];
     };
+    /**
+     * @description Immutable, opt-in identity declaration for a fresh schema namespace.
+     *     Identifier values preserve exact UTF-8 bytes; display names and legacy
+     *     normalization are not identity authority. Flat string arrays retain
+     *     their existing all-required composite meaning. Registration does not
+     *     migrate existing entities. Exact-mode activation is currently refused
+     *     until all identity consumers support the admitted declaration.
+     */
+    ExactEntityIdentityContract: {
+      /** @enum {string} */
+      version: "2";
+      /** @enum {string} */
+      mode: "exact_utf8";
+      namespace: string;
+      canonical_name_fields: (
+        | string
+        | {
+            composite: string[];
+          }
+      )[];
+    };
+    /** @description Server-admitted immutable identity metadata; never a registration input. */
+    AcceptedEntityIdentityBinding: {
+      /** @enum {string} */
+      version?: "1";
+      anchor_schema_id?: string;
+      contract_id?: string;
+      entity_type?: string;
+      /** @enum {string} */
+      scope?: "global" | "user";
+      user_id?: string | null;
+      tenant_scoped_entity_ids?: boolean;
+      contract?: components["schemas"]["ExactEntityIdentityContract"];
+    };
     EntitySchema: {
+      identity_binding?: components["schemas"]["AcceptedEntityIdentityBinding"] | null;
       entity_type?: string;
       schema_version?: string;
       field_names?: string[];
@@ -4052,6 +4087,7 @@ export interface components {
        *     storing.
        */
       schema_definition?: {
+        identity_contract?: components["schemas"]["ExactEntityIdentityContract"];
         fields?: {
           [key: string]: {
             type?: string;
@@ -9173,6 +9209,8 @@ export interface operations {
         "application/json": {
           entity_type: string;
           schema_definition: {
+            identity_contract?: components["schemas"]["ExactEntityIdentityContract"];
+          } & {
             [key: string]: unknown;
           };
           reducer_config: {
@@ -9201,6 +9239,7 @@ export interface operations {
         };
         content: {
           "application/json": {
+            schema?: components["schemas"]["EntitySchema"];
             success: boolean;
             entity_type: string;
             schema_version: string;

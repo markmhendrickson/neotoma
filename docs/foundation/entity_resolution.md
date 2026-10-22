@@ -29,6 +29,29 @@ function normalizeEntityValue(entityType: string, raw: string): string {
 
 **Tenant-scoped ids (opt-in).** `entities.id` is a global primary key, so without a salt two tenants writing the same `(entity_type, canonical_name)` collide on one row. For multi-tenant deployments (the public sandbox) `generateEntityId` accepts an optional `tenantSalt`, supplied by `entityIdTenantSalt(userId)` at every recompute site (resolver, identifier lookup, snapshot collision guard, entity split). The salt is applied when `isSandboxMode()` is true **or** `NEOTOMA_TENANT_SCOPED_ENTITY_IDS` is truthy (`1`/`true`/`yes`), and omitted otherwise — so single-tenant prod ids are unchanged (no migration, no id churn). Toggling the gate on a persistent store would strand existing rows, so it is intended to be set once per deployment. See [`docs/subsystems/sandbox_deployment.md`](../subsystems/sandbox_deployment.md).
 
+### Accepted exact-identity namespaces
+
+The optional `SchemaDefinition.identity_contract` is a separate, explicit identity
+contract for fresh namespaces. Its version `2`, mode `exact_utf8`, namespace and
+existing `canonical_name_fields` grammar are admitted once in the existing schema
+registry. Admission captures the existing owner-scoping policy; subsequent schema
+versions retain those accepted bytes and that policy. It cannot reclassify an
+existing schema or entity space.
+
+Exact identity uses length-framed UTF-8 components, including the accepted contract
+identifier, namespace, entity type and established owner scope. Case, punctuation,
+whitespace and Unicode normalization forms remain distinct. Unpaired UTF-16
+surrogates are refused before encoding. Display formatting, lowercasing, heuristics
+and fuzzy matching cannot supply exact identity authority. Missing declared
+identifiers refuse instead of falling back to a display name.
+
+Omission retains all legacy hash bytes and declaration grammar above. Public exact
+activation remains refused until every supported identity consumer either uses
+the admitted binding or explicitly refuses the combination. The current admission
+foundation supports inactive registration only; it provides no identity migration.
+See [exact identity admission](../developer/exact_identity.md) for the implemented
+boundary.
+
 ## 15.2 Entity Rules
 
 Entity IDs MUST be:

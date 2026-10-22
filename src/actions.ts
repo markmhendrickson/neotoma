@@ -11,6 +11,7 @@ import {
   type StructuredStoreApiParams,
   type StoreRelationshipRef,
 } from "./services/store_admission.js";
+import { EntityIdentityContractError } from "./services/entity_identity_contract.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -7717,6 +7718,8 @@ app.post("/observations/create", async (req, res) => {
   } catch (error) {
     if (error instanceof ObservationValidityError)
       return sendError(res, 400, error.code, error.message, { field: error.field });
+    if (error instanceof EntityIdentityContractError)
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
     if (error instanceof ReservedObservationSourceError) {
       logWarn("ReservedObservationSource:observations_create", req, {
         code: error.code,
@@ -9650,6 +9653,8 @@ async function handleStorePost(
   } catch (error) {
     if (error instanceof ObservationValidityError)
       return sendError(res, 400, error.code, error.message, { field: error.field });
+    if (error instanceof EntityIdentityContractError)
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
@@ -12320,7 +12325,8 @@ app.post("/register_schema", async (req, res) => {
     const definitionWithIdentity = (() => {
       const def = schema_definition as Record<string, unknown> | undefined;
       if (!def || typeof def !== "object") return schema_definition;
-      if (def.canonical_name_fields || def.identity_opt_out) return schema_definition;
+      if (def.canonical_name_fields || def.identity_opt_out || def.identity_contract)
+        return schema_definition;
       logWarn("DefaultIdentityOptOut:register_schema", req, { entity_type });
       return { ...def, identity_opt_out: "heuristic_canonical_name" };
     })();
@@ -12345,6 +12351,8 @@ app.post("/register_schema", async (req, res) => {
       const code = (err as { code?: string })?.code;
       const message = err instanceof Error ? err.message : String(err);
       logWarn("ValidationError:register_schema", req, { error: message });
+      if (err instanceof EntityIdentityContractError)
+        return sendError(res, 400, err.code, err.message, { hint: err.hint });
       if (code === "ERR_FORBIDDEN_ENTITY_TYPE" || code === "ERR_PLURAL_ENTITY_TYPE") {
         return sendError(res, 400, code, message);
       }

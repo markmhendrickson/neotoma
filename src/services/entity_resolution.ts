@@ -9,6 +9,8 @@ import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import { isSandboxMode } from "./sandbox_mode.js";
 import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
+import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
+import { assertIdentityResolutionAvailable } from "./entity_identity_admission.js";
 import {
   schemaRegistry,
   type CanonicalNameRule,
@@ -308,15 +310,20 @@ export function generateEntityId(
  */
 export function entityIdTenantSalt(userId?: string | null): string | undefined {
   if (!userId) return undefined;
+  return captureEntityIdOwnerScopePolicy().tenantScopedEntityIds ? userId : undefined;
+}
+
+/** Capture once when admitting an immutable namespace; never re-read it per exact write. */
+export function captureEntityIdOwnerScopePolicy(): { tenantScopedEntityIds: boolean } {
   const runtime = getEmbeddedRuntimeContext();
-  if (runtime) return runtime.legacyIdentityPolicy.tenantScopedEntityIds ? userId : undefined;
+  if (runtime) return { tenantScopedEntityIds: runtime.legacyIdentityPolicy.tenantScopedEntityIds };
   const override = (process.env.NEOTOMA_TENANT_SCOPED_ENTITY_IDS ?? "")
     .toString()
     .trim()
     .toLowerCase();
   const overrideOn = override === "1" || override === "true" || override === "yes";
   const enabled = overrideOn || isSandboxMode();
-  return enabled ? userId : undefined;
+  return { tenantScopedEntityIds: enabled };
 }
 
 /**
@@ -1144,6 +1151,7 @@ export async function resolveEntityWithTrace(
   } = options;
 
   let schema = options.schema;
+  await assertIdentityResolutionAvailable(await getDb(), entityType, userId);
   if (schema === undefined) {
     // Load the active schema so canonical_name derivation is schema-driven.
     // Failures here are non-fatal for derivation itself — we still throw
@@ -1471,6 +1479,7 @@ export async function resolveEntity(
   // so we cannot throw CanonicalNameUnresolvedError here.
   if (typeof options === "string") {
     const entityType = options;
+    await assertIdentityResolutionAvailable(await getDb(), entityType);
     const canonicalName = formatCanonicalNameForStorage(entityType, rawValue || "");
     // No userId on the positional path → always a global id (never tenant-salted).
     // See the tenant-scoping contract in this function's JSDoc.

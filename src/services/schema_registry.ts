@@ -8,6 +8,14 @@ import { entityHasObservationValidityIntent } from "./observation_validity.js";
 import { db } from "../db.js";
 import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 import type { DbConnection } from "../repositories/db/driver.js";
+import { acquireDatabase as getDb } from "../repositories/db/acquisition.js";
+import { randomUUID } from "node:crypto";
+import { prepareIdentityRegistration } from "./entity_identity_admission.js";
+import {
+  canonicalExactIdentityContract,
+  type ExactIdentityContract,
+  type AcceptedIdentityBinding,
+} from "./entity_identity_contract.js";
 import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
   checkPluralEntityType,
@@ -187,6 +195,8 @@ export type CanonicalNameRule = string | { composite: string[] };
  */
 export interface SchemaDefinition {
   fields: Record<string, FieldDefinition>;
+  /** Immutable opt-in identity declaration; legacy omission preserves existing ID bytes. */
+  identity_contract?: ExactIdentityContract;
 
   /**
    * Identity rules used to compose this entity's canonical_name. Two accepted
@@ -718,6 +728,7 @@ export interface SchemaRegistryEntry {
   user_id?: string | null;
   scope?: "global" | "user";
   metadata?: SchemaMetadata;
+  identity_binding?: AcceptedIdentityBinding | null;
 }
 
 /**
@@ -1084,6 +1095,22 @@ export class SchemaRegistryService {
       context: "register_schema",
     });
 
+    // Canonicalize a copy; accepted bytes must not depend on caller key order.
+    if (config.schema_definition.identity_contract !== undefined) {
+      const contract = canonicalExactIdentityContract(
+        config.schema_definition.identity_contract,
+        config.schema_definition.fields
+      );
+      config = {
+        ...config,
+        schema_definition: {
+          ...config.schema_definition,
+          identity_contract: contract,
+          canonical_name_fields:
+            config.schema_definition.canonical_name_fields ?? contract.canonical_name_fields,
+        },
+      };
+    }
     // Validate schema definition
     this.validateSchemaDefinition(config.schema_definition);
 
@@ -1091,63 +1118,88 @@ export class SchemaRegistryService {
     this.validateReducerConfig(config.reducer_config, config.schema_definition);
 
     const scope = config.user_specific ? "user" : "global";
-
-    const { data, error } = await db
-      .from("schema_registry")
-      .insert({
-        entity_type: config.entity_type,
-        schema_version: config.schema_version,
-        schema_definition: config.schema_definition,
-        reducer_config: config.reducer_config,
-        active: config.activate || false, // New schemas start inactive unless specified
-        user_id: config.user_specific ? config.user_id || null : null,
-        scope: scope,
-        metadata: config.metadata || {},
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to register schema: ${error.message}`);
-    }
-
-    const registeredSchema = data as SchemaRegistryEntry;
-
-    // When activating a new schema version, deactivate all previously active
-    // versions for the same entity_type and scope so only one row ever has
-    // active = true. Without this, `loadGlobalSchema` / `loadUserSpecificSchema`
-    // use `.single()` which errors (or non-deterministically returns the old
-    // version) when multiple active rows exist, causing new fields to be routed
-    // to raw_fragments instead of the top-level snapshot. (Fixes #142)
-    if (config.activate) {
-      let deactivateQuery = db
+    const persist = async (
+      identityBinding?: AcceptedIdentityBinding,
+      id?: string
+    ): Promise<SchemaRegistryEntry> => {
+      const { data, error } = await db
         .from("schema_registry")
-        .update({ active: false })
-        .eq("entity_type", config.entity_type)
-        .eq("active", true)
-        .not("id", "eq", registeredSchema.id);
+        .insert({
+          ...(identityBinding ? { id, identity_binding: identityBinding } : {}),
+          entity_type: config.entity_type,
+          schema_version: config.schema_version,
+          schema_definition: config.schema_definition,
+          reducer_config: config.reducer_config,
+          active: config.activate || false, // New schemas start inactive unless specified
+          user_id: config.user_specific ? config.user_id || null : null,
+          scope: scope,
+          metadata: config.metadata || {},
+        })
+        .select()
+        .single();
 
-      if (scope === "user" && config.user_specific && config.user_id) {
-        deactivateQuery = deactivateQuery.eq("scope", "user").eq("user_id", config.user_id);
-      } else {
-        deactivateQuery = deactivateQuery.eq("scope", "global").is("user_id", null);
+      if (error) {
+        throw new Error(`Failed to register schema: ${error.message}`);
       }
 
-      const { error: deactivateError } = await deactivateQuery;
-      if (deactivateError) {
-        logSchemaRegistryInfo(
-          `[SCHEMA_REGISTRY] Warning: failed to deactivate prior active schemas for ` +
-            `${config.entity_type}: ${deactivateError.message}`
-        );
+      const registeredSchema = data as SchemaRegistryEntry;
+
+      // When activating a new schema version, deactivate all previously active
+      // versions for the same entity_type and scope so only one row ever has
+      // active = true. Without this, `loadGlobalSchema` / `loadUserSpecificSchema`
+      // use `.single()` which errors (or non-deterministically returns the old
+      // version) when multiple active rows exist, causing new fields to be routed
+      // to raw_fragments instead of the top-level snapshot. (Fixes #142)
+      if (config.activate) {
+        let deactivateQuery = db
+          .from("schema_registry")
+          .update({ active: false })
+          .eq("entity_type", config.entity_type)
+          .eq("active", true)
+          .not("id", "eq", registeredSchema.id);
+
+        if (scope === "user" && config.user_specific && config.user_id) {
+          deactivateQuery = deactivateQuery.eq("scope", "user").eq("user_id", config.user_id);
+        } else {
+          deactivateQuery = deactivateQuery.eq("scope", "global").is("user_id", null);
+        }
+
+        const { error: deactivateError } = await deactivateQuery;
+        if (deactivateError) {
+          logSchemaRegistryInfo(
+            `[SCHEMA_REGISTRY] Warning: failed to deactivate prior active schemas for ` +
+              `${config.entity_type}: ${deactivateError.message}`
+          );
+        }
       }
+
+      return registeredSchema;
+    };
+    let registeredSchema: SchemaRegistryEntry;
+    if (config.schema_definition.identity_contract) {
+      const database = await getDb();
+      const { captureEntityIdOwnerScopePolicy } = await import("./entity_resolution.js");
+      // Adapter statements join this native transaction using its existing ALS gate.
+      registeredSchema = await database.transaction(async (tx) => {
+        const id = randomUUID();
+        const identityBinding = await prepareIdentityRegistration(tx, {
+          id,
+          entityType: config.entity_type,
+          scope,
+          userId: config.user_specific ? config.user_id || null : null,
+          definition: config.schema_definition,
+          tenantScopedEntityIds: captureEntityIdOwnerScopePolicy().tenantScopedEntityIds,
+          activate: config.activate === true,
+        });
+        return persist(identityBinding, id);
+      });
+    } else {
+      // Preserve legacy registration transaction/lifecycle behavior.
+      registeredSchema = await persist();
     }
-
-    // Auto-generate icon if not provided (non-blocking)
+    // Launch optional side effects only after the registration commits.
     this.generateIconAsync(registeredSchema.entity_type, config.metadata);
-
-    // Automatically export schema snapshots (non-blocking)
     this.exportSnapshotsAsync();
-
     return registeredSchema;
   }
 
@@ -2116,7 +2168,7 @@ export class SchemaRegistryService {
           // original evidence rather than promoting it with a fresh fallback clock.
           if (
             await entityHasObservationValidityIntent(
-              await (await import("../repositories/db/connection.js")).getDb(),
+              await getDb(),
               entityId,
               firstFragment.user_id ?? options.user_id ?? null
             )
@@ -2826,6 +2878,20 @@ export class SchemaRegistryService {
   private validateSchemaDefinition(definition: SchemaDefinition): void {
     if (!definition.fields || typeof definition.fields !== "object") {
       throw new Error("Schema definition must have fields object");
+    }
+    if (definition.identity_contract !== undefined) {
+      const contract = canonicalExactIdentityContract(
+        definition.identity_contract,
+        definition.fields
+      );
+      if (
+        JSON.stringify(definition.canonical_name_fields) !==
+          JSON.stringify(contract.canonical_name_fields) ||
+        definition.identity_opt_out !== undefined
+      )
+        throw new Error(
+          "Exact identity requires matching declared rules and forbids heuristic identity opt-out."
+        );
     }
 
     // R2: every schema must either declare `canonical_name_fields` or opt

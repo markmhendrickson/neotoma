@@ -1,5 +1,6 @@
 import type { DbConnection, DbDatabase } from "../db/driver.js";
 import { STORE_CONDITION_KEYS_SCHEMA } from "../db/store_condition_schema.js";
+import { ENTITY_IDENTITY_CONTRACT_SCHEMA } from "../db/entity_identity_contract_schema.js";
 
 /**
  * Milliseconds a SQLite connection waits for a contended lock before failing
@@ -228,7 +229,8 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT,
     user_id TEXT,
     scope TEXT,
-    metadata TEXT
+    metadata TEXT,
+    identity_binding TEXT
   )`,
   // Relationship-type registry (#1972 / G25). APPEND-ONLY: every registration,
   // re-registration and deregistration is an INSERT and `state` is a value on
@@ -497,6 +499,10 @@ export async function ensureSchema(
     }
 
     // Add columns if missing (existing DBs created before these columns existed)
+    await addColumnIfMissing(db, "schema_registry", "identity_binding", "TEXT");
+    for (const statement of ENTITY_IDENTITY_CONTRACT_SCHEMA) {
+      await db.prepare(statement).run();
+    }
     await addColumnIfMissing(db, "sources", "source_type", "TEXT");
     await addColumnIfMissing(db, "sources", "original_filename", "TEXT");
     await addColumnIfMissing(db, "sources", "mime_type", "TEXT");
