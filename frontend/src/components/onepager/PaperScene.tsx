@@ -346,7 +346,7 @@ function After() {
 function Source() {
   return (
     <>
-      <Thread d="M324 209 C427 239 422 141 559 140 M323 230 C450 238 468 290 650 309 M321 248 C448 274 461 351 470 437" />
+      <Thread d="M290 207 C427 239 422 141 555 162 M286 229 C450 238 468 290 623 318 M283 247 C448 274 461 351 485 397" />
       <Piece x={-25} y={-20} w={408} h={461} angle={10} from="left">
         <Writing x={37} y={39} w={303} rows={20} />
         <path d="M303 208 h10 v53 h-10" className="paper-bracket" />
@@ -369,7 +369,7 @@ function Source() {
 function Observation() {
   return (
     <>
-      <Thread d="M305 117 C385 155 377 91 451 101 M299 177 C388 226 407 167 472 183 M286 237 C369 309 373 261 430 274 M678 406 C738 401 723 358 776 368 M680 455 C739 501 744 445 794 472" />
+      <Thread d="M322 146 C385 155 377 91 451 106 M309 207 C388 226 407 167 472 180 M296 269 C369 309 373 261 430 274 M678 406 C738 401 723 358 776 368 M680 455 C739 501 744 445 794 472" />
       <Piece x={73} y={43} w={250} h={302} angle={12} from="left">
         <Bars x={30} y={36} w={183} count={7} thick={10} gap={28} />
         {[78, 141, 204].map((y) => (
@@ -483,7 +483,7 @@ function Reducer() {
 function Snapshot() {
   return (
     <>
-      <Thread d="M347 248 H681" />
+      <Thread d="M336 232 H681" />
       <Piece x={48} y={68} w={328} h={456} from="left">
         <Bars x={29} y={31} w={105} count={1} thick={21} tone="blue" />
         <Writing x={29} y={88} w={268} rows={2} />
@@ -493,8 +493,8 @@ function Snapshot() {
           ))}
           <path d="M29 128 V266 M209 128 V266 M291 128 V266" />
         </g>
-        <rect x="216" y="218" width="72" height="28" fill="var(--paper-blue)" />
-        <Writing x={221} y={225} w={58} rows={2} />
+        <rect x="216" y="153" width="72" height="19" fill="var(--paper-blue)" />
+        <path d="M223 158 H279 M223 166 H269" className="paper-writing" />
         <Bars x={29} y={349} w={123} count={1} thick={13} tone="blue" />
         <Writing x={29} y={384} w={264} rows={3} />
       </Piece>
@@ -512,7 +512,7 @@ function Snapshot() {
 function Invoice() {
   return (
     <>
-      <Thread d="M282 135 C454 127 440 285 567 295 M371 382 C481 388 483 310 567 310 M729 307 C769 301 772 333 811 332" />
+      <Thread d="M261 134 C454 127 440 285 575 310 M355 377 C481 388 483 310 575 310 M716 312 C769 301 772 333 811 332" />
       <Piece x={79} y={43} w={318} h={222} from="left">
         <Bars x={20} y={20} w={275} count={1} thick={20} />
         <g className="paper-table">
@@ -538,6 +538,7 @@ function Invoice() {
         <Bars x={15} y={17} w={130} count={1} thick={17} />
         <Writing x={15} y={47} w={129} rows={7} />
         <rect x="66" y="97" width="65" height="16" fill="var(--paper-sage)" />
+        <Punch x={8} y={105} />
       </Piece>
       <Piece x={696} y={301} w={37} h={23} tone="rust" from="top" delay={420}>
         <Punch x={20} y={11} />
@@ -618,13 +619,10 @@ export function PaperScene({ scene }: { scene: PaperSceneKind }) {
         data-paper-scene={scene}
         viewBox="0 0 900 600"
         role="img"
-        aria-labelledby={`${id}-title ${id}-desc`}
+        aria-labelledby={`${id}-title`}
       >
         <title id={`${id}-title`}>{OCTOBER_RENDERS[scene].alt}</title>
-        <desc id={`${id}-desc`}>
-          A tactile paper composition. Individual paper objects assemble, then their connections are
-          drawn.
-        </desc>
+
         <defs>
           {(
             [

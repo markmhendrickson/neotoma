@@ -285,7 +285,7 @@ describe("layered paper illustration motion", () => {
     );
     const scenes = [...container.querySelectorAll("[data-paper-scene]")];
     expect(scenes).toHaveLength(10);
-    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(container.querySelectorAll('img[src*="/brand/october/"]')).toHaveLength(0);
     expect(new Set(scenes.map((scene) => scene.getAttribute("data-paper-scene")))).toHaveProperty(
       "size",
       10
@@ -319,7 +319,7 @@ describe("layered paper illustration motion", () => {
       ).toBeInTheDocument();
       expect(svg.querySelector("image")).toBeNull();
       expect(svg.querySelector("feTurbulence")).not.toBeNull();
-      playPaperScene(svg as unknown as HTMLElement);
+      playPaperScene(svg);
       const arrivals = calls.filter((call) => call.target.hasAttribute("data-paper-object"));
       const links = calls.filter((call) => call.target.hasAttribute("data-paper-connection"));
       expect(arrivals.length).toBeGreaterThanOrEqual(3);

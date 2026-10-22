@@ -1,19 +1,19 @@
 import { useEffect, type RefObject } from "react";
 
-type Play = (target: HTMLElement) => Animation[];
+type Play = (target: Element) => Animation[];
 
 /** Animate only actual entry transitions. The authored final state is always visible without JS. */
-export function observeViewportMotion(targets: HTMLElement[], play: Play): () => void {
+export function observeViewportMotion(targets: Element[], play: Play): () => void {
   if (!window.matchMedia || !window.IntersectionObserver || !Element.prototype.animate)
     return () => {};
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const inside = new Set<HTMLElement>();
-  const running = new Map<HTMLElement, Animation[]>();
-  const cancel = (target: HTMLElement) => {
+  const inside = new Set<Element>();
+  const running = new Map<Element, Animation[]>();
+  const cancel = (target: Element) => {
     running.get(target)?.forEach((animation) => animation.cancel());
     running.delete(target);
   };
-  const enter = (target: HTMLElement) => {
+  const enter = (target: Element) => {
     cancel(target);
     if (reduced.matches || document.hidden) return;
     const animations = play(target);
@@ -34,7 +34,7 @@ export function observeViewportMotion(targets: HTMLElement[], play: Play): () =>
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        const target = entry.target as HTMLElement;
+        const target = entry.target;
         if (entry.isIntersecting) {
           if (!inside.has(target)) {
             inside.add(target);
@@ -67,7 +67,7 @@ export function observeViewportMotion(targets: HTMLElement[], play: Play): () =>
 }
 
 const timing = { duration: 650, easing: "cubic-bezier(.22,.7,.2,1)", fill: "both" } as const;
-export function playLogo(target: HTMLElement): Animation[] {
+export function playLogo(target: Element): Animation[] {
   return [...target.querySelectorAll<SVGElement>("[data-brand-part]")].map((part) =>
     part.animate(
       [
@@ -79,11 +79,13 @@ export function playLogo(target: HTMLElement): Animation[] {
   );
 }
 
+const PAPER_SPRING_MS = 820;
+
 /** Sample the displacement of a damped spring, with a modest initial velocity toward rest. */
 export function springFrames(x: number, y: number, rotation: number): Keyframe[] {
   const frequency = 12,
     damping = 0.8,
-    duration = 0.82;
+    duration = PAPER_SPRING_MS / 1000;
   const decay = damping * frequency;
   const angular = frequency * Math.sqrt(1 - damping * damping);
   return Array.from({ length: 73 }, (_, index) => {
@@ -100,9 +102,9 @@ export function springFrames(x: number, y: number, rotation: number): Keyframe[]
   });
 }
 
-export function playPaperScene(target: HTMLElement): Animation[] {
+export function playPaperScene(target: Element): Animation[] {
   const objects = [...target.querySelectorAll<SVGElement>("[data-paper-object]")];
-  const duration = 820;
+  const duration = PAPER_SPRING_MS;
   let settledAt = duration;
   const arrivals = objects.map((object) => {
     const delay = Number(object.dataset.enterDelay || 0);
@@ -134,14 +136,14 @@ export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
   useEffect(() => {
     if (!ref.current) return;
     return observeViewportMotion(
-      [...ref.current.querySelectorAll<HTMLElement>("[data-paper-scene], .plan-vision-diagram")],
+      [...ref.current.querySelectorAll<SVGSVGElement>("[data-paper-scene], .plan-vision-diagram")],
       (target) => {
         if (target.matches("[data-paper-scene]")) return playPaperScene(target);
         // Existing vision illustrations are already layered; preserve their authored arrangement.
         const records = [...target.querySelectorAll<SVGElement>("[data-vision-record]")];
         const arrivals = records.map((record, index) =>
           record.animate(springFrames(index % 2 ? 400 : -400, 20, index % 2 ? 3 : -3), {
-            duration: 820,
+            duration: PAPER_SPRING_MS,
             delay: index * 90,
             easing: "linear",
             fill: "both",
@@ -157,7 +159,7 @@ export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
             ],
             {
               duration: 600,
-              delay: 820 + Math.max(0, records.length - 1) * 90 + 40,
+              delay: PAPER_SPRING_MS + Math.max(0, records.length - 1) * 90 + 40,
               easing: "ease-out",
               fill: "both",
             }

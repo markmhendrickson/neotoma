@@ -262,8 +262,13 @@ describe("October visual variant", () => {
       expect(image.format, name).toBe("webp");
       expect([image.width, image.height], name).toEqual([render.width, render.height]);
     }
-    expect(page).toContain('loading="eager"');
-    expect(page).toContain('fetchPriority="high"');
+    // Authored SVG counterparts are present in the server HTML without a raster fetch.
+    expect(page).toContain('<PaperScene scene="hero"');
+    const home = renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    );
+    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(10);
+    expect(home).not.toMatch(/<img[^>]+brand\/october/);
     const cards = page.slice(
       page.indexOf('className="plan-contrast"'),
       page.indexOf('className="plan-table-wrap"')
