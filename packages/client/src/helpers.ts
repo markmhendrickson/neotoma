@@ -23,6 +23,7 @@
  * based on their own error policy.
  */
 
+import { NeotomaClientError } from "./types.js";
 import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
 
 /**
@@ -268,6 +269,13 @@ export async function retrieveOrStore(
 
 export interface SnapshotOnUpdateInput {
   entityId: string;
+  entityType: string;
+  /** Stable caller-owned key for this exact correction, including review output. */
+  idempotencyKey: string;
+  /** Optional existing entity-level CAS token; reading the snapshot alone is not CAS. */
+  expectedVersion?: string;
+  overwrite?: boolean;
+  /** Exactly one field; multi-field atomic transitions use the transaction API. */
   corrections: Record<string, unknown>;
   /**
    * Called with the current snapshot before the correction is applied.
@@ -289,7 +297,7 @@ export interface SnapshotOnUpdateResult {
  * Before applying a correction, fetch the current entity snapshot so the
  * caller can reconcile against live state rather than stale assumptions.
  * Optional `review` callback may short-circuit the update or replace the
- * corrections payload based on the snapshot. This implements the
+ * single-field corrections payload based on the snapshot. This implements the
  * "retrieve-before-write" obligation specifically for observation-level
  * corrections.
  */
@@ -310,9 +318,29 @@ export async function snapshotOnUpdate(
     }
   }
 
+  const entries =
+    corrections && typeof corrections === "object" && !Array.isArray(corrections)
+      ? Object.entries(corrections)
+      : [];
+  if (entries.length !== 1 || !input.entityType?.trim() || !input.idempotencyKey?.trim()) {
+    throw new NeotomaClientError("snapshotOnUpdate requires one field, entityType and idempotencyKey.", {
+      body: {
+        error_code: "ERR_CLIENT_CORRECTION_INPUT",
+        details: {
+          hint: "Supply exactly one correction field, the entity type and a stable caller-owned key. Use the atomic correction transaction API for multiple fields.",
+        },
+      },
+    });
+  }
+  const [field, value] = entries[0];
   const correctionResult = await transport.correct({
     entity_id: input.entityId,
-    corrections,
+    entity_type: input.entityType,
+    field,
+    value,
+    idempotency_key: input.idempotencyKey,
+    ...(input.expectedVersion !== undefined ? { expected_version: input.expectedVersion } : {}),
+    ...(input.overwrite !== undefined ? { overwrite: input.overwrite } : {}),
   });
 
   return { applied: true, previousSnapshot: snapshot, correctionResult };

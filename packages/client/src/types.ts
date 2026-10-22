@@ -33,6 +33,19 @@ export interface StoreInput {
   original_filename?: string;
 }
 
+/** Single-field correction body declared by POST /correct in openapi.yaml. */
+export interface CorrectInput {
+  entity_id: string;
+  entity_type: string;
+  field: string;
+  value: unknown;
+  /** Caller-owned operation identity; reuse the exact payload/key on retry. */
+  idempotency_key: string;
+  user_id?: string;
+  expected_version?: string;
+  overwrite?: boolean;
+}
+
 export interface StoredEntityRef {
   entity_id: string;
   entity_type: string;
@@ -139,7 +152,7 @@ export interface NeotomaTransport {
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
   createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
-  correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
+  correct(input: CorrectInput): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
   executeTool(name: string, args: unknown): Promise<unknown>;

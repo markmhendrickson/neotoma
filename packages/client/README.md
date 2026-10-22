@@ -71,12 +71,42 @@ The client exposes typed wrappers for the full MCP action catalog:
 - `listTimelineEvents(input)` — timeline events in a window
 - `retrieveRelatedEntities(input)` — graph expansion
 - `createRelationship(input)` — link two existing entities
-- `correct(input)` — supersede a prior observation
+- `correct(input)` — correct one field with caller-owned retry identity
 - `listEntityTypes(input)` — schema-level discovery
 - `getEntityTypeCounts(input)` — per-type cardinality
 - `executeTool(name, args)` — escape hatch for any MCP action
 
 See [`docs/specs/MCP_SPEC.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/specs/MCP_SPEC.md) and [`openapi.yaml`](https://github.com/markmhendrickson/neotoma/blob/main/openapi.yaml) for complete action semantics.
+
+## Correction input migration
+
+`correct` takes the single-field body declared by `POST /correct`:
+
+```ts
+await client.correct({
+  entity_id: entityId,
+  entity_type: "task",
+  field: "status",
+  value: "done",
+  idempotency_key: callerOperationKey,
+});
+```
+
+The previous SDK declaration accepted `{ entity_id, corrections }`, but both real transports reject that shape. Replace that map with `field`/`value` and supply the entity type and a stable caller-owned key. Retry an uncertain operation with the **same payload and key**; changing either creates a different request or conflicts with the prior receipt. The client never generates correction keys. Optional `expected_version` and `overwrite` forward the existing server concurrency rules.
+
+`snapshotOnUpdate` retains its `corrections` map and optional `review` callback, but now requires `entityType` and `idempotencyKey`. The final map, including any review replacement, must contain exactly one field. Empty and multi-field maps fail before correction writes; `review: () => false` still skips without writing.
+
+```ts
+await snapshotOnUpdate(client, {
+  entityId,
+  entityType: "task",
+  idempotencyKey: callerOperationKey,
+  corrections: { status: "done" },
+  expectedVersion: reviewedEntityVersion,
+});
+```
+
+Reading before writing is not a lock or compare-and-swap. Supply `expectedVersion` to bind the correction to the reviewed entity version; `overwrite: true` explicitly uses the existing bypass semantics. A review callback must produce the same correction payload on an uncertain retry. Multi-field atomic transitions require the existing [correction transaction API](../../docs/developer/atomic_corrections.md) and its explicit preconditions; this helper never loops over fields or promises atomic multi-field updates.
 
 ## High-level helpers
 

@@ -9,6 +9,7 @@ export type { LocalTransportOptions, LocalOperations } from "./local.js";
 
 export {
   NeotomaClientError,
+  type CorrectInput,
   type CreateRelationshipInput,
   type ListObservationsInput,
   type ListTimelineEventsInput,
