@@ -1,10 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { useCopyFeedback } from "@/lib/copy_feedback";
 import { copyTextToClipboard } from "@/lib/copy_to_clipboard";
-import {
-  sendFunnelInstallPromptCopy,
-  type InstallPromptCopyBlock,
-} from "@/utils/analytics";
+import { sendFunnelInstallPromptCopy, type InstallPromptCopyBlock } from "@/utils/analytics";
 import {
   CODE_BLOCK_CARD_INNER_CLASS,
   CODE_BLOCK_CARD_SHELL_CLASS,
@@ -138,6 +135,9 @@ export function CodeBlock({
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </Button>
+        <span className="sr-only" role="status" aria-live="polite">
+          {copied ? "Commands copied" : ""}
+        </span>
       </div>
       <pre
         className={`${CODE_BLOCK_CARD_INNER_CLASS} code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words`}

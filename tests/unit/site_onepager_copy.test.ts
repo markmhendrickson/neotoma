@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -13,6 +14,7 @@ import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
 import { LIVE_ROUTES } from "../../frontend/src/site/route_retirement";
 import { OLD_LEDE, UNMEASURED_INSTALL_TIME } from "../../scripts/docs_viewer/claim_patterns";
 import { RecordPlate } from "../../frontend/src/components/onepager/onepager_plate";
+import { NeotomaOnePager } from "../../frontend/src/components/onepager/NeotomaOnePager";
 import {
   OCTOBER_RENDERS,
   RECORD_RENDERS,
@@ -28,15 +30,43 @@ import {
  */
 const root = join(__dirname, "..", "..");
 const dir = join(root, "frontend", "src", "components", "onepager");
-const files = ["NeotomaOnePager.tsx", "onepager_copy.ts", "onepager_figures.tsx"].map((f) =>
-  readFileSync(join(dir, f), "utf-8")
-);
+const files = [
+  "NeotomaOnePager.tsx",
+  "onepager_copy.ts",
+  "onepager_figures.tsx",
+  "InterfaceExplorer.tsx",
+  "InspectorPreview.tsx",
+].map((f) => readFileSync(join(dir, f), "utf-8"));
 // Doc comments list what is deliberately not claimed; only shipped copy is checked.
 const all = [...files, readFileSync(join(dir, "onepager_plate.tsx"), "utf-8")]
   .join("\n")
   .replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("neotoma.io one-pager copy", () => {
+  it("renders the oriented invoice journey in the static page", () => {
+    const html = renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    );
+    expect(html).toContain('href="#plan-content"');
+    expect(html).toContain('aria-label="Site"');
+    expect(html).toContain("Invoice INV-2041 arrives as a PDF due 22 October");
+    expect(html).toContain("date_due");
+    expect(html).toContain("29 October 2026");
+    expect(html).toContain("22 October 2026");
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('role="tabpanel"');
+    expect(html).toContain("neotoma setup --tool claude-code");
+    expect(html).toContain("docs/subsystems/entity_snapshots.md");
+  });
+
+  it("describes the two repaired concept scenes exactly", () => {
+    expect(OCTOBER_RENDERS.source.alt).toContain(
+      "one marked passage connected by blue lines to three smaller paper source slips"
+    );
+    expect(OCTOBER_RENDERS.snapshot.alt).toContain(
+      "highlighted table cell linked to a selected passage on a blue observation sheet"
+    );
+  });
   it("uses no em dashes", () => {
     expect(all.includes("—")).toBe(false);
     expect(all.includes("&mdash;")).toBe(false);
@@ -44,7 +74,7 @@ describe("neotoma.io one-pager copy", () => {
 
   it("states the current category and the lead contrast", () => {
     expect(all).toContain("A record, not recall.");
-    expect(all).toContain("the system of record for AI agents");
+    expect(all).toContain("The system of record for AI agents.");
   });
 
   it("does not make claims the build cannot support", () => {
@@ -182,7 +212,9 @@ describe("October visual variant", () => {
       expect(info.source, file).not.toBe("");
       expect(info.source_sha256, file).toMatch(/^[a-f0-9]{64}$/);
       expect(info.bundled_sha256, file).toMatch(/^[a-f0-9]{64}$/);
-      const digest = createHash("sha256").update(readFileSync(join(brand, file))).digest("hex");
+      const digest = createHash("sha256")
+        .update(readFileSync(join(brand, file)))
+        .digest("hex");
       expect(digest, file).toBe(info.bundled_sha256);
     }
   });
@@ -256,10 +288,11 @@ describe("review fixes (install path, accessibility, wording)", () => {
   const install = read("frontend/src/components/install/install_page_body.tsx");
 
   it("makes the install block one pasteable command set with no placeholder on a command line", () => {
-    const block = /INSTALL_COMMANDS = `([^`]*)`/.exec(copy)![1];
-    expect(block).toContain("neotoma setup --tool claude-code --yes");
-    expect(block).not.toMatch(/[<>|]/);
-    expect(page).toContain("connection table above");
+    expect(copy).toContain('INSTALL_COMMANDS = installCommands("claude-code")');
+    expect(copy).toContain("neotoma setup --tool ${tool}");
+    expect(copy).not.toContain("neotoma setup --tool ${tool} --yes");
+    expect(page).toContain("value={host.tool}");
+    expect(page).toContain("code={installCommands(host.tool)}");
   });
 
   it("/install leads with the same command block, then the agent prompt, and has no human evaluate callout", () => {
@@ -281,17 +314,20 @@ describe("review fixes (install path, accessibility, wording)", () => {
     expect(/memory/i.test(en), "memory frame in English integration cards").toBe(false);
   });
 
-  it("opens the lede with the category, lets the document scroll, and names the logo for assistive tech", () => {
-    expect(page).toMatch(/plan-lede">\s*Neotoma is the system of record for AI agents\./);
+  it("leads with the category, lets the document scroll, and names the logo for assistive tech", () => {
+    expect(page).toContain('<h1 id="s1">The system of record for AI agents.</h1>');
+    expect(page).toContain(
+      "Give agents operational truth they can read, update, and maintain as they work."
+    );
     expect(page).not.toContain("h-screen");
     expect(page).not.toContain("overflow-y-auto");
-    const logos = files[3] ?? readFileSync(join(dir, "NeotomaLogos.tsx"), "utf-8");
-    expect(logos).toContain('role="img" aria-label="Neotoma"');
+    const logos = readFileSync(join(dir, "AnimatedLockup.tsx"), "utf-8");
+    expect(logos).toMatch(/role="img"\s+aria-label="Neotoma"/);
   });
 
-  it("uses the Ateles repository's own wording for the companion project", () => {
-    expect(page).toContain(
-      "operating system for humans and AI agents to jointly initiate, execute, approve, and"
+  it("bounds the companion project to action authority", () => {
+    expect(page).toMatch(
+      /Ateles<\/a>\s*\{" "\}\s*coordinates work and action under explicit authority\./
     );
     expect(page).not.toContain("agentic organizations");
   });
@@ -324,12 +360,15 @@ describe("logo size rule and union outline", () => {
     expect(logos).not.toMatch(/stroke(Width)?=/);
   });
 
-  it("uses the solid accepted lockup in the masthead, the footer and the /install chrome", () => {
+  it("uses the accepted animated lockup in the masthead and solid lockup elsewhere", () => {
     const mast = onepager.slice(
       onepager.indexOf('className="plan-masthead"'),
       onepager.indexOf('className="plan-masthead"') + 200
     );
-    expect(mast).toContain("<SolidLockup");
+    expect(mast).toContain("<AnimatedLockup");
+    const animated = read("frontend/src/components/onepager/AnimatedLockup.tsx");
+    expect(animated).toContain("n2-nav-light.svg?raw");
+    expect(animated).toContain("selected-site-identity.js");
     const footer = onepager.slice(onepager.indexOf('<footer className="plan-footer">'));
     expect(footer.slice(0, footer.indexOf("</footer>"))).toContain("<SolidLockup");
     const installMast = installPage.slice(installPage.indexOf('className="plan-install-masthead"'));
@@ -444,27 +483,26 @@ describe("/install polish", () => {
     const page2 = files[0];
     const copy2 = files[1];
 
-    it("lede reads as before and after, and does not claim who corrected it", () => {
+    it("lede states the approved promise without claiming independent verification", () => {
       const lede = /plan-lede">([\s\S]*?)<\/p>/.exec(page2)![1].replace(/\s+/g, " ");
       expect(lede).toContain(
-        "Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing."
-      );
-      expect(lede).not.toMatch(/last told|recalls only/i);
-      expect(lede).toContain(
-        "With one, it reads what was stored, from which source, and what is current now"
+        "Give agents operational truth they can read, update, and maintain as they work."
       );
       expect(lede).not.toMatch(/corrected/i);
-      expect(lede).not.toMatch(/for example/i);
+      expect(page2).toContain("A current field comes from recorded observations and a field rule");
     });
 
-    it("keeps the corrections command in the illustrative transcript", () => {
-      expect(copy2).toMatch(/neotoma dev corrections create ent_\w+ --entity-type invoice/);
+    it("shows an amendment without a reusable fixed ID", () => {
+      const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
+      expect(explorer).toContain('corrections create "$INVOICE_ID"');
+      expect(explorer).not.toMatch(/corrections create ent_[a-f0-9]+/);
     });
 
-    it("does not attribute the illustrative transcript to a release, and says ids vary", () => {
+    it("marks the interface calls illustrative and keeps IDs variable", () => {
       expect(page2).not.toContain("published npm package (0.25.0) and on main");
-      expect(page2).toContain("transcript below illustrates the invoice from the example above");
-      expect(page2).toContain("Store observation ids differ");
+      const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
+      expect(explorer).toContain("Illustrative calls, never run by this page");
+      expect(explorer).toMatch(/Read the store response for the actual entity\s+ID/);
     });
 
     it("sheet 02 R1 does not say each fact is linked unqualified", () => {
@@ -477,9 +515,8 @@ describe("/install polish", () => {
     });
 
     it("lists no interactive command in the pasted install block", () => {
-      const block = /INSTALL_COMMANDS = `([^`]*)`/.exec(copy2)![1];
-      expect(block).not.toContain("neotoma mcp config");
-      expect(page2).toContain("neotoma mcp config");
+      expect(copy2).not.toContain("neotoma mcp config");
+      expect(page2).toContain("neotoma status --json");
     });
 
     it("never says no telemetry without the npm update-check qualification", () => {
@@ -935,7 +972,7 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     }
     expect(page).toContain("{PLATE_CAPTION}");
     expect(copyConst("PLATE_CAPTION")).toBe(
-      "Synthetic example: agents write two sources in and read one current record out. The same flow is run for real in the CLI transcript below."
+      "Synthetic example: the current record selects a value for each field and keeps its observation trail."
     );
   });
 });
