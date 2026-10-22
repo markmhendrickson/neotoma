@@ -1,6 +1,7 @@
 /** Accepted exact identity bytes. No display formatting or ambient policy reads. */
 import { createHash } from "node:crypto";
 import type { CanonicalNameRule, SchemaDefinition } from "./schema_registry.js";
+import type { components } from "../shared/openapi_types.js";
 
 export interface ExactIdentityContract {
   version: "2";
@@ -25,8 +26,12 @@ export class EntityIdentityContractError extends Error {
   readonly code = "VALIDATION_INVALID_FORMAT";
   readonly hint =
     "Use the immutable identity declaration of a fresh schema namespace; do not migrate existing identities by editing a schema.";
-  toErrorEnvelope() {
-    return { code: this.code, message: this.message, hint: this.hint };
+  toErrorEnvelope(): components["schemas"]["ErrorEnvelope"] {
+    return {
+      error_code: this.code,
+      message: this.message,
+      details: { hint: this.hint },
+    };
   }
 }
 

@@ -14507,7 +14507,7 @@ schemasCommand
             force: opts.force,
           },
         });
-        if (error) throw new Error("Failed to update schema");
+        if (error) throw cliApiError(error);
         const registerResult = data as Record<string, unknown> | null;
         if (
           registerResult &&
@@ -14624,7 +14624,7 @@ schemasCommand
           force: opts.force,
         },
       });
-      if (error) throw new Error("Failed to register schema");
+      if (error) throw cliApiError(error);
       const registerResult = data as Record<string, unknown> | null;
       if (
         registerResult &&
@@ -17091,6 +17091,7 @@ program
 
     const { data, error } = await handler(operation.path, requestParams);
     if (error) {
+      if (opts.operation === "registerSchema") throw cliApiError(error);
       throw new Error("Request failed: " + formatRequestError(error));
     }
     writeOutput(data, outputMode);

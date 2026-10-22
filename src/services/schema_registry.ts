@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { prepareIdentityRegistration } from "./entity_identity_admission.js";
 import {
   canonicalExactIdentityContract,
+  EntityIdentityContractError,
   type ExactIdentityContract,
   type AcceptedIdentityBinding,
 } from "./entity_identity_contract.js";
@@ -1139,6 +1140,13 @@ export class SchemaRegistryService {
         .single();
 
       if (error) {
+        if (
+          error.message.includes("EXACT_IDENTITY_") ||
+          error.message.includes("idx_identity_namespace_anchor")
+        )
+          throw new EntityIdentityContractError(
+            "Exact identity registration requires the original immutable binding and an unused namespace."
+          );
         throw new Error(`Failed to register schema: ${error.message}`);
       }
 
@@ -2889,7 +2897,7 @@ export class SchemaRegistryService {
           JSON.stringify(contract.canonical_name_fields) ||
         definition.identity_opt_out !== undefined
       )
-        throw new Error(
+        throw new EntityIdentityContractError(
           "Exact identity requires matching declared rules and forbids heuristic identity opt-out."
         );
     }

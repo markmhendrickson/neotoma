@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **761**
-- Backend and repo Vitest files: **725**
+- Total automated test files: **763**
+- Backend and repo Vitest files: **727**
 - Frontend Vitest files: **10**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 216 |
+| Vitest unit tests | 217 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 229 |
+| Vitest integration tests | 230 |
 | Vitest CLI tests | 91 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (216):**
+**Files (217):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -191,6 +191,7 @@ flowchart TD
 - `tests/unit/embedded_runtime_state.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
 - `tests/unit/entity_id_tenant_scope.test.ts`
+- `tests/unit/entity_identity_contract.test.ts`
 - `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/env_contamination_audit.test.ts`
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
@@ -475,7 +476,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (229):**
+**Files (230):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -523,6 +524,7 @@ flowchart TD
 - `tests/integration/embed_cross_origin_http.test.ts`
 - `tests/integration/empty_registry_builtin_repair_e2e.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
+- `tests/integration/entity_identity_admission.test.ts`
 - `tests/integration/entity_lifecycle_authority.test.ts`
 - `tests/integration/entity_lifecycle_cutover.test.ts`
 - `tests/integration/entity_lifecycle_executor_boundary.test.ts`

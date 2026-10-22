@@ -1,5 +1,11 @@
 /** These fixtures reserve fresh namespaces; exact public writes remain incomplete. */
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/db.js";
 import { getDb } from "../../src/repositories/db/connection.js";
@@ -12,16 +18,39 @@ import {
   deriveExactEntityIdentity,
 } from "../../src/services/entity_identity_contract.js";
 import { generateEntityId } from "../../src/services/entity_resolution.js";
+import { createObservation } from "../../src/services/observation_storage.js";
 import {
   PARITY_USER_ID,
   callHttp,
-  callMcp,
   makeMcpServer,
   startOfflineServer,
   stopServer,
 } from "../helpers/transport_parity_matrix.js";
 
 const suffix = randomUUID().replaceAll("-", "");
+const execFileAsync = promisify(execFile);
+const cliPath = fileURLToPath(new URL("../../dist/cli/index.js", import.meta.url));
+let cliHome: string;
+
+function domainEnvelope(envelope: Record<string, unknown>) {
+  const { timestamp: _timestamp, trace_id: _traceId, ...domain } = envelope;
+  return domain;
+}
+
+/** Use the actual registered tools/call handler, including its public error mapping. */
+async function callRegisteredMcp(input: Record<string, unknown>, name = "register_schema") {
+  type Handler = (
+    request: unknown,
+    extra: unknown
+  ) => Promise<{ content: Array<{ text: string }> }>;
+  const server = makeMcpServer() as unknown as {
+    mcpServer: { server: { _requestHandlers: Map<string, Handler> } };
+  };
+  const handler = server.mcpServer.server._requestHandlers.get("tools/call");
+  if (!handler) throw new Error("MCP tools/call is not registered");
+  const result = await handler({ method: "tools/call", params: { name, arguments: input } }, {});
+  return JSON.parse(result.content[0].text) as Record<string, unknown>;
+}
 const type = (label: string) => `synthetic_exact_${label}_${suffix}`;
 const definition = (namespace: string) => ({
   fields: { code: { type: "string" as const }, title: { type: "string" as const } },
@@ -41,9 +70,57 @@ const config = (entity_type: string) => ({
   activate: false,
 });
 
+function cliRequest(base: string, body: Record<string, unknown>) {
+  return execFileAsync(
+    process.execPath,
+    [
+      cliPath,
+      "--json",
+      "--api-only",
+      "--no-log-file",
+      "--base-url",
+      base,
+      "request",
+      "--operation",
+      "registerSchema",
+      "--skip-auth",
+      "--body",
+      JSON.stringify(body),
+    ],
+    {
+      cwd: cliHome,
+      env: {
+        PATH: process.env.PATH,
+        HOME: cliHome,
+        USERPROFILE: cliHome,
+        TMPDIR: cliHome,
+        NODE_ENV: "test",
+        NEOTOMA_ENV: "development",
+        NO_UPDATE_NOTIFIER: "1",
+        NEOTOMA_DATA_DIR: join(cliHome, "data"),
+        NEOTOMA_SQLITE_PATH: join(cliHome, "data", "state.db"),
+        NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR: "1",
+        NEOTOMA_API_ONLY: "1",
+        NEOTOMA_ICON_GENERATION_ENABLED: "false",
+        OPENAI_API_KEY: "test-openai-key",
+        ...(process.env.NODE_OPTIONS ? { NODE_OPTIONS: process.env.NODE_OPTIONS } : {}),
+        ...(process.env.SCHEMA_GATE_NETWORK_JOURNAL
+          ? { SCHEMA_GATE_NETWORK_JOURNAL: process.env.SCHEMA_GATE_NETWORK_JOURNAL }
+          : {}),
+        ...(process.env.SCHEMA_GATE_IPC_ROOT
+          ? { SCHEMA_GATE_IPC_ROOT: process.env.SCHEMA_GATE_IPC_ROOT }
+          : {}),
+      },
+      timeout: 30000,
+    }
+  );
+}
+
 // Suppress only optional detached icon/export work. Registration, transactions,
 // both transports, native constraints and persistence remain real.
 beforeAll(() => {
+  cliHome = mkdtempSync(join(tmpdir(), "identity-admission-cli-"));
+  mkdirSync(join(cliHome, "data"));
   vi.spyOn(SchemaRegistryService.prototype as never, "generateIconAsync").mockImplementation(
     () => undefined
   );
@@ -51,7 +128,10 @@ beforeAll(() => {
     () => undefined
   );
 });
-afterAll(() => vi.restoreAllMocks());
+afterAll(() => {
+  vi.restoreAllMocks();
+  if (cliHome) rmSync(cliHome, { recursive: true, force: true });
+});
 
 async function stored(entityType: string) {
   const rows = await db.from("schema_registry").select("*").eq("entity_type", entityType);
@@ -65,16 +145,23 @@ async function stored(entityType: string) {
 }
 
 describe("immutable exact-identity admission in the existing registry", () => {
-  it("registers and reads back the same exact declaration through real HTTP and MCP", async () => {
+  it("registers and reads back the same exact declaration through real HTTP, registered MCP and compiled generic CLI", async () => {
     const server = await startOfflineServer();
     try {
       const httpType = type("http");
       const http = await callHttp(server.base, "/register_schema", config(httpType));
       expect(http.status).toBe(200);
       const mcpType = type("mcp");
-      const mcp = await callMcp(makeMcpServer(), "register_schema", config(mcpType));
+      const mcp = await callRegisteredMcp(config(mcpType));
       expect(mcp.success).toBe(true);
-      for (const entityType of [httpType, mcpType]) {
+      const cliType = type("cli");
+      const cli = JSON.parse((await cliRequest(server.base, config(cliType))).stdout);
+      expect(cli.success).toBe(true);
+      expect(cli.schema.identity_binding).toMatchObject({
+        entity_type: cliType,
+        contract: definition(`synthetic:${cliType}:v2`).identity_contract,
+      });
+      for (const entityType of [httpType, mcpType, cliType]) {
         const rows = await stored(entityType);
         expect(rows).toHaveLength(1);
         expect(rows[0].identity_binding).toMatchObject({
@@ -92,6 +179,121 @@ describe("immutable exact-identity admission in the existing registry", () => {
           deriveExactEntityIdentity(binding, { code: "SR-cli" }, PARITY_USER_ID).entityId
         ).not.toBe(deriveExactEntityIdentity(binding, { code: "sr-cli" }, PARITY_USER_ID).entityId);
       }
+    } finally {
+      await stopServer(server.server);
+    }
+  });
+
+  it("keeps activation and reserved writes closed in supported APIs and native storage without adding rows", async () => {
+    const entityType = type("reserved");
+    const first = await schemaRegistry.register(config(entityType));
+    const database = await getDb();
+    // Positive control for the same physical observation-count instrument.
+    const control = await createObservation({
+      entity_id: `ent_identity_control_${suffix}`,
+      entity_type: type("control"),
+      schema_version: "1",
+      source_id: null,
+      interpretation_id: null,
+      user_id: PARITY_USER_ID,
+      observed_at: "2026-10-20T00:00:00Z",
+      fields: { code: "legacy" },
+      specificity_score: 1,
+      source_priority: 100,
+      idempotency_key: `identity-control-${suffix}`,
+    });
+    expect(
+      await database.prepare("SELECT id FROM observations WHERE id = ?").get(control.id)
+    ).toEqual({ id: control.id });
+    async function counts() {
+      const result: Record<string, unknown> = {};
+      for (const table of [
+        "schema_registry",
+        "entities",
+        "observations",
+        "sources",
+        "store_condition_keys",
+      ])
+        result[table] = await database.prepare(`SELECT count(*) AS n FROM ${table}`).get();
+      return result;
+    }
+    const before = await counts();
+    await expect(schemaRegistry.activate(entityType, first.schema_version)).rejects.toThrow(
+      /EXACT_IDENTITY_ACTIVATION_UNAVAILABLE/
+    );
+    await expect(
+      database.prepare("UPDATE schema_registry SET active = 1 WHERE id = ?").run(first.id)
+    ).rejects.toThrow(/EXACT_IDENTITY_ACTIVATION_UNAVAILABLE/);
+    const copied = { ...first, id: randomUUID(), schema_version: "1.0.1", active: true };
+    const insertion = await db.from("schema_registry").insert(copied);
+    expect(insertion.error?.message).toContain("EXACT_IDENTITY_ACTIVATION_UNAVAILABLE");
+    await expect(
+      database
+        .prepare("INSERT INTO entities(id,entity_type,canonical_name,user_id) VALUES(?,?,?,?)")
+        .run(`ent_reserved_${suffix}`, entityType, "SR-cli", PARITY_USER_ID)
+    ).rejects.toThrow(/EXACT_IDENTITY_ACTIVATION_UNAVAILABLE/);
+    await expect(
+      database
+        .prepare(
+          "INSERT INTO observations(id,entity_id,entity_type,schema_version,observed_at,fields,user_id) VALUES(?,?,?,?,?,?,?)"
+        )
+        .run(
+          randomUUID(),
+          `ent_reserved_${suffix}`,
+          entityType,
+          "1",
+          "2026-10-20T00:00:00Z",
+          '{"code":"SR-cli"}',
+          PARITY_USER_ID
+        )
+    ).rejects.toThrow(/EXACT_IDENTITY_ACTIVATION_UNAVAILABLE/);
+    const server = await startOfflineServer();
+    try {
+      const payload = { ...config(entityType), schema_version: "1.1.0", activate: true };
+      const http = await callHttp(server.base, "/register_schema", payload);
+      expect(http.status).toBe(400);
+      await expect(callRegisteredMcp(payload)).rejects.toMatchObject({
+        code: -32602,
+        data: {
+          error_code: http.json.error_code,
+          message: http.json.message,
+          details: http.json.details,
+        },
+      });
+      const cli = (await cliRequest(server.base, payload).then(
+        () => {
+          throw new Error("Expected CLI activation refusal");
+        },
+        (error: unknown) => error
+      )) as { code: number; stderr: string };
+      expect(cli.code).toBe(1);
+      expect(cli.stderr).toContain("VALIDATION_INVALID_FORMAT");
+      const store = {
+        entities: [{ entity_type: entityType, code: "SR-cli" }],
+        idempotency_key: `reserved-store-${suffix}`,
+        commit: true,
+      };
+      const refusedStore = await callHttp(server.base, "/store", store);
+      expect(refusedStore.status).toBe(400);
+      await expect(callRegisteredMcp(store, "store")).rejects.toMatchObject({
+        code: -32602,
+        data: {
+          error_code: refusedStore.json.error_code,
+          message: refusedStore.json.message,
+          details: refusedStore.json.details,
+        },
+      });
+      await expect(
+        createObservation({
+          ...control,
+          idempotency_key: `reserved-direct-${suffix}`,
+          entity_id: `ent_reserved_${suffix}`,
+          entity_type: entityType,
+          fields: { code: "SR-cli" },
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION_INVALID_FORMAT" });
+      expect(await counts()).toEqual(before);
+      expect((await stored(entityType))[0].active).toBe(false);
     } finally {
       await stopServer(server.server);
     }
@@ -122,25 +324,41 @@ describe("immutable exact-identity admission in the existing registry", () => {
     }
   });
 
-  it("refuses malformed public declarations with a canonical validation code and repair hint", async () => {
+  it("uses the same canonical refusal envelope for malformed Unicode, mismatched rules and heuristic opt-out over HTTP and registered MCP", async () => {
     const server = await startOfflineServer();
     try {
-      const entityType = type("unicode_refusal");
-      const payload = { ...config(entityType), schema_definition: definition("\ud800") };
-      const http = await callHttp(server.base, "/register_schema", payload);
-      expect(http.status).toBe(400);
-      expect(http.json).toMatchObject({
-        error_code: "VALIDATION_INVALID_FORMAT",
-        details: { hint: expect.stringContaining("fresh schema namespace") },
-      });
-      await expect(callMcp(makeMcpServer(), "register_schema", payload)).rejects.toMatchObject({
-        code: -32602,
-        data: {
-          code: "VALIDATION_INVALID_FORMAT",
-          hint: expect.stringContaining("fresh schema namespace"),
-        },
-      });
-      expect(await stored(entityType)).toHaveLength(0);
+      for (const scenario of ["unicode", "rules", "opt_out"]) {
+        const entityType = type(`${scenario}_refusal`);
+        const payload = {
+          ...config(entityType),
+          schema_definition: {
+            ...definition(scenario === "unicode" ? "\ud800" : `synthetic:${entityType}:v2`),
+            ...(scenario === "rules" ? { canonical_name_fields: ["title"] } : {}),
+            ...(scenario === "opt_out" ? { identity_opt_out: "heuristic_canonical_name" } : {}),
+          },
+        };
+        const http = await callHttp(server.base, "/register_schema", payload);
+        expect(http.status).toBe(400);
+        expect(http.json).toMatchObject({
+          error_code: "VALIDATION_INVALID_FORMAT",
+          message: expect.any(String),
+          details: { hint: expect.stringContaining("fresh schema namespace") },
+          timestamp: expect.any(String),
+        });
+        const error = (await callRegisteredMcp(payload).then(
+          () => {
+            throw new Error("Expected MCP refusal");
+          },
+          (failure: unknown) => failure
+        )) as { code: number; data: Record<string, unknown> };
+        expect(error.code).toBe(-32602);
+        // Compare every domain field; timestamps and trace IDs belong to the transports.
+        expect(domainEnvelope(error.data)).toEqual(domainEnvelope(http.json));
+        for (const envelope of [http.json, error.data])
+          if (envelope.timestamp !== undefined)
+            expect(new Date(envelope.timestamp as string).toISOString()).toBe(envelope.timestamp);
+        expect(await stored(entityType)).toHaveLength(0);
+      }
     } finally {
       await stopServer(server.server);
     }
@@ -155,9 +373,42 @@ describe("immutable exact-identity admission in the existing registry", () => {
         ...config(secondType),
         schema_definition: config(firstType).schema_definition,
       })
-    ).rejects.toThrow(/UNIQUE constraint failed/);
+    ).rejects.toThrow(/unused namespace/);
     expect(await stored(secondType)).toHaveLength(0);
     expect((await stored(firstType))[0].identity_binding).toEqual(first.identity_binding);
+  });
+
+  it("preserves the canonical identity code and repair hint through compiled CLI registration requests", async () => {
+    const server = await startOfflineServer();
+    try {
+      const entityType = type("cli_refusal");
+      const payload = {
+        ...config(entityType),
+        schema_definition: {
+          ...definition(`synthetic:${entityType}:v2`),
+          canonical_name_fields: ["title"],
+        },
+      };
+      const http = await callHttp(server.base, "/register_schema", payload);
+      expect(http.status).toBe(400);
+      const failure = (await cliRequest(server.base, payload).then(
+        () => {
+          throw new Error("Expected compiled CLI refusal");
+        },
+        (error: unknown) => error
+      )) as { code: number; stderr: string };
+      expect(failure.code).toBe(1);
+      const line = failure.stderr.split("\n").find((text) => text.startsWith('{"error":'));
+      expect(line).toBeTruthy();
+      const emitted = JSON.parse(line!);
+      expect(emitted.hint).toMatchObject({
+        code: http.json.error_code,
+        hint: (http.json.details as Record<string, unknown>).hint,
+      });
+      expect(await stored(entityType)).toHaveLength(0);
+    } finally {
+      await stopServer(server.server);
+    }
   });
 
   it("refuses namespace/rule/scope changes and downgrade without creating a new version", async () => {
