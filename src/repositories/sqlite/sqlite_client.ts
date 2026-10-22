@@ -470,8 +470,22 @@ async function addColumnIfMissing(
  * behavior itself lives in each backend's transaction() implementation
  * (sqlite_driver.ts, libsql_driver.ts).
  */
-export async function ensureSchema(database: DbDatabase): Promise<void> {
+export async function ensureSchema(
+  database: DbDatabase,
+  options?: { freshOnly: true }
+): Promise<void> {
+  if (options !== undefined && (options.freshOnly !== true || Object.keys(options).length !== 1)) {
+    throw new Error("EXPLICIT_DATABASE_INITIALIZATION_OPTIONS_INVALID");
+  }
   await database.transaction(async (db) => {
+    if (options?.freshOnly) {
+      // Check under the same write transaction as DDL. A racing initializer
+      // cannot both see an empty database and subsequently modify it.
+      const existing = await db
+        .prepare("SELECT name FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' LIMIT 1")
+        .get();
+      if (existing) throw new Error("EXPLICIT_DATABASE_MUST_BE_EMPTY");
+    }
     await db.exec("PRAGMA foreign_keys = OFF");
     for (const table of DEPRECATED_TABLES) {
       await db.prepare(`DROP TABLE IF EXISTS ${table}`).run();

@@ -84,9 +84,10 @@ for (const [context, operations, version, label] of [
   [b, opsB, "2.0", "b"],
 ]) {
   await context.run(async () => {
-    const { ensureSchema } = await import("../../../dist/repositories/sqlite/sqlite_client.js");
-    // Isolated test admission only; no runtime/factory auto-DDL is authorized.
-    await ensureSchema(context.database);
+    const { initializeFreshEmbeddedDatabase } =
+      await import("../../../dist/core/runtime_database.js");
+    // Intentional fresh setup; the context/factory itself never runs DDL.
+    await initializeFreshEmbeddedDatabase(context);
     assert.equal(
       (await operations.executeTool("register_schema", schema(version, label))).success,
       true
