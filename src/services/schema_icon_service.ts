@@ -11,11 +11,35 @@ import OpenAI from "openai";
 import { config } from "../config.js";
 import type { IconMetadata, SchemaMetadata } from "./schema_registry.js";
 import { ALL_LUCIDE_ICONS, getSuggestedIcon, isValidLucideIcon } from "../utils/lucide_icons.js";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 
-const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
+const clients = new Map<string, OpenAI>();
+
+function getOpenAI(): OpenAI | null {
+  const apiKey = config.openaiApiKey;
+  if (!apiKey) return null;
+  let client = clients.get(apiKey);
+  if (!client) {
+    client = new OpenAI({ apiKey });
+    clients.set(apiKey, client);
+  }
+  return client;
+}
 
 // In-memory cache for icon mappings
-const iconCache = new Map<string, IconMetadata>();
+const legacyIconCache = new Map<string, IconMetadata>();
+const runtimeIconCaches = new WeakMap<object, Map<string, IconMetadata>>();
+
+function getIconCache(): Map<string, IconMetadata> {
+  const runtime = getEmbeddedRuntimeContext();
+  if (!runtime) return legacyIconCache;
+  let cache = runtimeIconCaches.get(runtime);
+  if (!cache) {
+    cache = new Map();
+    runtimeIconCaches.set(runtime, cache);
+  }
+  return cache;
+}
 
 /**
  * Generate icon metadata for an entity type
@@ -24,6 +48,7 @@ export async function generateIconForEntityType(
   entityType: string,
   metadata?: SchemaMetadata
 ): Promise<IconMetadata> {
+  const iconCache = getIconCache();
   // Check if icon generation is enabled
   if (!config.iconGeneration.enabled) {
     return getDefaultIcon();
@@ -50,7 +75,7 @@ export async function generateIconForEntityType(
     }
 
     // Use AI to match to Lucide icon
-    if (openai) {
+    if (getOpenAI()) {
       const match = await matchLucideIcon(
         entityType,
         metadata?.description || "",
@@ -97,6 +122,7 @@ async function matchLucideIcon(
   description: string,
   category?: string
 ): Promise<{ iconName: string; confidence: number } | null> {
+  const openai = getOpenAI();
   if (!openai) {
     return null;
   }
@@ -171,6 +197,7 @@ Respond with ONLY a JSON object in this exact format:
  * Generate custom SVG icon using AI
  */
 async function generateCustomSVGIcon(entityType: string, description: string): Promise<string> {
+  const openai = getOpenAI();
   if (!openai) {
     return getDefaultSVG();
   }
@@ -250,12 +277,12 @@ function getDefaultSVG(): string {
  * Clear icon cache
  */
 export function clearIconCache(): void {
-  iconCache.clear();
+  getIconCache().clear();
 }
 
 /**
  * Check if icon generation is available
  */
 export function isIconGenerationAvailable(): boolean {
-  return config.iconGeneration.enabled && openai !== null;
+  return config.iconGeneration.enabled && Boolean(config.openaiApiKey);
 }

@@ -1,7 +1,18 @@
 import OpenAI from "openai";
 import { config } from "./config.js";
 
-const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
+const clients = new Map<string, OpenAI>();
+
+function getOpenAI(): OpenAI | null {
+  const apiKey = config.openaiApiKey;
+  if (!apiKey) return null;
+  let client = clients.get(apiKey);
+  if (!client) {
+    client = new OpenAI({ apiKey });
+    clients.set(apiKey, client);
+  }
+  return client;
+}
 
 /**
  * Generate an embedding vector from text.
@@ -19,6 +30,7 @@ export async function generateEmbedding(
   text: string,
   trace?: EmbeddingAcquisitionTrace
 ): Promise<number[] | null> {
+  const openai = getOpenAI();
   // OpenAI provider
   if (openai) {
     try {

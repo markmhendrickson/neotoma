@@ -13,6 +13,7 @@ import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
 import { clearDbCache, getDb } from "../repositories/db/connection.js";
 import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
 import type { DbConnection } from "../repositories/db/driver.js";
+import { getEmbeddedRuntimeContext } from "../core/runtime_context.js";
 
 // Cached service role client instance
 let cachedServiceRoleClient: LocalDbClient | null = null;
@@ -80,12 +81,28 @@ interface _MCPConnection {
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 minutes before expiry
 
-// Encryption key for refresh tokens (use environment variable or config)
-const ENCRYPTION_KEY =
-  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
-  process.env.MCP_TOKEN_ENCRYPTION_KEY ||
-  config.mcpTokenEncryptionKey;
-const isLocalBackend = config.storageBackend === "local";
+// Keep the legacy key snapshot separate from any explicit runtime that happens
+// to import this module first. No credential is read from the host in that case.
+function readLegacyEncryptionKey(): string {
+  return (
+    process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
+    process.env.MCP_TOKEN_ENCRYPTION_KEY ||
+    config.mcpTokenEncryptionKey
+  );
+}
+
+let legacyEncryptionKey = getEmbeddedRuntimeContext() ? undefined : readLegacyEncryptionKey();
+
+function encryptionKey(): string {
+  const runtime = getEmbeddedRuntimeContext();
+  if (runtime) return runtime.configuration.mcpTokenEncryptionKey;
+  legacyEncryptionKey ??= readLegacyEncryptionKey();
+  return legacyEncryptionKey;
+}
+
+function isLocalBackend(): boolean {
+  return config.storageBackend === "local";
+}
 
 export const OAUTH_CODE_PROVENANCE = {
   CLIENT_PKCE: "client_pkce",
@@ -698,9 +715,9 @@ function generateState(): string {
  * Exported for testing purposes only
  */
 export function encryptRefreshToken(token: string): string {
-  validateEncryptionKey(ENCRYPTION_KEY);
+  validateEncryptionKey(encryptionKey());
 
-  const key = Buffer.from(ENCRYPTION_KEY, "hex");
+  const key = Buffer.from(encryptionKey(), "hex");
   const iv = randomBytes(16);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
 
@@ -720,10 +737,10 @@ const PLAIN_REFRESH_PREFIX = "plain:";
  * Allows local OAuth approval to succeed without NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY.
  */
 function encryptRefreshTokenForStorage(token: string): string {
-  if (ENCRYPTION_KEY) {
+  if (encryptionKey()) {
     return encryptRefreshToken(token);
   }
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     return PLAIN_REFRESH_PREFIX + token;
   }
   throw createOAuthError.encryptionKeyMissing();
@@ -734,9 +751,9 @@ function encryptRefreshTokenForStorage(token: string): string {
  * Exported for testing purposes only
  */
 export function decryptRefreshToken(encrypted: string): string {
-  validateEncryptionKey(ENCRYPTION_KEY);
+  validateEncryptionKey(encryptionKey());
 
-  const key = Buffer.from(ENCRYPTION_KEY, "hex");
+  const key = Buffer.from(encryptionKey(), "hex");
   const parts = encrypted.split(":");
 
   if (parts.length !== 3) {
@@ -786,7 +803,7 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
   // Start registration
   clientRegistrationPromise = (async (): Promise<string> => {
     try {
-      if (isLocalBackend) {
+      if (isLocalBackend()) {
         const localClientId = "local_mcp_oauth_client";
         const db = await getDb();
         const existing = await db
@@ -1024,7 +1041,7 @@ export async function createAuthUrl(
   validateState(state);
   validateRedirectUri(redirectUri);
 
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     const localAuthUrl = new URL(`${config.apiBase}/mcp/oauth/local-login`);
     localAuthUrl.searchParams.set("state", state);
     return localAuthUrl.toString();
@@ -1059,7 +1076,7 @@ export async function createAuthUrl(
  */
 async function cleanupExpiredStates(): Promise<void> {
   try {
-    if (isLocalBackend) {
+    if (isLocalBackend()) {
       await cleanupExpiredLocalStates();
       return;
     }
@@ -1213,7 +1230,7 @@ export async function initiateOAuthFlow(
     process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
   const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
 
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     await insertLocalOAuthState({
       state,
       codeVerifier,
@@ -1307,7 +1324,7 @@ export async function createLocalAuthorizationRequest(params: {
   codeVerifier?: string;
   authorizationCodeProvenance?: OAuthCodeProvenance;
 }): Promise<{ authUrl: string; connectionId: string; state: string; expiresAt: string }> {
-  if (!isLocalBackend) {
+  if (!isLocalBackend()) {
     throw createOAuthError.stateInvalid(
       "Local authorization requests require local storage backend"
     );
@@ -1352,7 +1369,7 @@ export async function completeLocalAuthorization(
    *  report who signed in; it never affects which graph is accessed. */
   identity?: { authenticatedUserId?: string; authenticatedEmail?: string }
 ): Promise<{ connectionId: string; code: string; redirectUri?: string; clientState?: string }> {
-  if (!isLocalBackend) {
+  if (!isLocalBackend()) {
     throw createOAuthError.stateInvalid("Local authorization completion requires local backend");
   }
 
@@ -1435,7 +1452,7 @@ async function exchangeCodeForTokens(
   redirectUri: string,
   clientId: string
 ): Promise<OAuthTokens> {
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     throw createOAuthError.tokenExchangeFailed(
       "Local OAuth callback is disabled. Use /mcp/oauth/local-login for local auth."
     );
@@ -1509,7 +1526,7 @@ async function exchangeCodeForTokens(
 }
 
 async function exchangeRefreshTokenForTokens(refreshToken: string): Promise<OAuthTokens> {
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     throw createOAuthError.tokenExchangeFailed(
       "Remote refresh exchange is disabled for local backend"
     );
@@ -1603,7 +1620,7 @@ export async function handleOAuthCallback(
   redirectUri?: string;
   clientState?: string;
 }> {
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     throw createOAuthError.stateInvalid(
       "Local OAuth callback is disabled. Use /mcp/oauth/local-login."
     );
@@ -1726,7 +1743,7 @@ export async function getAccessTokenForConnection(connectionId: string): Promise
   // Validate input
   validateConnectionId(connectionId);
 
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     const connection = await getLocalConnectionById(connectionId);
     if (!connection) {
       logger.error(
@@ -1863,7 +1880,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
     throw createOAuthError.tokenExchangeFailed("refresh_token is required");
   }
 
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     const connection = await getLocalConnectionByRefreshToken(refreshToken);
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for refresh token");
@@ -2019,7 +2036,7 @@ export async function getTokenResponseForConnection(
   code: string,
   codeVerifier?: string
 ): Promise<OAuthTokenResponse> {
-  if (!isLocalBackend) {
+  if (!isLocalBackend()) {
     // Dead today (storageBackend is hardcoded "local"), but kept fail-closed
     // rather than silently falling through to the local path if that ever
     // changes: the remote/Supabase exchange has its own PKCE-checked endpoint
@@ -2048,7 +2065,7 @@ export async function getTokenResponseForConnection(
 export async function validateTokenAndGetConnectionId(
   accessToken: string
 ): Promise<{ connectionId: string; userId: string }> {
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     const connection = await getLocalConnectionByAccessToken(accessToken);
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for access token");
@@ -2106,7 +2123,7 @@ export async function getConnectionStatus(
   // Validate input
   validateConnectionId(connectionId);
 
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     const connection = await getLocalConnectionById(connectionId);
     if (connection) {
       return connection.revoked_at ? "expired" : "active";
@@ -2168,7 +2185,7 @@ export async function listConnections(userId: string): Promise<
     lastUsedAt: string | null;
   }>
 > {
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     const db = await getDb();
     const rows = await db
       .prepare(
@@ -2227,7 +2244,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
   // Validate inputs
   validateConnectionId(connectionId);
 
-  if (isLocalBackend) {
+  if (isLocalBackend()) {
     await revokeLocalConnection(connectionId, userId);
     logger.info(`[MCP OAuth] Connection revoked (${connectionIdForLog(connectionId)})`);
     auditLog("connection_revoked", {
