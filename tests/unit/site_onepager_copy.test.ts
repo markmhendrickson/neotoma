@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
@@ -168,6 +168,25 @@ describe("accepted Neotoma logo", () => {
 });
 
 describe("October visual variant", () => {
+  it("keeps every bundled October asset byte for byte as recorded in provenance", () => {
+    const brand = join(root, "frontend", "public", "brand", "october");
+    const provenance = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8")) as {
+      files: Record<string, { source: string; source_sha256: string; bundled_sha256: string }>;
+    };
+    const bundledFiles = readdirSync(brand)
+      .filter((file) => file !== "PROVENANCE.json")
+      .sort();
+    expect(Object.keys(provenance.files).sort()).toEqual(bundledFiles);
+    for (const file of bundledFiles) {
+      const info = provenance.files[file];
+      expect(info.source, file).not.toBe("");
+      expect(info.source_sha256, file).toMatch(/^[a-f0-9]{64}$/);
+      expect(info.bundled_sha256, file).toMatch(/^[a-f0-9]{64}$/);
+      const digest = createHash("sha256").update(readFileSync(join(brand, file))).digest("hex");
+      expect(digest, file).toBe(info.bundled_sha256);
+    }
+  });
+
   it("uses the accepted gem lockup and maps each local render to a developer explanation", async () => {
     const page = files[0];
     const brand = join(root, "frontend", "public", "brand", "october");
