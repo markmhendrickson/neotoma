@@ -648,6 +648,10 @@ export const OBSERVATION_SOURCE_VALUES = [
   // Lineage sentinel (#2241): the caller did not classify the write. Kept
   // last so existing positional consumers of this list are undisturbed.
   "unspecified",
+  // Server-stamped by createCorrection only (#2033). Present in the wire
+  // enum so responses/docs round-trip; generic store rejects client-supplied
+  // values with RESERVED_OBSERVATION_SOURCE (reject-not-strip).
+  "correction",
 ] as const;
 
 export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);

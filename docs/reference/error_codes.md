@@ -299,17 +299,17 @@ agents should address. Switch on the `code` field. All ride on a successful
 `HTTP 200` store response (the write completed); `Retry?` is always `No` — the
 caller repairs in-turn via `correct` rather than re-submitting the same payload.
 
-| Code                          | HTTP | Retry? | Description                                                                                                                                                                                                                                                    |
-| ----------------------------- | ---- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MISSING_CONTENT_FIELD`       | 200  | No     | A schema declares `content_field` and the stored observation omits or empties that field.                                                                                                                                                                      |
-| `MISSING_IDENTITY_FIELDS`     | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.                                                                                                                                                                  |
-| `UNKNOWN_FIELD`               | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema.                                                                      |
-| `MISSING_REQUIRED_FIELD`      | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete.                                                                                                                                    |
-| `CONSTRAINT_VIOLATION`        | 200  | No     | An observation fails a declarative write-time value constraint whose `policy` is `"warn"`. The write is accepted and the violating value is stored as-is.                                                                                                      |
-| `SOURCE_PRIORITY_IGNORED`     | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot.                                                          |
-| `AUTO_LINK_EDGE_RETRACTED`    | 200  | No     | A schema-declared reference field's resolved target changed, so a stale auto-linked edge (e.g. a prior `works_at`) was retracted in the same reduction that created the new one (#1963). Positive signal; no action needed.                                    |
-| `AUTO_LINK_RETRACTION_FAILED` | 200  | No     | A stale auto-linked edge should have been retracted but the soft-delete failed. The superseded edge may still be live despite the store succeeding. The message lists the stale `target_entity_id`s; clean up via `delete_relationship` (or re-run the store). |
-| `STORE_WARNING_RULE_NOT_EVALUATED` | 200 | No | A schema-declared `store_warnings` rule could not be evaluated (its `fields` list or `condition` is malformed, uses an unsupported `condition` key, or declares neither spelling). The write is NOT blocked by this; it is a fail-open diagnostic naming the inert rule and the specific path that could not be read (#2165, #2170). |
+| Code                               | HTTP | Retry? | Description                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MISSING_CONTENT_FIELD`            | 200  | No     | A schema declares `content_field` and the stored observation omits or empties that field.                                                                                                                                                                                                                                            |
+| `MISSING_IDENTITY_FIELDS`          | 200  | No     | A schema declares `store_warnings` identity rules and the observation omits all named fields.                                                                                                                                                                                                                                        |
+| `UNKNOWN_FIELD`                    | 200  | No     | The observation carries a field not declared on the entity's active schema. Preserved on the observation but dropped from the snapshot projection until the field is added to the schema.                                                                                                                                            |
+| `MISSING_REQUIRED_FIELD`           | 200  | No     | The observation omits or empties a schema field declared `required: true`. The write is accepted; the entity is incomplete.                                                                                                                                                                                                          |
+| `CONSTRAINT_VIOLATION`             | 200  | No     | An observation fails a declarative write-time value constraint whose `policy` is `"warn"`. The write is accepted and the violating value is stored as-is.                                                                                                                                                                            |
+| `SOURCE_PRIORITY_IGNORED`          | 200  | No     | The caller set a non-default `source_priority` but no field on the entity type uses a merge strategy that honours it. The write is accepted; the priority value has no effect on the stored snapshot.                                                                                                                                |
+| `AUTO_LINK_EDGE_RETRACTED`         | 200  | No     | A schema-declared reference field's resolved target changed, so a stale auto-linked edge (e.g. a prior `works_at`) was retracted in the same reduction that created the new one (#1963). Positive signal; no action needed.                                                                                                          |
+| `AUTO_LINK_RETRACTION_FAILED`      | 200  | No     | A stale auto-linked edge should have been retracted but the soft-delete failed. The superseded edge may still be live despite the store succeeding. The message lists the stale `target_entity_id`s; clean up via `delete_relationship` (or re-run the store).                                                                       |
+| `STORE_WARNING_RULE_NOT_EVALUATED` | 200  | No     | A schema-declared `store_warnings` rule could not be evaluated (its `fields` list or `condition` is malformed, uses an unsupported `condition` key, or declares neither spelling). The write is NOT blocked by this; it is a fail-open diagnostic naming the inert rule and the specific path that could not be read (#2165, #2170). |
 
 **`MISSING_CONTENT_FIELD`** — fired when an entity's `SchemaDefinition` declares
 `content_field` (e.g. `"body"` for `plan`, `"content"` for `note`) and the stored
@@ -481,8 +481,8 @@ Only returned when the instance policy sets `enforcement: "enforced"`. Under the
 default `advisory` posture the policy is declared to agents but violating writes
 are accepted.
 
-| Code                      | HTTP | Retry? | Description                                                              |
-| ------------------------- | ---- | ------ | ------------------------------------------------------------------------ |
+| Code                      | HTTP | Retry? | Description                                                                  |
+| ------------------------- | ---- | ------ | ---------------------------------------------------------------------------- |
 | `ERR_STORE_POLICY_DENIED` | 400  | No     | One or more entities were refused by this instance's configured data policy. |
 
 **Whole-request reject.** NOTHING is persisted, including entities in the batch
@@ -513,11 +513,11 @@ Response shape (`StorePolicyDeniedErrorEnvelope`):
 
 `reason_code` values:
 
-| `reason_code`                | Meaning                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------- |
-| `entity_type_denied`         | The entity type is deny-listed, or absent from a configured allow-list.     |
-| `pii_gate_missing_basis`     | A `person_data` type was written without its lawful-basis/purpose field.    |
-| `provenance_required`        | A `person_data` type was written without attribution/consent metadata.      |
+| `reason_code`                | Meaning                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `entity_type_denied`         | The entity type is deny-listed, or absent from a configured allow-list.           |
+| `pii_gate_missing_basis`     | A `person_data` type was written without its lawful-basis/purpose field.          |
+| `provenance_required`        | A `person_data` type was written without attribution/consent metadata.            |
 | `field_sensitivity_exceeded` | A field's declared `sensitivity_class` exceeds the instance's configured maximum. |
 
 Callers MUST NOT retry the same payload. Read each entry's `hint` — it names the
@@ -532,7 +532,7 @@ Treat an **unrecognized `reason_code`** as a hard denial and surface
 extensible by design.
 
 No PII appears in this envelope: interpolated values are schema-declared field
-*names* and configured policy values, never any fragment of the submitted
+_names_ and configured policy values, never any fragment of the submitted
 payload.
 
 ## ERR_STORE_POLICY_UNAVAILABLE
@@ -543,10 +543,10 @@ read**, so the write could not be checked against it. Nothing is persisted.
 This is deliberately a DIFFERENT code from `ERR_STORE_POLICY_DENIED`, and
 confusing the two is the failure this split exists to prevent:
 
-| Code | HTTP | Retry? | Means | Correct response |
-| --- | --- | --- | --- | --- |
-| `ERR_STORE_POLICY_DENIED` | 400 | **No** | The policy was read and forbids this write | Fix the payload |
-| `ERR_STORE_POLICY_UNAVAILABLE` | 503 | **Yes** | The policy could not be read; permission is unknown | Retry unchanged |
+| Code                           | HTTP | Retry?  | Means                                               | Correct response |
+| ------------------------------ | ---- | ------- | --------------------------------------------------- | ---------------- |
+| `ERR_STORE_POLICY_DENIED`      | 400  | **No**  | The policy was read and forbids this write          | Fix the payload  |
+| `ERR_STORE_POLICY_UNAVAILABLE` | 503  | **Yes** | The policy could not be read; permission is unknown | Retry unchanged  |
 
 **Do not apply DENIED remediation to this code.** An agent that responds to an
 infrastructure fault by rewriting or narrowing what it stores has been misled:
@@ -565,24 +565,50 @@ refused either way; only the explanation differs.
 
 ## Validation Errors
 
-| Code                        | HTTP | Retry? | Description                          |
-| --------------------------- | ---- | ------ | ------------------------------------ |
-| `VALIDATION_MISSING_FIELD`  | 400  | No     | Required field is missing            |
-| `VALIDATION_INVALID_TYPE`   | 400  | No     | Field has invalid type               |
-| `VALIDATION_INVALID_FORMAT` | 400  | No     | Field format is invalid (e.g., date) |
-| `VALIDATION_OUT_OF_RANGE`   | 400  | No     | Field value out of allowed range     |
+| Code                          | HTTP | Retry? | Description                                                                                                                                                                     |
+| ----------------------------- | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_MISSING_FIELD`    | 400  | No     | Required field is missing                                                                                                                                                       |
+| `VALIDATION_INVALID_TYPE`     | 400  | No     | Field has invalid type                                                                                                                                                          |
+| `VALIDATION_INVALID_FORMAT`   | 400  | No     | Field format is invalid (e.g., date)                                                                                                                                            |
+| `VALIDATION_OUT_OF_RANGE`     | 400  | No     | Field value out of allowed range                                                                                                                                                |
+| `RESERVED_OBSERVATION_SOURCE` | 400  | No     | Generic `store`/`store_structured` asserted reserved correction authority (`observation_source: "correction"` and/or `source_priority: 1000`). No observation row is persisted. |
+
+### RESERVED_OBSERVATION_SOURCE
+
+Returned when a client claims correction authority on the generic write path
+instead of calling `correct()`. Since #2033 this is reject-not-strip: the
+request fails with HTTP 400 and nothing is written.
+
+```json
+{
+  "error_code": "RESERVED_OBSERVATION_SOURCE",
+  "message": "observation_source: 'correction' is reserved — only the correct() operation may set it. Use correct() instead of store() to make an authoritative field change.",
+  "details": {
+    "hint": "Call correct({ entity_id, field, value }). Since #2033, store()/store_structured() reject reserved correction authority instead of silently accepting it.",
+    "field": "observation_source",
+    "rejected_value": "correction"
+  },
+  "timestamp": "2026-09-08T12:00:00.000Z"
+}
+```
+
+**Remediation:**
+
+- Use `correct({ entity_id, field, value })` (MCP/REST/CLI) for authoritative field changes.
+- For ordinary writes, omit `observation_source` (defaults to `llm_summary`) or use `sensor` / `workflow_state` / `human` / `import` / `sync`, and keep `source_priority` below 1000.
 
 **Common Causes:**
 
 - `VALIDATION_MISSING_FIELD`: Missing required `type` or `properties`
 - `VALIDATION_INVALID_FORMAT`: Invalid date format or JSON structure
+- `RESERVED_OBSERVATION_SOURCE`: Client sent `observation_source: "correction"` or `source_priority: 1000` on `/store`
 
 ## Idempotency Errors
 
-| Code                        | HTTP | Retry? | Description                                                                                                     |
-| --------------------------- | ---- | ------ | --------------------------------------------------------------------------------------------------------------- |
-| `ERR_IDEMPOTENCY_MISMATCH`  | 400  | No     | `idempotency_key` reused with a different canonicalized predicate (`entity_split`, `correct`).                  |
-| `ERR_IDEMPOTENCY_COLLISION` | 409  | No     | `idempotency_key` reused on `/store` with different content (different content hash) than the original request. |
+| Code                         | HTTP | Retry? | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ERR_IDEMPOTENCY_MISMATCH`   | 400  | No     | `idempotency_key` reused with a different canonicalized predicate (`entity_split`, `correct`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `ERR_IDEMPOTENCY_COLLISION`  | 409  | No     | `idempotency_key` reused on `/store` with different content (different content hash) than the original request.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `ERR_STORE_WRITE_INCOMPLETE` | 409  | No     | `idempotency_key` belongs to a store that did not finish writing and cannot be resumed under the same key (the request carries an `interpretation`). HTTP `/store` returns 409; MCP `store` returns the code in an invalid-params error with the same summary under `data`. The `details` name the entities with no observation yet (`missing_entity_indexes`); resend only those under a new key. The original request's relationships were not written: recreate them by entity id, looking each id up by the entity's identifying fields (the error does not return ids). |
 
 `ERR_IDEMPOTENCY_MISMATCH` and `ERR_IDEMPOTENCY_COLLISION` describe the same
@@ -616,13 +642,13 @@ whose canonical content hash matches the prior call. See
 
 Unlike the codes above, these appear inside a **2xx** response's `relationships_refused[].code` field (`StoreStructuredResponse` / `CreateInterpretationResponse` in `openapi.yaml`) — the overall call still succeeds, but one or more requested edges were not created. `POST /create_relationship`'s direct-call path (not via `store`/`create_interpretation`) surfaces the same conditions as a top-level 4xx/404 error instead; see [`docs/subsystems/relationships.md`](../subsystems/relationships.md) § 6.1.
 
-| Code                              | Meaning                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `unregistered_relationship_type`  | The relationship type is not registered on this instance. Call `list_relationship_types` and retry, or `register_relationship_type` if the meaning is genuinely new. |
-| `RELATIONSHIP_ENDPOINT_NOT_FOUND` | Source or target entity does not exist, or is not owned by the caller — both cases refuse identically so the refusal reveals nothing about other users' data. Store the missing entity first, then retry. |
-| `RELATIONSHIP_REFERENCE_UNRESOLVED` | An index-based endpoint reference (from the same `store` call) did not resolve to a stored entity. Fix the index. |
-| `RELATIONSHIP_INVALID_ENTITY_ID`  | A supplied endpoint id is not a well-formed entity id. |
-| `RELATIONSHIP_NOT_CREATED`        | Any other failure creating the edge, including a refused write from an `acyclic` type's cycle check. |
+| Code                                | Meaning                                                                                                                                                                                                   |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unregistered_relationship_type`    | The relationship type is not registered on this instance. Call `list_relationship_types` and retry, or `register_relationship_type` if the meaning is genuinely new.                                      |
+| `RELATIONSHIP_ENDPOINT_NOT_FOUND`   | Source or target entity does not exist, or is not owned by the caller — both cases refuse identically so the refusal reveals nothing about other users' data. Store the missing entity first, then retry. |
+| `RELATIONSHIP_REFERENCE_UNRESOLVED` | An index-based endpoint reference (from the same `store` call) did not resolve to a stored entity. Fix the index.                                                                                         |
+| `RELATIONSHIP_INVALID_ENTITY_ID`    | A supplied endpoint id is not a well-formed entity id.                                                                                                                                                    |
+| `RELATIONSHIP_NOT_CREATED`          | Any other failure creating the edge, including a refused write from an `acyclic` type's cycle check.                                                                                                      |
 
 ## Generic Errors
 

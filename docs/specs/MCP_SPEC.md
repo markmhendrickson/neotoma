@@ -123,8 +123,8 @@ Implementation: `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts` is spread
 
 **OAuth Endpoints:**
 
-| Endpoint                         | Method | Purpose                                          |
-| -------------------------------- | ------ | ------------------------------------------------ |
+| Endpoint                     | Method | Purpose                                          |
+| ---------------------------- | ------ | ------------------------------------------------ |
 | `/mcp/oauth/initiate`        | POST   | Start OAuth flow, generate PKCE challenge        |
 | `/mcp/oauth/callback`        | GET    | Handle OAuth callback, store tokens              |
 | `/mcp/oauth/status`          | GET    | Check connection status (pending/active/expired) |
@@ -200,7 +200,7 @@ Implementation: `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts` is spread
 
 ## 3. Complete MCP Action Catalog
 
-Catalog tables below list **every** MCP tool name registered by the server (see `NEOTOMA_TOOL_NAMES` in `src/tool_definitions.ts`). **§3 *Action Specifications*** documents request/response shapes in depth for the original core tools through **`split_entity`**; tools without a dedicated §3 subsection are specified in **§3.30** and in **`openapi.yaml`** (for operations wired from OpenAPI).
+Catalog tables below list **every** MCP tool name registered by the server (see `NEOTOMA_TOOL_NAMES` in `src/tool_definitions.ts`). **§3 _Action Specifications_** documents request/response shapes in depth for the original core tools through **`split_entity`**; tools without a dedicated §3 subsection are specified in **§3.30** and in **`openapi.yaml`** (for operations wired from OpenAPI).
 
 ### 2.1 Core [Storing](../vocabulary/canonical_terms.md#storing) Operations
 
@@ -233,7 +233,7 @@ Catalog tables below list **every** MCP tool name registered by the server (see 
 | `list_entity_types`             | List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with schema information, optionally filtered by keyword                                                                                                      | Strong      | Yes           | MVP        |
 | `merge_entities`                | Merge duplicate [entities](../vocabulary/canonical_terms.md#entity)                                                                                                                                                                          | Strong      | Yes           | MVP        |
 | `split_entity`                  | Split a predicate-selected subset of observations out of an over-merged [entity](../vocabulary/canonical_terms.md#entity)                                                                                                                    | Strong      | Yes           | Available  |
-| `list_potential_duplicates`     | List candidate duplicate [entity](../vocabulary/canonical_terms.md#entity) pairs for an `entity_type` (read-only; never auto-merges; use `merge_entities` after human confirmation)                                                           | Strong      | Yes           | Available  |
+| `list_potential_duplicates`     | List candidate duplicate [entity](../vocabulary/canonical_terms.md#entity) pairs for an `entity_type` (read-only; never auto-merges; use `merge_entities` after human confirmation)                                                          | Strong      | Yes           | Available  |
 | `get_entity_type_counts`        | Return row counts by `entity_type` for the authenticated user (sorted descending). Use for cardinality; do **not** treat `list_entity_types` `field_count` as entity counts                                                                  | Strong      | Yes           | MVP        |
 
 ### 2.4 [Observation](../vocabulary/canonical_terms.md#observation) and [Relationship](../vocabulary/canonical_terms.md#relationship) Operations ([Retrieving](../vocabulary/canonical_terms.md#retrieving))
@@ -243,7 +243,7 @@ Catalog tables below list **every** MCP tool name registered by the server (see 
 | `list_observations`         | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [observations](../vocabulary/canonical_terms.md#observation) for [entity](../vocabulary/canonical_terms.md#entity)                    | Strong      | Yes           | MVP        |
 | `retrieve_field_provenance` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) field [provenance](../vocabulary/canonical_terms.md#provenance) chain to [source](../vocabulary/canonical_terms.md#source)            | Strong      | Yes           | MVP        |
 | `create_relationship`       | Create typed [relationship](../vocabulary/canonical_terms.md#relationship) between [entities](../vocabulary/canonical_terms.md#entity)                                                        | Strong      | Yes           | MVP        |
-| `create_relationships`      | Create multiple typed [relationships](../vocabulary/canonical_terms.md#relationship) between existing [entities](../vocabulary/canonical_terms.md#entity) in one batch                     | Strong      | Yes           | MVP        |
+| `create_relationships`      | Create multiple typed [relationships](../vocabulary/canonical_terms.md#relationship) between existing [entities](../vocabulary/canonical_terms.md#entity) in one batch                        | Strong      | Yes           | MVP        |
 | `list_relationships`        | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [entity](../vocabulary/canonical_terms.md#entity) [relationships](../vocabulary/canonical_terms.md#relationship)                      | Strong      | Yes           | MVP        |
 | `get_relationship_snapshot` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [relationship](../vocabulary/canonical_terms.md#relationship) snapshot with [provenance](../vocabulary/canonical_terms.md#provenance) | Strong      | Yes           | MVP        |
 | `list_timeline_events`      | [Retrieve](../vocabulary/canonical_terms.md#retrieving) timeline [events](../vocabulary/canonical_terms.md#event) with filters                                                                | Strong      | Yes           | MVP        |
@@ -252,38 +252,38 @@ Catalog tables below list **every** MCP tool name registered by the server (see 
 
 ### 2.4.1 Soft delete and restoration
 
-| Action                 | Purpose                                                                                                                                     | Consistency | Deterministic | MVP Status |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| Action                 | Purpose                                                                                                                                                                               | Consistency | Deterministic | MVP Status |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
 | `delete_entity`        | Soft-delete an [entity](../vocabulary/canonical_terms.md#entity) via deletion [observation](../vocabulary/canonical_terms.md#observation) (excluded from active snapshots; auditable) | Strong      | Yes           | Available  |
-| `delete_relationship`  | Soft-delete a typed edge between two entities (same semantics as entity delete)                                                             | Strong      | Yes           | Available  |
-| `restore_entity`       | Restore a soft-deleted entity via restoration observation (priority overrides delete)                                                       | Strong      | Yes           | Available  |
-| `restore_relationship` | Restore a soft-deleted relationship                                                                                                         | Strong      | Yes           | Available  |
+| `delete_relationship`  | Soft-delete a typed edge between two entities (same semantics as entity delete)                                                                                                       | Strong      | Yes           | Available  |
+| `restore_entity`       | Restore a soft-deleted entity via restoration observation (priority overrides delete)                                                                                                 | Strong      | Yes           | Available  |
+| `restore_relationship` | Restore a soft-deleted relationship                                                                                                                                                   | Strong      | Yes           | Available  |
 
 Request/response detail: §3.24–§3.27.
 
 ### 2.5 Authentication Operations
 
-| Action                   | Purpose                                                   | Consistency | Deterministic | MVP Status |
-| ------------------------ | --------------------------------------------------------- | ----------- | ------------- | ---------- |
-| `get_authenticated_user` | Get the authenticated user ID for the current MCP session | Strong      | Yes           | MVP        |
+| Action                   | Purpose                                                                                                                   | Consistency | Deterministic | MVP Status |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| `get_authenticated_user` | Get the authenticated user ID for the current MCP session                                                                 | Strong      | Yes           | MVP        |
 | `get_session_identity`   | Resolve attribution tier (AAuth / clientInfo), anonymous-write policy, and trusted-write eligibility; read-only preflight | Strong      | Yes           | MVP        |
 
 **Note:** `get_authenticated_user` returns the `user_id` that is automatically used for all authenticated actions. `get_session_identity` is the contract preflight for agent identity and write gating; see [`docs/subsystems/agent_attribution_integration.md`](../subsystems/agent_attribution_integration.md).
 
 ### 2.5.1 Advisory / Update Check
 
-| Action             | Purpose                                                                                 | Consistency              | Deterministic | MVP Status |
-| ------------------ | --------------------------------------------------------------------------------------- | ------------------------ | ------------- | ---------- |
+| Action             | Purpose                                                                                                                                                                   | Consistency              | Deterministic | MVP Status |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------- | ---------- |
 | `npm_check_update` | Check if a newer npm package version is available; returns message, suggestedCommand, optional release_url and release-note excerpts when `include_release_notes` is true | N/A (read-only registry) | Yes           | MVP        |
 
 **Note:** No side effects. Agents can call at session start and, if `updateAvailable` is true, prompt the user to upgrade. Pass `include_release_notes: true` for best-effort upgrade context (npm + optional GitHub release body).
 
 ### 2.6 Correction and Parsing Operations
 
-| Action       | Purpose                                                                                              | Consistency | Deterministic | MVP Status |
-| ------------ | ---------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
-| `correct`    | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation)         | Strong      | Yes           | MVP        |
-| `parse_file` | Parse a file into agent-readable text and/or first-page PDF image data without storing anything     | N/A         | Yes           | MVP        |
+| Action       | Purpose                                                                                         | Consistency | Deterministic | MVP Status |
+| ------------ | ----------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| `correct`    | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation)     | Strong      | Yes           | MVP        |
+| `parse_file` | Parse a file into agent-readable text and/or first-page PDF image data without storing anything | N/A         | Yes           | MVP        |
 
 **Note:** `correct` creates priority-1000 [observations](../vocabulary/canonical_terms.md#observation) that override earlier extracted values. `parse_file` is a side-effect-free utility for agent-side extraction workflows.
 
@@ -418,61 +418,61 @@ This minimizes round-trips for common cases and keeps discovery for ambiguous or
 
 ### 2.7.1 Interpretation pipeline
 
-| Action                   | Purpose                                                                                                                                                    | Consistency | Deterministic | Status    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
-| `create_interpretation`  | Attach a versioned interpretation run to an existing **source** from agent-extracted flat entities (observations link `source_id` + `interpretation_id`). Prefer unified `store` with an `interpretation` block when file + entities land in one request | Strong      | Yes           | Available |
-| `list_interpretations`   | List interpretation runs for the authenticated user, optionally filtered by `source_id`                                                                  | Strong      | Yes           | Available |
+| Action                  | Purpose                                                                                                                                                                                                                                                  | Consistency | Deterministic | Status    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `create_interpretation` | Attach a versioned interpretation run to an existing **source** from agent-extracted flat entities (observations link `source_id` + `interpretation_id`). Prefer unified `store` with an `interpretation` block when file + entities land in one request | Strong      | Yes           | Available |
+| `list_interpretations`  | List interpretation runs for the authenticated user, optionally filtered by `source_id`                                                                                                                                                                  | Strong      | Yes           | Available |
 
 See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 
 ### 2.7.2 Diagnostics and activity
 
-| Action                   | Purpose                                                                                         | Consistency | Deterministic | Status    |
-| ------------------------ | ----------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
-| `health_check_snapshots` | Detect stale entity snapshots (`observation_count` mismatch); optional automatic recompute      | Strong      | Yes           | Available |
+| Action                   | Purpose                                                                                                                                         | Consistency | Deterministic | Status    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `health_check_snapshots` | Detect stale entity snapshots (`observation_count` mismatch); optional automatic recompute                                                      | Strong      | Yes           | Available |
 | `list_recent_changes`    | Recent activity across core tables (entities, sources, observations, interpretations, relationships, timeline_events), ordered by `activity_at` | Strong      | Yes           | Available |
 
 ### 2.7.3 Guest entity submission
 
-| Action                         | Purpose                                                                                                                                                     | Consistency | Deterministic | Status    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| Action                         | Purpose                                                                                                                                                       | Consistency | Deterministic | Status    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
 | `submit_entity`                | Config-driven submission for `entity_type` with an active `submission_config` row (operator-seeded; repo does not seed defaults). May mint guest thread token | Strong      | Partial       | Available |
-| `add_entity_message`           | Append a `conversation_message` to the thread linked to a submitted entity                                                                                  | Strong      | Yes           | Available |
-| `get_entity_submission_status` | Read-back submitted entity (`retrieve_entity_snapshot` shape); optional `guest_access_token`                                                                | Strong      | Yes           | Available |
-| `list_entity_submissions`      | List entities of a type for the current user (thin wrapper over entity listing)                                                                             | Strong      | Yes           | Available |
-| `sync_entity_submissions`      | Sync external mirrors for submissions (`issue` delegates to GitHub issue sync; other types may no-op until providers exist)                                  | Strong      | Varies        | Available |
+| `add_entity_message`           | Append a `conversation_message` to the thread linked to a submitted entity                                                                                    | Strong      | Yes           | Available |
+| `get_entity_submission_status` | Read-back submitted entity (`retrieve_entity_snapshot` shape); optional `guest_access_token`                                                                  | Strong      | Yes           | Available |
+| `list_entity_submissions`      | List entities of a type for the current user (thin wrapper over entity listing)                                                                               | Strong      | Yes           | Available |
+| `sync_entity_submissions`      | Sync external mirrors for submissions (`issue` delegates to GitHub issue sync; other types may no-op until providers exist)                                   | Strong      | Varies        | Available |
 
 ### 2.7.4 Issues (operator + GitHub)
 
-| Action             | Purpose                                                                                                                                                                              | Consistency | Deterministic | Status    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | ------------- | --------- |
-| `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+).                           | Strong      | Partial       | Available |
-| `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
-| `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
-| `sync_issues`      | Bulk pull issues (and messages) from the configured or `repo`-selected GitHub repo into local Neotoma; push opt-in for non-default repos; `commit: false` dry run                   | Strong      | Partial       | Available |
-| `bulk_close_issues`| Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                          | Strong      | Yes           | Available |
-| `bulk_remove_issues`| Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.   | Strong      | Yes           | Available |
+| Action               | Purpose                                                                                                                                                                                                                                     | Consistency | Deterministic | Status    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `submit_issue`       | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+). | Strong      | Partial       | Available |
+| `add_issue_message`  | Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                       | Strong      | Partial       | Available |
+| `get_issue_status`   | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                                                                                  | Strong      | Yes           | Available |
+| `sync_issues`        | Bulk pull issues (and messages) from the configured or `repo`-selected GitHub repo into local Neotoma; push opt-in for non-default repos; `commit: false` dry run                                                                           | Strong      | Partial       | Available |
+| `bulk_close_issues`  | Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                                                                              | Strong      | Yes           | Available |
+| `bulk_remove_issues` | Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.                                                        | Strong      | Yes           | Available |
 
 Canonical behavior: [`docs/subsystems/issues.md`](../subsystems/issues.md).
 
 ### 2.7.5 Substrate event subscriptions
 
-| Action                    | Purpose                                                                                                              | Consistency | Deterministic | Status    |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| Action                    | Purpose                                                                                                                               | Consistency | Deterministic | Status    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
 | `subscribe`               | Create a bounded subscription (`entity_types`, `entity_ids`, and/or `event_types`; at least one required) for webhook or SSE delivery | Strong      | Yes           | Available |
-| `unsubscribe`             | Deactivate a subscription by `subscription_id`                                                                       | Strong      | Yes           | Available |
-| `list_subscriptions`      | List active subscriptions (secrets omitted)                                                                          | Strong      | Yes           | Available |
-| `get_subscription_status` | Snapshot one subscription by `subscription_id` (secret omitted)                                                    | Strong      | Yes           | Available |
+| `unsubscribe`             | Deactivate a subscription by `subscription_id`                                                                                        | Strong      | Yes           | Available |
+| `list_subscriptions`      | List active subscriptions (secrets omitted)                                                                                           | Strong      | Yes           | Available |
+| `get_subscription_status` | Snapshot one subscription by `subscription_id` (secret omitted)                                                                       | Strong      | Yes           | Available |
 
 ### 2.7.6 Cross-instance peers and sync
 
-| Action                  | Purpose                                                                                                   | Consistency | Deterministic | Status    |
-| ----------------------- | --------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
-| `add_peer`              | Register a peer for cross-instance sync; may return `shared_secret` when using shared-secret auth       | Strong      | Partial       | Available |
-| `remove_peer`           | Deactivate a peer configuration                                                                           | Strong      | Yes           | Available |
-| `list_peers`            | List configured peers (shared secrets redacted)                                                           | Strong      | Yes           | Available |
-| `get_peer_status`       | One peer snapshot plus remote health probe when configured                                                | Strong      | Partial       | Available |
-| `sync_peer`             | Bounded outbound/inbound observation sync vs. a peer                                                      | Strong      | Partial       | Available |
+| Action                  | Purpose                                                                                                  | Consistency | Deterministic | Status    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- | ----------- | ------------- | --------- |
+| `add_peer`              | Register a peer for cross-instance sync; may return `shared_secret` when using shared-secret auth        | Strong      | Partial       | Available |
+| `remove_peer`           | Deactivate a peer configuration                                                                          | Strong      | Yes           | Available |
+| `list_peers`            | List configured peers (shared secrets redacted)                                                          | Strong      | Yes           | Available |
+| `get_peer_status`       | One peer snapshot plus remote health probe when configured                                               | Strong      | Partial       | Available |
+| `sync_peer`             | Bounded outbound/inbound observation sync vs. a peer                                                     | Strong      | Partial       | Available |
 | `resolve_sync_conflict` | Resolve replication conflicts (`prefer_local`, `prefer_remote`, `last_write_wins`, `source_priority`, …) | Strong      | Varies        | Available |
 
 See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md).
@@ -500,8 +500,8 @@ See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md).
 | Entity Relationships     | `neotoma://entity/{entity_id}/relationships`  | All relationships for an entity (inbound and outbound)                         | No - requires entity ID                                                                |
 | All Relationships        | `neotoma://relationships`                     | All relationships regardless of type                                           | Yes - always available                                                                 |
 | Relationship Collections | `neotoma://relationships/{relationship_type}` | All relationships of a specific type (e.g., `neotoma://relationships/PART_OF`) | Yes - dynamically enumerated                                                           |
-| Timeline (Year)          | `neotoma://timeline/{year}`                   | All timeline events in a specific year (e.g., `neotoma://timeline/2024`)       | No — valid for `read_resource` / templates; not listed in `list_resources`            |
-| Timeline (Month)         | `neotoma://timeline/{year}-{month}`           | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`)   | No — valid for `read_resource` / templates; not listed in `list_resources`            |
+| Timeline (Year)          | `neotoma://timeline/{year}`                   | All timeline events in a specific year (e.g., `neotoma://timeline/2024`)       | No — valid for `read_resource` / templates; not listed in `list_resources`             |
+| Timeline (Month)         | `neotoma://timeline/{year}-{month}`           | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`)   | No — valid for `read_resource` / templates; not listed in `list_resources`             |
 | Source                   | `neotoma://source/{source_id}`                | Specific source with metadata                                                  | No - requires source ID                                                                |
 | Source Collection        | `neotoma://sources`                           | All sources                                                                    | Yes - always available                                                                 |
 
@@ -656,7 +656,7 @@ Clients can subscribe to resource updates:
 | Query entities with filters     | Action: `retrieve_entities` (supports pagination, user filtering, entity_type filter) OR Resource with query params                |
 | Filter and paginate collections | Resource with query params: `neotoma://entities?limit=50&offset=100&user_id={uuid}`                                                |
 | Store new data                  | Action: `store` (resources are read-only)                                                                                          |
-| Create relationships            | Action: `create_relationship` or batched `create_relationships` (resources are read-only)                                        |
+| Create relationships            | Action: `create_relationship` or batched `create_relationships` (resources are read-only)                                          |
 | Correct entity fields           | Action: `correct` (resources are read-only)                                                                                        |
 | Subscribe to updates            | Resource subscriptions: `resources/subscribe`                                                                                      |
 
@@ -687,7 +687,7 @@ Clients can subscribe to resource updates:
   entities?: Array<Record<string, unknown>>;
   relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
   source_priority?: number;
-  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync" | "unspecified";
+  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync" | "unspecified" | "correction";
   source_peer_id?: string;
   external_actor?: { kind: "github_user"; login: string; html_url?: string };
   file_content?: string;
@@ -702,9 +702,9 @@ Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_
 
 **Write-classification, sync, and external attribution (v0.12+):**
 
-- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` (default order `sensor` > `workflow_state` > `llm_summary` = `unspecified` > `human` > `import` > `sync`; legacy null rows last). Every writer should set it: agent extraction and summaries send `llm_summary`; sensor / state-machine / human / import / sync writes send their own value. When the field is omitted the observations are stored as `unspecified` (a lineage sentinel that makes no claim about origin; unless a schema ranks it explicitly it shares `llm_summary`'s rank, so recency decides between the two, because legacy omitted writes were stored as `llm_summary`) and the response carries one `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Before #2241 omission was stored as `llm_summary`, so a legacy `llm_summary` row is not by itself evidence of model authorship.
+- `observation_source` classifies the _kind_ of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` (default order `sensor` > `workflow_state` > `llm_summary` = `unspecified` > `human` > `import` > `sync`; legacy null rows last). Every writer should set it: agent extraction and summaries send `llm_summary`; sensor / state-machine / human / import / sync writes send their own value. When the field is omitted the observations are stored as `unspecified` (a lineage sentinel that makes no claim about origin; unless a schema ranks it explicitly it shares `llm_summary`'s rank, so recency decides between the two, because legacy omitted writes were stored as `llm_summary`) and the response carries one `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Before #2241 omission was stored as `llm_summary`, so a legacy `llm_summary` row is not by itself evidence of model authorship.
 - `source_peer_id` stamps observations with the peer that produced them. Used for loop prevention on subscriptions whose `sync_peer_id` matches, and for the `Inspector → peers` audit view. Always pairs with `observation_source: "sync"`.
-- `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the *signing agent*, `external_actor` identifies the *human or account on whose behalf* the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
+- `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the _signing agent_, `external_actor` identifies the _human or account on whose behalf_ the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
 
 See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) for `source_peer_id` / `observation_source: "sync"` semantics, and [`docs/subsystems/issues.md`](../subsystems/issues.md) `## Reporter provenance` for the `external_actor` usage on issue mirrors.
 
@@ -763,7 +763,6 @@ The server handles all interpretation automatically. Agents should only pass the
 - **Use `file_content`** in web-based environments (claude.ai, chatgpt.com) where files are uploaded to the AI service's servers
 - `file_path` is more efficient for large files (no base64 encoding overhead)
 - `file_content` works universally across all environments
-
 
 **Request Schema (Structured):**
 
@@ -1413,7 +1412,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.12 `correct`
 
-**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
+**Purpose:** Create a priority-1000 correction-sourced [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. New correction-sourced observations survive later routine writes under default `last_write`. Other declared strategies retain their own comparison rules; unmarked historical rows are not inferred to be corrections. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
 
 **Request Schema:**
 
@@ -2125,11 +2124,11 @@ Typed relationships remain bound to the source entity. Callers must rebuild appr
 
 **Errors:**
 
-| Code | HTTP | Meaning | Retry? |
-| ---- | ---- | ------- | ------ |
-| `RESOURCE_NOT_FOUND` | 404 | Source entity does not exist for this user | No |
-| `VALIDATION_INVALID_FORMAT` | 400 | Source already merged, invalid predicate, predicate matched zero observations, or predicate matched every observation | No |
-| `ERR_IDEMPOTENCY_MISMATCH` | 400 | `idempotency_key` was reused with a different canonicalized predicate | No |
+| Code                        | HTTP | Meaning                                                                                                               | Retry? |
+| --------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------- | ------ |
+| `RESOURCE_NOT_FOUND`        | 404  | Source entity does not exist for this user                                                                            | No     |
+| `VALIDATION_INVALID_FORMAT` | 400  | Source already merged, invalid predicate, predicate matched zero observations, or predicate matched every observation | No     |
+| `ERR_IDEMPOTENCY_MISMATCH`  | 400  | `idempotency_key` was reused with a different canonicalized predicate                                                 | No     |
 
 **Consistency:** Strong (observations are rebound and snapshots recomputed synchronously)
 **Determinism:** Yes (same source, predicate, target identity, and idempotency key → same split result)
@@ -2142,38 +2141,38 @@ Typed relationships remain bound to the source entity. Callers must rebuild appr
 
 The following tools are first-class MCP actions (listed in §2 catalog tables and in `NEOTOMA_TOOL_NAMES`) but do not yet have a dedicated numbered subsection in §3.1–§3.29. **Request and response shapes:** use `openapi.yaml` for paths whose `operationId` matches the tool name (camelCase in OpenAPI, snake_case in MCP), or inspect the `inputSchema` object in `buildToolDefinitions` in `src/tool_definitions.ts` for tools defined only in code.
 
-| Tool | Mutation? | Primary doc / notes |
-| ---- | --------- | -------------------- |
-| `create_relationships` | Yes | Same edge semantics as `create_relationship`; accepts an array of `{ relationship_type, source_entity_id, target_entity_id, metadata? }`. Prefer batching when creating many edges after `store`. |
-| `list_potential_duplicates` | No | Parameters: `entity_type` (required), optional `threshold`, `limit`, `user_id`. |
-| `get_entity_type_counts` | No | Optional `user_id`; returns sorted counts map. |
-| `create_interpretation` | Yes | OpenAPI-backed; links new observations to existing `source_id`. |
-| `list_interpretations` | No | OpenAPI-backed; optional `source_id` filter. |
-| `get_session_identity` | No | No parameters; returns attribution envelope for MCP `initialize` / AAuth diagnostics. |
-| `list_recent_changes` | No | Pagination `limit` / `offset`. |
-| `submit_entity` | Yes | Requires active `submission_config` for `entity_type`; optional `initial_message`. |
-| `add_entity_message` | Yes | `entity_id` + `message`. |
-| `get_entity_submission_status` | No | `entity_id`, optional `guest_access_token`. |
-| `list_entity_submissions` | No | `entity_type`, optional `limit` / `offset`. |
-| `sync_entity_submissions` | Yes | Optional `entity_type` (defaults toward `issue` sync behavior). |
-| `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`. |
-| `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
-| `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
-| `sync_issues` | Yes | Optional `state`, `labels`, `since`, `repo` (`owner/name`, defaults to the configured repo), `push` (default true only for the configured repo, false for any other `repo`), `commit` (`false` = dry run, writes nothing). `repo` must be the configured repo or listed in `NEOTOMA_ISSUES_ALLOWED_REPOS`; otherwise `InvalidParams`. |
-| `bulk_close_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
-| `bulk_remove_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
-| `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |
-| `unsubscribe` | Yes | `subscription_id`. |
-| `list_subscriptions` | No | Lists active rows (secrets omitted). |
-| `get_subscription_status` | No | `subscription_id`. |
-| `add_peer` | Yes | OpenAPI `add_peer` body; see peer sync doc for env prerequisites (`NEOTOMA_PUBLIC_BASE_URL`, etc.). |
-| `remove_peer` | Yes | Path-style `peer_id` per OpenAPI `DELETE /peers/{peer_id}` (MCP tool wraps the same contract). |
-| `list_peers` | No | — |
-| `get_peer_status` | No | `peer_id`. |
-| `sync_peer` | Yes | Bounded fan-out; requires peer + public base URL configuration. |
-| `resolve_sync_conflict` | Yes | Strategy enum + entity/observation selectors per OpenAPI. |
-| `register_relationship_type` | Yes | Runtime relationship-type registry. `relationship_type`, optional `description`, `scope` (`user` default, `global` requires an explicit grant), `acyclic`, `inverse`, `symmetric`, `source_entity_types`, `target_entity_types`. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md). |
-| `list_relationship_types` | No | Optional `keyword`, `scope`, `include_edge_counts`. Empty result carries `empty_reason` (`registry_unseeded` or `filtered_to_empty`) rather than being ambiguous with "no vocabulary exists." |
+| Tool                           | Mutation? | Primary doc / notes                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_relationships`         | Yes       | Same edge semantics as `create_relationship`; accepts an array of `{ relationship_type, source_entity_id, target_entity_id, metadata? }`. Prefer batching when creating many edges after `store`.                                                                                                                                     |
+| `list_potential_duplicates`    | No        | Parameters: `entity_type` (required), optional `threshold`, `limit`, `user_id`.                                                                                                                                                                                                                                                       |
+| `get_entity_type_counts`       | No        | Optional `user_id`; returns sorted counts map.                                                                                                                                                                                                                                                                                        |
+| `create_interpretation`        | Yes       | OpenAPI-backed; links new observations to existing `source_id`.                                                                                                                                                                                                                                                                       |
+| `list_interpretations`         | No        | OpenAPI-backed; optional `source_id` filter.                                                                                                                                                                                                                                                                                          |
+| `get_session_identity`         | No        | No parameters; returns attribution envelope for MCP `initialize` / AAuth diagnostics.                                                                                                                                                                                                                                                 |
+| `list_recent_changes`          | No        | Pagination `limit` / `offset`.                                                                                                                                                                                                                                                                                                        |
+| `submit_entity`                | Yes       | Requires active `submission_config` for `entity_type`; optional `initial_message`.                                                                                                                                                                                                                                                    |
+| `add_entity_message`           | Yes       | `entity_id` + `message`.                                                                                                                                                                                                                                                                                                              |
+| `get_entity_submission_status` | No        | `entity_id`, optional `guest_access_token`.                                                                                                                                                                                                                                                                                           |
+| `list_entity_submissions`      | No        | `entity_type`, optional `limit` / `offset`.                                                                                                                                                                                                                                                                                           |
+| `sync_entity_submissions`      | Yes       | Optional `entity_type` (defaults toward `issue` sync behavior).                                                                                                                                                                                                                                                                       |
+| `submit_issue`                 | Yes       | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`.                                                                                             |
+| `add_issue_message`            | Yes       | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted).                                                                                                                                      |
+| `get_issue_status`             | No        | `entity_id`, optional `skip_sync`, `guest_access_token`.                                                                                                                                                                                                                                                                              |
+| `sync_issues`                  | Yes       | Optional `state`, `labels`, `since`, `repo` (`owner/name`, defaults to the configured repo), `push` (default true only for the configured repo, false for any other `repo`), `commit` (`false` = dry run, writes nothing). `repo` must be the configured repo or listed in `NEOTOMA_ISSUES_ALLOWED_REPOS`; otherwise `InvalidParams`. |
+| `bulk_close_issues`            | Yes       | `entity_ids: string[]` (required, non-empty), optional `reason`.                                                                                                                                                                                                                                                                      |
+| `bulk_remove_issues`           | Yes       | `entity_ids: string[]` (required, non-empty), optional `reason`.                                                                                                                                                                                                                                                                      |
+| `subscribe`                    | Yes       | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI.                                                                                                                                                                                                           |
+| `unsubscribe`                  | Yes       | `subscription_id`.                                                                                                                                                                                                                                                                                                                    |
+| `list_subscriptions`           | No        | Lists active rows (secrets omitted).                                                                                                                                                                                                                                                                                                  |
+| `get_subscription_status`      | No        | `subscription_id`.                                                                                                                                                                                                                                                                                                                    |
+| `add_peer`                     | Yes       | OpenAPI `add_peer` body; see peer sync doc for env prerequisites (`NEOTOMA_PUBLIC_BASE_URL`, etc.).                                                                                                                                                                                                                                   |
+| `remove_peer`                  | Yes       | Path-style `peer_id` per OpenAPI `DELETE /peers/{peer_id}` (MCP tool wraps the same contract).                                                                                                                                                                                                                                        |
+| `list_peers`                   | No        | —                                                                                                                                                                                                                                                                                                                                     |
+| `get_peer_status`              | No        | `peer_id`.                                                                                                                                                                                                                                                                                                                            |
+| `sync_peer`                    | Yes       | Bounded fan-out; requires peer + public base URL configuration.                                                                                                                                                                                                                                                                       |
+| `resolve_sync_conflict`        | Yes       | Strategy enum + entity/observation selectors per OpenAPI.                                                                                                                                                                                                                                                                             |
+| `register_relationship_type`   | Yes       | Runtime relationship-type registry. `relationship_type`, optional `description`, `scope` (`user` default, `global` requires an explicit grant), `acyclic`, `inverse`, `symmetric`, `source_entity_types`, `target_entity_types`. See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).                            |
+| `list_relationship_types`      | No        | Optional `keyword`, `scope`, `include_edge_counts`. Empty result carries `empty_reason` (`registry_unseeded` or `filtered_to_empty`) rather than being ambiguous with "no vocabulary exists."                                                                                                                                         |
 
 When adding or renaming an MCP tool, update **this catalog**, **`NEOTOMA_TOOL_NAMES`**, and the change-guardrails checklist in [`docs/architecture/change_guardrails_rules.mdc`](../architecture/change_guardrails_rules.mdc).
 

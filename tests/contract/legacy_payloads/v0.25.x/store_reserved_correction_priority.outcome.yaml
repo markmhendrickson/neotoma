@@ -1,0 +1,9 @@
+endpoint: "POST /store"
+outcome: rejected
+error_code: RESERVED_OBSERVATION_SOURCE
+hint_match: "correct({ entity_id, field, value })"
+notes: |
+  v0.25.x generic store accepted `source_priority: 1000`, the priority that
+  `correct()` stamps. Since #2033 that value is reserved for corrections, and
+  generic store rejects it with RESERVED_OBSERVATION_SOURCE and persists
+  nothing. Other numeric priorities are unaffected.

@@ -216,7 +216,7 @@ export function emitCommittedCorrection(event: DeferredCorrectionEvent): void {
     observation_id: event.observation_id,
     timestamp: event.timestamp,
     idempotency_key: event.idempotency_key,
-    observation_source: "human",
+    observation_source: "correction",
     source_peer_id: event.source_peer_id,
   });
   emitEntitySnapshotChange({
@@ -228,7 +228,7 @@ export function emitCommittedCorrection(event: DeferredCorrectionEvent): void {
     observation_id: event.observation_id,
     fields_changed: [event.field],
     idempotency_key: event.idempotency_key,
-    observation_source: "human",
+    observation_source: "correction",
     source_peer_id: event.source_peer_id,
   });
 }
@@ -384,6 +384,10 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     observed_at: new Date().toISOString(),
     specificity_score: 1.0,
     source_priority: 1000,
+    // #2033: durable correction-sourced observation marker. Stamped ONLY
+    // here — never accepted from client request bodies on the generic
+    // store/store_structured paths (RESERVED_OBSERVATION_SOURCE).
+    observation_source: "correction",
     fields: { [field]: value },
     user_id,
     idempotency_key: idempotency_key || undefined,

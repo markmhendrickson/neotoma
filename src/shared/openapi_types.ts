@@ -3795,7 +3795,9 @@ export interface components {
        *     - `workflow_state` — deterministic state-machine transitions
        *       (task status advances, node exits, pipeline step outcomes).
        *     - `human` — direct human write (acceptance of a suggestion,
-       *       Inspector edit, `entities correct`, manual annotation).
+       *       Inspector edit, manual annotation). Distinct from
+       *       `correction`: ordinary human-authored writes, not the
+       *       durable correction-sourced partition marker.
        *     - `import` — batch ingestion / ETL / scheduled imports.
        *     - `sync` — cross-instance replication from a configured Neotoma peer.
        *     - `unspecified` — the caller did not say what kind of write this
@@ -3808,6 +3810,11 @@ export interface components {
        *       reducer tie-break it shares `llm_summary`'s rank unless the
        *       schema's `observation_source_priority` names it, so recency
        *       decides between the two.
+       *     - `correction` — correction-sourced observation stamped only by
+       *       `correct()` / `createCorrection`. Durable under default `last_write` (#2033). Client
+       *       `store`/`store_structured` requests that assert this value
+       *       (or `source_priority: 1000`) are rejected with
+       *       `RESERVED_OBSERVATION_SOURCE`.
        *
        *     Null / missing for legacy rows written before the field
        *     existed. Rows written before `unspecified` was introduced carry
@@ -3824,6 +3831,7 @@ export interface components {
         | "import"
         | "sync"
         | "unspecified"
+        | "correction"
         | null;
       fields?: {
         [key: string]: unknown;
@@ -4307,7 +4315,8 @@ export interface components {
         | "human"
         | "import"
         | "sync"
-        | "unspecified";
+        | "unspecified"
+        | "correction";
       /**
        * @description Optional upstream author (e.g. GitHub user for issue submission).
        *     Stamped into observation provenance; must align with
@@ -4418,7 +4427,8 @@ export interface components {
         | "human"
         | "import"
         | "sync"
-        | "unspecified";
+        | "unspecified"
+        | "correction";
       idempotency_key: string;
       user_id?: string;
       /**
@@ -7382,8 +7392,12 @@ export interface operations {
        *     write is well-formed but refused by this instance's configured data
        *     policy; the whole request is rejected and `denied[]` enumerates every
        *     violating entity — call `describe_instance_policy` to read the policy
-       *     before retrying. Other validation errors fall back to the generic
-       *     `ErrorEnvelope`.
+       *     before retrying. `RESERVED_OBSERVATION_SOURCE` is returned when the
+       *     caller asserts reserved correction authority via
+       *     `observation_source: correction` and/or `source_priority: 1000` on
+       *     generic `store`/`store_structured` — use `correct()` instead; no
+       *     observation row is persisted. Other validation errors fall back to
+       *     the generic `ErrorEnvelope`.
        */
       400: {
         headers: {

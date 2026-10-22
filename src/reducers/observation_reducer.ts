@@ -48,20 +48,33 @@ export interface Observation {
   entity_id: string;
   entity_type: string;
   schema_version: string;
-  source_id: string;
+  source_id: string | null;
   observed_at: string;
   specificity_score: number | null;
   source_priority: number;
   /**
    * Kind of write (sensor / llm_summary / workflow_state / human /
-   * import). Used as a tie-break after numeric `source_priority`.
-   * Null / undefined for legacy rows written before the field existed;
-   * those rank last within their `source_priority` bucket.
+   * import / sync / correction). Used as a tie-break after numeric
+   * `source_priority`. Null / undefined for legacy rows written before
+   * the field existed; those rank last within their `source_priority`
+   * bucket. `correction` is stamped only by `createCorrection` (#2033).
    */
   observation_source?: ObservationSourceRankValue | null;
   fields: Record<string, unknown>;
   created_at: string;
   user_id: string;
+}
+
+/**
+ * Correction authority is explicit, server-stamped lineage. Historical
+ * priority-1000/source-less rows are ambiguous: ordinary writes could create
+ * the same shape, so they must never be promoted by a reducer heuristic.
+ * Such rows remain immutable and require an explicit, authorized correction.
+ */
+export function isCorrectionSourcedObservation(
+  obs: Pick<Observation, "observation_source" | "source_priority" | "source_id" | "fields">
+): boolean {
+  return obs.observation_source === "correction";
 }
 
 /**
@@ -423,6 +436,18 @@ export class ObservationReducer {
 
   /**
    * Last Write Wins strategy
+   *
+   * #2033: a correction-sourced observation (`observation_source: "correction"`,
+   * stamped only by `createCorrection`) must survive a later, non-correction
+   * write — the documented "corrections always win" contract (#1541) applied
+   * to merge_array, but not to last_write, the default for every
+   * auto-discovered field. When any candidate is correction-sourced, restrict
+   * resolution to those candidates only (mirroring the priority-gated union
+   * in `mergeArray`); corrections remain mutually last-write among themselves
+   * via the existing observed_at DESC sort. Ordinary numeric `source_priority`
+   * is intentionally NOT read here for non-correction writes — that would
+   * reintroduce the general priority-vs-last_write mismatch #1755 deliberately
+   * declined to fix.
    */
   private lastWriteWins(
     field: string,
@@ -433,7 +458,12 @@ export class ObservationReducer {
     // down to those where this field is non-null, so the input list can be
     // empty for fields whose only observation is null. Return a sentinel
     // no-value result in that case; the caller drops it from the snapshot.
-    const latest = observations[0];
+    const correctionObservations = observations.filter((obs) =>
+      isCorrectionSourcedObservation(obs)
+    );
+    const candidates = correctionObservations.length > 0 ? correctionObservations : observations;
+
+    const latest = candidates[0];
     if (!latest) {
       return { value: undefined, source_observation_id: "" };
     }

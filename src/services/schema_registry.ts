@@ -609,6 +609,7 @@ export const OBSERVATION_SOURCE_RANK_VALUES = [
   // does not name it, buildObservationSourceRankMap
   // (observation_source_rank.ts) ranks it level with `llm_summary`.
   "unspecified",
+  "correction",
 ] as const;
 
 export type ObservationSourceRankValue = (typeof OBSERVATION_SOURCE_RANK_VALUES)[number];
@@ -623,6 +624,10 @@ export type ObservationSourceRankValue = (typeof OBSERVATION_SOURCE_RANK_VALUES)
  * overrides), which outrank batch imports.
  */
 export const DEFAULT_OBSERVATION_SOURCE_PRIORITY: readonly ObservationSourceRankValue[] = [
+  // correction-sourced observations outrank every ordinary write kind when
+  // observation_source ranking is consulted (highest_priority tie-break).
+  // last_write partitions on the correction marker separately (#2033).
+  "correction",
   "sensor",
   "workflow_state",
   "llm_summary",

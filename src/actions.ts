@@ -57,6 +57,10 @@ import { CursorError } from "./services/entity_cursor.js";
 import { assertNoShadowedRoutes } from "./services/route_shadowing.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
+  ReservedObservationSourceError,
+  assertClientObservationSourceAllowed,
+} from "./services/reserved_observation_source.js";
+import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
@@ -7640,6 +7644,13 @@ app.post("/observations/create", async (req, res) => {
     // Get authenticated user_id and validate it matches provided user_id
     const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
+    // #2033: priority 1000 is reserved for correct() on every client write
+    // entrance, not only /store; reject before anything is written.
+    assertClientObservationSourceAllowed({
+      observationSource: parsed.data.observation_source,
+      sourcePriority: parsed.data.source_priority,
+    });
+
     const {
       entity_type,
       entity_identifier,
@@ -7691,6 +7702,13 @@ app.post("/observations/create", async (req, res) => {
       snapshot: snapshot?.snapshot || {},
     });
   } catch (error) {
+    if (error instanceof ReservedObservationSourceError) {
+      logWarn("ReservedObservationSource:observations_create", req, {
+        code: error.code,
+        field: error.field,
+      });
+      return res.status(400).json(error.toErrorEnvelope());
+    }
     logError("APIError:observations_create", req, error);
     const message = error instanceof Error ? error.message : "Failed to create observation";
     return res.status(500).json(buildErrorEnvelope("DB_QUERY_FAILED", message));
@@ -9400,6 +9418,14 @@ async function handleStorePost(
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    // #2033: reject-not-strip reserved correction authority at the client
+    // transport boundary, before any source or observation is written.
+    // Internal server callers of storeStructuredForApi (e.g. sync
+    // prefer_remote) do not pass through this guard.
+    assertClientObservationSourceAllowed({
+      observationSource: parsed.data.observation_source,
+      sourcePriority: parsed.data.source_priority,
+    });
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
     assertConditionalStoreRequest(parsed.data);
     const hasEntities = Boolean(parsed.data.entities?.length);
@@ -9611,6 +9637,13 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       logWarn("EntityTypeGuardError:store", req, { code: errCode, message });
       return sendError(res, 400, errCode, message);
+    }
+    if (error instanceof ReservedObservationSourceError) {
+      logWarn("ReservedObservationSource:store", req, {
+        code: error.code,
+        field: error.field,
+      });
+      return res.status(400).json(error.toErrorEnvelope());
     }
     if (errCode === "ERR_IDEMPOTENCY_MISMATCH") {
       const message = error instanceof Error ? error.message : "Idempotency key mismatch";

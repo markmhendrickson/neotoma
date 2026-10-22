@@ -134,6 +134,10 @@ import { EntityOwnerConflictError } from "./services/entity_resolution.js";
 import { CursorError } from "./services/entity_cursor.js";
 import { StorePolicyDeniedError, StorePolicyUnavailableError } from "./services/instance_policy.js";
 import {
+  ReservedObservationSourceError,
+  assertClientObservationSourceAllowed,
+} from "./services/reserved_observation_source.js";
+import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
@@ -2592,6 +2596,11 @@ export class NeotomaServer {
           // `reason_code` / `hint` would survive on REST but vanish on MCP, and a
           // policy rejection would read as a server fault. Envelope comes from the
           // error itself, so both surfaces stay identical by construction.
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
+        }
+        if (error instanceof ReservedObservationSourceError) {
+          // #2033: reserved correction authority on generic store must surface
+          // as InvalidRequest with the ErrorEnvelope in MCP `data`, matching REST.
           throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         if (error instanceof StorePolicyUnavailableError) {
@@ -5795,6 +5804,13 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    // #2033: reject-not-strip reserved correction authority at the MCP
+    // transport boundary, before overflow intake, file storage, or any
+    // observation write. Mirrors the HTTP /store guard in actions.ts.
+    assertClientObservationSourceAllowed({
+      observationSource: parsed.observation_source,
+      sourcePriority: parsed.source_priority,
+    });
     // #2242: peel the reserved per-entity `data_origin` key off every entity and
     // resolve each entity's effective origin (entity → request → none) before
     // anything else reads the entities. Mirrors the REST boundary in actions.ts.
@@ -6409,6 +6425,7 @@ export class NeotomaServer {
     const observationSource = options.observationSource;
     const sourcePeerId = options.sourcePeerId;
     const interpretation = options.interpretation;
+
     const { storeRawContent } = await import("./services/raw_storage.js");
     const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
       await import("./services/entity_resolution.js");
