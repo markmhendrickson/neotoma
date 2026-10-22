@@ -1,6 +1,6 @@
 # v0.26.0 test coverage review
 
-Range: `v0.25.0..HEAD` (20 commits; reviewed on `fdefe19e3`, then `b0b78cee0` (#2660, deploy workflow + `tests/contract/deploy_workflow_config.test.ts`) merged in). Six parallel `/review` passes, one per theme, read every diff and the test bodies for each user-facing surface. Focused suites were run locally against real SQLite. CI run 38585142254 on `fdefe19e3` passed every required job (`baseline`, `contract_parity`, `security_gates`, `frontend`, `site_export`, `agentic_evals`, `eval_scenarios`, `eval_combined`, `python_sdk`, `graph_render_smoke`).
+Range: `v0.25.0..release/v0.26.0` (41 commits and 410 files at `f062accad`; refreshed 2026-10-22). The code was reviewed on `fdefe19e3`. Merged in afterwards: `b0b78cee0` (#2660, deploy workflow + `tests/contract/deploy_workflow_config.test.ts`), the two release-branch fixes, the version bump, and website, documentation and CI work (#2663, #2680, #2683 to #2689, #2696, #2697, #2701, #2709 to #2712, #2714, #2715, and #2684 which fixes #2682; see the supplement). Six parallel `/review` passes, one per theme, read every diff and the test bodies for each user-facing surface. Focused suites were run locally against real SQLite. CI run 38585142254 on `fdefe19e3` passed every required job. CI run 39801146123 on `f062accad` also passed every job (`baseline`, `contract_parity`, `security_gates`, `frontend`, `site_export`, `agentic_evals`, `eval_scenarios`, `eval_combined`, `python_sdk`, `graph_render_smoke`): `baseline` ran 396 test files and 4,784 tests green, with 2 files and 13 tests skipped and 3 todo. The tests added by the later site and documentation PRs (for example `site_onepager_copy`, `llms_txt_claims`, `docs_viewer_*`, `site_route_retirement`) run in `baseline`.
 
 ## Code review
 
@@ -30,8 +30,8 @@ Range: `v0.25.0..HEAD` (20 commits; reviewed on `fdefe19e3`, then `b0b78cee0` (#
 - **#2651** Completeness detection for keys written before this release can misjudge payloads that differ only in unknown fields. On MCP, a shared interpretation source can under-report missing entities.
 - **#2614** The conditional error codes are not in `docs/reference/error_codes.md` or `docs/subsystems/errors.md`. Their store-path cost (key-mode row, double resolution) is noted in the supplement.
 - **#2636** `cli_reference.md` lacks `--data-origin` (the supplement wording was corrected). Guest redaction of origins is tested only at the helper level.
-- **#2577** The WS bridge has no Origin allowlist and logs no warning on a non-loopback `NEOTOMA_WS_HOST`. `WS_PORT` vs `NEOTOMA_WS_PORT` docs drift.
-- **#1934** Provenance for files the agent reads is instruction-only. Detection is tracked in #1935.
+- **#2577** `WS_PORT` vs `NEOTOMA_WS_PORT` docs drift.
+- **#1934** Detection of agent file reads is tracked in #1935.
 
 ### NIT
 
@@ -50,20 +50,40 @@ Range: `v0.25.0..HEAD` (20 commits; reviewed on `fdefe19e3`, then `b0b78cee0` (#
 | `expected_entity_absent` (HTTP, MCP, CLI) | `tests/services/store_conditional.test.ts`, `store_conditional_race.test.ts`, `store_condition_keys.test.ts`, `tests/cli/request_conditional_store.test.ts` | End-to-end, including multi-process races |
 | Keyed-store resume, `ERR_STORE_WRITE_INCOMPLETE` | `tests/integration/store_partial_write_2144.test.ts` (plus the new interpretation-source case), `store_abort_context_2144.test.ts` | End-to-end |
 | `data_origin` (REST, MCP, CLI, reads) | `tests/integration/store_data_origin.test.ts`, `tests/cli/cli_store_data_origin.test.ts`, `tests/unit/store_data_origin.test.ts`, legacy-payload fixtures | End-to-end; guest redaction helper-only |
-| `observation_source: unspecified` + warning | `tests/integration/observation_source_unspecified_default.test.ts`, `tests/cli/cli_store_observation_source.test.ts`, reducer unit tests | End-to-end |
-| `retrieve_field_provenance` on corrected/merged fields | `tests/integration/field_provenance_corrected_and_merged.test.ts` | End-to-end |
+| `observation_source: unspecified` + warning (#2635) | `tests/integration/observation_source_unspecified_default.test.ts`, `tests/cli/cli_store_observation_source.test.ts`, reducer unit tests | End-to-end |
+| `retrieve_field_provenance` on corrected/merged fields (#2634) | `tests/integration/field_provenance_corrected_and_merged.test.ts` | End-to-end |
 | `read_contract` on GET/POST entities, MCP `retrieve_entities`, CLI | `tests/integration/entity_read_contract*.test.ts` | End-to-end; semantic cap helper-level |
 | `store --plan` writes nothing | `tests/cli/cli_store_plan_mode_no_writes.test.ts`, `tests/integration/mcp_store_plan_mode_no_writes.test.ts`, contract test | End-to-end |
 | Relationship grant scoping | `tests/integration/relationship_write_capability_surfaces.test.ts`, `tests/contract/relationship_write_grant_contract.test.ts` | End-to-end |
-| Relationship delete after restore | `tests/integration/relationship_liveness_pagination.test.ts`, `tests/services/relationship_type_registration.test.ts` | End-to-end at the service level |
+| Relationship delete after restore (#2570) | `tests/integration/relationship_liveness_pagination.test.ts`, `tests/services/relationship_type_registration.test.ts` | End-to-end at the service level |
 | `NEOTOMA_WS_HOST` loopback default | `tests/security/ws_bridge_bind_host.test.ts` | End-to-end (spawns the bridge) |
 | Docker `.env*` exclusion | `tests/scripts/test_docker_context.py` | End-to-end (real Docker matcher) |
-| Operator deploy workflow escalation + probe retry (#2660, CI-only) | `tests/contract/deploy_workflow_config.test.ts` (6 passed locally) | Config contract; not a package surface |
+| Operator deploy workflow escalation + probe retry (#2660, #2663; CI-only) | `tests/contract/deploy_workflow_config.test.ts` (16 tests, all passing in `baseline` on `f062accad`) | Config contract; not a package surface |
 | Cross-type merge snapshot (release fix) | `tests/integration/cross_type_merge_snapshot.test.ts` | End-to-end |
+| Shared observation-insert primitive (#2582, no behaviour change) | `tests/unit/observation_insert_primitive.test.ts` (9 tests, in `baseline`), `tests/unit/observation_reducer_comparator.test.ts`, `tests/integration/observation_insert_sites_{attribution,characterization,routing}.test.ts` (not in the `baseline` lane; not seen in the CI run log) | Unit plus characterization of the insert sites |
+| Offline lifecycle preview and verifier (#2621, internal, `apply` refuses) | `tests/integration/entity_lifecycle_inventory.test.ts` (5), `entity_lifecycle_executor_boundary.test.ts` (12), `entity_lifecycle_executor_program.test.ts` (26), all passing in CI on `f062accad` | Service-level; no tool or startup step exposes it |
+| neotoma.io one-pager, route retirement, docs viewer, README and `llms.txt` claims (#2680 to #2715) | `tests/unit/site_onepager_copy.test.ts`, `site_route_retirement.test.ts`, `site_served_claims.test.ts`, `llms_txt_claims.test.ts`, `docs_viewer_{build,lint,render}.test.ts`, `root_landing_site_nav_drift.test.ts`, `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx` (new in #2715) | Site and documentation copy guards; not a package surface |
 
 No surface is classified BLOCKING.
 
+## Committed evals for agent-facing changes
+
+CI run 39801146123 on `f062accad` ran these committed evals green. `agentic_evals` ran 61 tests in total. The replay scenarios run in `eval_scenarios` (50 scenarios: 42 passed, 0 failed, 8 skipped) and in `eval_combined`, which reports them as Tier 2.
+
+| Change | Eval | Lane |
+|---|---|---|
+| Agent-initiated file-read provenance (#1934) | Three agentic fixtures in `tests/fixtures/agentic_eval/`: `agent_initiated_file_read_provenance`, `agent_initiated_file_read_provenance_noncompliant`, `agent_initiated_secret_file_read_no_persist` | `agentic_evals` |
+| Relationship grant scoping (#2525) | One agentic fixture: `relationship_write_capability_effect` (a single declared model, by design) | `agentic_evals` |
+| `observation_source` default (#2635) | Eval-harness scenarios `observation_source_unspecified_rank` and `observation_source_lineage` | `eval_scenarios`, `eval_combined` |
+| `data_origin` (#2636) | Eval-harness scenario `store_data_origin_readback` | `eval_scenarios`, `eval_combined` |
+| Interrupted keyed stores (#2651) | Eval-harness scenario `store_keyed_write_resume` | `eval_scenarios`, `eval_combined` |
+| `store --plan` writes nothing (#2471) | Eval-harness scenarios `store_plan_mode_persists_nothing` and `store_commit_persists_control` | `eval_scenarios`, `eval_combined` |
+| Atomic corrections, keyed array writes, conditional store, read acquisition (#2397, #2528, #2614, #2612) | Eval-harness scenarios `atomic_correction_transaction_recovery`, `atomic_keyed_array_disjoint_writers`, `native_conditional_store_recovery`, `entity_read_acquisition_scope` | `eval_scenarios`, `eval_combined` |
+| Field provenance on corrected and merged fields (#2634) | No eval-harness scenario. `tests/integration/field_provenance_corrected_and_merged.test.ts` is run by the CI step "Run field-provenance regression for corrected and merged fields (#2026)" in `ci_test_lanes.yml` | CI step |
+
+**Tier 2 skips.** `eval_combined` reported "Tier 2: 44/61 passed, 0 failed, 17 skipped". Skipped scenarios did not run and are not claimed here. The `eval_scenarios` log itemizes its 8 skips: three are quarantined under neotoma#1726 because the isolated replay server does not emit the counters they read (`closing_assistant_store`, `compact_profile_still_stores`, `file_source_provenance`), and five lack a replay cassette (`agent_under_load_skips_store`, `attachment_extraction`, `compliance_followup_loop`, `multi_tool_research_then_synthesis`, `simple_user_message_with_extracted_contact`). The `eval_combined` log does not give a reason for its other skips, and this review did not establish them. None of the evals in the table above was skipped: each shows as passed in both lanes. Because `file_source_provenance` is quarantined, file-sourced provenance is held by the #1934 agentic fixtures and not by a replay scenario.")
+
 ## Local run notes
 
-- The local suites were run against a temporary or default `.vitest` data dir with `NEOTOMA_ENV=test`. Local failures in `tenant_isolation_matrix`, `cli_store_data_origin`, `cli_store_plan_mode_no_writes`, `entity_lifecycle_executor_program` and two `store_conditional` HTTP cases came from the environment: the worktree has an env file, the operator shell sets `NEOTOMA_ENV=production`, and a `NEOTOMA_DATA_DIR` override splits server and worker databases. All of these pass in CI run 38585142254 on `fdefe19e3`.
+- The local suites were run against a temporary or default `.vitest` data dir with `NEOTOMA_ENV=test`. Local failures in `tenant_isolation_matrix`, `cli_store_data_origin`, `cli_store_plan_mode_no_writes`, `entity_lifecycle_executor_program` and two `store_conditional` HTTP cases came from the environment: the worktree has an env file, the operator shell sets `NEOTOMA_ENV=production`, and a `NEOTOMA_DATA_DIR` override splits server and worker databases. All of these pass in CI run 38585142254 on `fdefe19e3`; the `baseline` job of run 39801146123 on `f062accad` also passes `tenant_isolation_matrix` (19 of 19) and `deploy_workflow_config` (16 of 16).
 - After the fixes: `type-check` clean, `build:server` clean. Lifecycle, merge and plural-repair suites: 91/91. Keyed-store and conditional-store suites: 66/66.
