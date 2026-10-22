@@ -18,7 +18,8 @@ import { assertCanWriteProtected } from "./protected_entity_types.js";
 import { enforceOverridePolicy } from "./override_validation.js";
 import { assertAgentGrantFieldValid } from "./agent_grants.js";
 import { assertNoOwnerConflict } from "./entity_resolution.js";
-import type { ObservationSource } from "../shared/action_schemas.js";
+import type { DataOrigin, ObservationSource } from "../shared/action_schemas.js";
+import { withDataOriginProvenance } from "./provenance_data_origin.js";
 import {
   DEFAULT_OBSERVATION_SOURCE,
   buildObservationRow,
@@ -40,7 +41,8 @@ export interface CreateObservationParams {
   specificity_score: number;
   source_priority: number;
   /**
-   * Kind of write (sensor | llm_summary | workflow_state | human | import).
+   * Kind of write (sensor | llm_summary | workflow_state | human | import |
+   * sync | unspecified).
    * Orthogonal to `source_priority` (numeric ranking) and to
    * `provenance`/AAuth (which agent wrote it). Omit to fall back to
    * {@link DEFAULT_OBSERVATION_SOURCE}. See openapi.yaml
@@ -65,6 +67,12 @@ export interface CreateObservationParams {
   identity_rule?: string | null;
   /** Server-owned conditional operation proof; never a public store field. */
   operation_receipt?: { fingerprint: string; receipt: object };
+  /**
+   * Caller-claimed data origin (#2242), stamped as `provenance.data_origin`
+   * alongside — never merged into — the server's attribution keys. Omit to
+   * write no origin key at all.
+   */
+  data_origin?: DataOrigin | null;
 }
 
 export interface ObservationRecord {
@@ -156,7 +164,7 @@ export async function createObservation(
   // request context is active (stdio + no env identity), which keeps
   // existing behaviour intact. See src/crypto/agent_identity.ts for the
   // AttributionProvenance shape.
-  const attribution = getCurrentAttribution();
+  const attribution = withDataOriginProvenance(getCurrentAttribution(), params.data_origin);
 
   const row = buildObservationRow({
     id: observationId,

@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_keyed_write_resume",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-14T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Store four notes under one idempotency key. The first attempt will be refused by a limit constraint; relax the constraint and retry the same key, then repeat the call once more, and finally try the key with a different payload.",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Persist batches with store and a stable idempotency_key. If a keyed store fails, fix the cause and retry with the same key and payload.",
+  "tool_calls": [
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_resume_note",
+        "schema_version": "1.0",
+        "activate": true,
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": false
+            },
+            "limit": {
+              "type": "number",
+              "required": false,
+              "constraints": {
+                "max": 10
+              }
+            }
+          },
+          "canonical_name_fields": [
+            "title"
+          ],
+          "constraint_violation_policy": "reject"
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        }
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store_keyed_write_resume-batch",
+        "entities": [
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 0",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 1",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 2",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 3",
+            "limit": 50
+          }
+        ]
+      },
+      "sequence": 1
+    },
+    {
+      "name": "register_schema",
+      "input": {
+        "entity_type": "eval_resume_note",
+        "schema_version": "1.1",
+        "activate": true,
+        "schema_definition": {
+          "fields": {
+            "title": {
+              "type": "string",
+              "required": false
+            },
+            "limit": {
+              "type": "number",
+              "required": false
+            }
+          },
+          "canonical_name_fields": [
+            "title"
+          ]
+        },
+        "reducer_config": {
+          "merge_policies": {}
+        }
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store_keyed_write_resume-batch",
+        "entities": [
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 0",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 1",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 2",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 3",
+            "limit": 50
+          }
+        ]
+      },
+      "sequence": 3
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store_keyed_write_resume-batch",
+        "entities": [
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 0",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 1",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 2",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 3",
+            "limit": 50
+          }
+        ]
+      },
+      "sequence": 4
+    },
+    {
+      "name": "store",
+      "input": {
+        "idempotency_key": "store_keyed_write_resume-batch",
+        "entities": [
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 0",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 1",
+            "limit": 50
+          },
+          {
+            "entity_type": "eval_resume_note",
+            "title": "resume note 2",
+            "limit": 50
+          }
+        ]
+      },
+      "sequence": 5
+    }
+  ],
+  "assistant_text": "The first attempt was refused by the limit constraint. After relaxing it, the same key wrote all four notes; a further replay changed nothing, and a different payload under the key was refused."
+}

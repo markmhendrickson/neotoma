@@ -146,6 +146,7 @@ export const OBSERVATION_SOURCE_CLI_VALUES = [
   "human",
   "import",
   "sync",
+  "unspecified",
 ] as const;
 
 type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
@@ -159,6 +160,28 @@ export function normalizeObservationSourceFlag(raw: string): ObservationSourceFl
     );
   }
   return normalized as ObservationSourceFlag;
+}
+
+/**
+ * Parse `store --data-origin <json>` (#2242). Only checks that the value is a
+ * JSON object; the server validates the shape (kind enum, locator rules) with
+ * the same schema on every transport, so the CLI does not fork that contract.
+ */
+export function parseDataOriginFlag(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"file","locator":"report.xlsx"}\'.'
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(
+      'Invalid --data-origin: expected a JSON object such as \'{"kind":"url","locator":"https://example.com/page"}\'.'
+    );
+  }
+  return parsed as Record<string, unknown>;
 }
 
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
@@ -15440,9 +15463,14 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
+  .option(
+    "--data-origin <json>",
+    'Where the entities came from (#2242), e.g. \'{"kind":"file","locator":"report.xlsx","part":"sheet=Q3;row=12"}\'. ' +
+      "Applies to every entity; an entity's own data_origin key overrides it. A claim, not proof."
+  )
   .option(
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
@@ -15477,6 +15505,7 @@ program
     let entities: unknown;
     let fileRelationships: unknown[] | undefined;
     let fileIdempotencyKey: string | undefined;
+    let fileDataOrigin: unknown;
     if (opts.entities) {
       entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
@@ -15489,6 +15518,9 @@ program
         }
         if (typeof envelope.idempotency_key === "string") {
           fileIdempotencyKey = envelope.idempotency_key;
+        }
+        if (envelope.data_origin !== undefined) {
+          fileDataOrigin = envelope.data_origin;
         }
         if (Array.isArray(envelope.entities)) {
           entities = envelope.entities;
@@ -15570,6 +15602,13 @@ program
         structuredBody.observation_source = normalizeObservationSourceFlag(
           opts.observationSource as string
         );
+      }
+      const dataOrigin =
+        opts.dataOrigin !== undefined
+          ? parseDataOriginFlag(opts.dataOrigin as string)
+          : fileDataOrigin;
+      if (dataOrigin !== undefined) {
+        structuredBody.data_origin = dataOrigin;
       }
       if (opts.file && !hasUnstructured) {
         const resolvedFile = path.isAbsolute(opts.file)
@@ -15693,7 +15732,7 @@ program
   )
   .option(
     "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, import, or sync (custom v0.17 values → use data_source)"
+    "Kind of write: sensor, llm_summary, workflow_state, human, import, sync, or unspecified. When omitted the server stores unspecified and returns an OBSERVATION_SOURCE_OMITTED store warning; pass llm_summary for model-authored content (custom v0.17 values → use data_source)"
   )
   .option(
     "--source-upload",
@@ -17152,7 +17191,7 @@ snapshotsCommand
   )
   .option(
     "--observation-source <kind>",
-    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync (custom v0.17 values → use data_source)"
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import | sync | unspecified (custom v0.17 values → use data_source)"
   )
   .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
   .option("--limit <n>", "Cap on returned entities (default: 500)")

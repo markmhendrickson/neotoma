@@ -7,6 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import { DEFAULT_OBSERVATION_SOURCE_PRIORITY } from "./schema_registry.js";
+import { buildObservationSourceRankMap } from "./observation_source_rank.js";
 
 export const ENTITY_LIFECYCLE_CUTOVER_ID = "entity_lifecycle_authority_v1";
 export const ENTITY_LEGACY_SELECTOR_VERSION = "entity_visibility_legacy_v1";
@@ -93,7 +94,8 @@ export function selectLegacyEntityVisibility(
       if (!Number.isFinite(row.source_priority) || !row.id || !row.fields) refuse();
     }
   }
-  const rank = new Map<string, number>(DEFAULT_OBSERVATION_SOURCE_PRIORITY.map((v, i) => [v, i]));
+  // Same rank map as the reducer, so legacy visibility and snapshots agree (#2241).
+  const rank = buildObservationSourceRankMap(DEFAULT_OBSERVATION_SOURCE_PRIORITY);
   const ordered = [...observations].sort((a, b) => {
     const timeA = Date.parse(a.observed_at),
       timeB = Date.parse(b.observed_at);

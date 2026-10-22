@@ -73,6 +73,12 @@ import {
   RegisterSchemaRequestSchema,
   IntakeHintSchema,
   IssuesSyncRepoSchema,
+  DataOriginSchema,
+  DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE,
+  dataOriginHasEntities,
+  refineEntityDataOrigins,
+  type DataOrigin,
+  ObservationSourceSchema,
   type StoreInterpretationInput,
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
@@ -290,6 +296,18 @@ export function installStdioSignalHandlers(close: () => Promise<void>): boolean 
   });
   return true;
 }
+
+type StoreStructuredInternalOptions = {
+  expectedEntityAbsent?: boolean;
+  commit?: boolean;
+  strict?: boolean;
+  observationSource?: import("./shared/action_schemas.js").ObservationSource;
+  sourcePeerId?: string | null;
+  interpretation?: StoreInterpretationInput;
+  interpretationSourceId?: string;
+  /** Effective data origin per entity index (#2242); see provenance_data_origin.ts. */
+  dataOrigins?: Array<DataOrigin | undefined>;
+};
 
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
@@ -3621,9 +3639,16 @@ export class NeotomaServer {
           ? payload.snapshot.agent_instructions
           : null;
 
+      // #2242: caller-claimed data origins of the observations this snapshot's
+      // field provenance cites. Omitted entirely when none carry one.
+      const { collectSnapshotDataOrigins } = await import("./services/provenance_data_origin.js");
+      const dataOrigins = await collectSnapshotDataOrigins(payload.provenance, userId);
+      const hasDataOrigins = Object.keys(dataOrigins).length > 0;
+
       if (responseFormat === "json") {
         return this.buildTextResponse({
           ...payload,
+          ...(hasDataOrigins ? { data_origins: dataOrigins } : {}),
           ...(schemaInstructions !== null ? { schema_instructions: schemaInstructions } : {}),
           ...(entityInstructions !== null ? { entity_instructions: entityInstructions } : {}),
         });
@@ -3638,6 +3663,7 @@ export class NeotomaServer {
           observation_count: payload.observation_count,
           last_observation_at: payload.last_observation_at ?? null,
           provenance: payload.provenance,
+          ...(hasDataOrigins ? { data_origins: dataOrigins } : {}),
         },
         schemaFieldOrder,
         { includeProvenance: true }
@@ -3811,56 +3837,92 @@ export class NeotomaServer {
       );
     }
 
-    // Get the observation
-    const { data: observation, error: obsError } = await db
+    // A merge_array / merge_array_by_key field records every contributing
+    // observation as a comma-joined id list (observation_reducer.ts); a scalar
+    // field records exactly one. Same split as HTTP /get_field_provenance.
+    const observationIds = observationId
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
+
+    const { data: observationRows, error: obsError } = await db
       .from("observations")
       .select("*")
-      .eq("id", observationId)
-      .eq("user_id", userId)
-      .single();
+      .in("id", observationIds)
+      .eq("user_id", userId);
 
-    if (obsError || !observation) {
+    if (obsError || !observationRows || observationRows.length === 0) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to get observation: ${obsError?.message}`
+        `Failed to get observation: ${obsError?.message ?? "Observation not found"}`
       );
     }
 
-    // Get the source from sources table
-    if (!observation.source_id) {
-      throw new McpError(ErrorCode.InternalError, `Observation does not have source_id`);
+    // The observation reported as `source_observation` is the most recent
+    // contributor (latest observed_at, then id, so the pick is deterministic).
+    // For a scalar field it is the single winning observation. A merged field
+    // has no single winner, so this is a presentation choice, not a winner.
+    const observations = [...(observationRows as Array<Record<string, any>>)].sort((a, b) => {
+      const byTime = String(b.observed_at ?? "").localeCompare(String(a.observed_at ?? ""));
+      return byTime !== 0 ? byTime : String(a.id).localeCompare(String(b.id));
+    });
+    const observation = observations[0];
+
+    // `source_id` is nullable on `observations`, and NULL is a legal state:
+    // correct() and deletion observations are written without a source
+    // document. Report that as `source: null` instead of failing (#2026). A
+    // non-NULL source_id that does not resolve is an integrity violation and
+    // still errors.
+    let source: {
+      id: string;
+      mime_type: string | null;
+      file_urls: string[];
+      created_at: string | null;
+    } | null = null;
+
+    if (observation.source_id) {
+      const { data: sourceData, error: sourceError } = await db
+        .from("sources")
+        .select("id, mime_type, file_size, original_filename, created_at")
+        .eq("id", observation.source_id)
+        .eq("user_id", userId)
+        .single();
+
+      if (sourceError || !sourceData) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to get source: ${sourceError?.message || "Source not found"}`
+        );
+      }
+
+      source = {
+        id: sourceData.id,
+        mime_type: sourceData.mime_type,
+        file_urls: [], // Sources table doesn't have file_urls directly
+        created_at: sourceData.created_at,
+      };
     }
 
-    const { data: sourceData, error: sourceError } = await db
-      .from("sources")
-      .select("id, mime_type, file_size, original_filename, created_at")
-      .eq("id", observation.source_id)
-      .eq("user_id", userId)
-      .single();
+    // #2242: the caller-claimed data origin of the reported observation, when
+    // one was supplied. Absent (not null) when the observation carries none.
+    const { readDataOriginFromProvenance } = await import("./services/provenance_data_origin.js");
+    const winningDataOrigin = readDataOriginFromProvenance(observation.provenance);
 
-    if (sourceError || !sourceData) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get source: ${sourceError?.message || "Source not found"}`
-      );
-    }
-
-    const source = {
-      id: sourceData.id,
-      mime_type: sourceData.mime_type,
-      file_urls: [], // Sources table doesn't have file_urls directly
-      created_at: sourceData.created_at,
-    };
-
+    // Response shape is unchanged from before #2026: one source_observation
+    // and its source. Aligning this with the HTTP response of the same
+    // operation (observation_ids, every contributing observation, per-
+    // contributor sources) is deliberately left to a follow-up that declares
+    // one schema for both surfaces in openapi.yaml.
     const provenanceChain = {
       field: parsed.field,
       value: (snapshot.snapshot as Record<string, unknown>)[parsed.field],
       source_observation: {
-        id: observationId,
-        source_id: observation.source_id,
+        id: observation.id,
+        source_id: observation.source_id ?? null,
         observed_at: observation.observed_at,
         specificity_score: observation.specificity_score,
         source_priority: observation.source_priority,
+        ...(winningDataOrigin ? { data_origin: winningDataOrigin } : {}),
       },
       source: source,
       observed_at: observation.observed_at,
@@ -5678,8 +5740,10 @@ export class NeotomaServer {
         file_path: z.string().optional(),
         mime_type: z.string().optional(),
         original_filename: z.string().optional(),
-        entities: z.array(z.record(z.unknown())).optional(),
+        entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
         relationships: z.array(StoreRelationshipInputSchema).optional(),
+        // #2242: request-level data origin; entities[i].data_origin overrides it.
+        data_origin: DataOriginSchema.optional(),
         interpretation: z
           .object({
             source_id: z.string().min(1).optional(),
@@ -5691,9 +5755,8 @@ export class NeotomaServer {
           })
           .optional(),
         source_priority: z.number().default(100),
-        observation_source: z
-          .enum(["sensor", "llm_summary", "workflow_state", "human", "import", "sync"])
-          .optional(),
+        // Shared enum (#2241) so the MCP store accepts exactly what REST does.
+        observation_source: ObservationSourceSchema.optional(),
         source_peer_id: z.string().min(1).optional(),
         commit: z.boolean().optional(),
         strict: z.boolean().optional(),
@@ -5716,6 +5779,7 @@ export class NeotomaServer {
       .refine((data) => data.intake?.mode === "overflow" || Boolean(data.idempotency_key), {
         message: "idempotency_key is required when intake.mode is not 'overflow'",
       })
+      .refine(dataOriginHasEntities, DATA_ORIGIN_WITHOUT_ENTITIES_ISSUE)
       .refine(
         (data) => {
           // reference mode requires an absolute file_path (no base64 inline content)
@@ -5730,6 +5794,17 @@ export class NeotomaServer {
       );
 
     const parsed = schema.parse(args);
+
+    // #2242: peel the reserved per-entity `data_origin` key off every entity and
+    // resolve each entity's effective origin (entity → request → none) before
+    // anything else reads the entities. Mirrors the REST boundary in actions.ts.
+    let storeDataOrigins: Array<DataOrigin | undefined> | undefined;
+    if (parsed.entities?.length) {
+      const { splitEntityDataOrigins } = await import("./services/provenance_data_origin.js");
+      const split = splitEntityDataOrigins(parsed.entities, parsed.data_origin);
+      parsed.entities = split.entities;
+      storeDataOrigins = split.origins;
+    }
 
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
     assertConditionalStoreRequest(parsed);
@@ -5822,6 +5897,7 @@ export class NeotomaServer {
             typeof preloadedUnstructuredPayload?.source_id === "string"
               ? preloadedUnstructuredPayload.source_id
               : undefined,
+          dataOrigins: storeDataOrigins,
         }
       );
       try {
@@ -6263,6 +6339,12 @@ export class NeotomaServer {
   }
 
   // Internal helper for structured source storing
+  /**
+   * MCP structured store entry point. A committing, keyed store is a write:
+   * once it starts it is not cancelled by the caller's abort signal, and a
+   * second call for the same idempotency key waits for the first (#2144). See
+   * `runKeyedStoreWrite`.
+   */
   private async storeStructuredInternal(
     userId: string,
     entities: Record<string, unknown>[],
@@ -6270,15 +6352,33 @@ export class NeotomaServer {
     idempotencyKey?: string,
     originalFilename?: string,
     relationships?: StoreRelationshipRef[],
-    options: {
-      expectedEntityAbsent?: boolean;
-      commit?: boolean;
-      strict?: boolean;
-      observationSource?: import("./shared/action_schemas.js").ObservationSource;
-      sourcePeerId?: string | null;
-      interpretation?: StoreInterpretationInput;
-      interpretationSourceId?: string;
-    } = {}
+    options: StoreStructuredInternalOptions = {}
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const run = () =>
+      this.storeStructuredInternalUnguarded(
+        userId,
+        entities,
+        sourcePriority,
+        idempotencyKey,
+        originalFilename,
+        relationships,
+        options
+      );
+    if (!idempotencyKey || options.commit === false || options.expectedEntityAbsent === true) {
+      return run();
+    }
+    const { runKeyedStoreWrite } = await import("./services/store_write_state.js");
+    return runKeyedStoreWrite(userId, idempotencyKey, run);
+  }
+
+  private async storeStructuredInternalUnguarded(
+    userId: string,
+    entities: Record<string, unknown>[],
+    sourcePriority: number = 100,
+    idempotencyKey?: string,
+    originalFilename?: string,
+    relationships?: StoreRelationshipRef[],
+    options: StoreStructuredInternalOptions = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     if (options.expectedEntityAbsent === true) {
       const { preflightStructuredStoreAdmission } = await import("./services/store_admission.js");
@@ -6300,6 +6400,7 @@ export class NeotomaServer {
         originalFilename,
         strict: options.strict,
         observationSource: options.observationSource,
+        dataOrigin: options.dataOrigins?.[0],
       });
       return this.buildTextResponse(result);
     }
@@ -6512,6 +6613,10 @@ export class NeotomaServer {
       });
     }
 
+    // Set when a keyed store is resuming its own unfinished write (#2144):
+    // entity rows that write already created are not merge targets, so the
+    // resolver skips its strict / collision refusals for them.
+    let resumeSourceId: string | undefined;
     if (idempotencyKey) {
       const incomingContentHash = createHash("sha256")
         .update(JSON.stringify(entities, null, 2))
@@ -6522,7 +6627,7 @@ export class NeotomaServer {
 
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
-        .select("id, content_hash")
+        .select("id, content_hash, provenance")
         .eq("user_id", userId)
         .eq("idempotency_key", idempotencyKey)
         .maybeSingle();
@@ -6531,16 +6636,57 @@ export class NeotomaServer {
         throw new Error(`Failed to check idempotency key: ${existingSourceError.message}`);
       }
 
-      if (existingSource) {
-        if (existingSource.content_hash && existingSource.content_hash !== incomingContentHash) {
-          const mismatchErr = new McpError(
-            ErrorCode.InvalidParams,
-            `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
-              `Use a unique idempotency_key for each distinct write.`
-          );
-          throw mismatchErr;
-        }
+      if (
+        existingSource &&
+        existingSource.content_hash &&
+        existingSource.content_hash !== incomingContentHash
+      ) {
+        const mismatchErr = new McpError(
+          ErrorCode.InvalidParams,
+          `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
+            `Use a unique idempotency_key for each distinct write.`
+        );
+        throw mismatchErr;
+      }
 
+      // A recorded key is not a finished write (#2144). When the earlier
+      // attempt never recorded completion, skip the replay branch and run the
+      // ordinary write again over the same source: observation ids are
+      // deterministic, so entities already written resolve to their existing
+      // observation and only the missing ones are added. Sources written
+      // before the marker existed have no recorded state and replay as before.
+      let resumeIncompleteWrite = false;
+      if (existingSource) {
+        const { readStoreWriteState } = await import("./services/store_write_state.js");
+        if (readStoreWriteState(existingSource.provenance) === "in_progress") {
+          if (interpretation) {
+            const storeWriteState = await import("./services/store_write_state.js");
+            const summary = await storeWriteState.summarizeUnfinishedStore({
+              userId,
+              sourceId:
+                options.interpretationSourceId ??
+                (typeof interpretation.source_id === "string"
+                  ? interpretation.source_id
+                  : undefined) ??
+                existingSource.id,
+              entities,
+            });
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `ERR_STORE_WRITE_INCOMPLETE: idempotency_key "${idempotencyKey}" belongs to a store ` +
+                `that did not finish writing (${summary.entities_written} of ` +
+                `${summary.entities_requested} entities have an observation), and it cannot be ` +
+                "resumed under the same key because the request carries an interpretation. " +
+                storeWriteState.incompleteStoreHint(summary),
+              { code: "ERR_STORE_WRITE_INCOMPLETE", ...summary }
+            );
+          }
+          resumeIncompleteWrite = true;
+          resumeSourceId = existingSource.id;
+        }
+      }
+
+      if (existingSource && !resumeIncompleteWrite) {
         // Combined stores with interpretation.source_ref=unstructured write
         // observations against the unstructured source, while the structured
         // JSON source still owns the idempotency key. Exact replay must look
@@ -6707,8 +6853,12 @@ export class NeotomaServer {
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
+    // #2242: each entity's effective data_origin is part of the stored payload
+    // (and so of the idempotency content hash); unchanged when there is none.
+    const { entitiesWithStoredDataOrigins } = await import("./services/provenance_data_origin.js");
+    const dataOrigins = options.dataOrigins;
     const jsonContent = JSON.stringify(
-      entities,
+      entitiesWithStoredDataOrigins(entities, dataOrigins),
       (key, value) => {
         if (typeof value === "bigint") {
           return Number(value);
@@ -6733,6 +6883,7 @@ export class NeotomaServer {
           upload_method: "mcp_store",
           client: "mcp",
           source_priority: sourcePriority,
+          ...(await import("./services/store_write_state.js")).inProgressStoreWriteProvenance(),
         },
       });
     } catch (rawStorageErr) {
@@ -6755,6 +6906,7 @@ export class NeotomaServer {
         userId,
         sourceId: resolvedInterpretationSourceId,
         extractedData: entities,
+        dataOrigins,
         idempotencyKey,
         config: {
           provider: "agent",
@@ -6817,6 +6969,13 @@ export class NeotomaServer {
         }
       }
 
+      // Every observation and relationship is written; record it on the source so
+      // a replay of this key knows the write finished (#2144).
+      {
+        const { markStoreWriteComplete } = await import("./services/store_write_state.js");
+        await markStoreWriteComplete(storageResult.sourceId, userId);
+      }
+
       return this.buildTextResponse({
         source_id: storageResult.sourceId,
         interpretation_source_id: resolvedInterpretationSourceId,
@@ -6848,6 +7007,8 @@ export class NeotomaServer {
     // pre-pass uses commit=false so it only tests derivation without touching
     // the DB. The commit pass below runs only when all entities pass.
     const preResolutionIssues: Array<{ index: number; entityType: string; message: string }> = [];
+    // One fresh set per pass when resuming (#2144): see `resumeClaimedEntityIds`.
+    const preClaimedEntityIds = resumeSourceId !== undefined ? new Set<string>() : undefined;
     for (let preIdx = 0; preIdx < entities.length; preIdx++) {
       const preEntityData = entities[preIdx];
       const preEntityType =
@@ -6862,14 +7023,17 @@ export class NeotomaServer {
           ? (preEntityData.target_id as string)
           : undefined;
       try {
-        await resolveEntityWithTrace({
+        const preResult = await resolveEntityWithTrace({
           entityType: preEntityType,
           fields: preFields,
           userId,
           commit: false,
           strict,
           targetId: preTargetId,
+          resumeSourceId,
+          resumeClaimedEntityIds: preClaimedEntityIds,
         });
+        preClaimedEntityIds?.add(preResult.entityId);
       } catch (err) {
         if (
           err instanceof CanonicalNameUnresolvedError ||
@@ -6918,8 +7082,11 @@ export class NeotomaServer {
     const insertedObservationIds = new Set<string>();
     let unknownFieldsCount = 0;
     const unknownFieldNamesSet = new Set<string>();
+    // A second fresh set for the commit pass (#2144): the pre-pass above is a
+    // separate pass and must not mark rows as claimed for this one.
+    const commitClaimedEntityIds = resumeSourceId !== undefined ? new Set<string>() : undefined;
 
-    for (const entityData of entities) {
+    for (const [entityIndex, entityData] of entities.entries()) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
       let entityType =
         (entityData.entity_type as string) || (entityData.type as string) || "generic";
@@ -7207,7 +7374,10 @@ export class NeotomaServer {
           commit: true,
           strict,
           targetId: targetIdForResolve,
+          resumeSourceId,
+          resumeClaimedEntityIds: commitClaimedEntityIds,
         });
+        commitClaimedEntityIds?.add(result.entityId);
         entityId = result.entityId;
         resolverTrace = {
           canonicalName: result.trace.canonicalName,
@@ -7307,7 +7477,11 @@ export class NeotomaServer {
         // writing agent for structured-store observations too.
         const { getCurrentAttribution: _structuredAttrib } =
           await import("./services/request_context.js");
-        const structuredAttribution = _structuredAttrib();
+        const { withDataOriginProvenance } = await import("./services/provenance_data_origin.js");
+        const structuredAttribution = withDataOriginProvenance(
+          _structuredAttrib(),
+          dataOrigins?.[entityIndex]
+        );
         const observedAt = new Date().toISOString();
         const { error: obsError } = await insertObservationRow(
           buildObservationRow({
@@ -7544,7 +7718,7 @@ export class NeotomaServer {
               timestamp: emitTs,
               source_id: storageResult.sourceId,
               idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? "llm_summary",
+              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
               source_peer_id: sourcePeerId ?? undefined,
             });
             const isNewEntity = createdEntity.action === "created";
@@ -7564,7 +7738,7 @@ export class NeotomaServer {
               fields_changed: fieldsChanged,
               source_id: storageResult.sourceId,
               idempotency_key: idempotencyKey,
-              observation_source: observationSource ?? "llm_summary",
+              observation_source: observationSource ?? DEFAULT_OBSERVATION_SOURCE,
               source_peer_id: sourcePeerId ?? undefined,
             });
           }
@@ -7898,6 +8072,23 @@ export class NeotomaServer {
       }
     }
 
+    // #2241: OBSERVATION_SOURCE_OMITTED — the request did not say what kind of
+    // write this was, so every observation was stored as `unspecified`. Judged
+    // on the raw request value (an explicit `unspecified` does not warn) and
+    // emitted once per request, because observation_source is request-scoped.
+    {
+      const { buildObservationSourceOmittedWarning } =
+        await import("./services/observation_source_warning.js");
+      const first = createdEntities[0];
+      const obsSourceWarn = buildObservationSourceOmittedWarning({
+        rawObservationSource: observationSource,
+        firstStored: first
+          ? { observation_index: 0, entity_type: first.entityType, entity_id: first.entityId }
+          : undefined,
+      });
+      if (obsSourceWarn) schemaStoreWarnings.push(obsSourceWarn);
+    }
+
     // #1963: surface auto-link edge retractions on the MCP store response so a
     // retraction — and especially a retraction *failure* — is never silent. A
     // failure means a superseded reference-field edge may still be live despite
@@ -8014,6 +8205,13 @@ export class NeotomaServer {
           err instanceof Error ? err.message : String(err)
         }`
       );
+    }
+
+    // Every observation and relationship is written; record it on the source so
+    // a replay of this key knows the write finished (#2144).
+    {
+      const { markStoreWriteComplete } = await import("./services/store_write_state.js");
+      await markStoreWriteComplete(storageResult.sourceId, userId);
     }
 
     return this.buildTextResponse({

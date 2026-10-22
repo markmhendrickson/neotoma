@@ -139,7 +139,9 @@ describe("observation insertion sites (characterization)", () => {
       });
 
       const row = await rowById(returned.id, USER_A);
-      expect(row.observation_source).toBe("llm_summary");
+      // #2241: omission is recorded as the `unspecified` sentinel, not as a
+      // claim of LLM authorship.
+      expect(row.observation_source).toBe("unspecified");
       expect(row.idempotency_key ?? null).toBeNull();
       expect(row.identity_basis ?? null).toBeNull();
       expect(row.identity_rule ?? null).toBeNull();
@@ -250,7 +252,8 @@ describe("observation insertion sites (characterization)", () => {
         interpretation_id: null,
         specificity_score: 1,
         source_priority: 100,
-        observation_source: "llm_summary",
+        // #2241: the request omitted observation_source.
+        observation_source: "unspecified",
         user_id: MCP_USER_ID,
       });
       expect(row.source_id).toBeTruthy();

@@ -687,7 +687,7 @@ Clients can subscribe to resource updates:
   entities?: Array<Record<string, unknown>>;
   relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
   source_priority?: number;
-  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync";
+  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync" | "unspecified";
   source_peer_id?: string;
   external_actor?: { kind: "github_user"; login: string; html_url?: string };
   file_content?: string;
@@ -702,7 +702,7 @@ Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_
 
 **Write-classification, sync, and external attribution (v0.12+):**
 
-- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` so classified writes beat unclassified legacy rows. Set this only when the writer is **not** an LLM summary — for sensor / state-machine / human / import / sync writes. Plain agent extraction omits the field and defaults to `llm_summary`.
+- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` (default order `sensor` > `workflow_state` > `llm_summary` = `unspecified` > `human` > `import` > `sync`; legacy null rows last). Every writer should set it: agent extraction and summaries send `llm_summary`; sensor / state-machine / human / import / sync writes send their own value. When the field is omitted the observations are stored as `unspecified` (a lineage sentinel that makes no claim about origin; unless a schema ranks it explicitly it shares `llm_summary`'s rank, so recency decides between the two, because legacy omitted writes were stored as `llm_summary`) and the response carries one `OBSERVATION_SOURCE_OMITTED` entry in `store_warnings`. Before #2241 omission was stored as `llm_summary`, so a legacy `llm_summary` row is not by itself evidence of model authorship.
 - `source_peer_id` stamps observations with the peer that produced them. Used for loop prevention on subscriptions whose `sync_peer_id` matches, and for the `Inspector → peers` audit view. Always pairs with `observation_source: "sync"`.
 - `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the *signing agent*, `external_actor` identifies the *human or account on whose behalf* the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
 
@@ -785,10 +785,11 @@ The server handles all interpretation automatically. Agents should only pass the
   observation_source?:                 // Optional: classifies the KIND of write (v0.12+)
     | "sensor"                         //   deterministic tool / telemetry emission
     | "workflow_state"                 //   state machine transitions
-    | "llm_summary"                    //   LLM-authored content (default; omit for plain extraction)
+    | "llm_summary"                    //   LLM-authored content (set explicitly for agent extraction)
     | "human"                          //   direct human edit or acceptance
     | "import"                         //   batch / ETL ingestion
-    | "sync";                          //   cross-instance peer replication (always pairs with source_peer_id)
+    | "sync"                           //   cross-instance peer replication (always pairs with source_peer_id)
+    | "unspecified";                   //   no claim; the default when omitted (+ OBSERVATION_SOURCE_OMITTED warning)
   source_peer_id?: string;             // Optional (v0.12+): peer_id of the producing instance for sync replays
   external_actor?: {                   // Optional (v0.12+): upstream human / account behind a guest write
     kind: "github_user";

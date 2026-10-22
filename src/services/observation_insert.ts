@@ -45,13 +45,18 @@ type ObservationsQuery = ReturnType<LocalDbClient["from"]>;
 
 /**
  * Default `observation_source` applied by the write path when a caller
- * omits the field. MCP / CLI callers are LLM-driven by construction, so
- * unclassified writes land in the LLM-summary bucket. Sensors, workflow
- * state machines, humans, and ETL pipelines MUST set the field
- * explicitly — the default is deliberately non-sensor so the reducer
- * does not over-weight unclassified writes.
+ * omits the field. `unspecified` records that the caller said nothing about
+ * the kind of write; it makes no claim about origin (#2241). The previous
+ * default, `llm_summary`, turned omission into an assertion that a language
+ * model produced the value, which mislabelled imports, file assets and
+ * deterministic pipelines. Every writer should set the field explicitly —
+ * `llm_summary` for model-authored content, `sensor`, `workflow_state`,
+ * `human`, `import` or `sync` otherwise. `unspecified` is absent from the
+ * reducer's default source ranking but shares `llm_summary`'s rank there (see
+ * buildObservationSourceRankMap in observation_source_rank.ts), so an omitted-source
+ * write ranks exactly as it did before #2241 and recency decides.
  */
-export const DEFAULT_OBSERVATION_SOURCE: ObservationSource = "llm_summary";
+export const DEFAULT_OBSERVATION_SOURCE: ObservationSource = "unspecified";
 
 /**
  * Input to {@link buildObservationRow}. The first group of columns is written

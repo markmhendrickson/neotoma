@@ -45,17 +45,12 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
     title: "Architecture",
     items: [
       { label: "Foundations", href: "/foundations", icon: "Shield" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
       { label: "Architecture", href: "/architecture", icon: "Layers" },
-      { label: "Memory models", href: "/memory-models", icon: "Boxes" },
     ],
   },
   {
     title: "Hosted",
-    items: [
-      { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
-      { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
-    ],
+    items: [{ label: "Public sandbox", href: "/sandbox", icon: "Globe" }],
   },
   {
     title: "Integrations",
@@ -143,8 +138,6 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
       { label: "Subscriptions", href: "/subscriptions", icon: "Radio" },
       { label: "Issue reporting", href: "/issue-reporting", icon: "Bug" },
       { label: "Security hardening", href: "/security-hardening", icon: "Lock" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
-      { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
       { label: "Problem statement", href: "/foundation/problem-statement", icon: "FileText" },
       { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
@@ -178,14 +171,6 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
       { label: "Agents & grants", href: "/inspector/agents", icon: "Bot" },
       { label: "Search", href: "/inspector/search", icon: "Search" },
       { label: "Settings", href: "/inspector/settings", icon: "Settings" },
-    ],
-  },
-  {
-    title: "Where the tax shows up",
-    items: [
-      { label: "Context janitor", href: "/operating", icon: "SatelliteDish" },
-      { label: "Inference variance", href: "/building-pipelines", icon: "Zap" },
-      { label: "Log archaeology", href: "/debugging-infrastructure", icon: "Cpu" },
     ],
   },
   {
