@@ -1596,6 +1596,8 @@
 }
 .plan-evaluate p:not(.plan-label) {
   max-width: 80ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 760px) {
   .plan-masthead {
