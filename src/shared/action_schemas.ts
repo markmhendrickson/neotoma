@@ -48,17 +48,20 @@ export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
   include_cleared_fields: z.boolean().optional(),
   /**
-   * Event-time cutoff (ISO 8601). Reconstructs the snapshot from observations
-   * whose `observed_at` ≤ this timestamp. Reflects what *happened* at time T,
-   * regardless of when the observation was ingested.
+   * Observation-time cutoff (ISO 8601). Reconstructs the snapshot from
+   * observations whose `observed_at` ≤ this timestamp. Public store and correct
+   * stamp `observed_at` with the server clock at write time, so this answers
+   * "what had been asserted by T", not "what was true in the world at T".
+   * Domain date fields are ordinary fields, not a reducer time axis.
    */
   at: z.string().optional(),
   /**
    * Ingestion-time cutoff (ISO 8601). Reconstructs the snapshot from
    * observations whose `created_at` (row-insertion time) ≤ this timestamp.
-   * Use this for "what did we actually KNOW at time T" semantics: backfilled
-   * or late-arriving observations with a past `observed_at` are excluded if
-   * they arrived after this cutoff.
+   * Public store and correct assign both timestamps during the write, but
+   * assertion stamping and row insertion can occur at different moments.
+   * The timestamps are not guaranteed to be identical. Neither cutoff
+   * filters domain date fields.
    *
    * When both `at` and `at_ingested` are supplied, both bounds are applied
    * simultaneously (most conservative knowledge-as-of: an observation must

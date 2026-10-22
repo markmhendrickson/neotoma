@@ -3704,12 +3704,13 @@ export class NeotomaServer {
       throw new McpError(ErrorCode.InvalidParams, `Entity not found: ${parsed.entity_id}`);
     }
 
-    // If 'at' (event-time) or 'at_ingested' (ingestion-time) cutoff is provided,
+    // If 'at' (observation-time) or 'at_ingested' (ingestion-time) cutoff is provided,
     // compute a point-in-time snapshot via the shared helper so this path and
     // the offline/HTTP path (actions.ts) stay in sync.
     //
-    // - `at`          filters on `observed_at`  (event time): "what had happened by T"
-    // - `at_ingested` filters on `created_at`   (row time):   "what did we know by T"
+    // - `at`          filters on `observed_at` (assertion time, stamped by the server on
+    //                 public store/correct): "what had been asserted by T"
+    // - `at_ingested` filters on `created_at`  (row-insertion time)
     //
     // When both are supplied, both bounds are applied (AND): an observation must
     // satisfy observed_at ≤ at AND created_at ≤ at_ingested. This is the most

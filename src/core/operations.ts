@@ -119,9 +119,10 @@ export interface Operations {
   /**
    * Snapshot of a single entity. Pass format: "json" for machine-readable payloads (e.g. issue tooling).
    *
-   * - `at`          — event-time cutoff: reconstructs from observations whose `observed_at` ≤ timestamp.
+   * - `at`          — observation-time cutoff: reconstructs from observations whose `observed_at` ≤ timestamp.
+   *   Public store/correct stamp `observed_at` with the server clock at write time, so this is
+   *   "what had been asserted by T", not valid time ("what was true in the world at T").
    * - `at_ingested` — ingestion-time cutoff: reconstructs from observations whose `created_at` ≤ timestamp.
-   *   Use this for "what did we actually know at time T" semantics (prevents look-ahead from backfills).
    *   When both are supplied, both bounds are applied (AND logic).
    */
   retrieveEntitySnapshot(input: {
