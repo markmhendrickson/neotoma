@@ -30,6 +30,26 @@ export const config: NeotomaConfiguration = new Proxy({} as NeotomaConfiguration
   set(_target, key, value) {
     return Reflect.set(assertMutableLegacyConfiguration(), key, value);
   },
+  defineProperty(_target, key, descriptor) {
+    const legacyConfiguration = assertMutableLegacyConfiguration();
+    // A nonconfigurable descriptor would bind the shared facade's target,
+    // preventing a different runtime from supplying its own value later.
+    if (descriptor.configurable !== true) {
+      throw new Error("CONTEXTUAL_CONFIGURATION_CONFIGURABLE_DESCRIPTOR_REQUIRED");
+    }
+    return Reflect.defineProperty(legacyConfiguration, key, descriptor);
+  },
+  getPrototypeOf() {
+    return Reflect.getPrototypeOf(getConfiguration());
+  },
+  setPrototypeOf(_target, prototype) {
+    return Reflect.setPrototypeOf(assertMutableLegacyConfiguration(), prototype);
+  },
+  preventExtensions() {
+    assertMutableLegacyConfiguration();
+    // Freezing/sealing one shared facade must never poison unrelated scopes.
+    throw new Error("CONTEXTUAL_CONFIGURATION_EXTENSIBILITY_REQUIRED");
+  },
   deleteProperty(_target, key) {
     return Reflect.deleteProperty(assertMutableLegacyConfiguration(), key);
   },

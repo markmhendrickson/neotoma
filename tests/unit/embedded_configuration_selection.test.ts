@@ -46,6 +46,47 @@ describe("contextual configuration selection", () => {
     await b.dispose();
   });
 
+  it("rejects reflective mutations inside explicit operations without poisoning later scopes", async () => {
+    const legacy = getConfiguration();
+    const prototype = Object.getPrototypeOf(config);
+    const a = context("reflection-a"),
+      b = context("reflection-b");
+    const attacks = [
+      () => Object.defineProperty(config, "dataDir", { value: "poisoned" }),
+      () => Object.setPrototypeOf(config, null),
+      () => Object.preventExtensions(config),
+      () => Object.freeze(config),
+      () => Object.seal(config),
+    ];
+    try {
+      for (const attack of attacks) {
+        await a.run(() => {
+          expect(attack).toThrow("EXPLICIT_RUNTIME_CONFIGURATION_IMMUTABLE");
+          expect(config.dataDir).toBe(a.configuration.dataDir);
+          expect({ ...config }).toEqual(a.configuration);
+          expect(Object.getPrototypeOf(config)).toBe(prototype);
+        });
+        await b.run(() => expect({ ...config }).toEqual(b.configuration));
+        expect(getConfiguration()).toBe(legacy);
+        expect({ ...config }).toEqual(legacy);
+      }
+      expect(() => Object.freeze(config)).toThrow(
+        "CONTEXTUAL_CONFIGURATION_EXTENSIBILITY_REQUIRED"
+      );
+      expect(() => Object.defineProperty(config, "poison", { value: true })).toThrow(
+        "CONTEXTUAL_CONFIGURATION_CONFIGURABLE_DESCRIPTOR_REQUIRED"
+      );
+      Object.defineProperty(config, "reflectionFixture", { value: true, configurable: true });
+      expect(Reflect.get(config, "reflectionFixture")).toBe(true);
+      expect(Reflect.deleteProperty(config, "reflectionFixture")).toBe(true);
+      expect({ ...config }).toEqual(legacy);
+      await a.run(() => expect({ ...config }).toEqual(a.configuration));
+    } finally {
+      await a.dispose();
+      await b.dispose();
+    }
+  });
+
   it("can import config and provider modules first inside explicit scopes without capturing their values", () => {
     const temporary = mkdtempSync(join(tmpdir(), "neotoma-configuration-selection-"));
     try {
