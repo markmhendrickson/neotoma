@@ -340,4 +340,3 @@ describe("live page metadata carries no retired claim", () => {
     expect(meta.ogImageUrl).toBe("https://neotoma.io/neotoma-og-1200x630.png");
   });
 });
-

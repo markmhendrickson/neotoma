@@ -464,17 +464,55 @@ export function buildToolDefinitions(
       name: "store",
       description: desc(
         "store",
-        "Save, create, or record entities and files into Neotoma. Use this tool to store any structured data — tasks, notes, contacts, transactions, events, plans, issues, receipts, decisions, or any other entity type. Also handles file uploads (base64 or path). Alias names: store, save, create entity, add record, ingest, persist. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments."
+        "Store entities, files, or both. Use entities[] for structured data; file_content+mime_type or server-local file_path for files. Use data_origin for provenance. Files get per-user deduplication; unregistered types get schema inference."
       ),
       inputSchema: {
         ...storeBaseSchema,
         type: "object",
         properties: {
           ...storeBaseProperties,
+          data_origin: {
+            ...(storeBaseProperties.data_origin as Record<string, unknown>),
+            description:
+              "Origin of structured entities, separate from writer attribution and observation_source. Request-level data_origin applies to every entity; an entity's data_origin overrides it. Include kind and a stable locator unless kind is manual. It is stored in observation provenance, not entity fields, and does not replace data_source. Strip credentials and auth tokens from locator and url. Omit when unknown; keep the file bytes when available. Read back via list_observations or retrieve_field_provenance.",
+          },
+          entities: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: true,
+            },
+            description:
+              "Array of structured entities to store. Include ALL fields from source data: undeclared fields are retained in raw_fragments. An unregistered entity_type gets automatic schema inference per user. Parse readable files before storing structured entities; raw file bytes alone do not create structured fields. Use with file input in the same call when preserving the source. Aliases: save, create entity, add record, ingest, persist.",
+          },
+          interpretation: {
+            type: "object",
+            additionalProperties: false,
+            description:
+              "Provenance link for source-derived entities. Interpretation block creates a Source → Interpretation → Observation chain, recording which external data source (email_thread, calendar_event, web_fetch, etc.) contributed to the stored entity. Include only when storing entities extracted from external data; omit for agent-generated or previously-stored entities. When omitted, observation.interpretation_id is null.",
+            properties: {
+              source_id: {
+                type: "string",
+                description: "Existing source to interpret.",
+              },
+              source_ref: {
+                type: "string",
+                enum: ["structured", "unstructured"],
+                description:
+                  "Source created by this store request. Use unstructured for the raw file source in combined file+entities requests, or structured for the generated JSON source.",
+              },
+              interpretation_config: {
+                type: "object",
+                additionalProperties: true,
+                description:
+                  "Audit configuration for a parser or agent-authored interpretation run. Include extractor_type, extractor_version, model, prompt_hash, schema_version, agent_notes, or other provenance fields as needed.",
+              },
+            },
+          },
           file_content: {
             type: "string",
             description:
-              "Base64-encoded file content. Use file_path for local files instead of base64 encoding.",
+              "Base64-encoded file bytes with mime_type. Use when the file is not on the Neotoma server. Per-user SHA-256 deduplication avoids duplicate source storage. Parse readable files before sending entities if structured fields are needed.",
           },
           file_path: {
             type: "string",
@@ -484,7 +522,12 @@ export function buildToolDefinitions(
           mime_type: {
             type: "string",
             description:
-              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path (auto-detected from extension)",
+              "MIME type documenting file format (e.g., application/pdf, text/csv). Required with file_content, optional with file_path (auto-detected from extension).",
+          },
+          idempotency_key: {
+            type: "string",
+            description:
+              "Required for entities[] path; optional for file-only operations. Ensures idempotent writes: reuse with identical content returns the original result; reuse with different content raises ERR_IDEMPOTENCY_MISMATCH.",
           },
           original_filename: {
             type: "string",

@@ -16,8 +16,7 @@ import { describe, it, expect } from "vitest";
 
 /** Minimal extraction of the AUTH_REQUIRED formatting logic from neotoma_client.ts */
 function formatRemoteSubmitError(error: unknown): string {
-  const errObj =
-    error && typeof error === "object" ? (error as Record<string, unknown>) : null;
+  const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
   if (errObj?.["error_code"] === "AUTH_REQUIRED") {
     const hint =
       typeof errObj?.["details"] === "object" &&
@@ -124,7 +123,7 @@ describe("submit_issue body literal \\n normalisation (#1484)", () => {
 /** Minimal reproduction of the server-side auto-populate logic */
 function resolveReporterAppVersion(
   callerProvided: string | undefined,
-  serverVersion: string,
+  serverVersion: string
 ): string {
   return callerProvided ?? serverVersion;
 }
@@ -146,17 +145,18 @@ describe("reporter_app_version auto-populate (#182)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// #181 — store tool description contains keywords used in tool_search
+// #181 / #1882 — store tool discoverability keywords for tool_search
 // ---------------------------------------------------------------------------
+// #1882 shortened the ListTools hint to ≤60 tokens and moved entity-type and
+// behavioral keywords into inputSchema field descriptions. Keyword coverage
+// therefore spans the short hint PLUS the store field-description block.
 
-// The description is embedded in buildToolDefinitions(); we read the source
-// file directly so we don't have to spin up a full server instance.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const toolDefsSource = readFileSync(
   resolve(import.meta.dirname, "../../src/tool_definitions.ts"),
-  "utf-8",
+  "utf-8"
 );
 
 // Extract the store description from the source by finding the string between
@@ -164,6 +164,13 @@ const toolDefsSource = readFileSync(
 // representative sample of keywords rather than parsing the full AST.
 const storeDescriptionMatch = toolDefsSource.match(/desc\(\s*"store"\s*,\s*"([^"]+)"/);
 const storeDescription = storeDescriptionMatch?.[1] ?? "";
+
+// Field descriptions live in the store tool's inputSchema properties block
+// immediately after the short hint (entities, interpretation, file_*).
+const storeFieldBlockMatch = toolDefsSource.match(
+  /desc\(\s*"store"\s*,\s*"[^"]+"\s*\)[\s\S]*?name:\s*"parse_file"/
+);
+const storeFieldBlock = storeFieldBlockMatch?.[0] ?? "";
 
 describe("store tool description keyword coverage (#181)", () => {
   it("contains the store description in source", () => {
@@ -177,15 +184,19 @@ describe("store tool description keyword coverage (#181)", () => {
   });
 
   it("mentions common entity type names for improved tool_search ranking", () => {
-    const desc = storeDescription.toLowerCase();
-    // At least two of these must appear so agents searching for a specific
-    // entity type have a match in the description.
+    // #1882: entity-type examples live in the entities[] field description,
+    // not the ≤60-token tool hint.
+    const haystack = storeFieldBlock.toLowerCase();
     const entityTerms = ["task", "note", "contact", "transaction", "event", "plan"];
-    const matched = entityTerms.filter((t) => desc.includes(t));
+    const matched = entityTerms.filter((t) => haystack.includes(t));
     expect(matched.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("includes alias names to catch store/save/create variations", () => {
-    expect(storeDescription.toLowerCase()).toContain("alias");
+  it("includes store/save/create verb coverage for tool_search aliases", () => {
+    // #1882 dropped the literal word "alias" from the hint; verb coverage
+    // (save + store tool name) is the discoverability signal that remains.
+    const haystack = `${storeDescription} store`.toLowerCase();
+    expect(haystack).toMatch(/save/);
+    expect(haystack).toMatch(/store/);
   });
 });
