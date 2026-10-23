@@ -1792,3 +1792,109 @@
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
 }
+
+/* Capability disclosures and the consolidated explorer keep the paper rhythm at small widths. */
+.plan-meta-pills li {
+  position: relative;
+  padding: 0;
+  color: var(--ink);
+}
+.plan-meta-pills button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  cursor: pointer;
+}
+.plan-meta-pills button[aria-expanded="true"] {
+  color: var(--rust);
+}
+.plan-benefit-detail:not([hidden]) {
+  display: block;
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  width: min(18rem, calc(100vw - 3rem));
+  padding: 0.75rem 0.85rem;
+  background: var(--sheet);
+  border: 1px solid var(--ink);
+  box-shadow: 0 10px 20px -12px rgba(40, 55, 47, 0.55);
+  color: var(--ink);
+  font: 400 0.85rem/1.45 var(--sans);
+}
+.plan-meta-pills li:nth-last-child(-n + 2) .plan-benefit-detail:not([hidden]) {
+  left: auto;
+  right: 0;
+}
+.plan-anchor {
+  display: block;
+  position: relative;
+  top: -1rem;
+}
+.plan-interface,
+.plan-interface [role="tabpanel"] {
+  min-width: 0;
+}
+.plan-interface [role="tabpanel"]:not([hidden]) {
+  display: block;
+}
+.plan-interface .site-snippet-code {
+  max-width: 100%;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+.plan-hero-aside .plan-btn-primary {
+  min-width: 10rem;
+  min-height: 3.4rem;
+  font-size: 0.9rem;
+}
+.plan-install-sheet h1 > svg {
+  margin-top: clamp(0.4rem, 1vw, 0.85rem);
+}
+.plan-vision-art .paper-scene {
+  aspect-ratio: 3 / 2;
+}
+@media (max-width: 600px) {
+  .plan-meta-pills li {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .plan-benefit-detail:not([hidden]) {
+    position: static;
+    width: 100%;
+    box-shadow: none;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+  .plan-hero-aside .plan-actions,
+  .plan-hero-aside .plan-btn-primary {
+    width: 100%;
+  }
+  .plan-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .plan-tabs button {
+    min-width: 0;
+    min-height: 2.75rem;
+    padding-inline: 0.35rem;
+  }
+  .plan-inspector-card dl > div {
+    flex-wrap: wrap;
+  }
+  .plan-inspector-card dd {
+    overflow-wrap: anywhere;
+  }
+  .plan-vision-art {
+    max-width: 100%;
+  }
+}

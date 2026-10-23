@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -13,8 +14,7 @@ import { MemoryRouter } from "react-router-dom";
 import { runInNewContext } from "node:vm";
 import { execFileSync } from "node:child_process";
 import { observeViewportMotion, playPaperScene, springFrames } from "./viewport_motion";
-import { PaperScene, type PaperSceneKind } from "./PaperScene";
-import { OCTOBER_RENDERS } from "./october_renders";
+import { PaperScene, PAPER_SCENE_ALTS, type PaperSceneKind } from "./PaperScene";
 import { ENTITY_SCHEMAS } from "../../../../src/services/schema_definitions";
 import { InterfaceExplorer } from "./InterfaceExplorer";
 import { CodeBlock } from "../InstallCodeBlock";
@@ -80,12 +80,14 @@ describe("one-page interface examples", () => {
 
   it("moves selection, visible panel, and focus with ArrowRight, ArrowLeft, Home and End", () => {
     render(<InterfaceExplorer />);
-    const tabs = ["CLI", "MCP", "REST API"].map((name) => screen.getByRole("tab", { name }));
+    const tabs = ["App", "CLI", "MCP", "REST API"].map((name) => screen.getByRole("tab", { name }));
     for (const [from, key, to] of [
       [0, "ArrowRight", 1],
       [1, "ArrowLeft", 0],
-      [0, "End", 2],
-      [2, "Home", 0],
+      [0, "ArrowLeft", 3],
+      [3, "ArrowRight", 0],
+      [0, "End", 3],
+      [3, "Home", 0],
     ] as const) {
       tabs[from].focus();
       const event = createEvent.keyDown(tabs[from], { key, bubbles: true, cancelable: true });
@@ -97,6 +99,27 @@ describe("one-page interface examples", () => {
         screen.getByRole("tabpanel", { name: tabs[to].textContent ?? "" })
       ).not.toHaveAttribute("hidden");
     }
+  });
+
+  it("restores App for direct and repeated inspect links without changing ordinary tab URLs", () => {
+    window.history.replaceState({}, "", "/#inspect");
+    render(
+      <>
+        <a href="#inspect">Inspect</a>
+        <InterfaceExplorer />
+      </>
+    );
+    expect(screen.getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "REST API" }));
+    expect(window.location.hash).toBe("#inspect");
+    fireEvent.click(screen.getByRole("link", { name: "Inspect" }));
+    expect(screen.getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+    window.history.replaceState({}, "", "/#example");
+    fireEvent.click(screen.getByRole("tab", { name: "MCP" }));
+    window.history.replaceState({}, "", "/#inspect");
+    fireEvent(window, new Event("popstate"));
+    expect(screen.getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+    window.history.replaceState({}, "", "/");
   });
 });
 
@@ -203,6 +226,33 @@ describe("shared site snippet content", () => {
       expect(source).toContain('"invoice_date": "2026-10-01"');
     }
   });
+
+  it("keeps a delayed copy result with its original panel", async () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 10_000);
+    let finish!: () => void;
+    const write = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    clipboard(write, () => false);
+    render(<InterfaceExplorer />);
+    fireEvent.click(screen.getByRole("tab", { name: "CLI" }));
+    const cliPanel = screen.getByRole("tabpanel", { name: "CLI" });
+    fireEvent.click(within(cliPanel).getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("tab", { name: "MCP" }));
+    finish();
+    await waitFor(() =>
+      expect(
+        within(cliPanel).getByRole("button", { name: "Copied", hidden: true })
+      ).toBeInTheDocument()
+    );
+    expect(
+      within(screen.getByRole("tabpanel", { name: "MCP" })).getByRole("button", { name: "Copy" })
+    ).toBeInTheDocument();
+  });
 });
 
 describe("viewport entrance lifecycle", () => {
@@ -230,7 +280,10 @@ describe("viewport entrance lifecycle", () => {
     ]);
     const stop = observeViewportMotion([target], play);
     const entry = (isIntersecting: boolean) =>
-      notify([{ target, isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver);
+      notify(
+        [{ target, isIntersecting } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
     entry(true);
     expect(play).toHaveBeenCalledTimes(1);
     entry(true);
@@ -277,25 +330,25 @@ describe("viewport entrance lifecycle", () => {
 });
 
 describe("layered paper illustration motion", () => {
-  it("serves ten distinct object scenes instead of translating images or the Inspector", () => {
+  it("serves thirteen distinct object scenes instead of translating images or the Inspector", () => {
     const { container } = render(
       <MemoryRouter>
         <NeotomaOnePager />
       </MemoryRouter>
     );
     const scenes = [...container.querySelectorAll("[data-paper-scene]")];
-    expect(scenes).toHaveLength(10);
+    expect(scenes).toHaveLength(13);
     expect(container.querySelectorAll('img[src*="/brand/october/"]')).toHaveLength(0);
     expect(new Set(scenes.map((scene) => scene.getAttribute("data-paper-scene")))).toHaveProperty(
       "size",
-      10
+      13
     );
     const compositions = scenes.map((scene) =>
       [...scene.querySelectorAll("[data-paper-object] path")]
         .map((path) => path.getAttribute("d"))
         .join("|")
     );
-    expect(new Set(compositions).size).toBe(10);
+    expect(new Set(compositions).size).toBe(13);
     expect(container.querySelector(".plan-inspector")?.hasAttribute("data-paper-scene")).toBe(
       false
     );
@@ -310,12 +363,12 @@ describe("layered paper illustration motion", () => {
         return { cancel: vi.fn(), finished: new Promise(() => {}), playState: "running" };
       },
     });
-    for (const scene of Object.keys(OCTOBER_RENDERS) as PaperSceneKind[]) {
+    for (const scene of Object.keys(PAPER_SCENE_ALTS) as PaperSceneKind[]) {
       calls.length = 0;
       const { container, unmount } = render(<PaperScene scene={scene} />);
       const svg = container.querySelector("svg")!;
       expect(
-        screen.getByRole("img", { name: new RegExp(OCTOBER_RENDERS[scene].alt) })
+        screen.getByRole("img", { name: new RegExp(PAPER_SCENE_ALTS[scene]) })
       ).toBeInTheDocument();
       expect(svg.querySelector("image")).toBeNull();
       expect(svg.querySelector("feTurbulence")).not.toBeNull();
@@ -333,6 +386,7 @@ describe("layered paper illustration motion", () => {
         expect(Math.abs(x) >= 1050 || Math.abs(y) >= 760).toBe(true);
         expect(Math.abs(Number(target.dataset.enterRotation))).toBeLessThanOrEqual(5);
         expect(arrival.frames[0].transform).toContain(`translate(${x}px, ${y}px)`);
+        expect(arrival.frames).toHaveLength(33);
         expect(arrival.frames.slice(-1)[0]?.transform).toBe("translate(0px, 0px) rotate(0deg)");
         expect(arrival.frames.every((frame) => frame.opacity === undefined)).toBe(true);
         expect(arrival.options.easing).toBe("linear");
@@ -359,7 +413,7 @@ describe("layered paper illustration motion", () => {
     expect(displacements[0] - displacements[18]).toBeGreaterThan(800);
     expect(Math.min(...displacements)).toBeLessThan(-1);
     expect(Math.min(...displacements)).toBeGreaterThan(-40);
-    expect(Math.max(...displacements.slice(-8).map(Math.abs))).toBeLessThan(1);
+    expect(Math.max(...displacements.slice(-6).map(Math.abs))).toBeLessThan(1);
     expect(displacements.slice(-1)[0]).toBe(0);
   });
 

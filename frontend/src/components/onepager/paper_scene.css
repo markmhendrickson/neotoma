@@ -93,3 +93,12 @@
   stroke: #646359;
   stroke-width: 2;
 }
+.paper-label {
+  fill: var(--paper-navy);
+  font: 700 40px/1 system-ui, sans-serif;
+  letter-spacing: 1.2px;
+  paint-order: stroke;
+}
+.paper-label-light {
+  fill: var(--paper-cream);
+}

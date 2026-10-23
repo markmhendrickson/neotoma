@@ -253,14 +253,14 @@ describe("sheet 06 limits", () => {
     for (const statement of [
       "later ordinary writes can replace corrections",
       "export contains current values without observation history",
-      "authorship is verified only for signed requests, and some paths record no writer",
+      "Writer attribution is verified only for admitted signed",
       "One entity can be read as of a past time; the whole record cannot",
     ]) {
       expect(direction, statement).toContain(statement);
     }
   });
   it("states local operator scope and links full limitations without issue numbers", () => {
-    expect(direction).toContain("Current boundaries: one local operator");
+    expect(direction).toContain("Current boundaries: configured shared access");
     expect(markup).toContain("docs/known_limitations.md");
     expect(direction).not.toMatch(
       /One operator per instance|users are separate tenants|#\d{3,}|issue \d{3,}/i

@@ -88,15 +88,15 @@ export function springFrames(x: number, y: number, rotation: number): Keyframe[]
     duration = PAPER_SPRING_MS / 1000;
   const decay = damping * frequency;
   const angular = frequency * Math.sqrt(1 - damping * damping);
-  return Array.from({ length: 73 }, (_, index) => {
-    const t = (index / 72) * duration;
+  return Array.from({ length: 33 }, (_, index) => {
+    const t = (index / 32) * duration;
     const remaining =
-      index === 72
+      index === 32
         ? 0
         : Math.exp(-decay * t) *
           (Math.cos(angular * t) + ((decay - 5) / angular) * Math.sin(angular * t));
     return {
-      offset: index / 72,
+      offset: index / 32,
       transform: `translate(${x * remaining}px, ${y * remaining}px) rotate(${rotation * remaining}deg)`,
     };
   });
@@ -136,37 +136,8 @@ export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
   useEffect(() => {
     if (!ref.current) return;
     return observeViewportMotion(
-      [...ref.current.querySelectorAll<SVGSVGElement>("[data-paper-scene], .plan-vision-diagram")],
-      (target) => {
-        if (target.matches("[data-paper-scene]")) return playPaperScene(target);
-        // Existing vision illustrations are already layered; preserve their authored arrangement.
-        const records = [...target.querySelectorAll<SVGElement>("[data-vision-record]")];
-        const arrivals = records.map((record, index) =>
-          record.animate(springFrames(index % 2 ? 400 : -400, 20, index % 2 ? 3 : -3), {
-            duration: PAPER_SPRING_MS,
-            delay: index * 90,
-            easing: "linear",
-            fill: "both",
-          })
-        );
-        const connections = [
-          ...target.querySelectorAll<SVGGeometryElement>("[data-vision-connection]"),
-        ].map((path) =>
-          path.animate(
-            [
-              { strokeDasharray: "1", strokeDashoffset: "1" },
-              { strokeDasharray: "1", strokeDashoffset: "0" },
-            ],
-            {
-              duration: 600,
-              delay: PAPER_SPRING_MS + Math.max(0, records.length - 1) * 90 + 40,
-              easing: "ease-out",
-              fill: "both",
-            }
-          )
-        );
-        return [...arrivals, ...connections];
-      }
+      [...ref.current.querySelectorAll<SVGSVGElement>("[data-paper-scene]")],
+      playPaperScene
     );
   }, [ref]);
 }

@@ -38,7 +38,7 @@ export const OCTOBER_RENDERS = {
   ),
   localService: render(
     "N-tools",
-    "Four different tool cards connected by paired threads to one record box on a local base"
+    "Four agent cards surround and connect to one labeled local archive"
   ),
 } as const;
 

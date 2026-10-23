@@ -19,7 +19,7 @@ export function InstallPage() {
         </Link>
         <nav aria-label="Install page" className="plan-install-links">
           <Link to="/" className="plan-link">
-            Back to neotoma.io
+            Home
           </Link>
           <a href={NEOTOMA_GITHUB_REPO} className="plan-link">
             GitHub

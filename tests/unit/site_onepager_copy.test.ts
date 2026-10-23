@@ -267,7 +267,7 @@ describe("October visual variant", () => {
     const home = renderToStaticMarkup(
       createElement(MemoryRouter, null, createElement(NeotomaOnePager))
     );
-    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(10);
+    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(13);
     expect(home).not.toMatch(/<img[^>]+brand\/october/);
     const cards = page.slice(
       page.indexOf('className="plan-contrast"'),
@@ -511,8 +511,8 @@ describe("/install polish", () => {
     it("marks the interface calls illustrative and keeps IDs variable", () => {
       expect(page2).not.toContain("published npm package (0.25.0) and on main");
       const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
-      expect(explorer).toContain("Illustrative calls, never run by this page");
-      expect(explorer).toMatch(/Read the store response for the actual entity\s+ID/);
+      expect(explorer).toContain("illustrative calls, never run by this page");
+      expect(explorer).toMatch(/Read the\s+store response for the actual entity\s+ID/);
     });
 
     it("sheet 02 R1 does not say each fact is linked unqualified", () => {

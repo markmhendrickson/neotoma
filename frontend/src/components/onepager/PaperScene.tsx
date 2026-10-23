@@ -2,7 +2,17 @@ import { createContext, useContext, useId, type ReactNode } from "react";
 import { OCTOBER_RENDERS } from "./october_renders";
 import "./paper_scene.css";
 
-export type PaperSceneKind = keyof typeof OCTOBER_RENDERS;
+export const VISION_SCENE_ALTS = {
+  visionDomain: "Planned domain authority: two scoped record cards connected to one owner card",
+  visionPositions: "Planned position tracking: two claim cards connect to a selected record card",
+  visionExplanation:
+    "Planned explanation: a source card connects through a rule card to a current record",
+} as const;
+export type PaperSceneKind = keyof typeof OCTOBER_RENDERS | keyof typeof VISION_SCENE_ALTS;
+export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
+  ...Object.fromEntries(Object.entries(OCTOBER_RENDERS).map(([key, render]) => [key, render.alt])),
+  ...VISION_SCENE_ALTS,
+} as Record<PaperSceneKind, string>;
 const Materials = createContext("");
 type Tone = "cream" | "sage" | "blue" | "navy" | "rust";
 type Shape = "sheet" | "folder" | "notch" | "tag" | "torn";
@@ -564,17 +574,29 @@ function LocalService() {
           stroke="#b9aa90"
         />
         <path d="M77 6 q15 32 30 2" fill="#3a3529" />
+        <text x="102" y="105" textAnchor="middle" className="paper-label paper-label-light">
+          ARCHIVE
+        </text>
       </Piece>
       <Piece x={76} y={77} w={169} h={104} angle={-11} tone="blue" from="left" delay={180}>
         <Bars x={21} y={21} w={125} count={1} thick={12} />
         <Writing x={21} y={49} w={124} rows={3} />
+        <text x="83" y="87" textAnchor="middle" className="paper-label">
+          AGENT
+        </text>
       </Piece>
       <Piece x={646} y={66} w={145} h={115} tone="navy" angle={7} from="right" delay={270}>
         <rect x="22" y="44" width="101" height="15" fill="var(--paper-cream)" />
+        <text x="72" y="92" textAnchor="middle" className="paper-label paper-label-light">
+          AGENT
+        </text>
       </Piece>
       <Piece x={69} y={435} w={155} h={119} angle={-13} from="left" delay={360}>
         <Bars x={23} y={24} w={107} count={1} thick={10} />
         <Writing x={23} y={51} w={107} rows={3} />
+        <text x="77" y="103" textAnchor="middle" className="paper-label">
+          AGENT
+        </text>
       </Piece>
       <Piece
         x={670}
@@ -591,6 +613,101 @@ function LocalService() {
         <circle cx="27" cy="42" r="6" fill="#8c846b" />
         <Bars x={51} y={29} w={106} count={1} thick={9} />
         <Writing x={51} y={57} w={106} rows={3} />
+        <text x="103" y="96" textAnchor="middle" className="paper-label">
+          AGENT
+        </text>
+      </Piece>
+    </>
+  );
+}
+
+function VisionDomain() {
+  return (
+    <>
+      <Thread d="M290 300 H405 M522 258 H617 M522 340 H617" />
+      <Piece x={77} y={174} w={212} h={251} tone="blue" from="left">
+        <Bars x={28} y={71} w={150} thick={14} />
+        <Writing x={28} y={113} w={143} rows={5} />
+        <text x="106" y="225" textAnchor="middle" className="paper-label">
+          OWNER
+        </text>
+      </Piece>
+      <Piece x={405} y={245} w={117} h={111} tone="sage" from="bottom" delay={120}>
+        <circle cx="59" cy="47" r="20" fill="var(--paper-cream)" />
+        <text x="58" y="91" textAnchor="middle" className="paper-label">
+          SCOPE
+        </text>
+      </Piece>
+      <Piece x={618} y={94} w={217} h={166} from="right" delay={230}>
+        <Bars x={24} y={55} w={164} thick={12} />
+        <Writing x={24} y={91} w={154} rows={3} />
+        <text x="107" y="151" textAnchor="middle" className="paper-label">
+          DOMAIN A
+        </text>
+      </Piece>
+      <Piece x={618} y={341} w={217} h={166} tone="sage" from="right" delay={330}>
+        <Bars x={24} y={55} w={164} thick={12} />
+        <Writing x={24} y={91} w={154} rows={3} />
+        <text x="107" y="151" textAnchor="middle" className="paper-label">
+          DOMAIN B
+        </text>
+      </Piece>
+    </>
+  );
+}
+function VisionPositions() {
+  return (
+    <>
+      <Thread d="M295 166 H418 V294 H560 M295 438 H418 V306 H560" />
+      <Piece x={77} y={65} w={218} h={203} tone="rust" from="left">
+        <Bars x={24} y={52} w={163} thick={12} />
+        <Writing x={24} y={93} w={158} rows={4} />
+        <text x="109" y="179" textAnchor="middle" className="paper-label paper-label-light">
+          CLAIM A
+        </text>
+      </Piece>
+      <Piece x={77} y={336} w={218} h={203} tone="sage" from="left" delay={120}>
+        <Bars x={24} y={52} w={163} thick={12} />
+        <Writing x={24} y={93} w={158} rows={4} />
+        <text x="109" y="179" textAnchor="middle" className="paper-label">
+          CLAIM B
+        </text>
+      </Piece>
+      <Piece x={559} y={169} w={257} h={262} from="right" delay={260}>
+        <Bars x={28} y={62} w={193} thick={15} />
+        <Writing x={28} y={112} w={184} rows={5} />
+        <text x="128" y="230" textAnchor="middle" className="paper-label">
+          POSITION
+        </text>
+      </Piece>
+    </>
+  );
+}
+function VisionExplanation() {
+  return (
+    <>
+      <Thread d="M277 301 H365 M537 301 H626" />
+      <Piece x={51} y={116} w={226} h={367} tone="blue" from="left">
+        <Bars x={25} y={56} w={176} thick={13} />
+        <Writing x={25} y={104} w={168} rows={10} />
+        <text x="112" y="333" textAnchor="middle" className="paper-label">
+          SOURCE
+        </text>
+      </Piece>
+      <Piece x={365} y={213} w={172} h={174} tone="sage" from="top" delay={160}>
+        <Bars x={21} y={48} w={130} thick={12} />
+        <Writing x={21} y={86} w={128} rows={3} />
+        <text x="86" y="153" textAnchor="middle" className="paper-label">
+          RULE
+        </text>
+      </Piece>
+      <Piece x={626} y={110} w={226} h={379} from="right" delay={300}>
+        <Bars x={25} y={60} w={173} thick={13} />
+        <Writing x={25} y={107} w={166} rows={9} />
+        <rect x="25" y="277" width="174" height="28" fill="var(--paper-sage)" />
+        <text x="112" y="348" textAnchor="middle" className="paper-label">
+          CURRENT
+        </text>
       </Piece>
     </>
   );
@@ -607,6 +724,9 @@ const scenes: Record<PaperSceneKind, () => ReactNode> = {
   snapshot: Snapshot,
   invoiceExample: Invoice,
   localService: LocalService,
+  visionDomain: VisionDomain,
+  visionPositions: VisionPositions,
+  visionExplanation: VisionExplanation,
 };
 /** Authored animated counterpart of the October paper composition; no raster underneath. */
 export function PaperScene({ scene }: { scene: PaperSceneKind }) {
@@ -621,7 +741,7 @@ export function PaperScene({ scene }: { scene: PaperSceneKind }) {
         role="img"
         aria-labelledby={`${id}-title`}
       >
-        <title id={`${id}-title`}>{OCTOBER_RENDERS[scene].alt}</title>
+        <title id={`${id}-title`}>{PAPER_SCENE_ALTS[scene]}</title>
 
         <defs>
           {(

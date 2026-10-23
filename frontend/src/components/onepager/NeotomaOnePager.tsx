@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { Braces, Cable, HardDrive, Scale, Terminal } from "lucide-react";
 import { SiteSnippet } from "../SiteSnippet";
 import { usePageVisualMotion } from "./viewport_motion";
 import { VisionGallery } from "./VisionGallery";
@@ -22,7 +21,7 @@ import {
   installCommands,
 } from "./onepager_copy";
 import { InterfaceExplorer } from "./InterfaceExplorer";
-import { InspectorPreview } from "./InspectorPreview";
+import { ProductBenefitPills } from "./ProductBenefitPills";
 import "./onepager.css";
 
 function SheetHead({ id, mark, title }: { id: string; mark: string; title: string }) {
@@ -50,42 +49,17 @@ export function NeotomaOnePager() {
           <div className="plan-masthead">
             <AnimatedLockup />
             <nav className="plan-nav" aria-label="Site">
-              <a href="#fit">Fit</a>
-              <a href="#example">Example</a>
               <a href="#how-it-works">How it works</a>
-              <a href="#inspect">Inspector</a>
+              <a href="#interfaces">Interfaces</a>
               <a href="#connect">Connect</a>
               <a href="#vision">Vision</a>
-              <a href={NEOTOMA_GITHUB_REPO}>GitHub</a>
-              <a href={neotomaGithubBlobUrl("docs/architecture/architecture.md")}>Architecture</a>
             </nav>
           </div>
           <div className="plan-hero-copy" id="plan-content">
             <div>
               <p className="plan-label">A record, not recall.</p>
               <h1 id="s1">The system of record for AI agents.</h1>
-              <ul className="plan-meta-pills" aria-label="Product details">
-                <li>
-                  <Scale size={13} aria-hidden="true" />
-                  MIT
-                </li>
-                <li>
-                  <HardDrive size={13} aria-hidden="true" />
-                  Local-first
-                </li>
-                <li>
-                  <Cable size={13} aria-hidden="true" />
-                  MCP
-                </li>
-                <li>
-                  <Braces size={13} aria-hidden="true" />
-                  REST API
-                </li>
-                <li>
-                  <Terminal size={13} aria-hidden="true" />
-                  CLI
-                </li>
-              </ul>
+              <ProductBenefitPills />
             </div>
             <div className="plan-hero-aside">
               <p className="plan-lede">
@@ -211,16 +185,13 @@ export function NeotomaOnePager() {
             </div>
             <p className="plan-note">{PLATE_CAPTION}</p>
           </aside>
-          <section id="inspect" className="plan-inspect-section" aria-labelledby="inspect-title">
-            <h3 id="inspect-title">Inspect the record</h3>
-            <p className="plan-small">
-              A static, read-only illustration using the bundled Inspector&apos;s entity detail,
-              snapshot and observation history vocabulary. The invoice and sources are synthetic.
-            </p>
-            <InspectorPreview />
-          </section>
-          <section className="plan-interface-section" aria-labelledby="interface-title">
-            <h3 id="interface-title">One record, three interfaces</h3>
+          <section
+            id="interfaces"
+            className="plan-interface-section"
+            aria-labelledby="interface-title"
+          >
+            <span id="inspect" className="plan-anchor" aria-hidden="true" />
+            <h3 id="interface-title">One record. Four ways to work with it.</h3>
             <InterfaceExplorer />
           </section>
         </section>
@@ -230,7 +201,7 @@ export function NeotomaOnePager() {
           <div className="plan-split">
             <figure className="plan-scene plan-local-scene">
               <PaperScene scene="localService" />
-              <figcaption>Run the service locally and connect the tools you use.</figcaption>
+              <figcaption>One local archive holds the record for connected agents.</figcaption>
             </figure>
             <p className="plan-body">
               Neotoma runs as a local service. Connected agents use the Model Context Protocol
@@ -239,6 +210,12 @@ export function NeotomaOnePager() {
               use separate databases. The bundled Inspector lets you examine the record.
             </p>
           </div>
+          <p className="plan-body">
+            Configured tools can share one record when they use the same instance and data profile.
+            Signed requests can establish a verified agent identity, while scoped grants determine
+            what that agent may do. Other paths may carry a self-reported name or no writer
+            identity. A signature alone does not grant access.
+          </p>
           <label className="plan-host-label" htmlFor="plan-host">
             Choose your tool
           </label>
@@ -279,6 +256,14 @@ export function NeotomaOnePager() {
             </a>{" "}
             for each guide.
           </p>
+          <p className="plan-small">
+            For separate instances, read the{" "}
+            <a href={neotomaGithubBlobUrl("docs/subsystems/peer_sync.md")}>
+              advanced peering guide
+            </a>
+            . Peering is distinct from sharing one configured graph and does not promise complete
+            history, file or deletion replication.
+          </p>
         </section>
 
         <section className="plan-sheet" aria-labelledby="s5" id="vision">
@@ -296,10 +281,12 @@ export function NeotomaOnePager() {
           <details className="plan-current-boundaries">
             <summary>Current scope and limits</summary>
             <p className="plan-small">
-              Current boundaries: one local operator; later ordinary writes can replace corrections;
-              export contains current values without observation history; authorship is verified
-              only for signed requests, and some paths record no writer. One entity can be read as
-              of a past time; the whole record cannot. Read the{" "}
+              Current boundaries: configured shared access does not provide workspace membership
+              lifecycle or domain ownership. Writer attribution is verified only for admitted signed
+              requests; some paths are self-reported or absent; later ordinary writes can replace
+              corrections; export contains current values without observation history. Peering does
+              not guarantee complete history, files or deletions. One entity can be read as of a
+              past time; the whole record cannot. Read the{" "}
               <a href={neotomaGithubBlobUrl("docs/known_limitations.md")}>known limitations</a>.
             </p>
           </details>
@@ -354,6 +341,10 @@ export function NeotomaOnePager() {
           </p>
           <footer className="plan-footer">
             <SolidLockup />
+            <p className="plan-small">
+              <a href={NEOTOMA_GITHUB_REPO}>GitHub</a> ·{" "}
+              <a href={neotomaGithubBlobUrl("docs/architecture/architecture.md")}>Architecture</a>
+            </p>
             <p className="plan-small plan-colophon">
               Neotoma · From Constara · MIT licensed ·{" "}
               <a href="https://markmhendrickson.com">Contributor</a> ·{" "}
