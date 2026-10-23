@@ -128,7 +128,8 @@ a:focus-visible,pre:focus-visible,.dv-table:focus-visible,summary:focus-visible{
 .dv-pager .dv-mono{display:block;color:var(--rust);margin-bottom:2px}
 .dv-pager .next{text-align:right;grid-column:2}
 .dv-foot{max-width:1400px;margin:0 auto;padding:0 clamp(18px,5vw,80px) 48px;font:.8125rem/1.6 var(--sans);color:var(--muted)}
-.dv-foot a{display:inline-block;min-height:32px;line-height:32px;color:var(--ink)}
+.dv-foot a{display:inline-block;min-height:32px;line-height:32px;color:var(--ink);text-decoration:none}
+.dv-foot a:hover,.dv-foot a:focus-visible{text-decoration:underline}
 @media (max-width:900px){
 .dv-layout{grid-template-columns:minmax(0,1fr);padding-top:28px;gap:0}
 .dv-side{display:none}
