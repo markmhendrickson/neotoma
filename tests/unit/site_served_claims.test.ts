@@ -58,7 +58,7 @@ describe("one-pager sheets 02 to 04", () => {
     expect(examples).toContain("Authorization: Bearer $NEOTOMA_TOKEN");
   });
   it("limits shared reads to a configured instance and matching entry or profile", () => {
-    expect(text).toContain("same instance and data profile or MCP entry");
+    expect(text).toContain("same instance and data profile");
     expect(text).toContain("separate entries can use separate databases");
     expect(text).not.toMatch(
       /what one agent stored is what the next one reads|agents connected to the same instance read the same record/i
@@ -219,53 +219,34 @@ describe("markdown mirrors of retired pages", () => {
   });
 });
 
-describe("sheet 06 limits", () => {
-  const page = read("frontend", "src", "components", "onepager", "NeotomaOnePager.tsx");
+describe("advanced capability boundaries", () => {
   const markup = renderToStaticMarkup(
     createElement(MemoryRouter, null, createElement(NeotomaOnePager))
   );
   const text = pageText(markup).replace(/\s+/g, " ");
-  const direction = text.slice(
-    text.indexOf("Where this is going"),
-    text.indexOf("Explore the source")
+  const advanced = text.slice(
+    text.indexOf("Advanced capabilities"),
+    text.indexOf("Evaluate the fit")
   );
-  it("separates the current record from planned governance", () => {
-    expect(direction).toContain("The source, observation and snapshot foundation is here today");
-    expect(direction).toContain("Planned governance, with no promised timeline");
-    for (const ambition of [
-      "Give each domain a clear owner",
-      "Keep disagreement on the record",
-      "Make authority easier to inspect",
-    ]) {
-      expect(direction).toContain(ambition);
-    }
-    expect((direction.match(/Planned direction/g) ?? []).length).toBe(3);
-    expect(direction).toContain("authority scoped to the domain");
-    expect(direction).toContain("competing claims, unresolved disputes and official positions");
-    expect(direction.indexOf("foundation is here today")).toBeLessThan(
-      direction.indexOf("Planned direction")
-    );
-    expect(direction).not.toMatch(
-      /correction rights (ship|are available)|disputes (ship|are available)/i
-    );
+  it("shows three supported and three planned visual capabilities", () => {
+    expect((advanced.match(/Supported/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((advanced.match(/Planned/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    for (const title of [
+      "One configured instance",
+      "Verified identity and scoped access",
+      "Selected record exchange",
+      "Bounded domain ownership",
+      "Retained positions",
+      "Inspectable explanations",
+    ])
+      expect(advanced).toContain(title);
+    expect(markup).toContain('data-paper-scene="peering"');
+    expect(markup).toContain('data-paper-scene="visionDomain"');
   });
-  it("names all four current limits in the served direction section", () => {
-    for (const statement of [
-      "later ordinary writes can replace corrections",
-      "export contains current values without observation history",
-      "Writer attribution is verified only for admitted signed",
-      "One entity can be read as of a past time; the whole record cannot",
-    ]) {
-      expect(direction, statement).toContain(statement);
-    }
-  });
-  it("states local operator scope and links full limitations without issue numbers", () => {
-    expect(direction).toContain("Current boundaries: configured shared access");
-    expect(markup).toContain("docs/known_limitations.md");
-    expect(direction).not.toMatch(
-      /One operator per instance|users are separate tenants|#\d{3,}|issue \d{3,}/i
-    );
-    expect(page).toContain("known_limitations.md");
+  it("keeps qualifications local to their capability", () => {
+    expect(advanced).toContain("a signature alone is not a grant");
+    expect(advanced).toContain("complete history, files and deletions are outside this claim");
+    expect(advanced).not.toContain("Current scope and limits");
   });
 });
 

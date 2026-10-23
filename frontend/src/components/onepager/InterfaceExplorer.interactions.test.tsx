@@ -123,6 +123,27 @@ describe("one-page interface examples", () => {
   });
 });
 
+describe("connection selector", () => {
+  it("shows manual guidance for a documented host without inventing a setup target", () => {
+    render(
+      <MemoryRouter>
+        <NeotomaOnePager />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText("Choose your tool"), { target: { value: "windsurf" } });
+    expect(
+      screen.getByText("Add Neotoma to Windsurf's MCP configuration using the manual guide.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/neotoma setup --tool windsurf/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Windsurf guide" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("mcp_windsurf_setup.md")
+    );
+    fireEvent.change(screen.getByLabelText("Choose your tool"), { target: { value: "cursor" } });
+    expect(screen.getByText(/neotoma setup --tool cursor/)).toBeInTheDocument();
+  });
+});
+
 function clipboard(writeText: () => Promise<void>, execCommand: () => boolean) {
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -381,25 +402,25 @@ describe("viewport entrance lifecycle", () => {
 });
 
 describe("layered paper illustration motion", () => {
-  it("serves thirteen distinct object scenes instead of translating images or the Inspector", () => {
+  it("serves sixteen distinct object scenes instead of translating images or the Inspector", () => {
     const { container } = render(
       <MemoryRouter>
         <NeotomaOnePager />
       </MemoryRouter>
     );
     const scenes = [...container.querySelectorAll("[data-paper-scene]")];
-    expect(scenes).toHaveLength(13);
+    expect(scenes).toHaveLength(16);
     expect(container.querySelectorAll('img[src*="/brand/october/"]')).toHaveLength(0);
     expect(new Set(scenes.map((scene) => scene.getAttribute("data-paper-scene")))).toHaveProperty(
       "size",
-      13
+      16
     );
     const compositions = scenes.map((scene) =>
       [...scene.querySelectorAll("[data-paper-object] path")]
         .map((path) => path.getAttribute("d"))
         .join("|")
     );
-    expect(new Set(compositions).size).toBe(13);
+    expect(new Set(compositions).size).toBe(16);
     expect(container.querySelector(".plan-inspector")?.hasAttribute("data-paper-scene")).toBe(
       false
     );
@@ -421,17 +442,20 @@ describe("layered paper illustration motion", () => {
       expect(
         screen.getByRole("img", { name: new RegExp(PAPER_SCENE_ALTS[scene]) })
       ).toBeInTheDocument();
-      expect(svg.querySelector("image")).toBeNull();
+      expect(svg.querySelector("image")?.getAttribute("href")).toBe(
+        "/brand/october/paper-fiber.webp"
+      );
       expect(svg.querySelector("feTurbulence, feDropShadow, filter")).toBeNull();
       expect(svg.querySelector("pattern[id$='-fiber']")).not.toBeNull();
       expect(
-        svg.querySelectorAll("[data-paper-object] > path[transform='translate(3 7)']").length
+        svg.querySelectorAll("[data-paper-object] > path[transform='translate(1.5 2.5)']").length
       ).toBe(svg.querySelectorAll("[data-paper-object]").length);
       playPaperScene(svg);
       const arrivals = calls.filter((call) => call.target.hasAttribute("data-paper-object"));
       const links = calls.filter((call) => call.target.hasAttribute("data-paper-connection"));
       expect(arrivals.length).toBeGreaterThanOrEqual(3);
-      expect(links.length).toBeGreaterThan(0);
+      if (scene === "before") expect(links).toHaveLength(0);
+      else expect(links.length).toBeGreaterThan(0);
       expect(calls.some((call) => call.target === svg)).toBe(false);
       expect(calls).toHaveLength(arrivals.length + links.length);
       for (const arrival of arrivals) {

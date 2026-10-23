@@ -135,7 +135,7 @@ export function InterfaceExplorer() {
   return (
     <div className="plan-interface">
       <p className="plan-small">
-        Follow the same fictional invoice through the App view or a documented interface.
+        Follow the example invoice through the app or a documented interface.
       </p>
       <div className="plan-tabs" role="tablist" aria-label="Invoice operation interface">
         {interfaces.map((name, index) => (
@@ -168,10 +168,6 @@ export function InterfaceExplorer() {
         >
           {name === "App" ? (
             <>
-              <p className="plan-small">
-                Synthetic, read-only Inspector illustration. Its fictional sources, snapshot and
-                observation history are not editable; this page makes no requests.
-              </p>
               <InspectorPreview />
             </>
           ) : (

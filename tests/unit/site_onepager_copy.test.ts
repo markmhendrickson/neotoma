@@ -51,10 +51,10 @@ describe("neotoma.io one-pager copy", () => {
     );
     expect(html).toContain('href="#plan-content"');
     expect(html).toContain('aria-label="Site"');
-    expect(html).toContain("Invoice INV-2041 arrives as a PDF due 22 October");
+    expect(html).toContain("Invoice INV-2041 arrives as a PDF due October 22nd");
     expect(html).toContain("date_due");
-    expect(html).toContain("29 October 2026");
-    expect(html).toContain("22 October 2026");
+    expect(html).toContain("October 29th, 2026");
+    expect(html).toContain("October 22nd, 2026");
     expect(html).toContain('role="tablist"');
     expect(html).toContain('role="tabpanel"');
     expect(html).toContain("neotoma setup --tool claude-code");
@@ -75,8 +75,9 @@ describe("neotoma.io one-pager copy", () => {
   });
 
   it("states the current category and the lead contrast", () => {
-    expect(all).toContain("A record, not recall.");
-    expect(all).toContain("The system of record for AI agents.");
+    expect(all).toContain("A record, not recall");
+    expect(all).not.toContain("A record, not recall.");
+    expect(all).toContain("system of record</span> for AI agents.");
   });
 
   it("does not make claims the build cannot support", () => {
@@ -119,13 +120,13 @@ describe("neotoma.io one-pager copy", () => {
     }
   });
 
-  it("has no old app header or footer and links only to /install, GitHub, npm and held routes", () => {
+  it("has no old app header and links to the bounded comparison", () => {
     const page = files[0];
     expect(page).not.toContain("SiteTailpiece");
     expect(page).not.toContain("SiteHeaderNav");
     const internal = [...page.matchAll(/to="(\/[^"]*)"/g)].map((m) => m[1]);
     expect(
-      internal.every((r) => r === "/install"),
+      internal.every((r) => r === "/install" || r === "/compare"),
       `internal links: ${internal.join(" ")}`
     ).toBe(true);
     const copy = files[1];
@@ -267,7 +268,7 @@ describe("October visual variant", () => {
     const home = renderToStaticMarkup(
       createElement(MemoryRouter, null, createElement(NeotomaOnePager))
     );
-    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(13);
+    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(16);
     expect(home).not.toMatch(/<img[^>]+brand\/october/);
     const cards = page.slice(
       page.indexOf('className="plan-contrast"'),
@@ -283,7 +284,7 @@ describe("October visual variant", () => {
     expect(page).not.toMatch(/N-(cloud|managed)/i);
     const css = readFileSync(join(dir, "onepager.css"), "utf-8");
     expect(css).toMatch(/\.plan-sheet::before \{\s*display: none;/);
-    expect(css).toMatch(/\.plan-hero-copy \{[^}]*align-items: start;/);
+    expect(css).toMatch(/\.plan-hero-copy \{[^}]*align-items: center;/);
     expect(css).toMatch(/\.plan-section-cut img \{[^}]*aspect-ratio: 3\/2;/);
   });
 });
@@ -298,7 +299,7 @@ describe("review fixes (install path, accessibility, wording)", () => {
     expect(copy).toContain('INSTALL_COMMANDS = installCommands("claude-code")');
     expect(copy).toContain("neotoma setup --tool ${tool}");
     expect(copy).not.toContain("neotoma setup --tool ${tool} --yes");
-    expect(page).toContain("value={host.tool}");
+    expect(page).toContain("value={host.id}");
     expect(page).toContain("code={installCommands(host.tool)}");
   });
 
@@ -322,7 +323,7 @@ describe("review fixes (install path, accessibility, wording)", () => {
   });
 
   it("leads with the category, lets the document scroll, and names the logo for assistive tech", () => {
-    expect(page).toContain('<h1 id="s1">The system of record for AI agents.</h1>');
+    expect(page).toContain('<span className="plan-hero-phrase">system of record</span>');
     expect(page).toContain(
       "Give agents operational truth they can read, update, and maintain as they work."
     );
@@ -332,10 +333,11 @@ describe("review fixes (install path, accessibility, wording)", () => {
     expect(logos).toMatch(/role="img"\s+aria-label="Neotoma"/);
   });
 
-  it("bounds the companion project to action authority", () => {
-    expect(page).toContain('href="https://github.com/markmhendrickson/ateles"');
-    expect(page).toMatch(/coordinates work and action under explicit authority\./);
-    expect(page).not.toContain("agentic organizations");
+  it("puts the companion project in the categorized footer", () => {
+    expect(copy).toContain(
+      '{ label: "Ateles", href: "https://github.com/markmhendrickson/ateles" }'
+    );
+    expect(page).not.toContain("coordinates work and action under explicit authority");
   });
 });
 
@@ -376,7 +378,7 @@ describe("logo size rule and union outline", () => {
     expect(animated).toContain("n2-nav-light.svg?raw");
     expect(animated).toContain("observeViewportMotion");
     expect(animated).toContain("playLogo");
-    const footer = onepager.slice(onepager.indexOf('<footer className="plan-footer">'));
+    const footer = onepager.slice(onepager.indexOf('<footer className="plan-site-footer"'));
     expect(footer.slice(0, footer.indexOf("</footer>"))).toContain("<SolidLockup");
     const installMast = installPage.slice(installPage.indexOf('className="plan-install-masthead"'));
     expect(installMast.slice(0, installMast.indexOf("</nav>"))).toContain("<SolidLockup");
@@ -526,7 +528,7 @@ describe("/install polish", () => {
 
     it("lists no interactive command in the pasted install block", () => {
       expect(copy2).not.toContain("neotoma mcp config");
-      expect(page2).toContain("neotoma status --json");
+      expect(page2).toContain("install guide");
     });
 
     it("never says no telemetry without the npm update-check qualification", () => {
@@ -574,7 +576,7 @@ describe("/install polish", () => {
     });
 
     it("says OpenCode uses a plugin or MCP", () => {
-      expect(copy2).toContain("OpenCode uses a plugin or MCP");
+      expect(copy2).toContain('host: "OpenCode"');
     });
 
     it("install page: no unevidenced reversibility, 5-minute, or telemetry-absolute claims", () => {
@@ -955,24 +957,19 @@ describe("sheet 01 plate (FIG. A-1)", () => {
     const items = legendItems();
     expect(items.length).toBe(5);
     expect(items[0]).toBe(
-      "Two sources say different things about one invoice: the PDF says due 22 October, a later email says 29 October."
+      "Two sources say different things about one invoice: the PDF says due October 22nd, a later email says October 29th."
     );
     expect(items[3]).toBe(
       "The amount still comes from the first observation. Both observations stay on record."
     );
     expect(items[2]).toBe(
-      "The due date now reads 29 October. The changed field points to the later observation."
+      "The due date now reads October 29th. The changed field points to the later observation."
     );
     expect(items[4]).toBe(
       "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports."
     );
     // Every piece of plate text: attribution only for MCP writes, only as the client's own report.
-    const plateText = [
-      items[4],
-      copyConst("PLATE_ALT"),
-      copyConst("PLATE_CAPTION"),
-      ...noteLines(),
-    ];
+    const plateText = [items[4], copyConst("PLATE_ALT"), ...noteLines()];
     expect(plateText.every((t) => t.length > 0)).toBe(true);
     for (const t of plateText) {
       expect(t, t).not.toMatch(/(every|all|each) writes?[^.]*(record|attribut)/i);
@@ -980,10 +977,8 @@ describe("sheet 01 plate (FIG. A-1)", () => {
       expect(t, t).not.toMatch(/(verified|authenticated|proven) (client|identity|author)/i);
       if (/client/i.test(t)) expect(t, t).toContain("the client name the client reports");
     }
-    expect(page).toContain("{PLATE_CAPTION}");
-    expect(copyConst("PLATE_CAPTION")).toBe(
-      "The current record selects a value for each field and keeps its observation trail."
-    );
+    expect(page).not.toContain("{PLATE_CAPTION}");
+    expect(page).toContain("later email changes this invoice");
   });
 });
 

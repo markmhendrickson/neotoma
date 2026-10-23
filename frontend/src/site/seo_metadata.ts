@@ -107,6 +107,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       ],
     },
   },
+  "/compare": {
+    title: "Compare recall, retrieval and a system of record | Neotoma",
+    description:
+      "Compare session memory, document retrieval, memory services, custom state and Neotoma against the need for current values and inspectable evidence.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Compare approaches", path: "/compare" },
+    ],
+  },
   "/install": {
     title: "Install | Neotoma",
     description:

@@ -38,7 +38,7 @@ export const OCTOBER_RENDERS = {
   ),
   localService: render(
     "N-tools",
-    "Four agent cards surround and connect to one labeled local archive"
+    "Four distinct tool objects surround and connect to one configured instance"
   ),
 } as const;
 

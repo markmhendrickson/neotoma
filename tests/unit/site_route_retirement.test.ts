@@ -49,6 +49,8 @@ describe("one-pager route set", () => {
 
   it("keeps /install live and every locale route retired to the one-pager", () => {
     expect(isRetiredRoute("/install")).toBe(false);
+    expect(isRetiredRoute("/compare")).toBe(false);
+    expect(LIVE_ROUTES).toContain("/compare");
     expect(isRetiredRoute("/")).toBe(false);
     for (const route of ["/es", "/de/docs", "/fr/install", "/ar/evaluate"]) {
       expect(isRetiredRoute(route)).toBe(true);

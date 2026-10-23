@@ -69,6 +69,7 @@ import { OpenClawConnectLocalStdioPage } from "@/components/subpages/OpenClawCon
 import { OpenClawConnectRemoteHttpPage } from "@/components/subpages/OpenClawConnectRemoteHttpPage";
 import { MemoryGuaranteesPage } from "@/components/subpages/MemoryGuaranteesPage";
 import { MemoryModelsPage } from "@/components/subpages/MemoryModelsPage";
+import { CompareApproaches } from "@/components/onepager/CompareApproaches";
 import { DeterministicStateEvolutionPage } from "@/components/subpages/DeterministicStateEvolutionPage";
 import { VersionedHistoryPage } from "@/components/subpages/VersionedHistoryPage";
 import { ReplayableTimelinePage } from "@/components/subpages/ReplayableTimelinePage";
@@ -297,6 +298,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/zero-setup-onboarding", element: <ZeroSetupOnboardingPage /> },
   { path: "/semantic-similarity-search", element: <SemanticSimilaritySearchPage /> },
   { path: "/direct-human-editability", element: <DirectHumanEditabilityPage /> },
+  { path: "/compare", element: <CompareApproaches /> },
   { path: "/memory-models", element: <MemoryModelsPage /> },
   { path: "/platform-memory", element: <PlatformMemoryPage /> },
   { path: "/retrieval-memory", element: <RetrievalMemoryPage /> },
@@ -480,7 +482,13 @@ export function MainApp() {
           <Route
             key={route.path}
             path={route.path}
-            element={isRetiredRoute(route.path) || isDocsViewerRoute(route.path) ? <RetiredRouteStub /> : route.element}
+            element={
+              isRetiredRoute(route.path) || isDocsViewerRoute(route.path) ? (
+                <RetiredRouteStub />
+              ) : (
+                route.element
+              )
+            }
           />
         ))}
         <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />

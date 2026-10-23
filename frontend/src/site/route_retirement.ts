@@ -22,7 +22,7 @@ const BLOB = `${GITHUB_REPO}/blob/main/`;
 const TREE = `${GITHUB_REPO}/tree/main/`;
 
 /** Routes that are real pages on the one-pager site. */
-export const LIVE_ROUTES: readonly string[] = ["/", "/install"];
+export const LIVE_ROUTES: readonly string[] = ["/", "/install", "/compare"];
 
 const MARKDOWN_MIRROR_REASON =
   "Markdown mirrors of site pages that are themselves served, linked from each page for agents and crawlers; llms.txt points at them.";
@@ -293,7 +293,10 @@ export function heldReason(route: string): string | null {
  * Every locale route goes to the one-pager, except the localized legal routes, which stay live.
  * A route served by a published docs viewer page (`/docs/<slug>/`) is a real page, not retired.
  */
-export function isRetiredRoute(route: string, viewer: DocsViewerIndex = DOCS_VIEWER_INDEX): boolean {
+export function isRetiredRoute(
+  route: string,
+  viewer: DocsViewerIndex = DOCS_VIEWER_INDEX
+): boolean {
   const r = stripTrailingSlash(route);
   if (isLocaleRoute(r)) return !LOCALE_LEGAL.test(r);
   if (isLiveRoute(r)) return false;

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-21T17:21:26.045Z",
-  "total_files": 731,
+  "generated_at": "2026-10-23T11:02:45.558Z",
+  "total_files": 732,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -34,7 +34,7 @@
     "reports": 48,
     "research": 1,
     "security": 10,
-    "site": 179,
+    "site": 180,
     "skills": 4,
     "specs": 14,
     "subsystems": 51,
@@ -1707,6 +1707,10 @@
     },
     {
       "rel": "docs/site/MIGRATION_BATCHES.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/onepager_capability_evidence.md",
       "top": "site"
     },
     {
