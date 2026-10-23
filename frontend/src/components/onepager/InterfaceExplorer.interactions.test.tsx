@@ -531,7 +531,31 @@ describe("layered paper illustration motion", () => {
     expect(container.querySelector("svg image")?.getAttribute("href")).toBe(
       "/pr-950/brand/october/paper-fiber.webp"
     );
+    for (const image of container.querySelectorAll("[data-paper-cutout], [data-paper-material]"))
+      expect(image.getAttribute("href")).toMatch(/^\/pr-950\/brand\/october\/hybrid\//);
     window.history.replaceState({}, "", "/");
+  });
+
+  it("keeps a complete vector object while a cutout loads or fails", () => {
+    const { container } = render(<PaperScene scene="source" />);
+    const cutout = container.querySelector<SVGImageElement>('[data-paper-cutout="paper-ivory"]')!;
+    const fallback = cutout.parentElement!.querySelector(".paper-raster-fallback")!;
+    expect(cutout.getAttribute("href")).toBe("/brand/october/hybrid/paper-ivory.webp");
+    expect(fallback.getAttribute("opacity")).toBe("1");
+    fireEvent.load(cutout);
+    expect(fallback.getAttribute("opacity")).toBe("0");
+    fireEvent.error(cutout);
+    expect(fallback.getAttribute("opacity")).toBe("1");
+  });
+
+  it("uses one physical envelope fold construction in both evidence scenes", () => {
+    for (const scene of ["observation", "invoiceExample"] as const) {
+      const { container, unmount } = render(<PaperScene scene={scene} />);
+      const cutouts = container.querySelectorAll('[data-paper-cutout="envelope-blue"]');
+      expect(cutouts).toHaveLength(1);
+      expect(cutouts[0].parentElement!.querySelectorAll(".paper-fold")).toHaveLength(1);
+      unmount();
+    }
   });
 
   it("loads both fallback lockups from the preview mount", () => {

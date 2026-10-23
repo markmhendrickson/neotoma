@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import { OCTOBER_RENDERS } from "./october_renders";
 import { staticAssetPath } from "@/site/spa_path";
 import "./paper_scene.css";
@@ -23,6 +23,8 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
 const Materials = createContext("");
 type Tone = "cream" | "sage" | "blue" | "navy" | "rust";
 type Shape = "sheet" | "folder" | "notch" | "tag" | "torn" | "round";
+type Cutout = "paper-ivory" | "folder-sage" | "envelope-blue";
+const cutoutPath = (name: Cutout) => staticAssetPath(`/brand/october/hybrid/${name}.webp`);
 
 function silhouette(w: number, h: number, shape: Shape) {
   if (shape === "folder")
@@ -48,6 +50,7 @@ function Piece({
   shape = "sheet",
   from = "left",
   delay = 0,
+  raster,
   children,
 }: {
   x: number;
@@ -59,9 +62,20 @@ function Piece({
   shape?: Shape;
   from?: "left" | "right" | "top" | "bottom";
   delay?: number;
+  raster?: Cutout;
   children?: ReactNode;
 }) {
   const id = useContext(Materials);
+  const clipId = `paper-cut-${useId().replace(/:/g, "")}`;
+  const directCutout: Cutout | undefined =
+    raster ??
+    (tone === "cream" && shape === "sheet" && h > w * 1.1 && w >= 180
+      ? "paper-ivory"
+      : tone === "sage" && shape === "folder" && w > h * 1.2
+        ? "folder-sage"
+        : undefined);
+  const [cutoutReady, setCutoutReady] = useState(false);
+  const body = silhouette(w, h, shape);
   const vectors = {
     left: [-1050, 35, -5],
     right: [1050, -25, 5],
@@ -79,39 +93,81 @@ function Piece({
         data-enter-delay={delay}
       >
         <path
-          d={silhouette(w, h, shape)}
+          d={body}
           transform="translate(1.5 2.5)"
           fill="#403322"
-          opacity=".18"
+          opacity={cutoutReady && directCutout ? 0 : 0.12}
         />
-        <path d={silhouette(w, h, shape)} transform="translate(4 7)" fill="#4e3d27" opacity=".10" />
         <path
-          d={silhouette(w, h, shape)}
+          d={body}
+          transform="translate(4 7)"
+          fill="#4e3d27"
+          opacity={cutoutReady && directCutout ? 0 : 0.065}
+        />
+        <path
+          d={body}
           transform="translate(6 9)"
           fill="#4e3d27"
-          opacity=".055"
+          opacity={cutoutReady && directCutout ? 0 : 0.035}
           stroke="#4e3d27"
           strokeWidth="10"
           strokeLinejoin="round"
           strokeOpacity=".025"
         />
         <path
-          d={silhouette(w, h, shape)}
+          d={body}
           transform="translate(0 1.5)"
           fill="#b9a991"
-          opacity=".68"
+          opacity={cutoutReady && directCutout ? 0 : 0.45}
         />
-        <path d={silhouette(w, h, shape)} fill={`url(#${id}-${tone})`} className="paper-edge" />
-        <path
-          d={silhouette(w, h, shape)}
-          fill={`url(#${id}-fiber)`}
-          opacity=".38"
-          style={{ mixBlendMode: "multiply" }}
-        />
-        <path
-          d={`M1 ${shape === "folder" ? 18 : 1} V${h - 1} H${w - 1}`}
-          className="paper-underedge"
-        />
+        <g className="paper-raster-fallback" opacity={cutoutReady && directCutout ? 0 : 1}>
+          <path d={body} fill={`url(#${id}-${tone})`} className="paper-edge" />
+          <path
+            d={body}
+            fill={`url(#${id}-fiber)`}
+            opacity=".38"
+            style={{ mixBlendMode: "multiply" }}
+          />
+          <path
+            d={`M1 ${shape === "folder" ? 18 : 1} V${h - 1} H${w - 1}`}
+            className="paper-underedge"
+          />
+          {raster === "envelope-blue" && (
+            <path
+              d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1}`}
+              className="paper-fold"
+            />
+          )}
+        </g>
+        {directCutout ? (
+          <image
+            href={cutoutPath(directCutout)}
+            width={w}
+            height={h}
+            preserveAspectRatio="none"
+            onLoad={() => setCutoutReady(true)}
+            onError={() => setCutoutReady(false)}
+            data-paper-cutout={directCutout}
+          />
+        ) : (
+          <>
+            <defs>
+              <clipPath id={clipId}>
+                <path d={body} />
+              </clipPath>
+            </defs>
+            <image
+              href={cutoutPath(tone === "sage" ? "folder-sage" : "paper-ivory")}
+              width={w}
+              height={h}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath={`url(#${clipId})`}
+              opacity={tone === "cream" ? ".72" : tone === "sage" ? ".42" : ".25"}
+              style={{ mixBlendMode: "multiply" }}
+              data-paper-material={tone}
+            />
+          </>
+        )}
         {children}
       </g>
     </g>
@@ -245,24 +301,17 @@ function Envelope({
   delay?: number;
 }) {
   return (
-    <Piece x={x} y={y} w={w} h={h} tone="blue" angle={angle} from="bottom" delay={delay}>
-      <path
-        d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 Z`}
-        fill="#c3d1d6"
-        stroke="#849ba6"
-        strokeWidth="1"
-      />
-      <path
-        d={`M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1} Z`}
-        fill="#a9c0ca"
-        stroke="#849ba6"
-        strokeWidth="1"
-      />
-      <path
-        d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1}`}
-        className="paper-fold"
-      />
-    </Piece>
+    <Piece
+      x={x}
+      y={y}
+      w={w}
+      h={h}
+      tone="blue"
+      angle={angle}
+      from="bottom"
+      delay={delay}
+      raster="envelope-blue"
+    />
   );
 }
 function Folder({
@@ -571,14 +620,11 @@ function Invoice() {
         <Punch x={182} y={91} />
       </Piece>
       <Envelope x={35} y={328} w={402} h={226} delay={80} />
-      <Piece x={74} y={288} w={334} h={204} from="bottom" delay={210}>
+      <Piece x={74} y={252} w={334} h={204} from="bottom" delay={210}>
         <Bars x={24} y={21} w={284} count={1} thick={17} />
         <Writing x={24} y={65} w={280} rows={5} />
         <rect x="114" y="80" width="174" height="18" fill="var(--paper-sage)" />
         <Punch x={281} y={89} />
-      </Piece>
-      <Piece x={35} y={425} w={402} h={129} tone="blue" from="bottom" delay={80}>
-        <path d="M0 0 201 80 402 0 M0 129 150 50 M402 129 252 50" className="paper-fold" />
       </Piece>
       <Piece x={567} y={205} w={162} h={204} from="right" delay={310}>
         <Bars x={15} y={17} w={130} count={1} thick={17} />
@@ -832,7 +878,7 @@ const scenes: Record<PaperSceneKind, () => ReactNode> = {
   scopedAccess: ScopedAccess,
   peering: Peering,
 };
-/** Authored animated counterpart of the October paper composition; no raster underneath. */
+/** Each paper object keeps its own geometry, material, and entrance motion. */
 export function PaperScene({ scene }: { scene: PaperSceneKind }) {
   const id = `paper-${useId().replace(/:/g, "")}`;
   const Scene = scenes[scene];
