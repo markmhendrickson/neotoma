@@ -1,4 +1,9 @@
 # MCP overview
+
+How agents connect to Neotoma through MCP and where to find setup and protocol details.
+
+Applies to v0.25.0 and main.
+
 ## Scope
 This document covers a curated overview of Neotoma MCP usage and links to canonical MCP references. It does not replace the full MCP specification or OAuth implementation details.
 
@@ -7,7 +12,7 @@ Provide a single entry point for MCP documentation with links to setup guides, t
 
 ## Invariants
 1. MCP actions MUST follow the MCP specification.
-2. MCP mutations MUST respect State Layer boundaries and explicit user control.
+2. MCP mutations MUST respect Neotoma's record boundary and explicit user control.
 3. MCP examples MUST be deterministic and free of credentials.
 
 ## Definitions
@@ -77,7 +82,7 @@ flowchart TD
 **Storing:** Use the **structured** path (store with `entities`) for conversation- or tool-sourced data; use the **unstructured** path (store with `file_content`/`file_path`) for file- or resource-sourced data. See MCP_SPEC section 2.6 for the full rule.
 
 ### Store a structured entity
-```
+```json
 {
   "action": "store",
   "entities": [
@@ -91,7 +96,7 @@ flowchart TD
 ```
 
 ### Store chat turn with batched relationships (preferred)
-```
+```json
 {
   "action": "store",
   "idempotency_key": "conversation-chat-12-1731680000000",
@@ -115,7 +120,7 @@ flowchart TD
 Use one `store` call with a batched `relationships` array when the linked entities are in the same request. Reserve `create_relationship` for fallback cases or links that target entities outside the request (for example, `EMBEDS` to a file interpretation entity).
 
 ### Store a file (unstructured)
-```
+```json
 {
   "action": "store",
   "idempotency_key": "file-invoice-001",
@@ -126,7 +131,7 @@ Use one `store` call with a batched `relationships` array when the linked entiti
 ```
 
 ### Retrieve entities
-```
+```json
 {
   "action": "retrieve_entities",
   "entity_type": "task",

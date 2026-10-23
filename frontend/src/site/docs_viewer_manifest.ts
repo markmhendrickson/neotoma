@@ -57,7 +57,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "README",
     group: "Start here",
     order: 10,
-    status: "pending",
+    status: "included",
   },
   {
     slug: "cli",
@@ -65,7 +65,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "CLI reference",
     group: "Start here",
     order: 20,
-    status: "pending",
+    status: "included",
   },
   {
     slug: "mcp",
@@ -73,7 +73,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "MCP overview",
     group: "Start here",
     order: 30,
-    status: "pending",
+    status: "included",
   },
   {
     slug: "rest-api",
@@ -81,7 +81,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "REST API",
     group: "Start here",
     order: 40,
-    status: "pending",
+    status: "included",
   },
   {
     slug: "integrations",
@@ -89,7 +89,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "Integrations matrix",
     group: "Start here",
     order: 50,
-    status: "pending",
+    status: "included",
   },
   {
     slug: "architecture",
@@ -97,7 +97,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "Architecture",
     group: "How the record works",
     order: 60,
-    status: "pending",
+    status: "included",
   },
   {
     slug: "vocabulary",
@@ -105,7 +105,7 @@ export const DOCS_VIEWER_MANIFEST: readonly DocsViewerEntry[] = [
     title: "Vocabulary",
     group: "How the record works",
     order: 70,
-    status: "pending",
+    status: "included",
   },
 ];
 
