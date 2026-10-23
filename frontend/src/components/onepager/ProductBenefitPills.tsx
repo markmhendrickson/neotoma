@@ -59,7 +59,11 @@ export function ProductBenefitPills() {
   };
 
   return (
-    <ul className="plan-meta-pills" aria-label="Product details" ref={list}>
+    <ul
+      className={`plan-meta-pills${open ? " plan-meta-pills-open" : ""}`}
+      aria-label="Product details"
+      ref={list}
+    >
       {benefits.map(({ id, label, Icon, detail }) => (
         <li
           key={id}

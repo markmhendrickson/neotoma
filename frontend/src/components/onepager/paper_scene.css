@@ -95,10 +95,18 @@
 }
 .paper-label {
   fill: var(--paper-navy);
-  font: 700 40px/1 system-ui, sans-serif;
+  font:
+    700 40px/1 system-ui,
+    sans-serif;
   letter-spacing: 1.2px;
   paint-order: stroke;
 }
 .paper-label-light {
   fill: var(--paper-cream);
+}
+.paper-agent-label {
+  font:
+    700 17px/1 system-ui,
+    sans-serif;
+  letter-spacing: 2px;
 }

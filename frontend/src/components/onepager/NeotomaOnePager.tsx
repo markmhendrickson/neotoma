@@ -210,12 +210,28 @@ export function NeotomaOnePager() {
               use separate databases. The bundled Inspector lets you examine the record.
             </p>
           </div>
-          <p className="plan-body">
-            Configured tools can share one record when they use the same instance and data profile.
-            Signed requests can establish a verified agent identity, while scoped grants determine
-            what that agent may do. Other paths may carry a self-reported name or no writer
-            identity. A signature alone does not grant access.
-          </p>
+          <div className="plan-capability-grid" aria-label="Shared access and identity">
+            <article>
+              <h3>A shared record for people and agents</h3>
+              <p>
+                People can inspect the record in the bundled Inspector. Configured tools share it
+                when they connect to the same instance and data profile; separate entries may use
+                separate databases.
+              </p>
+              <a href={neotomaGithubBlobUrl("docs/integrations/matrix.md")}>Connection guides</a>
+            </article>
+            <article>
+              <h3>Verified agents, scoped access</h3>
+              <p>
+                An admitted signed request can establish verified agent identity. Active scoped
+                grants determine permitted actions; a signature alone is not permission. Other paths
+                may report a name themselves or no writer identity.
+              </p>
+              <a href={neotomaGithubBlobUrl("docs/use_cases/agent_auth.md")}>
+                Agent identity guide
+              </a>
+            </article>
+          </div>
           <label className="plan-host-label" htmlFor="plan-host">
             Choose your tool
           </label>
@@ -256,14 +272,14 @@ export function NeotomaOnePager() {
             </a>{" "}
             for each guide.
           </p>
-          <p className="plan-small">
-            For separate instances, read the{" "}
-            <a href={neotomaGithubBlobUrl("docs/subsystems/peer_sync.md")}>
-              advanced peering guide
-            </a>
-            . Peering is distinct from sharing one configured graph and does not promise complete
-            history, file or deletion replication.
-          </p>
+          <aside className="plan-peer-note">
+            <h3>Exchange selected records between instances</h3>
+            <p className="plan-small">
+              Advanced peering is separate from sharing one configured graph. It does not promise
+              complete history, file or deletion replication. Read the{" "}
+              <a href={neotomaGithubBlobUrl("docs/subsystems/peer_sync.md")}>peering guide</a>.
+            </p>
+          </aside>
         </section>
 
         <section className="plan-sheet" aria-labelledby="s5" id="vision">

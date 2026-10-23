@@ -306,12 +306,63 @@ describe("viewport entrance lifecycle", () => {
     expect(play).toHaveBeenCalledTimes(2);
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
     document.dispatchEvent(new Event("visibilitychange"));
+    expect(play).toHaveBeenCalledTimes(2);
+    entry(false);
+    entry(true);
     expect(play).toHaveBeenCalledTimes(3);
     stop();
     expect(disconnect).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledTimes(3);
     document.dispatchEvent(new Event("visibilitychange"));
     expect(play).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("caps simultaneous scenes while skipped scenes stay drawn and can animate on re-entry", () => {
+    let notify: IntersectionObserverCallback = () => {};
+    const media = new EventTarget() as MediaQueryList;
+    Object.defineProperty(media, "matches", { value: false });
+    vi.stubGlobal("matchMedia", () => media);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          notify = callback;
+        }
+        observe() {}
+        disconnect() {}
+      }
+    );
+    Object.defineProperty(Element.prototype, "animate", { configurable: true, value: vi.fn() });
+    const targets = Array.from({ length: 3 }, () => {
+      const node = document.createElement("div");
+      node.textContent = "Complete record";
+      return node;
+    });
+    const play = vi.fn(() => [
+      {
+        cancel: vi.fn(),
+        finished: new Promise(() => {}),
+        playState: "running",
+      } as unknown as Animation,
+    ]);
+    const stop = observeViewportMotion(targets, play);
+    const entry = (target: Element, isIntersecting: boolean) =>
+      notify(
+        [{ target, isIntersecting } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
+    targets.forEach((target) => entry(target, true));
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(targets[2].textContent).toBe("Complete record");
+    expect(targets[2].getAttribute("style")).toBeNull();
+    entry(targets[0], false);
+    expect(play).toHaveBeenCalledTimes(2);
+    entry(targets[2], false);
+    entry(targets[2], true);
+    expect(play).toHaveBeenCalledTimes(3);
+    stop();
     vi.unstubAllGlobals();
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
@@ -371,7 +422,11 @@ describe("layered paper illustration motion", () => {
         screen.getByRole("img", { name: new RegExp(PAPER_SCENE_ALTS[scene]) })
       ).toBeInTheDocument();
       expect(svg.querySelector("image")).toBeNull();
-      expect(svg.querySelector("feTurbulence")).not.toBeNull();
+      expect(svg.querySelector("feTurbulence, feDropShadow, filter")).toBeNull();
+      expect(svg.querySelector("pattern[id$='-fiber']")).not.toBeNull();
+      expect(
+        svg.querySelectorAll("[data-paper-object] > path[transform='translate(3 7)']").length
+      ).toBe(svg.querySelectorAll("[data-paper-object]").length);
       playPaperScene(svg);
       const arrivals = calls.filter((call) => call.target.hasAttribute("data-paper-object"));
       const links = calls.filter((call) => call.target.hasAttribute("data-paper-connection"));
@@ -406,6 +461,8 @@ describe("layered paper illustration motion", () => {
 
   it("samples momentum and limited damped overshoot into a stable final pose", () => {
     const frames = springFrames(1000, 20, 5);
+    expect(springFrames(1000, 20, 5)).toBe(frames);
+    expect(springFrames(1000, 21, 5)).not.toBe(frames);
     const displacements = frames.map((frame) =>
       Number(String(frame.transform).match(/translate\(([-\d.e]+)/)?.[1])
     );

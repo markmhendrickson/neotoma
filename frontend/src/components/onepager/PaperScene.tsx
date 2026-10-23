@@ -68,14 +68,10 @@ function Piece({
         data-enter-y={dy}
         data-enter-rotation={turn}
         data-enter-delay={delay}
-        filter={`url(#${id}-shadow)`}
       >
-        <path
-          d={silhouette(w, h, shape)}
-          fill={`url(#${id}-${tone})`}
-          filter={`url(#${id}-grain)`}
-          className="paper-edge"
-        />
+        <path d={silhouette(w, h, shape)} transform="translate(3 7)" fill="#4e3d27" opacity=".18" />
+        <path d={silhouette(w, h, shape)} fill={`url(#${id}-${tone})`} className="paper-edge" />
+        <path d={silhouette(w, h, shape)} fill={`url(#${id}-fiber)`} opacity=".42" />
         <path
           d={`M1 ${shape === "folder" ? 18 : 1} V${h - 1} H${w - 1}`}
           className="paper-underedge"
@@ -251,7 +247,6 @@ function Folder({
         fill={`url(#${id}-${tone})`}
         stroke="#f6edda"
         strokeWidth="1"
-        filter={`url(#${id}-grain)`}
       />
       <path d={`M10 48 V${h} M${w - 13} 76 V${h}`} className="paper-fold" />
     </Piece>
@@ -560,6 +555,36 @@ function Invoice() {
   );
 }
 function LocalService() {
+  const TerminalCard = ({ w, h, light = false }: { w: number; h: number; light?: boolean }) => (
+    <>
+      <rect
+        x="12"
+        y="15"
+        width={w - 24}
+        height={h - 45}
+        rx="3"
+        fill={light ? "#eee6d6" : "#223e50"}
+      />
+      <circle cx="23" cy="26" r="2.5" fill="var(--paper-rust)" />
+      <circle cx="32" cy="26" r="2.5" fill="var(--paper-sage)" />
+      <path
+        d={`M23 40 l8 5 -8 5 M37 50 h${Math.max(30, w - 80)}`}
+        fill="none"
+        stroke={light ? "#223e50" : "#eee6d6"}
+        strokeWidth="2"
+      />
+      <path d={`M${w - 18} 39 h12 v23 h-12`} fill="var(--paper-rust)" />
+      <text
+        x={w / 2}
+        y={h - 9}
+        textAnchor="middle"
+        className="paper-agent-label"
+        fill={light ? "#eee6d6" : "#223e50"}
+      >
+        AGENT
+      </text>
+    </>
+  );
   return (
     <>
       <Thread d="M220 150 376 275 M230 131 388 254 M631 135 534 255 M645 154 545 277 M235 466 365 385 M247 482 378 402 M671 463 549 389 M683 447 559 371" />
@@ -567,36 +592,30 @@ function LocalService() {
         <path d="M0 15 141 49 270 15 M141 49 V91" className="paper-fold" />
       </Piece>
       <Piece x={360} y={231} w={204} h={170} from="bottom" delay={90}>
-        <rect y="67" width="204" height="55" fill="var(--paper-navy)" />
         <path
           d="M0 0 123 -60 236 -13 204 30 0 0 M204 30 V170 L236 132 V-13"
           fill="#d4c7ad"
           stroke="#b9aa90"
         />
+        <path d="M24 -48 h53 l10 -12 h57 v12 h38 v67 H24Z" fill="#e9dfc9" stroke="#a99a80" />
+        <path d="M35 -38 h126 M35 -25 h111 M35 -12 h137" className="paper-writing" />
+        <path d="M13 -4 h154 l12 -14 h18 v86 H13Z" fill="#d5c5a7" stroke="#a99a80" />
+        <path d="M24 21 h146 M24 34 h125" className="paper-writing" />
+        <rect y="67" width="204" height="55" fill="var(--paper-navy)" />
+        <rect x="77" y="87" width="51" height="12" rx="3" fill="var(--paper-cream)" />
         <path d="M77 6 q15 32 30 2" fill="#3a3529" />
-        <text x="102" y="105" textAnchor="middle" className="paper-label paper-label-light">
+        <text x="102" y="151" textAnchor="middle" className="paper-agent-label">
           ARCHIVE
         </text>
       </Piece>
       <Piece x={76} y={77} w={169} h={104} angle={-11} tone="blue" from="left" delay={180}>
-        <Bars x={21} y={21} w={125} count={1} thick={12} />
-        <Writing x={21} y={49} w={124} rows={3} />
-        <text x="83" y="87" textAnchor="middle" className="paper-label">
-          AGENT
-        </text>
+        <TerminalCard w={169} h={104} />
       </Piece>
       <Piece x={646} y={66} w={145} h={115} tone="navy" angle={7} from="right" delay={270}>
-        <rect x="22" y="44" width="101" height="15" fill="var(--paper-cream)" />
-        <text x="72" y="92" textAnchor="middle" className="paper-label paper-label-light">
-          AGENT
-        </text>
+        <TerminalCard w={145} h={115} light />
       </Piece>
       <Piece x={69} y={435} w={155} h={119} angle={-13} from="left" delay={360}>
-        <Bars x={23} y={24} w={107} count={1} thick={10} />
-        <Writing x={23} y={51} w={107} rows={3} />
-        <text x="77" y="103" textAnchor="middle" className="paper-label">
-          AGENT
-        </text>
+        <TerminalCard w={155} h={119} />
       </Piece>
       <Piece
         x={670}
@@ -609,13 +628,7 @@ function LocalService() {
         from="right"
         delay={450}
       >
-        <circle cx="27" cy="42" r="12" fill="var(--paper-cream)" />
-        <circle cx="27" cy="42" r="6" fill="#8c846b" />
-        <Bars x={51} y={29} w={106} count={1} thick={9} />
-        <Writing x={51} y={57} w={106} rows={3} />
-        <text x="103" y="96" textAnchor="middle" className="paper-label">
-          AGENT
-        </text>
+        <TerminalCard w={179} h={111} />
       </Piece>
     </>
   );
@@ -762,28 +775,12 @@ export function PaperScene({ scene }: { scene: PaperSceneKind }) {
             <stop stopColor="#f0e9dc" />
             <stop offset="1" stopColor="#ddd1bd" />
           </radialGradient>
-          <filter id={`${id}-shadow`} x="-30%" y="-30%" width="170%" height="180%">
-            <feDropShadow dx="3" dy="7" stdDeviation="4" floodColor="#4e3d27" floodOpacity=".25" />
-          </filter>
-          <filter id={`${id}-grain`} x="0" y="0" width="100%" height="100%">
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency=".72"
-              numOctaves="3"
-              seed="17"
-              result="noise"
-            />
-            <feColorMatrix
-              in="noise"
-              type="matrix"
-              values="0 0 0 0 0.35 0 0 0 0 0.3 0 0 0 0 0.22 0 0 0 .14 0"
-              result="grain"
-            />
-            <feComposite in="grain" in2="SourceGraphic" operator="in" result="clipped" />
-            <feBlend in="SourceGraphic" in2="clipped" mode="multiply" />
-          </filter>
+          <pattern id={`${id}-fiber`} width="17" height="19" patternUnits="userSpaceOnUse">
+            <path d="M2 4h2 M11 12h3 M7 17h1" stroke="#705c46" strokeWidth=".45" opacity=".34" />
+          </pattern>
         </defs>
-        <rect width="900" height="600" fill={`url(#${id}-ground)`} filter={`url(#${id}-grain)`} />
+        <rect width="900" height="600" fill={`url(#${id}-ground)`} />
+        <rect width="900" height="600" fill={`url(#${id}-fiber)`} opacity=".36" />
         <Scene />
       </svg>
     </Materials.Provider>

@@ -1363,6 +1363,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+  position: relative;
   margin: 0 0 1.5rem;
   padding: 0;
 }
@@ -1829,6 +1830,32 @@
   color: var(--ink);
   font: 400 0.85rem/1.45 var(--sans);
 }
+.plan-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+.plan-capability-grid article {
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--rust);
+  background: var(--sheet);
+}
+.plan-capability-grid h3,
+.plan-peer-note h3 {
+  margin-bottom: 0.55rem;
+}
+.plan-capability-grid p,
+.plan-peer-note p {
+  margin: 0 0 0.7rem;
+  max-width: 65ch;
+}
+.plan-peer-note {
+  margin-top: 1.25rem;
+  padding-left: 1.2rem;
+  border-left: 2px solid var(--line);
+}
 .plan-meta-pills li:nth-last-child(-n + 2) .plan-benefit-detail:not([hidden]) {
   left: auto;
   right: 0;
@@ -1863,17 +1890,25 @@
   aspect-ratio: 3 / 2;
 }
 @media (max-width: 600px) {
+  .plan-capability-grid {
+    grid-template-columns: 1fr;
+  }
   .plan-meta-pills li {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
+    width: auto;
+    flex: 0 0 auto;
+    position: static;
+  }
+  .plan-meta-pills-open {
+    padding-bottom: 4.8rem;
   }
   .plan-benefit-detail:not([hidden]) {
-    position: static;
+    position: absolute;
+    top: calc(100% - 4.5rem);
+    left: 0;
+    right: 0;
     width: 100%;
     box-shadow: none;
-    border: 0;
-    border-top: 1px solid var(--line);
+    border: 1px solid var(--line);
   }
   .plan-hero-aside .plan-actions,
   .plan-hero-aside .plan-btn-primary {

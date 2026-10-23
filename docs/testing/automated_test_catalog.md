@@ -61,10 +61,10 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **741**
+- Total automated test files: **743**
 - Backend and repo Vitest files: **704**
-- Frontend Vitest files: **11**
-- Playwright spec files: **26**
+- Frontend Vitest files: **12**
+- Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
@@ -81,8 +81,8 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 11 |
-| Playwright E2E tests | 22 |
+| Frontend Vitest tests | 12 |
+| Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
 | Tests Scripts | 4 |
@@ -892,9 +892,10 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (11):**
+**Files (12):**
 - `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx`
+- `frontend/src/components/onepager/ProductBenefitPills.interactions.test.tsx`
 - `frontend/src/components/subpages/EvaluatePage.icp_fit.test.tsx`
 - `frontend/src/lib/idempotency.test.ts`
 - `frontend/src/site/mdx_site_registry.test.ts`
@@ -910,7 +911,7 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e`
 **Requirements:** Playwright browsers installed; mock or real API configured per suite.
-**Files (22):**
+**Files (23):**
 - `playwright/tests/auto-enhancement.spec.ts`
 - `playwright/tests/design-system.spec.ts`
 - `playwright/tests/entity-detail.spec.ts`
@@ -924,6 +925,7 @@ flowchart TD
 - `playwright/tests/not-found.spec.ts`
 - `playwright/tests/oauth-flow.spec.ts`
 - `playwright/tests/observations.spec.ts`
+- `playwright/tests/onepager-mobile.spec.ts`
 - `playwright/tests/relationship-detail.spec.ts`
 - `playwright/tests/relationships-list.spec.ts`
 - `playwright/tests/schema-detail.spec.ts`

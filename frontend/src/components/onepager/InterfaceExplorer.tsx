@@ -135,10 +135,7 @@ export function InterfaceExplorer() {
   return (
     <div className="plan-interface">
       <p className="plan-small">
-        A synthetic, read-only App view and illustrative calls, never run by this page. Read the
-        store response for the actual entity ID. The snippets record fields and their observation
-        history; they do not upload the fictional PDF or email shown above. Each correction needs
-        its own idempotency key and does not edit the earlier observation.
+        Follow the same fictional invoice through the App view or a documented interface.
       </p>
       <div className="plan-tabs" role="tablist" aria-label="Invoice operation interface">
         {interfaces.map((name, index) => (
@@ -172,8 +169,8 @@ export function InterfaceExplorer() {
           {name === "App" ? (
             <>
               <p className="plan-small">
-                The bundled Inspector illustration shows fictional sources, a snapshot and
-                observation history. Its fields are not editable and it makes no requests.
+                Synthetic, read-only Inspector illustration. Its fictional sources, snapshot and
+                observation history are not editable; this page makes no requests.
               </p>
               <InspectorPreview />
             </>
@@ -202,14 +199,18 @@ export function InterfaceExplorer() {
                   .
                 </p>
               )}
+              <p className="plan-small">
+                These illustrative calls never run on this page. Read the store response for the
+                actual entity ID. Replace each example idempotency key with a unique key per
+                operation, then reuse that key and payload only to retry that operation. A
+                correction adds an observation; it does not edit the earlier one. The snippets store
+                fields and inspect their history, but do not upload the fictional PDF or email.
+                Observation history is distinct from date-derived timeline events.
+              </p>
             </>
           )}
         </div>
       ))}
-      <p className="plan-small">
-        The three command paths store, amend, read the snapshot and inspect observations and field
-        provenance. Observation history is distinct from date-derived timeline events.
-      </p>
     </div>
   );
 }
