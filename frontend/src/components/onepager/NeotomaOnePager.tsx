@@ -100,31 +100,22 @@ export function NeotomaOnePager() {
           </p>
           <p className="plan-body plan-fit-note">
             Neotoma is for developers and operators whose agents handle changing facts across tools.
-            You choose what enters the local instance and which tools use it. If your existing tools
-            already maintain source-backed current state, they may be sufficient.
+            You choose what enters the local instance and which tools use it.
           </p>
           <div className="plan-contrast">
             <article>
-              <figure>
-                <PaperScene scene="before" />
-                <figcaption>
-                  Relevant facts remain scattered across separate pieces of context, with no
-                  explicit current value selected here.
-                </figcaption>
-              </figure>
               <p className="plan-label">Without a system of record</p>
               <h3>What an agent happens to recall</h3>
+              <figure>
+                <PaperScene scene="before" />
+              </figure>
             </article>
             <article>
-              <figure>
-                <PaperScene scene="after" />
-                <figcaption>
-                  One record presents the selected field values while keeping their supporting
-                  observations connected.
-                </figcaption>
-              </figure>
               <p className="plan-label">With a system of record</p>
               <h3>The current record</h3>
+              <figure>
+                <PaperScene scene="after" />
+              </figure>
             </article>
           </div>
           <div className="plan-table-wrap">
@@ -150,11 +141,10 @@ export function NeotomaOnePager() {
               </tbody>
             </table>
           </div>
-          <p className="plan-body">
-            <Link to="/compare" className="plan-compare-link">
-              Compare recall, retrieval and a system of record in more detail.
-            </Link>
-          </p>
+          <Link to="/compare" className="plan-compare-link">
+            Compare recall, retrieval and a system of record in more detail{" "}
+            <span aria-hidden="true">→</span>
+          </Link>
         </section>
 
         <section className="plan-sheet" aria-labelledby="s3" id="how-it-works">
@@ -183,7 +173,6 @@ export function NeotomaOnePager() {
                   <PaperScene
                     scene={(["source", "observation", "entity", "reducer", "snapshot"] as const)[i]}
                   />
-                  <figcaption>{step.caption}</figcaption>
                 </figure>
               </li>
             ))}
@@ -193,10 +182,6 @@ export function NeotomaOnePager() {
             <div className="plan-example-content">
               <figure>
                 <PaperScene scene="invoiceExample" />
-                <figcaption>
-                  A later email changes this invoice’s due date, while its amount still comes from
-                  the original PDF.
-                </figcaption>
               </figure>
               <ol className="plan-legend">
                 {FIGURE_LEGEND.map((item, i) => (
@@ -226,9 +211,6 @@ export function NeotomaOnePager() {
           <div className="plan-split">
             <figure className="plan-scene plan-local-scene">
               <PaperScene scene="localService" />
-              <figcaption>
-                Connected tools read and write records in the same configured Neotoma instance.
-              </figcaption>
             </figure>
             <div>
               <p className="plan-body">

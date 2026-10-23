@@ -5,66 +5,57 @@ type Capability = {
   title: string;
   scene: PaperSceneKind;
   status: "Supported" | "Planned";
-  caption: string;
   detail: string;
   guide: string;
 };
 
 const capabilities: Capability[] = [
   {
-    title: "One configured instance",
+    title: "A shared system of record",
     scene: "sharedInstance",
     status: "Supported",
-    caption:
-      "People and configured tools can work with the same records when they use the same instance and data profile.",
     detail:
-      "Sharing is configured access to one instance, with no workspace membership lifecycle implied.",
+      "Teams and collaborators can work with the same records through configured access to one instance and data profile.",
     guide: "docs/integrations/matrix.md",
   },
   {
     title: "Verified identity and scoped access",
     scene: "scopedAccess",
     status: "Supported",
-    caption:
-      "An admitted signed request can establish agent identity, while active scoped grants determine its permitted actions.",
     detail:
-      "Other access paths may use self-reported or absent writer identity; a signature alone is not a grant.",
+      "An admitted signed request can establish agent identity; active scoped grants determine permitted actions. Other paths may have self-reported or absent writer identity.",
     guide: "docs/use_cases/agent_auth.md",
   },
   {
     title: "Selected record exchange",
     scene: "peering",
     status: "Supported",
-    caption: "Configured peers can exchange selected records between separate instances.",
     detail:
-      "Exchange is bounded to selected records; complete history, files and deletions are outside this claim.",
+      "Configured peers exchange selected records between separate instances, without claiming complete history, files or deletions.",
     guide: "docs/subsystems/peer_sync.md",
   },
   {
     title: "Bounded domain ownership",
     scene: "visionDomain",
     status: "Planned",
-    caption:
-      "Planned domain ownership would make clear who may correct each bounded part of the system of record.",
-    detail: "The authority would be scoped to a domain rather than granted across every record.",
+    detail:
+      "Planned domain ownership would make clear who may correct each bounded part of the record.",
     guide: "docs/foundation/core_identity.md",
   },
   {
     title: "Retained positions",
     scene: "visionPositions",
     status: "Planned",
-    caption:
-      "Planned position tracking would retain competing claims and make an explicit position inspectable.",
-    detail: "A selected position would leave the alternative claim visible.",
+    detail:
+      "Planned position tracking would make a selected position inspectable while retaining the competing claim.",
     guide: "docs/foundation/core_identity.md",
   },
   {
     title: "Inspectable explanations",
     scene: "visionExplanation",
     status: "Planned",
-    caption:
+    detail:
       "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
-    detail: "This extends the current field basis toward authority and impact inspection.",
     guide: "docs/foundation/core_identity.md",
   },
 ];
@@ -76,12 +67,13 @@ export function VisionGallery() {
         <article className="plan-vision-card" key={capability.scene}>
           <figure className="plan-vision-art">
             <PaperScene scene={capability.scene} />
-            <figcaption>{capability.caption}</figcaption>
           </figure>
-          <p className="plan-label">{capability.status}</p>
-          <h3>{capability.title}</h3>
-          <p>{capability.detail}</p>
-          <a href={neotomaGithubBlobUrl(capability.guide)}>Read the guide</a>
+          <div className="plan-vision-content">
+            <p className="plan-label">{capability.status}</p>
+            <h3>{capability.title}</h3>
+            <p>{capability.detail}</p>
+            <a href={neotomaGithubBlobUrl(capability.guide)}>Read the guide</a>
+          </div>
         </article>
       ))}
     </div>

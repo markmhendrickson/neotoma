@@ -2169,11 +2169,23 @@
   gap: 1.25rem;
   margin: 3rem 0;
 }
-.plan-compare-link {
+.plan .plan-compare-link {
   display: block;
   max-width: 48ch;
   min-height: 44px;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--rust);
+  border-radius: 0.25rem;
+  background: var(--sheet);
+  color: var(--rust);
+  font-weight: 700;
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+.plan .plan-compare-link:hover,
+.plan .plan-compare-link:focus-visible {
+  background: var(--band);
+  text-decoration: underline;
 }
 .plan-compare-grid article {
   border-top: 2px solid var(--rust);
@@ -2229,5 +2241,127 @@
   }
   .plan-hero-phrase {
     font-size: 0.83em;
+  }
+}
+
+/* Refinements to the responsive paper layout. */
+.plan-contrast figure {
+  margin-top: 0.9rem;
+}
+.plan-contrast h3 {
+  margin-bottom: 0;
+}
+.plan-host-select {
+  appearance: none;
+  padding: 0.65rem 2.8rem 0.65rem 0.85rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.15rem) 50%,
+    calc(100% - 0.85rem) 50%;
+  background-size:
+    0.35rem 0.35rem,
+    0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+.plan-site-footer a {
+  text-decoration: none;
+}
+.plan-site-footer a:hover,
+.plan-site-footer a:focus-visible {
+  text-decoration: underline;
+}
+.plan-vision-card {
+  align-content: start;
+}
+.plan-vision-content {
+  align-self: start;
+}
+.plan-vision-content .plan-label {
+  margin: 0 0 0.45rem;
+}
+.plan-vision-content h3 {
+  margin: 0 0 0.5rem;
+}
+.plan-vision-content > p:not(.plan-label) {
+  margin: 0 0 0.6rem;
+  line-height: 1.48;
+  color: var(--slate);
+}
+.plan-vision-content a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  font: 600 0.85rem/1.4 var(--sans);
+  text-underline-offset: 0.2em;
+}
+@media (max-width: 1100px) {
+  .plan-vision-gallery {
+    grid-template-columns: 1fr;
+  }
+  .plan-vision-card {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    gap: 0 1.5rem;
+    align-items: start;
+  }
+  .plan-vision-art {
+    grid-row: auto;
+    margin: 0;
+  }
+}
+@media (max-width: 950px) {
+  .plan-hero-copy {
+    gap: 0.65rem;
+  }
+  .plan-hero-aside .plan-actions {
+    margin-top: 0.8rem;
+  }
+}
+@media (max-width: 600px) {
+  .plan-masthead {
+    gap: 0.3rem;
+    margin-bottom: 1.2rem;
+    padding-block: 0.7rem;
+  }
+  .plan-nav {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+    scrollbar-width: thin;
+  }
+  .plan-nav a {
+    flex: 0 0 auto;
+    min-height: 44px;
+    font-size: 0.72rem;
+  }
+  .plan-meta-pills {
+    gap: 0.25rem;
+    margin-bottom: 0.8rem;
+  }
+  .plan-meta-pills li {
+    font-size: 0.64rem;
+  }
+  .plan-meta-pills button {
+    min-height: 44px;
+    padding-inline: 0.55rem;
+    gap: 0.25rem;
+  }
+  .plan-meta-pills svg {
+    width: 11px;
+    height: 11px;
+  }
+}
+@media (max-width: 540px) {
+  .plan-vision-card {
+    display: block;
+  }
+  .plan-vision-art {
+    margin-bottom: 1.1rem;
   }
 }

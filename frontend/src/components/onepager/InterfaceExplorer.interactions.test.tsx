@@ -59,6 +59,34 @@ function renderedStorePayload(tab: string): Record<string, unknown> {
 }
 
 describe("one-page interface examples", () => {
+  it("shows an invoice with distinct evidence sources and explicitly linked typed records", () => {
+    render(<InterfaceExplorer />);
+    const app = screen.getByRole("tabpanel", { name: "App" });
+    const current = within(app).getByRole("region", { name: "Current snapshot" });
+    for (const field of [
+      "invoice_number",
+      "vendor_name",
+      "invoice_date",
+      "date_due",
+      "amount_due",
+      "currency",
+    ])
+      expect(within(current).getByText(field)).toBeInTheDocument();
+    const sources = within(app).getByRole("region", { name: "Sources" });
+    expect(within(sources).getByText("INV-2041.pdf")).toBeInTheDocument();
+    expect(within(sources).getByText("Due date update")).toBeInTheDocument();
+    const links = within(app).getByRole("region", { name: "Relationships" });
+    const rows = [...links.querySelectorAll(".plan-related-entity")].map((row) => row.textContent);
+    expect(rows).toEqual([
+      "INV-2041 · invoiceREFERS_TOAcme · company",
+      "Due date update · emailREFERS_TOINV-2041 · invoice",
+      "Follow up on INV-2041 · task (pending)REFERS_TOINV-2041 · invoice",
+    ]);
+    expect(
+      within(links).getByText(/not automatically created from those sources/)
+    ).toBeInTheDocument();
+  });
+
   it("renders one schema-complete invoice through all three natural store shapes", () => {
     render(<InterfaceExplorer />);
     const required = Object.entries(ENTITY_SCHEMAS.invoice.schema_definition.fields)
@@ -300,11 +328,18 @@ describe("viewport entrance lifecycle", () => {
       { cancel, finished: new Promise(() => {}), playState: "running" } as unknown as Animation,
     ]);
     const stop = observeViewportMotion([target], play);
-    const entry = (isIntersecting: boolean) =>
+    const entry = (isIntersecting: boolean, intersectionRatio = isIntersecting ? 1 : 0) =>
       notify(
-        [{ target, isIntersecting } as unknown as IntersectionObserverEntry],
+        [{ target, isIntersecting, intersectionRatio } as unknown as IntersectionObserverEntry],
         {} as IntersectionObserver
       );
+    entry(true, 0.12);
+    expect(play).not.toHaveBeenCalled();
+    entry(true, 0.34);
+    expect(play).not.toHaveBeenCalled();
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(1);
+    entry(true, 0.12);
     entry(true);
     expect(play).toHaveBeenCalledTimes(1);
     entry(true);
@@ -371,7 +406,13 @@ describe("viewport entrance lifecycle", () => {
     const stop = observeViewportMotion(targets, play);
     const entry = (target: Element, isIntersecting: boolean) =>
       notify(
-        [{ target, isIntersecting } as unknown as IntersectionObserverEntry],
+        [
+          {
+            target,
+            isIntersecting,
+            intersectionRatio: isIntersecting ? 1 : 0,
+          } as unknown as IntersectionObserverEntry,
+        ],
         {} as IntersectionObserver
       );
     targets.forEach((target) => entry(target, true));

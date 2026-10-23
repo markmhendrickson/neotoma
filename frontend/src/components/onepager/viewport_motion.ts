@@ -39,7 +39,10 @@ export function observeViewportMotion(targets: Element[], play: Play): () => voi
     (entries) => {
       for (const entry of entries) {
         const target = entry.target;
+        // Wait until the composition is substantially visible. Keep an entered scene entered
+        // while it leaves the viewport so minor ratio changes do not restart its animation.
         if (entry.isIntersecting) {
+          if (entry.intersectionRatio < 0.35) continue;
           if (!inside.has(target)) {
             inside.add(target);
             enter(target);
@@ -50,7 +53,7 @@ export function observeViewportMotion(targets: Element[], play: Play): () => voi
         }
       }
     },
-    { threshold: 0.12 }
+    { threshold: [0, 0.35] }
   );
   targets.forEach((target) => observer.observe(target));
   const motionChange = () => {

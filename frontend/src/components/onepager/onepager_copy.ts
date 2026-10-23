@@ -67,7 +67,6 @@ export const PIPELINE: readonly {
   text: string;
   doc: string;
   link: string;
-  caption: string;
 }[] = [
   {
     name: "Source",
@@ -75,8 +74,6 @@ export const PIPELINE: readonly {
     text: "The supplied document or message is retained as the input to this record.",
     doc: "docs/subsystems/sources.md",
     link: "Read about sources",
-    caption:
-      "A supplied document or message stays available as the source for the facts drawn from it.",
   },
   {
     name: "Observation",
@@ -84,8 +81,6 @@ export const PIPELINE: readonly {
     text: "Each stored fact is an observation with a path back to its source.",
     doc: "docs/subsystems/observation_architecture.md",
     link: "Read about observations",
-    caption:
-      "Each extracted fact becomes its own observation and remains linked to the source that supplied it.",
   },
   {
     name: "Entity",
@@ -93,8 +88,6 @@ export const PIPELINE: readonly {
     text: "Identity fields connect observations about the same invoice.",
     doc: "docs/foundation/entity_resolution.md",
     link: "Read about entities",
-    caption:
-      "Observations with matching identity fields are gathered into the same record, while another identity stays separate.",
   },
   {
     name: "Reducer",
@@ -102,8 +95,6 @@ export const PIPELINE: readonly {
     text: "Merge rules per field compute the current value from the observations.",
     doc: "docs/subsystems/reducer.md",
     link: "Read about field rules",
-    caption:
-      "A field rule selects a current value from the retained observations without discarding the earlier ones.",
   },
   {
     name: "Snapshot",
@@ -111,7 +102,6 @@ export const PIPELINE: readonly {
     text: "The snapshot shows the rule-selected field values and the observations behind them.",
     doc: "docs/subsystems/entity_snapshots.md",
     link: "Read about snapshots",
-    caption: "A current field points back to the observation that supplied its selected value.",
   },
 ];
 
@@ -272,7 +262,6 @@ export const DEEPER_MATERIAL: readonly {
   {
     title: "Organization and legal",
     links: [
-      { label: "Constara" },
       { label: "MIT license", href: `${GH}/blob/main/LICENSE` },
       { label: "Privacy", href: "/privacy" },
       { label: "Terms of use", href: "/terms" },

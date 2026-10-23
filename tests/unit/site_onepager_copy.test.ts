@@ -978,7 +978,8 @@ describe("sheet 01 plate (FIG. A-1)", () => {
       if (/client/i.test(t)) expect(t, t).toContain("the client name the client reports");
     }
     expect(page).not.toContain("{PLATE_CAPTION}");
-    expect(page).toContain("later email changes this invoice");
+    expect(page).toContain("A later supplied email changes the");
+    expect(page).not.toContain("A later email changes this invoice’s due date");
   });
 });
 

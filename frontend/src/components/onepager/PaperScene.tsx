@@ -192,7 +192,7 @@ function Hero() {
   return (
     <>
       <Thread d="M374 157 H472 M634 157 H713" />
-      <Thread d="M552 261 V326" />
+      <Thread d="M552 261 V333" />
       <Piece x={52} y={74} w={320} h={446} shape="folder" from="left">
         <Bars x={30} y={83} w={238} thick={18} gap={29} />
         <Bars x={30} y={342} w={164} thick={14} gap={24} />
@@ -246,13 +246,19 @@ function Envelope({
   return (
     <Piece x={x} y={y} w={w} h={h} tone="blue" angle={angle} from="bottom" delay={delay}>
       <path
-        d={`M0 0 L${w / 2} ${h * 0.59} L${w} 0`}
+        d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 Z`}
         fill="#c3d1d6"
         stroke="#849ba6"
         strokeWidth="1"
       />
       <path
-        d={`M0 ${h} L${w * 0.39} ${h * 0.48} M${w} ${h} L${w * 0.61} ${h * 0.48}`}
+        d={`M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1} Z`}
+        fill="#a9c0ca"
+        stroke="#849ba6"
+        strokeWidth="1"
+      />
+      <path
+        d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1}`}
         className="paper-fold"
       />
     </Piece>
@@ -354,7 +360,7 @@ function Before() {
 function After() {
   return (
     <>
-      <Thread d="M193 321 C244 315 244 329 280 340 M193 410 C253 421 252 398 286 401 M517 337 C551 310 562 289 582 278 M580 273 H706" />
+      <Thread d="M193 321 C244 315 244 329 280 340 M193 410 C253 421 252 398 286 401 M575 278 H707" />
       <Piece x={48} y={69} w={556} h={455} shape="folder" from="left" />
       <Piece x={213} y={117} w={255} h={187} from="top" delay={90}>
         <Bars x={21} y={25} w={210} thick={14} gap={24} />
@@ -702,7 +708,7 @@ function VisionPositions() {
 function VisionExplanation() {
   return (
     <>
-      <Thread d="M524 319 C597 321 606 261 680 261 M524 336 C599 360 608 407 679 407" />
+      <Thread d="M515 319 C597 321 606 261 679 261 M515 336 C599 360 608 407 679 407" />
       <Piece x={102} y={194} w={410} h={278} tone="blue" shape="round" from="left">
         <Writing x={38} y={75} w={288} rows={7} />
         <path d="M42 163 h275 v42 H42Z" fill="var(--paper-sage)" opacity=".65" />
@@ -750,7 +756,7 @@ function SharedInstance() {
 function ScopedAccess() {
   return (
     <>
-      <Thread d="M371 206 H447 M518 206 C593 206 570 359 649 359" />
+      <Thread d="M371 206 H447 M518 281 V331 M584 377 C619 377 619 359 649 359" />
       <Piece x={80} y={140} w={291} h={190} tone="blue" shape="tag" from="left">
         <circle cx="65" cy="72" r="33" fill="var(--paper-cream)" />
         <path d="M50 72 l12 12 23 -27" fill="none" stroke="var(--paper-navy)" strokeWidth="6" />

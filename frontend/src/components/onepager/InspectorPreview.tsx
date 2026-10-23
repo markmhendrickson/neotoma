@@ -10,7 +10,7 @@ export function InspectorPreview() {
           <div>
             <span className="plan-inspector-type">invoice</span>
             <h3>INV-2041</h3>
-            <p>Acme · Invoice record</p>
+            <p>Acme</p>
           </div>
           <span className="plan-inspector-count">2 observations</span>
         </div>
@@ -43,7 +43,13 @@ export function InspectorPreview() {
               <div>
                 <dt>amount_due</dt>
                 <dd>
-                  3,200 USD <small>from invoice PDF</small>
+                  3,200 <small>from invoice PDF</small>
+                </dd>
+              </div>
+              <div>
+                <dt>currency</dt>
+                <dd>
+                  USD <small>from invoice PDF</small>
                 </dd>
               </div>
             </dl>
@@ -90,12 +96,24 @@ export function InspectorPreview() {
           <section className="plan-inspector-card" aria-label="Relationships">
             <h4>Relationships</h4>
             <p className="plan-related-entity">
-              <span>INV-2041</span>
+              <span>INV-2041 · invoice</span>
               <span>REFERS_TO</span>
               <strong>Acme · company</strong>
             </p>
+            <p className="plan-related-entity">
+              <span>Due date update · email</span>
+              <span>REFERS_TO</span>
+              <strong>INV-2041 · invoice</strong>
+            </p>
+            <p className="plan-related-entity">
+              <span>Follow up on INV-2041 · task (pending)</span>
+              <span>REFERS_TO</span>
+              <strong>INV-2041 · invoice</strong>
+            </p>
             <p className="plan-small">
-              The vendor_name field identifies the related company record.
+              An agent explicitly linked these example records. The supplied PDF and email above
+              remain sources for observations; the typed email record and follow-up task are
+              separate records, not automatically created from those sources.
             </p>
           </section>
         </div>
