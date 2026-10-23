@@ -23,7 +23,7 @@ MCP is the primary integration protocol. Every host below speaks MCP either over
 | Claude Code | stdio, remote HTTP | `neotoma setup --tool claude-code --yes` or `npm run sync:mcp` | [mcp_claude_code_setup.md](../developer/mcp_claude_code_setup.md) | Stable |
 | Claude Desktop | local, remote MCP, desktop connector | `neotoma setup --tool claude-desktop --install-scope user --yes` (existing Desktop config) | [Claude Desktop setup](../developer/mcp_claude_code_setup.md), [MCP overview](../developer/mcp_overview.md) | Stable |
 | ChatGPT | MCP App (connector), Custom GPT Actions (OpenAPI) | Manual HTTPS + OAuth | [chatgpt_apps_setup.md](../developer/chatgpt_apps_setup.md), [chatgpt_actions_setup.md](../developer/chatgpt_actions_setup.md) | Stable |
-| Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` | [Codex setup](../developer/agent_cli_configuration.md), [local MCP](../developer/mcp_overview.md), [remote MCP](../developer/mcp_oauth_implementation.md) | Stable |
+| Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` for local stdio; `codex mcp add` for remote HTTP | [Codex remote setup](../developer/mcp_codex_remote_setup.md), [local config](../developer/agent_cli_configuration.md) | Stable |
 | OpenClaw | Native plugin (`kind: memory`) + MCP | `neotoma setup --tool openclaw --yes` | [mcp_openclaw_setup.md](../developer/mcp_openclaw_setup.md), [openclaw.md](openclaw.md) | Stable |
 | IronClaw | MCP | `ironclaw mcp add` (no `neotoma setup --tool ironclaw`) | [mcp_ironclaw_setup.md](../developer/mcp_ironclaw_setup.md) | Stable |
 | Smithery | External URL registry | Manual registration | [smithery_external_url.md](smithery_external_url.md) | Stable |

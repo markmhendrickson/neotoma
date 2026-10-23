@@ -23,14 +23,14 @@ Provide a single entry point for MCP documentation with links to setup guides, t
 ## When to use CLI vs MCP
 
 - **Local (same machine as repo):** Prefer the **Neotoma CLI** for all Neotoma operations. Invoke commands directly (e.g. `neotoma entities list`). The CLI is more reliable locally (no MCP server spawn/sync issues). Use MCP only if the user explicitly configures it.
-- **Remote (tunnel, ChatGPT, cloud):** Use **MCP** over HTTP with the configured Neotoma URL (e.g. tunnel or neotoma.fly.dev).
+- **Remote (tunnel, ChatGPT, cloud):** Use **MCP** over HTTP with your instance's configured HTTPS URL.
 
 For local development and agents running in the repo, the CLI is the recommended interface; MCP is recommended for remote clients.
 
 ## Transport choice: stdio (local) vs HTTP (remote)
 
 - **Stdio:** Use for local clients (Cursor, Claude Code, Codex on the same machine as the Neotoma repo). Client spawns the server; better recovery after sleep.
-- **HTTP:** Use for remote access (tunnel, ChatGPT, deployed `neotoma.fly.dev`).
+- **HTTP:** Use for remote access (tunnel, ChatGPT, or another HTTPS deployment).
 
 See setup guides for config examples and comparison table.
 
@@ -42,7 +42,7 @@ The table below lists every supported harness with its setup guide and whether `
 |---------|-------|--------------|-----------|-------|
 | Cursor | [`mcp_cursor_setup.md`](mcp_cursor_setup.md) | `neotoma setup --tool cursor` | stdio (local) or HTTP | Source of truth for `.cursor/mcp.json`; sync to other clients via `npm run sync:mcp` |
 | Claude Code | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-code` | stdio (local) or HTTP | OAuth supported; writes user + project scopes |
-| Codex CLI | [`agent_cli_configuration.md`](agent_cli_configuration.md) | `neotoma setup --tool codex` | stdio | Synced from `.cursor/mcp.json` via `npm run sync:mcp` |
+| Codex CLI | [`mcp_codex_remote_setup.md`](mcp_codex_remote_setup.md) | `neotoma setup --tool codex` for local stdio; remote HTTP uses `codex mcp add` | stdio or HTTP | The guide gives Codex-specific remote OAuth steps; repo config sync covers local stdio only |
 | Claude Desktop | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-desktop --install-scope user` updates an existing Desktop config | stdio | The default project scope writes a project MCP config instead; no allowlist patch |
 | Windsurf | [`mcp_windsurf_setup.md`](mcp_windsurf_setup.md) | manual (see guide) | stdio (local) or HTTP | Edit `~/.codeium/windsurf/mcp_config.json` by hand |
 | Continue | [`mcp_continue_setup.md`](mcp_continue_setup.md) | manual (see guide) | stdio (local) or HTTP | Edit Continue's `config.json` by hand |
@@ -81,10 +81,12 @@ flowchart TD
 
 **Storing:** Use the **structured** path (store with `entities`) for conversation- or tool-sourced data; use the **unstructured** path (store with `file_content`/`file_path`) for file- or resource-sourced data. See MCP_SPEC section 2.6 for the full rule.
 
+The JSON blocks below are arguments to the named MCP tool; the tool name is not an `action` field in the payload.
+
 ### Store a structured entity
 ```json
 {
-  "action": "store",
+  "idempotency_key": "task-quarterly-report-001",
   "entities": [
     {
       "entity_type": "task",
@@ -98,7 +100,6 @@ flowchart TD
 ### Store chat turn with batched relationships (preferred)
 ```json
 {
-  "action": "store",
   "idempotency_key": "conversation-chat-12-1731680000000",
   "entities": [
     { "entity_type": "conversation", "title": "Inbox check" },
@@ -119,21 +120,35 @@ flowchart TD
 
 Use one `store` call with a batched `relationships` array when the linked entities are in the same request. Reserve `create_relationship` for fallback cases or links that target entities outside the request (for example, `EMBEDS` to a file interpretation entity).
 
-### Store a file (unstructured)
+### Store a file from a co-located MCP server (unstructured)
+
+Call `store` with `file_path` only when the path exists on the **Neotoma server's** filesystem. A local stdio server on the same machine can read this path. A remote HTTP server cannot read a file on the client machine; it rejects that request with `ERR_FILE_PATH_IS_SERVER_LOCAL`.
+
 ```json
 {
-  "action": "store",
-  "idempotency_key": "file-invoice-001",
-  "file_path": "/path/to/invoice.pdf",
-  "mime_type": "application/pdf",
-  "original_filename": "invoice.pdf"
+  "idempotency_key": "file-example-local-001",
+  "file_path": "/srv/neotoma/example.txt",
+  "mime_type": "text/plain",
+  "original_filename": "example.txt"
+}
+```
+
+### Store a file over remote HTTP MCP
+
+Call `store` with base64-encoded bytes in `file_content` and the matching `mime_type`. This payload works when the MCP client and Neotoma are on different machines; the example bytes decode to `Hello, Neotoma!` followed by a newline. For larger files, the REST multipart upload route `POST /sources/upload` is another remote transport; it is not an MCP tool.
+
+```json
+{
+  "idempotency_key": "file-example-remote-001",
+  "file_content": "SGVsbG8sIE5lb3RvbWEhCg==",
+  "mime_type": "text/plain",
+  "original_filename": "example.txt"
 }
 ```
 
 ### Retrieve entities
 ```json
 {
-  "action": "retrieve_entities",
   "entity_type": "task",
   "limit": 5,
   "offset": 0

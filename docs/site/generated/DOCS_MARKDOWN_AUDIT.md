@@ -2,12 +2,12 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **732**
+Total files: **733**
 
 ## By top-level folder under docs/
 
 - **site**: 180
-- **developer**: 126
+- **developer**: 127
 - **plans**: 69
 - **subsystems**: 51
 - **reports**: 48

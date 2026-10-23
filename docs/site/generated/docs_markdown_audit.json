@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-23T11:02:45.558Z",
-  "total_files": 732,
+  "generated_at": "2026-10-23T16:04:56.187Z",
+  "total_files": 733,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
     "bundles": 2,
     "conventions": 12,
     "coverage_manifest.md": 1,
-    "developer": 126,
+    "developer": 127,
     "examples": 1,
     "feature_units": 20,
     "foundation": 25,
@@ -471,6 +471,10 @@
     },
     {
       "rel": "docs/developer/mcp_claude_code_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_codex_remote_setup.md",
       "top": "developer"
     },
     {

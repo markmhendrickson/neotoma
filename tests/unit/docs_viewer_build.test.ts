@@ -283,6 +283,31 @@ describe("docs viewer export validation", () => {
         manifest: [vocabulary],
       }).problems
     ).toEqual([]);
+
+    const page = join(outDir, "docs/vocabulary/index.html");
+    const original = readFileSync(page, "utf-8");
+    const check = () =>
+      validateDocsViewerExport(outDir, {
+        index: buildDocsViewerIndex([vocabulary]),
+        manifest: [vocabulary],
+      }).problems.join("\n");
+    writeFileSync(page, original.replace("</main>", "<p>Neotoma is the state layer.</p></main>"));
+    expect(check()).toMatch(/retired category noun/);
+    writeFileSync(
+      page,
+      original.replace("</main>", "<p>Neotoma is a unified platform.</p></main>")
+    );
+    expect(check()).toMatch(/unified platform/);
+    writeFileSync(page, original);
+    expect(check()).toBe("");
+  });
+
+  it("rejects a retired noun on an ordinary included page", () => {
+    const outDir = built();
+    edit(join(outDir, "docs/rest-api/index.html"), (s) =>
+      s.replace("</main>", "<p>Neotoma is the state layer.</p></main>")
+    );
+    expect(validate(outDir).join("\n")).toMatch(/retired category noun/);
   });
 
   it.each([
