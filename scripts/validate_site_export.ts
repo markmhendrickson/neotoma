@@ -237,7 +237,10 @@ if (englishHomeSentinelHits === 0) {
 const HOME_REQUIRED = [
   "A record, not recall.",
   "the system of record for AI agents",
-  "05 · References",
+  "04 · Advanced",
+  "Advanced capabilities",
+  "05 · EVALUATE",
+  "Evaluate the fit",
 ] as const;
 const HOME_FORBIDDEN = [
   "Your agents forget",
@@ -265,7 +268,7 @@ let homeFailures = 0;
 }
 if (homeFailures === 0) {
   pass(
-    "Home page is the one-pager: current category, references, no old header, footer or title blocks"
+    "Home page is the one-pager: current category, advanced and evaluate sections, no old header, footer or title blocks"
   );
 }
 
@@ -689,42 +692,77 @@ if (fs.existsSync(installHtmlForHowTo)) {
     servedPageFailures++;
   }
 }
-// The direction section separates current boundaries from planned governance.
+// Each advanced card must keep its status and qualification together in the exported page.
 const homeForLimits = path.join(siteDir, "index.html");
 if (fs.existsSync(homeForLimits)) {
-  const homeText = servedText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
-  const directionText = homeText.slice(
-    homeText.indexOf("Where this is going"),
-    homeText.indexOf("Explore the source")
-  );
-  for (const needle of [
-    "Where this is going",
-    "Current boundaries: one local operator",
-    "later ordinary writes can replace corrections",
-    "export contains current values without observation history",
-    "authorship is verified only for signed requests, and some paths record no writer",
-    "One entity can be read as of a past time; the whole record cannot",
-    "A record people and agents maintain together",
-    "Give each domain a clear owner",
-    "authority scoped to the domain",
-    "Keep disagreement on the record",
-    "competing claims, unresolved disputes and official positions",
-    "Make authority easier to inspect",
-    "Planned governance, with no promised timeline",
-    "Authority to act stays in the operational tools above the record",
-    "known limitations",
-  ]) {
-    if (!directionText.includes(needle)) {
-      fail(`site_pages/index.html direction section no longer says "${needle}"`);
-      servedPageFailures++;
-    }
-  }
-  if ((directionText.match(/Planned direction/g) ?? []).length !== 3) {
+  const homeHtml = fs.readFileSync(homeForLimits, "utf-8");
+  const advancedStart = homeHtml.indexOf('id="vision"');
+  const evaluateStart = homeHtml.indexOf('id="evaluate"', advancedStart);
+  const advancedHtml =
+    advancedStart >= 0 && evaluateStart > advancedStart
+      ? homeHtml.slice(advancedStart, evaluateStart)
+      : "";
+  const cardPattern =
+    /<div class="plan-vision-content"><p class="plan-label">([^<]+)<\/p><h3>([^<]+)<\/h3><p>([^<]+)<\/p>/g;
+  const cards = [...advancedHtml.matchAll(cardPattern)].map((match) => ({
+    status: match[1],
+    title: match[2],
+    detail: match[3],
+  }));
+  const expectedCards = [
+    {
+      status: "Supported",
+      title: "A shared system of record",
+      detail:
+        "Teams and collaborators can work with the same records through configured access to one instance and data profile.",
+    },
+    {
+      status: "Supported",
+      title: "Verified identity and scoped access",
+      detail:
+        "An admitted signed request can establish agent identity; active scoped grants determine permitted actions. Other paths may have self-reported or absent writer identity.",
+    },
+    {
+      status: "Supported",
+      title: "Selected record exchange",
+      detail:
+        "Configured peers exchange selected records between separate instances, without claiming complete history, files or deletions.",
+    },
+    {
+      status: "Planned",
+      title: "Bounded domain ownership",
+      detail:
+        "Planned domain ownership would make clear who may correct each bounded part of the record.",
+    },
+    {
+      status: "Planned",
+      title: "Retained positions",
+      detail:
+        "Planned position tracking would make a selected position inspectable while retaining the competing claim.",
+    },
+    {
+      status: "Planned",
+      title: "Inspectable explanations",
+      detail:
+        "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
+    },
+  ] as const;
+  if (cards.length !== expectedCards.length) {
     fail(
-      "site_pages/index.html must label each of the three governance ambitions as planned direction"
+      `site_pages/index.html advanced section has ${cards.length} capability cards; expected six`
     );
     servedPageFailures++;
   }
+  for (const expected of expectedCards) {
+    const card = cards.find((candidate) => candidate.title === expected.title);
+    if (!card || card.status !== expected.status || card.detail !== expected.detail) {
+      fail(
+        `site_pages/index.html advanced capability "${expected.title}" lost its status or limit`
+      );
+      servedPageFailures++;
+    }
+  }
+  const homeText = servedText(homeHtml).replace(/\s+/g, " ");
   if (
     /Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants|corrections always win|export (with|including) (full )?history/i.test(
       homeText

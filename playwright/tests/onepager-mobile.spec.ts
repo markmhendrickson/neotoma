@@ -7,7 +7,7 @@ test.describe("one-pager mobile visual parity", () => {
       await page.setViewportSize({ width, height: 844 });
       await page.goto("/");
       const scenes = page.locator("[data-paper-scene]");
-      await expect(scenes).toHaveCount(13);
+      await expect(scenes).toHaveCount(16);
       for (const scene of await scenes.all()) {
         await expect(scene.locator("title")).not.toBeEmpty();
         const box = await scene.boundingBox();

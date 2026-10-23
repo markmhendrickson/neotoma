@@ -228,24 +228,41 @@ describe("advanced capability boundaries", () => {
     text.indexOf("Advanced capabilities"),
     text.indexOf("Evaluate the fit")
   );
+  const cards = [
+    ...markup.matchAll(
+      /<div class="plan-vision-content"><p class="plan-label">([^<]+)<\/p><h3>([^<]+)<\/h3><p>([^<]+)<\/p>/g
+    ),
+  ].map(([, status, title, detail]) => ({ status, title, detail }));
   it("shows three supported and three planned visual capabilities", () => {
-    expect((advanced.match(/Supported/g) ?? []).length).toBeGreaterThanOrEqual(3);
-    expect((advanced.match(/Planned/g) ?? []).length).toBeGreaterThanOrEqual(3);
-    for (const title of [
-      "One configured instance",
-      "Verified identity and scoped access",
-      "Selected record exchange",
-      "Bounded domain ownership",
-      "Retained positions",
-      "Inspectable explanations",
-    ])
-      expect(advanced).toContain(title);
+    expect(cards.map(({ status, title }) => ({ status, title }))).toEqual([
+      { status: "Supported", title: "A shared system of record" },
+      { status: "Supported", title: "Verified identity and scoped access" },
+      { status: "Supported", title: "Selected record exchange" },
+      { status: "Planned", title: "Bounded domain ownership" },
+      { status: "Planned", title: "Retained positions" },
+      { status: "Planned", title: "Inspectable explanations" },
+    ]);
     expect(markup).toContain('data-paper-scene="peering"');
     expect(markup).toContain('data-paper-scene="visionDomain"');
   });
   it("keeps qualifications local to their capability", () => {
-    expect(advanced).toContain("a signature alone is not a grant");
-    expect(advanced).toContain("complete history, files and deletions are outside this claim");
+    const detail = (title: string) => cards.find((card) => card.title === title)?.detail;
+    expect(detail("A shared system of record")).toContain(
+      "configured access to one instance and data profile"
+    );
+    expect(detail("Verified identity and scoped access")).toContain(
+      "active scoped grants determine permitted actions"
+    );
+    expect(detail("Verified identity and scoped access")).toContain(
+      "Other paths may have self-reported or absent writer identity"
+    );
+    expect(detail("Selected record exchange")).toContain(
+      "without claiming complete history, files or deletions"
+    );
+    for (const card of cards.slice(3)) expect(card.detail).toMatch(/^Planned /);
+    expect(advanced).not.toMatch(
+      /every agent can read all records|any signed request can act|all history, files and deletions/i
+    );
     expect(advanced).not.toContain("Current scope and limits");
   });
 });
