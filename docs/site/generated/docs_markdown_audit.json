@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-21T17:21:26.045Z",
-  "total_files": 731,
+  "generated_at": "2026-10-23T16:04:56.187Z",
+  "total_files": 733,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
     "bundles": 2,
     "conventions": 12,
     "coverage_manifest.md": 1,
-    "developer": 126,
+    "developer": 127,
     "examples": 1,
     "feature_units": 20,
     "foundation": 25,
@@ -34,7 +34,7 @@
     "reports": 48,
     "research": 1,
     "security": 10,
-    "site": 179,
+    "site": 180,
     "skills": 4,
     "specs": 14,
     "subsystems": 51,
@@ -471,6 +471,10 @@
     },
     {
       "rel": "docs/developer/mcp_claude_code_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_codex_remote_setup.md",
       "top": "developer"
     },
     {
@@ -1707,6 +1711,10 @@
     },
     {
       "rel": "docs/site/MIGRATION_BATCHES.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/onepager_capability_evidence.md",
       "top": "site"
     },
     {

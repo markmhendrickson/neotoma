@@ -1,18 +1,16 @@
-/** Static, synthetic rendering of the bundled Inspector's entity detail vocabulary and layout. */
+/** Static example using documented invoice fields and the app's detail vocabulary. */
 export function InspectorPreview() {
   return (
-    <div className="plan-inspector" aria-label="Illustrative read-only Inspector invoice detail">
+    <div className="plan-inspector" aria-label="Example invoice record in the Neotoma app">
       <header className="plan-inspector-head">
-        <span className="plan-inspector-brand">Neotoma / Inspector</span>
-        <span className="plan-inspector-mode">Read-only illustration</span>
+        <span className="plan-inspector-brand">Neotoma</span>
       </header>
       <div className="plan-inspector-body">
-        <p className="plan-inspector-crumb">Entities / invoice / INV-2041</p>
         <div className="plan-inspector-title">
           <div>
             <span className="plan-inspector-type">invoice</span>
             <h3>INV-2041</h3>
-            <p>Acme · synthetic example</p>
+            <p>Acme</p>
           </div>
           <span className="plan-inspector-count">2 observations</span>
         </div>
@@ -21,34 +19,102 @@ export function InspectorPreview() {
             <h4>Current snapshot</h4>
             <dl>
               <div>
-                <dt>amount_due</dt>
+                <dt>invoice_number</dt>
+                <dd>INV-2041</dd>
+              </div>
+              <div>
+                <dt>vendor_name</dt>
                 <dd>
-                  3,200 USD <small>from invoice PDF</small>
+                  Acme <small>from invoice PDF</small>
+                </dd>
+              </div>
+              <div>
+                <dt>invoice_date</dt>
+                <dd>
+                  October 1st, 2026 <small>from invoice PDF</small>
                 </dd>
               </div>
               <div>
                 <dt>date_due</dt>
                 <dd>
-                  29 October 2026 <small>from later email observation</small>
+                  October 29th, 2026 <small>from later email</small>
+                </dd>
+              </div>
+              <div>
+                <dt>amount_due</dt>
+                <dd>
+                  3,200 <small>from invoice PDF</small>
+                </dd>
+              </div>
+              <div>
+                <dt>currency</dt>
+                <dd>
+                  USD <small>from invoice PDF</small>
                 </dd>
               </div>
             </dl>
-            <p className="plan-inspector-trace">Field provenance · date_due → later observation</p>
+            <p className="plan-inspector-trace">date_due → later email observation</p>
           </section>
           <section className="plan-inspector-card" aria-label="Observation history">
             <h4>Observation history</h4>
             <ol className="plan-inspector-history">
               <li>
                 <strong>Later email</strong>
-                <span>date_due: 29 October 2026</span>
-                <small>Source: supplied email</small>
+                <span>date_due: October 29th, 2026</span>
+                <small>Supplied email · retained observation</small>
               </li>
               <li>
                 <strong>Invoice PDF</strong>
-                <span>date_due: 22 October 2026 · amount_due: 3,200 USD</span>
-                <small>Source: supplied invoice</small>
+                <span>date_due: October 22nd, 2026 · amount_due: 3,200 USD</span>
+                <small>Supplied PDF · retained observation</small>
               </li>
             </ol>
+          </section>
+          <section className="plan-inspector-card plan-inspector-sources" aria-label="Sources">
+            <h4>Sources</h4>
+            <div className="plan-source-preview">
+              <span className="plan-source-symbol" aria-hidden="true">
+                PDF
+              </span>
+              <div>
+                <strong>INV-2041.pdf</strong>
+                <p>Invoice from Acme · issued October 1st, 2026</p>
+                <p>Amount 3,200 USD · due October 22nd, 2026</p>
+              </div>
+            </div>
+            <div className="plan-source-preview">
+              <span className="plan-source-symbol" aria-hidden="true">
+                @
+              </span>
+              <div>
+                <strong>Due date update</strong>
+                <p>Supplied email about INV-2041</p>
+                <p>Revised due date: October 29th, 2026</p>
+              </div>
+            </div>
+          </section>
+          <section className="plan-inspector-card" aria-label="Relationships">
+            <h4>Relationships</h4>
+            <p className="plan-related-entity">
+              <span>INV-2041 · invoice</span>
+              <span>REFERS_TO</span>
+              <strong>Acme · company</strong>
+            </p>
+            <p className="plan-related-entity">
+              <span>Due date update · email</span>
+              <span>REFERS_TO</span>
+              <strong>INV-2041 · invoice</strong>
+            </p>
+            <p className="plan-related-entity">
+              <span>Follow up on INV-2041 · task (pending)</span>
+              <span>REFERS_TO</span>
+              <strong>INV-2041 · invoice</strong>
+            </p>
+            <p className="plan-small">
+              An agent explicitly linked these example records. The supplied PDF and email above
+              remain sources for observations; the typed email record and follow-up task are
+              separate records, not automatically created from those sources.
+            </p>
           </section>
         </div>
       </div>

@@ -1,11 +1,30 @@
-import { createContext, useContext, useId, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import { OCTOBER_RENDERS } from "./october_renders";
+import { staticAssetPath } from "@/site/spa_path";
 import "./paper_scene.css";
 
-export type PaperSceneKind = keyof typeof OCTOBER_RENDERS;
+export const VISION_SCENE_ALTS = {
+  visionDomain:
+    "Planned domain authority: a matching holder reaches one of two bounded compartments",
+  visionPositions:
+    "Planned position tracking: two distinct claims remain visible beside a selected position",
+  visionExplanation:
+    "Planned explanation: lifted current field reveals its basis and a bounded set of effects",
+  sharedInstance: "Supported sharing: three different readers connect to one configured instance",
+  scopedAccess:
+    "Supported access: verified identity and a separate scope grant reach one compartment",
+  peering: "Supported peering: two separate instances exchange a selected subset of records",
+} as const;
+export type PaperSceneKind = keyof typeof OCTOBER_RENDERS | keyof typeof VISION_SCENE_ALTS;
+export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
+  ...Object.fromEntries(Object.entries(OCTOBER_RENDERS).map(([key, render]) => [key, render.alt])),
+  ...VISION_SCENE_ALTS,
+} as Record<PaperSceneKind, string>;
 const Materials = createContext("");
 type Tone = "cream" | "sage" | "blue" | "navy" | "rust";
-type Shape = "sheet" | "folder" | "notch" | "tag" | "torn";
+type Shape = "sheet" | "folder" | "notch" | "tag" | "torn" | "round";
+type Cutout = "paper-ivory" | "folder-sage" | "envelope-blue";
+const cutoutPath = (name: Cutout) => staticAssetPath(`/brand/october/hybrid/${name}.webp`);
 
 function silhouette(w: number, h: number, shape: Shape) {
   if (shape === "folder")
@@ -13,9 +32,11 @@ function silhouette(w: number, h: number, shape: Shape) {
   if (shape === "notch")
     return `M0 0 H${w * 0.36} C${w * 0.36} 30 ${w * 0.64} 30 ${w * 0.64} 0 H${w} V${h} H0 Z`;
   if (shape === "tag") return `M0 0 H${w - 28} L${w} 28 V${h} H0 Z`;
+  if (shape === "round")
+    return `M0 0 H${w - 42} Q${w - 8} 0 ${w} 29 V${h - 40} Q${w} ${h} ${w - 42} ${h} H0 Z`;
   if (shape === "torn")
     return `M0 3 L${w * 0.14} 0 L${w * 0.25} 4 L${w * 0.44} 1 L${w * 0.62} 4 L${w * 0.8} 0 L${w} 3 V${h - 4} L${w * 0.86} ${h} L${w * 0.7} ${h - 3} L${w * 0.53} ${h} L${w * 0.3} ${h - 3} L${w * 0.12} ${h} L0 ${h - 3} Z`;
-  return `M0 0 H${w} V${h} H0 Z`;
+  return `M0 1 Q${w * 0.31} -1 ${w * 0.57} 1 L${w} 0 V${h - 2} Q${w * 0.73} ${h + 1} ${w * 0.42} ${h - 1} L0 ${h} Z`;
 }
 
 /** Placement stays outside the animated group, so motion cannot replace the authored composition. */
@@ -29,6 +50,7 @@ function Piece({
   shape = "sheet",
   from = "left",
   delay = 0,
+  raster,
   children,
 }: {
   x: number;
@@ -40,9 +62,20 @@ function Piece({
   shape?: Shape;
   from?: "left" | "right" | "top" | "bottom";
   delay?: number;
+  raster?: Cutout;
   children?: ReactNode;
 }) {
   const id = useContext(Materials);
+  const clipId = `paper-cut-${useId().replace(/:/g, "")}`;
+  const directCutout: Cutout | undefined =
+    raster ??
+    (tone === "cream" && shape === "sheet" && h > w * 1.1 && w >= 180
+      ? "paper-ivory"
+      : tone === "sage" && shape === "folder" && w > h * 1.2
+        ? "folder-sage"
+        : undefined);
+  const [cutoutReady, setCutoutReady] = useState(false);
+  const body = silhouette(w, h, shape);
   const vectors = {
     left: [-1050, 35, -5],
     right: [1050, -25, 5],
@@ -58,18 +91,95 @@ function Piece({
         data-enter-y={dy}
         data-enter-rotation={turn}
         data-enter-delay={delay}
-        filter={`url(#${id}-shadow)`}
       >
         <path
-          d={silhouette(w, h, shape)}
-          fill={`url(#${id}-${tone})`}
-          filter={`url(#${id}-grain)`}
-          className="paper-edge"
+          d={body}
+          transform="translate(1.5 2.5)"
+          fill="#403322"
+          opacity={cutoutReady && directCutout ? 0 : 0.12}
         />
         <path
-          d={`M1 ${shape === "folder" ? 18 : 1} V${h - 1} H${w - 1}`}
-          className="paper-underedge"
+          d={body}
+          transform="translate(4 7)"
+          fill="#4e3d27"
+          opacity={cutoutReady && directCutout ? 0 : 0.065}
         />
+        <path
+          d={body}
+          transform="translate(6 9)"
+          fill="#4e3d27"
+          opacity={cutoutReady && directCutout ? 0 : 0.035}
+          stroke="#4e3d27"
+          strokeWidth="10"
+          strokeLinejoin="round"
+          strokeOpacity=".025"
+        />
+        <path
+          d={body}
+          transform="translate(0 1.5)"
+          fill="#b9a991"
+          opacity={cutoutReady && directCutout ? 0 : 0.45}
+        />
+        <g className="paper-raster-fallback" opacity={cutoutReady && directCutout ? 0 : 1}>
+          <path d={body} fill={`url(#${id}-${tone})`} className="paper-edge" />
+          <path
+            d={body}
+            fill={`url(#${id}-fiber)`}
+            opacity=".38"
+            style={{ mixBlendMode: "multiply" }}
+          />
+          <path
+            d={`M1 ${shape === "folder" ? 18 : 1} V${h - 1} H${w - 1}`}
+            className="paper-underedge"
+          />
+          {raster === "envelope-blue" && (
+            <>
+              <path
+                d={`M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1} Z`}
+                fill="#a9c0ca"
+                stroke="#849ba6"
+                strokeWidth="1"
+                data-envelope-flap="lower"
+              />
+              <path
+                d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 Z`}
+                fill="#c3d1d6"
+                stroke="#849ba6"
+                strokeWidth="1"
+                data-envelope-flap="closing"
+              />
+            </>
+          )}
+        </g>
+        {directCutout ? (
+          <image
+            href={cutoutPath(directCutout)}
+            width={w}
+            height={h}
+            preserveAspectRatio="none"
+            onLoad={() => setCutoutReady(true)}
+            onError={() => setCutoutReady(false)}
+            data-paper-cutout={directCutout}
+          />
+        ) : (
+          <>
+            <defs>
+              <clipPath id={clipId}>
+                <path d={body} />
+              </clipPath>
+            </defs>
+            <image
+              href={cutoutPath(tone === "sage" ? "folder-sage" : "paper-ivory")}
+              width={w}
+              height={h}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath={`url(#${clipId})`}
+              opacity={tone === "cream" ? ".72" : tone === "sage" ? ".42" : ".25"}
+              style={{ mixBlendMode: "multiply" }}
+              data-paper-material={tone}
+            />
+          </>
+        )}
         {children}
       </g>
     </g>
@@ -151,7 +261,7 @@ function Hero() {
   return (
     <>
       <Thread d="M374 157 H472 M634 157 H713" />
-      <Thread d="M552 261 V326" />
+      <Thread d="M552 261 V333" />
       <Piece x={52} y={74} w={320} h={446} shape="folder" from="left">
         <Bars x={30} y={83} w={238} thick={18} gap={29} />
         <Bars x={30} y={342} w={164} thick={14} gap={24} />
@@ -166,7 +276,7 @@ function Hero() {
         <circle cx="24" cy="98" r="7" fill="var(--paper-rust)" />
         <path d="M39 62 H88 M39 101 H88" className="paper-writing" />
       </Piece>
-      <Piece x={400} y={333} w={398} h={184} from="bottom" delay={320}>
+      <Piece x={400} y={333} w={398} h={184} shape="round" from="bottom" delay={320}>
         <path d="M16 15 H167 V162 H16 Z" className="paper-writing" />
         <path
           d="M97 16 94 31 98 49 94 62 97 78 93 92 97 113 94 129 98 145 96 162 H166 V16 Z"
@@ -203,18 +313,17 @@ function Envelope({
   delay?: number;
 }) {
   return (
-    <Piece x={x} y={y} w={w} h={h} tone="blue" angle={angle} from="bottom" delay={delay}>
-      <path
-        d={`M0 0 L${w / 2} ${h * 0.59} L${w} 0`}
-        fill="#c3d1d6"
-        stroke="#849ba6"
-        strokeWidth="1"
-      />
-      <path
-        d={`M0 ${h} L${w * 0.39} ${h * 0.48} M${w} ${h} L${w * 0.61} ${h * 0.48}`}
-        className="paper-fold"
-      />
-    </Piece>
+    <Piece
+      x={x}
+      y={y}
+      w={w}
+      h={h}
+      tone="blue"
+      angle={angle}
+      from="bottom"
+      delay={delay}
+      raster="envelope-blue"
+    />
   );
 }
 function Folder({
@@ -241,7 +350,6 @@ function Folder({
         fill={`url(#${id}-${tone})`}
         stroke="#f6edda"
         strokeWidth="1"
-        filter={`url(#${id}-grain)`}
       />
       <path d={`M10 48 V${h} M${w - 13} 76 V${h}`} className="paper-fold" />
     </Piece>
@@ -269,7 +377,6 @@ function Before() {
   ] as const;
   return (
     <>
-      <Thread d="M160 507 C240 491 250 427 340 438 S510 493 590 520" dashed />
       {scraps.map(([x, y, w, h, angle, tone], i) => (
         <Piece
           key={i}
@@ -315,7 +422,7 @@ function Before() {
 function After() {
   return (
     <>
-      <Thread d="M580 273 H706" />
+      <Thread d="M193 321 C244 315 244 329 280 340 M193 410 C253 421 252 398 286 401 M575 278 H707" />
       <Piece x={48} y={69} w={556} h={455} shape="folder" from="left" />
       <Piece x={213} y={117} w={255} h={187} from="top" delay={90}>
         <Bars x={21} y={25} w={210} thick={14} gap={24} />
@@ -525,14 +632,11 @@ function Invoice() {
         <Punch x={182} y={91} />
       </Piece>
       <Envelope x={35} y={328} w={402} h={226} delay={80} />
-      <Piece x={74} y={288} w={334} h={204} from="bottom" delay={210}>
+      <Piece x={74} y={252} w={334} h={204} from="bottom" delay={210}>
         <Bars x={24} y={21} w={284} count={1} thick={17} />
         <Writing x={24} y={65} w={280} rows={5} />
         <rect x="114" y="80" width="174" height="18" fill="var(--paper-sage)" />
         <Punch x={281} y={89} />
-      </Piece>
-      <Piece x={35} y={425} w={402} h={129} tone="blue" from="bottom" delay={80}>
-        <path d="M0 0 201 80 402 0 M0 129 150 50 M402 129 252 50" className="paper-fold" />
       </Piece>
       <Piece x={567} y={205} w={162} h={204} from="right" delay={310}>
         <Bars x={15} y={17} w={130} count={1} thick={17} />
@@ -552,29 +656,38 @@ function Invoice() {
 function LocalService() {
   return (
     <>
-      <Thread d="M220 150 376 275 M230 131 388 254 M631 135 534 255 M645 154 545 277 M235 466 365 385 M247 482 378 402 M671 463 549 389 M683 447 559 371" />
-      <Piece x={325} y={365} w={270} h={91} tone="sage" from="bottom">
-        <path d="M0 15 141 49 270 15 M141 49 V91" className="paper-fold" />
+      <Thread d="M245 137 361 258 M238 153 353 273 M645 123 560 247 M650 142 566 266 M236 467 354 379 M246 484 365 397 M669 466 562 380 M678 450 572 363" />
+      <Piece x={325} y={353} w={270} h={102} tone="sage" from="bottom">
+        <path d="M0 15 141 49 270 15 M141 49 V101" className="paper-fold" />
       </Piece>
-      <Piece x={360} y={231} w={204} h={170} from="bottom" delay={90}>
-        <rect y="67" width="204" height="55" fill="var(--paper-navy)" />
-        <path
-          d="M0 0 123 -60 236 -13 204 30 0 0 M204 30 V170 L236 132 V-13"
-          fill="#d4c7ad"
-          stroke="#b9aa90"
-        />
-        <path d="M77 6 q15 32 30 2" fill="#3a3529" />
+      <Piece x={359} y={220} w={205} h={180} from="bottom" delay={90}>
+        <path d="M0 28 106 -7 205 28 V176 H0 Z" fill="#cfc1a5" stroke="#a99a80" />
+        <path d="M0 28 106 -7 205 28 103 57Z" fill="#f0e8d7" stroke="#fff6e7" />
+        <path d="M0 94 H205 V137 H0Z" fill="var(--paper-navy)" />
+        <path d="M91 115 h23" stroke="#eee6d6" strokeWidth="5" />
+        <path d="M96 34 q8 14 17 0" stroke="#705e48" strokeWidth="2" fill="none" />
       </Piece>
-      <Piece x={76} y={77} w={169} h={104} angle={-11} tone="blue" from="left" delay={180}>
-        <Bars x={21} y={21} w={125} count={1} thick={12} />
-        <Writing x={21} y={49} w={124} rows={3} />
+      <Piece
+        x={76}
+        y={77}
+        w={169}
+        h={104}
+        angle={-11}
+        tone="blue"
+        shape="round"
+        from="left"
+        delay={180}
+      >
+        <Bars x={25} y={27} w={100} thick={11} count={1} />
+        <Writing x={25} y={52} w={104} rows={2} />
       </Piece>
       <Piece x={646} y={66} w={145} h={115} tone="navy" angle={7} from="right" delay={270}>
-        <rect x="22" y="44" width="101" height="15" fill="var(--paper-cream)" />
+        <rect x="22" y="34" width="100" height="24" fill="var(--paper-cream)" />
       </Piece>
       <Piece x={69} y={435} w={155} h={119} angle={-13} from="left" delay={360}>
-        <Bars x={23} y={24} w={107} count={1} thick={10} />
-        <Writing x={23} y={51} w={107} rows={3} />
+        <path d="M0 29 78 0 155 29 M78 0 v109" className="paper-fold" />
+        <Bars x={24} y={48} w={107} count={1} />
+        <Writing x={24} y={71} w={97} rows={2} />
       </Piece>
       <Piece
         x={670}
@@ -587,10 +700,173 @@ function LocalService() {
         from="right"
         delay={450}
       >
-        <circle cx="27" cy="42" r="12" fill="var(--paper-cream)" />
-        <circle cx="27" cy="42" r="6" fill="#8c846b" />
-        <Bars x={51} y={29} w={106} count={1} thick={9} />
-        <Writing x={51} y={57} w={106} rows={3} />
+        <Punch x={23} y={54} />
+        <Bars x={49} y={30} w={97} count={1} />
+        <Writing x={49} y={53} w={97} rows={2} />
+      </Piece>
+      {[
+        [245, 137],
+        [645, 123],
+        [236, 467],
+        [669, 466],
+      ].map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r="6" fill="var(--paper-rust)" />
+      ))}
+    </>
+  );
+}
+
+function VisionDomain() {
+  return (
+    <>
+      <Thread d="M324 289 C375 274 389 245 450 243 M552 243 C590 243 585 221 625 221" />
+      <Piece x={71} y={184} w={255} h={190} tone="blue" shape="notch" from="left">
+        <circle cx="42" cy="51" r="17" fill="var(--paper-cream)" />
+        <path d="M43 50 H207 M43 50 v72" className="paper-writing" />
+        <Bars x={44} y={125} w={138} count={1} thick={10} />
+      </Piece>
+      <Piece x={441} y={211} w={112} h={68} tone="sage" shape="tag" from="bottom" delay={120}>
+        <Punch x={25} y={34} />
+        <circle cx="69" cy="34" r="13" fill="var(--paper-cream)" />
+      </Piece>
+      <Piece x={620} y={87} w={220} h={220} shape="folder" from="right" delay={230}>
+        <path d="M18 43 H202 V202 H18Z" fill="#e6dbc6" stroke="#ac9d85" />
+        <circle cx="52" cy="75" r="13" fill="var(--paper-sage)" />
+        <Writing x={34} y={115} w={149} rows={3} />
+      </Piece>
+      <Piece x={620} y={349} w={220} h={170} tone="sage" shape="folder" from="right" delay={330}>
+        <path d="M18 45 H202 V150 H18Z" fill="#d0d7c5" stroke="#8c987f" />
+        <path d="M30 80 h150 M30 100 h120" className="paper-writing" />
+      </Piece>
+    </>
+  );
+}
+function VisionPositions() {
+  return (
+    <>
+      <Thread d="M347 226 C424 215 446 260 551 253 M347 402 C421 409 466 299 551 286" />
+      <Piece x={76} y={103} w={271} h={181} tone="rust" shape="torn" from="left">
+        <Bars x={29} y={44} w={165} thick={12} />
+        <Writing x={29} y={84} w={190} rows={3} />
+        <Punch x={241} y={125} />
+      </Piece>
+      <Piece x={76} y={332} w={271} h={171} tone="sage" shape="notch" from="left" delay={120}>
+        <circle cx="54" cy="52" r="20" fill="var(--paper-cream)" />
+        <Bars x={29} y={96} w={165} thick={12} />
+        <Punch x={242} y={83} />
+      </Piece>
+      <Piece x={551} y={136} w={251} h={341} shape="folder" from="right" delay={260}>
+        <path d="M28 86 H220 M28 251 H220" className="paper-fold" />
+        <path d="M45 118 H215 V183 H45Z" fill="var(--paper-rust)" opacity=".72" />
+        <path d="M45 276 H215 V325 H45Z" fill="var(--paper-sage)" opacity=".65" />
+        <path d="M202 134 l23 17 -23 17" fill="var(--paper-cream)" />
+      </Piece>
+    </>
+  );
+}
+function VisionExplanation() {
+  return (
+    <>
+      <Thread d="M515 319 C597 321 606 261 679 261 M515 336 C599 360 608 407 679 407" />
+      <Piece x={102} y={194} w={410} h={278} tone="blue" shape="round" from="left">
+        <Writing x={38} y={75} w={288} rows={7} />
+        <path d="M42 163 h275 v42 H42Z" fill="var(--paper-sage)" opacity=".65" />
+      </Piece>
+      <Piece x={167} y={141} w={188} h={90} tone="sage" shape="tag" from="top" delay={160}>
+        <Punch x={25} y={42} />
+        <Bars x={50} y={33} w={95} count={1} />
+      </Piece>
+      <Piece x={225} y={241} w={290} h={117} shape="torn" from="bottom" delay={240}>
+        <Bars x={24} y={33} w={190} count={1} thick={14} />
+        <path d="M31 73 H245" className="paper-writing" />
+      </Piece>
+      <Piece x={679} y={205} w={155} h={89} tone="cream" shape="tag" from="right" delay={330}>
+        <Bars x={17} y={30} w={94} count={1} />
+      </Piece>
+      <Piece x={679} y={371} w={155} h={89} tone="blue" shape="tag" from="right" delay={390}>
+        <Bars x={17} y={30} w={94} count={1} />
+      </Piece>
+    </>
+  );
+}
+
+function SharedInstance() {
+  return (
+    <>
+      <Thread d="M300 151 C390 175 388 246 446 270 M634 152 C570 180 563 232 537 271 M292 447 C379 415 394 353 444 331" />
+      <Piece x={415} y={248} w={166} h={120} tone="sage" shape="folder" from="bottom">
+        <Bars x={23} y={55} w={110} count={2} thick={11} />
+      </Piece>
+      <Piece x={104} y={91} w={196} h={114} tone="blue" shape="round" from="left" delay={110}>
+        <Bars x={25} y={34} w={130} count={1} />
+        <Writing x={25} y={58} w={128} rows={2} />
+      </Piece>
+      <Piece x={634} y={94} w={153} h={115} tone="navy" shape="tag" from="right" delay={170}>
+        <rect x="25" y="38" width="98" height="25" fill="var(--paper-cream)" />
+      </Piece>
+      <Piece x={105} y={389} w={188} h={129} shape="round" from="left" delay={230}>
+        <path d="M20 31 H166 V112 H20Z" fill="var(--paper-blue)" />
+        <Writing x={33} y={56} w={105} rows={2} />
+      </Piece>
+    </>
+  );
+}
+
+function ScopedAccess() {
+  return (
+    <>
+      <Thread d="M371 206 H447 M518 281 V331 M584 377 C619 377 619 359 649 359" />
+      <Piece x={80} y={140} w={291} h={190} tone="blue" shape="tag" from="left">
+        <circle cx="65" cy="72" r="33" fill="var(--paper-cream)" />
+        <path d="M50 72 l12 12 23 -27" fill="none" stroke="var(--paper-navy)" strokeWidth="6" />
+        <Bars x={124} y={64} w={122} count={2} />
+      </Piece>
+      <Piece x={446} y={135} w={143} h={146} tone="cream" shape="notch" from="top" delay={120}>
+        <path d="M54 84 L47 127 L72 114 L97 127 L90 84Z" fill="var(--paper-rust)" />
+        <circle cx="72" cy="65" r="34" fill="var(--paper-blue)" />
+        <circle
+          cx="72"
+          cy="65"
+          r="25"
+          fill="none"
+          stroke="var(--paper-navy)"
+          strokeWidth="2"
+          strokeDasharray="3 5"
+        />
+        <circle cx="72" cy="65" r="9" fill="var(--paper-cream)" />
+      </Piece>
+      <Piece x={444} y={331} w={140} h={92} tone="sage" shape="tag" from="bottom" delay={210}>
+        <Punch x={33} y={45} />
+        <Bars x={57} y={36} w={59} count={1} />
+      </Piece>
+      <Piece x={649} y={267} w={185} h={183} shape="folder" from="right" delay={290}>
+        <path d="M24 72 H161 V156 H24Z" fill="var(--paper-sage)" />
+        <Writing x={37} y={96} w={98} rows={2} />
+      </Piece>
+      <Piece x={649} y={467} w={185} h={85} tone="blue" shape="folder" from="right" delay={350}>
+        <path d="M27 48 H158" className="paper-writing" />
+      </Piece>
+    </>
+  );
+}
+
+function Peering() {
+  return (
+    <>
+      <Thread d="M330 234 C435 216 466 216 570 234 M330 267 C433 286 465 286 570 267" />
+      <Piece x={97} y={147} w={235} h={309} tone="sage" shape="folder" from="left">
+        <Bars x={25} y={67} w={156} count={3} gap={67} thick={11} />
+        <Writing x={25} y={295} w={148} rows={2} />
+      </Piece>
+      <Piece x={570} y={147} w={235} h={309} tone="blue" shape="folder" from="right" delay={80}>
+        <Bars x={25} y={67} w={156} count={3} gap={67} thick={11} />
+        <Writing x={25} y={295} w={148} rows={2} />
+      </Piece>
+      <Piece x={401} y={196} w={95} h={49} shape="torn" from="top" delay={200}>
+        <Bars x={15} y={21} w={55} count={1} thick={7} />
+      </Piece>
+      <Piece x={401} y={255} w={95} h={49} tone="sage" shape="torn" from="bottom" delay={260}>
+        <Bars x={15} y={21} w={55} count={1} thick={7} />
       </Piece>
     </>
   );
@@ -607,8 +883,14 @@ const scenes: Record<PaperSceneKind, () => ReactNode> = {
   snapshot: Snapshot,
   invoiceExample: Invoice,
   localService: LocalService,
+  visionDomain: VisionDomain,
+  visionPositions: VisionPositions,
+  visionExplanation: VisionExplanation,
+  sharedInstance: SharedInstance,
+  scopedAccess: ScopedAccess,
+  peering: Peering,
 };
-/** Authored animated counterpart of the October paper composition; no raster underneath. */
+/** Each paper object keeps its own geometry, material, and entrance motion. */
 export function PaperScene({ scene }: { scene: PaperSceneKind }) {
   const id = `paper-${useId().replace(/:/g, "")}`;
   const Scene = scenes[scene];
@@ -621,7 +903,7 @@ export function PaperScene({ scene }: { scene: PaperSceneKind }) {
         role="img"
         aria-labelledby={`${id}-title`}
       >
-        <title id={`${id}-title`}>{OCTOBER_RENDERS[scene].alt}</title>
+        <title id={`${id}-title`}>{PAPER_SCENE_ALTS[scene]}</title>
 
         <defs>
           {(
@@ -640,30 +922,25 @@ export function PaperScene({ scene }: { scene: PaperSceneKind }) {
           ))}
           <radialGradient id={`${id}-ground`}>
             <stop stopColor="#f0e9dc" />
-            <stop offset="1" stopColor="#ddd1bd" />
+            <stop offset="1" stopColor="#c9bda9" />
           </radialGradient>
-          <filter id={`${id}-shadow`} x="-30%" y="-30%" width="170%" height="180%">
-            <feDropShadow dx="3" dy="7" stdDeviation="4" floodColor="#4e3d27" floodOpacity=".25" />
-          </filter>
-          <filter id={`${id}-grain`} x="0" y="0" width="100%" height="100%">
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency=".72"
-              numOctaves="3"
-              seed="17"
-              result="noise"
+          <pattern id={`${id}-fiber`} width="512" height="512" patternUnits="userSpaceOnUse">
+            <image
+              href={staticAssetPath("/brand/october/paper-fiber.webp")}
+              width="512"
+              height="512"
+              preserveAspectRatio="xMidYMid slice"
             />
-            <feColorMatrix
-              in="noise"
-              type="matrix"
-              values="0 0 0 0 0.35 0 0 0 0 0.3 0 0 0 0 0.22 0 0 0 .14 0"
-              result="grain"
-            />
-            <feComposite in="grain" in2="SourceGraphic" operator="in" result="clipped" />
-            <feBlend in="SourceGraphic" in2="clipped" mode="multiply" />
-          </filter>
+          </pattern>
         </defs>
-        <rect width="900" height="600" fill={`url(#${id}-ground)`} filter={`url(#${id}-grain)`} />
+        <rect width="900" height="600" fill={`url(#${id}-ground)`} />
+        <rect
+          width="900"
+          height="600"
+          fill={`url(#${id}-fiber)`}
+          opacity=".22"
+          style={{ mixBlendMode: "multiply" }}
+        />
         <Scene />
       </svg>
     </Materials.Provider>

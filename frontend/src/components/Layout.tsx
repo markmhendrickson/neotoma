@@ -32,8 +32,9 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
   const isRawMarkdownRoute = stripped === "/raw";
   const isMarkdownMirrorRoute = stripped === "/markdown" || stripped.startsWith("/markdown/");
   const isRouteHome = stripped === "/";
-  /** One-pager site: the home page and /install draw their own minimal chrome (no app header, sidebar or footer). */
-  const isOnePagerShell = (isRouteHome && !isProductBasePath()) || stripped === "/install";
+  /** Editorial pages draw their own minimal chrome (no app header, sidebar or footer). */
+  const isOnePagerShell =
+    (isRouteHome && !isProductBasePath()) || stripped === "/install" || stripped === "/compare";
   const isFullPageLanding = isMarketingFullPageRoute(stripped);
   /** Full-bleed shell: home, marketing use case landings, product-at-root basenames. */
   const isHomeShell = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
@@ -58,8 +59,7 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
   }
 
   /** Marketing `/` (and locale roots) scroll inside `SitePage`; dev SEO panel belongs in that scroll, not below `h-screen`. */
-  const seoDevMetaRenderedInsideSitePageScroll =
-    stripped === "/" && !isProductBasePath();
+  const seoDevMetaRenderedInsideSitePageScroll = stripped === "/" && !isProductBasePath();
 
   return (
     <SiteAppNavProvider>
@@ -102,7 +102,7 @@ function LayoutShell({
             ? undefined
             : cn(
                 "flex flex-1 min-h-0 min-w-0 overflow-hidden transition-[padding-top] duration-300 ease-out",
-                appNavBarVisible ? "pt-12" : "pt-0",
+                appNavBarVisible ? "pt-12" : "pt-0"
               )
         }
       >

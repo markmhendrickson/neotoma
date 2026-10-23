@@ -11,10 +11,12 @@
  * deny it.
  */
 
+import { neotomaDocUrl } from "@/site/neotoma_repo";
+
 export const FIGURE_LEGEND: readonly string[] = [
-  "Two sources say different things about one invoice: the PDF says due 22 October, a later email says 29 October.",
+  "Two sources say different things about one invoice: the PDF says due October 22nd, a later email says October 29th.",
   "Each source becomes an observation. A rule, last write per field here, computes the current value from them.",
-  "The due date now reads 29 October. The changed field points to the later observation.",
+  "The due date now reads October 29th. The changed field points to the later observation.",
   "The amount still comes from the first observation. Both observations stay on record.",
   "Agents write each source in as an observation, and read the current snapshot back out. Writes made through the MCP server also record the client name the client reports.",
 ];
@@ -33,10 +35,6 @@ export const PLATE_NOTE: readonly string[] = [
   "Paper objects carry no invoice data.",
   "Keys 1 to 5 match the legend.",
 ];
-
-/** Caption line under the synthetic example. */
-export const PLATE_CAPTION =
-  "The current record selects a value for each field and keeps its observation trail.";
 
 export const RECALL_VS_RECORD: readonly {
   question: string;
@@ -65,50 +63,162 @@ export const RECALL_VS_RECORD: readonly {
   },
 ];
 
-export const PIPELINE: readonly { name: string; label: string; text: string; doc: string }[] = [
+export const PIPELINE: readonly {
+  name: string;
+  label: string;
+  text: string;
+  doc: string;
+  link: string;
+}[] = [
   {
     name: "Source",
     label: "Keep the source",
     text: "The supplied document or message is retained as the input to this record.",
     doc: "docs/subsystems/sources.md",
+    link: "Read about sources",
   },
   {
     name: "Observation",
     label: "Record a fact",
     text: "Each stored fact is an observation with a path back to its source.",
     doc: "docs/subsystems/observation_architecture.md",
+    link: "Read about observations",
   },
   {
     name: "Entity",
     label: "Match the record",
     text: "Identity fields connect observations about the same invoice.",
     doc: "docs/foundation/entity_resolution.md",
+    link: "Read about entities",
   },
   {
     name: "Reducer",
     label: "Apply the field rule",
     text: "Merge rules per field compute the current value from the observations.",
     doc: "docs/subsystems/reducer.md",
+    link: "Read about field rules",
   },
   {
     name: "Snapshot",
     label: "Read the current value",
     text: "The snapshot shows the rule-selected field values and the observations behind them.",
     doc: "docs/subsystems/entity_snapshots.md",
+    link: "Read about snapshots",
   },
 ];
 
-export const CONNECTIONS_SETUP: readonly { host: string; tool: string }[] = [
-  { host: "Claude Code", tool: "claude-code" },
-  { host: "Cursor", tool: "cursor" },
-  { host: "Codex CLI", tool: "codex" },
-  { host: "OpenClaw", tool: "openclaw" },
-  { host: "Claude Desktop", tool: "claude-desktop" },
+export type Connection =
+  | { host: string; id: string; kind: "setup"; tool: string; guide: string }
+  | {
+      host: string;
+      id: string;
+      kind: "manual" | "plugin" | "sdk" | "registry";
+      guide: string;
+      instruction: string;
+    };
+
+export const CONNECTIONS: readonly Connection[] = [
+  {
+    host: "Claude Code",
+    id: "claude-code",
+    kind: "setup",
+    tool: "claude-code",
+    guide: "docs/developer/mcp_claude_code_setup.md",
+  },
+  {
+    host: "Cursor",
+    id: "cursor",
+    kind: "setup",
+    tool: "cursor",
+    guide: "docs/developer/mcp_cursor_setup.md",
+  },
+  {
+    host: "Codex CLI",
+    id: "codex",
+    kind: "setup",
+    tool: "codex",
+    guide: "docs/integrations/hooks/codex_cli.md",
+  },
+  {
+    host: "OpenClaw",
+    id: "openclaw",
+    kind: "setup",
+    tool: "openclaw",
+    guide: "docs/integrations/openclaw.md",
+  },
+  {
+    host: "Claude Desktop",
+    id: "claude-desktop",
+    kind: "setup",
+    tool: "claude-desktop",
+    guide: "docs/integrations/matrix.md",
+  },
+  {
+    host: "ChatGPT",
+    id: "chatgpt",
+    kind: "manual",
+    guide: "docs/developer/chatgpt_apps_setup.md",
+    instruction:
+      "Configure the HTTPS/OAuth connector in ChatGPT, or follow the Custom GPT Actions guide for the OpenAPI path.",
+  },
+  {
+    host: "Windsurf",
+    id: "windsurf",
+    kind: "manual",
+    guide: "docs/developer/mcp_windsurf_setup.md",
+    instruction: "Add Neotoma to Windsurf's MCP configuration using the manual guide.",
+  },
+  {
+    host: "Continue",
+    id: "continue",
+    kind: "manual",
+    guide: "docs/developer/mcp_continue_setup.md",
+    instruction: "Add Neotoma to Continue's MCP configuration using the manual guide.",
+  },
+  {
+    host: "VS Code / Copilot Chat",
+    id: "vscode",
+    kind: "manual",
+    guide: "docs/developer/mcp_vscode_setup.md",
+    instruction: "Configure the Neotoma MCP server in VS Code using the manual guide.",
+  },
+  {
+    host: "IronClaw",
+    id: "ironclaw",
+    kind: "manual",
+    guide: "docs/developer/mcp_ironclaw_setup.md",
+    instruction: "Use IronClaw's documented mcp add flow; this is not a Neotoma setup target.",
+  },
+  {
+    host: "Letta",
+    id: "letta",
+    kind: "sdk",
+    guide: "docs/developer/mcp_letta_setup.md",
+    instruction: "Follow the Letta guide to connect its SDK or MCP client to Neotoma.",
+  },
+  {
+    host: "OpenCode",
+    id: "opencode",
+    kind: "plugin",
+    guide: "docs/integrations/hooks/opencode.md",
+    instruction: "Install the documented OpenCode plugin or configure MCP through its guide.",
+  },
+  {
+    host: "Claude Agent SDK",
+    id: "claude-agent-sdk",
+    kind: "sdk",
+    guide: "docs/integrations/hooks/claude_agent_sdk.md",
+    instruction: "Use the documented Claude Agent SDK adapter and hooks.",
+  },
+  {
+    host: "Smithery",
+    id: "smithery",
+    kind: "registry",
+    guide: "docs/integrations/smithery_external_url.md",
+    instruction: "Register a Neotoma external URL in Smithery using its registry guide.",
+  },
 ];
-
-export const CONNECTIONS_OTHER =
-  "ChatGPT, Windsurf, Continue, VS Code, IronClaw and Letta use MCP or an HTTP connector, configured by hand, and OpenCode uses a plugin or MCP";
-
+export const CONNECTIONS_SETUP = CONNECTIONS.filter((connection) => connection.kind === "setup");
 export const installCommands = (tool: string) => `npm install -g neotoma
 neotoma init
 neotoma setup --tool ${tool}`;
@@ -118,25 +228,26 @@ export const INSTALL_COMMANDS = installCommands("claude-code");
 const GH = "https://github.com/markmhendrickson/neotoma";
 export const DEEPER_MATERIAL: readonly {
   title: string;
-  links: readonly { label: string; href: string }[];
+  links: readonly { label: string; href?: string }[];
 }[] = [
   {
     title: "Read",
     links: [
-      { label: "README", href: `${GH}#readme` },
-      { label: "Documentation", href: `${GH}/tree/main/docs` },
-      { label: "Architecture", href: `${GH}/blob/main/docs/architecture/architecture.md` },
-      { label: "Integrations", href: `${GH}/blob/main/docs/integrations/matrix.md` },
+      { label: "README", href: neotomaDocUrl("README.md") },
+      { label: "Documentation", href: neotomaDocUrl("docs/") },
+      { label: "Architecture", href: neotomaDocUrl("docs/architecture/architecture.md") },
+      { label: "Integrations", href: neotomaDocUrl("docs/integrations/matrix.md") },
       { label: "Changelog and releases", href: `${GH}/releases` },
+      { label: "Ateles", href: "https://github.com/markmhendrickson/ateles" },
     ],
   },
   {
     title: "Reference",
     links: [
-      { label: "REST API", href: `${GH}/blob/main/docs/api/rest_api.md` },
-      { label: "MCP server", href: `${GH}/blob/main/docs/developer/mcp_overview.md` },
-      { label: "CLI", href: `${GH}/blob/main/docs/developer/cli_reference.md` },
-      { label: "Vocabulary", href: `${GH}/blob/main/docs/vocabulary/canonical_terms.md` },
+      { label: "REST API", href: neotomaDocUrl("docs/api/rest_api.md") },
+      { label: "MCP server", href: neotomaDocUrl("docs/developer/mcp_overview.md") },
+      { label: "CLI", href: neotomaDocUrl("docs/developer/cli_reference.md") },
+      { label: "Vocabulary", href: neotomaDocUrl("docs/vocabulary/canonical_terms.md") },
     ],
   },
   {
@@ -147,6 +258,15 @@ export const DEEPER_MATERIAL: readonly {
       { label: "Issues", href: `${GH}/issues` },
       { label: "Discussions", href: `${GH}/discussions` },
       { label: "Talk to us", href: "/meet" },
+      { label: "Contributor", href: "https://markmhendrickson.com" },
+    ],
+  },
+  {
+    title: "Organization and legal",
+    links: [
+      { label: "MIT license", href: `${GH}/blob/main/LICENSE` },
+      { label: "Privacy", href: "/privacy" },
+      { label: "Terms of use", href: "/terms" },
     ],
   },
 ];

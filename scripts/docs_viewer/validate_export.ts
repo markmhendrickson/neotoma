@@ -28,6 +28,7 @@ import {
 } from "../../frontend/src/site/route_retirement";
 import { findClaimProblems } from "./claim_patterns";
 import { canonicalUrl } from "./page";
+import { FORBIDDEN_TERM_CONTEXTS } from "./render";
 
 const VIEWER_MARKER = '<meta name="docs-viewer-source"';
 
@@ -96,20 +97,49 @@ function parseAttrs(raw: string): { name: string; value: string }[] {
  * swallow the rest), so the cost stays linear whatever the input. Head content and script and
  * style bodies are not text.
  */
-export function scanHtml(html: string): { tags: ScannedTag[]; text: string } {
+interface VisibleBlock {
+  name: string;
+  start: number;
+  end: number | null;
+  listStart: number | null;
+}
+
+function decodeText(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+export function scanHtml(html: string): {
+  tags: ScannedTag[];
+  text: string;
+  claimExempt: [number, number][];
+} {
   const tags: ScannedTag[] = [];
   const lower = html.toLowerCase();
   const parts: string[] = [];
+  const blocks: VisibleBlock[] = [];
+  const openBlocks: VisibleBlock[] = [];
+  const listStarts: number[] = [];
+  let textLength = 0;
+  const append = (s: string) => {
+    const decoded = decodeText(s);
+    parts.push(decoded);
+    textLength += decoded.length;
+  };
   let inHead = false;
   let i = 0;
   const n = html.length;
   while (i < n) {
     const lt = html.indexOf("<", i);
     if (lt < 0) {
-      if (!inHead) parts.push(html.slice(i));
+      if (!inHead) append(html.slice(i));
       break;
     }
-    if (!inHead) parts.push(html.slice(i, lt));
+    if (!inHead) append(html.slice(i, lt));
     const next = html[lt + 1] ?? "";
     if (html.startsWith("<!--", lt)) {
       const end = html.indexOf("-->", lt + 4);
@@ -127,7 +157,7 @@ export function scanHtml(html: string): { tags: ScannedTag[]; text: string } {
     const nameStart = closing ? lt + 2 : lt + 1;
     const nameMatch = /^[a-zA-Z][a-zA-Z0-9-]*/.exec(html.slice(nameStart, nameStart + 32));
     if (!nameMatch) {
-      if (!inHead) parts.push("<");
+      if (!inHead) append("<");
       i = lt + 1;
       continue;
     }
@@ -147,6 +177,24 @@ export function scanHtml(html: string): { tags: ScannedTag[]; text: string } {
     const attrs = closing ? [] : parseAttrs(html.slice(nameStart + nameMatch[0].length, j));
     tags.push({ name, closing, attrs });
     i = j + 1;
+    if (!inHead && /^(?:h[1-6]|p|li|ul|ol|pre)$/.test(name)) {
+      if (closing) {
+        // Discard unmatched opens as a browser would; each block is popped at most once.
+        while (openBlocks.length) {
+          const block = openBlocks.pop()!;
+          if (block.name === "ul" || block.name === "ol") listStarts.pop();
+          if (block.name === name) {
+            block.end = textLength;
+            break;
+          }
+        }
+      } else {
+        const block = { name, start: textLength, end: null, listStart: listStarts.at(-1) ?? null };
+        blocks.push(block);
+        openBlocks.push(block);
+        if (name === "ul" || name === "ol") listStarts.push(block.start);
+      }
+    }
     if (name === "head") inHead = !closing;
     if (!closing && (name === "script" || name === "style")) {
       const end = lower.indexOf(`</${name}`, i);
@@ -154,16 +202,54 @@ export function scanHtml(html: string): { tags: ScannedTag[]; text: string } {
       i = end;
       continue;
     }
-    if (closing && BLOCK_CLOSE.has(name) && !inHead) parts.push("\n\n");
+    if (closing && BLOCK_CLOSE.has(name) && !inHead) append("\n\n");
   }
-  const decoded = parts
-    .join("")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&");
-  return { tags, text: decoded };
+  const text = parts.join("");
+  const claimExempt: [number, number][] = [];
+  const quoted = /"[^"\n]{1,80}"|\u201c[^\u201d\n]{1,80}\u201d/g;
+  const exemptQuoted = (block: VisibleBlock) => {
+    for (const m of text.slice(block.start, block.end ?? block.start).matchAll(quoted)) {
+      const start = block.start + (m.index ?? 0);
+      claimExempt.push([start, start + m[0].length]);
+    }
+  };
+  let headingForbiddenDepth: number | null = null;
+  let leadIn = false;
+  const permittedLists = new Set<number>();
+  // Blocks are already extracted by the scanner; use their visible positions to preserve the
+  // same explicit forbidden-term contexts as source lint without trusting the source filename.
+  for (const block of blocks) {
+    if (block.end === null) continue;
+    if (/^h[1-6]$/.test(block.name)) {
+      const value = text.slice(block.start, block.end).replace(/#$/, "").trim();
+      const depth = Number(block.name[1]);
+      if (headingForbiddenDepth !== null && depth <= headingForbiddenDepth)
+        headingForbiddenDepth = null;
+      if ((FORBIDDEN_TERM_CONTEXTS.headings as readonly string[]).includes(value))
+        headingForbiddenDepth = depth;
+      leadIn = false;
+    } else if (block.name === "p" && block.listStart === null) {
+      const value = text.slice(block.start, block.end).trim();
+      leadIn = (FORBIDDEN_TERM_CONTEXTS.leadIns as readonly string[]).includes(value);
+      if (FORBIDDEN_TERM_CONTEXTS.sentence.test(value)) exemptQuoted(block);
+    } else if (block.name === "ul" || block.name === "ol") {
+      if (leadIn) permittedLists.add(block.start);
+      leadIn = false;
+    } else if (
+      block.name === "li" &&
+      (headingForbiddenDepth !== null ||
+        (block.listStart !== null && permittedLists.has(block.listStart)))
+    ) {
+      exemptQuoted(block);
+    } else if (block.name === "pre") {
+      let at = block.start;
+      for (const line of text.slice(block.start, block.end).split("\n")) {
+        if (FORBIDDEN_TERM_CONTEXTS.fencedLine.test(line)) claimExempt.push([at, at + line.length]);
+        at += line.length + 1;
+      }
+    }
+  }
+  return { tags, text, claimExempt };
 }
 
 export function pageText(html: string): string {
@@ -283,8 +369,15 @@ export function validateDocsViewerExport(
       problems.push(`${where} does not name its build commit`);
     }
     for (const p of unsafeMarkup(html)) problems.push(`${where} ${p}`);
-    for (const f of findClaimProblems(pageText(html)))
+    const visible = scanHtml(html);
+    for (const f of findClaimProblems(visible.text)) {
+      if (
+        (f.id === "retired-noun" || f.id === "omitted-claim") &&
+        visible.claimExempt.some(([start, end]) => f.index >= start && f.index < end)
+      )
+        continue;
       problems.push(`${where} text: ${f.label} ("${f.match}")`);
+    }
     for (const href of retiredRouteLinks(html, index))
       problems.push(`${where} links a retired neotoma.io route: ${href}`);
   }

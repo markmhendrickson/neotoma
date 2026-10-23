@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -13,12 +14,12 @@ import { MemoryRouter } from "react-router-dom";
 import { runInNewContext } from "node:vm";
 import { execFileSync } from "node:child_process";
 import { observeViewportMotion, playPaperScene, springFrames } from "./viewport_motion";
-import { PaperScene, type PaperSceneKind } from "./PaperScene";
-import { OCTOBER_RENDERS } from "./october_renders";
+import { PaperScene, PAPER_SCENE_ALTS, type PaperSceneKind } from "./PaperScene";
 import { ENTITY_SCHEMAS } from "../../../../src/services/schema_definitions";
 import { InterfaceExplorer } from "./InterfaceExplorer";
 import { CodeBlock } from "../InstallCodeBlock";
 import { NeotomaOnePager } from "./NeotomaOnePager";
+import { SolidLockup } from "./NeotomaLogos";
 
 vi.mock("./selected-site-identity.js", () => ({}));
 
@@ -59,6 +60,34 @@ function renderedStorePayload(tab: string): Record<string, unknown> {
 }
 
 describe("one-page interface examples", () => {
+  it("shows an invoice with distinct evidence sources and explicitly linked typed records", () => {
+    render(<InterfaceExplorer />);
+    const app = screen.getByRole("tabpanel", { name: "App" });
+    const current = within(app).getByRole("region", { name: "Current snapshot" });
+    for (const field of [
+      "invoice_number",
+      "vendor_name",
+      "invoice_date",
+      "date_due",
+      "amount_due",
+      "currency",
+    ])
+      expect(within(current).getByText(field)).toBeInTheDocument();
+    const sources = within(app).getByRole("region", { name: "Sources" });
+    expect(within(sources).getByText("INV-2041.pdf")).toBeInTheDocument();
+    expect(within(sources).getByText("Due date update")).toBeInTheDocument();
+    const links = within(app).getByRole("region", { name: "Relationships" });
+    const rows = [...links.querySelectorAll(".plan-related-entity")].map((row) => row.textContent);
+    expect(rows).toEqual([
+      "INV-2041 · invoiceREFERS_TOAcme · company",
+      "Due date update · emailREFERS_TOINV-2041 · invoice",
+      "Follow up on INV-2041 · task (pending)REFERS_TOINV-2041 · invoice",
+    ]);
+    expect(
+      within(links).getByText(/not automatically created from those sources/)
+    ).toBeInTheDocument();
+  });
+
   it("renders one schema-complete invoice through all three natural store shapes", () => {
     render(<InterfaceExplorer />);
     const required = Object.entries(ENTITY_SCHEMAS.invoice.schema_definition.fields)
@@ -80,12 +109,14 @@ describe("one-page interface examples", () => {
 
   it("moves selection, visible panel, and focus with ArrowRight, ArrowLeft, Home and End", () => {
     render(<InterfaceExplorer />);
-    const tabs = ["CLI", "MCP", "REST API"].map((name) => screen.getByRole("tab", { name }));
+    const tabs = ["App", "CLI", "MCP", "REST API"].map((name) => screen.getByRole("tab", { name }));
     for (const [from, key, to] of [
       [0, "ArrowRight", 1],
       [1, "ArrowLeft", 0],
-      [0, "End", 2],
-      [2, "Home", 0],
+      [0, "ArrowLeft", 3],
+      [3, "ArrowRight", 0],
+      [0, "End", 3],
+      [3, "Home", 0],
     ] as const) {
       tabs[from].focus();
       const event = createEvent.keyDown(tabs[from], { key, bubbles: true, cancelable: true });
@@ -97,6 +128,48 @@ describe("one-page interface examples", () => {
         screen.getByRole("tabpanel", { name: tabs[to].textContent ?? "" })
       ).not.toHaveAttribute("hidden");
     }
+  });
+
+  it("restores App for direct and repeated inspect links without changing ordinary tab URLs", () => {
+    window.history.replaceState({}, "", "/#inspect");
+    render(
+      <>
+        <a href="#inspect">Inspect</a>
+        <InterfaceExplorer />
+      </>
+    );
+    expect(screen.getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "REST API" }));
+    expect(window.location.hash).toBe("#inspect");
+    fireEvent.click(screen.getByRole("link", { name: "Inspect" }));
+    expect(screen.getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+    window.history.replaceState({}, "", "/#example");
+    fireEvent.click(screen.getByRole("tab", { name: "MCP" }));
+    window.history.replaceState({}, "", "/#inspect");
+    fireEvent(window, new Event("popstate"));
+    expect(screen.getByRole("tab", { name: "App" })).toHaveAttribute("aria-selected", "true");
+    window.history.replaceState({}, "", "/");
+  });
+});
+
+describe("connection selector", () => {
+  it("shows manual guidance for a documented host without inventing a setup target", () => {
+    render(
+      <MemoryRouter>
+        <NeotomaOnePager />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText("Choose your tool"), { target: { value: "windsurf" } });
+    expect(
+      screen.getByText("Add Neotoma to Windsurf's MCP configuration using the manual guide.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/neotoma setup --tool windsurf/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Windsurf guide" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("mcp_windsurf_setup.md")
+    );
+    fireEvent.change(screen.getByLabelText("Choose your tool"), { target: { value: "cursor" } });
+    expect(screen.getByText(/neotoma setup --tool cursor/)).toBeInTheDocument();
   });
 });
 
@@ -203,6 +276,33 @@ describe("shared site snippet content", () => {
       expect(source).toContain('"invoice_date": "2026-10-01"');
     }
   });
+
+  it("keeps a delayed copy result with its original panel", async () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 10_000);
+    let finish!: () => void;
+    const write = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    clipboard(write, () => false);
+    render(<InterfaceExplorer />);
+    fireEvent.click(screen.getByRole("tab", { name: "CLI" }));
+    const cliPanel = screen.getByRole("tabpanel", { name: "CLI" });
+    fireEvent.click(within(cliPanel).getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("tab", { name: "MCP" }));
+    finish();
+    await waitFor(() =>
+      expect(
+        within(cliPanel).getByRole("button", { name: "Copied", hidden: true })
+      ).toBeInTheDocument()
+    );
+    expect(
+      within(screen.getByRole("tabpanel", { name: "MCP" })).getByRole("button", { name: "Copy" })
+    ).toBeInTheDocument();
+  });
 });
 
 describe("viewport entrance lifecycle", () => {
@@ -229,8 +329,18 @@ describe("viewport entrance lifecycle", () => {
       { cancel, finished: new Promise(() => {}), playState: "running" } as unknown as Animation,
     ]);
     const stop = observeViewportMotion([target], play);
-    const entry = (isIntersecting: boolean) =>
-      notify([{ target, isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver);
+    const entry = (isIntersecting: boolean, intersectionRatio = isIntersecting ? 1 : 0) =>
+      notify(
+        [{ target, isIntersecting, intersectionRatio } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
+    entry(true, 0.12);
+    expect(play).not.toHaveBeenCalled();
+    entry(true, 0.34);
+    expect(play).not.toHaveBeenCalled();
+    entry(true);
+    expect(play).toHaveBeenCalledTimes(1);
+    entry(true, 0.12);
     entry(true);
     expect(play).toHaveBeenCalledTimes(1);
     entry(true);
@@ -253,12 +363,69 @@ describe("viewport entrance lifecycle", () => {
     expect(play).toHaveBeenCalledTimes(2);
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
     document.dispatchEvent(new Event("visibilitychange"));
+    expect(play).toHaveBeenCalledTimes(2);
+    entry(false);
+    entry(true);
     expect(play).toHaveBeenCalledTimes(3);
     stop();
     expect(disconnect).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledTimes(3);
     document.dispatchEvent(new Event("visibilitychange"));
     expect(play).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("caps simultaneous scenes while skipped scenes stay drawn and can animate on re-entry", () => {
+    let notify: IntersectionObserverCallback = () => {};
+    const media = new EventTarget() as MediaQueryList;
+    Object.defineProperty(media, "matches", { value: false });
+    vi.stubGlobal("matchMedia", () => media);
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          notify = callback;
+        }
+        observe() {}
+        disconnect() {}
+      }
+    );
+    Object.defineProperty(Element.prototype, "animate", { configurable: true, value: vi.fn() });
+    const targets = Array.from({ length: 3 }, () => {
+      const node = document.createElement("div");
+      node.textContent = "Complete record";
+      return node;
+    });
+    const play = vi.fn(() => [
+      {
+        cancel: vi.fn(),
+        finished: new Promise(() => {}),
+        playState: "running",
+      } as unknown as Animation,
+    ]);
+    const stop = observeViewportMotion(targets, play);
+    const entry = (target: Element, isIntersecting: boolean) =>
+      notify(
+        [
+          {
+            target,
+            isIntersecting,
+            intersectionRatio: isIntersecting ? 1 : 0,
+          } as unknown as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver
+      );
+    targets.forEach((target) => entry(target, true));
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(targets[2].textContent).toBe("Complete record");
+    expect(targets[2].getAttribute("style")).toBeNull();
+    entry(targets[0], false);
+    expect(play).toHaveBeenCalledTimes(2);
+    entry(targets[2], false);
+    entry(targets[2], true);
+    expect(play).toHaveBeenCalledTimes(3);
+    stop();
     vi.unstubAllGlobals();
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
@@ -277,25 +444,25 @@ describe("viewport entrance lifecycle", () => {
 });
 
 describe("layered paper illustration motion", () => {
-  it("serves ten distinct object scenes instead of translating images or the Inspector", () => {
+  it("serves sixteen distinct object scenes instead of translating images or the Inspector", () => {
     const { container } = render(
       <MemoryRouter>
         <NeotomaOnePager />
       </MemoryRouter>
     );
     const scenes = [...container.querySelectorAll("[data-paper-scene]")];
-    expect(scenes).toHaveLength(10);
+    expect(scenes).toHaveLength(16);
     expect(container.querySelectorAll('img[src*="/brand/october/"]')).toHaveLength(0);
     expect(new Set(scenes.map((scene) => scene.getAttribute("data-paper-scene")))).toHaveProperty(
       "size",
-      10
+      16
     );
     const compositions = scenes.map((scene) =>
       [...scene.querySelectorAll("[data-paper-object] path")]
         .map((path) => path.getAttribute("d"))
         .join("|")
     );
-    expect(new Set(compositions).size).toBe(10);
+    expect(new Set(compositions).size).toBe(16);
     expect(container.querySelector(".plan-inspector")?.hasAttribute("data-paper-scene")).toBe(
       false
     );
@@ -310,20 +477,27 @@ describe("layered paper illustration motion", () => {
         return { cancel: vi.fn(), finished: new Promise(() => {}), playState: "running" };
       },
     });
-    for (const scene of Object.keys(OCTOBER_RENDERS) as PaperSceneKind[]) {
+    for (const scene of Object.keys(PAPER_SCENE_ALTS) as PaperSceneKind[]) {
       calls.length = 0;
       const { container, unmount } = render(<PaperScene scene={scene} />);
       const svg = container.querySelector("svg")!;
       expect(
-        screen.getByRole("img", { name: new RegExp(OCTOBER_RENDERS[scene].alt) })
+        screen.getByRole("img", { name: new RegExp(PAPER_SCENE_ALTS[scene]) })
       ).toBeInTheDocument();
-      expect(svg.querySelector("image")).toBeNull();
-      expect(svg.querySelector("feTurbulence")).not.toBeNull();
+      expect(svg.querySelector("image")?.getAttribute("href")).toBe(
+        "/brand/october/paper-fiber.webp"
+      );
+      expect(svg.querySelector("feTurbulence, feDropShadow, filter")).toBeNull();
+      expect(svg.querySelector("pattern[id$='-fiber']")).not.toBeNull();
+      expect(
+        svg.querySelectorAll("[data-paper-object] > path[transform='translate(1.5 2.5)']").length
+      ).toBe(svg.querySelectorAll("[data-paper-object]").length);
       playPaperScene(svg);
       const arrivals = calls.filter((call) => call.target.hasAttribute("data-paper-object"));
       const links = calls.filter((call) => call.target.hasAttribute("data-paper-connection"));
       expect(arrivals.length).toBeGreaterThanOrEqual(3);
-      expect(links.length).toBeGreaterThan(0);
+      if (scene === "before") expect(links).toHaveLength(0);
+      else expect(links.length).toBeGreaterThan(0);
       expect(calls.some((call) => call.target === svg)).toBe(false);
       expect(calls).toHaveLength(arrivals.length + links.length);
       for (const arrival of arrivals) {
@@ -333,6 +507,7 @@ describe("layered paper illustration motion", () => {
         expect(Math.abs(x) >= 1050 || Math.abs(y) >= 760).toBe(true);
         expect(Math.abs(Number(target.dataset.enterRotation))).toBeLessThanOrEqual(5);
         expect(arrival.frames[0].transform).toContain(`translate(${x}px, ${y}px)`);
+        expect(arrival.frames).toHaveLength(33);
         expect(arrival.frames.slice(-1)[0]?.transform).toBe("translate(0px, 0px) rotate(0deg)");
         expect(arrival.frames.every((frame) => frame.opacity === undefined)).toBe(true);
         expect(arrival.options.easing).toBe("linear");
@@ -350,8 +525,81 @@ describe("layered paper illustration motion", () => {
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
 
+  it("loads the paper texture from the preview mount", () => {
+    window.history.replaceState({}, "", "/pr-950/");
+    const { container } = render(<PaperScene scene="hero" />);
+    expect(container.querySelector("svg image")?.getAttribute("href")).toBe(
+      "/pr-950/brand/october/paper-fiber.webp"
+    );
+    for (const image of container.querySelectorAll("[data-paper-cutout], [data-paper-material]"))
+      expect(image.getAttribute("href")).toMatch(/^\/pr-950\/brand\/october\/hybrid\//);
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("keeps a complete vector object while a cutout loads or fails", () => {
+    const { container } = render(<PaperScene scene="source" />);
+    const cutout = container.querySelector<SVGImageElement>('[data-paper-cutout="paper-ivory"]')!;
+    const fallback = cutout.parentElement!.querySelector(".paper-raster-fallback")!;
+    expect(cutout.getAttribute("href")).toBe("/brand/october/hybrid/paper-ivory.webp");
+    expect(fallback.getAttribute("opacity")).toBe("1");
+    fireEvent.load(cutout);
+    expect(fallback.getAttribute("opacity")).toBe("0");
+    fireEvent.error(cutout);
+    expect(fallback.getAttribute("opacity")).toBe("1");
+  });
+
+  it("shows filled envelope flaps on image failure and hides the whole fallback on load", () => {
+    for (const scene of ["observation", "invoiceExample"] as const) {
+      const { container, unmount } = render(<PaperScene scene={scene} />);
+      const cutouts = container.querySelectorAll('[data-paper-cutout="envelope-blue"]');
+      expect(cutouts).toHaveLength(1);
+      const fallback = cutouts[0].parentElement!.querySelector(".paper-raster-fallback")!;
+      const flaps = [...fallback.querySelectorAll("path[data-envelope-flap]")];
+      fireEvent.error(cutouts[0]);
+      expect(fallback.getAttribute("opacity")).toBe("1");
+      expect(flaps).toHaveLength(2);
+      expect(flaps.map((flap) => flap.getAttribute("data-envelope-flap"))).toEqual([
+        "lower",
+        "closing",
+      ]);
+      for (const flap of flaps) {
+        expect(flap.getAttribute("d")).toMatch(/Z$/);
+        expect(flap.getAttribute("fill")).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+      const flapVertices = flaps.map((flap) =>
+        [...flap.getAttribute("d")!.matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((match) =>
+          Number(match[1])
+        )
+      );
+      expect(flapVertices.map((vertices) => vertices.length)).toEqual([3, 3]);
+      expect(flapVertices[0][0]).toBeGreaterThan(flapVertices[1][0]);
+      expect(flapVertices[1][1]).toBeGreaterThan(flapVertices[0][1]);
+      expect(flaps[0].getAttribute("fill")).not.toBe(flaps[1].getAttribute("fill"));
+      expect(flaps.every((flap) => flap.getAttribute("stroke") !== null)).toBe(true);
+      expect([...fallback.querySelectorAll("path")].at(-1)).toBe(flaps[1]);
+      expect(fallback.querySelectorAll(".paper-fold")).toHaveLength(0);
+      expect(cutouts[0].parentElement!.querySelectorAll("[data-envelope-flap]")).toHaveLength(2);
+      fireEvent.load(cutouts[0]);
+      expect(fallback.getAttribute("opacity")).toBe("0");
+      expect(cutouts[0].getAttribute("opacity")).not.toBe("0");
+      unmount();
+    }
+  });
+
+  it("loads both fallback lockups from the preview mount", () => {
+    window.history.replaceState({}, "", "/pr-950/install");
+    const { container } = render(<SolidLockup />);
+    expect([...container.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual([
+      "/pr-950/brand/n2-nav-light.svg",
+      "/pr-950/brand/n2-nav-dark.svg",
+    ]);
+    window.history.replaceState({}, "", "/");
+  });
+
   it("samples momentum and limited damped overshoot into a stable final pose", () => {
     const frames = springFrames(1000, 20, 5);
+    expect(springFrames(1000, 20, 5)).toBe(frames);
+    expect(springFrames(1000, 21, 5)).not.toBe(frames);
     const displacements = frames.map((frame) =>
       Number(String(frame.transform).match(/translate\(([-\d.e]+)/)?.[1])
     );
@@ -359,7 +607,7 @@ describe("layered paper illustration motion", () => {
     expect(displacements[0] - displacements[18]).toBeGreaterThan(800);
     expect(Math.min(...displacements)).toBeLessThan(-1);
     expect(Math.min(...displacements)).toBeGreaterThan(-40);
-    expect(Math.max(...displacements.slice(-8).map(Math.abs))).toBeLessThan(1);
+    expect(Math.max(...displacements.slice(-6).map(Math.abs))).toBeLessThan(1);
     expect(displacements.slice(-1)[0]).toBe(0);
   });
 

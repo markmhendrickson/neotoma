@@ -2,9 +2,9 @@
 
 Neotoma is cross-platform by design. This page is the single canonical index of every host, harness, and framework Neotoma integrates with, and the status of each integration.
 
-The public-facing version of this page lives at [neotoma.io/integrations](https://neotoma.io/integrations).
+Applies to v0.25.0 and main.
 
-> **Source of truth for installable targets:** `src/cli/setup.ts` (the `harnessMap` in `getSkillsTarget`). If this matrix disagrees with the CLI, the CLI wins.
+The supported `neotoma setup --tool` values are listed by `neotoma setup --help`; the CLI implementation controls what each setup path writes. The broader table also includes manual integrations.
 
 ## Legend
 
@@ -21,9 +21,9 @@ MCP is the primary integration protocol. Every host below speaks MCP either over
 | --- | --- | --- | --- | --- |
 | Cursor | stdio, remote HTTP | `neotoma setup --tool cursor --yes` | [mcp_cursor_setup.md](../developer/mcp_cursor_setup.md) | Stable |
 | Claude Code | stdio, remote HTTP | `neotoma setup --tool claude-code --yes` or `npm run sync:mcp` | [mcp_claude_code_setup.md](../developer/mcp_claude_code_setup.md) | Stable |
-| Claude Desktop | local, remote MCP, desktop connector | `neotoma setup --tool claude-desktop --yes` | [neotoma-with-claude-connect-desktop](https://neotoma.io/neotoma-with-claude-connect-desktop), [remote MCP](https://neotoma.io/neotoma-with-claude-connect-remote-mcp) | Stable |
+| Claude Desktop | local, remote MCP, desktop connector | `neotoma setup --tool claude-desktop --install-scope user --yes` (existing Desktop config) | [Claude Desktop setup](../developer/mcp_claude_code_setup.md), [MCP overview](../developer/mcp_overview.md) | Stable |
 | ChatGPT | MCP App (connector), Custom GPT Actions (OpenAPI) | Manual HTTPS + OAuth | [chatgpt_apps_setup.md](../developer/chatgpt_apps_setup.md), [chatgpt_actions_setup.md](../developer/chatgpt_actions_setup.md) | Stable |
-| Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` | [neotoma-with-codex](https://neotoma.io/neotoma-with-codex), [stdio](https://neotoma.io/neotoma-with-codex-connect-local-stdio), [remote](https://neotoma.io/neotoma-with-codex-connect-remote-http-oauth) | Stable |
+| Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` for local stdio; `codex mcp add` for remote HTTP | [Codex remote setup](../developer/mcp_codex_remote_setup.md), [local config](../developer/agent_cli_configuration.md) | Stable |
 | OpenClaw | Native plugin (`kind: memory`) + MCP | `neotoma setup --tool openclaw --yes` | [mcp_openclaw_setup.md](../developer/mcp_openclaw_setup.md), [openclaw.md](openclaw.md) | Stable |
 | IronClaw | MCP | `ironclaw mcp add` (no `neotoma setup --tool ironclaw`) | [mcp_ironclaw_setup.md](../developer/mcp_ironclaw_setup.md) | Stable |
 | Smithery | External URL registry | Manual registration | [smithery_external_url.md](smithery_external_url.md) | Stable |
@@ -34,7 +34,7 @@ MCP is the primary integration protocol. Every host below speaks MCP either over
 
 ## Supported (hooks)
 
-Hooks are the reliability floor — guaranteed capture, retrieval injection, compaction awareness, and persistence safety nets that compose with MCP. MCP remains the quality ceiling for agent-driven structured writes.
+Hooks can capture turns, inject retrieval, and handle compaction when installed and the local service is running. MCP supplies agent-driven structured reads and writes.
 
 | Harness | Package | Guide | Status |
 | --- | --- | --- | --- |
@@ -73,11 +73,11 @@ A new host integration usually needs three things:
 2. **A public setup page.** Add `docs/site/pages/en/neotoma-with-<host>.mdx` with a sidecar `.meta.json` matching the format used by existing `neotoma-with-*` pages.
 3. **A row in this matrix.** Update both this file and `docs/site/pages/en/integrations.mdx`.
 
-The CLI's `harnessMap` is the source of truth for supported `--tool` targets. Keep this matrix synchronized with it.
+Use `neotoma setup --help` to check supported `--tool` targets and keep this matrix synchronized with the CLI implementation.
 
 ## Related
 
-- [Public integrations page](https://neotoma.io/integrations) — buyer-facing version
+- [MCP overview](../developer/mcp_overview.md) — transport and setup references
 - [MCP specification](../specs/MCP_SPEC.md) — protocol details
 - [CLI reference](../developer/cli_reference.md) — `neotoma setup`, `neotoma mcp config`, `neotoma cli config`
 - [Hooks index](hooks/README.md) — hooks contract and per-harness guides

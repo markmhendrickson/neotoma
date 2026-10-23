@@ -68,6 +68,14 @@ export const SEO_DEFAULTS = {
   author: "Neotoma",
 };
 
+/** The server export and browser bundle must agree on preview indexing. */
+export function isSitePreview(): boolean {
+  return (
+    import.meta.env?.VITE_SITE_PREVIEW === "1" ||
+    (typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1")
+  );
+}
+
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Neotoma: the system of record for AI agents",
@@ -106,6 +114,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         "https://x.com/markmhendrickson",
       ],
     },
+  },
+  "/compare": {
+    title: "Compare recall, retrieval and a system of record | Neotoma",
+    description:
+      "Compare session memory, document retrieval, memory services, custom state and Neotoma against the need for current values and inspectable evidence.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Compare approaches", path: "/compare" },
+    ],
   },
   "/install": {
     title: "Install | Neotoma",
@@ -2975,10 +2994,7 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
       answer: item.answer,
     }));
   }
-  const robots =
-    typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
-      ? "noindex,follow"
-      : resolvedRouteMetadata.robots;
+  const robots = isSitePreview() ? "noindex,follow" : resolvedRouteMetadata.robots;
   const ogImageUrl = resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
   const ogImageAlt =
     resolvedRouteMetadata.ogImageAlt ??
@@ -3184,9 +3200,12 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
   );
 
   out = out.replace(
-    /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    /<script type="application\/ld\+json"(?: [^>]*)?>[\s\S]*?<\/script>/,
     meta.jsonLd
-      .map((entry) => `<script type="application/ld+json">${JSON.stringify(entry)}</script>`)
+      .map(
+        (entry) =>
+          `<script type="application/ld+json" data-rh="true">${JSON.stringify(entry)}</script>`
+      )
       .join("\n    ")
   );
 
@@ -3194,7 +3213,7 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
   const alternatesHtml = meta.alternates
     .map(
       (alternate) =>
-        `<link rel="alternate" hrefLang="${escapeHtml(alternate.hrefLang)}" href="${escapeHtml(alternate.href)}" />`
+        `<link rel="alternate" hrefLang="${escapeHtml(alternate.hrefLang)}" href="${escapeHtml(alternate.href)}" data-rh="true" />`
     )
     .join("\n    ");
   if (alternatesHtml) {

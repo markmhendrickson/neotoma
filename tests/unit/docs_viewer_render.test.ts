@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDocsViewerIndex,
   type DocsViewerEntry,
@@ -21,6 +21,7 @@ import {
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const GH = "https://github.com/markmhendrickson/neotoma";
+afterEach(() => vi.unstubAllEnvs());
 
 const entries: DocsViewerEntry[] = [
   {
@@ -390,7 +391,18 @@ describe("docs viewer follow-up guards", () => {
 
 describe("docs viewer page chrome", () => {
   const entry = entries[1];
-  it("uses the accepted solid logo lockup in the masthead, for light and dark", () => {
+  it("labels preview documents and keeps them noindex", () => {
+    vi.stubEnv("SITE_PREVIEW", "1");
+    const page = renderPage({
+      entry,
+      doc: render("# T\n\nA summary.\n"),
+      nav: entries,
+      commit: COMMIT,
+    });
+    expect(page).toContain('<meta name="robots" content="noindex,follow">');
+    expect(page).toContain("Pre-release review");
+  });
+  it("uses the accepted solid logo lockup in the masthead", () => {
     const page = renderPage({
       entry,
       doc: render("# T\n\nA summary.\n"),
@@ -400,13 +412,32 @@ describe("docs viewer page chrome", () => {
     expect(page).toContain('src="/brand/n2-nav-light.svg" alt="Neotoma"');
     expect(page).toContain('src="/brand/n2-nav-dark.svg" alt="Neotoma"');
     expect(page).not.toContain("<b>Neotoma</b>");
-    // Dark mode swaps the files; the swap must come after (and outrank) the default rule.
+    // The current homepage's charcoal dark preference keeps its matching logo treatment.
     const hide = page.indexOf(".dv-brand .dv-logo-dark{display:none}");
+    const darkTokens = page.indexOf("@media (prefers-color-scheme:dark){:root{color-scheme:dark;");
     const swap = page.indexOf(
       "@media (prefers-color-scheme:dark){.dv-brand .dv-logo-light{display:none}.dv-brand .dv-logo-dark{display:block}}"
     );
     expect(hide).toBeGreaterThan(-1);
+    expect(darkTokens).toBeGreaterThan(-1);
     expect(swap).toBeGreaterThan(hide);
+  });
+
+  it("uses the homepage's local Instrument font files in static docs output", () => {
+    const page = renderPage({
+      entry,
+      doc: render("# T\n\nA summary.\n"),
+      nav: entries,
+      commit: COMMIT,
+    });
+    for (const asset of [
+      "/brand/october/instrument-sans-regular.ttf",
+      "/brand/october/instrument-sans-semibold.ttf",
+      "/brand/october/instrument-serif.ttf",
+    ])
+      expect(page).toContain(asset);
+    expect(page).toContain('--serif:"Instrument Serif Docs",Georgia,serif');
+    expect(page).toContain('--sans:"Instrument Sans Docs",system-ui,sans-serif');
   });
 
   it("truncates the meta description to about 155 characters at a word boundary", () => {
@@ -439,7 +470,7 @@ describe("docs viewer page chrome", () => {
     expect(long).toContain('<ol><li><a href="#sub-one">Sub one</a></li></ol>');
   });
 
-  it("caps the body measure and gives small links a 24px target", () => {
+  it("caps the body measure and gives small links a 32px target", () => {
     const page = renderPage({ entry, doc: render("# T\n"), nav: entries, commit: COMMIT });
     expect(page).toContain(".dv-body>*{max-width:72ch}");
     for (const sel of [
@@ -449,7 +480,7 @@ describe("docs viewer page chrome", () => {
       ".dv-foot a{",
     ]) {
       const rule = page.slice(page.indexOf(sel), page.indexOf("}", page.indexOf(sel)));
-      expect(rule, sel).toContain("min-height:24px");
+      expect(rule, sel).toContain("min-height:32px");
     }
   });
 });

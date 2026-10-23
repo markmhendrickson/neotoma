@@ -690,7 +690,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
       <div className="flex items-center gap-0.5">
         {showSidebarTrigger && <SidebarTrigger className="shrink-0" aria-label="Toggle sidebar" />}
         <a
-          href="/"
+          href={staticAssetPath("/")}
           className={`no-underline hover:opacity-80 transition-opacity ${!showSidebarTrigger ? "pl-3" : ""}`}
           aria-label="Neotoma home"
           onClick={(e) => {
@@ -909,7 +909,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           <div className="flex h-full flex-col">
             <div className="flex h-12 items-center border-b border-sidebar-border px-4">
               <a
-                href="/"
+                href={staticAssetPath("/")}
                 className="no-underline hover:opacity-80 transition-opacity"
                 onClick={(e) => {
                   setMobileMenuOpen(false);

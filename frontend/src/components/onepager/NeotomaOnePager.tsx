@@ -1,28 +1,28 @@
 import { useRef, useState } from "react";
-import { Braces, Cable, HardDrive, Scale, Terminal } from "lucide-react";
 import { SiteSnippet } from "../SiteSnippet";
 import { usePageVisualMotion } from "./viewport_motion";
 import { VisionGallery } from "./VisionGallery";
 import { PaperScene } from "./PaperScene";
 import { Link } from "react-router-dom";
-import { NEOTOMA_GITHUB_REPO, neotomaGithubBlobUrl } from "@/site/neotoma_repo";
+import { neotomaDocUrl } from "@/site/neotoma_repo";
 import { CodeBlock } from "@/components/InstallCodeBlock";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
 import { AnimatedLockup } from "./AnimatedLockup";
+import { staticAssetPath } from "@/site/spa_path";
 
 import {
   DEEPER_MATERIAL,
-  CONNECTIONS_OTHER,
+  CONNECTIONS,
+  type Connection,
   CONNECTIONS_SETUP,
   PIPELINE,
   RECALL_VS_RECORD,
   FIGURE_LEGEND,
-  PLATE_CAPTION,
   installCommands,
 } from "./onepager_copy";
 import { InterfaceExplorer } from "./InterfaceExplorer";
-import { InspectorPreview } from "./InspectorPreview";
+import { ProductBenefitPills } from "./ProductBenefitPills";
 import "./onepager.css";
 
 function SheetHead({ id, mark, title }: { id: string; mark: string; title: string }) {
@@ -35,11 +35,15 @@ function SheetHead({ id, mark, title }: { id: string; mark: string; title: strin
 }
 
 export function NeotomaOnePager() {
-  const [host, setHost] = useState(CONNECTIONS_SETUP[0]);
+  const [host, setHost] = useState<Connection>(CONNECTIONS_SETUP[0]);
   const pageRef = useRef<HTMLElement>(null);
   usePageVisualMotion(pageRef);
   const evaluationPrompt =
-    "Read https://neotoma.io/. Ask about my workflow, then explain whether Neotoma fits, whether my existing tools are sufficient, and which current limits matter.";
+    "Read https://neotoma.io/. Ask about my current workflows and tools. Evaluate whether Neotoma would improve how my agents maintain changing facts, whether what I already use is sufficient, and which current limits matter for my use case.";
+  const docHref = (repoPath: string) => {
+    const href = neotomaDocUrl(repoPath);
+    return href.startsWith("/") ? staticAssetPath(href) : href;
+  };
   return (
     <div>
       <a className="plan-skip" href="#plan-content">
@@ -50,42 +54,19 @@ export function NeotomaOnePager() {
           <div className="plan-masthead">
             <AnimatedLockup />
             <nav className="plan-nav" aria-label="Site">
-              <a href="#fit">Fit</a>
-              <a href="#example">Example</a>
               <a href="#how-it-works">How it works</a>
-              <a href="#inspect">Inspector</a>
-              <a href="#connect">Connect</a>
-              <a href="#vision">Vision</a>
-              <a href={NEOTOMA_GITHUB_REPO}>GitHub</a>
-              <a href={neotomaGithubBlobUrl("docs/architecture/architecture.md")}>Architecture</a>
+              <a href="#interfaces">Interfaces</a>
+              <a href={docHref("docs/architecture/architecture.md")}>Architecture</a>
+              <a href="#evaluate">Evaluate</a>
             </nav>
           </div>
           <div className="plan-hero-copy" id="plan-content">
             <div>
-              <p className="plan-label">A record, not recall.</p>
-              <h1 id="s1">The system of record for AI agents.</h1>
-              <ul className="plan-meta-pills" aria-label="Product details">
-                <li>
-                  <Scale size={13} aria-hidden="true" />
-                  MIT
-                </li>
-                <li>
-                  <HardDrive size={13} aria-hidden="true" />
-                  Local-first
-                </li>
-                <li>
-                  <Cable size={13} aria-hidden="true" />
-                  MCP
-                </li>
-                <li>
-                  <Braces size={13} aria-hidden="true" />
-                  REST API
-                </li>
-                <li>
-                  <Terminal size={13} aria-hidden="true" />
-                  CLI
-                </li>
-              </ul>
+              <p className="plan-label">A record, not recall</p>
+              <h1 id="s1">
+                The <span className="plan-hero-phrase">system of record</span> for AI agents.
+              </h1>
+              <ProductBenefitPills />
             </div>
             <div className="plan-hero-aside">
               <p className="plan-lede">
@@ -104,7 +85,10 @@ export function NeotomaOnePager() {
           </div>
           <figure className="plan-scene plan-hero-scene">
             <PaperScene scene="hero" />
-            <figcaption>Sources, observations and a current record.</figcaption>
+            <figcaption>
+              Neotoma connects each current field in a record to the observations and sources behind
+              it.
+            </figcaption>
           </figure>
         </section>
 
@@ -112,56 +96,72 @@ export function NeotomaOnePager() {
           <SheetHead
             id="s2"
             mark="01 · Compare"
-            title="Recall and record answer different questions"
+            title="Recall and a system of record answer different questions"
           />
           <p className="plan-body">
-            Memory and retrieval tools help an agent keep and find context. A record takes on a
-            different job. It computes the current value from accepted observations and keeps a path
-            back to the evidence for each field. The two overlap, and a product can cover more than
-            one.
+            Memory and retrieval tools help an agent keep and find context. A system of record
+            computes current values from accepted observations and keeps a path back to the evidence
+            for each field.
           </p>
           <p className="plan-body plan-fit-note">
             Neotoma is for developers and operators whose agents handle changing facts across tools.
-            You choose what enters the local record and which tools use it. If your existing tools
-            already maintain a source-backed record, they may be sufficient.
+            You choose what enters the local instance and which tools use it.
           </p>
           <div className="plan-contrast">
             <article>
-              <PaperScene scene="before" />
-              <p className="plan-label">Without one</p>
-              <h3>What an agent happens to recall</h3>
+              <figure>
+                <PaperScene scene="before" />
+                <figcaption>
+                  <p className="plan-label">Without a system of record</p>
+                  <h3>What an agent happens to recall</h3>
+                  <p>
+                    Relevant facts remain scattered across separate pieces of context, with no
+                    explicit current value selected here.
+                  </p>
+                </figcaption>
+              </figure>
             </article>
             <article>
-              <PaperScene scene="after" />
-              <p className="plan-label">With one</p>
-              <h3>The current record</h3>
+              <figure>
+                <PaperScene scene="after" />
+                <figcaption>
+                  <p className="plan-label">With a system of record</p>
+                  <h3>The current record</h3>
+                  <p>
+                    One record presents the selected field values while keeping their supporting
+                    observations connected.
+                  </p>
+                </figcaption>
+              </figure>
             </article>
           </div>
           <div className="plan-table-wrap">
             <table className="plan-table">
-              <caption className="plan-sr">Recall compared with a record</caption>
+              <caption className="plan-sr">Recall compared with a system of record</caption>
               <thead>
                 <tr>
-                  <th scope="col">Mark</th>
                   <th scope="col">Question</th>
                   <th scope="col">Recall</th>
-                  <th scope="col">Record (Neotoma)</th>
+                  <th scope="col">System of record (Neotoma)</th>
                 </tr>
               </thead>
               <tbody>
-                {RECALL_VS_RECORD.map((row, i) => (
+                {RECALL_VS_RECORD.map((row) => (
                   <tr key={row.question}>
-                    <td data-label="Mark">R{i + 1}</td>
                     <th scope="row" data-label="Question">
                       {row.question}
                     </th>
                     <td data-label="Recall">{row.recall}</td>
-                    <td data-label="Record (Neotoma)">{row.record}</td>
+                    <td data-label="System of record">{row.record}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Link to="/compare" className="plan-compare-link">
+            Compare recall, retrieval and a system of record in more detail{" "}
+            <span aria-hidden="true">→</span>
+          </Link>
         </section>
 
         <section className="plan-sheet" aria-labelledby="s3" id="how-it-works">
@@ -169,10 +169,10 @@ export function NeotomaOnePager() {
           <div className="plan-invoice-story" id="example">
             <p className="plan-label">Example</p>
             <p>
-              Invoice INV-2041 arrives as a PDF due 22 October. A later supplied email changes the
-              due date to 29 October. A connected agent reading the invoice sees the selected 29
-              October value and can inspect which observation supplied it. The amount still comes
-              from the PDF.
+              Invoice INV-2041 arrives as a PDF due October 22nd. A later supplied email changes the
+              due date to October 29th, 2026. A connected agent reading the invoice sees the
+              selected October 29th value and can inspect which observation supplied it. The amount
+              still comes from the PDF.
             </p>
           </div>
           <ol className="plan-section-cut">
@@ -184,20 +184,22 @@ export function NeotomaOnePager() {
                   </span>
                   <h3>{step.label}</h3>
                   <p>{step.text}</p>
-                  <a href={neotomaGithubBlobUrl(step.doc)}>
-                    Read the {step.name.toLowerCase()} reference
-                  </a>
+                  <a href={docHref(step.doc)}>{step.link}</a>
                 </div>
-                <PaperScene
-                  scene={(["source", "observation", "entity", "reducer", "snapshot"] as const)[i]}
-                />
+                <figure className="plan-step-art">
+                  <PaperScene
+                    scene={(["source", "observation", "entity", "reducer", "snapshot"] as const)[i]}
+                  />
+                </figure>
               </li>
             ))}
           </ol>
           <aside className="plan-example" aria-label="Synthetic invoice example">
             <p className="plan-label">One invoice, five parts</p>
             <div className="plan-example-content">
-              <PaperScene scene="invoiceExample" />
+              <figure>
+                <PaperScene scene="invoiceExample" />
+              </figure>
               <ol className="plan-legend">
                 {FIGURE_LEGEND.map((item, i) => (
                   <li key={item}>
@@ -209,18 +211,14 @@ export function NeotomaOnePager() {
                 ))}
               </ol>
             </div>
-            <p className="plan-note">{PLATE_CAPTION}</p>
           </aside>
-          <section id="inspect" className="plan-inspect-section" aria-labelledby="inspect-title">
-            <h3 id="inspect-title">Inspect the record</h3>
-            <p className="plan-small">
-              A static, read-only illustration using the bundled Inspector&apos;s entity detail,
-              snapshot and observation history vocabulary. The invoice and sources are synthetic.
-            </p>
-            <InspectorPreview />
-          </section>
-          <section className="plan-interface-section" aria-labelledby="interface-title">
-            <h3 id="interface-title">One record, three interfaces</h3>
+          <section
+            id="interfaces"
+            className="plan-interface-section"
+            aria-labelledby="interface-title"
+          >
+            <span id="inspect" className="plan-anchor" aria-hidden="true" />
+            <h3 id="interface-title">One invoice record. Four ways to work with it.</h3>
             <InterfaceExplorer />
           </section>
         </section>
@@ -230,14 +228,17 @@ export function NeotomaOnePager() {
           <div className="plan-split">
             <figure className="plan-scene plan-local-scene">
               <PaperScene scene="localService" />
-              <figcaption>Run the service locally and connect the tools you use.</figcaption>
             </figure>
-            <p className="plan-body">
-              Neotoma runs as a local service. Connected agents use the Model Context Protocol
-              (MCP), REST API or CLI to read and write a configured instance. Point each tool at the
-              same instance and data profile or MCP entry to share a record; separate entries can
-              use separate databases. The bundled Inspector lets you examine the record.
-            </p>
+            <div>
+              <p className="plan-body">
+                Neotoma runs as a local service. Connected agents use the Model Context Protocol
+                (MCP), REST API or CLI to read and write records in a configured instance.
+              </p>
+              <p className="plan-body">
+                Point each tool at the same instance and data profile to work with the same records;
+                separate entries can use separate databases. The bundled app lets you examine them.
+              </p>
+            </div>
           </div>
           <label className="plan-host-label" htmlFor="plan-host">
             Choose your tool
@@ -245,64 +246,38 @@ export function NeotomaOnePager() {
           <select
             id="plan-host"
             className="plan-host-select"
-            value={host.tool}
+            value={host.id}
             onChange={(event) =>
               setHost(
-                CONNECTIONS_SETUP.find((row) => row.tool === event.target.value) ??
-                  CONNECTIONS_SETUP[0]
+                CONNECTIONS.find((row) => row.id === event.target.value) ?? CONNECTIONS_SETUP[0]
               )
             }
           >
-            {CONNECTIONS_SETUP.map((row) => (
-              <option key={row.tool} value={row.tool}>
+            {CONNECTIONS.map((row) => (
+              <option key={row.id} value={row.id}>
                 {row.host}
               </option>
             ))}
           </select>
-          <CodeBlock
-            code={installCommands(host.tool)}
-            copyFeedbackId={`onepager-install-${host.tool}`}
-            installBlock="manual_commands"
-            scrollLabel="Install commands for selected tool"
-          />
+          {host.kind === "setup" ? (
+            <CodeBlock
+              code={installCommands(host.tool)}
+              copyFeedbackId={`onepager-install-${host.id}`}
+              installBlock="manual_commands"
+              scrollLabel="Install commands for selected tool"
+            />
+          ) : (
+            <p className="plan-manual-instruction">{host.instruction}</p>
+          )}
           <p className="plan-small">
-            These human-run commands omit <code>--yes</code>. Setup still makes some changes
-            automatically, including initialization and certain configuration writes; omission is
-            not a general approval gate. Review the <Link to="/install">full install guide</Link>{" "}
-            and run <code>neotoma status --json</code> to check the result. Automated setup may use{" "}
-            <code>--yes</code> after its operator has authorized the changes.
-          </p>
-          <p className="plan-body plan-small">
-            Other documented integrations: {CONNECTIONS_OTHER}. See{" "}
-            <a href={`${NEOTOMA_GITHUB_REPO}/blob/main/docs/integrations/matrix.md`}>
-              integrations
-            </a>{" "}
-            for each guide.
+            Read the <a href={docHref(host.guide)}>{host.host} guide</a> for the supported
+            connection path. The <Link to="/install">install guide</Link> covers the local service.
           </p>
         </section>
 
         <section className="plan-sheet" aria-labelledby="s5" id="vision">
-          <SheetHead id="s5" mark="04 · Direction" title="Where this is going" />
-          <p className="plan-body">
-            A record people and agents maintain together. The source, observation and snapshot
-            foundation is here today. These ambitions extend it toward clearer authority over state.
-          </p>
+          <SheetHead id="s5" mark="04 · Advanced" title="Advanced capabilities" />
           <VisionGallery />
-          <p className="plan-small plan-vision-boundary">
-            Planned governance, with no promised timeline. Authority to act stays in the operational
-            tools above the record. See{" "}
-            <a href={`${NEOTOMA_GITHUB_REPO}#vision-and-execution-status`}>vision status</a>.
-          </p>
-          <details className="plan-current-boundaries">
-            <summary>Current scope and limits</summary>
-            <p className="plan-small">
-              Current boundaries: one local operator; later ordinary writes can replace corrections;
-              export contains current values without observation history; authorship is verified
-              only for signed requests, and some paths record no writer. One entity can be read as
-              of a past time; the whole record cannot. Read the{" "}
-              <a href={neotomaGithubBlobUrl("docs/known_limitations.md")}>known limitations</a>.
-            </p>
-          </details>
           <div className="plan-actions">
             <Link
               to="/install"
@@ -311,17 +286,17 @@ export function NeotomaOnePager() {
             >
               Install guide
             </Link>
-            <a href={`${NEOTOMA_GITHUB_REPO}/tree/main/docs`} className="plan-link">
+            <a href={docHref("docs/")} className="plan-link">
               Documentation
             </a>
           </div>
         </section>
 
-        <section className="plan-sheet" aria-labelledby="s7">
-          <SheetHead id="s7" mark="05 · References" title="Explore the source" />
+        <section className="plan-sheet plan-evaluate-sheet" aria-labelledby="s7" id="evaluate">
+          <SheetHead id="s7" mark="05 · EVALUATE" title="Evaluate the fit" />
           <p className="plan-body">
-            Evaluate the fit before installing. Your agent can compare Neotoma with your current
-            tools and recommend staying with those tools when they already meet the need.
+            Ask your agent to consider Neotoma against your existing workflows and tools. It can
+            identify where a system of record would help, and where what you already use is enough.
           </p>
           <SiteSnippet
             text={evaluationPrompt}
@@ -331,36 +306,38 @@ export function NeotomaOnePager() {
             copyFeedbackId="onepager-evaluate"
             successMessage="Prompt copied"
           />
-          <div className="plan-deeper">
-            {DEEPER_MATERIAL.map((group) => (
-              <div key={group.title}>
-                <h3>{group.title}</h3>
-                <ul>
-                  {group.links.map((link) => (
-                    <li key={link.href}>
-                      <a href={link.href}>{link.label}</a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <p className="plan-small">
-            See the companion project:{" "}
-            <a className="plan-companion-link" href="https://github.com/markmhendrickson/ateles">
-              Ateles
-            </a>{" "}
-            coordinates work and action under explicit authority.
-          </p>
-          <footer className="plan-footer">
-            <SolidLockup />
-            <p className="plan-small plan-colophon">
-              Neotoma · From Constara · MIT licensed ·{" "}
-              <a href="https://markmhendrickson.com">Contributor</a> ·{" "}
-              <a href="/privacy">Privacy</a> · <a href="/terms">Terms of use</a>
-            </p>
-          </footer>
         </section>
+        <footer className="plan-site-footer" aria-label="References and site information">
+          <div className="plan-footer-inner">
+            <div className="plan-deeper">
+              {DEEPER_MATERIAL.map((group) => (
+                <div key={group.title}>
+                  <h3>{group.title}</h3>
+                  <ul>
+                    {group.links.map((link) => (
+                      <li key={link.label}>
+                        {link.href ? (
+                          <a
+                            href={
+                              link.href.startsWith("/") ? staticAssetPath(link.href) : link.href
+                            }
+                          >
+                            {link.label}
+                          </a>
+                        ) : (
+                          <span>{link.label}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="plan-footer">
+              <SolidLockup />
+            </div>
+          </div>
+        </footer>
       </main>
     </div>
   );

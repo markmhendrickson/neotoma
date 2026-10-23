@@ -221,7 +221,7 @@ describe("docs viewer routes, redirect stubs and sitemap", () => {
       const dest = resolveDestination(route, index).url;
       if (mapped && index.bySource.has(mapped))
         expect(dest, route).toMatch(/^https:\/\/neotoma\.io\/docs\//);
-      else expect(dest, route).toBe(resolveDestination(route).url);
+      else expect(dest, route).toBe(resolveDestination(route, buildDocsViewerIndex([])).url);
     }
   });
 
@@ -263,6 +263,51 @@ describe("docs viewer export validation", () => {
 
   it("passes a correct build", () => {
     expect(validate(built())).toEqual([]);
+  });
+
+  it("accepts the canonical vocabulary's quoted forbidden terms after source lint", () => {
+    const outDir = mkdtempSync(join(tmpdir(), "docs-viewer-vocabulary-"));
+    dirs.push(outDir);
+    const vocabulary = entry("vocabulary", "docs/vocabulary/canonical_terms.md", "included", 70);
+    const result = runDocsViewer({
+      repoRoot: root,
+      outDir,
+      write: true,
+      manifest: [vocabulary],
+      commit: COMMIT,
+    });
+    expect(result.failures).toEqual([]);
+    expect(
+      validateDocsViewerExport(outDir, {
+        index: buildDocsViewerIndex([vocabulary]),
+        manifest: [vocabulary],
+      }).problems
+    ).toEqual([]);
+
+    const page = join(outDir, "docs/vocabulary/index.html");
+    const original = readFileSync(page, "utf-8");
+    const check = () =>
+      validateDocsViewerExport(outDir, {
+        index: buildDocsViewerIndex([vocabulary]),
+        manifest: [vocabulary],
+      }).problems.join("\n");
+    writeFileSync(page, original.replace("</main>", "<p>Neotoma is the state layer.</p></main>"));
+    expect(check()).toMatch(/retired category noun/);
+    writeFileSync(
+      page,
+      original.replace("</main>", "<p>Neotoma is a unified platform.</p></main>")
+    );
+    expect(check()).toMatch(/unified platform/);
+    writeFileSync(page, original);
+    expect(check()).toBe("");
+  });
+
+  it("rejects a retired noun on an ordinary included page", () => {
+    const outDir = built();
+    edit(join(outDir, "docs/rest-api/index.html"), (s) =>
+      s.replace("</main>", "<p>Neotoma is the state layer.</p></main>")
+    );
+    expect(validate(outDir).join("\n")).toMatch(/retired category noun/);
   });
 
   it.each([
@@ -328,7 +373,10 @@ describe("docs viewer export validation", () => {
     );
 
     outDir = built();
-    writeFileSync(join(outDir, "api/index.html"), buildRedirectStub("/api"));
+    writeFileSync(
+      join(outDir, "api/index.html"),
+      buildRedirectStub("/api", "https://neotoma.io", buildDocsViewerIndex([]))
+    );
     expect(validate(outDir).join("\n")).toMatch(
       /api\/index.html does not redirect to the viewer page/
     );

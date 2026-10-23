@@ -42,7 +42,6 @@ export function SiteSnippet({
       <div className="site-snippet-header">
         <div className="site-snippet-heading">
           <p className="site-snippet-title">{title}</p>
-          {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
         </div>
         <button
           type="button"
@@ -63,6 +62,7 @@ export function SiteSnippet({
           )}
           {copied && !copyFailed ? copiedLabel : copyLabel}
         </button>
+        {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
       </div>
       <p
         className={
