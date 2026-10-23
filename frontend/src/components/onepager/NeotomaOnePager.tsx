@@ -4,7 +4,7 @@ import { usePageVisualMotion } from "./viewport_motion";
 import { VisionGallery } from "./VisionGallery";
 import { PaperScene } from "./PaperScene";
 import { Link } from "react-router-dom";
-import { NEOTOMA_GITHUB_REPO, neotomaGithubBlobUrl } from "@/site/neotoma_repo";
+import { neotomaDocUrl } from "@/site/neotoma_repo";
 import { CodeBlock } from "@/components/InstallCodeBlock";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
@@ -40,6 +40,10 @@ export function NeotomaOnePager() {
   usePageVisualMotion(pageRef);
   const evaluationPrompt =
     "Read https://neotoma.io/. Ask about my current workflows and tools. Evaluate whether Neotoma would improve how my agents maintain changing facts, whether what I already use is sufficient, and which current limits matter for my use case.";
+  const docHref = (repoPath: string) => {
+    const href = neotomaDocUrl(repoPath);
+    return href.startsWith("/") ? staticAssetPath(href) : href;
+  };
   return (
     <div>
       <a className="plan-skip" href="#plan-content">
@@ -52,7 +56,7 @@ export function NeotomaOnePager() {
             <nav className="plan-nav" aria-label="Site">
               <a href="#how-it-works">How it works</a>
               <a href="#interfaces">Interfaces</a>
-              <a href={neotomaGithubBlobUrl("docs/architecture/architecture.md")}>Architecture</a>
+              <a href={docHref("docs/architecture/architecture.md")}>Architecture</a>
               <a href="#evaluate">Evaluate</a>
             </nav>
           </div>
@@ -180,7 +184,7 @@ export function NeotomaOnePager() {
                   </span>
                   <h3>{step.label}</h3>
                   <p>{step.text}</p>
-                  <a href={neotomaGithubBlobUrl(step.doc)}>{step.link}</a>
+                  <a href={docHref(step.doc)}>{step.link}</a>
                 </div>
                 <figure className="plan-step-art">
                   <PaperScene
@@ -266,9 +270,8 @@ export function NeotomaOnePager() {
             <p className="plan-manual-instruction">{host.instruction}</p>
           )}
           <p className="plan-small">
-            Read the <a href={neotomaGithubBlobUrl(host.guide)}>{host.host} guide</a> for the
-            supported connection path. The <Link to="/install">install guide</Link> covers the local
-            service.
+            Read the <a href={docHref(host.guide)}>{host.host} guide</a> for the supported
+            connection path. The <Link to="/install">install guide</Link> covers the local service.
           </p>
         </section>
 
@@ -283,7 +286,7 @@ export function NeotomaOnePager() {
             >
               Install guide
             </Link>
-            <a href={`${NEOTOMA_GITHUB_REPO}/tree/main/docs`} className="plan-link">
+            <a href={docHref("docs/")} className="plan-link">
               Documentation
             </a>
           </div>

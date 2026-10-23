@@ -131,8 +131,8 @@ describe("neotoma.io one-pager copy", () => {
     ).toBe(true);
     const copy = files[1];
     for (const needle of [
-      "#readme",
-      "/tree/main/docs",
+      "README.md",
+      "docs/",
       "docs/architecture/architecture.md",
       "docs/integrations/matrix.md",
       "/releases",
@@ -141,6 +141,21 @@ describe("neotoma.io one-pager copy", () => {
       "/discussions",
     ]) {
       expect(copy, `deeper material is missing ${needle}`).toContain(needle);
+    }
+    const html = renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    );
+    for (const slug of [
+      "",
+      "readme",
+      "cli",
+      "mcp",
+      "rest-api",
+      "integrations",
+      "architecture",
+      "vocabulary",
+    ]) {
+      expect(html).toContain(`href="/docs/${slug ? `${slug}/` : ""}"`);
     }
   });
 });

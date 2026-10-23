@@ -11,6 +11,8 @@
  * deny it.
  */
 
+import { neotomaDocUrl } from "@/site/neotoma_repo";
+
 export const FIGURE_LEGEND: readonly string[] = [
   "Two sources say different things about one invoice: the PDF says due October 22nd, a later email says October 29th.",
   "Each source becomes an observation. A rule, last write per field here, computes the current value from them.",
@@ -231,10 +233,10 @@ export const DEEPER_MATERIAL: readonly {
   {
     title: "Read",
     links: [
-      { label: "README", href: `${GH}#readme` },
-      { label: "Documentation", href: `${GH}/tree/main/docs` },
-      { label: "Architecture", href: `${GH}/blob/main/docs/architecture/architecture.md` },
-      { label: "Integrations", href: `${GH}/blob/main/docs/integrations/matrix.md` },
+      { label: "README", href: neotomaDocUrl("README.md") },
+      { label: "Documentation", href: neotomaDocUrl("docs/") },
+      { label: "Architecture", href: neotomaDocUrl("docs/architecture/architecture.md") },
+      { label: "Integrations", href: neotomaDocUrl("docs/integrations/matrix.md") },
       { label: "Changelog and releases", href: `${GH}/releases` },
       { label: "Ateles", href: "https://github.com/markmhendrickson/ateles" },
     ],
@@ -242,10 +244,10 @@ export const DEEPER_MATERIAL: readonly {
   {
     title: "Reference",
     links: [
-      { label: "REST API", href: `${GH}/blob/main/docs/api/rest_api.md` },
-      { label: "MCP server", href: `${GH}/blob/main/docs/developer/mcp_overview.md` },
-      { label: "CLI", href: `${GH}/blob/main/docs/developer/cli_reference.md` },
-      { label: "Vocabulary", href: `${GH}/blob/main/docs/vocabulary/canonical_terms.md` },
+      { label: "REST API", href: neotomaDocUrl("docs/api/rest_api.md") },
+      { label: "MCP server", href: neotomaDocUrl("docs/developer/mcp_overview.md") },
+      { label: "CLI", href: neotomaDocUrl("docs/developer/cli_reference.md") },
+      { label: "Vocabulary", href: neotomaDocUrl("docs/vocabulary/canonical_terms.md") },
     ],
   },
   {

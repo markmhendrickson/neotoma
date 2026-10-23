@@ -283,8 +283,13 @@ export function validateDocsViewerExport(
       problems.push(`${where} does not name its build commit`);
     }
     for (const p of unsafeMarkup(html)) problems.push(`${where} ${p}`);
-    for (const f of findClaimProblems(pageText(html)))
+    for (const f of findClaimProblems(pageText(html))) {
+      // The vocabulary page quotes retired nouns as forbidden terms. Its source still passes the
+      // context-aware docs lint; this flattened HTML text scan cannot retain that list context.
+      if (entry.source === "docs/vocabulary/canonical_terms.md" && f.id === "retired-noun")
+        continue;
       problems.push(`${where} text: ${f.label} ("${f.match}")`);
+    }
     for (const href of retiredRouteLinks(html, index))
       problems.push(`${where} links a retired neotoma.io route: ${href}`);
   }

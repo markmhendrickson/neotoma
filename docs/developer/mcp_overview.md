@@ -43,7 +43,7 @@ The table below lists every supported harness with its setup guide and whether `
 | Cursor | [`mcp_cursor_setup.md`](mcp_cursor_setup.md) | `neotoma setup --tool cursor` | stdio (local) or HTTP | Source of truth for `.cursor/mcp.json`; sync to other clients via `npm run sync:mcp` |
 | Claude Code | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-code` | stdio (local) or HTTP | OAuth supported; writes user + project scopes |
 | Codex CLI | [`agent_cli_configuration.md`](agent_cli_configuration.md) | `neotoma setup --tool codex` | stdio | Synced from `.cursor/mcp.json` via `npm run sync:mcp` |
-| Claude Desktop | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-desktop` | stdio | Native plugin manages permissions; allowlist patch is skipped |
+| Claude Desktop | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-desktop --install-scope user` updates an existing Desktop config | stdio | The default project scope writes a project MCP config instead; no allowlist patch |
 | Windsurf | [`mcp_windsurf_setup.md`](mcp_windsurf_setup.md) | manual (see guide) | stdio (local) or HTTP | Edit `~/.codeium/windsurf/mcp_config.json` by hand |
 | Continue | [`mcp_continue_setup.md`](mcp_continue_setup.md) | manual (see guide) | stdio (local) or HTTP | Edit Continue's `config.json` by hand |
 | VS Code | [`mcp_vscode_setup.md`](mcp_vscode_setup.md) | manual (see guide) | stdio (local) or HTTP | Copilot Chat MCP integration; edit `.vscode/mcp.json` by hand |
@@ -72,8 +72,8 @@ MCP exposes structured actions for:
 ```mermaid
 flowchart TD
     aiTool[AITool] -->|"MCP action"| mcpServer[McpServer]
-    mcpServer -->|"Validate and store"| stateLayer[TruthLayer]
-    stateLayer -->|"Response"| mcpServer
+    mcpServer -->|"Validate and store"| record[NeotomaRecord]
+    record -->|"Response"| mcpServer
     mcpServer -->|"MCP response"| aiTool
 ```
 

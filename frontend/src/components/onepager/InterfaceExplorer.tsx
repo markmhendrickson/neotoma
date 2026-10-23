@@ -1,10 +1,12 @@
 import { SiteSnippet } from "../SiteSnippet";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { InspectorPreview } from "./InspectorPreview";
-import { neotomaGithubBlobUrl } from "@/site/neotoma_repo";
+import { neotomaDocUrl } from "@/site/neotoma_repo";
+import { staticAssetPath } from "@/site/spa_path";
 
 type Interface = "App" | "CLI" | "MCP" | "REST API";
 const interfaces: Interface[] = ["App", "CLI", "MCP", "REST API"];
+const cliDocHref = neotomaDocUrl("docs/developer/cli_reference.md");
 
 const invoice = {
   entity_type: "invoice",
@@ -189,7 +191,7 @@ export function InterfaceExplorer() {
               ) : (
                 <p className="plan-small">
                   Example unavailable; use the{" "}
-                  <a href={neotomaGithubBlobUrl("docs/developer/cli_reference.md")}>
+                  <a href={cliDocHref.startsWith("/") ? staticAssetPath(cliDocHref) : cliDocHref}>
                     interface reference
                   </a>
                   .
