@@ -548,12 +548,30 @@ describe("layered paper illustration motion", () => {
     expect(fallback.getAttribute("opacity")).toBe("1");
   });
 
-  it("uses one physical envelope fold construction in both evidence scenes", () => {
+  it("shows filled envelope flaps on image failure and hides the whole fallback on load", () => {
     for (const scene of ["observation", "invoiceExample"] as const) {
       const { container, unmount } = render(<PaperScene scene={scene} />);
       const cutouts = container.querySelectorAll('[data-paper-cutout="envelope-blue"]');
       expect(cutouts).toHaveLength(1);
-      expect(cutouts[0].parentElement!.querySelectorAll(".paper-fold")).toHaveLength(1);
+      const fallback = cutouts[0].parentElement!.querySelector(".paper-raster-fallback")!;
+      const flaps = [...fallback.querySelectorAll("path[data-envelope-flap]")];
+      fireEvent.error(cutouts[0]);
+      expect(fallback.getAttribute("opacity")).toBe("1");
+      expect(flaps).toHaveLength(2);
+      expect(flaps.map((flap) => flap.getAttribute("data-envelope-flap"))).toEqual([
+        "back",
+        "front",
+      ]);
+      for (const flap of flaps) {
+        expect(flap.getAttribute("d")).toMatch(/Z$/);
+        expect(flap.getAttribute("fill")).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+      expect(flaps[0].getAttribute("fill")).not.toBe(flaps[1].getAttribute("fill"));
+      expect(fallback.querySelectorAll(".paper-fold")).toHaveLength(1);
+      expect(cutouts[0].parentElement!.querySelectorAll("[data-envelope-flap]")).toHaveLength(2);
+      fireEvent.load(cutouts[0]);
+      expect(fallback.getAttribute("opacity")).toBe("0");
+      expect(cutouts[0].getAttribute("opacity")).not.toBe("0");
       unmount();
     }
   });
