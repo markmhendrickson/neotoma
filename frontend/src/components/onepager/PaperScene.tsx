@@ -135,22 +135,18 @@ function Piece({
           {raster === "envelope-blue" && (
             <>
               <path
-                d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 Z`}
-                fill="#c3d1d6"
-                stroke="#849ba6"
-                strokeWidth="1"
-                data-envelope-flap="back"
-              />
-              <path
                 d={`M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1} Z`}
                 fill="#a9c0ca"
                 stroke="#849ba6"
                 strokeWidth="1"
-                data-envelope-flap="front"
+                data-envelope-flap="lower"
               />
               <path
-                d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 M1 ${h - 1} L${w / 2} ${h * 0.48} L${w - 1} ${h - 1}`}
-                className="paper-fold"
+                d={`M1 1 L${w / 2} ${h * 0.56} L${w - 1} 1 Z`}
+                fill="#c3d1d6"
+                stroke="#849ba6"
+                strokeWidth="1"
+                data-envelope-flap="closing"
               />
             </>
           )}

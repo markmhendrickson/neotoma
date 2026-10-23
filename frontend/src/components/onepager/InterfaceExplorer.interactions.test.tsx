@@ -559,15 +559,25 @@ describe("layered paper illustration motion", () => {
       expect(fallback.getAttribute("opacity")).toBe("1");
       expect(flaps).toHaveLength(2);
       expect(flaps.map((flap) => flap.getAttribute("data-envelope-flap"))).toEqual([
-        "back",
-        "front",
+        "lower",
+        "closing",
       ]);
       for (const flap of flaps) {
         expect(flap.getAttribute("d")).toMatch(/Z$/);
         expect(flap.getAttribute("fill")).toMatch(/^#[0-9a-f]{6}$/i);
       }
+      const flapVertices = flaps.map((flap) =>
+        [...flap.getAttribute("d")!.matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((match) =>
+          Number(match[1])
+        )
+      );
+      expect(flapVertices.map((vertices) => vertices.length)).toEqual([3, 3]);
+      expect(flapVertices[0][0]).toBeGreaterThan(flapVertices[1][0]);
+      expect(flapVertices[1][1]).toBeGreaterThan(flapVertices[0][1]);
       expect(flaps[0].getAttribute("fill")).not.toBe(flaps[1].getAttribute("fill"));
-      expect(fallback.querySelectorAll(".paper-fold")).toHaveLength(1);
+      expect(flaps.every((flap) => flap.getAttribute("stroke") !== null)).toBe(true);
+      expect([...fallback.querySelectorAll("path")].at(-1)).toBe(flaps[1]);
+      expect(fallback.querySelectorAll(".paper-fold")).toHaveLength(0);
       expect(cutouts[0].parentElement!.querySelectorAll("[data-envelope-flap]")).toHaveLength(2);
       fireEvent.load(cutouts[0]);
       expect(fallback.getAttribute("opacity")).toBe("0");
