@@ -104,17 +104,29 @@ export function NeotomaOnePager() {
           </p>
           <div className="plan-contrast">
             <article>
-              <p className="plan-label">Without a system of record</p>
-              <h3>What an agent happens to recall</h3>
               <figure>
                 <PaperScene scene="before" />
+                <figcaption>
+                  <p className="plan-label">Without a system of record</p>
+                  <h3>What an agent happens to recall</h3>
+                  <p>
+                    Relevant facts remain scattered across separate pieces of context, with no
+                    explicit current value selected here.
+                  </p>
+                </figcaption>
               </figure>
             </article>
             <article>
-              <p className="plan-label">With a system of record</p>
-              <h3>The current record</h3>
               <figure>
                 <PaperScene scene="after" />
+                <figcaption>
+                  <p className="plan-label">With a system of record</p>
+                  <h3>The current record</h3>
+                  <p>
+                    One record presents the selected field values while keeping their supporting
+                    observations connected.
+                  </p>
+                </figcaption>
               </figure>
             </article>
           </div>

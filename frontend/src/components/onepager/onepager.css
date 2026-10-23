@@ -1948,7 +1948,6 @@
   margin: 0;
   min-width: 0;
 }
-.plan-contrast figcaption,
 .plan-step-art figcaption,
 .plan-example-content figcaption,
 .plan-vision-art figcaption {
@@ -2248,8 +2247,20 @@
 .plan-contrast figure {
   margin-top: 0.9rem;
 }
-.plan-contrast h3 {
-  margin-bottom: 0;
+.plan-contrast figcaption {
+  padding-top: 0.8rem;
+}
+.plan-contrast figcaption .plan-label {
+  margin-bottom: 0.4rem;
+}
+.plan-contrast figcaption h3 {
+  margin: 0 0 0.45rem;
+}
+.plan-contrast figcaption > p:last-child {
+  max-width: 52ch;
+  margin: 0;
+  font: 0.95rem/1.5 var(--sans);
+  color: var(--muted);
 }
 .plan-host-select {
   appearance: none;
