@@ -3195,9 +3195,12 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
   );
 
   out = out.replace(
-    /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    /<script type="application\/ld\+json"(?: [^>]*)?>[\s\S]*?<\/script>/,
     meta.jsonLd
-      .map((entry) => `<script type="application/ld+json">${JSON.stringify(entry)}</script>`)
+      .map(
+        (entry) =>
+          `<script type="application/ld+json" data-rh="true">${JSON.stringify(entry)}</script>`
+      )
       .join("\n    ")
   );
 
@@ -3205,7 +3208,7 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
   const alternatesHtml = meta.alternates
     .map(
       (alternate) =>
-        `<link rel="alternate" hrefLang="${escapeHtml(alternate.hrefLang)}" href="${escapeHtml(alternate.href)}" />`
+        `<link rel="alternate" hrefLang="${escapeHtml(alternate.hrefLang)}" href="${escapeHtml(alternate.href)}" data-rh="true" />`
     )
     .join("\n    ");
   if (alternatesHtml) {

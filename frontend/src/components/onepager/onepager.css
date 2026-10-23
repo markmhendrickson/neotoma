@@ -2069,6 +2069,12 @@
 .plan-site-footer .plan-footer svg {
   max-width: 11rem;
 }
+.plan-site-footer .plan-logo-light {
+  display: none !important;
+}
+.plan-site-footer .plan-logo-dark {
+  display: block !important;
+}
 @media (max-width: 950px) {
   .plan-hero-copy {
     grid-template-columns: 1fr;

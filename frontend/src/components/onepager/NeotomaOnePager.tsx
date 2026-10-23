@@ -331,7 +331,6 @@ export function NeotomaOnePager() {
             </div>
             <div className="plan-footer">
               <SolidLockup />
-              <p>Neotoma</p>
             </div>
           </div>
         </footer>
