@@ -204,6 +204,10 @@ export function renderPage(input: PageInput): string {
   const toc = onPageContents(doc);
   const navHtml = navList(nav, entry);
   const title = `${entry.title} | Neotoma docs`;
+  const isPreview = process.env.SITE_PREVIEW === "1";
+  const previewNotice = [isPreview ? "Pre-release review" : "", input.previewNotice]
+    .filter(Boolean)
+    .join(" · ");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -211,7 +215,7 @@ export function renderPage(input: PageInput): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeText(title)}</title>
 <meta name="description" content="${escapeAttr(description)}">
-<meta name="robots" content="index,follow">
+<meta name="robots" content="${isPreview ? "noindex,follow" : "index,follow"}">
 <link rel="canonical" href="${escapeAttr(canonical)}">
 <link rel="alternate" type="text/markdown" href="${escapeAttr(rawUrl)}" title="Markdown source at ${escapeAttr(short)}">
 <meta property="og:type" content="article">
@@ -239,7 +243,7 @@ export function renderPage(input: PageInput): string {
 <details class="dv-mnav"><summary class="dv-mono">Documents</summary><div>${navHtml}</div></details>
 <article class="dv-sheet">
 <header class="dv-head">
-${input.previewNotice ? `<p class="dv-preview">${escapeText(input.previewNotice)}</p>` : ""}
+${previewNotice ? `<p class="dv-preview">${escapeText(previewNotice)}</p>` : ""}
 <p class="dv-kicker dv-mono">Docs · ${escapeText(entry.group)}</p>
 <h1>${escapeText(entry.title)}</h1>
 ${summary ? `<p class="dv-summary">${escapeText(summary)}</p>` : ""}

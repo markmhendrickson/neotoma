@@ -68,6 +68,14 @@ export const SEO_DEFAULTS = {
   author: "Neotoma",
 };
 
+/** The server export and browser bundle must agree on preview indexing. */
+export function isSitePreview(): boolean {
+  return (
+    import.meta.env?.VITE_SITE_PREVIEW === "1" ||
+    (typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1")
+  );
+}
+
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Neotoma: the system of record for AI agents",
@@ -2986,10 +2994,7 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
       answer: item.answer,
     }));
   }
-  const robots =
-    typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
-      ? "noindex,follow"
-      : resolvedRouteMetadata.robots;
+  const robots = isSitePreview() ? "noindex,follow" : resolvedRouteMetadata.robots;
   const ogImageUrl = resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
   const ogImageAlt =
     resolvedRouteMetadata.ogImageAlt ??

@@ -9,6 +9,7 @@ import { CodeBlock } from "@/components/InstallCodeBlock";
 import { sendCtaClick } from "@/utils/analytics";
 import { SolidLockup } from "./NeotomaLogos";
 import { AnimatedLockup } from "./AnimatedLockup";
+import { staticAssetPath } from "@/site/spa_path";
 
 import {
   DEEPER_MATERIAL,
@@ -313,7 +314,13 @@ export function NeotomaOnePager() {
                     {group.links.map((link) => (
                       <li key={link.label}>
                         {link.href ? (
-                          <a href={link.href}>{link.label}</a>
+                          <a
+                            href={
+                              link.href.startsWith("/") ? staticAssetPath(link.href) : link.href
+                            }
+                          >
+                            {link.label}
+                          </a>
                         ) : (
                           <span>{link.label}</span>
                         )}

@@ -19,6 +19,7 @@ import { ENTITY_SCHEMAS } from "../../../../src/services/schema_definitions";
 import { InterfaceExplorer } from "./InterfaceExplorer";
 import { CodeBlock } from "../InstallCodeBlock";
 import { NeotomaOnePager } from "./NeotomaOnePager";
+import { SolidLockup } from "./NeotomaLogos";
 
 vi.mock("./selected-site-identity.js", () => ({}));
 
@@ -522,6 +523,25 @@ describe("layered paper illustration motion", () => {
       unmount();
     }
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("loads the paper texture from the preview mount", () => {
+    window.history.replaceState({}, "", "/pr-950/");
+    const { container } = render(<PaperScene scene="hero" />);
+    expect(container.querySelector("svg image")?.getAttribute("href")).toBe(
+      "/pr-950/brand/october/paper-fiber.webp"
+    );
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("loads both fallback lockups from the preview mount", () => {
+    window.history.replaceState({}, "", "/pr-950/install");
+    const { container } = render(<SolidLockup />);
+    expect([...container.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual([
+      "/pr-950/brand/n2-nav-light.svg",
+      "/pr-950/brand/n2-nav-dark.svg",
+    ]);
+    window.history.replaceState({}, "", "/");
   });
 
   it("samples momentum and limited damped overshoot into a stable final pose", () => {

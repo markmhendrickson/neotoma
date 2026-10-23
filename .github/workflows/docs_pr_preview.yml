@@ -5,9 +5,16 @@ on:
     paths:
       - "docs/**"
       - "frontend/src/site/**"
+      - "frontend/src/components/**"
+      - "frontend/src/App.tsx"
+      - "frontend/src/index.css"
+      - "frontend/index.html"
+      - "vite.config.ts"
+      - ".github/workflows/docs_pr_preview.yml"
       - "frontend/public/**"
       - "public/**"
       - "scripts/build_github_pages_site.tsx"
+      - "scripts/docs_viewer/**"
 
 permissions:
   contents: read
@@ -37,6 +44,8 @@ jobs:
         run: npm run validate:routes
 
       - name: Build UI (for compiled Tailwind CSS)
+        env:
+          VITE_SITE_PREVIEW: "1"
         run: npm run build:ui
 
       - name: Install Playwright browser (Chromium)
@@ -45,6 +54,7 @@ jobs:
       - name: Build static site
         env:
           SITE_PREVIEW: "1"
+          VITE_SITE_PREVIEW: "1"
           NEOTOMA_DOCS_SHOW_INTERNAL: "false"
         run: npm run build:site:pages
 
@@ -75,6 +85,16 @@ jobs:
             -e "s|/android-chrome-192x192\.png|/pr-${PR_NUMBER}/android-chrome-192x192.png|g" \
             -e "s|/android-chrome-512x512\.png|/pr-${PR_NUMBER}/android-chrome-512x512.png|g" \
             -e "s|/site\.webmanifest|/pr-${PR_NUMBER}/site.webmanifest|g"
+
+          # Brand resources also appear in prerendered HTML and compiled CSS.
+          find site_pages -name "*.html" -o -name "*.css" | while IFS= read -r file; do
+            sed -i "s|/brand/|/pr-${PR_NUMBER}/brand/|g" "$file"
+          done
+
+          # Static docs have no hydration; prerendered app links must also work before hydration.
+          # Leave external GitHub documentation URLs and already-prefixed assets alone.
+          find site_pages -name "*.html" -print0 | xargs -0 perl -pi -e \
+            's{(href|src|srcset)="/(?!/|pr-\d+/)}{$1="/pr-$ENV{PR_NUMBER}/}g'
 
       # The preview deploy pushes to the external markmhendrickson/neotoma-dev-site
       # repo using DEV_PAGES_DEPLOY_TOKEN. When that token is missing or expired the

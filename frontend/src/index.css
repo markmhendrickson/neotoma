@@ -506,3 +506,17 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+.site-preview-label {
+  position: fixed;
+  z-index: 1000;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #a84d33;
+  border-radius: 0.25rem;
+  background: #fffbf2;
+  color: #28372f;
+  font: 600 0.7rem/1.3 ui-monospace, monospace;
+  pointer-events: none;
+}

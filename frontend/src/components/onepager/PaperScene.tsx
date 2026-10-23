@@ -1,5 +1,6 @@
 import { createContext, useContext, useId, type ReactNode } from "react";
 import { OCTOBER_RENDERS } from "./october_renders";
+import { staticAssetPath } from "@/site/spa_path";
 import "./paper_scene.css";
 
 export const VISION_SCENE_ALTS = {
@@ -867,7 +868,7 @@ export function PaperScene({ scene }: { scene: PaperSceneKind }) {
           </radialGradient>
           <pattern id={`${id}-fiber`} width="512" height="512" patternUnits="userSpaceOnUse">
             <image
-              href="/brand/october/paper-fiber.webp"
+              href={staticAssetPath("/brand/october/paper-fiber.webp")}
               width="512"
               height="512"
               preserveAspectRatio="xMidYMid slice"

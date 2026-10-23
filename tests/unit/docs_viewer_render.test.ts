@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDocsViewerIndex,
   type DocsViewerEntry,
@@ -21,6 +21,7 @@ import {
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const GH = "https://github.com/markmhendrickson/neotoma";
+afterEach(() => vi.unstubAllEnvs());
 
 const entries: DocsViewerEntry[] = [
   {
@@ -390,6 +391,17 @@ describe("docs viewer follow-up guards", () => {
 
 describe("docs viewer page chrome", () => {
   const entry = entries[1];
+  it("labels preview documents and keeps them noindex", () => {
+    vi.stubEnv("SITE_PREVIEW", "1");
+    const page = renderPage({
+      entry,
+      doc: render("# T\n\nA summary.\n"),
+      nav: entries,
+      commit: COMMIT,
+    });
+    expect(page).toContain('<meta name="robots" content="noindex,follow">');
+    expect(page).toContain("Pre-release review");
+  });
   it("uses the accepted solid logo lockup in the masthead, for light and dark", () => {
     const page = renderPage({
       entry,
