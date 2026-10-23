@@ -200,12 +200,13 @@ export function InterfaceExplorer() {
                 </p>
               )}
               <p className="plan-small">
-                These illustrative calls never run on this page. Read the store response for the
-                actual entity ID. Replace each example idempotency key with a unique key per
-                operation, then reuse that key and payload only to retry that operation. A
-                correction adds an observation; it does not edit the earlier one. The snippets store
-                fields and inspect their history, but do not upload the fictional PDF or email.
-                Observation history is distinct from date-derived timeline events.
+                The snippets are illustrative calls, never run by this page.{" "}
+                {"Read the store response for the actual entity ID."} Replace each example
+                idempotency key with a unique key per operation, then reuse that key and payload
+                only to retry that operation. A correction adds an observation; it does not edit the
+                earlier one. The snippets store fields and inspect their history, but do not upload
+                the fictional PDF or email. Observation history is distinct from date-derived
+                timeline events.
               </p>
             </>
           )}
