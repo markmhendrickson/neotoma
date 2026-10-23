@@ -10,13 +10,15 @@ This guide covers Codex on a different machine or in a sandbox that cannot run N
 
 ## Connect
 
-1. Install and configure Neotoma on the machine that will host the instance, following [`install.md`](../../install.md). Start its API with an HTTPS tunnel or use an existing HTTPS deployment. For a local instance exposed by a tunnel, the documented command is:
+1. Obtain the HTTPS base URL of a running Neotoma instance from its administrator. The instance must expose `/mcp` and support MCP OAuth. If it requires key-auth before OAuth, arrange that access with the administrator. If you are hosting the instance yourself from the published npm package, follow the [production deployment guide](../../install.md#production-deployment-headless--systemd): run the packaged `dist/actions.js` under a supervisor and put a TLS-terminating reverse proxy in front of it. The npm package cannot start this server with `neotoma api start`, and its `--tunnel` mode requires a source checkout.
+
+   For a temporary HTTPS tunnel instead, use a [Neotoma source checkout](../../install.md#developer-setup-source-checkout) with its dependencies installed and an [installed tunnel provider](tunnels.md#supported-providers). From that checkout, start the source-backed API and tunnel:
 
    ```bash
    neotoma api start --env prod --tunnel
    ```
 
-   Follow the [tunnel guide](tunnels.md) for the public HTTPS URL. Use the instance's actual URL; the MCP endpoint is `/mcp`.
+   Follow the [tunnel guide](tunnels.md) to obtain its public HTTPS URL. Use the instance's actual URL; the MCP endpoint is `/mcp`.
 
 2. On the machine running Codex, add the streamable HTTP endpoint. Substitute your own host in the command:
 
