@@ -221,8 +221,9 @@ describe("October visual variant", () => {
     const provenance = JSON.parse(readFileSync(join(brand, "PROVENANCE.json"), "utf-8")) as {
       files: Record<string, { source: string; source_sha256: string; bundled_sha256: string }>;
     };
-    const bundledFiles = readdirSync(brand)
-      .filter((file) => file !== "PROVENANCE.json")
+    const bundledFiles = readdirSync(brand, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name !== "PROVENANCE.json")
+      .map((entry) => entry.name)
       .sort();
     expect(Object.keys(provenance.files).sort()).toEqual(bundledFiles);
     for (const file of bundledFiles) {
