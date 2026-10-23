@@ -151,7 +151,7 @@ export function NeotomaOnePager() {
             </table>
           </div>
           <p className="plan-body">
-            <Link to="/compare">
+            <Link to="/compare" className="plan-compare-link">
               Compare recall, retrieval and a system of record in more detail.
             </Link>
           </p>

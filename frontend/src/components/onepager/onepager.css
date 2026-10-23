@@ -2169,6 +2169,12 @@
   gap: 1.25rem;
   margin: 3rem 0;
 }
+.plan-compare-link {
+  display: block;
+  max-width: 48ch;
+  min-height: 44px;
+  padding: 0.5rem 0;
+}
 .plan-compare-grid article {
   border-top: 2px solid var(--rust);
   background: var(--band);
