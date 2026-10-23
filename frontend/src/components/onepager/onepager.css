@@ -2286,6 +2286,9 @@
 .plan-vision-card {
   align-content: start;
 }
+.plan-vision-art {
+  margin-bottom: 1.1rem;
+}
 .plan-vision-content {
   align-self: start;
 }
