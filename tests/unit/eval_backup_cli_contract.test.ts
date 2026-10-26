@@ -93,13 +93,24 @@ describe("required backup CLI eval contract", () => {
   });
 
   it("rejects deleted live assertions, quarantine and added executable host stubs", () => {
-    expect(() =>
-      loadScenarioFile(
-        alteredScenario((value) => {
-          (value.expected as unknown[]).pop();
-        })
-      )
-    ).toThrow(/assertions/);
+    for (let index = 0; index < 7; index++) {
+      expect(() =>
+        loadScenarioFile(
+          alteredScenario((value) => {
+            (value.expected as unknown[]).splice(index, 1);
+          })
+        )
+      ).toThrow(/assertions/);
+      expect(() =>
+        loadScenarioFile(
+          alteredScenario((value) => {
+            const predicate = (value.expected as Array<Record<string, unknown>>)[index];
+            if (index === 0) predicate.value = 0;
+            else (predicate.result_subset as Record<string, unknown>).exitCode = 1;
+          })
+        )
+      ).toThrow(/assertions/);
+    }
     expect(() =>
       loadScenarioFile(
         alteredScenario((value) => {

@@ -29,16 +29,19 @@ expected:
     operation: create
     result_subset:
       exitCode: 0
+      stderr: ""
       stdoutJson: { status: complete, verified: true }
   - type: cli.result
     operation: verify
     result_subset:
       exitCode: 0
+      stderr: ""
       stdoutJson: { status: valid }
   - type: cli.result
     operation: restore
     result_subset:
       exitCode: 0
+      stderr: ""
       stdoutJson: { status: restored }
   - type: fixture.state
     result_subset:

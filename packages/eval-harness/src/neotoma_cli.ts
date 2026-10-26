@@ -22,6 +22,9 @@ const CLI = path.join(REPO, "dist/cli/bootstrap.js");
 const SEALED = path.join(REPO, "packages/eval-harness/dist/sealed_backup_eval.js");
 const MAX_OUTPUT = 64 * 1024;
 const OP_TIMEOUT_MS = 30_000;
+const MAX_STAGE_FILES = 50_000;
+const MAX_STAGE_BYTES = 512 * 1024 * 1024;
+const MAX_TARBALL_BYTES = 64 * 1024 * 1024;
 const builtins = new Set(builtinModules.map((item) => item.replace(/^node:/, "")));
 const stagedExtensions = new Set([
   ".js",
@@ -98,6 +101,38 @@ function packageName(specifier: string): string {
     ? specifier.split("/").slice(0, 2).join("/")
     : specifier.split("/")[0];
 }
+interface StageBudget {
+  files: number;
+  bytes: number;
+  deadline: number;
+}
+function chargeStage(budget: StageBudget, size: number): void {
+  budget.files++;
+  budget.bytes += size;
+  if (
+    budget.files > MAX_STAGE_FILES ||
+    budget.bytes > MAX_STAGE_BYTES ||
+    Date.now() > budget.deadline
+  )
+    throw new Error("sealed runtime staging exceeded its file, byte, or time bound");
+}
+async function removeOwnedTree(root: string, deadline: number): Promise<void> {
+  let entries = 0;
+  const walk = async (candidate: string): Promise<void> => {
+    if (++entries > MAX_STAGE_FILES + 20_000 || Date.now() > deadline)
+      throw new Error("sealed eval cleanup exceeded its entry or time bound");
+    const stat = await fs.lstat(candidate).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!stat) return;
+    if (stat.isDirectory()) {
+      for (const name of await fs.readdir(candidate)) await walk(path.join(candidate, name));
+      await fs.rmdir(candidate);
+    } else await fs.unlink(candidate);
+  };
+  await walk(root);
+}
 function noSymlinkComponents(candidate: string, stop: string): void {
   const base = path.resolve(stop);
   let current = path.resolve(candidate);
@@ -110,11 +145,17 @@ function noSymlinkComponents(candidate: string, stop: string): void {
   }
   if (fsSync.lstatSync(base).isSymbolicLink()) throw new Error("symlink at confinement root");
 }
-async function copyRegular(source: string, destination: string, root: string): Promise<void> {
+async function copyRegular(
+  source: string,
+  destination: string,
+  root: string,
+  budget?: StageBudget
+): Promise<void> {
   noSymlinkComponents(source, root);
   const stat = await fs.lstat(source);
   if (!stat.isFile() || stat.nlink !== 1)
     throw new Error("runtime source is not a unique regular file");
+  if (budget) chargeStage(budget, stat.size);
   if (
     path.basename(source).startsWith(".env") ||
     /\.(?:key|pem|p12|pfx|jwk)$/i.test(source) ||
@@ -164,9 +205,20 @@ function resolveLocalJs(from: string, specifier: string, root: string): string {
   }
   if (!fsSync.existsSync(candidate)) throw new Error(`missing compiled import ${specifier}`);
   noSymlinkComponents(candidate, candidate === migrationScript ? REPO : root);
+  if (candidate === migrationScript) {
+    const relative = "scripts/run_migrations.js";
+    const committed = execFileSync("/usr/bin/git", ["show", `HEAD:${relative}`], {
+      cwd: REPO,
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+      env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
+    });
+    if (sha(committed) !== sha(fsSync.readFileSync(candidate)))
+      throw new Error("reviewed migration runtime file differs from exact HEAD");
+  }
   return candidate;
 }
-async function stageBuiltClosure(runtime: string): Promise<Set<string>> {
+async function stageBuiltClosure(runtime: string, budget: StageBudget): Promise<Set<string>> {
   const dist = path.join(REPO, "dist");
   const queue = [CLI];
   const seen = new Set<string>();
@@ -176,7 +228,7 @@ async function stageBuiltClosure(runtime: string): Promise<Set<string>> {
     if (seen.has(file)) continue;
     seen.add(file);
     const relative = path.relative(REPO, file);
-    await copyRegular(file, path.join(runtime, relative), REPO);
+    await copyRegular(file, path.join(runtime, relative), REPO, budget);
     if (!file.endsWith(".js")) continue;
     const parsed = specsFromJs(file);
     // These two existing compiled modules contain optional command-specific
@@ -207,13 +259,33 @@ function resolveInstalledPackage(name: string, fromDir: string): string | null {
   }
   return null;
 }
-async function stagePackageClosure(runtime: string, roots: Set<string>): Promise<void> {
+async function stagePackageClosure(
+  runtime: string,
+  roots: Set<string>,
+  scratch: string,
+  budget: StageBudget
+): Promise<void> {
   const lock = JSON.parse(await fs.readFile(path.join(REPO, "package-lock.json"), "utf8")) as {
-    packages: Record<string, { version?: string }>;
+    packages: Record<string, { version?: string; integrity?: string; resolved?: string }>;
   };
+  const npmRoot = path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm");
+  const npmRequire = createRequire(path.join(npmRoot, "package.json"));
+  const cacache = npmRequire("cacache") as {
+    get: { byDigest(cache: string, integrity: string): Promise<Buffer> };
+  };
+  const pacote = npmRequire("pacote") as {
+    extract(file: string, destination: string, options: Record<string, unknown>): Promise<unknown>;
+  };
+  const npmCache =
+    process.env.NEOTOMA_EVAL_NPM_CACHE ??
+    process.env.npm_config_cache ??
+    path.join(os.homedir(), ".npm");
+  const cacheContent = path.join(npmCache, "_cacache");
   const queue = [...roots].map((name) => ({ name, from: REPO }));
   const seen = new Set<string>();
+  let tarballBytes = 0;
   while (queue.length) {
+    if (Date.now() > budget.deadline) throw new Error("runtime package staging deadline expired");
     const { name, from } = queue.pop()!;
     const dir = resolveInstalledPackage(name, from);
     if (!dir) throw new Error(`missing installed runtime dependency ${name}`);
@@ -221,19 +293,47 @@ async function stagePackageClosure(runtime: string, roots: Set<string>): Promise
     if (seen.has(key)) continue;
     seen.add(key);
     noSymlinkComponents(dir, REPO);
-    const manifestPath = path.join(dir, "package.json");
-    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as {
+    const locked = lock.packages[key];
+    if (
+      !locked?.version ||
+      !locked.integrity?.startsWith("sha512-") ||
+      !locked.resolved?.startsWith("https://registry.npmjs.org/")
+    )
+      throw new Error(`runtime dependency lacks a registry SHA512 lock entry: ${name}`);
+    const tarball = await cacache.get.byDigest(cacheContent, locked.integrity);
+    const actualIntegrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
+    tarballBytes += tarball.length;
+    if (
+      tarball.length > MAX_TARBALL_BYTES ||
+      tarballBytes > MAX_STAGE_BYTES ||
+      actualIntegrity !== locked.integrity
+    )
+      throw new Error(`locked runtime dependency cache digest or size invalid: ${name}`);
+    const archive = path.join(scratch, "archives", `${sha(key)}.tgz`);
+    const unpacked = path.join(scratch, "unpacked", key);
+    await fs.mkdir(path.dirname(archive), { recursive: true, mode: 0o700 });
+    await fs.writeFile(archive, tarball, { mode: 0o600 });
+    await pacote.extract(archive, unpacked, {
+      integrity: locked.integrity,
+      offline: true,
+      ignoreScripts: true,
+      cache: npmCache,
+    });
+    const manifest = JSON.parse(await fs.readFile(path.join(unpacked, "package.json"), "utf8")) as {
+      name?: string;
       version?: string;
       dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     };
-    if (!lock.packages[key] || lock.packages[key].version !== manifest.version)
-      throw new Error(`dependency not pinned by lockfile: ${name}`);
+    if (manifest.name !== name || manifest.version !== locked.version)
+      throw new Error(`extracted dependency identity differs from lockfile: ${name}`);
     const destinationRoot = path.join(runtime, key);
     const walk = async (sourceDir: string): Promise<void> => {
       for (const entry of await fs.readdir(sourceDir, { withFileTypes: true })) {
+        if (Date.now() > budget.deadline)
+          throw new Error("runtime package staging deadline expired");
         if (entry.name === "node_modules" || entry.name === ".git" || entry.name.startsWith(".env"))
-          continue;
+          throw new Error(`locked dependency contains forbidden runtime entry: ${name}`);
         const source = path.join(sourceDir, entry.name);
         if (entry.isSymbolicLink()) throw new Error(`dependency symlink refused: ${name}`);
         if (entry.isDirectory()) {
@@ -241,10 +341,15 @@ async function stagePackageClosure(runtime: string, roots: Set<string>): Promise
           continue;
         }
         if (!entry.isFile() || !stagedExtensions.has(path.extname(entry.name))) continue;
-        await copyRegular(source, path.join(destinationRoot, path.relative(dir, source)), REPO);
+        await copyRegular(
+          source,
+          path.join(destinationRoot, path.relative(unpacked, source)),
+          scratch,
+          budget
+        );
       }
     };
-    await walk(dir);
+    await walk(unpacked);
     for (const dependency of Object.keys(manifest.dependencies ?? {}))
       queue.push({ name: dependency, from: dir });
     for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
@@ -255,6 +360,7 @@ async function stagePackageClosure(runtime: string, roots: Set<string>): Promise
 
 interface ProcessResult {
   exitCode: number;
+  processId: string;
   stdout: string;
   stderr: string;
 }
@@ -321,7 +427,7 @@ async function runBounded(
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
       if (failure) reject(failure);
-      else resolve({ exitCode: code ?? 1, stdout, stderr });
+      else resolve({ exitCode: code ?? 1, processId: String(child.pid), stdout, stderr });
     });
   });
 }
@@ -333,6 +439,18 @@ function parsedJson(result: ProcessResult): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("sandboxed child returned non-object JSON");
   return value as Record<string, unknown>;
+}
+function freezeJson(value: unknown): void {
+  const pending: unknown[] = [value];
+  let visited = 0;
+  while (pending.length) {
+    if (++visited > MAX_OUTPUT) throw new Error("sandboxed JSON structure exceeded freeze bound");
+    const next = pending.pop();
+    if (next && typeof next === "object") {
+      pending.push(...Object.values(next));
+      Object.freeze(next);
+    }
+  }
 }
 
 interface LinuxBoundary {
@@ -387,7 +505,11 @@ async function verifyLocalDocker(base: string): Promise<LinuxBoundary> {
   return boundary;
 }
 
-async function stageLinuxLibraries(node: string, contextRoot: string): Promise<void> {
+async function stageLinuxLibraries(
+  node: string,
+  contextRoot: string,
+  budget: StageBudget
+): Promise<void> {
   const ldd = execFileSync("/usr/bin/ldd", [node], {
     encoding: "utf8",
     timeout: 10_000,
@@ -418,6 +540,7 @@ async function stageLinuxLibraries(node: string, contextRoot: string): Promise<v
     if (![/^\/lib(?:64)?\//, /^\/usr\/lib(?:64)?\//].some((rule) => rule.test(resolved)))
       throw new Error("ELF dependency escaped system library roots");
     const before = sha(await fs.readFile(resolved));
+    chargeStage(budget, (await fs.stat(resolved)).size);
     const target = path.join(contextRoot, source.slice(1));
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.copyFile(resolved, target, fsSync.constants.COPYFILE_EXCL);
@@ -438,6 +561,7 @@ export class BackupEvalSession {
   private profile: string | null = null;
   private readonly linux: LinuxBoundary | null;
   private readonly fixtureIdentity: { dev: number; ino: number };
+  private readonly deadlineAt: number;
   private readonly abortController = new AbortController();
   readonly boundaryProof: {
     fileDenied: boolean;
@@ -454,17 +578,19 @@ export class BackupEvalSession {
     fixture: string,
     runtime: string,
     runtimeHash: string,
-    linux: LinuxBoundary | null
+    linux: LinuxBoundary | null,
+    deadlineAt: number
   ) {
     this.fixture = fixture;
     this.runtime = runtime;
     this.runtimeHash = runtimeHash;
     this.linux = linux;
+    this.deadlineAt = deadlineAt;
     const stat = fsSync.lstatSync(fixture);
     this.fixtureIdentity = { dev: stat.dev, ino: stat.ino };
     this.boundaryId = randomUUID();
   }
-  static async create(): Promise<BackupEvalSession> {
+  static async create(deadlineAt = Date.now() + 240_000): Promise<BackupEvalSession> {
     const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-eval-")));
     await fs.chmod(base, 0o700);
     const fixture = path.join(base, "fixture");
@@ -476,22 +602,27 @@ export class BackupEvalSession {
     await fs.mkdir(runtime, { mode: 0o700 });
     let linux: LinuxBoundary | null = null;
     try {
+      const budget: StageBudget = { files: 0, bytes: 0, deadline: deadlineAt - 30_000 };
+      const scratch = path.join(base, "pinned-packages");
+      await fs.mkdir(scratch, { mode: 0o700 });
       const node = await fs.realpath(process.execPath);
       if (Number(process.versions.node.split(".")[0]) !== 24)
         throw new Error("restore eval requires Node 24");
       if (process.platform === "linux") linux = await verifyLocalDocker(base);
-      const packages = await stageBuiltClosure(runtime);
-      await stagePackageClosure(runtime, packages);
-      await copyRegular(SEALED, path.join(runtime, "eval/sealed_backup_eval.js"), REPO);
+      const packages = await stageBuiltClosure(runtime, budget);
+      await stagePackageClosure(runtime, packages, scratch, budget);
+      await removeOwnedTree(scratch, deadlineAt);
+      await copyRegular(SEALED, path.join(runtime, "eval/sealed_backup_eval.js"), REPO, budget);
       await fs.writeFile(
         path.join(runtime, "package.json"),
         JSON.stringify({ name: "neotoma", type: "module", version: "0.25.0" })
       );
+      chargeStage(budget, (await fs.stat(node)).size);
       await fs.copyFile(node, path.join(runtime, "node"));
       await fs.chmod(path.join(runtime, "node"), 0o555);
       if (linux) {
         const context = path.join(base, "context");
-        await stageLinuxLibraries(node, path.join(context, "rootfs"));
+        await stageLinuxLibraries(node, path.join(context, "rootfs"), budget);
         await fs.writeFile(path.join(context, "Dockerfile"), "FROM scratch\nCOPY rootfs/ /\n");
         linux.contextHash = sha(JSON.stringify(await BackupEvalSession.hashTree(context)));
         dockerOutput(
@@ -509,7 +640,13 @@ export class BackupEvalSession {
           throw new Error("local image build did not yield an image id");
       }
       const manifest = await BackupEvalSession.hashTree(runtime);
-      const session = new BackupEvalSession(fixture, runtime, sha(JSON.stringify(manifest)), linux);
+      const session = new BackupEvalSession(
+        fixture,
+        runtime,
+        sha(JSON.stringify(manifest)),
+        linux,
+        deadlineAt
+      );
       await session.initialize();
       return session;
     } catch (error) {
@@ -520,7 +657,7 @@ export class BackupEvalSession {
           /* not yet built */
         }
       }
-      await fs.rm(base, { recursive: true, force: true });
+      await removeOwnedTree(base, Date.now() + 30_000);
       throw error;
     }
   }
@@ -812,22 +949,31 @@ export class BackupEvalSession {
     profileOverride?: string,
     linuxOptions?: LinuxRunOptions
   ): Promise<ProcessResult> {
+    const remaining = this.deadlineAt - 30_000 - Date.now();
+    if (remaining <= 0) throw new Error("required restore eval aggregate deadline expired");
     await this.validateFixtureTree();
     if (sha(JSON.stringify(await BackupEvalSession.hashTree(this.runtime))) !== this.runtimeHash)
       throw new Error("staged runtime changed before child launch");
     let result: ProcessResult;
-    if (this.linux) result = await this.runDocker(entry, args, extraEnv, linuxOptions);
-    else {
-      if (!this.profile) throw new Error("no verified local OS boundary");
-      result = await runBounded(
-        "/usr/bin/sandbox-exec",
-        ["-f", profileOverride ?? this.profile, path.join(this.runtime, "node"), entry, ...args],
-        { cwd: this.fixture, env: this.childEnv(extraEnv), signal: this.abortController.signal }
-      );
-    }
-    await this.validateFixtureTree();
-    if (sha(JSON.stringify(await BackupEvalSession.hashTree(this.runtime))) !== this.runtimeHash) {
-      throw new Error("staged runtime changed after child exit");
+    try {
+      if (this.linux) result = await this.runDocker(entry, args, extraEnv, linuxOptions);
+      else {
+        if (!this.profile) throw new Error("no verified local OS boundary");
+        result = await runBounded(
+          "/usr/bin/sandbox-exec",
+          ["-f", profileOverride ?? this.profile, path.join(this.runtime, "node"), entry, ...args],
+          {
+            cwd: this.fixture,
+            env: this.childEnv(extraEnv),
+            signal: this.abortController.signal,
+            timeoutMs: Math.min(OP_TIMEOUT_MS, remaining),
+          }
+        );
+      }
+    } finally {
+      await this.validateFixtureTree();
+      if (sha(JSON.stringify(await BackupEvalSession.hashTree(this.runtime))) !== this.runtimeHash)
+        throw new Error("staged runtime changed after child exit");
     }
     return result;
   }
@@ -849,6 +995,7 @@ export class BackupEvalSession {
       boundary.host,
       "run",
       "--rm",
+      "--pull=never",
       "--name",
       container,
       "--network",
@@ -898,6 +1045,7 @@ export class BackupEvalSession {
           LC_ALL: "C",
         },
         signal: this.abortController.signal,
+        timeoutMs: Math.min(OP_TIMEOUT_MS, this.deadlineAt - 30_000 - Date.now()),
         onKill: () => {
           try {
             dockerOutput(boundary, ["rm", "-f", container]);
@@ -921,7 +1069,7 @@ export class BackupEvalSession {
       }
       if (remains) throw new Error("sandbox container cleanup failed");
     }
-    return result;
+    return { ...result, processId: container };
   }
   abort(): void {
     this.abortController.abort();
@@ -955,6 +1103,7 @@ export class BackupEvalSession {
       ];
     const result = await this.runNode(path.join(this.runtime, "dist/cli/bootstrap.js"), args);
     const stdoutJson = parsedJson(result);
+    freezeJson(stdoutJson);
     if (input.operation === "create") {
       const returned = stdoutJson.backup_dir;
       if (typeof returned !== "string" || !path.isAbsolute(returned))
@@ -983,7 +1132,8 @@ export class BackupEvalSession {
       operation: input.operation,
       argv: Object.freeze(args),
       exitCode: result.exitCode,
-      stdoutJson: Object.freeze(stdoutJson),
+      processId: result.processId,
+      stdoutJson,
       stderr: result.stderr,
       runtimeHash: this.runtimeHash,
       boundaryId: this.boundaryId,
@@ -1026,7 +1176,24 @@ export class BackupEvalSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    if (this.linux) dockerOutput(this.linux, ["image", "rm", "-f", this.linux.image]);
-    await fs.rm(path.dirname(this.fixture), { recursive: true });
+    let failure: Error | null = null;
+    if (this.linux) {
+      try {
+        dockerOutput(this.linux, ["image", "rm", "-f", this.linux.image]);
+      } catch (error) {
+        failure = new Error(`sandbox image cleanup failed: ${(error as Error).message}`);
+      }
+    }
+    try {
+      await removeOwnedTree(
+        path.dirname(this.fixture),
+        Math.max(this.deadlineAt, Date.now() + 1_000)
+      );
+    } catch (error) {
+      failure = new Error(`sandbox fixture cleanup failed: ${(error as Error).message}`);
+    }
+    if (Date.now() > this.deadlineAt)
+      failure = new Error("required restore eval cleanup exceeded aggregate deadline");
+    if (failure) throw failure;
   }
 }

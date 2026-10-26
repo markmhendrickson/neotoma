@@ -36,6 +36,14 @@ if (!allowed.has(action)) throw new Error("unknown sealed action");
 const at = (...parts: string[]) => path.join(root, ...parts);
 const hash = (bytes: Buffer) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const fileHash = async (file: string) => hash(await fs.readFile(file));
+const optionalFileHash = async (file: string): Promise<string | null> => {
+  try {
+    return await fileHash(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+};
 const rows = (dbPath: string): string[] => {
   const db = new DatabaseSync!(dbPath);
   try {
@@ -226,7 +234,9 @@ async function probe(member: "neotoma_db" | "wal"): Promise<Record<string, unkno
     caught = (error as Error).message;
   }
   const after = await Promise.all(
-    ["neotoma.db", "neotoma.db-wal", "neotoma.db-shm"].map((x) => fileHash(path.join(target, x)))
+    ["neotoma.db", "neotoma.db-wal", "neotoma.db-shm"].map((x) =>
+      optionalFileHash(path.join(target, x))
+    )
   );
   const mismatchMember = caught.includes("staged database checksum mismatch")
     ? "neotoma_db"

@@ -150,6 +150,12 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const effectiveProfile = classifyEffectiveProfile(plan.model, plan.instructionProfile);
   const cellLabel = `${plan.scenario.meta.id} | ${plan.model.provider}/${plan.model.model} | profile=${effectiveProfile} | hooks=${plan.hooksEnabled}`;
   const requiredBackup = plan.scenario.meta.id === "backup_restore_cli_safety";
+  const requiredDeadline = Date.now() + (opts.cellTimeoutMs ?? 240_000);
+  const requiredWorkMs = (): number => {
+    const remaining = requiredDeadline - 30_000 - Date.now();
+    if (remaining <= 0) throw new Error("required restore eval aggregate deadline expired");
+    return remaining;
+  };
   log(`[runner] starting cell: ${cellLabel}`);
   const requiredFailure = (message: string): CellReport => ({
     scenario: plan.scenario.meta,
@@ -244,7 +250,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       if (opts.mode !== "replay") throw new Error("restore eval is replay-only");
       // This cassette has only neotoma_cli calls. Do not start the ordinary
       // isolated HTTP server: its raw-checkout config import can read .env.
-      backupSession = await BackupEvalSession.create();
+      backupSession = await BackupEvalSession.create(requiredDeadline);
       const invocation: DriverInvocation = {
         scenario: plan.scenario,
         model: plan.model,
@@ -253,13 +259,15 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         effectiveProfile,
         mode: opts.mode,
         cassettePath: plan.cassettePath,
-        timeoutMs: opts.cellTimeoutMs ?? 240_000,
+        timeoutMs: requiredWorkMs(),
         backupEval: backupSession,
       };
-      driverResult = await runWithTimeout(driver.runOnce(invocation), invocation.timeoutMs!, () =>
+      const driverMs = requiredWorkMs();
+      driverResult = await runWithTimeout(driver.runOnce(invocation), driverMs, () =>
         backupSession?.abort()
       );
-      const effects = await runWithTimeout(backupSession.finish(), invocation.timeoutMs!, () =>
+      const effectsMs = requiredWorkMs();
+      const effects = await runWithTimeout(backupSession.finish(), effectsMs, () =>
         backupSession?.abort()
       );
       assertionFailures = await evaluateExpectations(plan.scenario.expected, {

@@ -164,7 +164,7 @@ export async function replayCassetteAgainstServer(
 ): Promise<DriverResult> {
   const start = Date.now();
   const replayedCalls: ToolCall[] = [];
-  const backupScenario = invocation.scenario.meta.id === "backup_restore_cli_safety";
+  const backupScenario = invocation.scenario?.meta.id === "backup_restore_cli_safety";
   if (backupScenario) validateBackupCassette(cassette, invocation.scenario);
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };

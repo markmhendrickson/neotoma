@@ -441,6 +441,9 @@ jobs:
     # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
     # skipped, not failed; cassette-less scenarios skip until recorded.
     runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_CACHE: ${{ runner.temp }}/neotoma-eval-npm-cache
+      NEOTOMA_EVAL_NPM_CACHE: ${{ runner.temp }}/neotoma-eval-npm-cache
     steps:
       - name: Checkout
         uses: actions/checkout@v4

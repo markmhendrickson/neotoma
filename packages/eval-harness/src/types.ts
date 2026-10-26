@@ -66,6 +66,7 @@ export interface BackupCliResult {
   operation: BackupCliInput["operation"];
   argv: readonly string[];
   exitCode: number;
+  processId: string;
   stdoutJson: unknown;
   stderr: string;
   runtimeHash: string;

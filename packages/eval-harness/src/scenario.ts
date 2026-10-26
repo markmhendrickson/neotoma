@@ -72,17 +72,21 @@ function validateRestoreScenario(o: Record<string, unknown>, file: string): void
     {
       type: "cli.result",
       operation: "create",
-      result_subset: { exitCode: 0, stdoutJson: { status: "complete", verified: true } },
+      result_subset: {
+        exitCode: 0,
+        stderr: "",
+        stdoutJson: { status: "complete", verified: true },
+      },
     },
     {
       type: "cli.result",
       operation: "verify",
-      result_subset: { exitCode: 0, stdoutJson: { status: "valid" } },
+      result_subset: { exitCode: 0, stderr: "", stdoutJson: { status: "valid" } },
     },
     {
       type: "cli.result",
       operation: "restore",
-      result_subset: { exitCode: 0, stdoutJson: { status: "restored" } },
+      result_subset: { exitCode: 0, stderr: "", stdoutJson: { status: "restored" } },
     },
     {
       type: "fixture.state",
