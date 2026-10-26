@@ -13,6 +13,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import * as yaml from "yaml";
 
 import type { ScenarioFile } from "./types.js";
@@ -64,6 +65,53 @@ function validateRestoreScenario(o: Record<string, unknown>, file: string): void
   assertField(
     Array.isArray(o.host_tools) && o.host_tools.length === 0,
     "restore eval cannot declare canned host_tools",
+    file
+  );
+  const requiredExpectations = [
+    { type: "host_tool.invocations", tool_name: "neotoma_cli", op: "eq", value: 3 },
+    {
+      type: "cli.result",
+      operation: "create",
+      result_subset: { exitCode: 0, stdoutJson: { status: "complete", verified: true } },
+    },
+    {
+      type: "cli.result",
+      operation: "verify",
+      result_subset: { exitCode: 0, stdoutJson: { status: "valid" } },
+    },
+    {
+      type: "cli.result",
+      operation: "restore",
+      result_subset: { exitCode: 0, stdoutJson: { status: "restored" } },
+    },
+    {
+      type: "fixture.state",
+      result_subset: {
+        mainRow: true,
+        walOnlyRow: true,
+        staleSidecarsAbsentBeforeOpen: true,
+        modePreserved: true,
+        unrelatedBytesPreserved: true,
+        unexpectedWrites: false,
+      },
+    },
+    ...(["neotoma_db", "wal"] as const).map((member) => ({
+      type: "causal_probe.result",
+      member,
+      result_subset: {
+        preflightCliValid: true,
+        originalIntegrity: true,
+        replacementIntegrity: true,
+        replacementDistinct: true,
+        mismatchMember: member,
+        priorTargetHashesUnchanged: true,
+        published: false,
+      },
+    })),
+  ];
+  assertField(
+    isDeepStrictEqual(o.expected, requiredExpectations),
+    "required restore eval assertions must retain every live effect and causal guard",
     file
   );
 }

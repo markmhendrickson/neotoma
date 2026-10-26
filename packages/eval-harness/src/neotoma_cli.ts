@@ -335,6 +335,98 @@ function parsedJson(result: ProcessResult): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+interface LinuxBoundary {
+  host: string;
+  image: string;
+  configDir: string;
+  contextHash: string;
+}
+interface LinuxRunOptions {
+  markerMount?: string;
+  network?: string;
+}
+
+function dockerOutput(boundary: LinuxBoundary, args: string[], timeout = 15_000): string {
+  return execFileSync("/usr/bin/docker", ["--host", boundary.host, ...args], {
+    encoding: "utf8",
+    timeout,
+    maxBuffer: MAX_OUTPUT,
+    env: {
+      HOME: boundary.configDir,
+      DOCKER_CONFIG: boundary.configDir,
+      PATH: "/usr/bin:/bin",
+      LANG: "C",
+      LC_ALL: "C",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+async function verifyLocalDocker(base: string): Promise<LinuxBoundary> {
+  const configured = process.env.DOCKER_HOST;
+  if (configured && !configured.startsWith("unix:///"))
+    throw new Error("restore eval rejects non-Unix Docker endpoints");
+  const socket = configured ? configured.slice("unix://".length) : "/var/run/docker.sock";
+  if (!(await fs.lstat(socket)).isSocket())
+    throw new Error("Docker endpoint is not a local socket");
+  const context = process.env.DOCKER_CONTEXT;
+  if (context && context !== "default")
+    throw new Error("restore eval rejects non-default Docker contexts");
+  if (!(await fs.lstat("/usr/bin/docker")).isFile())
+    throw new Error("fixed local Docker CLI is unavailable");
+  const configDir = path.join(base, "docker-config");
+  await fs.mkdir(configDir, { mode: 0o700 });
+  const boundary: LinuxBoundary = {
+    host: `unix://${socket}`,
+    image: `neotoma-eval:${randomUUID()}`,
+    configDir,
+    contextHash: "",
+  };
+  if (dockerOutput(boundary, ["info", "--format", "{{.OSType}}"]) !== "linux")
+    throw new Error("local Docker daemon is not Linux");
+  return boundary;
+}
+
+async function stageLinuxLibraries(node: string, contextRoot: string): Promise<void> {
+  const ldd = execFileSync("/usr/bin/ldd", [node], {
+    encoding: "utf8",
+    timeout: 10_000,
+    maxBuffer: MAX_OUTPUT,
+    env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
+  });
+  if (ldd.includes("not found") || ldd.includes("not a dynamic executable"))
+    throw new Error("installed Node 24 ELF library closure is incomplete");
+  const readelf = execFileSync("/usr/bin/readelf", ["-l", node], {
+    encoding: "utf8",
+    timeout: 10_000,
+    maxBuffer: MAX_OUTPUT,
+    env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
+  });
+  const interpreter = readelf.match(/Requesting program interpreter:\s*([^\]]+)\]/)?.[1];
+  if (!interpreter) throw new Error("installed Node 24 ELF interpreter unknown");
+  const paths = new Set<string>([interpreter]);
+  for (const line of ldd.split("\n")) {
+    const match = line.match(/(?:=>\s*)?(\/(?:lib|lib64|usr\/lib|usr\/lib64)\/[^\s(]+)/);
+    if (match) paths.add(match[1]);
+    else if (line.trim() && !line.includes("linux-vdso"))
+      throw new Error(`unparsed Node ELF dependency: ${line.trim().slice(0, 120)}`);
+  }
+  for (const source of paths) {
+    if (!path.isAbsolute(source) || source.includes(".."))
+      throw new Error("invalid ELF dependency path");
+    const resolved = await fs.realpath(source);
+    if (![/^\/lib(?:64)?\//, /^\/usr\/lib(?:64)?\//].some((rule) => rule.test(resolved)))
+      throw new Error("ELF dependency escaped system library roots");
+    const before = sha(await fs.readFile(resolved));
+    const target = path.join(contextRoot, source.slice(1));
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(resolved, target, fsSync.constants.COPYFILE_EXCL);
+    await fs.chmod(target, 0o555);
+    if (before !== sha(await fs.readFile(resolved)) || before !== sha(await fs.readFile(target)))
+      throw new Error("ELF dependency changed during staging");
+  }
+}
+
 export class BackupEvalSession {
   readonly fixture: string;
   readonly runtime: string;
@@ -344,6 +436,8 @@ export class BackupEvalSession {
   private calls = 0;
   private closed = false;
   private profile: string | null = null;
+  private readonly linux: LinuxBoundary | null;
+  private readonly fixtureIdentity: { dev: number; ino: number };
   private readonly abortController = new AbortController();
   readonly boundaryProof: {
     fileDenied: boolean;
@@ -356,23 +450,36 @@ export class BackupEvalSession {
     weakenedFileRead: false,
     weakenedNetworkConnect: false,
   };
-  private constructor(fixture: string, runtime: string, runtimeHash: string) {
+  private constructor(
+    fixture: string,
+    runtime: string,
+    runtimeHash: string,
+    linux: LinuxBoundary | null
+  ) {
     this.fixture = fixture;
     this.runtime = runtime;
     this.runtimeHash = runtimeHash;
+    this.linux = linux;
+    const stat = fsSync.lstatSync(fixture);
+    this.fixtureIdentity = { dev: stat.dev, ino: stat.ino };
     this.boundaryId = randomUUID();
   }
   static async create(): Promise<BackupEvalSession> {
     const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-eval-")));
     await fs.chmod(base, 0o700);
     const fixture = path.join(base, "fixture");
-    const runtime = path.join(base, "runtime");
+    const runtime =
+      process.platform === "linux"
+        ? path.join(base, "context", "rootfs", "runtime")
+        : path.join(base, "runtime");
     await fs.mkdir(fixture, { mode: 0o700 });
     await fs.mkdir(runtime, { mode: 0o700 });
+    let linux: LinuxBoundary | null = null;
     try {
-      const node = process.execPath;
+      const node = await fs.realpath(process.execPath);
       if (Number(process.versions.node.split(".")[0]) !== 24)
         throw new Error("restore eval requires Node 24");
+      if (process.platform === "linux") linux = await verifyLocalDocker(base);
       const packages = await stageBuiltClosure(runtime);
       await stagePackageClosure(runtime, packages);
       await copyRegular(SEALED, path.join(runtime, "eval/sealed_backup_eval.js"), REPO);
@@ -382,11 +489,37 @@ export class BackupEvalSession {
       );
       await fs.copyFile(node, path.join(runtime, "node"));
       await fs.chmod(path.join(runtime, "node"), 0o555);
+      if (linux) {
+        const context = path.join(base, "context");
+        await stageLinuxLibraries(node, path.join(context, "rootfs"));
+        await fs.writeFile(path.join(context, "Dockerfile"), "FROM scratch\nCOPY rootfs/ /\n");
+        linux.contextHash = sha(JSON.stringify(await BackupEvalSession.hashTree(context)));
+        dockerOutput(
+          linux,
+          ["build", "--network=none", "--pull=false", "--quiet", "-t", linux.image, context],
+          120_000
+        );
+        if (linux.contextHash !== sha(JSON.stringify(await BackupEvalSession.hashTree(context))))
+          throw new Error("Docker build context changed during local image construction");
+        if (
+          !dockerOutput(linux, ["image", "inspect", linux.image, "--format", "{{.Id}}"]).startsWith(
+            "sha256:"
+          )
+        )
+          throw new Error("local image build did not yield an image id");
+      }
       const manifest = await BackupEvalSession.hashTree(runtime);
-      const session = new BackupEvalSession(fixture, runtime, sha(JSON.stringify(manifest)));
+      const session = new BackupEvalSession(fixture, runtime, sha(JSON.stringify(manifest)), linux);
       await session.initialize();
       return session;
     } catch (error) {
+      if (linux) {
+        try {
+          dockerOutput(linux, ["image", "rm", "-f", linux.image]);
+        } catch {
+          /* not yet built */
+        }
+      }
       await fs.rm(base, { recursive: true, force: true });
       throw error;
     }
@@ -409,6 +542,13 @@ export class BackupEvalSession {
     return result;
   }
   private async validateFixtureTree(): Promise<void> {
+    const rootStat = await fs.lstat(this.fixture);
+    if (
+      !rootStat.isDirectory() ||
+      rootStat.dev !== this.fixtureIdentity.dev ||
+      rootStat.ino !== this.fixtureIdentity.ino
+    )
+      throw new Error("fixture root inode changed after child exit");
     const canonicalRoot = await fs.realpath(this.fixture);
     if (canonicalRoot !== this.fixture) throw new Error("fixture root changed after child exit");
     let entries = 0;
@@ -435,19 +575,19 @@ export class BackupEvalSession {
     await walk(this.fixture);
   }
   private childEnv(extra: Record<string, string> = {}): Record<string, string> {
-    const data = this.innerPath("source");
+    const data = this.childPath("source");
     return {
       NEOTOMA_ENV: "development",
       NODE_ENV: "test",
       NEOTOMA_REQUIRE_EXPLICIT_DATA_DIR: "1",
-      NEOTOMA_PROJECT_ROOT: this.runtime,
+      NEOTOMA_PROJECT_ROOT: this.linux ? "/runtime" : this.runtime,
       NEOTOMA_DATA_DIR: data,
-      NEOTOMA_RAW_STORAGE_DIR: this.innerPath("source/sources"),
-      NEOTOMA_LOGS_DIR: this.innerPath("source/logs"),
-      NEOTOMA_EVAL_FIXTURE_ROOT: this.fixture,
-      HOME: this.innerPath("home"),
-      XDG_CONFIG_HOME: this.innerPath("home/config"),
-      TMPDIR: this.innerPath("tmp"),
+      NEOTOMA_RAW_STORAGE_DIR: this.childPath("source/sources"),
+      NEOTOMA_LOGS_DIR: this.childPath("source/logs"),
+      NEOTOMA_EVAL_FIXTURE_ROOT: this.linux ? "/fixture" : this.fixture,
+      HOME: this.childPath("home"),
+      XDG_CONFIG_HOME: this.childPath("home/config"),
+      TMPDIR: this.childPath("tmp"),
       LANG: "C",
       LC_ALL: "C",
       PATH: "/nonexistent",
@@ -456,6 +596,9 @@ export class BackupEvalSession {
   }
   private innerPath(suffix: string): string {
     return path.join(this.fixture, suffix);
+  }
+  private childPath(suffix: string): string {
+    return this.linux ? path.posix.join("/fixture", suffix) : this.innerPath(suffix);
   }
   private async initialize(): Promise<void> {
     for (const name of ["home/config", "tmp"])
@@ -470,12 +613,11 @@ export class BackupEvalSession {
       const source = `(version 1)\n(deny default)\n(allow sysctl-read)\n(allow file-read* (literal "/"))\n${ancestors.join("\n")}\n(allow process-fork)\n(allow process-exec (literal ${escaped(path.join(this.runtime, "node"))}))\n(allow file-read* (subpath ${escaped(this.runtime)}))\n(allow file-read* (subpath "/usr/lib"))\n(allow file-read* (subpath "/System/Library"))\n(allow file-read* (literal "/dev/null"))\n(allow file-read* (subpath ${escaped(this.fixture)}))\n(allow file-write* (subpath ${escaped(this.fixture)}))\n(deny network*)\n`;
       await fs.writeFile(profile, source, { mode: 0o600 });
       this.profile = profile;
-    } else {
-      throw new Error("Linux FROM scratch Docker runtime is required and not yet staged");
-    }
+    } else if (!this.linux) throw new Error("verified local OS boundary unavailable");
     const setup = parsedJson(await this.runSealed("setup"));
     if (setup.native !== true) throw new Error("native fixture setup failed");
-    await this.verifyMacBoundaryControls();
+    if (this.linux) await this.verifyLinuxBoundaryControls();
+    else await this.verifyMacBoundaryControls();
   }
   private async verifyMacBoundaryControls(): Promise<void> {
     if (!this.profile) throw new Error("sandbox profile missing");
@@ -545,40 +687,239 @@ export class BackupEvalSession {
       } finally {
         await new Promise<void>((resolveClose) => listener.close(() => resolveClose()));
       }
+      const fileStillDenied = parsedJson(
+        await this.runSealed("read-control", { NEOTOMA_EVAL_CONTROL_MARKER: marker })
+      );
+      if (
+        fileStillDenied.read !== false ||
+        !["EPERM", "EACCES"].includes(String(fileStillDenied.code))
+      )
+        throw new Error("restrictive file policy changed after weakened control");
     } finally {
       await Promise.all(
         [marker, fileWeak, networkWeak].map((file) => fs.rm(file, { force: true }))
       );
     }
   }
+  private async verifyLinuxBoundaryControls(): Promise<void> {
+    const boundary = this.linux;
+    if (!boundary) throw new Error("Linux boundary missing");
+    const base = path.dirname(this.fixture);
+    const marker = path.join(base, "synthetic-forbidden-marker.txt");
+    const markerText = "synthetic-only-boundary-control";
+    await fs.writeFile(marker, markerText, { mode: 0o600 });
+    const network = `neotoma-eval-control-${randomUUID()}`;
+    let networkCreated = false;
+    try {
+      const deniedFile = parsedJson(
+        await this.runSealed("read-control", {
+          NEOTOMA_EVAL_CONTROL_MARKER: "/synthetic-host-marker",
+        })
+      );
+      if (deniedFile.read !== false || deniedFile.code !== "ENOENT")
+        throw new Error("container did not exclude synthetic host marker");
+      this.boundaryProof.fileDenied = true;
+      const allowedFile = parsedJson(
+        await this.runSealed(
+          "read-control",
+          { NEOTOMA_EVAL_CONTROL_MARKER: "/synthetic-host-marker" },
+          undefined,
+          { markerMount: marker }
+        )
+      );
+      if (allowedFile.read !== true || allowedFile.value !== markerText)
+        throw new Error("synthetic mount negative control did not read marker");
+      this.boundaryProof.weakenedFileRead = true;
+
+      dockerOutput(boundary, ["network", "create", "--driver", "bridge", "--internal", network]);
+      networkCreated = true;
+      const gateway = dockerOutput(boundary, [
+        "network",
+        "inspect",
+        network,
+        "--format",
+        "{{(index .IPAM.Config 0).Gateway}}",
+      ]).trim();
+      if (net.isIP(gateway) !== 4 || gateway.startsWith("127."))
+        throw new Error("controlled bridge has no numeric non-loopback gateway");
+      const listener = net.createServer((socket) => socket.end());
+      await new Promise<void>((resolveListen, rejectListen) => {
+        listener.once("error", rejectListen);
+        listener.listen(0, gateway, resolveListen);
+      });
+      try {
+        const address = listener.address();
+        if (!address || typeof address === "string")
+          throw new Error("controlled bridge listener unavailable");
+        const env = {
+          NEOTOMA_EVAL_CONTROL_HOST: gateway,
+          NEOTOMA_EVAL_CONTROL_PORT: String(address.port),
+        };
+        const denied = parsedJson(await this.runSealed("network-control", env));
+        if (
+          denied.connected !== false ||
+          !["ENETUNREACH", "EHOSTUNREACH", "EPERM", "EACCES"].includes(String(denied.code))
+        )
+          throw new Error(
+            `network-none control did not deny controlled endpoint (${String(denied.code)})`
+          );
+        this.boundaryProof.networkDenied = true;
+        const allowed = parsedJson(
+          await this.runSealed("network-control", env, undefined, { network })
+        );
+        if (allowed.connected !== true)
+          throw new Error("weakened isolated bridge control did not connect");
+        this.boundaryProof.weakenedNetworkConnect = true;
+        const stillDenied = parsedJson(await this.runSealed("network-control", env));
+        if (
+          stillDenied.connected !== false ||
+          !["ENETUNREACH", "EHOSTUNREACH", "EPERM", "EACCES"].includes(String(stillDenied.code))
+        )
+          throw new Error("network-none control changed after weakened control");
+      } finally {
+        await new Promise<void>((resolveClose) => listener.close(() => resolveClose()));
+      }
+      const fileStillDenied = parsedJson(
+        await this.runSealed("read-control", {
+          NEOTOMA_EVAL_CONTROL_MARKER: "/synthetic-host-marker",
+        })
+      );
+      if (fileStillDenied.read !== false || fileStillDenied.code !== "ENOENT")
+        throw new Error("fixture-only mount policy changed after weakened control");
+    } finally {
+      await fs.rm(marker, { force: true });
+      if (networkCreated) dockerOutput(boundary, ["network", "rm", network]);
+    }
+  }
   private async runSealed(
     action: string,
     env: Record<string, string> = {},
-    profile?: string
+    profile?: string,
+    linuxOptions?: LinuxRunOptions
   ): Promise<ProcessResult> {
     return await this.runNode(
       path.join(this.runtime, "eval/sealed_backup_eval.js"),
       [action],
       env,
-      profile
+      profile,
+      linuxOptions
     );
   }
   private async runNode(
     entry: string,
     args: string[],
     extraEnv: Record<string, string> = {},
-    profileOverride?: string
+    profileOverride?: string,
+    linuxOptions?: LinuxRunOptions
   ): Promise<ProcessResult> {
-    if (!this.profile) throw new Error("no verified local OS boundary");
-    const command = "/usr/bin/sandbox-exec";
-    const result = await runBounded(
-      command,
-      ["-f", profileOverride ?? this.profile, path.join(this.runtime, "node"), entry, ...args],
-      { cwd: this.fixture, env: this.childEnv(extraEnv), signal: this.abortController.signal }
-    );
+    await this.validateFixtureTree();
+    if (sha(JSON.stringify(await BackupEvalSession.hashTree(this.runtime))) !== this.runtimeHash)
+      throw new Error("staged runtime changed before child launch");
+    let result: ProcessResult;
+    if (this.linux) result = await this.runDocker(entry, args, extraEnv, linuxOptions);
+    else {
+      if (!this.profile) throw new Error("no verified local OS boundary");
+      result = await runBounded(
+        "/usr/bin/sandbox-exec",
+        ["-f", profileOverride ?? this.profile, path.join(this.runtime, "node"), entry, ...args],
+        { cwd: this.fixture, env: this.childEnv(extraEnv), signal: this.abortController.signal }
+      );
+    }
     await this.validateFixtureTree();
     if (sha(JSON.stringify(await BackupEvalSession.hashTree(this.runtime))) !== this.runtimeHash) {
       throw new Error("staged runtime changed after child exit");
+    }
+    return result;
+  }
+  private async runDocker(
+    entry: string,
+    args: string[],
+    extraEnv: Record<string, string>,
+    options: LinuxRunOptions = {}
+  ): Promise<ProcessResult> {
+    const boundary = this.linux;
+    if (!boundary) throw new Error("Linux boundary missing");
+    if (!entry.startsWith(this.runtime + path.sep)) throw new Error("Docker entry escaped runtime");
+    const container = `neotoma-eval-${randomUUID()}`;
+    const insideEntry = path.posix.join("/runtime", path.relative(this.runtime, entry));
+    const env = this.childEnv(extraEnv);
+    const envArgs = Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]);
+    const dockerArgs = [
+      "--host",
+      boundary.host,
+      "run",
+      "--rm",
+      "--name",
+      container,
+      "--network",
+      options.network ?? "none",
+      "--read-only",
+      "--user",
+      `${process.getuid!()}:${process.getgid!()}`,
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
+      "--pids-limit",
+      "32",
+      "--memory",
+      "512m",
+      "--cpus",
+      "1",
+      "--ulimit",
+      "nofile=128:128",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,nodev,size=33554432,mode=1777",
+      "--mount",
+      `type=bind,source=${this.fixture},target=/fixture`,
+      ...(options.markerMount
+        ? [
+            "--mount",
+            `type=bind,source=${options.markerMount},target=/synthetic-host-marker,readonly`,
+          ]
+        : []),
+      "--workdir",
+      "/fixture",
+      ...envArgs,
+      boundary.image,
+      "/runtime/node",
+      insideEntry,
+      ...args,
+    ];
+    let result: ProcessResult;
+    try {
+      result = await runBounded("/usr/bin/docker", dockerArgs, {
+        cwd: this.fixture,
+        env: {
+          HOME: boundary.configDir,
+          DOCKER_CONFIG: boundary.configDir,
+          PATH: "/usr/bin:/bin",
+          LANG: "C",
+          LC_ALL: "C",
+        },
+        signal: this.abortController.signal,
+        onKill: () => {
+          try {
+            dockerOutput(boundary, ["rm", "-f", container]);
+          } catch {
+            /* inspect below decides */
+          }
+        },
+      });
+    } finally {
+      try {
+        dockerOutput(boundary, ["rm", "-f", container]);
+      } catch {
+        /* --rm may already remove it */
+      }
+      let remains = false;
+      try {
+        dockerOutput(boundary, ["inspect", "--format", "{{.Id}}", container]);
+        remains = true;
+      } catch {
+        /* absent */
+      }
+      if (remains) throw new Error("sandbox container cleanup failed");
     }
     return result;
   }
@@ -591,19 +932,26 @@ export class BackupEvalSession {
     if (++this.calls > 3) throw new Error("restore eval CLI call cap exceeded");
     let args: string[];
     if (input.operation === "create")
-      args = ["--json", "backup", "create", "--output", this.innerPath("created_output")];
+      args = ["--json", "backup", "create", "--output", this.childPath("created_output")];
     else if (input.operation === "verify") {
       if (!this.createdBackup) throw new Error("created_backup is not bound by a live create");
-      args = ["--json", "backup", "verify", this.createdBackup];
+      args = [
+        "--json",
+        "backup",
+        "verify",
+        this.linux
+          ? this.childPath(path.relative(this.fixture, this.createdBackup))
+          : this.createdBackup,
+      ];
     } else
       args = [
         "--json",
         "backup",
         "restore",
         "--from",
-        this.innerPath("legacy_backup"),
+        this.childPath("legacy_backup"),
         "--target",
-        this.innerPath("target"),
+        this.childPath("target"),
       ];
     const result = await this.runNode(path.join(this.runtime, "dist/cli/bootstrap.js"), args);
     const stdoutJson = parsedJson(result);
@@ -611,11 +959,23 @@ export class BackupEvalSession {
       const returned = stdoutJson.backup_dir;
       if (typeof returned !== "string" || !path.isAbsolute(returned))
         throw new Error("create did not return a confined backup_dir");
-      const canonical = await fs.realpath(returned);
+      const childOutput = this.childPath("created_output");
+      if (
+        !returned.startsWith(childOutput + path.sep) ||
+        !path.resolve(returned).startsWith(childOutput + path.sep)
+      )
+        throw new Error("live backup_dir escaped the fixed output handle");
+      const hostReturned =
+        this.linux && returned.startsWith("/fixture/")
+          ? this.innerPath(returned.slice("/fixture/".length))
+          : returned;
       const output = await fs.realpath(this.innerPath("created_output"));
+      noSymlinkComponents(hostReturned, output);
+      const canonical = await fs.realpath(hostReturned);
+      if (!(await fs.lstat(canonical)).isDirectory())
+        throw new Error("live backup_dir is not a directory");
       if (!canonical.startsWith(output + path.sep))
         throw new Error("create backup_dir escaped output root");
-      noSymlinkComponents(canonical, output);
       if (this.createdBackup) throw new Error("created_backup was already bound");
       this.createdBackup = canonical;
     }
@@ -647,7 +1007,7 @@ export class BackupEvalSession {
           "--json",
           "backup",
           "verify",
-          this.innerPath(`${name}/backup`),
+          this.childPath(`${name}/backup`),
         ])
       );
       if (verified.status !== "valid") throw new Error(`causal ${member} preflight was not valid`);
@@ -666,6 +1026,7 @@ export class BackupEvalSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    if (this.linux) dockerOutput(this.linux, ["image", "rm", "-f", this.linux.image]);
     await fs.rm(path.dirname(this.fixture), { recursive: true });
   }
 }

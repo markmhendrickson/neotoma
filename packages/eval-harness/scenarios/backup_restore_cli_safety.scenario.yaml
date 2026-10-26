@@ -47,6 +47,7 @@ expected:
       staleSidecarsAbsentBeforeOpen: true
       modePreserved: true
       unrelatedBytesPreserved: true
+      unexpectedWrites: false
   - type: causal_probe.result
     member: neotoma_db
     result_subset:

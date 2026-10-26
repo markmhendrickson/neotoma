@@ -151,11 +151,22 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const cellLabel = `${plan.scenario.meta.id} | ${plan.model.provider}/${plan.model.model} | profile=${effectiveProfile} | hooks=${plan.hooksEnabled}`;
   const requiredBackup = plan.scenario.meta.id === "backup_restore_cli_safety";
   log(`[runner] starting cell: ${cellLabel}`);
+  const requiredFailure = (message: string): CellReport => ({
+    scenario: plan.scenario.meta,
+    model: plan.model,
+    effectiveProfile,
+    mode: opts.mode,
+    assertionFailures: [],
+    startedAt,
+    endedAt: new Date().toISOString(),
+    pass: false,
+    errorMessage: message,
+  });
 
   // Quarantined scenarios are skipped (not failed) so the CI scenario lane
   // stays green on a clean main while a known gap is tracked + fixed.
   if (plan.scenario.meta.quarantine) {
-    if (requiredBackup) throw new Error("required restore eval cannot be quarantined");
+    if (requiredBackup) return requiredFailure("required restore eval cannot be quarantined");
     log(`[runner] QUARANTINED: ${plan.scenario.meta.id} — ${plan.scenario.meta.quarantine}`);
     return {
       scenario: plan.scenario.meta,
@@ -174,7 +185,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const preflight = driver.preflight(opts.mode);
   if (!preflight.ok) {
     if (requiredBackup)
-      throw new Error(preflight.reason ?? "required restore eval preflight failed");
+      return requiredFailure(preflight.reason ?? "required restore eval preflight failed");
     return {
       scenario: plan.scenario.meta,
       model: plan.model,
@@ -193,7 +204,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
     const cassetteResult = readCassette(plan.cassettePath);
     if (!cassetteResult) {
       if (requiredBackup)
-        throw new Error(`required restore eval cassette missing: ${plan.cassettePath}`);
+        return requiredFailure(`required restore eval cassette missing: ${plan.cassettePath}`);
       return {
         scenario: plan.scenario.meta,
         model: plan.model,
@@ -208,7 +219,13 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         },
       };
     }
-    if (requiredBackup) validateBackupCassette(cassetteResult.cassette, plan.scenario);
+    if (requiredBackup) {
+      try {
+        validateBackupCassette(cassetteResult.cassette, plan.scenario);
+      } catch (error) {
+        return requiredFailure((error as Error).message);
+      }
+    }
     if (staleness(cassetteResult.ageDays) === "stale") {
       log(
         `[runner] WARNING: cassette ${plan.cassettePath} is ${cassetteResult.ageDays} days old; consider re-recording.`

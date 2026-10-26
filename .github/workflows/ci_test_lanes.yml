@@ -433,8 +433,9 @@ jobs:
 
   eval_scenarios:
     # eval-harness SCENARIO lane (Tier 2). Runs the agent-driving scenarios in
-    # packages/eval-harness/scenarios/ against a real in-process isolated
-    # Neotoma server in REPLAY mode (committed cassettes — no API key required).
+    # packages/eval-harness/scenarios/ in REPLAY mode (committed cassettes —
+    # no API key required). The required backup CLI scenario uses Node 24's
+    # native SQLite and a verified local Docker boundary on this Linux runner.
     # This is the CI gate for tool-behavior evals (agent calls correct / merge /
     # subscribe / …), which the hook-lifecycle agentic_evals lane cannot model.
     # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
@@ -444,16 +445,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies with npm 10
+        run: npm exec --yes --package=npm@10 -- npm ci
+
+      - name: Build exact-head server and eval executor
+        run: |
+          npm run build:server
+          npm --prefix packages/eval-harness run build
+
+      - name: Require native SQLite and local Docker socket
+        run: |
+          node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+          test -S /var/run/docker.sock
+          test "$(docker --host unix:///var/run/docker.sock info --format '{{.OSType}}')" = linux
+
+      - name: Verify sealed CLI executor and boundary failure controls
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: ./node_modules/.bin/vitest run tests/unit/eval_backup_cli_contract.test.ts tests/cli/eval_backup_cli_boundary.test.ts
 
       - name: Run eval-harness scenarios (replay)
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: npm run eval:scenarios
 
   eval_combined:

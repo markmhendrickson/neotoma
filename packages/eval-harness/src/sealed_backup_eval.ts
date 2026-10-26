@@ -28,6 +28,9 @@ const allowed = new Set([
   "probe-wal",
   "read-control",
   "network-control",
+  "env-control",
+  "sleep-control",
+  "overflow-control",
 ]);
 if (!allowed.has(action)) throw new Error("unknown sealed action");
 const at = (...parts: string[]) => path.join(root, ...parts);
@@ -244,8 +247,11 @@ async function networkControl(): Promise<Record<string, unknown>> {
   const port = Number(process.env.NEOTOMA_EVAL_CONTROL_PORT);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("fixed control port missing");
+  const host = process.env.NEOTOMA_EVAL_CONTROL_HOST ?? "127.0.0.1";
+  if (host !== "127.0.0.1" && !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host))
+    throw new Error("fixed numeric control host required");
   return await new Promise((resolve) => {
-    const socket = connect({ host: "127.0.0.1", port });
+    const socket = connect({ host, port });
     socket.once("connect", () => {
       socket.destroy();
       resolve({ connected: true });
@@ -287,6 +293,33 @@ async function main(): Promise<void> {
     case "network-control":
       result = await networkControl();
       break;
+    case "env-control":
+      result = {
+        inherited: [
+          "OPENAI_API_KEY",
+          "ANTHROPIC_API_KEY",
+          "GITHUB_TOKEN",
+          "GH_TOKEN",
+          "DOCKER_HOST",
+          "HTTP_PROXY",
+          "HTTPS_PROXY",
+          "NODE_OPTIONS",
+          "NODE_PATH",
+          "LD_PRELOAD",
+          "DYLD_INSERT_LIBRARIES",
+          "NEOTOMA_ALLOW_USER_ENV_IN_TEST",
+        ].filter((key) => Object.hasOwn(process.env, key)),
+        syntheticFixture: process.env.NEOTOMA_EVAL_FIXTURE_ROOT === root,
+      };
+      break;
+    case "sleep-control":
+      await fs.writeFile(at("sleep-started"), "synthetic-only");
+      await new Promise((resolveSleep) => setTimeout(resolveSleep, 10_000));
+      result = { completed: true };
+      break;
+    case "overflow-control":
+      process.stdout.write("X".repeat(128 * 1024));
+      return;
     default:
       throw new Error("unknown sealed action");
   }
