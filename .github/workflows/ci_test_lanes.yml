@@ -441,12 +441,18 @@ jobs:
     # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
     # skipped, not failed; cassette-less scenarios skip until recorded.
     runs-on: ubuntu-latest
-    env:
-      NPM_CONFIG_CACHE: ${{ runner.temp }}/neotoma-eval-npm-cache
-      NEOTOMA_EVAL_NPM_CACHE: ${{ runner.temp }}/neotoma-eval-npm-cache
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set isolated npm cache for subsequent steps
+        run: |
+          test -n "$RUNNER_TEMP"
+          test -n "$GITHUB_ENV"
+          cache_dir="$RUNNER_TEMP/neotoma-eval-npm-cache"
+          mkdir -p "$cache_dir"
+          chmod 700 "$cache_dir"
+          printf 'NPM_CONFIG_CACHE=%s\nNEOTOMA_EVAL_NPM_CACHE=%s\n' "$cache_dir" "$cache_dir" >> "$GITHUB_ENV"
 
       - name: Setup Node 24
         uses: actions/setup-node@v4
