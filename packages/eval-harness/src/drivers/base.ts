@@ -10,6 +10,7 @@
 import { readCassette, type CassetteFile } from "../cassette.js";
 import { createHostToolRegistry, type HostToolRegistry } from "../host_tools.js";
 import type { DriverInvocation, DriverResult, ToolCall } from "../types.js";
+import { parseBackupCliInput, validateBackupCassette } from "../neotoma_cli.js";
 
 /**
  * Map MCP tool name → HTTP endpoint we POST to on the isolated server.
@@ -163,9 +164,17 @@ export async function replayCassetteAgainstServer(
 ): Promise<DriverResult> {
   const start = Date.now();
   const replayedCalls: ToolCall[] = [];
+  const backupScenario = invocation.scenario.meta.id === "backup_restore_cli_safety";
+  if (backupScenario) validateBackupCassette(cassette, invocation.scenario);
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };
-    if (NEOTOMA_TOOL_NAMES.has(call.name)) {
+    if (backupScenario) {
+      if (!invocation.backupEval || call.name !== "neotoma_cli")
+        throw new Error("restore eval executable capability missing");
+      // Input validation occurs again immediately before the effect. The
+      // returned JSON is produced by the child, never by the cassette.
+      result = { output: await invocation.backupEval.runCli(parseBackupCliInput(call.input)) };
+    } else if (NEOTOMA_TOOL_NAMES.has(call.name)) {
       result = await postNeotomaTool(
         invocation.neotomaBaseUrl,
         call.name,
@@ -179,8 +188,8 @@ export async function replayCassetteAgainstServer(
     replayedCalls.push({
       name: call.name,
       input: call.input,
-      output: result.output ?? call.output,
-      error: result.error ?? call.error,
+      output: backupScenario ? result.output : (result.output ?? call.output),
+      error: backupScenario ? result.error : (result.error ?? call.error),
       sequence: replayedCalls.length,
     });
   }

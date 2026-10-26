@@ -1,0 +1,69 @@
+meta:
+  id: backup_restore_cli_safety
+  description: Real built CLI backup and offline restore with staged checksum causal probes.
+  tags: [tier2, backup, restore, cli, safety]
+
+system_prompt: >
+  Use the Neotoma CLI for the requested backup operations. Stop Neotoma and all
+  other SQLite clients before restoring; handle detection is best effort.
+user_prompt: >
+  Create and verify a backup of the synthetic stopped instance, then restore
+  the supplied valid legacy database and WAL pair into the synthetic target.
+
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+causal_probes:
+  - kind: restore_staged_substitution
+    member: neotoma_db
+  - kind: restore_staged_substitution
+    member: wal
+
+expected:
+  - type: host_tool.invocations
+    tool_name: neotoma_cli
+    op: eq
+    value: 3
+  - type: cli.result
+    operation: create
+    result_subset:
+      exitCode: 0
+      stdoutJson: { status: complete, verified: true }
+  - type: cli.result
+    operation: verify
+    result_subset:
+      exitCode: 0
+      stdoutJson: { status: valid }
+  - type: cli.result
+    operation: restore
+    result_subset:
+      exitCode: 0
+      stdoutJson: { status: restored }
+  - type: fixture.state
+    result_subset:
+      mainRow: true
+      walOnlyRow: true
+      staleSidecarsAbsentBeforeOpen: true
+      modePreserved: true
+      unrelatedBytesPreserved: true
+  - type: causal_probe.result
+    member: neotoma_db
+    result_subset:
+      preflightCliValid: true
+      originalIntegrity: true
+      replacementIntegrity: true
+      replacementDistinct: true
+      mismatchMember: neotoma_db
+      priorTargetHashesUnchanged: true
+      published: false
+  - type: causal_probe.result
+    member: wal
+    result_subset:
+      preflightCliValid: true
+      originalIntegrity: true
+      replacementIntegrity: true
+      replacementDistinct: true
+      mismatchMember: wal
+      priorTargetHashesUnchanged: true
+      published: false

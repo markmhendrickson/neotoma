@@ -13,6 +13,9 @@ import type {
   ExpectedAssertion,
   InstructionProfile,
   ToolCall,
+  BackupCliResult,
+  BackupCausalProbeResult,
+  BackupFixtureState,
 } from "./types.js";
 import type { HostToolInvocation, HostToolRegistry } from "./host_tools.js";
 import { existsSync, readdirSync, statSync } from "node:fs";
@@ -40,6 +43,10 @@ export interface AssertionContext {
    * independent of any database row.
    */
   dataDir?: string;
+  /** Immutable results of the required, sandboxed restore evaluation. */
+  liveCliResults?: readonly BackupCliResult[];
+  causalProbeResults?: readonly BackupCausalProbeResult[];
+  fixtureState?: Readonly<BackupFixtureState>;
 }
 
 interface EntitiesQueryResponse {
@@ -170,7 +177,7 @@ function countStoreStructuredCalls(stats: Record<string, unknown> | null): numbe
   if (entitiesByType && typeof entitiesByType === "object") {
     const total = Object.values(entitiesByType).reduce(
       (acc, v) => acc + (typeof v === "number" ? v : 0),
-      0,
+      0
     );
     return total > 0 ? 1 : 0;
   }
@@ -204,7 +211,6 @@ function countHostToolInvocations(
   if (!toolName) return invocations.length;
   return invocations.filter((i) => i.name === toolName).length;
 }
-
 
 /** Raw-storage subdirectories under NEOTOMA_DATA_DIR (see config.rawStorageDir). */
 const RAW_STORAGE_SUBDIRS = ["sources", "sources_prod"];
@@ -271,7 +277,10 @@ function toolCallsNamed(calls: ToolCall[], name: string | undefined): ToolCall[]
 }
 
 /** Pick one tool call by `which` (default last). */
-function pickToolCall(calls: ToolCall[], which: "first" | "last" | number | undefined): ToolCall | undefined {
+function pickToolCall(
+  calls: ToolCall[],
+  which: "first" | "last" | number | undefined
+): ToolCall | undefined {
   if (calls.length === 0) return undefined;
   if (which === "first") return calls[0];
   if (typeof which === "number") return calls[which];
@@ -342,11 +351,12 @@ export async function evaluatePredicate(
       };
     }
     case "entity.exists": {
-      const types = predicate.entity_type_any_of && predicate.entity_type_any_of.length > 0
-        ? predicate.entity_type_any_of
-        : predicate.entity_type
-          ? [predicate.entity_type]
-          : [undefined as unknown as string];
+      const types =
+        predicate.entity_type_any_of && predicate.entity_type_any_of.length > 0
+          ? predicate.entity_type_any_of
+          : predicate.entity_type
+            ? [predicate.entity_type]
+            : [undefined as unknown as string];
       const lists = await Promise.all(types.map((t) => fetchEntities(ctx, t, predicate.where)));
       const all = lists.flat();
       const matches = all.filter((e) => whereMatches(e, predicate.where));
@@ -395,15 +405,17 @@ export async function evaluatePredicate(
       };
     }
     case "relationship.exists": {
-      const types = predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
-        ? predicate.relationship_type_any_of
-        : predicate.relationship_type
-          ? [predicate.relationship_type]
-          : [];
+      const types =
+        predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
+          ? predicate.relationship_type_any_of
+          : predicate.relationship_type
+            ? [predicate.relationship_type]
+            : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
       const rels = lists.flat();
       if (rels.length > 0) return null;
-      const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      const label =
+        types.length > 1 ? `any of ${JSON.stringify(types)}` : (types[0] ?? "(unspecified)");
       return {
         predicate,
         message: `Expected at least one ${label} relationship, got 0.`,
@@ -452,16 +464,49 @@ export async function evaluatePredicate(
     case "host_tool.invocations": {
       const expected = typeof predicate.value === "number" ? predicate.value : 0;
       const op = predicate.op ?? "eq";
-      const actual = countHostToolInvocations(
-        ctx.hostToolRegistry.invocations,
-        predicate.tool_name
-      );
+      const actual =
+        predicate.tool_name === "neotoma_cli"
+          ? (ctx.toolCalls ?? []).filter((call) => call.name === "neotoma_cli").length
+          : countHostToolInvocations(ctx.hostToolRegistry.invocations, predicate.tool_name);
       if (compareNumber(actual, op, expected)) return null;
       return {
         predicate,
         message: `Expected host_tool[${predicate.tool_name ?? "*"}] invocations ${op} ${expected}, got ${actual}.`,
         expected: { op, value: expected, tool_name: predicate.tool_name },
         actual,
+      };
+    }
+    case "cli.result": {
+      const actual = ctx.liveCliResults?.find((result) => result.operation === predicate.operation);
+      if (actual && predicate.result_subset && isSubset(actual, predicate.result_subset))
+        return null;
+      return {
+        predicate,
+        message: `cli.result ${predicate.operation ?? "(missing operation)"} did not match live result`,
+        expected: predicate.result_subset,
+        actual: actual ?? null,
+      };
+    }
+    case "fixture.state": {
+      const actual = ctx.fixtureState;
+      if (actual && predicate.result_subset && isSubset(actual, predicate.result_subset))
+        return null;
+      return {
+        predicate,
+        message: "fixture.state did not match sealed live probe",
+        expected: predicate.result_subset,
+        actual: actual ?? null,
+      };
+    }
+    case "causal_probe.result": {
+      const actual = ctx.causalProbeResults?.find((result) => result.member === predicate.member);
+      if (actual && predicate.result_subset && isSubset(actual, predicate.result_subset))
+        return null;
+      return {
+        predicate,
+        message: `causal_probe.result ${predicate.member ?? "(missing member)"} did not match sealed live probe`,
+        expected: predicate.result_subset,
+        actual: actual ?? null,
       };
     }
     case "reply_text.contains": {
@@ -476,7 +521,8 @@ export async function evaluatePredicate(
           actual: text.slice(0, 200),
         };
       }
-      const needle = predicate.substring ?? (typeof predicate.value === "string" ? predicate.value : "");
+      const needle =
+        predicate.substring ?? (typeof predicate.value === "string" ? predicate.value : "");
       if (!needle) {
         return {
           predicate,
@@ -494,17 +540,19 @@ export async function evaluatePredicate(
       };
     }
     case "relationship.count": {
-      const types = predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
-        ? predicate.relationship_type_any_of
-        : predicate.relationship_type
-          ? [predicate.relationship_type]
-          : [];
+      const types =
+        predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
+          ? predicate.relationship_type_any_of
+          : predicate.relationship_type
+            ? [predicate.relationship_type]
+            : [];
       const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
       const rels = lists.flat();
       const expected = typeof predicate.value === "number" ? predicate.value : 0;
       const op = predicate.op ?? "eq";
       if (compareNumber(rels.length, op, expected)) return null;
-      const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      const label =
+        types.length > 1 ? `any of ${JSON.stringify(types)}` : (types[0] ?? "(unspecified)");
       return {
         predicate,
         message: `Expected relationship.count of "${label}" ${op} ${expected}, got ${rels.length}.`,
@@ -528,7 +576,12 @@ export async function evaluatePredicate(
         message: `Expected mcp_tool[${predicate.tool_name ?? "*"}]${
           predicate.arg_subset ? ` with args ⊇ ${JSON.stringify(predicate.arg_subset)}` : ""
         } invocations ${op} ${expected}, got ${actual}.`,
-        expected: { op, value: expected, tool_name: predicate.tool_name, arg_subset: predicate.arg_subset },
+        expected: {
+          op,
+          value: expected,
+          tool_name: predicate.tool_name,
+          arg_subset: predicate.arg_subset,
+        },
         actual: calls.map((c) => ({ name: c.name, input: c.input })),
       };
     }
@@ -539,8 +592,7 @@ export async function evaluatePredicate(
         // Distinguish "tool never called" from "called, but `which` index is
         // out of range" — the latter is a scenario-authoring bug with a
         // concrete fix (docs/subsystems/errors.md — actionable hints).
-        const outOfRange =
-          typeof predicate.which === "number" && calls.length > 0;
+        const outOfRange = typeof predicate.which === "number" && calls.length > 0;
         const message = outOfRange
           ? `tool_result.matches: "${predicate.tool_name ?? "(any)"}" was invoked ${calls.length} time(s), but which=${predicate.which} is out of range (valid 0..${calls.length - 1}).`
           : `tool_result.matches: no invocation of "${predicate.tool_name ?? "(any)"}" was captured.`;
@@ -639,8 +691,8 @@ export async function evaluatePredicate(
           actual: null,
         };
       }
-      const present = RAW_STORAGE_SUBDIRS.map((d) => join(ctx.dataDir as string, d)).filter(
-        (d) => existsSync(d)
+      const present = RAW_STORAGE_SUBDIRS.map((d) => join(ctx.dataDir as string, d)).filter((d) =>
+        existsSync(d)
       );
       // A directory that was never created holds zero files; that is the
       // correct reading for a run that wrote nothing to raw storage.
@@ -664,7 +716,12 @@ export async function evaluatePredicate(
           actual: null,
         };
       }
-      const snap = await fetchSnapshot(ctx, predicate.entity_id, predicate.entity_type, predicate.where);
+      const snap = await fetchSnapshot(
+        ctx,
+        predicate.entity_id,
+        predicate.entity_type,
+        predicate.where
+      );
       if (!snap) {
         return {
           predicate,
