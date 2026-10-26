@@ -4,6 +4,7 @@ This is an unreleased candidate supplement. It does not describe behavior shippe
 
 ## Highlights
 
+- **Healthy Node 24 backups verify again.** `neotoma backup create` reads PRAGMA rows through the native `node:sqlite` driver, so a healthy backup exits successfully with `verified: true`. A genuine non-`ok` result remains `INTEGRITY_FAILED`; an empty, malformed, or otherwise unreadable result is `VERIFY_INSTRUMENT_FAILURE` without false corruption guidance.
 - **Restore the backup you selected, not stale target state.** `neotoma backup restore` publishes a verified self-contained database and removes the target's old WAL and SHM sidecars.
 - **Keep the previous target recoverable when publication fails.** Caught filesystem failures trigger an attempted rollback of the prior database, sidecars, and referenced directories; a rollback failure reports the retained recovery location.
 - **Preserve unrelated target content.** Source and log directories are overlaid without replacing unrelated files or accepting symlink aliases that overlap the backup and target.
@@ -43,7 +44,7 @@ No plugin, hook, or SDK surface changed.
 
 ## Security hardening
 
-No security-sensitive surfaces touched.
+This change hardens a local, security-sensitive filesystem operation: restore checks canonical backup/target separation and symlink containment, preserves restrictive existing database modes, stages and verifies selected inputs before publication, removes stale target sidecars, and attempts rollback after caught publication failures. The `lsof` subprocess is only a best-effort active-handle check; restore still requires every client to be stopped. The rollback protocol is not crash-wide atomicity. Independent security review remains required before this unreleased candidate is published.
 
 ## Docs site & CI / tooling
 
@@ -55,12 +56,13 @@ No security-sensitive surfaces touched.
 
 ## Fixes
 
+- Fixed healthy Node 24 backups being reported as unverifiable under the native `node:sqlite` driver (issue #2207); successful JSON output now reports `verified: true`, while verification-instrument and genuine-integrity failures remain distinct.
 - Fixed restore success reopening with rows from a stale target WAL instead of the selected backup.
 - Fixed later member-copy failures leaving the previous database replaced without an attempted rollback.
 
 ## Tests and validation
 
-- Focused backup/restore and recovery-hint suites cover current snapshots, legacy database/WAL materialization, stale target sidecars, invalid preflight inputs, containment and symlink aliases, unrelated nested content, caught publication rollback, and rollback-failure recovery material on both supported SQLite drivers.
+- Focused backup/restore and recovery-hint suites cover healthy Node 24 `verified: true`, the `INTEGRITY_FAILED` / `VERIFY_INSTRUMENT_FAILURE` taxonomy, current snapshots, legacy database/WAL materialization, stale target sidecars, invalid preflight inputs, containment and symlink aliases, unrelated nested content, caught publication rollback, and rollback-failure recovery material on both supported SQLite drivers.
 
 ## Breaking changes
 

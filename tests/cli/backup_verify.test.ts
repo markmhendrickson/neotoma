@@ -421,6 +421,153 @@ describe("CLI backup verify (smoke)", () => {
     }
   );
 
+  it.each([
+    ["empty", []],
+    ["malformed", [{ wrong_column: "ok" }]],
+    ["throw", new Error("SENSITIVE_STAGED_VERIFY_FAILURE")],
+  ])(
+    "preserves a staged %s verification instrument failure in restore JSON",
+    async (_kind, stagedResult) => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-staged-instrument-");
+      const backupDir = path.join(parent, "backup");
+      const target = path.join(parent, "target");
+      await fs.mkdir(backupDir);
+      await fs.mkdir(target);
+      await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backupDir, "neotoma.db"));
+      await fs.writeFile(
+        path.join(backupDir, "manifest.json"),
+        JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+      );
+      const targetDb = path.join(target, "neotoma.db");
+      await fs.writeFile(targetDb, "previous-target-database");
+      const before = await fs.readFile(targetDb);
+      const pragma = vi
+        .spyOn(AsyncSqliteDatabase.prototype, "pragma")
+        .mockResolvedValueOnce([{ integrity_check: "ok" }]);
+      if (stagedResult instanceof Error) pragma.mockRejectedValueOnce(stagedResult);
+      else pragma.mockResolvedValueOnce(stagedResult);
+      try {
+        const run = await runNeotomaCli(
+          ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+          {}
+        );
+        expect(run.exitCode, run.stderr + run.stdout).toBe(1);
+        const envelope = JSON.parse(run.stderr) as {
+          error: string;
+          hint?: { code?: string; failure_kind?: string };
+        };
+        expect(envelope.hint).toEqual({
+          code: "VERIFY_INSTRUMENT_FAILURE",
+          failure_kind: "verify_instrument_failure",
+        });
+        expect(run.stderr).not.toContain("SQLite may be corrupted");
+        expect(run.stderr).not.toContain("recover-db");
+        expect(run.stderr).not.toContain("SENSITIVE_STAGED_VERIFY_FAILURE");
+        expect(await fs.readFile(targetDb)).toEqual(before);
+      } finally {
+        pragma.mockRestore();
+      }
+    }
+  );
+
+  it("preserves staged corruption taxonomy and guidance before target publication", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-staged-corruption-");
+    const backupDir = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(backupDir);
+    await fs.mkdir(target);
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backupDir, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+    );
+    const targetDb = path.join(target, "neotoma.db");
+    await fs.writeFile(targetDb, "previous-target-database");
+    const before = await fs.readFile(targetDb);
+    const pragma = vi
+      .spyOn(AsyncSqliteDatabase.prototype, "pragma")
+      .mockResolvedValueOnce([{ integrity_check: "ok" }])
+      .mockRejectedValueOnce(
+        Object.assign(new Error("SENSITIVE_STAGED_CORRUPTION"), { code: "SQLITE_CORRUPT" })
+      );
+    try {
+      const run = await runNeotomaCli(
+        ["--json", "backup", "restore", "--from", backupDir, "--target", target],
+        {}
+      );
+      expect(run.exitCode, run.stderr + run.stdout).toBe(1);
+      const envelope = JSON.parse(run.stderr) as {
+        error: string;
+        hint?: { code?: string; failure_kind?: string; message?: string };
+      };
+      expect(envelope.hint).toMatchObject({
+        code: "INTEGRITY_FAILED",
+        failure_kind: "integrity_failed",
+      });
+      expect(envelope.hint?.message).toContain("recover-db");
+      expect(run.stderr).not.toContain("SENSITIVE_STAGED_CORRUPTION");
+      expect(await fs.readFile(targetDb)).toEqual(before);
+    } finally {
+      pragma.mockRestore();
+    }
+  });
+
+  it("rejects a valid database substituted after checksum preflight", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-staged-checksum-");
+    const backupDir = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(backupDir);
+    await fs.mkdir(target);
+    const sourcePath = path.join(backupDir, "neotoma.db");
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), sourcePath);
+    const expected =
+      "sha256:" +
+      createHash("sha256")
+        .update(await fs.readFile(sourcePath))
+        .digest("hex");
+    const manifest = {
+      contents: { neotoma_db: "neotoma.db" },
+      checksums: { "neotoma.db": expected },
+    };
+    await fs.writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(manifest));
+    const preflight = await runNeotomaCli(["--json", "backup", "verify", backupDir], {});
+    expect(preflight.exitCode, preflight.stderr + preflight.stdout).toBe(0);
+
+    const replacementPath = path.join(parent, "replacement.db");
+    const replacement = createFixtureSqliteDatabase(replacementPath);
+    replacement.exec(
+      "create table replacement(value text); insert into replacement values ('other');"
+    );
+    replacement.close();
+    await fs.copyFile(replacementPath, sourcePath);
+
+    const targetDb = path.join(target, "neotoma.db");
+    await fs.writeFile(targetDb, "previous-target-database");
+    const before = await fs.readFile(targetDb);
+    await expect(
+      restoreBackupIntoTarget(backupDir, target, {
+        manifest,
+        contents: manifest.contents,
+        paths: { neotoma_db: sourcePath },
+        issues: [],
+      })
+    ).rejects.toThrow("staged database checksum mismatch");
+    expect(await fs.readFile(targetDb)).toEqual(before);
+  });
+
+  it("documents the mandatory offline restore precondition in command help", async () => {
+    const help = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli/bootstrap.ts", "backup", "restore", "--help"],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+    expect(help.status, help.stderr + help.stdout).toBe(0);
+    const text = help.stdout.replace(/\s+/g, " ");
+    expect(text).toContain("Stop Neotoma and every SQLite client");
+    expect(text).toContain("best-effort lsof");
+    expect(text).toContain("does not make online restore safe");
+  });
+
   it.each(["sources", "logs"] as const)(
     "rejects a %s symlink at the input root before certifying a backup",
     async (directory) => {

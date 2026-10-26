@@ -11474,6 +11474,37 @@ async function inspectBackupDirectory(dir: string): Promise<BackupInspection> {
   return result;
 }
 
+async function verifyStagedBackupMemberChecksum(
+  inspection: BackupInspection,
+  key: "neotoma_db" | "wal",
+  stagedPath: string
+): Promise<void> {
+  const member = inspection.contents[key];
+  const rawChecksums = inspection.manifest?.checksums;
+  if (
+    !member ||
+    !rawChecksums ||
+    typeof rawChecksums !== "object" ||
+    Array.isArray(rawChecksums) ||
+    !Object.hasOwn(rawChecksums, member)
+  ) {
+    return;
+  }
+  const expected = (rawChecksums as Record<string, unknown>)[member];
+  if (typeof expected !== "string") {
+    throw new Error(`Backup restore refused: staged ${key} checksum is invalid.`);
+  }
+  const actual =
+    "sha256:" +
+    createHash("sha256")
+      .update(await fs.readFile(stagedPath))
+      .digest("hex");
+  if (actual !== expected) {
+    const label = key === "neotoma_db" ? "database" : "WAL";
+    throw new Error(`Backup restore refused: staged ${label} checksum mismatch.`);
+  }
+}
+
 function backupIntegrityError(
   databasePath: string,
   integrity: BackupIntegrityVerification
@@ -11947,8 +11978,10 @@ export async function restoreBackupIntoTarget(
     const stagedDb = path.join(stageDir, "input.db");
     const stagedSnapshot = path.join(stageDir, "snapshot.db");
     await fs.copyFile(inspection.paths.neotoma_db, stagedDb);
+    await verifyStagedBackupMemberChecksum(inspection, "neotoma_db", stagedDb);
     if (inspection.contents.wal) {
       await fs.copyFile(inspection.paths.wal, `${stagedDb}-wal`);
+      await verifyStagedBackupMemberChecksum(inspection, "wal", `${stagedDb}-wal`);
       let db: AsyncSqliteDatabase | null = null;
       try {
         db = new AsyncSqliteDatabase(stagedDb, { existing: true, readOnly: false });
@@ -12109,7 +12142,10 @@ export async function restoreBackupIntoTarget(
 
 backupCommand
   .command("restore")
-  .description("Restore a backup into the data directory")
+  .description(
+    "Restore a backup into the data directory. Stop Neotoma and every SQLite client " +
+      "that can access the target first; best-effort lsof detection does not make online restore safe."
+  )
   .requiredOption("--from <dir>", "Backup directory to restore from")
   .option("--target <dir>", "Target data directory (default: NEOTOMA_DATA_DIR or ./data)")
   .action(async (opts: { from: string; target?: string }) => {
@@ -12153,8 +12189,12 @@ backupCommand
     try {
       await restoreBackupIntoTarget(opts.from, targetDir, inspection);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Backup restore failed.";
-      writeCliError(message, { suppressRecoveryHint: true });
+      if (error instanceof CliHintError) {
+        writeCliError(error);
+      } else {
+        const message = error instanceof Error ? error.message : "Backup restore failed.";
+        writeCliError(message, { suppressRecoveryHint: true });
+      }
       process.exitCode = 1;
       return;
     }
