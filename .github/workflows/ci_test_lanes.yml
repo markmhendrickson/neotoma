@@ -493,6 +493,8 @@ jobs:
     # key (WRIT degrades to a substring judge; OPENAI_API_KEY/WRIT_JUDGE_API_KEY
     # gives higher-fidelity llm_judge scoring). The runner fails closed if a
     # requested WRIT run errors (neotoma#1738/#1739).
+    # Tier 2 includes the required native backup CLI cell, so this job needs
+    # the same Node 24 build, pinned cache, and local Docker boundary as eval_scenarios.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (with writ submodule)
@@ -500,24 +502,46 @@ jobs:
         # NOT submodules:recursive — other submodules (e.g. foundation) use SSH
         # URLs that fail in CI. writ is public HTTPS, so init ONLY it explicitly.
 
-      - name: Setup Node
+      - name: Set isolated npm cache for subsequent steps
+        run: |
+          test -n "$RUNNER_TEMP"
+          test -n "$GITHUB_ENV"
+          cache_dir="$RUNNER_TEMP/neotoma-eval-npm-cache"
+          mkdir -p "$cache_dir"
+          chmod 700 "$cache_dir"
+          printf 'NPM_CONFIG_CACHE=%s\nNEOTOMA_EVAL_NPM_CACHE=%s\n' "$cache_dir" "$cache_dir" >> "$GITHUB_ENV"
+
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Init writ submodule (public HTTPS)
         run: git submodule update --init writ
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies with npm 10
+        run: npm exec --yes --package=npm@10 -- npm ci
+
+      - name: Build exact-head server and eval executor
+        run: |
+          npm run build:server
+          npm --prefix packages/eval-harness run build
 
       - name: Build writ (eval-combined imports writ/dist)
         run: |
-          npm ci --prefix writ
+          npm exec --yes --package=npm@10 -- npm ci --prefix writ
           npm run build --prefix writ
 
+      - name: Require native SQLite and local Docker socket
+        run: |
+          node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+          test -S /var/run/docker.sock
+          test "$(docker --host unix:///var/run/docker.sock info --format '{{.OSType}}')" = linux
+
       - name: Run combined WRIT + Tier-2 matrix
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: npm run eval:combined
 
   python_sdk:

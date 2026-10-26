@@ -5,10 +5,12 @@ import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   BackupEvalSession,
   extractLockedArchive,
+  normalizeContainerPayload,
+  prepareBackupEvalLayout,
 } from "../../packages/eval-harness/src/neotoma_cli.js";
 
 type FixedControl = {
@@ -25,6 +27,54 @@ const tar = npmRequire("tar") as {
 };
 afterEach(async () => {
   for (const session of sessions.splice(0)) await session.close();
+});
+
+it("prepares every Linux image ancestor and makes the vetted payload readable by a nonroot UID", async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-linux-layout-control-"));
+  await fs.chmod(base, 0o700);
+  try {
+    const { fixture, runtime } = await prepareBackupEvalLayout(base, "linux");
+    expect(runtime).toBe(path.join(base, "context", "rootfs", "runtime"));
+    expect((await fs.stat(fixture)).mode & 0o777).toBe(0o700);
+    for (const directory of [
+      path.join(base, "context"),
+      path.join(base, "context", "rootfs"),
+      runtime,
+    ]) {
+      expect((await fs.stat(directory)).mode & 0o777).toBe(0o755);
+    }
+    const nested = path.join(runtime, "node_modules", "locked");
+    await fs.mkdir(nested, { recursive: true, mode: 0o700 });
+    await fs.chmod(nested, 0o700);
+    const data = path.join(nested, "package.json");
+    const executable = path.join(runtime, "node");
+    await fs.writeFile(data, "{}", { mode: 0o600 });
+    await fs.writeFile(executable, "synthetic", { mode: 0o700 });
+    await fs.chmod(data, 0o600);
+    await fs.chmod(executable, 0o700);
+    await normalizeContainerPayload(path.join(base, "context", "rootfs"), {
+      files: 0,
+      bytes: 0,
+      unpackEntries: 0,
+      unpackBytes: 0,
+      deadline: Date.now() + 5_000,
+    });
+    expect((await fs.stat(nested)).mode & 0o777).toBe(0o755);
+    expect((await fs.stat(data)).mode & 0o777).toBe(0o444);
+    expect((await fs.stat(executable)).mode & 0o777).toBe(0o555);
+    await fs.symlink(data, path.join(runtime, "unvetted-link"));
+    await expect(
+      normalizeContainerPayload(path.join(base, "context", "rootfs"), {
+        files: 0,
+        bytes: 0,
+        unpackEntries: 0,
+        unpackBytes: 0,
+        deadline: Date.now() + 5_000,
+      })
+    ).rejects.toThrow(/symlink refused/);
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
 });
 
 it("bounds tar expansion and entry count while extracting a locked archive child", async () => {
@@ -172,6 +222,12 @@ it.skipIf(!hasNativeNode24)(
 it.skipIf(hasNativeNode24)(
   "fails closed before staging when native Node 24 is absent",
   async () => {
-    await expect(BackupEvalSession.create()).rejects.toThrow(/requires Node 24/);
+    const creation = vi.spyOn(fs, "mkdtemp");
+    try {
+      await expect(BackupEvalSession.create()).rejects.toThrow(/requires Node 24/);
+      expect(creation).not.toHaveBeenCalled();
+    } finally {
+      creation.mockRestore();
+    }
   }
 );

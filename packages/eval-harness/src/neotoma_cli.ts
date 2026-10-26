@@ -249,6 +249,53 @@ async function removeOwnedTree(root: string, deadline: number): Promise<void> {
   };
   await walk(root);
 }
+
+/** Prepare the owned fixture and image tree before any child can see them. */
+export async function prepareBackupEvalLayout(
+  base: string,
+  platform: NodeJS.Platform
+): Promise<{ fixture: string; runtime: string }> {
+  if (platform !== "darwin" && platform !== "linux")
+    throw new Error("verified local OS boundary unavailable");
+  const fixture = path.join(base, "fixture");
+  await fs.mkdir(fixture, { mode: 0o700 });
+  if (platform === "darwin") {
+    const runtime = path.join(base, "runtime");
+    await fs.mkdir(runtime, { mode: 0o700 });
+    return { fixture, runtime };
+  }
+  const context = path.join(base, "context");
+  const rootfs = path.join(context, "rootfs");
+  const runtime = path.join(rootfs, "runtime");
+  for (const directory of [context, rootfs, runtime]) {
+    await fs.mkdir(directory, { mode: 0o755 });
+    await fs.chmod(directory, 0o755);
+  }
+  return { fixture, runtime };
+}
+
+/** Docker COPY makes files root-owned; normalize the vetted tree for a nonroot child. */
+export async function normalizeContainerPayload(root: string, budget: StageBudget): Promise<void> {
+  const pending = [root];
+  let entries = 0;
+  let bytes = 0;
+  while (pending.length) {
+    checkStageDeadline(budget);
+    if (++entries > MAX_STAGE_FILES + 20_000)
+      throw new Error("container payload entry bound exceeded");
+    const candidate = pending.pop()!;
+    const stat = await fs.lstat(candidate);
+    if (stat.isSymbolicLink()) throw new Error("container payload symlink refused");
+    if (stat.isDirectory()) {
+      await fs.chmod(candidate, 0o755);
+      for (const name of await fs.readdir(candidate)) pending.push(path.join(candidate, name));
+    } else if (stat.isFile() && stat.nlink === 1) {
+      bytes += stat.size;
+      if (bytes > MAX_STAGE_BYTES) throw new Error("container payload byte bound exceeded");
+      await fs.chmod(candidate, stat.mode & 0o111 ? 0o555 : 0o444);
+    } else throw new Error("container payload special or linked file refused");
+  }
+}
 function noSymlinkComponents(candidate: string, stop: string): void {
   const base = path.resolve(stop);
   let current = path.resolve(candidate);
@@ -765,17 +812,17 @@ export class BackupEvalSession {
     deadlineAt = Date.now() + 240_000,
     signal?: AbortSignal
   ): Promise<BackupEvalSession> {
-    const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-eval-")));
-    await fs.chmod(base, 0o700);
-    const fixture = path.join(base, "fixture");
-    const runtime =
-      process.platform === "linux"
-        ? path.join(base, "context", "rootfs", "runtime")
-        : path.join(base, "runtime");
-    await fs.mkdir(fixture, { mode: 0o700 });
-    await fs.mkdir(runtime, { mode: 0o700 });
+    if (Number(process.versions.node.split(".")[0]) !== 24)
+      throw new Error("restore eval requires Node 24");
+    if (process.platform !== "darwin" && process.platform !== "linux")
+      throw new Error("verified local OS boundary unavailable");
+    const ownedBase = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-eval-"));
+    let base = ownedBase;
     let linux: LinuxBoundary | null = null;
     try {
+      base = await fs.realpath(ownedBase);
+      await fs.chmod(base, 0o700);
+      const { fixture, runtime } = await prepareBackupEvalLayout(base, process.platform);
       const budget: StageBudget = {
         files: 0,
         bytes: 0,
@@ -786,8 +833,6 @@ export class BackupEvalSession {
       const scratch = path.join(base, "pinned-packages");
       await fs.mkdir(scratch, { mode: 0o700 });
       const node = await fs.realpath(process.execPath);
-      if (Number(process.versions.node.split(".")[0]) !== 24)
-        throw new Error("restore eval requires Node 24");
       if (process.platform === "linux") linux = await verifyLocalDocker(base);
       const packages = await stageBuiltClosure(runtime, budget, signal);
       await stagePackageClosure(runtime, packages, scratch, budget, signal);
@@ -806,6 +851,7 @@ export class BackupEvalSession {
       if (linux) {
         const context = path.join(base, "context");
         await stageLinuxLibraries(node, path.join(context, "rootfs"), budget);
+        await normalizeContainerPayload(path.join(context, "rootfs"), budget);
         await fs.writeFile(path.join(context, "Dockerfile"), "FROM scratch\nCOPY rootfs/ /\n");
         linux.contextHash = sha(
           JSON.stringify(await BackupEvalSession.hashTree(context, budget.deadline))
