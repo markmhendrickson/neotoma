@@ -250,7 +250,12 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       if (opts.mode !== "replay") throw new Error("restore eval is replay-only");
       // This cassette has only neotoma_cli calls. Do not start the ordinary
       // isolated HTTP server: its raw-checkout config import can read .env.
-      backupSession = await BackupEvalSession.create(requiredDeadline);
+      const stageAbort = new AbortController();
+      backupSession = await runWithTimeout(
+        BackupEvalSession.create(requiredDeadline, stageAbort.signal),
+        requiredWorkMs(),
+        () => stageAbort.abort()
+      );
       const invocation: DriverInvocation = {
         scenario: plan.scenario,
         model: plan.model,

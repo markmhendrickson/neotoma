@@ -8,6 +8,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createWriteStream } from "node:fs";
+import { Transform, type Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import ts from "typescript";
 import type {
   BackupCliInput,
@@ -104,7 +107,15 @@ function packageName(specifier: string): string {
 interface StageBudget {
   files: number;
   bytes: number;
+  unpackEntries: number;
+  unpackBytes: number;
   deadline: number;
+}
+function checkStageDeadline(budget: StageBudget): void {
+  if (Date.now() > budget.deadline) throw new Error("sealed runtime staging deadline expired");
+}
+function checkStageAbort(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("sealed runtime staging aborted");
 }
 function chargeStage(budget: StageBudget, size: number): void {
   budget.files++;
@@ -115,6 +126,111 @@ function chargeStage(budget: StageBudget, size: number): void {
     Date.now() > budget.deadline
   )
     throw new Error("sealed runtime staging exceeded its file, byte, or time bound");
+}
+// This fixed worker never receives a shell command or a host path from a cassette.
+// It verifies decompressed size before unpacking and limits entries as unpacking runs.
+const LOCKED_ARCHIVE_WORKER = String.raw`
+const fs = require("node:fs");
+const zlib = require("node:zlib");
+const { Writable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
+const [archive, destination, byteLimitText, entryLimitText, tarModule] = process.argv.slice(1);
+const byteLimit = Number(byteLimitText);
+const entryLimit = Number(entryLimitText);
+if (!Number.isSafeInteger(byteLimit) || byteLimit < 1 ||
+    !Number.isSafeInteger(entryLimit) || entryLimit < 1)
+  throw new Error("invalid locked archive extraction limits");
+const tar = require(tarModule);
+let expandedBytes = 0;
+let entries = 0;
+let archiveRoot = null;
+const unpackOptions = {
+  cwd: destination,
+  strip: 1,
+  strict: true,
+  preservePaths: false,
+  noMtime: true,
+  noChmod: true,
+  filter(name, entry) {
+    entries++;
+    if (entries > entryLimit)
+      throw new Error("locked archive entry limit exceeded");
+    const parts = typeof name === "string" ? name.split("/").filter((part, index, all) =>
+      part !== "" || index !== all.length - 1) : [];
+    if (typeof name !== "string" || name.includes("\\") || name.includes(String.fromCharCode(0)) ||
+        name.startsWith("/") || parts.length === 0 ||
+        parts.some(part => part === "" || part === "." || part === "..") ||
+        (parts.length === 1 && entry.type !== "Directory") ||
+        (archiveRoot !== null && archiveRoot !== parts[0]) ||
+        !["File", "OldFile", "Directory"].includes(entry.type) ||
+        !Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > byteLimit)
+      throw new Error("locked archive contains an unsafe entry: " +
+        String(entry.type) + " " + JSON.stringify(name).slice(0, 120));
+    archiveRoot = parts[0];
+    return true;
+  },
+};
+pipeline(
+  fs.createReadStream(archive),
+  zlib.createGunzip(),
+  new Writable({
+    write(chunk, _encoding, callback) {
+      expandedBytes += chunk.length;
+      if (expandedBytes > byteLimit)
+        callback(new Error("locked archive expanded byte limit exceeded"));
+      else callback();
+    },
+  })
+)
+  .then(() => tar.x({ ...unpackOptions, file: archive }))
+  .then(() => process.stdout.write(JSON.stringify({ expandedBytes, entries })))
+  .catch(error => { console.error(error.message); process.exitCode = 1; });
+`;
+
+/** Internal bounded extractor. The worker is killed and reaped before any caller cleanup. */
+export async function extractLockedArchive(
+  archive: string,
+  destination: string,
+  tarModule: string,
+  limits: { bytes: number; entries: number; deadline: number },
+  signal?: AbortSignal
+): Promise<{ expandedBytes: number; entries: number }> {
+  const remaining = limits.deadline - Date.now();
+  if (remaining <= 0) throw new Error("locked archive extraction deadline expired");
+  await fs.mkdir(destination, { recursive: true, mode: 0o700 });
+  const result = await runBounded(
+    process.execPath,
+    [
+      "--max-old-space-size=128",
+      "-e",
+      LOCKED_ARCHIVE_WORKER,
+      archive,
+      destination,
+      String(limits.bytes),
+      String(limits.entries),
+      tarModule,
+    ],
+    {
+      cwd: destination,
+      env: { HOME: destination, TMPDIR: destination, PATH: "/nonexistent", LANG: "C", LC_ALL: "C" },
+      timeoutMs: remaining,
+      signal,
+    }
+  );
+  if (result.exitCode !== 0)
+    throw new Error(`locked archive extraction failed: ${result.stderr.slice(0, 300)}`);
+  const measurement: unknown = JSON.parse(result.stdout);
+  if (!measurement || typeof measurement !== "object")
+    throw new Error("locked archive extraction omitted its measurement");
+  const { expandedBytes, entries } = measurement as Record<string, unknown>;
+  if (
+    !Number.isSafeInteger(expandedBytes) ||
+    !Number.isSafeInteger(entries) ||
+    (expandedBytes as number) > limits.bytes ||
+    (entries as number) > limits.entries
+  )
+    throw new Error("locked archive extraction exceeded its reported limits");
+  return { expandedBytes: expandedBytes as number, entries: entries as number };
 }
 async function removeOwnedTree(root: string, deadline: number): Promise<void> {
   let entries = 0;
@@ -165,9 +281,14 @@ async function copyRegular(
   await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.copyFile(source, destination, fsSync.constants.COPYFILE_EXCL);
   await fs.chmod(destination, stat.mode & 0o555);
+  if (budget) checkStageDeadline(budget);
 }
-function specsFromJs(file: string): { specs: string[]; dynamic: boolean } {
+function specsFromJs(file: string, budget: StageBudget): { specs: string[]; dynamic: boolean } {
+  checkStageDeadline(budget);
+  if (fsSync.statSync(file).size > MAX_STAGE_BYTES - budget.bytes)
+    throw new Error("compiled runtime source exceeded staging byte bound");
   const source = fsSync.readFileSync(file, "utf8");
+  checkStageDeadline(budget);
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const specs: string[] = [];
   let dynamic = false;
@@ -218,19 +339,25 @@ function resolveLocalJs(from: string, specifier: string, root: string): string {
   }
   return candidate;
 }
-async function stageBuiltClosure(runtime: string, budget: StageBudget): Promise<Set<string>> {
+async function stageBuiltClosure(
+  runtime: string,
+  budget: StageBudget,
+  signal?: AbortSignal
+): Promise<Set<string>> {
   const dist = path.join(REPO, "dist");
   const queue = [CLI];
   const seen = new Set<string>();
   const packages = new Set<string>();
   while (queue.length) {
+    checkStageDeadline(budget);
+    checkStageAbort(signal);
     const file = queue.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
     const relative = path.relative(REPO, file);
     await copyRegular(file, path.join(runtime, relative), REPO, budget);
     if (!file.endsWith(".js")) continue;
-    const parsed = specsFromJs(file);
+    const parsed = specsFromJs(file, budget);
     // These two existing compiled modules contain optional command-specific
     // dynamic imports; neither is reached by fixed backup operations.
     if (
@@ -263,19 +390,23 @@ async function stagePackageClosure(
   runtime: string,
   roots: Set<string>,
   scratch: string,
-  budget: StageBudget
+  budget: StageBudget,
+  signal?: AbortSignal
 ): Promise<void> {
-  const lock = JSON.parse(await fs.readFile(path.join(REPO, "package-lock.json"), "utf8")) as {
+  checkStageDeadline(budget);
+  const lockPath = path.join(REPO, "package-lock.json");
+  if ((await fs.stat(lockPath)).size > 32 * 1024 * 1024)
+    throw new Error("runtime lockfile exceeded staging read bound");
+  const lock = JSON.parse(await fs.readFile(lockPath, { encoding: "utf8", signal })) as {
     packages: Record<string, { version?: string; integrity?: string; resolved?: string }>;
   };
+  checkStageDeadline(budget);
   const npmRoot = path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm");
   const npmRequire = createRequire(path.join(npmRoot, "package.json"));
   const cacache = npmRequire("cacache") as {
-    get: { byDigest(cache: string, integrity: string): Promise<Buffer> };
+    get: { stream: { byDigest(cache: string, integrity: string): Readable } };
   };
-  const pacote = npmRequire("pacote") as {
-    extract(file: string, destination: string, options: Record<string, unknown>): Promise<unknown>;
-  };
+  const tarModule = npmRequire.resolve("tar");
   const npmCache =
     process.env.NEOTOMA_EVAL_NPM_CACHE ??
     process.env.npm_config_cache ??
@@ -285,7 +416,8 @@ async function stagePackageClosure(
   const seen = new Set<string>();
   let tarballBytes = 0;
   while (queue.length) {
-    if (Date.now() > budget.deadline) throw new Error("runtime package staging deadline expired");
+    checkStageDeadline(budget);
+    checkStageAbort(signal);
     const { name, from } = queue.pop()!;
     const dir = resolveInstalledPackage(name, from);
     if (!dir) throw new Error(`missing installed runtime dependency ${name}`);
@@ -300,26 +432,61 @@ async function stagePackageClosure(
       !locked.resolved?.startsWith("https://registry.npmjs.org/")
     )
       throw new Error(`runtime dependency lacks a registry SHA512 lock entry: ${name}`);
-    const tarball = await cacache.get.byDigest(cacheContent, locked.integrity);
-    const actualIntegrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
-    tarballBytes += tarball.length;
-    if (
-      tarball.length > MAX_TARBALL_BYTES ||
-      tarballBytes > MAX_STAGE_BYTES ||
-      actualIntegrity !== locked.integrity
-    )
-      throw new Error(`locked runtime dependency cache digest or size invalid: ${name}`);
     const archive = path.join(scratch, "archives", `${sha(key)}.tgz`);
     const unpacked = path.join(scratch, "unpacked", key);
     await fs.mkdir(path.dirname(archive), { recursive: true, mode: 0o700 });
-    await fs.writeFile(archive, tarball, { mode: 0o600 });
-    await pacote.extract(archive, unpacked, {
-      integrity: locked.integrity,
-      offline: true,
-      ignoreScripts: true,
-      cache: npmCache,
-    });
-    const manifest = JSON.parse(await fs.readFile(path.join(unpacked, "package.json"), "utf8")) as {
+    const compressedLimit = Math.min(MAX_TARBALL_BYTES, MAX_STAGE_BYTES - tarballBytes);
+    if (compressedLimit <= 0) throw new Error("locked runtime archive budget exhausted");
+    const archiveHash = createHash("sha512");
+    let archiveBytes = 0;
+    const cacheAbort = new AbortController();
+    const onAbort = (): void => cacheAbort.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    const cacheTimer = setTimeout(onAbort, Math.max(1, budget.deadline - Date.now()));
+    try {
+      await pipeline(
+        cacache.get.stream.byDigest(cacheContent, locked.integrity),
+        new Transform({
+          transform(bytes: Buffer, _encoding, callback) {
+            archiveBytes += bytes.length;
+            if (archiveBytes > compressedLimit)
+              callback(new Error("locked runtime archive compressed byte limit exceeded"));
+            else {
+              archiveHash.update(bytes);
+              callback(null, bytes);
+            }
+          },
+        }),
+        createWriteStream(archive, { flags: "wx", mode: 0o600 }),
+        { signal: cacheAbort.signal }
+      );
+    } finally {
+      clearTimeout(cacheTimer);
+      signal?.removeEventListener("abort", onAbort);
+    }
+    checkStageDeadline(budget);
+    tarballBytes += archiveBytes;
+    if (`sha512-${archiveHash.digest("base64")}` !== locked.integrity)
+      throw new Error(`locked runtime dependency cache digest invalid: ${name}`);
+    const extracted = await extractLockedArchive(
+      archive,
+      unpacked,
+      tarModule,
+      {
+        bytes: MAX_STAGE_BYTES - budget.unpackBytes,
+        entries: MAX_STAGE_FILES - budget.unpackEntries,
+        deadline: budget.deadline,
+      },
+      signal
+    );
+    budget.unpackBytes += extracted.expandedBytes;
+    budget.unpackEntries += extracted.entries;
+    const manifestPath = path.join(unpacked, "package.json");
+    const manifestStat = await fs.lstat(manifestPath);
+    if (!manifestStat.isFile() || manifestStat.nlink !== 1 || manifestStat.size > 1024 * 1024)
+      throw new Error(`locked dependency manifest has unsafe type or size: ${name}`);
+    const manifest = JSON.parse(await fs.readFile(manifestPath, { encoding: "utf8", signal })) as {
       name?: string;
       version?: string;
       dependencies?: Record<string, string>;
@@ -327,11 +494,14 @@ async function stagePackageClosure(
     };
     if (manifest.name !== name || manifest.version !== locked.version)
       throw new Error(`extracted dependency identity differs from lockfile: ${name}`);
+    checkStageDeadline(budget);
     const destinationRoot = path.join(runtime, key);
     const walk = async (sourceDir: string): Promise<void> => {
+      checkStageDeadline(budget);
+      checkStageAbort(signal);
       for (const entry of await fs.readdir(sourceDir, { withFileTypes: true })) {
-        if (Date.now() > budget.deadline)
-          throw new Error("runtime package staging deadline expired");
+        checkStageDeadline(budget);
+        checkStageAbort(signal);
         if (entry.name === "node_modules" || entry.name === ".git" || entry.name.startsWith(".env"))
           throw new Error(`locked dependency contains forbidden runtime entry: ${name}`);
         const source = path.join(sourceDir, entry.name);
@@ -350,6 +520,7 @@ async function stagePackageClosure(
       }
     };
     await walk(unpacked);
+    checkStageDeadline(budget);
     for (const dependency of Object.keys(manifest.dependencies ?? {}))
       queue.push({ name: dependency, from: dir });
     for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
@@ -590,7 +761,10 @@ export class BackupEvalSession {
     this.fixtureIdentity = { dev: stat.dev, ino: stat.ino };
     this.boundaryId = randomUUID();
   }
-  static async create(deadlineAt = Date.now() + 240_000): Promise<BackupEvalSession> {
+  static async create(
+    deadlineAt = Date.now() + 240_000,
+    signal?: AbortSignal
+  ): Promise<BackupEvalSession> {
     const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-eval-")));
     await fs.chmod(base, 0o700);
     const fixture = path.join(base, "fixture");
@@ -602,16 +776,24 @@ export class BackupEvalSession {
     await fs.mkdir(runtime, { mode: 0o700 });
     let linux: LinuxBoundary | null = null;
     try {
-      const budget: StageBudget = { files: 0, bytes: 0, deadline: deadlineAt - 30_000 };
+      const budget: StageBudget = {
+        files: 0,
+        bytes: 0,
+        unpackEntries: 0,
+        unpackBytes: 0,
+        deadline: deadlineAt - 30_000,
+      };
       const scratch = path.join(base, "pinned-packages");
       await fs.mkdir(scratch, { mode: 0o700 });
       const node = await fs.realpath(process.execPath);
       if (Number(process.versions.node.split(".")[0]) !== 24)
         throw new Error("restore eval requires Node 24");
       if (process.platform === "linux") linux = await verifyLocalDocker(base);
-      const packages = await stageBuiltClosure(runtime, budget);
-      await stagePackageClosure(runtime, packages, scratch, budget);
+      const packages = await stageBuiltClosure(runtime, budget, signal);
+      await stagePackageClosure(runtime, packages, scratch, budget, signal);
+      checkStageAbort(signal);
       await removeOwnedTree(scratch, deadlineAt);
+      checkStageAbort(signal);
       await copyRegular(SEALED, path.join(runtime, "eval/sealed_backup_eval.js"), REPO, budget);
       await fs.writeFile(
         path.join(runtime, "package.json"),
@@ -620,17 +802,23 @@ export class BackupEvalSession {
       chargeStage(budget, (await fs.stat(node)).size);
       await fs.copyFile(node, path.join(runtime, "node"));
       await fs.chmod(path.join(runtime, "node"), 0o555);
+      checkStageAbort(signal);
       if (linux) {
         const context = path.join(base, "context");
         await stageLinuxLibraries(node, path.join(context, "rootfs"), budget);
         await fs.writeFile(path.join(context, "Dockerfile"), "FROM scratch\nCOPY rootfs/ /\n");
-        linux.contextHash = sha(JSON.stringify(await BackupEvalSession.hashTree(context)));
+        linux.contextHash = sha(
+          JSON.stringify(await BackupEvalSession.hashTree(context, budget.deadline))
+        );
         dockerOutput(
           linux,
           ["build", "--network=none", "--pull=false", "--quiet", "-t", linux.image, context],
-          120_000
+          Math.max(1, Math.min(120_000, budget.deadline - Date.now()))
         );
-        if (linux.contextHash !== sha(JSON.stringify(await BackupEvalSession.hashTree(context))))
+        if (
+          linux.contextHash !==
+          sha(JSON.stringify(await BackupEvalSession.hashTree(context, budget.deadline)))
+        )
           throw new Error("Docker build context changed during local image construction");
         if (
           !dockerOutput(linux, ["image", "inspect", linux.image, "--format", "{{.Id}}"]).startsWith(
@@ -638,8 +826,9 @@ export class BackupEvalSession {
           )
         )
           throw new Error("local image build did not yield an image id");
+        checkStageAbort(signal);
       }
-      const manifest = await BackupEvalSession.hashTree(runtime);
+      const manifest = await BackupEvalSession.hashTree(runtime, budget.deadline);
       const session = new BackupEvalSession(
         fixture,
         runtime,
@@ -648,6 +837,7 @@ export class BackupEvalSession {
         deadlineAt
       );
       await session.initialize();
+      checkStageAbort(signal);
       return session;
     } catch (error) {
       if (linux) {
@@ -657,22 +847,31 @@ export class BackupEvalSession {
           /* not yet built */
         }
       }
-      await removeOwnedTree(base, Date.now() + 30_000);
+      await removeOwnedTree(base, Math.min(deadlineAt, Date.now() + 30_000));
       throw error;
     }
   }
-  private static async hashTree(root: string): Promise<Array<[string, string]>> {
+  private static async hashTree(
+    root: string,
+    deadline = Date.now() + OP_TIMEOUT_MS
+  ): Promise<Array<[string, string]>> {
     const result: Array<[string, string]> = [];
     const walk = async (dir: string): Promise<void> => {
+      if (Date.now() > deadline) throw new Error("runtime hash traversal deadline expired");
       for (const entry of (await fs.readdir(dir, { withFileTypes: true })).sort((a, b) =>
         a.name.localeCompare(b.name)
       )) {
+        if (Date.now() > deadline || result.length > MAX_STAGE_FILES)
+          throw new Error("runtime hash traversal exceeded its entry or time bound");
         const file = path.join(dir, entry.name);
         if (entry.isSymbolicLink()) throw new Error("runtime symlink detected");
         if (entry.isDirectory()) await walk(file);
-        else if (entry.isFile())
+        else if (entry.isFile()) {
+          if ((await fs.stat(file)).size > MAX_STAGE_BYTES)
+            throw new Error("runtime hash traversal file exceeded staging byte bound");
           result.push([path.relative(root, file), sha(await fs.readFile(file))]);
-        else throw new Error("runtime special file detected");
+          if (Date.now() > deadline) throw new Error("runtime hash traversal deadline expired");
+        } else throw new Error("runtime special file detected");
       }
     };
     await walk(root);
