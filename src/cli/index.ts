@@ -12148,6 +12148,18 @@ backupCommand
   )
   .requiredOption("--from <dir>", "Backup directory to restore from")
   .option("--target <dir>", "Target data directory (default: NEOTOMA_DATA_DIR or ./data)")
+  .addHelpText(
+    "after",
+    "\nRecovery after failure:\n" +
+      "  On a caught publication failure, restore attempts to put the previous\n" +
+      "  target back. If rollback also fails, leave every SQLite client stopped,\n" +
+      "  keep the backup, and inspect the target and the reported previous-target\n" +
+      "  recovery directory before restarting. That directory retains prior\n" +
+      "  members still needing manual recovery; the error names its path.\n" +
+      "  Restore is not crash-wide atomic. After any interrupted restore, inspect\n" +
+      "  the target and any sibling .<target-name>-restore-* work directory before\n" +
+      "  restarting clients.\n"
+  )
   .action(async (opts: { from: string; target?: string }) => {
     const outputMode = resolveOutputMode();
     let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;

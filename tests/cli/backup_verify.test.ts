@@ -555,10 +555,10 @@ describe("CLI backup verify (smoke)", () => {
     expect(await fs.readFile(targetDb)).toEqual(before);
   });
 
-  it("documents the mandatory offline restore precondition in command help", async () => {
+  it("documents offline restore and failed-publication recovery in compiled command help", async () => {
     const help = spawnSync(
       process.execPath,
-      ["--import", "tsx", "src/cli/bootstrap.ts", "backup", "restore", "--help"],
+      ["dist/cli/bootstrap.js", "backup", "restore", "--help"],
       { cwd: process.cwd(), encoding: "utf8" }
     );
     expect(help.status, help.stderr + help.stdout).toBe(0);
@@ -566,6 +566,10 @@ describe("CLI backup verify (smoke)", () => {
     expect(text).toContain("Stop Neotoma and every SQLite client");
     expect(text).toContain("best-effort lsof");
     expect(text).toContain("does not make online restore safe");
+    expect(text).toContain("rollback");
+    expect(text).toContain("previous-target recovery directory");
+    expect(text).toContain("not crash-wide atomic");
+    expect(text).toContain("interrupted restore");
   });
 
   it.each(["sources", "logs"] as const)(
