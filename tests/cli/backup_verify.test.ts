@@ -22,6 +22,7 @@ type FixtureSqliteDatabase = {
 };
 
 const nodeRequire = createRequire(import.meta.url);
+const hasLsof = spawnSync("lsof", ["-v"], { stdio: "ignore" }).error === undefined;
 
 function activeSqliteDriverName(): "node:sqlite" | "better-sqlite3" {
   try {
@@ -607,6 +608,31 @@ describe("CLI backup verify (smoke)", () => {
     expect(await fs.readFile(path.join(target, "unrelated.txt"), "utf8")).toBe("retain");
   });
 
+  it("preserves a restrictive existing target database mode", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-target-mode-");
+    const backup = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(backup);
+    await fs.mkdir(target);
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ db_snapshot_method: "vacuum_into", contents: { neotoma_db: "neotoma.db" } })
+    );
+    const targetDb = path.join(target, "neotoma.db");
+    const previousDb = createFixtureSqliteDatabase(targetDb);
+    previousDb.exec("create table private_state (value text)");
+    previousDb.close();
+    await fs.chmod(targetDb, 0o600);
+
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backup, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(0);
+    expect((await fs.stat(targetDb)).mode & 0o777).toBe(0o600);
+  });
+
   it("rejects a target hidden inside the backup by a parent symlink", async () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-target-alias-");
     const backup = path.join(parent, "backup");
@@ -630,6 +656,44 @@ describe("CLI backup verify (smoke)", () => {
     });
   });
 
+  it.skipIf(!hasLsof)(
+    "refuses publication while a SQLite client holds the target open",
+    async () => {
+      const { parent, dataDir } = await createBackupInput("neotoma-backup-active-target-");
+      const backup = path.join(parent, "backup");
+      const target = path.join(parent, "target");
+      await fs.mkdir(backup);
+      await fs.mkdir(target);
+      await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+      await fs.writeFile(
+        path.join(backup, "manifest.json"),
+        JSON.stringify({
+          db_snapshot_method: "vacuum_into",
+          contents: { neotoma_db: "neotoma.db" },
+        })
+      );
+      const targetDb = path.join(target, "neotoma.db");
+      const openClient = createFixtureSqliteDatabase(targetDb);
+      openClient.exec("create table previous_state (value text)");
+      openClient.exec("insert into previous_state values ('still-open')");
+      const previousBytes = await fs.readFile(targetDb);
+      try {
+        const restored = await runNeotomaCli(
+          ["--json", "backup", "restore", "--from", backup, "--target", target],
+          {}
+        );
+        expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+        expect(restored.stderr).toContain(
+          "target database is in use; stop Neotoma and every SQLite client first"
+        );
+        expect(restored.stdout).not.toContain('"status":"restored"');
+        expect(await fs.readFile(targetDb)).toEqual(previousBytes);
+      } finally {
+        openClient.close();
+      }
+    }
+  );
+
   it("restores the prior target after a later publication copy fails", async () => {
     const { parent, dataDir } = await createBackupInput("neotoma-backup-publish-failure-");
     const backup = path.join(parent, "backup");
@@ -646,6 +710,10 @@ describe("CLI backup verify (smoke)", () => {
     previousDb.exec("insert into test_data values ('previous')");
     previousDb.close();
     const previousBytes = await fs.readFile(targetDb);
+    const previousWal = Buffer.from("previous-wal-bytes");
+    const previousShm = Buffer.from("previous-shm-bytes");
+    await fs.writeFile(`${targetDb}-wal`, previousWal);
+    await fs.writeFile(`${targetDb}-shm`, previousShm);
     await fs.writeFile(
       path.join(backup, "manifest.json"),
       JSON.stringify({ contents: { neotoma_db: "neotoma.db", sources: "locked/sources/" } })
@@ -661,8 +729,13 @@ describe("CLI backup verify (smoke)", () => {
       await fs.chmod(path.join(target, "locked"), 0o755).catch(() => {});
     }
     expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(restored.stderr).toContain(
+      "Backup restore failed during publication; previous target members were restored."
+    );
     expect(restored.stdout).not.toContain('"status":"restored"');
     expect(await fs.readFile(targetDb)).toEqual(previousBytes);
+    expect(await fs.readFile(`${targetDb}-wal`)).toEqual(previousWal);
+    expect(await fs.readFile(`${targetDb}-shm`)).toEqual(previousShm);
     expect(await fs.readFile(path.join(target, "locked", "sources", "old.txt"), "utf8")).toBe(
       "old"
     );

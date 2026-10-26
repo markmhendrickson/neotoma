@@ -12013,6 +12013,9 @@ export async function restoreBackupIntoTarget(
           "Backup restore failed while copying files. Target database member is not a file."
         );
       }
+      if (file === targetDb && stat) {
+        await fs.chmod(stagedSnapshot, stat.mode & 0o777);
+      }
     }
     for (const { key, path: staged } of stagedDirectories) {
       const destinationDir = destination.paths[key];
