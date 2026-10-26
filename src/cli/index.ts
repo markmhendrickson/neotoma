@@ -11858,6 +11858,252 @@ backupCommand
     }
   });
 
+type RestoreMember = {
+  target: string;
+  replacement?: string;
+  recovery: string;
+  oldMoved: boolean;
+  newPlaced: boolean;
+};
+
+async function existingRestorePath(filePath: string): Promise<Stats | null> {
+  try {
+    return await fs.lstat(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/** Resolve existing ancestors too, so a parent symlink cannot disguise overlapping roots. */
+async function canonicalRestorePath(filePath: string): Promise<string> {
+  let ancestor = path.resolve(filePath);
+  const missing: string[] = [];
+  while (!(await existingRestorePath(ancestor))) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor)
+      throw new Error("Backup restore refused: target path cannot be resolved.");
+    missing.unshift(path.basename(ancestor));
+    ancestor = parent;
+  }
+  return path.join(await fs.realpath(ancestor), ...missing);
+}
+
+/** A best-effort active-handle check supplements the required stopped-client precondition. */
+async function refuseActiveRestoreTarget(databasePath: string): Promise<void> {
+  const files = [databasePath, `${databasePath}-wal`, `${databasePath}-shm`];
+  const existing: string[] = [];
+  for (const file of files) if (await existingRestorePath(file)) existing.push(file);
+  if (existing.length === 0) return;
+  try {
+    const pids = execFileSync("lsof", ["-t", "--", ...existing], { encoding: "utf8" });
+    if (pids.trim())
+      throw new Error(
+        "Backup restore refused: target database is in use; stop Neotoma and every SQLite client first."
+      );
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Backup restore refused:")) throw error;
+    const commandError = error as NodeJS.ErrnoException & { status?: number };
+    if (commandError.code !== "ENOENT" && commandError.status !== 1) {
+      throw new Error("Backup restore refused: target database use could not be checked.");
+    }
+    // lsof is unavailable on some platforms. The documented offline precondition still applies.
+  }
+}
+
+/** Stage the complete input, then move only the target members this backup owns. */
+export async function restoreBackupIntoTarget(
+  backupDir: string,
+  targetDir: string,
+  inspection: BackupInspection,
+  publicationFileOps: Pick<typeof fs, "rename"> = fs
+): Promise<void> {
+  const requestedTarget = await existingRestorePath(path.resolve(targetDir));
+  if (requestedTarget?.isSymbolicLink()) {
+    throw new Error("Backup restore refused: target is a symlink.");
+  }
+  const absoluteTarget = await canonicalRestorePath(targetDir);
+  const absoluteBackup = await fs.realpath(backupDir);
+  if (
+    absoluteBackup === absoluteTarget ||
+    absoluteBackup.startsWith(`${absoluteTarget}${path.sep}`) ||
+    absoluteTarget.startsWith(`${absoluteBackup}${path.sep}`)
+  ) {
+    throw new Error("Backup restore refused: backup and target directories must be separate.");
+  }
+
+  const targetParent = path.dirname(absoluteTarget);
+  await fs.mkdir(targetParent, { recursive: true });
+  const workDir = await fs.mkdtemp(
+    path.join(targetParent, `.${path.basename(absoluteTarget)}-restore-`)
+  );
+  let keepRecovery = false;
+  let targetCreated = false;
+  try {
+    const stageDir = path.join(workDir, "stage");
+    const recoveryDir = path.join(workDir, "previous-target");
+    await fs.mkdir(stageDir);
+    await fs.mkdir(recoveryDir);
+    const stagedDb = path.join(stageDir, "input.db");
+    const stagedSnapshot = path.join(stageDir, "snapshot.db");
+    await fs.copyFile(inspection.paths.neotoma_db, stagedDb);
+    if (inspection.contents.wal) {
+      await fs.copyFile(inspection.paths.wal, `${stagedDb}-wal`);
+      let db: AsyncSqliteDatabase | null = null;
+      try {
+        db = new AsyncSqliteDatabase(stagedDb, { existing: true, readOnly: false });
+        await db.exec(`VACUUM INTO ${quoteSqliteStringLiteral(stagedSnapshot)}`);
+      } finally {
+        await db?.close();
+      }
+    } else {
+      await fs.rename(stagedDb, stagedSnapshot);
+    }
+    const stagedIntegrity = await verifyBackupDatabaseIntegrity(stagedSnapshot);
+    if (stagedIntegrity.kind !== "verified") {
+      throw backupIntegrityError(stagedSnapshot, stagedIntegrity);
+    }
+
+    const stagedDirectories: Array<{ key: string; path: string }> = [];
+    for (const [key, value] of Object.entries(inspection.contents)) {
+      if (!value.endsWith("/")) continue;
+      const staged = path.join(stageDir, `directory-${stagedDirectories.length}`);
+      await fs.cp(inspection.paths[key], staged, { recursive: true });
+      if (await backupDirectoryContainsSymlink(staged)) {
+        throw new Error("Backup restore refused: copied directory contains a symlink.");
+      }
+      stagedDirectories.push({ key, path: staged });
+    }
+
+    const targetStat = await existingRestorePath(absoluteTarget);
+    if (targetStat && (targetStat.isSymbolicLink() || !targetStat.isDirectory())) {
+      throw new Error(
+        "Backup operation failed while accessing files. Check paths and permissions."
+      );
+    }
+    if (!targetStat) {
+      await fs.mkdir(absoluteTarget);
+      targetCreated = true;
+    }
+    const destination = await resolveManifestContents(absoluteTarget, inspection.contents);
+    if (destination.issues.length > 0) {
+      throw new Error(`Backup restore refused: ${destination.issues.join("; ")}.`);
+    }
+    const targetDb = destination.paths.neotoma_db;
+    const targetSidecars = [`${targetDb}-wal`, `${targetDb}-shm`];
+    const targets = [
+      targetDb,
+      ...targetSidecars,
+      ...stagedDirectories.map(({ key }) => destination.paths[key]),
+    ];
+    if (new Set(targets).size !== targets.length) {
+      throw new Error("Backup restore refused: manifest target members overlap.");
+    }
+    for (const [index, member] of targets.entries()) {
+      for (const other of targets.slice(index + 1)) {
+        if (other.startsWith(`${member}${path.sep}`) || member.startsWith(`${other}${path.sep}`)) {
+          throw new Error("Backup restore refused: manifest target members overlap.");
+        }
+      }
+    }
+    for (const file of [targetDb, ...targetSidecars]) {
+      const stat = await existingRestorePath(file);
+      if (stat && !stat.isFile()) {
+        throw new Error(
+          "Backup restore failed while copying files. Target database member is not a file."
+        );
+      }
+    }
+    for (const { key, path: staged } of stagedDirectories) {
+      const destinationDir = destination.paths[key];
+      const stat = await existingRestorePath(destinationDir);
+      if (stat && !stat.isDirectory()) {
+        throw new Error("Backup restore refused: target directory member is not a directory.");
+      }
+      if (stat && (await backupDirectoryContainsSymlink(destinationDir))) {
+        throw new Error("Backup restore refused: target directory contains a symlink.");
+      }
+      if (stat) {
+        const merged = `${staged}-merged`;
+        await fs.cp(destinationDir, merged, { recursive: true });
+        await fs.cp(staged, merged, { recursive: true });
+        stagedDirectories.find((entry) => entry.key === key)!.path = merged;
+      }
+    }
+    await refuseActiveRestoreTarget(targetDb);
+
+    const members: RestoreMember[] = [
+      {
+        target: targetDb,
+        replacement: stagedSnapshot,
+        recovery: path.join(recoveryDir, "db"),
+        oldMoved: false,
+        newPlaced: false,
+      },
+      ...targetSidecars.map((target, index) => ({
+        target,
+        recovery: path.join(recoveryDir, `sidecar-${index}`),
+        oldMoved: false,
+        newPlaced: false,
+      })),
+      ...stagedDirectories.map(({ key, path: replacement }, index) => ({
+        target: destination.paths[key],
+        replacement,
+        recovery: path.join(recoveryDir, `directory-${index}`),
+        oldMoved: false,
+        newPlaced: false,
+      })),
+    ];
+    let publicationStarted = false;
+    try {
+      for (const member of members) {
+        await fs.mkdir(path.dirname(member.target), { recursive: true });
+        if (await existingRestorePath(member.target)) {
+          publicationStarted = true;
+          await publicationFileOps.rename(member.target, member.recovery);
+          member.oldMoved = true;
+        }
+        if (member.replacement) {
+          publicationStarted = true;
+          await publicationFileOps.rename(member.replacement, member.target);
+          member.newPlaced = true;
+        }
+      }
+    } catch {
+      const rollbackErrors: string[] = [];
+      if (publicationStarted) {
+        for (const member of [...members].reverse()) {
+          try {
+            if (member.newPlaced) await fs.rm(member.target, { recursive: true, force: true });
+            if (member.oldMoved) await publicationFileOps.rename(member.recovery, member.target);
+          } catch {
+            rollbackErrors.push(member.target);
+          }
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        keepRecovery = true;
+        throw new Error(
+          `Backup restore failed during publication; rollback also failed. Previous target members remain recoverable at ${recoveryDir}. Inspect ${rollbackErrors.join(", ")} before restarting Neotoma.`
+        );
+      }
+      throw new Error(
+        "Backup restore failed during publication; previous target members were restored."
+      );
+    }
+  } catch (error) {
+    if (targetCreated) await fs.rmdir(absoluteTarget).catch(() => {});
+    if (
+      error instanceof CliHintError ||
+      (error instanceof Error && /^Backup (restore|operation)/.test(error.message))
+    )
+      throw error;
+    throw new Error("Backup restore failed while copying files. Check paths and permissions.");
+  } finally {
+    if (!keepRecovery) await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 backupCommand
   .command("restore")
   .description("Restore a backup into the data directory")
@@ -11901,53 +12147,11 @@ backupCommand
     }
     const manifest = inspection.manifest!;
     const contents = inspection.contents;
-    const source = { paths: inspection.paths };
-    await backupFileOperation(() => fs.mkdir(targetDir, { recursive: true }));
-    const destination = await resolveManifestContents(targetDir, contents);
-    if (destination.issues.length > 0) {
-      writeCliError(`Backup restore refused: ${destination.issues.join("; ")}.`, {
-        suppressRecoveryHint: true,
-      });
-      process.exitCode = 1;
-      return;
-    }
-    for (const [key, member] of Object.entries(contents)) {
-      if (typeof member !== "string" || !member.endsWith("/")) continue;
-      for (const directory of [source.paths[key], destination.paths[key]]) {
-        try {
-          if (await backupDirectoryContainsSymlink(directory)) {
-            writeCliError("Backup restore refused: referenced directory contains a symlink.", {
-              suppressRecoveryHint: true,
-            });
-            process.exitCode = 1;
-            return;
-          }
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-            writeCliError("Backup restore refused: referenced directory cannot be inspected.", {
-              suppressRecoveryHint: true,
-            });
-            process.exitCode = 1;
-            return;
-          }
-        }
-      }
-    }
-
     try {
-      await fs.copyFile(source.paths.neotoma_db, destination.paths.neotoma_db);
-      if (contents.wal) {
-        await fs.copyFile(source.paths.wal, destination.paths.wal);
-      }
-      for (const [key, val] of Object.entries(contents)) {
-        if (typeof val === "string" && val.endsWith("/")) {
-          await fs.cp(source.paths[key], destination.paths[key], { recursive: true });
-        }
-      }
-    } catch {
-      writeCliError("Backup restore failed while copying files. Check paths and permissions.", {
-        suppressRecoveryHint: true,
-      });
+      await restoreBackupIntoTarget(opts.from, targetDir, inspection);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Backup restore failed.";
+      writeCliError(message, { suppressRecoveryHint: true });
       process.exitCode = 1;
       return;
     }

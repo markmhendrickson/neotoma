@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
-import { runCli } from "../../src/cli/index.ts";
+import { restoreBackupIntoTarget, runCli } from "../../src/cli/index.ts";
 import { AsyncSqliteDatabase } from "../../src/repositories/sqlite/sqlite_driver.ts";
 
 type FixtureSqliteStatement = {
@@ -565,6 +565,170 @@ describe("CLI backup verify (smoke)", () => {
     expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
     expect(restored.stderr).toContain("Backup restore failed while copying files");
     expect(restored.stdout).not.toContain('"status":"restored"');
+  });
+
+  it("replaces an existing WAL-bearing target with the snapshot's exact rows", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-stale-target-wal-");
+    const backup = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(backup);
+    await fs.mkdir(target);
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ db_snapshot_method: "vacuum_into", contents: { neotoma_db: "neotoma.db" } })
+    );
+
+    const oldDbPath = path.join(parent, "old.db");
+    const oldDb = createFixtureSqliteDatabase(oldDbPath);
+    oldDb.exec("create table test_data (value text)");
+    oldDb.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0");
+    oldDb.exec("insert into test_data values ('stale-target-row')");
+    await fs.copyFile(oldDbPath, path.join(target, "neotoma.db"));
+    await fs.copyFile(`${oldDbPath}-wal`, path.join(target, "neotoma.db-wal"));
+    oldDb.close();
+    expect((await fs.stat(path.join(target, "neotoma.db-wal"))).size).toBeGreaterThan(0);
+    await fs.writeFile(path.join(target, "unrelated.txt"), "retain");
+
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backup, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(0);
+    const db = createFixtureSqliteDatabase(path.join(target, "neotoma.db"));
+    try {
+      const rows = db.prepare("select value from test_data order by rowid").all() as Array<{
+        value: string;
+      }>;
+      expect(rows.map((row) => row.value)).toEqual(["ready"]);
+    } finally {
+      db.close();
+    }
+    expect(await fs.readFile(path.join(target, "unrelated.txt"), "utf8")).toBe("retain");
+  });
+
+  it("rejects a target hidden inside the backup by a parent symlink", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-target-alias-");
+    const backup = path.join(parent, "backup");
+    const alias = path.join(parent, "alias");
+    await fs.mkdir(backup);
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db" } })
+    );
+    await fs.symlink(backup, alias);
+    const target = path.join(alias, "nested-target");
+    const restored = await runNeotomaCli(
+      ["--json", "backup", "restore", "--from", backup, "--target", target],
+      {}
+    );
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(restored.stderr).toContain("must be separate");
+    await expect(fs.access(path.join(backup, "nested-target"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("restores the prior target after a later publication copy fails", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-publish-failure-");
+    const backup = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(path.join(backup, "locked", "sources"), { recursive: true });
+    await fs.mkdir(path.join(target, "locked", "sources"), { recursive: true });
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(path.join(backup, "locked", "sources", "new.txt"), "new");
+    await fs.writeFile(path.join(target, "locked", "sources", "old.txt"), "old");
+    await fs.writeFile(path.join(target, "unrelated.txt"), "retain");
+    const targetDb = path.join(target, "neotoma.db");
+    const previousDb = createFixtureSqliteDatabase(targetDb);
+    previousDb.exec("create table test_data (value text)");
+    previousDb.exec("insert into test_data values ('previous')");
+    previousDb.close();
+    const previousBytes = await fs.readFile(targetDb);
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db", sources: "locked/sources/" } })
+    );
+    await fs.chmod(path.join(target, "locked"), 0o555);
+    let restored;
+    try {
+      restored = await runNeotomaCli(
+        ["--json", "backup", "restore", "--from", backup, "--target", target],
+        {}
+      );
+    } finally {
+      await fs.chmod(path.join(target, "locked"), 0o755).catch(() => {});
+    }
+    expect(restored.exitCode, restored.stdout + restored.stderr).toBe(1);
+    expect(restored.stdout).not.toContain('"status":"restored"');
+    expect(await fs.readFile(targetDb)).toEqual(previousBytes);
+    expect(await fs.readFile(path.join(target, "locked", "sources", "old.txt"), "utf8")).toBe(
+      "old"
+    );
+    await expect(
+      fs.access(path.join(target, "locked", "sources", "new.txt"))
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await fs.readFile(path.join(target, "unrelated.txt"), "utf8")).toBe("retain");
+  });
+
+  it("retains the previous database in a named recovery directory if rollback fails", async () => {
+    const { parent, dataDir } = await createBackupInput("neotoma-backup-rollback-failure-");
+    const backup = path.join(parent, "backup");
+    const target = path.join(parent, "target");
+    await fs.mkdir(path.join(backup, "sources"), { recursive: true });
+    await fs.mkdir(path.join(target, "sources"), { recursive: true });
+    await fs.copyFile(path.join(dataDir, "neotoma.db"), path.join(backup, "neotoma.db"));
+    await fs.writeFile(path.join(backup, "sources", "new.txt"), "new");
+    await fs.writeFile(
+      path.join(backup, "manifest.json"),
+      JSON.stringify({ contents: { neotoma_db: "neotoma.db", sources: "sources/" } })
+    );
+    const targetDb = path.join(target, "neotoma.db");
+    const previousDb = createFixtureSqliteDatabase(targetDb);
+    previousDb.exec("create table test_data (value text)");
+    previousDb.exec("insert into test_data values ('previous')");
+    previousDb.close();
+    const previousBytes = await fs.readFile(targetDb);
+    const renames: string[] = [];
+    let failure: unknown;
+    try {
+      await restoreBackupIntoTarget(
+        backup,
+        target,
+        {
+          contents: { neotoma_db: "neotoma.db", sources: "sources/" },
+          paths: {
+            neotoma_db: path.join(backup, "neotoma.db"),
+            sources: path.join(backup, "sources"),
+          },
+          issues: [],
+        },
+        {
+          rename: async (source, destination) => {
+            renames.push(`${source} -> ${destination}`);
+            if (source.endsWith("/target/sources") && destination.includes("previous-target")) {
+              throw new Error("injected publication failure");
+            }
+            if (source.includes("previous-target") && destination.endsWith("/target/neotoma.db")) {
+              throw new Error("injected rollback failure");
+            }
+            await fs.rename(source, destination);
+          },
+        }
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure, renames.join("\n")).toBeInstanceOf(Error);
+    const errorMessage = (failure as Error).message;
+    expect(errorMessage).toContain("rollback also failed");
+    const recovery = errorMessage.match(/(\S+\/previous-target)/)?.[1];
+    expect(recovery).toBeDefined();
+    expect(await fs.readFile(path.join(recovery!, "db"))).toEqual(previousBytes);
+    await fs.rm(path.dirname(recovery!), { recursive: true, force: true });
   });
 
   it.each(["traversal", "absolute", "symlink"] as const)(
