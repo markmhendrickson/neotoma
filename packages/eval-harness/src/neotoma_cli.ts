@@ -265,8 +265,11 @@ async function runBounded(
     cwd: string;
     env: Record<string, string>;
     timeoutMs?: number;
+    signal?: AbortSignal;
+    onKill?: () => void;
   }
 ): Promise<ProcessResult> {
+  if (options.signal?.aborted) throw new Error("sandboxed process aborted before start");
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -277,21 +280,31 @@ async function runBounded(
     });
     let stdout = "",
       stderr = "",
-      settled = false;
+      settled = false,
+      killing = false;
     const kill = (reason: string): void => {
-      if (settled) return;
+      if (settled || killing) return;
+      killing = true;
       try {
         process.kill(-child.pid!, "SIGKILL");
       } catch {
         child.kill("SIGKILL");
       }
       failure = new Error(reason);
+      try {
+        options.onKill?.();
+      } catch (error) {
+        failure = new Error(`${reason}; cleanup failed: ${(error as Error).message}`);
+      }
     };
     let failure: Error | null = null;
     const timer = setTimeout(
       () => kill("sandboxed process timed out"),
       options.timeoutMs ?? OP_TIMEOUT_MS
     );
+    const onAbort = (): void => kill("sandboxed process aborted");
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
     child.stdout?.on("data", (bytes: Buffer) => {
       stdout += bytes.toString();
       if (Buffer.byteLength(stdout) > MAX_OUTPUT) kill("stdout limit exceeded");
@@ -306,6 +319,7 @@ async function runBounded(
     child.once("close", (code) => {
       settled = true;
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
       if (failure) reject(failure);
       else resolve({ exitCode: code ?? 1, stdout, stderr });
     });
@@ -330,6 +344,18 @@ export class BackupEvalSession {
   private calls = 0;
   private closed = false;
   private profile: string | null = null;
+  private readonly abortController = new AbortController();
+  readonly boundaryProof: {
+    fileDenied: boolean;
+    networkDenied: boolean;
+    weakenedFileRead: boolean;
+    weakenedNetworkConnect: boolean;
+  } = {
+    fileDenied: false,
+    networkDenied: false,
+    weakenedFileRead: false,
+    weakenedNetworkConnect: false,
+  };
   private constructor(fixture: string, runtime: string, runtimeHash: string) {
     this.fixture = fixture;
     this.runtime = runtime;
@@ -382,6 +408,32 @@ export class BackupEvalSession {
     await walk(root);
     return result;
   }
+  private async validateFixtureTree(): Promise<void> {
+    const canonicalRoot = await fs.realpath(this.fixture);
+    if (canonicalRoot !== this.fixture) throw new Error("fixture root changed after child exit");
+    let entries = 0;
+    const walk = async (dir: string): Promise<void> => {
+      for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+        if (++entries > 20_000) throw new Error("fixture entry limit exceeded");
+        const candidate = path.join(dir, entry.name);
+        const stat = await fs.lstat(candidate);
+        if (
+          stat.isSymbolicLink() ||
+          (!stat.isDirectory() && !stat.isFile()) ||
+          (stat.isFile() && (stat.nlink !== 1 || stat.size > 64 * 1024 * 1024))
+        ) {
+          throw new Error(
+            "post-child fixture contains a symlink, hardlink, special file or oversized file"
+          );
+        }
+        const real = await fs.realpath(candidate);
+        if (!real.startsWith(canonicalRoot + path.sep))
+          throw new Error("post-child fixture path escaped root");
+        if (stat.isDirectory()) await walk(candidate);
+      }
+    };
+    await walk(this.fixture);
+  }
   private childEnv(extra: Record<string, string> = {}): Record<string, string> {
     const data = this.innerPath("source");
     return {
@@ -423,25 +475,115 @@ export class BackupEvalSession {
     }
     const setup = parsedJson(await this.runSealed("setup"));
     if (setup.native !== true) throw new Error("native fixture setup failed");
+    await this.verifyMacBoundaryControls();
+  }
+  private async verifyMacBoundaryControls(): Promise<void> {
+    if (!this.profile) throw new Error("sandbox profile missing");
+    const base = path.dirname(this.fixture);
+    const marker = path.join(base, "synthetic-forbidden-marker.txt");
+    const fileWeak = path.join(base, "sandbox-file-control.sb");
+    const networkWeak = path.join(base, "sandbox-network-control.sb");
+    const markerText = "synthetic-only-boundary-control";
+    await fs.writeFile(marker, markerText, { mode: 0o600 });
+    const profileText = await fs.readFile(this.profile, "utf8");
+    try {
+      const deniedFile = parsedJson(
+        await this.runSealed("read-control", { NEOTOMA_EVAL_CONTROL_MARKER: marker })
+      );
+      if (deniedFile.read !== false || !["EPERM", "EACCES"].includes(String(deniedFile.code))) {
+        throw new Error("sandbox did not deny synthetic host marker read");
+      }
+      this.boundaryProof.fileDenied = true;
+      await fs.writeFile(
+        fileWeak,
+        profileText.replace(
+          "(deny network*)",
+          `(allow file-read* (literal ${JSON.stringify(marker)}))\n(deny network*)`
+        ),
+        { mode: 0o600 }
+      );
+      const allowedFile = parsedJson(
+        await this.runSealed("read-control", { NEOTOMA_EVAL_CONTROL_MARKER: marker }, fileWeak)
+      );
+      if (allowedFile.read !== true || allowedFile.value !== markerText)
+        throw new Error("file deny control cannot fail when synthetic marker is allowlisted");
+      this.boundaryProof.weakenedFileRead = true;
+
+      const listener = net.createServer((socket) => socket.end());
+      await new Promise<void>((resolveListen, rejectListen) => {
+        listener.once("error", rejectListen);
+        listener.listen(0, "127.0.0.1", resolveListen);
+      });
+      try {
+        const address = listener.address();
+        if (!address || typeof address === "string")
+          throw new Error("synthetic loopback listener unavailable");
+        const env = { NEOTOMA_EVAL_CONTROL_PORT: String(address.port) };
+        const deniedNetwork = parsedJson(await this.runSealed("network-control", env));
+        if (
+          deniedNetwork.connected !== false ||
+          !["EPERM", "EACCES"].includes(String(deniedNetwork.code))
+        ) {
+          throw new Error(
+            `sandbox did not deny synthetic network connection (${String(deniedNetwork.code)})`
+          );
+        }
+        this.boundaryProof.networkDenied = true;
+        await fs.writeFile(
+          networkWeak,
+          profileText.replace("(deny network*)", "(allow network*)"),
+          { mode: 0o600 }
+        );
+        const allowedNetwork = parsedJson(
+          await this.runSealed("network-control", env, networkWeak)
+        );
+        if (allowedNetwork.connected !== true)
+          throw new Error(
+            "network deny control cannot fail when synthetic loopback is allowlisted"
+          );
+        this.boundaryProof.weakenedNetworkConnect = true;
+      } finally {
+        await new Promise<void>((resolveClose) => listener.close(() => resolveClose()));
+      }
+    } finally {
+      await Promise.all(
+        [marker, fileWeak, networkWeak].map((file) => fs.rm(file, { force: true }))
+      );
+    }
   }
   private async runSealed(
     action: string,
-    env: Record<string, string> = {}
+    env: Record<string, string> = {},
+    profile?: string
   ): Promise<ProcessResult> {
-    return await this.runNode(path.join(this.runtime, "eval/sealed_backup_eval.js"), [action], env);
+    return await this.runNode(
+      path.join(this.runtime, "eval/sealed_backup_eval.js"),
+      [action],
+      env,
+      profile
+    );
   }
   private async runNode(
     entry: string,
     args: string[],
-    extraEnv: Record<string, string> = {}
+    extraEnv: Record<string, string> = {},
+    profileOverride?: string
   ): Promise<ProcessResult> {
     if (!this.profile) throw new Error("no verified local OS boundary");
     const command = "/usr/bin/sandbox-exec";
-    return await runBounded(
+    const result = await runBounded(
       command,
-      ["-f", this.profile, path.join(this.runtime, "node"), entry, ...args],
-      { cwd: this.fixture, env: this.childEnv(extraEnv) }
+      ["-f", profileOverride ?? this.profile, path.join(this.runtime, "node"), entry, ...args],
+      { cwd: this.fixture, env: this.childEnv(extraEnv), signal: this.abortController.signal }
     );
+    await this.validateFixtureTree();
+    if (sha(JSON.stringify(await BackupEvalSession.hashTree(this.runtime))) !== this.runtimeHash) {
+      throw new Error("staged runtime changed after child exit");
+    }
+    return result;
+  }
+  abort(): void {
+    this.abortController.abort();
   }
   async runCli(raw: unknown): Promise<BackupCliResult> {
     if (this.closed) throw new Error("restore eval session closed");

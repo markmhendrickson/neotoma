@@ -158,13 +158,27 @@ async function inspect(): Promise<Record<string, unknown>> {
   const mode = (await fs.stat(path.join(target, "neotoma.db"))).mode & 0o777;
   const unrelated = await fs.readFile(path.join(target, "unrelated.txt"), "utf8");
   const restoredRows = rows(path.join(target, "neotoma.db"));
+  const allowedTopLevel = new Set([
+    "source",
+    "created_output",
+    "legacy_backup",
+    "target",
+    "probe_db",
+    "probe_wal",
+    "legacy_source.db",
+    "main_only.db",
+    "pair-check",
+    "home",
+    "tmp",
+  ]);
+  const unexpectedWrites = (await fs.readdir(root)).some((name) => !allowedTopLevel.has(name));
   return {
     mainRow: restoredRows.includes("A"),
     walOnlyRow: restoredRows.includes("B"),
     staleSidecarsAbsentBeforeOpen: sidecarsAbsent,
     modePreserved: mode === 0o600,
     unrelatedBytesPreserved: unrelated === "untouched-natural-content",
-    unexpectedWrites: false,
+    unexpectedWrites,
   };
 }
 async function probe(member: "neotoma_db" | "wal"): Promise<Record<string, unknown>> {

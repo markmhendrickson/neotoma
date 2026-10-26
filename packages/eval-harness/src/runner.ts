@@ -239,8 +239,12 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         timeoutMs: opts.cellTimeoutMs ?? 240_000,
         backupEval: backupSession,
       };
-      driverResult = await runWithTimeout(driver.runOnce(invocation), invocation.timeoutMs!);
-      const effects = await backupSession.finish();
+      driverResult = await runWithTimeout(driver.runOnce(invocation), invocation.timeoutMs!, () =>
+        backupSession?.abort()
+      );
+      const effects = await runWithTimeout(backupSession.finish(), invocation.timeoutMs!, () =>
+        backupSession?.abort()
+      );
       assertionFailures = await evaluateExpectations(plan.scenario.expected, {
         baseUrl: "",
         stats: null,
@@ -341,17 +345,27 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   };
 }
 
-function runWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+function runWithTimeout<T>(p: Promise<T>, ms: number, abort?: () => void): Promise<T> {
   return new Promise<T>((resolveT, reject) => {
-    const t = setTimeout(() => reject(new Error(`cell timed out after ${ms}ms`)), ms);
+    let timedOut = false;
+    const t = setTimeout(() => {
+      timedOut = true;
+      abort?.();
+      if (abort) {
+        void p.then(
+          () => reject(new Error(`cell timed out after ${ms}ms`)),
+          () => reject(new Error(`cell timed out after ${ms}ms`))
+        );
+      } else reject(new Error(`cell timed out after ${ms}ms`));
+    }, ms);
     p.then(
       (v) => {
         clearTimeout(t);
-        resolveT(v);
+        if (!timedOut) resolveT(v);
       },
       (e) => {
         clearTimeout(t);
-        reject(e);
+        if (!timedOut) reject(e);
       }
     );
   });
