@@ -61,15 +61,15 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **774**
-- Backend and repo Vitest files: **723**
+- Total automated test files: **775**
+- Backend and repo Vitest files: **724**
 - Frontend Vitest files: **24**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 219 |
+| Vitest unit tests | 220 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 225 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (219):**
+**Files (220):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -190,6 +190,7 @@ flowchart TD
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
 - `tests/unit/eval_harness_error_result.test.ts`
 - `tests/unit/eval_harness_quarantine.test.ts`
+- `tests/unit/eval_site_http_reader.test.ts`
 - `tests/unit/ext_apps_widget_host.test.ts`
 - `tests/unit/external_actor_badge.test.ts`
 - `tests/unit/external_actor_builder.test.ts`

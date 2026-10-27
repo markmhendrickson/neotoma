@@ -616,7 +616,7 @@ export async function evaluatePredicate(
       // key check must pass AND the subset must match. Either may be omitted.
       // (a) result_key present/absent check (dotted path).
       if (predicate.result_key) {
-        const { found } = getPath(result, predicate.result_key);
+        const { found, value } = getPath(result, predicate.result_key);
         const wantPresent = predicate.present !== false;
         if (found === wantPresent) {
           // key check satisfied; fall through to the result_subset check below.
@@ -630,6 +630,25 @@ export async function evaluatePredicate(
             actual: result,
           };
         }
+        if (
+          predicate.result_contains !== undefined &&
+          (typeof value !== "string" || !value.includes(predicate.result_contains))
+        ) {
+          return {
+            predicate,
+            message: `Expected tool_result["${predicate.tool_name}"].${predicate.result_key} to contain ${JSON.stringify(predicate.result_contains)}.`,
+            expected: predicate.result_contains,
+            actual: typeof value === "string" ? value.slice(0, 300) : value,
+          };
+        }
+      }
+      if (predicate.result_contains !== undefined && !predicate.result_key) {
+        return {
+          predicate,
+          message: "result_contains requires result_key",
+          expected: predicate,
+          actual: result,
+        };
       }
       // (b) result_subset structural match.
       if (predicate.result_subset) {

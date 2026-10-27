@@ -11,6 +11,7 @@ import { readCassette, type CassetteFile } from "../cassette.js";
 import { createHostToolRegistry, type HostToolRegistry } from "../host_tools.js";
 import type { DriverInvocation, DriverResult, ToolCall } from "../types.js";
 import { parseBackupCliInput, validateBackupCassette } from "../neotoma_cli.js";
+import { readSiteHttp, SITE_HTTP_SCENARIO, validateSiteCassette } from "../site_http.js";
 
 /**
  * Map MCP tool name → HTTP endpoint we POST to on the isolated server.
@@ -165,10 +166,18 @@ export async function replayCassetteAgainstServer(
   const start = Date.now();
   const replayedCalls: ToolCall[] = [];
   const backupScenario = invocation.scenario?.meta.id === "backup_restore_cli_safety";
+  const siteScenario = invocation.scenario?.meta.id === SITE_HTTP_SCENARIO;
   if (backupScenario) validateBackupCassette(cassette, invocation.scenario);
+  if (siteScenario) validateSiteCassette(cassette, invocation.scenario);
   for (const call of cassette.tool_calls) {
     let result: { output?: unknown; error?: string };
-    if (backupScenario) {
+    if (siteScenario) {
+      if (!invocation.siteBaseUrl || call.name !== "site_http")
+        throw new Error("site_http executable capability missing");
+      result = {
+        output: await readSiteHttp(call.input, invocation.neotomaBaseUrl, invocation.siteBaseUrl),
+      };
+    } else if (backupScenario) {
       if (!invocation.backupEval || call.name !== "neotoma_cli")
         throw new Error("restore eval executable capability missing");
       // Input validation occurs again immediately before the effect. The
@@ -188,8 +197,8 @@ export async function replayCassetteAgainstServer(
     replayedCalls.push({
       name: call.name,
       input: call.input,
-      output: backupScenario ? result.output : (result.output ?? call.output),
-      error: backupScenario ? result.error : (result.error ?? call.error),
+      output: backupScenario || siteScenario ? result.output : (result.output ?? call.output),
+      error: backupScenario || siteScenario ? result.error : (result.error ?? call.error),
       sequence: replayedCalls.length,
     });
   }

@@ -168,6 +168,8 @@ export interface ExpectedAssertion {
    * (Dotted paths are a `result_key` feature.) Every leaf must deep-equal.
    */
   result_subset?: Record<string, unknown>;
+  /** For tool_result.matches: require this substring in the string at result_key. */
+  result_contains?: string;
   /**
    * For `tool_result.matches`: assert the result contains (or, when false,
    * does NOT contain) a key. Dotted paths allowed (e.g. "webhook_secret",
@@ -278,6 +280,8 @@ export interface DriverInvocation {
   timeoutMs?: number;
   /** The one-scenario, runner-owned executable capability. Never supplied by a cassette. */
   backupEval?: { runCli(input: unknown): Promise<BackupCliResult> };
+  /** Runner-owned static site server, only present for the closed website eval. */
+  siteBaseUrl?: string;
 }
 
 export interface ToolCall {

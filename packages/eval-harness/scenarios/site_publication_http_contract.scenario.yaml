@@ -1,0 +1,204 @@
+meta:
+  id: site_publication_http_contract
+  description: Replay closed natural HTTP reads of the isolated MCP root and
+    exact-head public site; qualification for website publication.
+  tags:
+    - tier2
+    - website
+    - required
+    - http
+seed_strategy: generated
+source_pattern: Canned host tool outputs cannot detect regressions in actual GET
+  / guidance or built public routes.
+privacy_transform: Only public guidance and built static pages; no operator data.
+system_prompt: Read the Neotoma root guidance and public website routes before
+  advising an evaluator.
+user_prompt: Read the six harness connection guidance at GET / as JSON, then
+  inspect the English and Spanish public site, integration, installation,
+  evaluation, and system-change routes.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: site_http
+    op: eq
+    value: 11
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 0
+    result_subset:
+      status: 200
+      content_type: application/json
+      harness_ids:
+        - claude-code
+        - claude-desktop
+        - chatgpt
+        - codex
+        - cursor
+        - openclaw
+      guidance_complete: true
+      remote_url_consistent: true
+      claude_code_remote_command: true
+      openclaw_plugin_caveat: true
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 1
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 1
+    result_key: body
+    result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 1
+    result_key: body
+    result_contains: Ask your agent to evaluate
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 1
+    result_key: body
+    result_contains: href="/install/system-changes/"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 2
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 2
+    result_key: body
+    result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 2
+    result_key: body
+    result_contains: Pide a tu agente que evalúe
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 2
+    result_key: body
+    result_contains: href="/es/install/system-changes/"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 3
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 3
+    result_key: body
+    result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 3
+    result_key: body
+    result_contains: Claude Code
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 4
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 4
+    result_key: body
+    result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 4
+    result_key: body
+    result_contains: OpenClaw
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 5
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 5
+    result_key: body
+    result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 5
+    result_key: body
+    result_contains: href="/install/system-changes/"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 6
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 6
+    result_key: body
+    result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 6
+    result_key: body
+    result_contains: href="/es/install/system-changes/"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 7
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 7
+    result_key: body
+    result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 8
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 8
+    result_key: body
+    result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 9
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 9
+    result_key: body
+    result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 9
+    result_key: body
+    result_contains: What changes on your system
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 10
+    result_subset:
+      status: 200
+      content_type: text/html
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 10
+    result_key: body
+    result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 10
+    result_key: body
+    result_contains: Qué cambia en tu sistema

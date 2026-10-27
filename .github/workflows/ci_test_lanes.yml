@@ -471,6 +471,12 @@ jobs:
           npm run build:server
           npm --prefix packages/eval-harness run build
 
+      - name: Build exact-head public site for closed HTTP eval
+        run: |
+          npm run build:ui
+          npm run build:site:pages
+          npm run validate:site-export
+
       - name: Require native SQLite and local Docker socket
         run: |
           node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
@@ -485,7 +491,9 @@ jobs:
       - name: Run eval-harness scenarios (replay)
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: npm run eval:scenarios
+        run: |
+          npm run eval:scenarios
+          npm run eval:scenarios -- --scenario site_publication_http_contract
 
   eval_combined:
     # COMBINED layered-matrix lane (WRIT state layer + Tier-2 agent layer).
@@ -535,6 +543,12 @@ jobs:
         run: |
           npm exec --yes --package=npm@10 -- npm ci --prefix writ
           npm run build --prefix writ
+
+      - name: Build exact-head public site for closed HTTP eval
+        run: |
+          npm run build:ui
+          npm run build:site:pages
+          npm run validate:site-export
 
       - name: Require native SQLite and local Docker socket
         run: |
