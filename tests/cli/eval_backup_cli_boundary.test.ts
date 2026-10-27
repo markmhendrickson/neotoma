@@ -17,6 +17,14 @@ type FixedControl = {
   runSealed(action: string): Promise<{ exitCode: number; stdout: string }>;
 };
 const sessions: BackupEvalSession[] = [];
+// Every test that calls BackupEvalSession.create() stages the full locked runtime closure
+// (and, on Linux, builds a local Docker image) before the assertion under test runs. That
+// legitimately takes ~45-60s on a CI runner, so the global 60s testTimeout left it ~1s of
+// headroom: the first (cold) session passed at 58.7s on one main run and timed out at
+// 60.9s on the next. The staging budget is BackupEvalSession.create()'s own 240s default
+// deadline; the test timeout sits just above it so a genuine stall still fails through the
+// harness's own fail-closed deadline error instead of an opaque vitest timeout.
+const SESSION_TEST_TIMEOUT_MS = 270_000;
 const hasNativeNode24 = Number(process.versions.node.split(".")[0]) === 24;
 const npmRequire = createRequire(
   path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/package.json")
@@ -167,7 +175,8 @@ it.skipIf(!hasNativeNode24)(
       if (previous === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = previous;
     }
-  }
+  },
+  SESSION_TEST_TIMEOUT_MS
 );
 
 it.skipIf(!hasNativeNode24)(
@@ -189,7 +198,8 @@ it.skipIf(!hasNativeNode24)(
     } finally {
       await fs.unlink(marker);
     }
-  }
+  },
+  SESSION_TEST_TIMEOUT_MS
 );
 
 it.skipIf(!hasNativeNode24)(
@@ -205,7 +215,8 @@ it.skipIf(!hasNativeNode24)(
     expect(existsSync(marker)).toBe(true);
     session.abort();
     await expect(pending).rejects.toThrow(/aborted/);
-  }
+  },
+  SESSION_TEST_TIMEOUT_MS
 );
 
 it.skipIf(!hasNativeNode24)(
@@ -216,7 +227,8 @@ it.skipIf(!hasNativeNode24)(
     await expect(
       (session as unknown as FixedControl).runSealed("overflow-control")
     ).rejects.toThrow(/stdout limit exceeded/);
-  }
+  },
+  SESSION_TEST_TIMEOUT_MS
 );
 
 it.skipIf(hasNativeNode24)(
