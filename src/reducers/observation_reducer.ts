@@ -17,6 +17,7 @@ import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
 import { recoverJsonArrayString } from "../services/recover_json_array_string.js";
 import { canonicalizePortableScalarKey, stableSerialize } from "../services/stable_serialize.js";
+import { isCorrectionObservation } from "../services/correction_identity.js";
 
 /** Per-observation bound that prevents one full-array write from exploding reducer work. */
 export const MAX_MERGE_ARRAY_BY_KEY_ITEMS = 10_000;
@@ -49,6 +50,13 @@ export interface Observation {
   entity_type: string;
   schema_version: string;
   source_id: string;
+  /**
+   * Interpretation run that produced the observation. Null for structured
+   * writes and corrections. Read only to recognise a correction
+   * (see services/correction_identity.ts); loaders that do not carry it leave
+   * it undefined, which counts as none.
+   */
+  interpretation_id?: string | null;
   observed_at: string;
   specificity_score: number | null;
   source_priority: number;
@@ -547,9 +555,25 @@ export class ObservationReducer {
       (max, obs) => (obs.source_priority > max ? obs.source_priority : max),
       Number.NEGATIVE_INFINITY
     );
-    const topPriorityObservations = observations.filter(
-      (obs) => obs.source_priority === maxPriority
-    );
+    let topPriorityObservations = observations.filter((obs) => obs.source_priority === maxPriority);
+
+    // #2341: every correction is written at the same priority (1000), so the
+    // priority gate alone cannot let a later correction supersede an earlier
+    // one — corrections would union with each other and `correct()` could add
+    // array members but never remove them. Within the top tier, when any
+    // observation is a correction, the latest correction (observed_at, then
+    // created_at, then id: the same recency order the scalar rules use) is the
+    // field's only contribution, so a later correction sets the array to
+    // exactly its members, including `[]` (or a null, which also yields `[]`).
+    // Ordinary writes at the same priority still union with each other.
+    const topCorrections = topPriorityObservations.filter(isCorrectionObservation);
+    const correctionWinner =
+      topCorrections.length > 0
+        ? [...topCorrections].sort(compareObservationRecencyThenId)[0]
+        : undefined;
+    if (correctionWinner) {
+      topPriorityObservations = [correctionWinner];
+    }
 
     for (const obs of topPriorityObservations) {
       // #1595: a transport/client may deliver a JSON-array-shaped *string*
@@ -588,6 +612,12 @@ export class ObservationReducer {
         }
         observationIds.push(obs.id);
       }
+    }
+
+    // A winning correction that clears the field (null or []) contributes no
+    // member, but it is still the observation that decided the value.
+    if (correctionWinner && observationIds.length === 0) {
+      observationIds.push(correctionWinner.id);
     }
 
     return {

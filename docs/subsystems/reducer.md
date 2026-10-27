@@ -254,9 +254,25 @@ created with `source_priority: 1000` (the highest tier), so a correction fully *
 any lower-priority array contributions rather than unioning with them — consistent with the
 rule that corrections "always win" (§4.2). The gate is `source_priority`-based and applies
 to any higher-priority write (e.g. a sensor), with corrections being the motivating case.
-Two writes at the **same** top priority still union with each other. Consequence:
-`source_observation_id` / `provenance[field]` lists only the top-priority contributing
-observation IDs, not every observation that ever contributed an element.
+Two ordinary writes at the **same** top priority still union with each other.
+Consequence: `source_observation_id` / `provenance[field]` lists only the top-priority
+contributing observation IDs, not every observation that ever contributed an element.
+
+**Later correction replaces earlier correction (issue #2341):** every correction is written
+at the same priority (1000), so the priority gate alone cannot let one correction supersede
+another. Within the top-priority tier, when any observation is a correction (recognised by
+`isCorrectionObservation` in `src/services/correction_identity.ts`: no source, no
+interpretation, no `observation_source`, priority 1000, specificity 1.0), the **latest
+correction** — ordered by `observed_at`, then `created_at`, then `id` — is the field's only
+contribution. A later `correct` therefore sets the array to exactly its members, can remove
+members an earlier correction added, and `[]` (or `null`) clears the field to `[]`. A request
+cannot forge a correction: every public write path stamps a non-null `observation_source`
+and, outside internal priority-0 writers, a `source_id`, so an ordinary write that merely
+carries `source_priority: 1000` keeps the same-priority union. The append-only log is
+unchanged: each correction is still its own observation, and supersession happens in the
+reducer. `merge_array_by_key` is not affected; its keyed reconciliation across the top tier
+is what `patch_array_item` relies on. Snapshots computed before this change keep the union
+until recomputed (`POST /recompute_snapshots_by_type`, `dry_run` first).
 
 > The gate is currently implicit in the `merge_array` strategy. A planned follow-up adds
 > an explicit `merge_policy.priority_gate: "max" | "all"` knob (default `"max"`) so a
