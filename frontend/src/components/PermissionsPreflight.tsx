@@ -11,13 +11,16 @@ import React, { useState } from "react";
 import { SiteSnippet } from "./SiteSnippet";
 import { SITE_CODE_SNIPPETS } from "../site/site_data";
 import { sendFunnelPreflightCopy, type PreflightHarness } from "../utils/analytics";
+import { useLocale } from "@/i18n/LocaleContext";
 
 interface HarnessTab {
   id: PreflightHarness;
   label: string;
   description: string;
   filePath: string;
+  filePathEs?: string;
   snippet: string;
+  snippetCommentsEs: string;
 }
 
 const TABS: HarnessTab[] = [
@@ -26,7 +29,9 @@ const TABS: HarnessTab[] = [
     label: "Claude Code",
     description: "JSON merge into Claude Code's permissions file.",
     filePath: ".claude/settings.local.json (project) — or ~/.claude/settings.json (user)",
+    filePathEs: ".claude/settings.local.json (proyecto) — o ~/.claude/settings.json (usuario)",
     snippet: SITE_CODE_SNIPPETS.preflightClaudeCode,
+    snippetCommentsEs: "// Pega esto en .claude/settings.local.json (proyecto) o ~/.claude/settings.json (usuario).\n// Combínalo con la lista existente de \"permissions.allow\", si la hay.",
   },
   {
     id: "cursor",
@@ -34,6 +39,7 @@ const TABS: HarnessTab[] = [
     description: "JSON merge into Cursor's project allowlist.",
     filePath: ".cursor/allowlist.json",
     snippet: SITE_CODE_SNIPPETS.preflightCursor,
+    snippetCommentsEs: "// Pega esto en .cursor/allowlist.json (proyecto).\n// Cursor aprobará automáticamente cualquier comando `neotoma ...` y la instalación global inicial.",
   },
   {
     id: "codex",
@@ -41,11 +47,21 @@ const TABS: HarnessTab[] = [
     description: "TOML block appended to Codex's user config.",
     filePath: "~/.codex/config.toml",
     snippet: SITE_CODE_SNIPPETS.preflightCodex,
+    snippetCommentsEs: "# Añade esto a ~/.codex/config.toml (configuración del usuario).\n# Codex aprobará automáticamente los comandos que coincidan con cada patrón.",
   },
 ];
 
-export function PermissionsPreflight(): React.ReactElement {
-  const [activeId, setActiveId] = useState<PreflightHarness>("claude-code");
+function localizedSnippet(tab: HarnessTab, spanish: boolean): string {
+  if (!spanish) return tab.snippet;
+  // Keep the executable JSON/TOML bytes in the existing shared snippet; only its leading comments differ.
+  return `${tab.snippetCommentsEs}\n${tab.snippet.replace(/^(?:(?:\/\/|#)[^\n]*\n)+/, "")}`;
+}
+
+export function PermissionsPreflight({ harness }: { harness?: PreflightHarness } = {}): React.ReactElement {
+  const { locale } = useLocale();
+  const es = locale === "es";
+  const [selectedId, setSelectedId] = useState<PreflightHarness>("claude-code");
+  const activeId = harness ?? selectedId;
   const active = TABS.find((t) => t.id === activeId) ?? TABS[0]!;
   return (
     <section
@@ -58,25 +74,27 @@ export function PermissionsPreflight(): React.ReactElement {
           id="permissions-preflight-heading"
           className="text-body font-semibold tracking-[-0.01em]"
         >
-          Permissions pre-flight (copy once, before running the agent prompt below)
+          {harness ? (es ? `Permisos opcionales de comandos para ${active.label}` : `Optional ${active.label} command permissions`) : (es ? "Comprobación previa de permisos" : "Permissions pre-flight")}
         </h2>
         <p className="text-ui leading-5 text-muted-foreground">
-          Paste this snippet into the right file for your agent harness so the rest of onboarding
-          only needs two approvals: <code className="rounded bg-muted px-1 py-0.5">neotoma *</code>{" "}
-          and one <code className="rounded bg-muted px-1 py-0.5">npm install -g neotoma</code>.
-          Without this, directory-scoped harnesses will prompt for every individual command.
+          {es ? <>Este fragmento opcional escribe en el archivo indicado. Las autorizaciones amplias, como <code className="rounded bg-muted px-1 py-0.5">Bash(neotoma:*)</code> en Claude Code y <code className="rounded bg-muted px-1 py-0.5">neotoma *</code> en Cursor o Codex, pueden permitir cualquier subcomando de Neotoma, incluido reset, sin otra solicitud del entorno. Revisa el alcance completo antes de copiar. Si se deniega un permiso o desconoces su alcance, inspecciona la configuración del entorno en vez de ampliarlo automáticamente.</> : <>This optional snippet writes to the target file below. Broad Neotoma command approvals,
+          including Claude Code&apos;s <code className="rounded bg-muted px-1 py-0.5">Bash(neotoma:*)</code> and
+          Cursor or Codex <code className="rounded bg-muted px-1 py-0.5">neotoma *</code>, can permit
+          any Neotoma subcommand, including reset, without another host prompt. Review their full
+          scope before copying. If permission is refused or its scope is unknown, inspect the host
+          setting instead of widening access automatically.</>}
         </p>
-        <p className="text-fine leading-5 text-muted-foreground">
-          Using <strong>OpenClaw</strong>? Skip this — the native plugin handles consent. Just run{" "}
+        {!harness && <p className="text-fine leading-5 text-muted-foreground">
+          {es ? "¿Usas " : "Using "}<strong>OpenClaw</strong>{es ? "? Omite este paso: el complemento nativo gestiona el consentimiento. Ejecuta " : "? Skip this — the native plugin handles consent. Just run "}{" "}
           <code className="rounded bg-muted px-1 py-0.5">
             openclaw plugins install clawhub:neotoma
           </code>{" "}
-          and approve the plugin permission prompt once.
-        </p>
+          {es ? "y aprueba la solicitud de permisos del complemento una sola vez." : "and approve the plugin permission prompt once."}
+        </p>}
       </header>
-      <div
+      {!harness && <div
         role="tablist"
-        aria-label="Agent harness"
+        aria-label={es ? "Entorno de agente" : "Agent harness"}
         className="mb-3 flex flex-wrap gap-1 border-b border-border pb-2"
       >
         {TABS.map((tab) => {
@@ -89,7 +107,7 @@ export function PermissionsPreflight(): React.ReactElement {
               aria-controls={`preflight-panel-${tab.id}`}
               id={`preflight-tab-${tab.id}`}
               type="button"
-              onClick={() => setActiveId(tab.id)}
+              onClick={() => setSelectedId(tab.id)}
               className={`rounded-md px-3 py-1.5 text-ui transition-colors ${
                 selected
                   ? "bg-foreground text-background"
@@ -100,18 +118,18 @@ export function PermissionsPreflight(): React.ReactElement {
             </button>
           );
         })}
-      </div>
+      </div>}
       <div
         id={`preflight-panel-${active.id}`}
-        role="tabpanel"
-        aria-labelledby={`preflight-tab-${active.id}`}
+        role={harness ? "region" : "tabpanel"}
+        aria-labelledby={harness ? "permissions-preflight-heading" : `preflight-tab-${active.id}`}
       >
         <SiteSnippet
-          text={active.snippet}
-          title={`${active.label} permissions`}
-          subtitle={`${active.description} Target: ${active.filePath}`}
+          text={localizedSnippet(active, es)}
+          title={`${active.label} ${es ? "permisos" : "permissions"}`}
+          subtitle={es ? `Fragmento de configuración para ${active.label}. Archivo de destino: ${active.filePathEs ?? active.filePath}` : `${active.description} Target: ${active.filePath}`}
           copyFeedbackId={`preflight-${activeId}`}
-          label="Permissions pre-flight snippet"
+          label={es ? "Fragmento de permisos previo" : "Permissions pre-flight snippet"}
           onAfterCopy={() => sendFunnelPreflightCopy(active.id)}
         />
       </div>

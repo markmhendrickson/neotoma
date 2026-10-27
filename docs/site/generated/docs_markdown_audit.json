@@ -1,21 +1,22 @@
 {
-  "generated_at": "2026-10-21T17:21:26.045Z",
-  "total_files": 731,
+  "generated_at": "2026-10-27T15:22:44.386Z",
+  "total_files": 807,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
     "bundles": 2,
     "conventions": 12,
     "coverage_manifest.md": 1,
-    "developer": 126,
+    "developer": 128,
     "examples": 1,
     "feature_units": 20,
     "foundation": 25,
     "getting_started": 4,
+    "guides": 29,
     "icp": 11,
     "implementation": 2,
     "infrastructure": 3,
-    "integrations": 12,
+    "integrations": 13,
     "known_limitations.md": 1,
     "legal": 8,
     "migration": 2,
@@ -34,12 +35,13 @@
     "reports": 48,
     "research": 1,
     "security": 10,
-    "site": 179,
+    "site": 181,
     "skills": 4,
     "specs": 14,
     "subsystems": 51,
     "templates": 2,
     "testing": 10,
+    "topics": 42,
     "ui": 42,
     "use_cases": 17,
     "vocabulary": 2
@@ -474,6 +476,10 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/mcp_codex_remote_setup.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/mcp_connect_button_troubleshooting.md",
       "top": "developer"
     },
@@ -651,6 +657,10 @@
     },
     {
       "rel": "docs/developer/shared_components_submodule_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/site_launch_readiness.md",
       "top": "developer"
     },
     {
@@ -894,6 +904,122 @@
       "top": "getting_started"
     },
     {
+      "rel": "docs/guides/connections/chatgpt.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/claude-agent-sdk.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/claude-code.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/claude-desktop.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/codex.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/continue.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/cursor.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/chatgpt.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/claude-agent-sdk.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/claude-code.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/claude-desktop.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/codex.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/continue.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/cursor.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/ironclaw.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/letta.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/openclaw.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/opencode.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/smithery.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/vscode.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/windsurf.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/ironclaw.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/letta.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/openclaw.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/opencode.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/README.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/smithery.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/vscode.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/windsurf.md",
+      "top": "guides"
+    },
+    {
       "rel": "docs/icp/developer_release_targeting.md",
       "top": "icp"
     },
@@ -967,6 +1093,10 @@
     },
     {
       "rel": "docs/integrations/aauth_yubikey.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/es/matrix.md",
       "top": "integrations"
     },
     {
@@ -1710,6 +1840,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/onepager_capability_evidence.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/pages/en/agent-auth.md",
       "top": "site"
     },
@@ -2398,6 +2532,10 @@
       "top": "site"
     },
     {
+      "rel": "docs/site/READER_CLOSEOUT.md",
+      "top": "site"
+    },
+    {
       "rel": "docs/site/README.md",
       "top": "site"
     },
@@ -2724,6 +2862,174 @@
     {
       "rel": "docs/testing/WHY_PARTIAL_ROUTE_COVERAGE.md",
       "top": "testing"
+    },
+    {
+      "rel": "docs/topics/architecture/current-snapshot.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/history.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/observations.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/provenance.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/README.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/record-model.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/schemas.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/architecture/vocabulary.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/current-snapshot.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/history.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/observations.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/provenance.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/README.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/record-model.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/schemas.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/architecture/vocabulary.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/install/system-changes.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/interfaces/cli.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/interfaces/mcp.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/interfaces/read-search.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/interfaces/README.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/interfaces/rest-api.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/interfaces/store-correct.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/start.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/trust/export-backup.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/trust/license.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/trust/limitations.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/trust/local-first.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/es/trust/README.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/install/system-changes.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/interfaces/cli.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/interfaces/mcp.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/interfaces/read-search.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/interfaces/README.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/interfaces/rest-api.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/interfaces/store-correct.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/start.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/trust/export-backup.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/trust/license.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/trust/limitations.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/trust/local-first.md",
+      "top": "topics"
+    },
+    {
+      "rel": "docs/topics/trust/README.md",
+      "top": "topics"
     },
     {
       "rel": "docs/ui/DESIGN_SYSTEM_UPDATE_SUMMARY.md",

@@ -53,7 +53,7 @@ export default defineConfig({
         return null;
       },
     },
-    { ...mdx({ providerImportSource: "@mdx-js/react" }), enforce: "pre" },
+    { ...mdx({ include: "**/*.mdx", providerImportSource: "@mdx-js/react" }), enforce: "pre" },
     react(),
   ],
   server: {

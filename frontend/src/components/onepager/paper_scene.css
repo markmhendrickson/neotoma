@@ -13,7 +13,7 @@
 }
 .paper-edge {
   stroke: #fff9ec;
-  stroke-width: 0.7;
+  stroke-width: 0.9;
   stroke-opacity: 0.7;
 }
 .paper-underedge {
@@ -38,9 +38,17 @@
   color: var(--paper-navy);
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 .paper-thread path {
+  vector-effect: non-scaling-stroke;
+}
+.paper-cell-trace {
+  fill: none;
+  stroke: var(--paper-navy);
+  stroke-width: 1.6;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 .paper-thread-dashed {
@@ -51,6 +59,34 @@
 }
 .paper-hole-rim {
   fill: #9f937d;
+}
+.paper-tack {
+  pointer-events: none;
+}
+.topic-visual {
+  margin: 1.6rem 0;
+}
+.topic-visual .paper-scene {
+  aspect-ratio: 3 / 2;
+  border-radius: 12px;
+}
+.topic-visual figcaption {
+  max-width: 62ch;
+  margin: 0.65rem 0 0;
+  color: #495866;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.topic-install-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: #304b5b;
+  font: 600 clamp(0.72rem, 2.5vw, 0.9rem)/1.35 var(--sans);
+  text-align: center;
 }
 .paper-scene [data-paper-object] {
   transform-box: fill-box;
@@ -92,4 +128,21 @@
   fill: none;
   stroke: #646359;
   stroke-width: 2;
+}
+.paper-label {
+  fill: var(--paper-navy);
+  font:
+    700 40px/1 system-ui,
+    sans-serif;
+  letter-spacing: 1.2px;
+  paint-order: stroke;
+}
+.paper-label-light {
+  fill: var(--paper-cream);
+}
+.paper-agent-label {
+  font:
+    700 17px/1 system-ui,
+    sans-serif;
+  letter-spacing: 2px;
 }

@@ -7,12 +7,14 @@ import {
   ToastViewport,
 } from '@/components/ui/toast';
 import { useToast } from '@/components/ui/use-toast';
+import { useOptionalLocale } from '@/i18n/LocaleContext';
 
 export function Toaster() {
   const { toasts } = useToast();
+  const spanish = useOptionalLocale()?.locale === 'es';
 
   return (
-    <ToastProvider>
+    <ToastProvider label={spanish ? 'Notificación' : 'Notification'}>
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
@@ -25,7 +27,7 @@ export function Toaster() {
           </Toast>
         );
       })}
-      <ToastViewport />
+      <ToastViewport label={spanish ? 'Notificaciones ({hotkey})' : 'Notifications ({hotkey})'} />
     </ToastProvider>
   );
 }

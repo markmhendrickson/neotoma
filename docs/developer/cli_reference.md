@@ -472,7 +472,7 @@ Config scope for `neotoma init` is a binary switch: `--project-local` writes to 
 After the JSON report, `neotoma setup` always emits two plain-text lines to stdout (regardless of `--json` / `--pretty` mode):
 
 1. **Install-verification line**: a single grep-able line confirming the binary path, version manager, version, data directory, and MCP transport. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`. Agent harnesses grep this line to confirm install succeeded without parsing JSON.
-2. **Transport summary**: the fixed text `Transport: local stdio MCP (no network egress). Override with --mcp-transport=http for signed HTTP /mcp proxy.` It is printed whatever transport was chosen, and it describes the MCP transport only: the CLI and the stdio MCP server still check the npm registry for updates (see [Update check](#update-check-stderr-notice)). `http` is not an accepted `--mcp-transport` value; the signed HTTP proxy preset is `a`.
+2. **Transport summary**: the fixed line begins `Transport: local stdio MCP` and is printed whatever transport was chosen. Its claim of zero network traffic describes only the local stdio MCP transport: the CLI and the stdio MCP server still check the npm registry for updates, which the registry sees with ordinary connection metadata. Set `NO_UPDATE_NOTIFIER=1` to disable those checks (see [Update check](#update-check-stderr-notice)). The printed `http` suggestion is inaccurate: `http` is not an accepted `--mcp-transport` value; the signed HTTP proxy preset is `a`.
 
 Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `neotoma mcp config` or `neotoma cli config` when only one layer needs repair.
 

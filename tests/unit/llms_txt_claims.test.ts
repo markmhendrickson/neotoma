@@ -123,8 +123,11 @@ function invertedIdCondition(text: string): string[] {
 function openApiPathCount(yaml: string): number {
   const body = yaml.slice(yaml.indexOf("\npaths:\n") + 1);
   const end = body.search(/\n\S/);
-  return (body.slice(0, end === -1 ? undefined : end).match(/^  \//gm) ?? []).length;
+  return (body.slice(0, end === -1 ? undefined : end).match(/^ {2}\//gm) ?? []).length;
 }
+
+const MAIN_SURFACE_COUNT_CLAIM =
+  /On main \(unreleased v(\d+\.\d+\.\d+) candidate\), Neotoma v\1 exposes (\d+) MCP tools and (\d+) REST paths in its OpenAPI spec\./;
 
 function surfaceOverclaims(text: string): string[] {
   return SURFACE_AND_ATTRIBUTION_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
@@ -270,11 +273,13 @@ describe("README checkable claims", () => {
   ).version;
 
   it("states this package version and its registered MCP tool count", () => {
-    const m = /Neotoma v(\d+\.\d+\.\d+) exposes (\d+) MCP tools/.exec(readme);
-    expect(m, "README must state this package version and its MCP tool count").not.toBeNull();
+    const m = MAIN_SURFACE_COUNT_CLAIM.exec(readme);
+    expect(
+      m,
+      "README must scope the main-branch MCP tool count to its unreleased candidate"
+    ).not.toBeNull();
     expect(m![1]).toBe(packageVersion);
     expect(Number(m![2])).toBe(NEOTOMA_TOOL_NAMES.length);
-    expect(readme).not.toMatch(/MCP tools \(as of v\d/);
   });
 
   it("opens with the lead contrast and the category sentence", () => {
@@ -340,20 +345,20 @@ describe("README checkable claims", () => {
   });
 
   it("states the REST path count that openapi.yaml has", () => {
-    const m =
-      /Neotoma v(\d+\.\d+\.\d+) exposes \d+ MCP tools and (\d+) REST paths in its OpenAPI spec/.exec(
-        readme
-      );
-    expect(m, "README must state the REST path count").not.toBeNull();
+    const m = MAIN_SURFACE_COUNT_CLAIM.exec(readme);
+    expect(
+      m,
+      "README must scope the main-branch REST path count to its unreleased candidate"
+    ).not.toBeNull();
     expect(m![1]).toBe(packageVersion);
-    expect(Number(m![2])).toBe(openApiPathCount(readFileSync(join(root, "openapi.yaml"), "utf-8")));
+    expect(Number(m![3])).toBe(openApiPathCount(readFileSync(join(root, "openapi.yaml"), "utf-8")));
     expect(readme).not.toMatch(/about \d+ REST endpoints/);
   });
 
   it("makes no surface-parity or attribution overclaim, and says the surfaces are separate", () => {
     expect(surfaceOverclaims(readme)).toEqual([]);
-    expect(readme).toContain(
-      "the MCP server, the REST API, and the CLI are separate implementations"
+    expect(readme).toMatch(
+      /the MCP server, the REST API, and the CLI are separate implementations/i
     );
     expect(readme).toContain(
       "Unless an agent signs its requests, the name is the writer's own claim"
@@ -546,13 +551,13 @@ describe("claims true for this package", () => {
     expect(readme).toContain("fail quietly when nothing is listening there");
   });
 
-  it("marks atomic corrections as part of this version in docs/README.md", () => {
+  it("marks atomic corrections as an unreleased candidate absent from the latest release", () => {
     const version = (
       JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
         version: string;
       }
     ).version;
-    expect(docsReadme).toContain(`one transaction (added in v${version})`);
+    expect(docsReadme).toContain(`one transaction (v${version} candidate; absent from v0.25.0)`);
   });
 });
 

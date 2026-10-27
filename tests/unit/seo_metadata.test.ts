@@ -14,7 +14,7 @@ import {
 const INDEXABLE_ROUTES = [
   "/",
   "/install",
-  "/docs",
+  "/integrations",
   "/terminology",
   "/agent-instructions",
   "/api",
@@ -77,10 +77,11 @@ describe("seo_metadata", () => {
   });
 
   it("buildDefaultOgImageAlt avoids double punctuation when title already ends with a period", () => {
-    const alt = buildDefaultOgImageAlt("Your agents forget. Neotoma makes them remember.", "Short desc.");
-    expect(alt).toBe(
-      "Your agents forget. Neotoma makes them remember. Short desc."
+    const alt = buildDefaultOgImageAlt(
+      "Your agents forget. Neotoma makes them remember.",
+      "Short desc."
     );
+    expect(alt).toBe("Your agents forget. Neotoma makes them remember. Short desc.");
     expect(alt).not.toMatch(/\.\./);
   });
 
@@ -96,11 +97,11 @@ describe("seo_metadata", () => {
     expect(k).toContain("MCP");
   });
 
-  it("maps docs child routes to docs metadata", () => {
+  it("keeps retired docs routes noindex", () => {
     const metadata = getSeoMetadataForPath("/docs/developer/getting_started.md");
 
-    expect(metadata.title).toContain("Neotoma Documentation");
-    expect(metadata.robots).toBe("index,follow");
+    expect(metadata.title).toBe("References moved | Neotoma");
+    expect(metadata.robots).toBe("noindex,follow");
   });
 
   it("uses noindex metadata for unknown routes", () => {
@@ -117,30 +118,47 @@ describe("seo_metadata", () => {
     expect(robots).toContain("Sitemap: https://neotoma.io/sitemap.xml");
   });
 
+  it("keeps a preview out of robots and its sitemap", () => {
+    expect(buildRobotsTxt(true)).toBe("User-agent: *\nDisallow: /\n");
+    expect(buildSitemapXml(["/", "/install"], true)).not.toContain("<loc>");
+  });
+
+  it("advertises the published package version in SoftwareApplication data", () => {
+    const app = resolveSeoMetadata("/").jsonLd.find(
+      (entry) => entry["@type"] === "SoftwareApplication"
+    );
+    expect(app?.softwareVersion).toBe("0.25.0");
+  });
+
   it("builds sitemap with expected canonical URLs", () => {
-    const sitemap = buildSitemapXml(["/", "/docs"]);
+    const sitemap = buildSitemapXml(["/", "/cli"]);
 
     expect(sitemap).toContain("<loc>https://neotoma.io/</loc>");
-    expect(sitemap).toContain("<loc>https://neotoma.io/docs</loc>");
+    expect(sitemap).toContain("<loc>https://neotoma.io/cli</loc>");
+    expect(sitemap).not.toContain("<loc>https://neotoma.io/docs</loc>");
   });
 
   it("normalizes canonical URLs with query and trailing slash", () => {
-    expect(buildCanonicalUrl("/docs/?q=test")).toBe(
-      "https://neotoma.io/docs"
-    );
+    expect(buildCanonicalUrl("/arbitrary/path/?q=test")).toBe("https://neotoma.io/arbitrary/path");
   });
 
   it("builds localized canonical URLs for locale-prefixed routes", () => {
-    expect(buildCanonicalUrl("/es/docs")).toBe("https://neotoma.io/es/docs");
-    expect(buildCanonicalUrl("/de/architecture")).toBe("https://neotoma.io/de/architecture");
+    expect(buildCanonicalUrl("/es/arbitrary/path")).toBe("https://neotoma.io/es/arbitrary/path");
+    expect(buildCanonicalUrl("/de/arbitrary/path")).toBe("https://neotoma.io/de/arbitrary/path");
   });
 
   it("resolves locale-specific OG locale and alternates for a localized legal route", () => {
     const metadata = resolveSeoMetadata("/es/privacy");
     expect(metadata.ogLocale).toBe("es_ES");
-    expect(metadata.alternates.find((entry) => entry.hrefLang === "x-default")?.href).toBe("https://neotoma.io/privacy");
-    expect(metadata.alternates.find((entry) => entry.hrefLang === "es")?.href).toBe("https://neotoma.io/es/privacy");
-    expect(metadata.alternates.find((entry) => entry.hrefLang === "en")?.href).toBe("https://neotoma.io/privacy");
+    expect(metadata.alternates.find((entry) => entry.hrefLang === "x-default")?.href).toBe(
+      "https://neotoma.io/privacy"
+    );
+    expect(metadata.alternates.find((entry) => entry.hrefLang === "es")?.href).toBe(
+      "https://neotoma.io/es/privacy"
+    );
+    expect(metadata.alternates.find((entry) => entry.hrefLang === "en")?.href).toBe(
+      "https://neotoma.io/privacy"
+    );
   });
 
   it("emits hreflang alternates only for locales that serve a real page", () => {
@@ -150,7 +168,10 @@ describe("seo_metadata", () => {
       expect(locales, path).not.toContain("es");
       expect(locales, path).not.toContain("de");
     }
-    expect(resolveSeoMetadata("/").alternates.map((entry) => entry.hrefLang)).toEqual(["x-default", "en"]);
+    expect(resolveSeoMetadata("/").alternates.map((entry) => entry.hrefLang)).toEqual([
+      "x-default",
+      "en",
+    ]);
     expect(resolveSeoMetadata("/terms").alternates.map((entry) => entry.hrefLang)).toContain("de");
   });
 
@@ -186,7 +207,9 @@ describe("seo_metadata", () => {
       for (const route of INDEXABLE_ROUTES) {
         expect(SITEMAP_PATHS).toContain(route);
       }
-      expect(SITEMAP_PATHS).toContain("/es/docs");
+      expect(SITEMAP_PATHS).not.toContain("/docs");
+      expect(SITEMAP_PATHS).not.toContain("/es/docs");
+      expect(SITEMAP_PATHS).toContain("/es/privacy");
       expect(SITEMAP_PATHS).toContain("/de/architecture");
     });
 
@@ -212,22 +235,16 @@ describe("seo_metadata", () => {
       expect(metadata.jsonLd[0]["@type"]).toBe("WebSite");
     });
 
-    it("docs page includes BreadcrumbList", () => {
-      const metadata = resolveSeoMetadata("/docs");
-      const breadcrumb = metadata.jsonLd.find(
-        (entry) => entry["@type"] === "BreadcrumbList"
-      );
+    it("root reader page includes BreadcrumbList", () => {
+      const metadata = resolveSeoMetadata("/cli");
+      const breadcrumb = metadata.jsonLd.find((entry) => entry["@type"] === "BreadcrumbList");
       expect(breadcrumb).toBeDefined();
-      expect(
-        (breadcrumb!["itemListElement"] as unknown[]).length
-      ).toBeGreaterThanOrEqual(2);
+      expect((breadcrumb!["itemListElement"] as unknown[]).length).toBeGreaterThanOrEqual(2);
     });
 
     it("subpages include BreadcrumbList", () => {
       const metadata = resolveSeoMetadata("/architecture");
-      const breadcrumb = metadata.jsonLd.find(
-        (entry) => entry["@type"] === "BreadcrumbList"
-      );
+      const breadcrumb = metadata.jsonLd.find((entry) => entry["@type"] === "BreadcrumbList");
       expect(breadcrumb).toBeDefined();
     });
   });
@@ -235,7 +252,7 @@ describe("seo_metadata", () => {
   describe("injectRouteMetaIntoHtml", () => {
     const TEMPLATE = [
       '<!doctype html><html lang="en"><head>',
-      '<title>Neotoma | The state layer for persistent AI agent memory</title>',
+      "<title>Neotoma | The state layer for persistent AI agent memory</title>",
       '<meta name="description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
       '<meta name="robots" content="index,follow" />',
       '<link rel="canonical" href="https://neotoma.io/" />',
@@ -321,7 +338,14 @@ describe("live page metadata carries no retired claim", () => {
   for (const route of ["/", "/install"]) {
     it(`${route}: JSON-LD, keywords, description and image alt are clean`, () => {
       const meta = resolveSeoMetadata(route);
-      const haystack = JSON.stringify(meta.jsonLd) + " " + meta.keywords + " " + meta.description + " " + meta.ogImageAlt;
+      const haystack =
+        JSON.stringify(meta.jsonLd) +
+        " " +
+        meta.keywords +
+        " " +
+        meta.description +
+        " " +
+        meta.ogImageAlt;
       for (const phrase of RETIRED) {
         expect(haystack.toLowerCase(), `${route}: ${phrase}`).not.toContain(phrase.toLowerCase());
       }
@@ -330,9 +354,11 @@ describe("live page metadata carries no retired claim", () => {
   }
 
   it("uses the category keyword list on the home page", () => {
-    expect(resolveSeoMetadata("/").keywords.endsWith(
-      "Neotoma, system of record, AI agents, MCP, Model Context Protocol, provenance, local-first",
-    )).toBe(true);
+    expect(
+      resolveSeoMetadata("/").keywords.endsWith(
+        "Neotoma, system of record, AI agents, MCP, Model Context Protocol, provenance, local-first"
+      )
+    ).toBe(true);
   });
 
   it("points the install page at an image that exists in the build", () => {
@@ -340,4 +366,3 @@ describe("live page metadata carries no retired claim", () => {
     expect(meta.ogImageUrl).toBe("https://neotoma.io/neotoma-og-1200x630.png");
   });
 });
-

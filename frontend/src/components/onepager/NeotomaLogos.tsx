@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { logoFilter } from "./logo_filter";
 import { NEOTOMA_LOGO_DRAFTING, NEOTOMA_LOGO_EDGE } from "./neotoma_logo_drafting.generated";
+import { staticAssetPath } from "../../site/spa_path";
 
 /**
  * Accepted Neotoma identity (symbol "Retained sheets", wordmark N2). Sources and derivation:
@@ -18,12 +19,18 @@ export function SolidLockup({ className = "" }: { className?: string }) {
     <span className={`plan-solid-logo ${className}`} role="img" aria-label="Neotoma">
       <img
         className="plan-logo-light"
-        src="/brand/n2-nav-light.svg"
+        src={staticAssetPath("/brand/n2-nav-light.svg")}
         alt=""
         width={132}
         height={28}
       />
-      <img className="plan-logo-dark" src="/brand/n2-nav-dark.svg" alt="" width={132} height={28} />
+      <img
+        className="plan-logo-dark"
+        src={staticAssetPath("/brand/n2-nav-dark.svg")}
+        alt=""
+        width={132}
+        height={28}
+      />
     </span>
   );
 }

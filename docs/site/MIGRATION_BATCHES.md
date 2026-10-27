@@ -2,6 +2,8 @@
 
 Batch plan for moving TSX page bodies into `docs/site/pages/**/*.mdx` while keeping shells, charts, and dynamic data in React.
 
+The MDX batches below record the earlier migration. For the current static repository-Markdown reader routes and disposition of older hardcoded pages, see [Public reader documentation closeout](READER_CLOSEOUT.md). Completion of an MDX batch does not mean its body is the current public reader or that all repository docs have been semantically reviewed.
+
 **Canonical architecture and authoring rules:** `docs/developer/site_mdx_documentation.md`.
 
 ## Batch 0 (done)

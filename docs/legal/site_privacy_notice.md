@@ -44,6 +44,12 @@ pseudonymous usage analytics:
 
 We do not run Google Analytics on the marketing site.
 
+- **Language preference.** If you choose English or Español using a site language
+  link, the site attempts to save `preferred_locale` (`en` or `es`) in your
+  browser's local storage. This preference is functional and is not sent to a
+  server as a separate event. Explicit page URLs take precedence over it.
+  Language links still work when browser storage is unavailable.
+
 ### 2.2 Issue reporting (GitHub Issues)
 
 When an agent running on your machine files an issue (via the

@@ -2,6 +2,8 @@
 
 Quick checklist for verifying SEO metadata and Umami instrumentation after deployment.
 
+For preview build flags, the migration audit, privacy-safe event contract and post-launch cadence, see [Site launch readiness](site_launch_readiness.md). This checklist's sitemap and robots expectations describe production mode; preview mode emits an empty sitemap, disallows crawling and carries noindex on every HTML page.
+
 ## Pre-Deploy (CI / Local)
 
 1. **Unit tests pass:** `npx vitest run tests/unit/seo_metadata.test.ts` — validates every indexable route has metadata, sitemap completeness, and structured data.
@@ -44,13 +46,13 @@ When adding a new public route:
 
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `frontend/src/site/seo_metadata.ts` | Route metadata registry, sitemap/robots builders |
-| `frontend/src/components/SeoHead.tsx` | Helmet-based per-route `<head>` tags |
-| `frontend/src/components/DetailPage.tsx` | Wrapper that derives route path for SeoHead |
-| `frontend/src/utils/analytics.ts` | Umami init, pageviews, and typed event helpers |
-| `deploy/umami/docker-compose.yml` | Optional self-hosted Umami + PostgreSQL |
-| `scripts/build_github_pages_site.tsx` | Build script that generates per-route HTML, sitemap.xml, robots.txt, and 404.html |
-| `tests/unit/seo_metadata.test.ts` | Unit tests for SEO completeness |
-| `playwright/tests/site-page.spec.ts` | E2E tests including meta tag verification |
+| File                                     | Purpose                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
+| `frontend/src/site/seo_metadata.ts`      | Route metadata registry, sitemap/robots builders                                  |
+| `frontend/src/components/SeoHead.tsx`    | Helmet-based per-route `<head>` tags                                              |
+| `frontend/src/components/DetailPage.tsx` | Wrapper that derives route path for SeoHead                                       |
+| `frontend/src/utils/analytics.ts`        | Umami init, pageviews, and typed event helpers                                    |
+| `deploy/umami/docker-compose.yml`        | Optional self-hosted Umami + PostgreSQL                                           |
+| `scripts/build_github_pages_site.tsx`    | Build script that generates per-route HTML, sitemap.xml, robots.txt, and 404.html |
+| `tests/unit/seo_metadata.test.ts`        | Unit tests for SEO completeness                                                   |
+| `playwright/tests/site-page.spec.ts`     | E2E tests including meta tag verification                                         |

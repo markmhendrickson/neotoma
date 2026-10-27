@@ -22,7 +22,7 @@ export const OCTOBER_RENDERS = {
   ),
   entity: render(
     "N-entity",
-    "Four rust-tabbed fact cards linked to one folder, and a sage-tabbed card linked to another"
+    "Four observation slips connect to one identity-marked dossier holding their linked records"
   ),
   reducer: render(
     "N-reducer",
@@ -30,15 +30,15 @@ export const OCTOBER_RENDERS = {
   ),
   snapshot: render(
     "N-basis",
-    "A record sheet with a highlighted table cell linked to a selected passage on a blue observation sheet, beside a narrow source slip"
+    "A current record sheet with one highlighted field connected to its selected passage on a blue evidence sheet"
   ),
   invoiceExample: render(
     "N-invoice-example",
-    "An invoice sheet and a letter linked to one record card with a rust correction tab"
+    "A separate invoice and email each connect by fine threads to a marked record card"
   ),
   localService: render(
     "N-tools",
-    "Four different tool cards connected by paired threads to one record box on a local base"
+    "One chosen AI tool card reaches a configured local archive containing multiple records"
   ),
 } as const;
 

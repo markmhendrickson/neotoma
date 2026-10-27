@@ -12,5 +12,6 @@ shell: detail
 translation_status: canonical
 ---
 
-# Neotoma with Claude code
+# Neotoma with Claude Code
 
+This legacy address is retained for existing links. Follow the [current Claude Code connection guide](https://neotoma.io/install/claude-code/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

@@ -7,7 +7,7 @@ import { getSpaBasename } from "./site/spa_path";
 import { initSiteAnalytics, installOutboundLinkTracking } from "./utils/analytics";
 import { installViteChunkRecovery } from "./utils/vite_chunk_recovery";
 import { LocaleProvider } from "./i18n/LocaleContext";
-import { ThemeProvider } from "./hooks/useTheme";
+import { ThemeProvider, applyThemeToDOM, readStoredTheme } from "./hooks/useTheme";
 import { MDXProvider } from "@mdx-js/react";
 import { mdxSiteProviderComponents } from "@/components/mdx/mdx_site_components";
 import "./index.css";
@@ -17,15 +17,7 @@ installOutboundLinkTracking();
 
 // Initialize theme on app load
 function initializeTheme() {
-  const stored = localStorage.getItem("theme") || "system";
-  const root = document.documentElement;
-
-  if (stored === "system") {
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    root.classList.toggle("dark", systemPrefersDark);
-  } else {
-    root.classList.toggle("dark", stored === "dark");
-  }
+  applyThemeToDOM(readStoredTheme());
 }
 
 // Initialize theme before React renders

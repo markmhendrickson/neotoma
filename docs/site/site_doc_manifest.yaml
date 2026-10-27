@@ -28,12 +28,14 @@ entries:
     canonical_site_path: /troubleshooting
 
   - repo_path: docs/site/pages/en/mcp.mdx
-    status: canonical_site_page
+    status: redirect
     canonical_site_path: /mcp
+    notes: "Legacy MDX row; the public reader page is now allowlisted in frontend/src/site/docs_viewer_manifest.ts."
 
   - repo_path: docs/site/pages/en/cli.mdx
-    status: canonical_site_page
+    status: redirect
     canonical_site_path: /cli
+    notes: "Legacy MDX row; the public reader page is now allowlisted in frontend/src/site/docs_viewer_manifest.ts."
 
   - repo_path: docs/site/pages/en/inspector-skinning.mdx
     status: canonical_site_page
@@ -67,8 +69,9 @@ entries:
     notes: "Canonical long-form source for the neotoma-client Python SDK page. Site MDX mirrors prose; package README mirrors the same content for PyPI consumers."
 
   - repo_path: docs/site/pages/en/api.mdx
-    status: canonical_site_page
-    canonical_site_path: /api
+    status: redirect
+    canonical_site_path: /rest-api
+    notes: "Legacy /api route redirects to the /rest-api reader page from frontend/src/site/docs_viewer_manifest.ts."
 
   - repo_path: docs/site/pages/en/install.mdx
     status: canonical_site_page

@@ -10,8 +10,8 @@
  * - the serializer emits only allow-listed elements and attributes and escapes every value.
  *
  * Relative links are rewritten per source file: a link to a published viewer document becomes its
- * `/docs/<slug>/` route (anchor kept); any other repository path becomes a GitHub blob or tree URL at
- * the build commit. Pure apart from the injected `pathKind` lookup.
+ * viewer route (anchor kept); any other repository path becomes a GitHub blob or tree URL at the
+ * selected published commit. Pure apart from the injected path lookups.
  */
 import path from "node:path";
 import type { Root as HastRoot, Element as HastElement, ElementContent, RootContent } from "hast";
@@ -72,6 +72,7 @@ for (const lang of [
 }
 
 export const GITHUB_REPO_URL = "https://github.com/markmhendrickson/neotoma";
+export const PREVIEW_REFERENCE_COMMIT = "477978471c5933e26fa07a0d28633382ec4bedb2";
 
 /** Fence languages mapped to the grammar used for highlighting. Unknown languages render plain. */
 const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
@@ -98,12 +99,16 @@ export type PathKind = "file" | "dir" | null;
 export interface RenderContext {
   /** Repository-relative POSIX path of the markdown file being rendered. */
   sourcePath: string;
+  /** Exact source-owned EN to ES counterparts for this finite viewer set. */
+  localizedSourceMap?: ReadonlyMap<string, string>;
   /** Full commit SHA the site is built from; GitHub URLs are pinned to it. */
   commit: string;
   /** Published viewer documents (links to them become viewer routes). */
   index: DocsViewerIndex;
   /** Whether a repository path is a tracked file, a directory, or absent. */
   pathKind: (repoPath: string) => PathKind;
+  /** Preview links outside the viewer use only paths verified at this published ref. */
+  reference?: { commit: string; pathKind: (repoPath: string) => PathKind };
 }
 
 export type LinkKind =
@@ -183,9 +188,14 @@ export function resolveLink(url: string, ctx: RenderContext): ResolvedLink {
     if (SITE_HOSTS.has(u.hostname)) {
       const route = u.pathname.replace(/\/+$/, "") || "/";
       const retired = isRetiredRoute(route, ctx.index);
+      const published = ctx.index.byRoute.get(route) ?? ctx.index.byAliasRoute.get(route);
+      // Absolute links to a published topic must follow the current site mount in previews.
+      // Metadata keeps the canonical production URL; only the article body uses local routes.
+      const localPath = published ? viewerHref(published.slug) : u.pathname;
+      const canonicalSiteOrigin = u.protocol === "https:" && u.port === "";
       return {
         original,
-        href: u.toString(),
+        href: retired || !canonicalSiteOrigin ? u.toString() : `${localPath}${u.search}${u.hash}`,
         kind: "site",
         ...(retired ? { problem: "retired-route" as const } : {}),
       };
@@ -236,29 +246,39 @@ export function resolveLink(url: string, ctx: RenderContext): ResolvedLink {
     return { original, href: null, kind: "broken", problem: "outside-repo" };
   }
   const repoPath = joined === "." ? "" : joined.replace(/\/$/, "");
-  const v = viewerTarget(isDir ? `${repoPath}/` : repoPath, ctx.index);
+  const localizedRepoPath = ctx.localizedSourceMap?.get(repoPath) ?? repoPath;
+  const v = viewerTarget(isDir ? `${localizedRepoPath}/` : localizedRepoPath, ctx.index);
   if (v)
     return {
       original,
       href: `${v}${hash ? `#${encodeFragment(hash)}` : ""}`,
       kind: "viewer",
-      repoPath,
+      repoPath: localizedRepoPath,
       hash,
     };
   const kind = repoPath === "" ? "dir" : ctx.pathKind(repoPath);
   if (kind === null) {
     return {
       original,
-      href: githubUrl("blob", ctx.commit, repoPath, hash),
+      href: null,
       kind: "broken",
       repoPath,
       hash,
       problem: "dead-link",
     };
   }
+  const linkKind = ctx.reference ? ctx.reference.pathKind(repoPath) : kind;
+  if (linkKind === null) {
+    return { original, href: null, kind: "broken", repoPath, hash, problem: "dead-link" };
+  }
   return {
     original,
-    href: githubUrl(kind === "dir" ? "tree" : "blob", ctx.commit, repoPath, hash),
+    href: githubUrl(
+      linkKind === "dir" ? "tree" : "blob",
+      ctx.reference?.commit ?? ctx.commit,
+      repoPath,
+      hash
+    ),
     kind: "github",
     repoPath,
     hash,
@@ -325,7 +345,7 @@ export function parseDoc(sourcePath: string, source: string): ParsedDoc {
   return { sourcePath, frontmatter, body, bodyLineOffset, tree, agentInstructionsHeading };
 }
 
-export const APPLIES_TO_RE = /^applies to\b/i;
+export const APPLIES_TO_RE = /^(?:applies to|se aplica)\b/i;
 
 export interface DocHeader {
   /** First H1 text, if any. */
@@ -428,6 +448,8 @@ export interface RenderedDoc {
 export interface RenderOptions {
   /** Map an image repository path to the public path it is copied to; null rejects the image. */
   imagePublicPath?: (repoPath: string) => string | null;
+  /** Stable paired English heading IDs, by document order. */
+  headingIds?: readonly RenderedHeading[];
 }
 
 /** Render a parsed document to sanitized HTML. Does not mutate `doc`. */
@@ -460,7 +482,9 @@ export function renderDoc(
     if (node.type === "heading") {
       const h = node as Heading;
       const text = toString(h).trim();
-      const id = slugger.slug(text);
+      const id = opts.headingIds?.[headings.length]?.id ?? slugger.slug(text);
+      if (opts.headingIds && opts.headingIds[headings.length]?.depth !== h.depth)
+        throw new Error(`Spanish heading structure differs from English source: ${ctx.sourcePath}`);
       headings.push({ depth: h.depth, text, id });
       h.data = { ...(h.data ?? {}), hProperties: { id } };
     } else if (node.type === "link" || node.type === "definition") {
@@ -487,6 +511,9 @@ export function renderDoc(
     }
   });
 
+  if (opts.headingIds && headings.length !== opts.headingIds.length)
+    throw new Error(`Spanish heading count differs from English source: ${ctx.sourcePath}`);
+
   const hast = toHast(tree, { allowDangerousHtml: false }) as HastRoot;
   decorate(hast);
   const wordCount = toString(tree).split(/\s+/).filter(Boolean).length;
@@ -506,7 +533,7 @@ function classList(el: HastElement): string[] {
   return Array.isArray(c) ? c.map(String) : typeof c === "string" ? c.split(/\s+/) : [];
 }
 
-/** Highlight code, wrap tables and code for in-place scrolling, add heading anchors. */
+/** Highlight code, wrap tables and code for in-place scrolling, retain heading IDs. */
 function decorate(root: HastRoot): void {
   let tableCount = 0;
   // Tables are labelled from the heading above them, so a screen reader announces what they hold.
@@ -574,23 +601,12 @@ function decorate(root: HastRoot): void {
         continue;
       }
       if (/^h[1-6]$/.test(node.tagName) && typeof node.properties?.id === "string") {
-        const id = node.properties.id;
         const text = node.children
           .map((c) => textOf(c))
           .join("")
           .trim();
         lastHeading = text;
         tablesUnderHeading = 0;
-        node.children.push({
-          type: "element",
-          tagName: "a",
-          properties: {
-            className: ["dv-anchor"],
-            href: `#${id}`,
-            ariaLabel: `Link to this section: ${text}`,
-          },
-          children: [{ type: "text", value: "#" }],
-        });
       }
       walk(node);
     }

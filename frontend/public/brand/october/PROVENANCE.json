@@ -55,7 +55,11 @@
       "bundled_sha256": "4042ac769c4eea1ee4dc555bb0d8fd7d001f3d662deb267b3b418c8f36a86299",
       "generator": "Codex built-in image generation",
       "generated_on": "2026-10-22",
-      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "style_references": [
+        "N-hero",
+        "N-capture",
+        "N-basis"
+      ],
       "brief": {
         "section": "How a fact becomes current, step 02 Observation",
         "meaning": "Each extracted fact is stored as its own small record that stays attached to the document it came from.",
@@ -70,7 +74,11 @@
       "bundled_sha256": "9729596dde92391d682186dd4490c32824e3997f6700a61c2bec7eb6762ede5c",
       "generator": "Codex built-in image generation",
       "generated_on": "2026-10-22",
-      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "style_references": [
+        "N-hero",
+        "N-capture",
+        "N-basis"
+      ],
       "brief": {
         "section": "How a fact becomes current, step 03 Entity",
         "meaning": "Slips that share the same identity mark are gathered under one thing; a slip with a different mark goes to a different thing.",
@@ -85,7 +93,11 @@
       "bundled_sha256": "2c3f149f9261f0f591ebe2669e6dcd8538b887a60eb7ebc72e6f8cdfd47e8687",
       "generator": "Codex built-in image generation",
       "generated_on": "2026-10-22",
-      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "style_references": [
+        "N-hero",
+        "N-capture",
+        "N-basis"
+      ],
       "brief": {
         "section": "How a fact becomes current, step 04 Reducer",
         "meaning": "For each field, a rule picks which recorded value is current; older values stay underneath, nothing is thrown away.",
@@ -100,7 +112,11 @@
       "bundled_sha256": "846a97176a564fe89c9c90a8be3799621898716b4a3bc27add5a91ddaa1c13de",
       "generator": "Codex built-in image generation",
       "generated_on": "2026-10-22",
-      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "style_references": [
+        "N-hero",
+        "N-capture",
+        "N-basis"
+      ],
       "brief": {
         "section": "Synthetic example: one invoice",
         "meaning": "Two sources disagree about one invoice; both are kept, and one current record shows the value now in force, with a visible correction mark.",
@@ -115,7 +131,11 @@
       "bundled_sha256": "0463eafa0e594c76297702ec68a1043565bbc5f4243c49173fb23ebfedc671b1",
       "generator": "Codex built-in image generation",
       "generated_on": "2026-10-22",
-      "style_references": ["N-hero", "N-capture", "N-basis"],
+      "style_references": [
+        "N-hero",
+        "N-capture",
+        "N-basis"
+      ],
       "brief": {
         "section": "One local service, read by the tools you connect",
         "meaning": "Several different agent tools write to and read from the same single record kept on one machine.",
@@ -135,6 +155,19 @@
       "source_sha256": "129ed7618959716959f2941fdd5b49e0ad6e6c1d78726761786a00253d865521",
       "bundled_sha256": "129ed7618959716959f2941fdd5b49e0ad6e6c1d78726761786a00253d865521",
       "used_in": "font licence"
+    },
+    "paper-fiber.webp": {
+      "source": "new/paper-fiber.png",
+      "source_sha256": "931d70b5f96ab145c19efdf41c5c460872b7be4ca4dce3f6df15f10a1668c0ed",
+      "bundled_sha256": "9e9dfed440f8ff1800180963edc0dfab6c8333607dc000e079018d9f0c6cf1b8",
+      "generator": "Codex built-in image generation",
+      "generated_on": "2026-10-23",
+      "brief": {
+        "meaning": "Fine irregular warm cotton fibers for paper surfaces and tabletop.",
+        "scene": "Evenly lit cream cotton rag paper texture with no objects, words, lines, stains or vignette."
+      },
+      "conversion": "Pillow Lanczos resize 512x512, WebP quality 82",
+      "used_in": "paper-scene material texture"
     }
   }
 }

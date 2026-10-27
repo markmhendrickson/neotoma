@@ -5,9 +5,16 @@ on:
     paths:
       - "docs/**"
       - "frontend/src/site/**"
+      - "frontend/src/components/**"
+      - "frontend/src/App.tsx"
+      - "frontend/src/index.css"
+      - "frontend/index.html"
+      - "vite.config.ts"
+      - ".github/workflows/docs_pr_preview.yml"
       - "frontend/public/**"
       - "public/**"
       - "scripts/build_github_pages_site.tsx"
+      - "scripts/docs_viewer/**"
 
 permissions:
   contents: read
@@ -23,6 +30,8 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -37,6 +46,8 @@ jobs:
         run: npm run validate:routes
 
       - name: Build UI (for compiled Tailwind CSS)
+        env:
+          VITE_SITE_PREVIEW: "1"
         run: npm run build:ui
 
       - name: Install Playwright browser (Chromium)
@@ -45,6 +56,7 @@ jobs:
       - name: Build static site
         env:
           SITE_PREVIEW: "1"
+          VITE_SITE_PREVIEW: "1"
           NEOTOMA_DOCS_SHOW_INTERNAL: "false"
         run: npm run build:site:pages
 
@@ -52,29 +64,14 @@ jobs:
         run: npm run validate:locales
 
       - name: Validate site export
+        env:
+          SITE_PREVIEW: "1"
         run: npm run validate:site-export
 
-      - name: Rewrite asset paths for subdirectory deploy
+      - name: Rewrite local links for subdirectory deploy
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          # Prerender and validation require root-absolute paths.
-          # Rewrite all root-absolute static asset references so they resolve
-          # under /pr-N/ when deployed to that subdirectory on dev.neotoma.io.
-          find site_pages -name "*.html" -print0 | xargs -0 sed -i \
-            -e "s|/assets/|/pr-${PR_NUMBER}/assets/|g" \
-            -e "s|/neotoma-wordmark\.svg|/pr-${PR_NUMBER}/neotoma-wordmark.svg|g" \
-            -e "s|/neotoma-hero\.png|/pr-${PR_NUMBER}/neotoma-hero.png|g" \
-            -e "s|/neotoma-og-1200x630\.png|/pr-${PR_NUMBER}/neotoma-og-1200x630.png|g" \
-            -e "s|/favicon\.ico|/pr-${PR_NUMBER}/favicon.ico|g" \
-            -e "s|/favicon\.svg|/pr-${PR_NUMBER}/favicon.svg|g" \
-            -e "s|/favicon-16x16\.png|/pr-${PR_NUMBER}/favicon-16x16.png|g" \
-            -e "s|/favicon-32x32\.png|/pr-${PR_NUMBER}/favicon-32x32.png|g" \
-            -e "s|/favicon-48x48\.png|/pr-${PR_NUMBER}/favicon-48x48.png|g" \
-            -e "s|/apple-touch-icon\.png|/pr-${PR_NUMBER}/apple-touch-icon.png|g" \
-            -e "s|/android-chrome-192x192\.png|/pr-${PR_NUMBER}/android-chrome-192x192.png|g" \
-            -e "s|/android-chrome-512x512\.png|/pr-${PR_NUMBER}/android-chrome-512x512.png|g" \
-            -e "s|/site\.webmanifest|/pr-${PR_NUMBER}/site.webmanifest|g"
+        run: ./node_modules/.bin/tsx scripts/rewrite_docs_pr_preview.ts site_pages "$PR_NUMBER"
 
       # The preview deploy pushes to the external markmhendrickson/neotoma-dev-site
       # repo using DEV_PAGES_DEPLOY_TOKEN. When that token is missing or expired the

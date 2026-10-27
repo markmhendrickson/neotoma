@@ -3,11 +3,15 @@ import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
+import { useLocale } from "@/i18n/LocaleContext";
+import { SpanishEvaluateAgentInstructions } from "./SpanishEvaluateAgentInstructions";
 
 const ONBOARDING_SEQUENCE = SITE_CODE_SNIPPETS.onboardingSequence;
 const ACTIVATION_SEQUENCE = SITE_CODE_SNIPPETS.activationSequence;
 
 export function EvaluateAgentInstructionsPage() {
+  const es = useLocale().locale === "es";
+  if (es) return <SpanishEvaluateAgentInstructions />;
   return (
     <DetailPage title="Evaluate: Agent instructions">
       <p className="text-[15px] leading-7 mb-4">
@@ -377,13 +381,13 @@ export function EvaluateAgentInstructionsPage() {
           </li>
           <li>
             <strong>Tooling config after activation:</strong>{" "}
-            <a href="/neotoma-with-chatgpt" className="underline">ChatGPT</a>,{" "}
-            <a href="/neotoma-with-claude" className="underline">Claude</a>,{" "}
-            <a href="/neotoma-with-cursor" className="underline">Cursor</a>,{" "}
-            <a href="/neotoma-with-claude-code" className="underline">Claude Code</a>,{" "}
-            <a href="/neotoma-with-codex" className="underline">Codex</a>,{" "}
-            <a href="/neotoma-with-opencode" className="underline">OpenCode</a>,{" "}
-            <a href="/neotoma-with-openclaw" className="underline">OpenClaw</a>
+            <a href="/install/chatgpt/" className="underline">ChatGPT</a>,{" "}
+            <a href="/install/claude-desktop/" className="underline">Claude Desktop</a>,{" "}
+            <a href="/install/cursor/" className="underline">Cursor</a>,{" "}
+            <a href="/install/claude-code/" className="underline">Claude Code</a>,{" "}
+            <a href="/install/codex/" className="underline">Codex</a>,{" "}
+            <a href="/install/opencode/" className="underline">OpenCode</a>,{" "}
+            <a href="/install/openclaw/" className="underline">OpenClaw</a>
           </li>
           <li>
             <strong>Deeper product context only if needed:</strong>{" "}

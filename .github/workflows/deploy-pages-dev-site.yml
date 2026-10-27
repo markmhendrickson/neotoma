@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: dev
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -37,6 +38,8 @@ jobs:
       # Optional: map dev Umami UUID into VITE_UMAMI_WEBSITE_ID (production build); e.g. secret VITE_UMAMI_WEBSITE_ID_DEV.
       - name: Build UI (for compiled Tailwind CSS)
         env:
+          SITE_PREVIEW: "1"
+          VITE_SITE_PREVIEW: "1"
           VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
           VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID_DEV }}
         run: npm run build:ui
@@ -47,12 +50,17 @@ jobs:
       - name: Build site for preview
         env:
           SITE_PREVIEW: "1"
+          VITE_SITE_PREVIEW: "1"
+          VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID_DEV }}
         run: npm run build:site:pages
 
       - name: Validate locale parity
         run: npm run validate:locales
 
       - name: Validate site export
+        env:
+          SITE_PREVIEW: "1"
         run: npm run validate:site-export
 
       - name: Set custom domain for dev Pages site

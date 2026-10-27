@@ -20,23 +20,13 @@ neotoma init
 
 - Windsurf installed.
 
-## Option A: Auto-install via neotoma setup (recommended)
+## Option A: Host configuration
 
-```bash
-neotoma setup --tool windsurf --yes
-```
-
-This writes the Neotoma MCP server entry into Windsurf's user-level config and verifies the connection.
-
-Alternatively, run the MCP config command directly:
-
-```bash
-neotoma mcp config --user-level --yes
-```
-
-Neotoma detects the Windsurf config path automatically.
+Configure Windsurf manually with the current host format. `neotoma setup --tool windsurf` can write Cursor configuration instead of Windsurf configuration. Check the active Windsurf file and tool list.
 
 ## Option B: Manual — stdio (local install)
+
+For the installed-package stdio example below, run `node -p "process.execPath"` and `npm root -g`, then replace the two example paths with the absolute Node.js executable and `<npm root -g>/neotoma/dist/index.js`. Confirm that file exists. This is the launch shape used by Neotoma's MCP config writer. A source checkout uses its absolute `scripts/run_neotoma_mcp_stdio_prod.sh` path instead.
 
 Create or edit `~/.codeium/windsurf/mcp_config.json`:
 
@@ -44,21 +34,15 @@ Create or edit `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "neotoma": {
-      "command": "neotoma",
-      "args": ["mcp", "stdio"],
-      "env": {}
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/npm/root/neotoma/dist/index.js"],
+      "env": { "NEOTOMA_ACTIONS_DISABLE_AUTOSTART": "1", "NEOTOMA_ENV": "production" }
     }
   }
 }
 ```
 
-If `neotoma` is not on `PATH` from Windsurf's launch environment, use the absolute path:
-
-```bash
-which neotoma
-```
-
-Then substitute the full path, for example `/usr/local/bin/neotoma`.
+Use the absolute Node.js executable and the installed package entrypoint found with the read-only commands above.
 
 Restart Windsurf after editing the config file.
 
@@ -94,7 +78,7 @@ For OAuth, run `neotoma auth login` first. Windsurf supports OAuth discovery via
 ## Troubleshooting
 
 - If tools do not appear, check the Windsurf output panel for MCP server errors
-- If the command is not found, use the absolute path to `neotoma` and restart Windsurf
+- If the command is not found, confirm the absolute Node.js path and package entrypoint and restart Windsurf
 - If using HTTP and getting 401, run `neotoma auth login` and verify the tunnel URL
 - Windsurf loads MCP config at startup; changes require a full restart, not just a reload
 

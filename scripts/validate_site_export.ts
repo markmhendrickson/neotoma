@@ -12,6 +12,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
+import { NON_DEFAULT_LOCALES } from "../frontend/src/i18n/config";
+import { localizePath } from "../frontend/src/i18n/routing";
+import { DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_MANIFEST, isDocsViewerRoute } from "../frontend/src/site/docs_viewer_manifest";
+import { SPANISH_RETAINED_BASE_ROUTES } from "../frontend/src/site/spanish_route_set";
+import { assertExportedUiEntry } from "./site_ui_source_binding";
 import {
   LIVE_ROUTES,
   LOCALIZED_LEGAL_PATHS,
@@ -33,6 +39,7 @@ import {
 import { pageText, scanHtml, validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { headMetaText, jsonLdBlocks } from "./site_html";
 import { llmsLinkProblems } from "./llms_links";
+import { REPO_VERSION } from "../frontend/src/site/site_data";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -132,6 +139,7 @@ if (!fs.existsSync(rootIndex)) {
 // ---------------------------------------------------------------------------
 let missingPages = 0;
 let emptyPages = 0;
+let landmarkFailures = 0;
 
 for (const routePath of indexablePaths) {
   if (isRetiredRoute(routePath)) continue; // retired routes are redirect stubs, checked in 3e
@@ -151,11 +159,66 @@ for (const routePath of indexablePaths) {
   }
 }
 
+// Check the entire retained public route inventory, including localized pages and
+// docs readers. The indexable metadata check above covers only default-locale pages.
+const retainedPaths = new Set<string>([
+  ...indexablePaths,
+  "/404",
+  ...NON_DEFAULT_LOCALES.flatMap((locale) =>
+    indexablePaths.map((routePath) => localizePath(routePath, locale))
+  ),
+  ...DOCS_VIEWER_INDEX.entries.map((entry) => `/${entry.slug}`),
+]);
+let retainedLandmarkPages = 0;
+for (const routePath of retainedPaths) {
+  if (isRetiredRoute(routePath)) continue;
+  const htmlPath =
+    routePath === "/404"
+      ? path.join(siteDir, "404.html")
+      : routePath === "/"
+        ? rootIndex
+        : path.join(siteDir, routePath.replace(/^\//, ""), "index.html");
+  if (!fs.existsSync(htmlPath)) {
+    fail(`Missing HTML for retained route: ${routePath}`);
+    landmarkFailures++;
+    continue;
+  }
+  const parsed = JSDOM.fragment(fs.readFileSync(htmlPath, "utf-8"));
+  const main = parsed.querySelectorAll<HTMLElement>("main");
+  const skip = parsed.querySelectorAll<HTMLAnchorElement>("a.plan-skip, a.dv-skip");
+  const firstFocusable = parsed.querySelector(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  const targetId = skip[0]?.getAttribute("href")?.replace(/^#/, "");
+  const ids = [...parsed.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
+  const target = targetId
+    ? [...parsed.querySelectorAll<HTMLElement>("[id]")].find((element) => element.id === targetId)
+    : null;
+  if (
+    main.length !== 1 ||
+    skip.length !== 1 ||
+    firstFocusable !== skip[0] ||
+    !target ||
+    target.tabIndex !== -1 ||
+    new Set(ids).size !== ids.length
+  ) {
+    fail(
+      `Retained route ${routePath} lacks one first-tab skip link, focusable target, unique IDs or main landmark`
+    );
+    landmarkFailures++;
+  }
+  retainedLandmarkPages++;
+}
+
 if (missingPages === 0 && emptyPages === 0) {
   pass(
     `All ${indexablePaths.filter((r) => !isRetiredRoute(r)).length} live and held pages have prerendered HTML files`
   );
 }
+if (landmarkFailures === 0)
+  pass(
+    `All ${retainedLandmarkPages} retained pages have one main landmark and first-tab skip link`
+  );
 
 // ---------------------------------------------------------------------------
 // 3b. Bundled assets must be root-absolute (/assets/), never ../assets/
@@ -237,7 +300,10 @@ if (englishHomeSentinelHits === 0) {
 const HOME_REQUIRED = [
   "A record, not recall.",
   "the system of record for AI agents",
-  "05 · References",
+  "04 · Advanced",
+  "Build a shared foundation for agent work",
+  "05 · EVALUATE",
+  "Evaluate the fit",
 ] as const;
 const HOME_FORBIDDEN = [
   "Your agents forget",
@@ -265,7 +331,7 @@ let homeFailures = 0;
 }
 if (homeFailures === 0) {
   pass(
-    "Home page is the one-pager: current category, references, no old header, footer or title blocks"
+    "Home page is the one-pager: current category, advanced and evaluate sections, no old header, footer or title blocks"
   );
 }
 
@@ -319,6 +385,13 @@ for (const route of Object.keys(RETIRED_DESTINATIONS)) {
 }
 for (const loc of NON_ENGLISH_SITE_LOCALES) {
   const stub = path.join(siteDir, loc, "index.html");
+  if (loc === "es") {
+    if (!fs.existsSync(stub) || !fs.readFileSync(stub, "utf-8").includes('<html lang="es"')) {
+      fail("site_pages/es/index.html must be a substantive Spanish homepage");
+      routeFailures++;
+    }
+    continue;
+  }
   if (
     !fs.existsSync(stub) ||
     !fs.readFileSync(stub, "utf-8").includes('content="0; url=https://neotoma.io/"')
@@ -389,10 +462,23 @@ for (const route of heldRoutes) {
     fail(`sitemap.xml lists retired routes: ${leaked.slice(0, 5).join(", ")}`);
     routeFailures++;
   }
-  for (const live of LIVE_ROUTES) {
-    if (!locs.includes(live)) {
-      fail(`sitemap.xml is missing live route ${live}`);
+  if (process.env.SITE_PREVIEW === "1") {
+    if (locs.length) {
+      fail("preview sitemap.xml must contain no URLs");
       routeFailures++;
+    }
+    if (
+      fs.readFileSync(path.join(siteDir, "robots.txt"), "utf8") !== "User-agent: *\nDisallow: /\n"
+    ) {
+      fail("preview robots.txt must disallow crawling");
+      routeFailures++;
+    }
+  } else {
+    for (const live of LIVE_ROUTES) {
+      if (!locs.includes(live)) {
+        fail(`sitemap.xml is missing live route ${live}`);
+        routeFailures++;
+      }
     }
   }
 }
@@ -409,7 +495,7 @@ for (const route of heldRoutes) {
 }
 if (routeFailures === 0) {
   pass(
-    "Route set holds: /install is real, retired routes are redirect stubs, sitemap lists only live and held routes"
+    "Route set holds: /install is real, retired routes are redirect stubs, sitemap follows build mode"
   );
 }
 
@@ -667,64 +753,123 @@ for (const file of servedPages) {
     }
   }
 }
-// The /install HowTo carries the same three steps as the visible install block.
-const installHtmlForHowTo = path.join(siteDir, "install", "index.html");
-if (fs.existsSync(installHtmlForHowTo)) {
-  const howTo = jsonLdBlocks(fs.readFileSync(installHtmlForHowTo, "utf-8")).find((b) =>
-    b.includes('"HowTo"')
-  );
-  const steps = howTo ? (JSON.parse(howTo).step as { text: string }[]) : [];
-  const joined = steps.map((st) => st.text).join(" ");
+// The default /install page selects among 14 distinct paths. Its JSON-LD must stay neutral,
+// and the full effects link must precede the first visible command in the server-rendered page.
+const installHtmlForSelectedFlow = path.join(siteDir, "install", "index.html");
+if (fs.existsSync(installHtmlForSelectedFlow)) {
+  const html = fs.readFileSync(installHtmlForSelectedFlow, "utf-8");
+  const blocks = jsonLdBlocks(html);
+  const effectsLink = html.indexOf('href="/install/system-changes/"');
+  const firstCommand = html.indexOf(`npm install -g neotoma@${REPO_VERSION}`);
   if (
-    steps.length !== 3 ||
-    !joined.includes("npm install -g neotoma") ||
-    !joined.includes("neotoma init") ||
-    !joined.includes("neotoma setup --tool claude-code") ||
-    joined.includes("--yes") ||
-    joined.includes("--tool cursor")
+    blocks.some((block) => block.includes('"HowTo"')) ||
+    !blocks.some((block) => block.includes('"WebPage"')) ||
+    !html.includes("Choose your tool") ||
+    effectsLink < 0 ||
+    firstCommand < 0 ||
+    effectsLink >= firstCommand
   ) {
-    fail(
-      "site_pages/install/index.html HowTo does not match the visible three human install lines (npm install, neotoma init, neotoma setup --tool claude-code)"
-    );
+    fail("site_pages/install/index.html selected-host flow lacks neutral metadata or upfront effects disclosure");
     servedPageFailures++;
   }
 }
-// The direction section separates current boundaries from planned governance.
-const homeForLimits = path.join(siteDir, "index.html");
-if (fs.existsSync(homeForLimits)) {
-  const homeText = servedText(fs.readFileSync(homeForLimits, "utf-8")).replace(/\s+/g, " ");
-  const directionText = homeText.slice(
-    homeText.indexOf("Where this is going"),
-    homeText.indexOf("Explore the source")
-  );
-  for (const needle of [
-    "Where this is going",
-    "Current boundaries: one local operator",
-    "later ordinary writes can replace corrections",
-    "export contains current values without observation history",
-    "authorship is verified only for signed requests, and some paths record no writer",
-    "One entity can be read as of a past time; the whole record cannot",
-    "A record people and agents maintain together",
-    "Give each domain a clear owner",
-    "authority scoped to the domain",
-    "Keep disagreement on the record",
-    "competing claims, unresolved disputes and official positions",
-    "Make authority easier to inspect",
-    "Planned governance, with no promised timeline",
-    "Authority to act stays in the operational tools above the record",
-    "known limitations",
-  ]) {
-    if (!directionText.includes(needle)) {
-      fail(`site_pages/index.html direction section no longer says "${needle}"`);
+// Validate the actual exported JSON-LD on every route, not only the route metadata source.
+for (const filePath of collectHtmlFiles(siteDir)) {
+  const blocks = jsonLdBlocks(fs.readFileSync(filePath, "utf-8"));
+  for (const block of blocks) {
+    let entry: Record<string, unknown>;
+    try {
+      entry = JSON.parse(block) as Record<string, unknown>;
+    } catch {
+      continue; // malformed JSON-LD is reported by the general structured-data validation
+    }
+    if (entry["@type"] !== "HowTo") continue;
+    const text = (Array.isArray(entry.step) ? entry.step : [])
+      .map((step: { text?: string }) => step.text ?? "")
+      .join(" ");
+    if (
+      (text.includes("npm install -g neotoma") &&
+        !text.includes(`npm install -g neotoma@${REPO_VERSION}`)) ||
+      text.includes("setup --tool openclaw") ||
+      (entry.name === "How to connect Neotoma to Claude Desktop" &&
+        !text.includes("neotoma setup --tool claude-desktop --install-scope user"))
+    ) {
+      fail(`${path.relative(siteDir, filePath)} has unsupported or unpinned HowTo instructions`);
       servedPageFailures++;
     }
   }
-  if ((directionText.match(/Planned direction/g) ?? []).length !== 3) {
+}
+// Each advanced card must keep its status and qualification together in the exported page.
+const homeForLimits = path.join(siteDir, "index.html");
+if (fs.existsSync(homeForLimits)) {
+  const homeHtml = fs.readFileSync(homeForLimits, "utf-8");
+  const advancedStart = homeHtml.indexOf('id="vision"');
+  const evaluateStart = homeHtml.indexOf('id="evaluate"', advancedStart);
+  const advancedHtml =
+    advancedStart >= 0 && evaluateStart > advancedStart
+      ? homeHtml.slice(advancedStart, evaluateStart)
+      : "";
+  const cardPattern =
+    /<div class="plan-vision-content"><p class="plan-label">([^<]+)<\/p><h3>([^<]+)<\/h3><p>([^<]+)<\/p>/g;
+  const cards = [...advancedHtml.matchAll(cardPattern)].map((match) => ({
+    status: match[1],
+    title: match[2],
+    detail: match[3],
+  }));
+  const expectedCards = [
+    {
+      status: "Supported",
+      title: "A shared system of record",
+      detail:
+        "Teams and collaborators can work with the same records through configured access to one instance and data profile.",
+    },
+    {
+      status: "Supported",
+      title: "Verified identity and scoped access",
+      detail:
+        "An admitted signed request can establish agent identity; active scoped grants determine permitted actions. Other paths may have self-reported or absent writer identity.",
+    },
+    {
+      status: "Supported",
+      title: "Selected record exchange",
+      detail:
+        "Configured peers exchange selected records between separate instances, without claiming complete history, files or deletions.",
+    },
+    {
+      status: "Planned",
+      title: "Bounded domain ownership",
+      detail:
+        "Planned domain ownership would make clear who may correct each bounded part of the record.",
+    },
+    {
+      status: "Planned",
+      title: "Retained positions",
+      detail:
+        "Planned position tracking would make a selected position inspectable while retaining the competing claim.",
+    },
+    {
+      status: "Planned",
+      title: "Inspectable explanations",
+      detail:
+        "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
+    },
+  ] as const;
+  if (cards.length !== expectedCards.length) {
     fail(
-      "site_pages/index.html must label each of the three governance ambitions as planned direction"
+      `site_pages/index.html advanced section has ${cards.length} capability cards; expected six`
     );
     servedPageFailures++;
   }
+  for (const expected of expectedCards) {
+    const card = cards.find((candidate) => candidate.title === expected.title);
+    if (!card || card.status !== expected.status || card.detail !== expected.detail) {
+      fail(
+        `site_pages/index.html advanced capability "${expected.title}" lost its status or limit`
+      );
+      servedPageFailures++;
+    }
+  }
+  const homeText = servedText(homeHtml).replace(/\s+/g, " ");
   if (
     /Authority over the record is not modeled|organizations, workspaces and rules for who may correct|One operator per instance|users are separate tenants|corrections always win|export (with|including) (full )?history/i.test(
       homeText
@@ -737,7 +882,7 @@ if (fs.existsSync(homeForLimits)) {
 liveClaimFailures += servedPageFailures;
 if (servedPageFailures === 0) {
   pass(
-    `Served pages: ${servedPages.length} files checked for retired statements, duplicate JSON-LD, orphan markdown mirrors and the /install HowTo`
+    `Served pages: ${servedPages.length} files checked for retired statements, duplicate JSON-LD, orphan markdown mirrors and the /install selected-host flow`
   );
 }
 
@@ -764,14 +909,28 @@ if (!fs.existsSync(notFoundPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Docs viewer pages (/docs/<slug>/, frontend/src/site/docs_viewer_manifest.ts)
+// 5. Curated topic pages (/<slug>/, frontend/src/site/docs_viewer_manifest.ts)
 // ---------------------------------------------------------------------------
 {
-  const { problems, checked } = validateDocsViewerExport(siteDir);
+  const allowedSourceSlugs = [...DOCS_VIEWER_INDEX.entries, ...SPANISH_DOCS_VIEWER_INDEX.entries].map((entry) => entry.slug);
+  const { problems, checked } = validateDocsViewerExport(siteDir, {
+    sourceContext: process.env.SITE_PREVIEW === "1" ? "local-preview" : "published",
+    repoRoot: process.cwd(),
+    allowedSourceSlugs,
+  });
+  const spanish = validateDocsViewerExport(siteDir, {
+    index: SPANISH_DOCS_VIEWER_INDEX,
+    manifest: SPANISH_DOCS_VIEWER_MANIFEST,
+    sourceContext: process.env.SITE_PREVIEW === "1" ? "local-preview" : "published",
+    repoRoot: process.cwd(),
+    allowedSourceSlugs,
+    skipGlobalChecks: true,
+  });
   for (const problem of problems) fail(problem);
-  if (problems.length === 0) {
+  for (const problem of spanish.problems) fail(problem);
+  if (problems.length === 0 && spanish.problems.length === 0) {
     pass(
-      `Docs viewer: ${checked} included page(s) are real, script-free and claim-safe; stubs and sitemap point at them`
+      `Docs viewer: ${checked} English and ${spanish.checked} Spanish included page(s) are real, safe without JavaScript and claim-safe; optional analytics asset is constrained`
     );
   }
 }
@@ -779,9 +938,18 @@ if (!fs.existsSync(notFoundPath)) {
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
+try {
+  const appBases = SPANISH_RETAINED_BASE_ROUTES.filter((route) => !isDocsViewerRoute(route));
+  const appRoutes = ["/en/", ...appBases.flatMap((route) => [route, `/es${route === "/" ? "/" : route}`])];
+  const ui = assertExportedUiEntry(siteDir, repoRoot, appRoutes);
+  pass(`UI entry ${ui.entry} matches source ${ui.head.slice(0, 12)}, compiled asset and ${appRoutes.length} EN/ES app pages`);
+} catch (error) {
+  fail(`Source-bound UI export mismatch: ${(error as Error).message}`);
+}
+
 if (failures === 0) {
   console.log(
-    `\n✓  Site export validation passed — ${indexablePaths.length} indexable pages verified.\n`
+    `\n✓  Site export validation passed — ${indexablePaths.length} route metadata entries checked (${process.env.SITE_PREVIEW === "1" ? "preview noindex" : "production indexable"}).\n`
   );
   process.exit(0);
 } else {

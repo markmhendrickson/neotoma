@@ -25,6 +25,24 @@ interface DocEntry {
 }
 
 const DOCS: DocEntry[] = [
+  ...[
+    "README",
+    "chatgpt",
+    "claude-agent-sdk",
+    "claude-code",
+    "claude-desktop",
+    "codex",
+    "continue",
+    "cursor",
+    "ironclaw",
+    "letta",
+    "openclaw",
+    "opencode",
+    "smithery",
+    "vscode",
+    "windsurf",
+  ].map((name) => ({ path: `docs/guides/connections/${name}.md` })),
+  { path: "docs/integrations/matrix.md" },
   {
     path: "docs/architecture/architecture.md",
     retiredPhraseAllowedLines: [

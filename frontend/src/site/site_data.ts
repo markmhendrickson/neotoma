@@ -1,7 +1,9 @@
 import repoInfo from "./repo_info.json";
 
-/** Version from package.json (updated by scripts/repo_info.ts). */
-export const REPO_VERSION: string = repoInfo.version;
+/** Public package version checked against npm latest on 2026-10-26. Update after a product release. */
+export const REPO_VERSION = "0.25.0";
+/** Source candidate version; not a published package claim. */
+export const SOURCE_VERSION: string = repoInfo.version;
 /** Published GitHub releases count (updated by scripts/repo_info.ts). */
 export const REPO_RELEASES_COUNT: number = repoInfo.releasesCount;
 /** GitHub stargazers count (build-time fallback, refreshed client-side). */
@@ -393,7 +395,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Getting started",
     items: [
-      { label: "Documentation", href: "/docs", icon: "Home" },
+      { label: "README", href: "/readme/", icon: "Home" },
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },
@@ -414,9 +416,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   },
   {
     title: "Hosted",
-    items: [
-      { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
-    ],
+    items: [{ label: "Public sandbox", href: "/sandbox", icon: "Globe" }],
   },
   {
     title: "Integrations",
@@ -437,7 +437,11 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "All skills", href: "/skills", icon: "Bot" },
       { label: "Ensure Neotoma", href: "/skills/ensure-neotoma", icon: "Download" },
       { label: "Remember Email", href: "/skills/remember-email", icon: "Mail" },
-      { label: "Remember Conversations", href: "/skills/remember-conversations", icon: "MessageSquare" },
+      {
+        label: "Remember Conversations",
+        href: "/skills/remember-conversations",
+        icon: "MessageSquare",
+      },
       { label: "Remember Meetings", href: "/skills/remember-meetings", icon: "Users" },
       { label: "Remember Finances", href: "/skills/remember-finances", icon: "Receipt" },
       { label: "Remember Contacts", href: "/skills/remember-contacts", icon: "BookUser" },
@@ -614,7 +618,8 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
 
 export const SITE_CODE_SNIPPETS = {
   onboardingSequence: "evaluation -> installation -> activation -> tooling config",
-  activationSequence: "detect context -> discover -> propose -> preview -> ingest -> query -> correct",
+  activationSequence:
+    "detect context -> discover -> propose -> preview -> ingest -> query -> correct",
   installCommands: `# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
 npm install -g neotoma
 
@@ -626,7 +631,7 @@ neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --
 neotoma hooks install --tool opencode --yes   # optional OpenCode lifecycle hooks`,
   agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
 
-Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
+Use \`neotoma\` commands for status and supported setup targets. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it. Choose the exact connection guide for my host at https://neotoma.io/install/. Only Claude Code, Cursor, Codex and Claude Desktop have direct setup paths; use Claude Desktop user scope. OpenClaw's native plugin is its primary path. For manual hosts, SDKs and registries follow their guide instead of substituting a setup target.
 
 Avoid ad-hoc shell introspection or arbitrary repo scripts. Then store my first records and configure my current tool for ongoing use.`,
   postInstallCommands: `# Run API server (development)

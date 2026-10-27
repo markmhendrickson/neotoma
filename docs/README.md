@@ -1,8 +1,8 @@
 # Neotoma documentation
 
-Neotoma is the system of record for AI agents: a record, not recall. These docs describe what the current build does. Pages under `foundation/` state the design, so read them with the build in mind; where the two differ, the code and the README are the reference.
+Neotoma is the system of record for AI agents: a record, not recall. These docs describe the current implementation. Pages under `foundation/` remain the design authority; where implementation differs, the code and README describe what this build actually does.
 
-Applies to v0.26.0.
+Applies to the unreleased v0.26.0 candidate; some linked behavior is absent from the released v0.25.0. Pages that span both versions name their differences.
 
 A running Neotoma server also serves these files at its own `/docs` route. To install and try Neotoma, start with the [README](../README.md).
 
@@ -20,7 +20,7 @@ A running Neotoma server also serves these files at its own `/docs` route. To in
 - [Reducer](subsystems/reducer.md): how the current value of each field is computed from observations.
 - [Observation architecture](subsystems/observation_architecture.md): how observations are stored and linked to sources.
 - [Determinism](architecture/determinism.md): what is derived from inputs, and how.
-- [Atomic corrections](developer/atomic_corrections.md): apply a bounded set of corrections in one transaction (added in v0.26.0).
+- [Atomic corrections](developer/atomic_corrections.md): apply a bounded set of corrections in one transaction (v0.26.0 candidate; absent from v0.25.0).
 
 ## Foundation
 

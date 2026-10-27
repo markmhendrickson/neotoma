@@ -45,6 +45,9 @@ const ATTRS: Readonly<Record<string, Readonly<Record<string, AttrRule>>>> = {
   br: {},
 };
 
+/** The document-body grammar shared with the final reader export validator. */
+export const DOCS_VIEWER_BODY_TAGS: ReadonlySet<string> = new Set(Object.keys(ATTRS));
+
 const VOID = new Set(["img", "hr", "br"]);
 const ROLES = new Set(["region"]);
 

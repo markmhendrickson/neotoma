@@ -20,7 +20,13 @@ if (path.resolve(outDir).startsWith(path.join(repoRoot, "site_pages"))) {
   console.error("docs viewer preview: refusing to write into site_pages/");
   process.exit(1);
 }
-const result = runDocsViewer({ repoRoot, outDir, write: true, includePending: true });
+const result = runDocsViewer({
+  repoRoot,
+  outDir,
+  write: true,
+  includePending: true,
+  sourceContext: "local-preview",
+});
 console.log(formatReport(result));
 for (const r of result.reports) {
   if (r.outFile)
