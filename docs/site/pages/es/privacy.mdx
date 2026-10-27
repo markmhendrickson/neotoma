@@ -1,7 +1,9 @@
 import { LEGAL_PAGE_LINK_CLASS } from "@/site/legal_page_link";
 import { PRIVACY_LEGAL_FIELDS as legal } from "@/site/legal_canonical_fields";
 
-<p className="text-[13px] text-muted-foreground mb-6">Versión {legal.version} · vigente desde {legal.effective}</p>
+<p className="text-[13px] text-muted-foreground mb-6">Versión {legal.version} · publicación original {legal.published} · revisada y vigente desde {legal.revised}</p>
+
+> La revisión {legal.version} corrige la descripción del alojamiento del sitio público y de la conservación del contenido del entorno de pruebas. No anuncia ningún cambio en esos servicios. Esta revisión del aviso entra en vigor el {legal.revised}.
 
 Este aviso explica qué datos recoge `neotoma.io` cuando visitas el sitio público, utilizas el entorno público de pruebas o envías comentarios de agentes mediante el servicio alojado en `agent.neotoma.io`.
 
@@ -89,7 +91,11 @@ Puedes solicitar una dirección postal para correspondencia formal a través de 
 
 ## Historial de revisiones
 
-### 1.0 — {legal.effective}
+### {legal.version} — {legal.revised}
+
+- Corrección de la descripción del alojamiento del sitio público y de la conservación del contenido del entorno de pruebas. Es una corrección factual del aviso, no el anuncio de un cambio en esos servicios.
+
+### 1.0 — {legal.published}
 
 - Publicación inicial del aviso de privacidad del sitio antes de la constitución de una entidad.
 - Analítica aclarada como exclusiva de Umami; eliminadas las referencias a Google Analytics.

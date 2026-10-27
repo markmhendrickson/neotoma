@@ -1,8 +1,11 @@
 # Neotoma Site Privacy Notice
 
 **Published:** 2026-04-24
-**Version:** 1.0
+**Version:** 1.1
+**Revised:** 2026-10-27
 **Live at:** https://neotoma.io/privacy
+
+> Revision 1.1 corrects the description of public-site hosting and sandbox content retention. It does not announce a change to those services. This notice revision is effective 2026-10-27.
 
 This notice describes what data `neotoma.io` collects when you visit
 the marketing site, interact with the public sandbox, or submit agent
@@ -167,6 +170,10 @@ A postal address for formal correspondence is available on request
 at the contact email above.
 
 ## Revision history
+
+### 1.1 — 2026-10-27
+
+- Corrected the description of public-site hosting and sandbox content retention. This is a factual correction to the notice, not an announcement of a change to those services.
 
 ### 1.0 — 2026-04-24
 
