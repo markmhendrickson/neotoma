@@ -1,5 +1,5 @@
 /**
- * Route set of neotoma.io as a one-pager.
+ * Route set for the homepage, curated topic pages, and held application surfaces.
  *
  * neotoma.io is a single page (`/`) plus a real `/install` page. Every other former route is
  * either HELD (still served as before, because something fetches or links to it programmatically,
@@ -16,13 +16,15 @@ import {
   type DocsViewerIndex,
   viewerHrefForRepoPath,
 } from "./docs_viewer_manifest";
+import { CONNECTIONS } from "../../../src/shared/harness_connections";
+import { isSpanishRetainedBaseRoute } from "./spanish_route_set";
 
 export const GITHUB_REPO = "https://github.com/markmhendrickson/neotoma";
 const BLOB = `${GITHUB_REPO}/blob/main/`;
 const TREE = `${GITHUB_REPO}/tree/main/`;
 
 /** Routes that are real pages on the one-pager site. */
-export const LIVE_ROUTES: readonly string[] = ["/", "/install"];
+export const LIVE_ROUTES: readonly string[] = ["/", "/install", "/compare"];
 
 const MARKDOWN_MIRROR_REASON =
   "Markdown mirrors of site pages that are themselves served, linked from each page for agents and crawlers; llms.txt points at them.";
@@ -64,11 +66,11 @@ export const HELD_ROUTES: readonly { match: string | RegExp; reason: string }[] 
   },
 ];
 
-/** `null` means "no GitHub equivalent: send to the one-pager". Paths ending in `/` are folders. */
+/** Retired paths point to a relevant retained page or current reference; no blanket home fallback. */
 export const RETIRED_DESTINATIONS: Readonly<Record<string, string | null>> = {
   // Client-side-only redirects in the old app that also had committed pages
   "/docker": "docs/developer/docker.md",
-  "/knowledge-workers": null,
+  "/knowledge-workers": "/readme/",
   "/quick-start": "/install",
   "/install/manual": "install.md",
   "/install/docker": "docs/developer/docker.md",
@@ -76,17 +78,21 @@ export const RETIRED_DESTINATIONS: Readonly<Record<string, string | null>> = {
   "/backup": "docs/operations/runbook.md",
   "/tunnel": "docs/infrastructure/deployment.md",
   "/hosted": "docs/infrastructure/deployment.md",
-  "/integrations": "docs/integrations/matrix.md",
   "/connect": "docs/integrations/matrix.md",
-  "/docs": "docs/",
+  "/docs": "/#references",
+  "/docs/readme": "README.md",
+  "/docs/cli": "docs/developer/cli_reference.md",
+  "/docs/mcp": "docs/developer/mcp_overview.md",
+  "/docs/rest-api": "docs/api/rest_api.md",
+  "/docs/integrations": "docs/integrations/matrix.md",
+  "/docs/architecture": "docs/architecture/architecture.md",
+  "/docs/vocabulary": "docs/vocabulary/canonical_terms.md",
   "/terminology": "docs/vocabulary/canonical_terms.md",
   "/agent-instructions": "docs/developer/agent_instructions.md",
   "/agent-instructions/store-recipes": "docs/developer/agent_instructions.md",
   "/agent-instructions/retrieval-provenance": "docs/developer/agent_instructions.md",
   "/agent-instructions/display-conventions": "docs/developer/agent_instructions.md",
   "/api": "docs/api/rest_api.md",
-  "/mcp": "docs/developer/mcp_overview.md",
-  "/cli": "docs/developer/cli_reference.md",
   "/sdk/agent": "packages/client/",
   "/sdk/python": "packages/client-python/",
   "/aauth": "docs/subsystems/aauth.md",
@@ -123,13 +129,13 @@ export const RETIRED_DESTINATIONS: Readonly<Record<string, string | null>> = {
   "/data-model": "docs/foundation/data_models.md",
   "/inspector-skinning": "docs/developer/inspector/README.md",
   "/identify-entity-by-signals": "docs/foundation/entity_resolution.md",
-  "/capability-delta": null,
-  "/high-velocity-intake": null,
-  "/embed-graph": null,
+  "/capability-delta": "/interfaces/",
+  "/high-velocity-intake": "/store-correct/",
+  "/embed-graph": "/interfaces/",
   "/architecture": "docs/architecture/architecture.md",
   "/operating": "docs/operations/runbook.md",
-  "/building-pipelines": null,
-  "/debugging-infrastructure": null,
+  "/building-pipelines": "/architecture/",
+  "/debugging-infrastructure": "/history/",
   "/neotoma-with-cursor": "docs/developer/mcp_cursor_setup.md",
   "/neotoma-with-claude": "docs/integrations/matrix.md",
   "/neotoma-with-claude-connect-desktop": "docs/integrations/matrix.md",
@@ -166,24 +172,24 @@ export const RETIRED_DESTINATIONS: Readonly<Record<string, string | null>> = {
   "/zero-setup-onboarding": "install.md",
   "/semantic-similarity-search": "docs/subsystems/vector_ops.md",
   "/direct-human-editability": "docs/subsystems/markdown_mirror.md",
-  "/platform-memory": null,
-  "/retrieval-memory": null,
-  "/file-based-memory": null,
-  "/database-memory": null,
-  "/deterministic-memory": null,
-  "/memory-vendors": null,
-  "/memory-models": null,
-  "/memory-guarantees": null,
-  "/build-vs-buy": null,
-  "/multi-agent-state": null,
+  "/platform-memory": "/architecture/",
+  "/retrieval-memory": "/read-search/",
+  "/file-based-memory": "/record-model/",
+  "/database-memory": "/record-model/",
+  "/deterministic-memory": "/architecture/",
+  "/memory-vendors": "/interfaces/",
+  "/memory-models": "/record-model/",
+  "/memory-guarantees": "/trust/",
+  "/build-vs-buy": "/limitations/",
+  "/multi-agent-state": "/architecture/",
   "/troubleshooting": "docs/operations/runbook.md",
-  "/faq": null,
-  "/neotoma-vs-platform-memory": null,
-  "/neotoma-vs-mem0": null,
-  "/neotoma-vs-zep": null,
-  "/neotoma-vs-rag": null,
-  "/neotoma-vs-files": null,
-  "/neotoma-vs-database": null,
+  "/faq": "/limitations/",
+  "/neotoma-vs-platform-memory": "/architecture/",
+  "/neotoma-vs-mem0": "/architecture/",
+  "/neotoma-vs-zep": "/architecture/",
+  "/neotoma-vs-rag": "/read-search/",
+  "/neotoma-vs-files": "/record-model/",
+  "/neotoma-vs-database": "/record-model/",
   "/types/contacts": "docs/subsystems/record_types.md",
   "/types/tasks": "docs/subsystems/record_types.md",
   "/types/transactions": "docs/subsystems/record_types.md",
@@ -210,8 +216,8 @@ export const RETIRED_DESTINATIONS: Readonly<Record<string, string | null>> = {
   "/changelog": "releases",
   "/foundations": "docs/foundation/core_identity.md",
   "/foundation/problem-statement": "docs/foundation/problem_statement.md",
-  "/privacy-first": null,
-  "/cross-platform": null,
+  "/privacy-first": "/local-first/",
+  "/cross-platform": "/interfaces/",
   // Use-case landing pages
   "/use-cases": "docs/use_cases/README.md",
   "/verticals": "docs/use_cases/README.md",
@@ -291,10 +297,16 @@ export function heldReason(route: string): string | null {
 
 /**
  * Every locale route goes to the one-pager, except the localized legal routes, which stay live.
- * A route served by a published docs viewer page (`/docs/<slug>/`) is a real page, not retired.
+ * A route served by a published topic page is a real page, not retired.
  */
-export function isRetiredRoute(route: string, viewer: DocsViewerIndex = DOCS_VIEWER_INDEX): boolean {
+export function isRetiredRoute(
+  route: string,
+  viewer: DocsViewerIndex = DOCS_VIEWER_INDEX
+): boolean {
   const r = stripTrailingSlash(route);
+  if (r === "/en") return false;
+  if (r === "/es") return false;
+  if (r.startsWith("/es/") && isSpanishRetainedBaseRoute(r.slice(3))) return false;
   if (isLocaleRoute(r)) return !LOCALE_LEGAL.test(r);
   if (isLiveRoute(r)) return false;
   if (viewer.byRoute.has(r)) return false;
@@ -311,9 +323,28 @@ export function resolveDestination(
   viewer: DocsViewerIndex = DOCS_VIEWER_INDEX
 ): Destination {
   const r = stripTrailingSlash(route);
-  if (isLocaleRoute(r)) return { url: "/", repoPath: null, kind: "onepager" };
+  if (isLocaleRoute(r)) {
+    const englishRoute = r.replace(LOCALE_PREFIX, "/");
+    if (englishRoute === "/") return { url: "/", repoPath: null, kind: "onepager" };
+    return resolveDestination(englishRoute, viewer);
+  }
+  if (isLiveRoute(r)) return { url: `https://neotoma.io${r}`, repoPath: null, kind: "site" };
+  if (heldReason(r)) return { url: `https://neotoma.io${r}`, repoPath: null, kind: "site" };
   const self = viewer.byRoute.get(r);
   if (self) return { url: `https://neotoma.io${r}/`, repoPath: null, kind: "site" };
+  const aliased = viewer.byAliasRoute.get(r);
+  if (aliased) return { url: `https://neotoma.io/${aliased.slug}/`, repoPath: null, kind: "site" };
+  if (r === "/neotoma-with-claude")
+    return { url: "https://neotoma.io/install/", repoPath: null, kind: "site" };
+  // Former host pages (including their connect subroutes) all lead to the current
+  // guide in the shared connection contract. Keep the retired route keys for inbound URLs.
+  if (r.startsWith("/neotoma-with-")) {
+    const host = r.slice("/neotoma-with-".length).split("-connect-")[0];
+    const id = host === "claude" ? "claude-desktop" : host;
+    const connection = CONNECTIONS.find((candidate) => candidate.id === id);
+    if (connection)
+      return { url: `https://neotoma.io${connection.guideRoute}`, repoPath: null, kind: "site" };
+  }
   // The mirror of a retired page goes where its source page goes.
   if (r.startsWith("/markdown/") && RETIRED_DESTINATIONS[r] === undefined) {
     return resolveDestination(r.slice("/markdown".length), viewer);
@@ -344,6 +375,12 @@ export function buildRedirectStub(
   const target = dest.url === "/" ? `${origin}/` : dest.url;
   const label = dest.kind === "github" ? "the Neotoma repository on GitHub" : "the Neotoma site";
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  // The fallback remains canonical for crawlers. In a preview, site destinations must stay on
+  // the preview origin and under its /pr-N mount; inbound query and fragment state travels too.
+  const redirectScript =
+    dest.kind === "github"
+      ? ""
+      : `<script>(()=>{const target=new URL(${JSON.stringify(target).replace(/</g, "\\u003c")});const mount=/^\\/pr-\\d+(?=\\/)/.exec(location.pathname)?.[0]||"";const next=new URL(mount+target.pathname,location.origin);next.search=location.search||target.search;next.hash=target.hash||location.hash;location.replace(next.href)})()</script>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -351,14 +388,15 @@ export function buildRedirectStub(
 <title>Moved | Neotoma</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,follow">
+${redirectScript}
 <meta http-equiv="refresh" content="0; url=${esc(target)}">
 <link rel="canonical" href="${esc(target)}">
-<style>body{margin:0;padding:48px 20px;background:#f2ecdf;color:#28372f;font:16px/1.6 system-ui,sans-serif}main{max-width:36rem;margin:0 auto;border:2px solid #28372f;background:#fffbf2;padding:28px}a{color:#a84d33}</style>
+<style>body{margin:0;padding:48px 20px;background:#faf8f3;color:#172b39;font:16px/1.6 system-ui,sans-serif}main{max-width:36rem;margin:0 auto;border:1px solid #d6d0c4;background:#faf8f3;padding:28px}a{color:#a14624}</style>
 </head>
 <body>
 <main>
 <p><strong>This page has moved.</strong></p>
-<p>Neotoma is now a single page at <a href="https://neotoma.io/">neotoma.io</a>. The closest match for this address is on ${label}.</p>
+<p>The closest current page for this address is on ${label}.</p>
 <p><a href="${esc(target)}">Continue to ${esc(target)}</a></p>
 </main>
 </body>

@@ -14,13 +14,14 @@
  *
  * CI runs both validations before deploying; a mismatch blocks the deploy.
  *
- * Docs viewer pages (/docs/<slug>/) are not app routes: they are rendered here from repository
+ * Curated topic pages (/<slug>/) are rendered from repository
  * markdown listed in frontend/src/site/docs_viewer_manifest.ts (see scripts/docs_viewer/).
  */
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { build as buildBrowserAsset } from "esbuild";
 import {
   DEFAULT_LOCALE,
   NON_DEFAULT_LOCALES,
@@ -33,24 +34,32 @@ import {
   buildRedirectStub,
   isRetiredRoute,
 } from "../frontend/src/site/route_retirement";
-import { isDocsViewerRoute } from "../frontend/src/site/docs_viewer_manifest";
+import { isDocsViewerRoute, SPANISH_DOCS_VIEWER_MANIFEST } from "../frontend/src/site/docs_viewer_manifest";
+import { TOPIC_VISUALS } from "../frontend/src/site/topic_visuals";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PaperScene } from "../frontend/src/components/onepager/PaperSceneDrawing";
 import {
   appendSitemapUrls,
+  docsViewerAliasRoutes,
   docsViewerSitemapUrls,
   formatReport,
   runDocsViewer,
 } from "./docs_viewer/build";
 import { dedupeJsonLd } from "./site_html";
+import { assertUiSourceBinding } from "./site_ui_source_binding";
 import {
   buildRobotsTxt,
   buildSitemapXml,
   INDEXABLE_SITE_PAGE_PATHS,
   injectRouteMetaIntoHtml,
+  isSitePreview,
   SITEMAP_PATHS,
 } from "../frontend/src/site/seo_metadata";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
+const docsSourceContext = process.env.SITE_PREVIEW === "1" ? "local-preview" : "published";
 const outputDir = path.join(repoRoot, "site_pages");
 const outputFile = path.join(outputDir, "index.html");
 const noJekyllFile = path.join(outputDir, ".nojekyll");
@@ -81,9 +90,7 @@ const publicRootAssets = [
 ] as const;
 
 const buildId =
-  process.env.GITHUB_SHA?.slice(0, 7) ||
-  process.env.BUILD_ID ||
-  `local-${Date.now()}`;
+  process.env.GITHUB_SHA?.slice(0, 7) || process.env.BUILD_ID || `local-${Date.now()}`;
 
 function markdownMirrorStaticPaths(): string[] {
   const out: string[] = [];
@@ -97,7 +104,6 @@ function markdownMirrorStaticPaths(): string[] {
   return out;
 }
 
-
 /**
  * Read Vite build output. Keep bundled entrypoints as root-absolute `/assets/…`
  * so every static HTML file (/, nested routes, 404) resolves the same chunk URLs.
@@ -109,6 +115,8 @@ function readPublicHtml(): string {
     throw new Error("Missing public/index.html (run 'npm run build:ui' first).");
   }
   const html = fs.readFileSync(publicIndex, "utf-8");
+  const ui = assertUiSourceBinding(html, repoRoot, isSitePreview() ? "preview" : "public");
+  console.log(`Source-bound UI entry: ${ui.entry} (${ui.entrySha256.slice(0, 12)}), ${ui.mode}, ${ui.head.slice(0, 12)}`);
   let out = html;
   const buildComment = `\n    <!-- build: ${buildId} -->`;
   if (out.includes("</head>")) {
@@ -159,7 +167,9 @@ function getContentType(filePath: string): string {
   return "application/octet-stream";
 }
 
-function startStaticServer(rootDir: string): Promise<{ origin: string; close: () => Promise<void> }> {
+function startStaticServer(
+  rootDir: string
+): Promise<{ origin: string; close: () => Promise<void> }> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url || "/", "http://localhost");
@@ -173,7 +183,9 @@ function startStaticServer(rootDir: string): Promise<{ origin: string; close: ()
         candidates.unshift(path.join(rootDir, "index.html"));
       }
 
-      let filePath = candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+      let filePath = candidates.find(
+        (candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()
+      );
       let statusCode = 200;
 
       if (!filePath) {
@@ -201,7 +213,8 @@ function startStaticServer(rootDir: string): Promise<{ origin: string; close: ()
       }
       resolve({
         origin: `http://127.0.0.1:${address.port}`,
-        close: () => new Promise<void>((done, fail) => server.close((err) => (err ? fail(err) : done()))),
+        close: () =>
+          new Promise<void>((done, fail) => server.close((err) => (err ? fail(err) : done()))),
       });
     });
   });
@@ -213,14 +226,69 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   await page.setViewportSize({ width: 1280, height: 900 });
+  page.on("pageerror", (error) => {
+    console.error(`prerender page error: ${error.message}`);
+  });
 
   try {
     for (const routePath of routePaths) {
       const targetUrl = `${server.origin}${routePath}`;
       await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      // The module bundle can finish after DOMContentLoaded; never freeze an empty SPA shell.
+      await page.locator("#root > *").first().waitFor({ timeout: 30000 });
       const renderedHtml = dedupeJsonLd(normalizeBundledAssetPaths(await page.content()));
-      fs.writeFileSync(getOutputPathForRoute(routePath), `<!DOCTYPE html>\n${renderedHtml}\n`, "utf-8");
+      fs.writeFileSync(
+        getOutputPathForRoute(routePath),
+        `<!DOCTYPE html>\n${renderedHtml}\n`,
+        "utf-8"
+      );
     }
+
+    // The reading pages contain no script. Capture their figures from the same settled,
+    // texture-loaded scenes used by the homepage, then ship small raster assets.
+    await page.goto(`${server.origin}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.locator("#root > *").first().waitFor({ timeout: 30000 });
+    await page.locator('svg[data-paper-scene="localService"]').first().waitFor();
+    const sharp = (await import("sharp")).default;
+    const visualDir = path.join(outputDir, "brand", "october", "topic");
+    fs.mkdirSync(visualDir, { recursive: true });
+    for (const [id, visual] of Object.entries(TOPIC_VISUALS)) {
+      const markup = renderToStaticMarkup(
+        createElement(PaperScene, { scene: visual.scene, idNamespace: `capture-${id}` })
+      );
+      const found = await page.evaluate(async (markup) => {
+        document.querySelector("#topic-capture")?.remove();
+        const wrap = document.createElement("div");
+        wrap.id = "topic-capture";
+        wrap.style.cssText =
+          "width:900px;height:600px;background:#faf8f3;overflow:hidden;position:fixed;left:0;top:0;z-index:99999";
+        // This markup comes only from our own React SVG renderer, never source documents.
+        const parsed = new DOMParser().parseFromString(markup, "image/svg+xml");
+        const clone = document.importNode(parsed.documentElement, true) as unknown as SVGSVGElement;
+        clone.style.cssText =
+          "display:block;width:900px;height:600px;max-width:none;opacity:1;transform:none;animation:none";
+        wrap.append(clone);
+        document.body.append(wrap);
+        await document.fonts.ready;
+        await Promise.all(
+          Array.from(clone.querySelectorAll("image")).map(async (image) => {
+            const href = image.getAttribute("href") ?? image.getAttribute("xlink:href");
+            if (!href) return;
+            const asset = new Image();
+            asset.src = href;
+            await asset.decode();
+          })
+        );
+        return true;
+      }, markup);
+      if (!found) throw new Error(`Missing homepage paper scene for topic visual ${id}`);
+      const png = await page.locator("#topic-capture").screenshot({ animations: "disabled" });
+      const webp = await sharp(png).webp({ quality: 76, effort: 5 }).toBuffer();
+      if (webp.byteLength > 1_000_000)
+        throw new Error(`Topic visual ${id} exceeds the reader image cap`);
+      fs.writeFileSync(path.join(visualDir, `${id}.webp`), webp);
+    }
+    await page.locator("#topic-capture").evaluate((element) => element.remove());
 
     await page.goto(`${server.origin}/404`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(250);
@@ -233,13 +301,27 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
   }
 }
 
-
 async function main() {
+  // Fail before copying assets or modifying the export when UI source, mode or
+  // the trusted reader enhancement no longer matches the compiled entry.
+  const rootHtml = readPublicHtml();
   // Docs viewer: lint the whitelist first, so an included file that fails stops the build early.
-  const docsViewer = runDocsViewer({ repoRoot });
+  const docsViewer = runDocsViewer({ repoRoot, sourceContext: docsSourceContext });
   console.log(formatReport(docsViewer));
   if (docsViewer.failures.length) {
     throw new Error(`Docs viewer lint failed:\n${docsViewer.failures.join("\n")}`);
+  }
+  const spanishViewer = runDocsViewer({
+    repoRoot,
+    manifest: SPANISH_DOCS_VIEWER_MANIFEST,
+    sourceContext: docsSourceContext,
+  });
+  const missingSpanish = spanishViewer.reports.filter((report) => report.entry.status === "included" && !report.exists);
+  if (spanishViewer.failures.length || missingSpanish.length) {
+    throw new Error(`Spanish docs viewer is incomplete:\n${[
+      ...spanishViewer.failures,
+      ...missingSpanish.map((report) => report.entry.source),
+    ].join("\n")}`);
   }
   fs.mkdirSync(outputDir, { recursive: true });
   const legacyCssFile = path.join(outputDir, "site.css");
@@ -254,20 +336,31 @@ async function main() {
     fs.rmSync(outputAssetsDir, { recursive: true, force: true });
   }
   fs.cpSync(publicAssetsDir, outputAssetsDir, { recursive: true });
+  if (process.env.VITE_UMAMI_URL?.trim() && process.env.VITE_UMAMI_WEBSITE_ID?.trim()) {
+    await buildBrowserAsset({
+      entryPoints: [path.join(repoRoot, "frontend/src/utils/reader_analytics.ts")],
+      outfile: path.join(outputAssetsDir, "reader-analytics.js"),
+      bundle: true,
+      format: "iife",
+      platform: "browser",
+      target: "es2020",
+      minify: true,
+    });
+  }
 
   // The checked-in site_pages tree can hold stale HTML for routes that no longer exist. Remove every
   // route directory that contains HTML (non-HTML asset folders such as og/ are kept); all live,
   // held and retired routes are regenerated below.
   const dirHasHtml = (dir: string): boolean =>
-    fs.readdirSync(dir, { withFileTypes: true }).some((e) =>
-      e.isDirectory() ? dirHasHtml(path.join(dir, e.name)) : e.name.endsWith(".html"),
-    );
+    fs
+      .readdirSync(dir, { withFileTypes: true })
+      .some((e) =>
+        e.isDirectory() ? dirHasHtml(path.join(dir, e.name)) : e.name.endsWith(".html")
+      );
   for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
     const full = path.join(outputDir, entry.name);
     if (entry.isDirectory() && dirHasHtml(full)) fs.rmSync(full, { recursive: true, force: true });
   }
-
-  const rootHtml = readPublicHtml();
 
   // Seed static route files with route-specific metadata.
   fs.writeFileSync(outputFile, buildHtmlForRoute(rootHtml, "/"), "utf-8");
@@ -287,15 +380,21 @@ async function main() {
     ...NON_DEFAULT_LOCALES.map((loc) => localizePath(route, loc)),
   ]);
   const allStaticRoutePaths = [
-    ...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths(), ...retiredStubPaths]),
+    ...new Set([
+      "/en",
+      ...SITEMAP_PATHS,
+      ...markdownMirrorStaticPaths(),
+      ...retiredStubPaths,
+      ...docsViewerAliasRoutes(docsViewer.published),
+    ]),
   ];
 
-  // neotoma.io is a one-pager: retired routes (every locale route and every old page that is not
-  // live or held, see frontend/src/site/route_retirement.ts) become static redirect stubs. They
+  // Retired routes (every locale route and every old page that is not
+  // live, held or a curated topic, see frontend/src/site/route_retirement.ts) become static redirect stubs. They
   // are written directly and are never pre-rendered.
   const retiredRoutePaths = allStaticRoutePaths.filter((r) => r !== "/" && isRetiredRoute(r));
   const renderedRoutePaths = allStaticRoutePaths.filter(
-    (r) => r === "/" || (!isRetiredRoute(r) && !isDocsViewerRoute(r)),
+    (r) => r === "/" || (!isRetiredRoute(r) && !isDocsViewerRoute(r))
   );
 
   let routeCount = 0;
@@ -309,7 +408,7 @@ async function main() {
       isRetiredRoute(routePath)
         ? buildRedirectStub(routePath)
         : buildHtmlForRoute(rootHtml, routePath),
-      "utf-8",
+      "utf-8"
     );
     routeCount++;
   }
@@ -347,24 +446,41 @@ async function main() {
     sitemapFile,
     appendSitemapUrls(
       buildSitemapXml(SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p))),
-      docsViewerSitemapUrls(docsViewer.published),
+      isSitePreview() ? [] : [...docsViewerSitemapUrls(docsViewer.published), ...docsViewerSitemapUrls(spanishViewer.published)]
     ),
-    "utf-8",
+    "utf-8"
   );
   if (fs.existsSync(llmsTxtSrc)) {
     fs.copyFileSync(llmsTxtSrc, llmsTxtDest);
     console.log(`Copied llms.txt: ${path.relative(repoRoot, llmsTxtDest)}`);
   }
   await prerenderHtmlRoutes(renderedRoutePaths);
-  const docsViewerWrite = runDocsViewer({ repoRoot, outDir: outputDir, write: true });
+  const docsViewerWrite = runDocsViewer({
+    repoRoot,
+    outDir: outputDir,
+    write: true,
+    sourceContext: docsSourceContext,
+  });
   if (docsViewerWrite.failures.length) {
     throw new Error(`Docs viewer build failed:\n${docsViewerWrite.failures.join("\n")}`);
   }
-  console.log(`Built ${docsViewerWrite.published.length} docs viewer pages`);
+  const spanishViewerWrite = runDocsViewer({
+    repoRoot,
+    outDir: outputDir,
+    write: true,
+    manifest: SPANISH_DOCS_VIEWER_MANIFEST,
+    sourceContext: docsSourceContext,
+  });
+  if (spanishViewerWrite.failures.length || spanishViewerWrite.published.length !== SPANISH_DOCS_VIEWER_MANIFEST.length) {
+    throw new Error(`Spanish docs viewer build failed: ${spanishViewerWrite.failures.join("; ")}`);
+  }
+  console.log(`Built ${docsViewerWrite.published.length} English and ${spanishViewerWrite.published.length} Spanish docs viewer pages`);
   finalizeBundledAssetPathsInAllHtml();
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);
-  console.log(`Built ${routeCount} route pages (${renderedRoutePaths.length - 1} pre-rendered, ${retiredRoutePaths.length} redirect stubs)`);
+  console.log(
+    `Built ${routeCount} route pages (${renderedRoutePaths.length - 1} pre-rendered, ${retiredRoutePaths.length} redirect stubs)`
+  );
   console.log(`Built 404.html (pre-rendered fallback)`);
   console.log(`Copied assets: ${path.relative(repoRoot, outputAssetsDir)}`);
   console.log(`Built robots: ${path.relative(repoRoot, robotsFile)}`);

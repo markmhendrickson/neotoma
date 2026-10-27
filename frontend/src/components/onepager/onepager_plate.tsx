@@ -1,6 +1,7 @@
 import { PLATE_ALT, PLATE_NOTE } from "./onepager_copy";
 import { cloudPath } from "./onepager_figures";
 import { PLATE_NARROW_LAYOUT, PLATE_WIDE_LAYOUT, type PlateFrame, type Pt } from "./plate_layout";
+import { staticAssetPath } from "@/site/spa_path";
 
 /**
  * Sheet 01 plate (FIG. A-1): a paper-object plate under inline SVG drafting callouts. The image files
@@ -284,27 +285,27 @@ export function RecordPlate() {
       <picture>
         <source
           media="(max-width: 860px)"
-          srcSet={`${PLATE_NARROW.src}.webp`}
+          srcSet={staticAssetPath(`${PLATE_NARROW.src}.webp`)}
           type="image/webp"
           width={PLATE_NARROW.width}
           height={PLATE_NARROW.height}
         />
         <source
           media="(max-width: 860px)"
-          srcSet={`${PLATE_NARROW.src}.jpg`}
+          srcSet={staticAssetPath(`${PLATE_NARROW.src}.jpg`)}
           type="image/jpeg"
           width={PLATE_NARROW.width}
           height={PLATE_NARROW.height}
         />
         <source
-          srcSet={`${PLATE_WIDE.src}.webp`}
+          srcSet={staticAssetPath(`${PLATE_WIDE.src}.webp`)}
           type="image/webp"
           width={PLATE_WIDE.width}
           height={PLATE_WIDE.height}
         />
         <img
           className="plan-plate-img"
-          src={`${PLATE_WIDE.src}.jpg`}
+          src={staticAssetPath(`${PLATE_WIDE.src}.jpg`)}
           width={PLATE_WIDE.width}
           height={PLATE_WIDE.height}
           alt={PLATE_ALT}

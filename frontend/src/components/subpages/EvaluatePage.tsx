@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES, sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
-import { CopyableCodeBlock } from "../CopyableCodeBlock";
+import { EvaluationCard } from "../onepager/EvaluationCard";
 import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 import { useLocale } from "@/i18n/LocaleContext";
@@ -62,14 +62,7 @@ export function EvaluatePage() {
       </section>
 
       <section>
-        <h2 className="text-xl font-medium mb-4">{ev.assessHeading}</h2>
-        <p className="text-[15px] leading-7 mb-4">{ev.assessIntro}</p>
-        <CopyableCodeBlock
-          code={ev.agentEvaluationPrompt}
-          className="mb-6"
-          variant="emerald"
-          onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")}
-        />
+        <EvaluationCard id="evaluate-page-prompt" title={ev.assessHeading} body={ev.assessIntro} onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")} />
         <div className="rounded-lg border border-border bg-card p-4">
           <Link to={localizePath("/evaluate/agent-instructions", locale)} className="group no-underline">
             <span className="text-[15px] font-medium text-foreground group-hover:underline block mb-1">

@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { llmsLinkProblems } from "../../scripts/llms_links";
+import { CONNECTIONS } from "../../src/shared/harness_connections";
+import { isDocsViewerRoute } from "../../frontend/src/site/docs_viewer_manifest";
+import { SPANISH_RETAINED_BASE_ROUTES } from "../../frontend/src/site/spanish_route_set";
 import {
   HELD_ROUTES,
   LOCALIZED_LEGAL_PATHS,
@@ -31,7 +35,7 @@ describe("one-pager route set", () => {
   it("classifies every app route as live, held (with a reason) or retired with a destination", () => {
     const unclassified: string[] = [];
     for (const route of appRoutes()) {
-      if (LIVE_ROUTES.includes(route)) continue;
+      if (LIVE_ROUTES.includes(route) || isDocsViewerRoute(route)) continue;
       if (heldReason(route)) continue;
       if (!(route in RETIRED_DESTINATIONS)) unclassified.push(route);
     }
@@ -47,13 +51,18 @@ describe("one-pager route set", () => {
     }
   });
 
-  it("keeps /install live and every locale route retired to the one-pager", () => {
+  it("keeps retained English and Spanish routes live and maps other retired locale routes", () => {
     expect(isRetiredRoute("/install")).toBe(false);
+    expect(isRetiredRoute("/compare")).toBe(false);
+    expect(LIVE_ROUTES).toContain("/compare");
     expect(isRetiredRoute("/")).toBe(false);
-    for (const route of ["/es", "/de/docs", "/fr/install", "/ar/evaluate"]) {
+    expect(isRetiredRoute("/es")).toBe(false);
+    expect(isRetiredRoute("/en/")).toBe(false);
+    expect(resolveDestination("/de/docs").url).toBe("https://neotoma.io/#references");
+    expect(resolveDestination("/fr/install").url).toBe("https://neotoma.io/install");
+    expect(resolveDestination("/ar/evaluate").url).toBe("https://neotoma.io/evaluate");
+    for (const route of ["/en/install", "/de/docs", "/fr/install", "/ar/evaluate"])
       expect(isRetiredRoute(route)).toBe(true);
-      expect(resolveDestination(route)).toMatchObject({ url: "/", kind: "onepager" });
-    }
   });
 
   it("holds routes that agents fetch or that are legal surfaces", () => {
@@ -95,7 +104,76 @@ describe("one-pager route set", () => {
     expect(html).toMatch(
       /<a href="https:\/\/github\.com\/markmhendrickson\/neotoma\/tree\/main\/docs\/icp\/">Continue/
     );
-    expect(buildRedirectStub("/es/docs")).toContain('content="0; url=https://neotoma.io/"');
+    expect(buildRedirectStub("/es/docs")).toContain(
+      'content="0; url=https://neotoma.io/#references"'
+    );
+  });
+
+  it("keeps alias fallbacks canonical while navigating preview aliases locally with inbound state", () => {
+    const html = buildRedirectStub("/docs/mcp");
+    expect(html).toContain('name="robots" content="noindex,follow"');
+    expect(html).toContain('content="0; url=https://neotoma.io/mcp/"');
+    expect(html).toContain('href="https://neotoma.io/mcp/"');
+    const script = /<script>([^]*?)<\/script>/.exec(html)?.[1];
+    expect(script).toBeTruthy();
+    for (const [pathname, origin, expected] of [
+      ["/docs/mcp/", "http://127.0.0.1:4000", "http://127.0.0.1:4000/mcp/?view=all#tools"],
+      [
+        "/pr-42/docs/mcp/",
+        "https://preview.example",
+        "https://preview.example/pr-42/mcp/?view=all#tools",
+      ],
+    ]) {
+      let navigated = "";
+      runInNewContext(script!, {
+        URL,
+        location: {
+          pathname,
+          origin,
+          search: "?view=all",
+          hash: "#tools",
+          replace: (href: string) => {
+            navigated = href;
+          },
+        },
+      });
+      expect(navigated).toBe(expected);
+    }
+    expect(buildRedirectStub("/docker")).not.toContain("<script");
+    const docsScript = /<script>([^]*?)<\/script>/.exec(buildRedirectStub("/docs"))?.[1];
+    let docsTarget = "";
+    runInNewContext(docsScript!, {
+      URL,
+      location: {
+        pathname: "/docs",
+        origin: "https://neotoma.io",
+        search: "",
+        hash: "#obsolete",
+        replace: (href: string) => {
+          docsTarget = href;
+        },
+      },
+    });
+    expect(docsTarget).toBe("https://neotoma.io/#references");
+  });
+
+  it("sends every former host address and its Markdown mirror to a current connection guide", () => {
+    for (const route of Object.keys(RETIRED_DESTINATIONS).filter((r) =>
+      r.startsWith("/neotoma-with-")
+    )) {
+      const host = route.slice("/neotoma-with-".length).split("-connect-")[0];
+      const id = host === "claude" ? "claude-desktop" : host;
+      const connection = CONNECTIONS.find((item) => item.id === id);
+      expect(connection, route).toBeDefined();
+      const expected =
+        route === "/neotoma-with-claude"
+          ? "https://neotoma.io/install/"
+          : `https://neotoma.io${connection!.guideRoute}`;
+      for (const oldRoute of [route, `/markdown${route}`]) {
+        expect(resolveDestination(oldRoute).url, oldRoute).toBe(expected);
+        expect(buildRedirectStub(oldRoute), oldRoute).toContain(`content="0; url=${expected}"`);
+      }
+    }
   });
 
   it("gives every committed page that disappears a stub, including client-side-only redirects", () => {
@@ -104,12 +182,30 @@ describe("one-pager route set", () => {
       expect(isRetiredRoute(route)).toBe(true);
     }
     expect(resolveDestination("/docker").repoPath).toBe("docs/developer/docker.md");
-    expect(resolveDestination("/knowledge-workers").kind).toBe("onepager");
+    expect(resolveDestination("/knowledge-workers").url).toBe("https://neotoma.io/readme/");
     expect(resolveDestination("/quick-start").url).toBe("https://neotoma.io/install");
   });
 
-  it("holds the localized legal routes and retires every other locale route", () => {
-    for (const locale of ["es", "ca", "zh", "de"]) {
+  it("keeps exactly the 56 Spanish page pairs and retires unknown Spanish routes", () => {
+    expect(SPANISH_RETAINED_BASE_ROUTES).toHaveLength(56);
+    for (const base of SPANISH_RETAINED_BASE_ROUTES) {
+      const route = base === "/" ? "/es/" : `/es${base}`;
+      expect(isRetiredRoute(route), route).toBe(false);
+    }
+    for (const route of [
+      "/es/docs",
+      "/es/install/manual",
+      "/es/skills/unknown",
+      "/es/neotoma-with-chatgpt",
+      "/es/privacy-first",
+      "/es/unknown",
+    ]) {
+      expect(isRetiredRoute(route), route).toBe(true);
+    }
+  });
+
+  it("holds other localized legal routes and retires their nonlegal routes", () => {
+    for (const locale of ["ca", "zh", "de"]) {
       for (const legal of ["/privacy", "/terms", "/sandbox/terms-of-use"]) {
         expect(isRetiredRoute(`/${locale}${legal}`), `${locale}${legal}`).toBe(false);
         expect(heldReason(`/${locale}${legal}`)).toMatch(/counsel/);

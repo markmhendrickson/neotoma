@@ -717,7 +717,7 @@ function EntityTypeGuideContent({ guide }: { guide: EntityTypeGuide }) {
 export function EntityTypeGuideRouter() {
   const { slug } = useParams<{ slug: string }>();
   const guide = ENTITY_TYPE_GUIDES.find((g) => g.slug === slug);
-  if (!guide) return <Navigate to="/docs" replace />;
+  if (!guide) return <Navigate to="/readme/" replace />;
   return <EntityTypeGuideContent guide={guide} />;
 }
 

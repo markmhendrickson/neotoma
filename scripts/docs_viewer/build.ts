@@ -14,6 +14,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   DOCS_VIEWER_GROUPS,
+  DOCS_VIEWER_COLLECTIONS,
+  DOCS_VIEWER_VISUALS,
   DOCS_VIEWER_MANIFEST,
   type DocsViewerEntry,
   type DocsViewerIndex,
@@ -23,6 +25,7 @@ import {
   viewerHref,
   viewerRoute,
 } from "../../frontend/src/site/docs_viewer_manifest";
+import { isRetiredRoute } from "../../frontend/src/site/route_retirement";
 import { type LintFinding, IMAGE_MAX_BYTES, IMAGE_TYPES, errorsOf, lintDoc } from "./lint";
 import { canonicalUrl, renderPage } from "./page";
 import {
@@ -31,7 +34,9 @@ import {
   type RenderContext,
   type RenderedDoc,
   parseDoc,
+  readHeader,
   renderDoc,
+  PREVIEW_REFERENCE_COMMIT,
 } from "./render";
 
 export interface EntryReport {
@@ -66,6 +71,8 @@ export interface DocsViewerOptions {
   pathKind?: (repoPath: string) => PathKind;
   /** Override reading a source file (tests). Returns null when absent. */
   readSource?: (repoPath: string) => string | null;
+  /** Local review serves manifest sources and pins other repository links to a published ref. */
+  sourceContext?: "published" | "local-preview";
 }
 
 export function resolveCommit(repoRoot: string, explicit?: string): string {
@@ -112,20 +119,56 @@ export function trackedPathKind(repoRoot: string): (repoPath: string) => PathKin
   };
 }
 
+/** The preview's GitHub links may name only files present at this known published commit. */
+function publishedReference(repoRoot: string): RenderContext["reference"] {
+  const files = new Set(
+    execFileSync("git", ["ls-tree", "-r", "-z", "--name-only", PREVIEW_REFERENCE_COMMIT], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+      .split("\0")
+      .filter(Boolean)
+  );
+  if (!files.size) throw new Error("docs viewer: published reference has no files");
+  const dirs = new Set<string>();
+  for (const file of files) {
+    const parts = file.split("/");
+    for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
+  }
+  return {
+    commit: PREVIEW_REFERENCE_COMMIT,
+    pathKind: (p) => (files.has(p) ? "file" : dirs.has(p) || p === "" ? "dir" : null),
+  };
+}
+
 /** Structural problems with the manifest itself. */
 export function manifestProblems(manifest: readonly DocsViewerEntry[]): string[] {
   const problems: string[] = [];
   const slugs = new Set<string>();
+  const ids = new Set<string>();
   const sources = new Set<string>();
+  const aliases = new Set<string>();
+  const visualOwners = new Map<string, string>();
   for (const e of manifest) {
-    if (!/^[a-z0-9-]*$/.test(e.slug))
+    if (!/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(e.slug))
       problems.push(
-        `docs viewer manifest: slug "${e.slug}" must be lower-case letters, digits and hyphens`
+        `docs viewer manifest: slug "${e.slug}" must be lower-case path segments with letters, digits and hyphens`
       );
-    if (slugs.has(e.slug)) problems.push(`docs viewer manifest: duplicate slug "${e.slug}"`);
-    slugs.add(e.slug);
-    if (sources.has(e.source)) problems.push(`docs viewer manifest: duplicate source ${e.source}`);
-    sources.add(e.source);
+    if (slugs.has(e.slug.toLowerCase()))
+      problems.push(`docs viewer manifest: duplicate slug "${e.slug}"`);
+    slugs.add(e.slug.toLowerCase());
+    if (!/^[a-z0-9-]+$/.test(e.id)) problems.push(`docs viewer manifest: invalid id "${e.id}"`);
+    if (ids.has(e.id.toLowerCase())) problems.push(`docs viewer manifest: duplicate id "${e.id}"`);
+    ids.add(e.id.toLowerCase());
+    if (sources.has(e.source.toLowerCase()) || aliases.has(e.source.toLowerCase()))
+      problems.push(`docs viewer manifest: duplicate source ${e.source}`);
+    sources.add(e.source.toLowerCase());
+    for (const alias of e.aliases ?? []) {
+      if (sources.has(alias.toLowerCase()) || aliases.has(alias.toLowerCase()))
+        problems.push(`docs viewer manifest: duplicate source alias ${alias}`);
+      aliases.add(alias.toLowerCase());
+    }
     if (!e.source.endsWith(".md"))
       problems.push(`docs viewer manifest: ${e.source} is not a markdown file`);
     for (const p of [e.source, ...(e.aliases ?? [])]) {
@@ -134,7 +177,80 @@ export function manifestProblems(manifest: readonly DocsViewerEntry[]): string[]
     }
     if (!DOCS_VIEWER_GROUPS.includes(e.group))
       problems.push(`docs viewer manifest: unknown group "${e.group}" for ${e.source}`);
+    if (!DOCS_VIEWER_COLLECTIONS.some((c) => c.id === e.collection))
+      problems.push(`docs viewer manifest: unknown collection "${e.collection}" for ${e.source}`);
     if (!e.title.trim()) problems.push(`docs viewer manifest: ${e.source} has no title`);
+    if (e.status === "included" && !e.summary?.trim())
+      problems.push(`docs viewer manifest: ${e.source} has no summary`);
+    const visualSrc =
+      e.visual?.src ?? (e.visualId ? DOCS_VIEWER_VISUALS[e.visualId]?.src : undefined);
+    if (visualSrc && e.status === "included") {
+      if (visualOwners.has(visualSrc))
+        problems.push(
+          `docs viewer manifest: duplicate topic visual for ${e.id} and ${visualOwners.get(visualSrc)}`
+        );
+      else visualOwners.set(visualSrc, e.id);
+    }
+    if (e.visual && e.visualId)
+      problems.push(`docs viewer manifest: ${e.source} has two visual sources`);
+    if (e.visualId && !DOCS_VIEWER_VISUALS[e.visualId])
+      problems.push(`docs viewer manifest: unknown visual id ${e.visualId} for ${e.source}`);
+    if (
+      e.visual &&
+      (!/^\/(?:brand|docs\/_media)\/[a-zA-Z0-9/_-]+\.(?:png|jpe?g|webp)$/.test(e.visual.src) ||
+        !e.visual.alt.trim() ||
+        !e.visual.caption.trim())
+    )
+      problems.push(`docs viewer manifest: unsafe or incomplete visual for ${e.source}`);
+  }
+  const routes = new Set(manifest.map((e) => viewerRoute(e.slug)));
+  const byId = new Map(manifest.map((e) => [e.id, e]));
+  const aliasRoutes = new Set<string>();
+  const derivedAliases = new Map(manifest.map((e) => [`/docs/${e.slug}`, e.slug]));
+  for (const e of manifest) {
+    if (e.parentId && e.parentId !== "install") {
+      const parent = byId.get(e.parentId);
+      if (!parent) problems.push(`docs viewer manifest: missing parent ${e.parentId} for ${e.id}`);
+      else if (e.status === "included" && parent.status !== "included")
+        problems.push(`docs viewer manifest: unpublished parent ${e.parentId} for ${e.id}`);
+    }
+    const visited = new Set<string>([e.id]);
+    let cursor = e.parentId;
+    while (cursor && cursor !== "install" && byId.has(cursor)) {
+      if (visited.has(cursor)) {
+        problems.push(`docs viewer manifest: parent cycle at ${e.id}`);
+        break;
+      }
+      visited.add(cursor);
+      cursor = byId.get(cursor)?.parentId;
+    }
+    for (const route of e.routeAliases ?? []) {
+      if (
+        !/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(route) ||
+        route.endsWith("/") ||
+        routes.has(route) ||
+        aliasRoutes.has(route) ||
+        (derivedAliases.has(route) && derivedAliases.get(route) !== e.slug) ||
+        !isRetiredRoute(route, buildDocsViewerIndex([]))
+      )
+        problems.push(`docs viewer manifest: invalid or duplicate route alias ${route}`);
+      aliasRoutes.add(route);
+    }
+    const relatedSeen = new Set<string>();
+    for (const related of e.relatedIds ?? []) {
+      if (relatedSeen.has(related))
+        problems.push(`docs viewer manifest: duplicate related id ${related} for ${e.source}`);
+      relatedSeen.add(related);
+      const target = byId.get(related);
+      if (!target && related !== "install")
+        problems.push(`docs viewer manifest: unknown related id ${related} for ${e.source}`);
+      if (e.status === "included" && target?.status === "pending")
+        problems.push(`docs viewer manifest: unpublished related id ${related} for ${e.source}`);
+      if (related === e.id)
+        problems.push(`docs viewer manifest: self-related id ${related} for ${e.source}`);
+    }
+    if ((e.relatedIds?.length ?? 0) > 6)
+      problems.push(`docs viewer manifest: too many related ids for ${e.source}`);
   }
   return problems;
 }
@@ -231,6 +347,9 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
   const commit = resolveCommit(opts.repoRoot, opts.commit);
   const pathKind = opts.pathKind ?? trackedPathKind(opts.repoRoot);
   const failures = manifestProblems(manifest);
+  const sourceContext = opts.sourceContext ?? "published";
+  const reference =
+    sourceContext === "local-preview" ? publishedReference(opts.repoRoot) : undefined;
   const readSource =
     opts.readSource ??
     ((p: string) => {
@@ -250,6 +369,14 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
   const index = buildDocsViewerIndex(published);
   // The lint always judges against what is actually published, never against a preview.
   const lintIndex = buildDocsViewerIndex(included);
+  const englishById = new Map(DOCS_VIEWER_MANIFEST.map((entry) => [entry.id, entry]));
+  const localizedSourceMap = new Map<string, string>(
+    manifest.flatMap((entry) => {
+      const english = englishById.get(entry.id);
+      return entry.slug.startsWith("es/") && english ? [[english.source, entry.source] as const] : [];
+    })
+  );
+  const englishIndex = buildDocsViewerIndex(DOCS_VIEWER_MANIFEST.filter((entry) => entry.status === "included"));
   const fileSize = (p: string) => {
     const abs = path.join(opts.repoRoot, p);
     return fs.existsSync(abs) ? fs.statSync(abs).size : null;
@@ -271,11 +398,30 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
       continue;
     }
     const doc = parseDoc(entry.source, source);
+    if (entry.slug.startsWith("es/")) {
+      const header = readHeader(doc);
+      if (header.h1) entry.title = header.h1;
+      if (header.summary) entry.summary = header.summary;
+    }
     parsed.set(entry.source, doc);
-    const ctx: RenderContext = { sourcePath: entry.source, commit, index, pathKind };
+    const english = entry.slug.startsWith("es/") ? englishById.get(entry.id) : undefined;
+    const englishSource = english ? readSource(english.source) : null;
+    if (english && englishSource === null) {
+      failures.push(`docs viewer: missing paired English source ${english.source}`);
+      continue;
+    }
+    const englishHeadings = english && englishSource !== null
+      ? renderDoc(parseDoc(english.source, englishSource), {
+          sourcePath: english.source, commit, index: englishIndex, pathKind, reference,
+        }).headings
+      : undefined;
+    const ctx: RenderContext = {
+      sourcePath: entry.source, commit, index, pathKind, reference,
+      ...(english ? { localizedSourceMap } : {}),
+    };
     rendered.set(
       entry.source,
-      renderDoc(doc, ctx, { imagePublicPath: (p) => mediaPublicPath(opts.repoRoot, p) })
+      renderDoc(doc, ctx, { imagePublicPath: (p) => mediaPublicPath(opts.repoRoot, p), headingIds: englishHeadings })
     );
     const findings = lintDoc(doc, { ...ctx, index: lintIndex }, { fileSize });
     reports.push({ entry, exists: true, findings, errors: errorsOf(findings) });
@@ -300,8 +446,17 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
       return { commit, reports, failures, published: [] };
     }
     const nav = published.filter((e) => rendered.has(e.source));
+    if (sourceContext === "published") {
+      for (const entry of manifest) {
+        if (!/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(entry.slug)) continue;
+        const generated = path.join(opts.outDir, "source", `${entry.slug}.md`);
+        if (fs.existsSync(generated) && fs.lstatSync(generated).isFile()) fs.unlinkSync(generated);
+      }
+    }
     for (const r of reports) {
       if (!nav.includes(r.entry)) continue;
+      if (!/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(r.entry.slug))
+        throw new Error(`docs viewer: unsafe output slug ${r.entry.slug}`);
       const doc = rendered.get(r.entry.source)!;
       for (const img of doc.images) {
         const dest = path.join(opts.outDir, img.publicPath.replace(/^\//, ""));
@@ -315,7 +470,27 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
         r.entry.status === "pending"
           ? `Preview only. This document is pending: it is not published on neotoma.io (${r.errors.length} lint error${r.errors.length === 1 ? "" : "s"}).`
           : undefined;
-      const html = renderPage({ entry: r.entry, doc, nav, commit, previewNotice: notice });
+      const localSource =
+        sourceContext === "local-preview" && r.entry.status === "included"
+          ? `/source/${r.entry.slug}.md`
+          : undefined;
+      if (localSource) {
+        const sourceFile = containedRepoFile(opts.repoRoot, r.entry.source);
+        if (!("real" in sourceFile))
+          throw new Error(`docs viewer: refusing to copy source ${r.entry.source}`);
+        const dest = path.join(opts.outDir, localSource.slice(1));
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(sourceFile.real, dest);
+      }
+      const html = renderPage({
+        entry: r.entry,
+        doc,
+        nav,
+        commit,
+        previewNotice: notice,
+        sourceContext,
+        localSource,
+      });
       const outFile = path.join(
         opts.outDir,
         viewerHref(r.entry.slug).replace(/^\//, ""),
@@ -333,7 +508,14 @@ export function runDocsViewer(opts: DocsViewerOptions): DocsViewerResult {
 
 /** Sitemap `<url>` entries for published viewer pages (with the trailing slash GitHub Pages serves). */
 export function docsViewerSitemapUrls(entries: readonly DocsViewerEntry[]): string[] {
-  return entries.map((e) => canonicalUrl(e));
+  return entries.filter((e) => e.robots !== "noindex").map((e) => canonicalUrl(e));
+}
+
+/** Inbound routes are generated from the same allowlist as the published pages. */
+export function docsViewerAliasRoutes(entries: readonly DocsViewerEntry[]): string[] {
+  return [
+    ...new Set(entries.flatMap((e) => [`/docs/${e.slug}`, ...(e.routeAliases ?? [])])),
+  ].sort();
 }
 
 /** Insert extra `<loc>` URLs into a sitemap built by `buildSitemapXml`. */

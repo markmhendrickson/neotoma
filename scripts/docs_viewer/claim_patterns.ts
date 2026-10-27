@@ -146,7 +146,7 @@ export const OLD_LEDE: readonly ClaimPattern[] = [
   {
     id: "retired-frame",
     name: "live-old-lede-en",
-    re: /\blast told\b|\brecalls only\b|\brecall holds\b/i,
+    re: /\blast told\b|\brecalls only\b(?! what (?:its|the agent.s) context retained)|\brecall holds\b/i,
     label: 'overstated lede ("recalls only what it was last told")',
   },
   {

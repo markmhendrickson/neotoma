@@ -85,7 +85,7 @@
 | `/primitives/relationships` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/primitives/sources` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/primitives/timeline-events` | en, es | 2026-05-07 | canonical, machine_draft |
-| `/privacy` | en | 2026-05-07 | canonical |
+| `/privacy` | en, es | 2026-05-07 / 2026-10-26 | canonical, human_draft |
 | `/procurement` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/replayable-timeline` | en | 2026-05-07 | canonical |
 | `/reproducible-state-reconstruction` | en | 2026-05-07 | canonical |
@@ -106,7 +106,7 @@
 | `/strong-consistency` | en | 2026-05-08 | canonical |
 | `/subscriptions` | en | 2026-05-12 | canonical |
 | `/subscriptions-guide` | en | 2026-05-20 | canonical |
-| `/terms` | en | 2026-05-07 | canonical |
+| `/terms` | en, es | 2026-05-07 / 2026-10-26 | canonical, human_draft |
 | `/trading` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/transactional-writes` | en | 2026-05-08 | canonical |
 | `/troubleshooting` | en | 2026-05-07 | canonical |

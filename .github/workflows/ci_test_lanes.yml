@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Local-preview reader tests resolve pinned source links against repository history.
+          fetch-depth: 0
 
       # Real Docker matcher, synthetic-only FROM scratch context; no registry pull.
       # Fail the required baseline lane if a local environment variant is copied.
@@ -440,7 +443,8 @@ jobs:
     # subscribe / …), which the hook-lifecycle agentic_evals lane cannot model.
     # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
     # skipped, not failed; cassette-less scenarios skip until recorded.
-    runs-on: ubuntu-latest
+    # Match the supported Playwright runtime used by the production site build.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -468,6 +472,15 @@ jobs:
           npm run build:server
           npm --prefix packages/eval-harness run build
 
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Build exact-head public site for closed HTTP eval
+        run: |
+          npm run build:ui
+          npm run build:site:pages
+          npm run validate:site-export
+
       - name: Require native SQLite and local Docker socket
         run: |
           node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
@@ -482,7 +495,9 @@ jobs:
       - name: Run eval-harness scenarios (replay)
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: npm run eval:scenarios
+        run: |
+          npm run eval:scenarios
+          npm run eval:scenarios -- --scenario site_publication_http_contract
 
   eval_combined:
     # COMBINED layered-matrix lane (WRIT state layer + Tier-2 agent layer).
@@ -495,7 +510,8 @@ jobs:
     # requested WRIT run errors (neotoma#1738/#1739).
     # Tier 2 includes the required native backup CLI cell, so this job needs
     # the same Node 24 build, pinned cache, and local Docker boundary as eval_scenarios.
-    runs-on: ubuntu-latest
+    # Match the supported Playwright runtime used by the production site build.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout (with writ submodule)
         uses: actions/checkout@v4
@@ -532,6 +548,15 @@ jobs:
         run: |
           npm exec --yes --package=npm@10 -- npm ci --prefix writ
           npm run build --prefix writ
+
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Build exact-head public site for closed HTTP eval
+        run: |
+          npm run build:ui
+          npm run build:site:pages
+          npm run validate:site-export
 
       - name: Require native SQLite and local Docker socket
         run: |

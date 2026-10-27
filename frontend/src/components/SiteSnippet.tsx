@@ -2,11 +2,35 @@ import { Check, Copy } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useCopyFeedback } from "@/lib/copy_feedback";
 import { copyTextToClipboard } from "@/lib/copy_to_clipboard";
+import { useOptionalLocale } from "@/i18n/LocaleContext";
+import { refractor } from "refractor/core";
+import bash from "refractor/bash";
+import type { RootContent } from "hast";
 import "./site_snippet.css";
+
+refractor.register(bash);
+function highlightedNodes(nodes: RootContent[]): ReactNode {
+  return nodes.map((node, index) =>
+    node.type === "text" ? (
+      node.value
+    ) : node.type === "element" ? (
+      <span
+        key={index}
+        className={
+          Array.isArray(node.properties.className) ? node.properties.className.join(" ") : undefined
+        }
+      >
+        {highlightedNodes(node.children)}
+      </span>
+    ) : null
+  );
+}
 
 type SiteSnippetProps = {
   text: string;
-  title: string;
+  title: ReactNode;
+  chrome?: boolean;
+  highlight?: boolean;
   subtitle?: string;
   copyFeedbackId: string;
   label?: string;
@@ -24,70 +48,93 @@ export function SiteSnippet({
   text,
   title,
   subtitle,
+  chrome = true,
+  highlight = false,
   copyFeedbackId,
   label,
   className = "",
   prose = false,
   children,
   onAfterCopy,
-  copyLabel = "Copy",
-  copiedLabel = "Copied",
-  successMessage = "Copied to clipboard",
+  copyLabel,
+  copiedLabel,
+  successMessage,
 }: SiteSnippetProps) {
+  const spanish = useOptionalLocale()?.locale === "es";
+  const idleLabel = copyLabel ?? (spanish ? "Copiar" : "Copy");
+  const doneLabel = copiedLabel ?? (spanish ? "Copiado" : "Copied");
+  const doneMessage = successMessage ?? (spanish ? "Copiado al portapapeles" : "Copied to clipboard");
   const [copied, markCopied] = useCopyFeedback(`${copyFeedbackId}:${text}`);
   const [copyFailed, setCopyFailed] = useState(false);
   useEffect(() => setCopyFailed(false), [text, copyFeedbackId]);
+  const copyButton = (
+    <button
+      type="button"
+      className="site-snippet-copy"
+      onClick={async () => {
+        const ok = await copyTextToClipboard(text);
+        setCopyFailed(!ok);
+        if (ok) {
+          markCopied();
+          onAfterCopy?.();
+        }
+      }}
+    >
+      {copied && !copyFailed ? (
+        <Check size={15} aria-hidden="true" />
+      ) : (
+        <Copy size={15} aria-hidden="true" />
+      )}
+      {copied && !copyFailed ? doneLabel : idleLabel}
+    </button>
+  );
+  const status = (
+    <p
+      className={copyFailed ? "site-snippet-status site-snippet-error plan-copy-error" : "sr-only"}
+      role="status"
+      aria-live="polite"
+    >
+      {copyFailed
+        ? spanish ? "No se pudo copiar. Inténtalo de nuevo o selecciona el texto y cópialo manualmente." : "Copy failed. Try again, or select the text below and copy manually."
+        : copied
+          ? doneMessage
+          : ""}
+    </p>
+  );
   return (
     <div className={`site-snippet ${className}`}>
-      <div className="site-snippet-header">
-        <div className="site-snippet-heading">
-          <p className="site-snippet-title">{title}</p>
-          {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
-        </div>
-        <button
-          type="button"
-          className="site-snippet-copy"
-          onClick={async () => {
-            const ok = await copyTextToClipboard(text);
-            setCopyFailed(!ok);
-            if (ok) {
-              markCopied();
-              onAfterCopy?.();
-            }
-          }}
-        >
-          {copied && !copyFailed ? (
-            <Check size={15} aria-hidden="true" />
-          ) : (
-            <Copy size={15} aria-hidden="true" />
-          )}
-          {copied && !copyFailed ? copiedLabel : copyLabel}
-        </button>
-      </div>
-      <p
-        className={
-          copyFailed ? "site-snippet-status site-snippet-error plan-copy-error" : "sr-only"
-        }
-        role="status"
-        aria-live="polite"
-      >
-        {copyFailed
-          ? "Copy failed. Try again, or select the text below and copy manually."
-          : copied
-            ? successMessage
-            : ""}
-      </p>
       {prose ? (
-        <p className="site-snippet-prose">{text}</p>
+        <div className="site-snippet-prose-flow">
+          <p className="site-snippet-title">{title}</p>
+          {copyButton}
+          {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
+          {status}
+          <p className="site-snippet-prose">{text}</p>
+        </div>
       ) : (
-        <pre
-          className="site-snippet-code plan-pre"
-          tabIndex={0}
-          role="region"
-          aria-label={label ?? title}
-        >
-          <code>{children ?? text}</code>
-        </pre>
+        <>
+          {chrome && (
+            <div className="site-snippet-header">
+              <div className="site-snippet-heading">
+                <p className="site-snippet-title">{title}</p>
+              </div>
+              {copyButton}
+              {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
+            </div>
+          )}
+          {chrome && status}
+          <pre
+            className="site-snippet-code plan-pre"
+            tabIndex={0}
+            role="region"
+            aria-label={label ?? (typeof title === "string" ? title : spanish ? "Comandos" : "Commands")}
+          >
+            <code>
+              {children ??
+                (highlight ? highlightedNodes(refractor.highlight(text, "bash").children) : text)}
+            </code>
+          </pre>
+        </>
       )}
     </div>
   );

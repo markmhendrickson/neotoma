@@ -12,5 +12,6 @@ shell: detail
 translation_status: canonical
 ---
 
-# Neotoma with Claude agent SDK
+# Neotoma with Claude Agent Sdk
 
+This legacy address is retained for existing links. Follow the [current Claude Agent Sdk connection guide](https://neotoma.io/install/claude-agent-sdk/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

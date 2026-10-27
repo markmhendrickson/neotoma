@@ -14,3 +14,4 @@ translation_status: canonical
 
 # Neotoma with Ironclaw
 
+This legacy address is retained for existing links. Follow the [current Ironclaw connection guide](https://neotoma.io/install/ironclaw/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

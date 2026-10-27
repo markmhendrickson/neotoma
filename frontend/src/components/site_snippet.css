@@ -7,6 +7,8 @@
   --snippet-band: var(--band, #f1ece2);
   --snippet-rust: var(--rust, #a14624);
   --snippet-muted: var(--slate, #52616a);
+  --snippet-string: #3f6259;
+  --snippet-variable: #22587a;
   width: 100%;
   min-width: 0;
   margin: 0 0 1.5rem;
@@ -25,12 +27,14 @@
   --snippet-band: var(--band, #303333);
   --snippet-rust: var(--rust, #e5a17c);
   --snippet-muted: var(--slate, #b7c4ca);
+  --snippet-string: #abd1b9;
+  --snippet-variable: #8fc4e2;
 }
 .site-snippet-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.8rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.35rem 0.8rem;
   margin-bottom: 1rem;
 }
 .site-snippet-heading {
@@ -44,7 +48,8 @@
   text-transform: uppercase;
 }
 .site-snippet-subtitle {
-  margin: 0.35rem 0 0;
+  grid-column: 1 / -1;
+  margin: 0;
   color: var(--snippet-muted);
   font-size: 0.85rem;
   line-height: 1.5;
@@ -65,6 +70,13 @@
   font: 600 0.82rem/1.2 var(--sans, system-ui, sans-serif);
   cursor: pointer;
   box-shadow: none;
+}
+@media (max-width: 600px) {
+  .site-snippet-copy {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.4rem 0.55rem;
+  }
 }
 .site-snippet-copy:hover {
   background: var(--snippet-ink);
@@ -101,6 +113,25 @@
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
+.site-snippet-prose-flow {
+  display: flow-root;
+}
+.site-snippet-prose-flow .site-snippet-title {
+  margin-bottom: 0.35rem;
+}
+.site-snippet-prose-flow .site-snippet-copy {
+  float: inline-end;
+  margin: 0 0 0.5rem 1rem;
+}
+.site-snippet-prose-flow .site-snippet-status.site-snippet-error {
+  clear: both;
+}
+@media (max-width: 350px) {
+  .site-snippet-prose-flow .site-snippet-copy {
+    float: none;
+    margin: 0 0 0.5rem;
+  }
+}
 .site-snippet-status.site-snippet-error {
   margin: 0 0 1rem;
   color: var(--snippet-rust);
@@ -125,4 +156,21 @@
 .site-snippet-expand:focus-visible {
   outline: 3px solid var(--rust, #a14624);
   outline-offset: 3px;
+}
+
+/* Token colors follow the same selected theme as the snippet surface. */
+.site-snippet-code .token.comment {
+  color: var(--snippet-muted);
+  font-style: italic;
+}
+.site-snippet-code .token.string {
+  color: var(--snippet-string);
+}
+.site-snippet-code .token.function,
+.site-snippet-code .token.keyword {
+  color: var(--snippet-rust);
+}
+.site-snippet-code .token.variable,
+.site-snippet-code .token.parameter {
+  color: var(--snippet-variable);
 }

@@ -61,28 +61,28 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **749**
-- Backend and repo Vitest files: **712**
-- Frontend Vitest files: **11**
-- Playwright spec files: **26**
+- Total automated test files: **776**
+- Backend and repo Vitest files: **725**
+- Frontend Vitest files: **24**
+- Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 208 |
+| Vitest unit tests | 220 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 225 |
 | Vitest CLI tests | 90 |
-| Vitest contract tests | 26 |
+| Vitest contract tests | 27 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 11 |
-| Playwright E2E tests | 22 |
+| Frontend Vitest tests | 24 |
+| Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
 | Tests Scripts | 4 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (208):**
+**Files (220):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -190,6 +190,7 @@ flowchart TD
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
 - `tests/unit/eval_harness_error_result.test.ts`
 - `tests/unit/eval_harness_quarantine.test.ts`
+- `tests/unit/eval_site_http_reader.test.ts`
 - `tests/unit/ext_apps_widget_host.test.ts`
 - `tests/unit/external_actor_badge.test.ts`
 - `tests/unit/external_actor_builder.test.ts`
@@ -262,6 +263,7 @@ flowchart TD
 - `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/pull_request_schema.test.ts`
+- `tests/unit/reader_language_asset.test.ts`
 - `tests/unit/readiness_probe.test.ts`
 - `tests/unit/recover_json_array_string.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
@@ -290,10 +292,20 @@ flowchart TD
 - `tests/unit/session_info.test.ts`
 - `tests/unit/shared_environment.test.ts`
 - `tests/unit/sign_in_session_wiring.test.ts`
+- `tests/unit/site_analytics_privacy.test.ts`
+- `tests/unit/site_launch_readiness.test.ts`
+- `tests/unit/site_migration_audit.test.ts`
 - `tests/unit/site_onepager_copy.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
+- `tests/unit/site_preview_build_flags.test.ts`
+- `tests/unit/site_published_install.test.ts`
+- `tests/unit/site_reader_analytics.test.ts`
+- `tests/unit/site_reader_closeout.test.ts`
+- `tests/unit/site_reader_dom_grammar.test.ts`
+- `tests/unit/site_reader_url_safety.test.ts`
 - `tests/unit/site_route_retirement.test.ts`
 - `tests/unit/site_served_claims.test.ts`
+- `tests/unit/site_ui_source_binding.test.ts`
 - `tests/unit/skill_deprecation.test.ts`
 - `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
@@ -796,11 +808,12 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (26):**
+**Files (27):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
 - `tests/contract/deploy_workflow_config.test.ts`
+- `tests/contract/eval_site_http_ci_wiring.test.ts`
 - `tests/contract/fly_deploy_config.test.ts`
 - `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
@@ -900,16 +913,29 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (11):**
+**Files (24):**
 - `frontend/src/bridge/websocket.test.ts`
+- `frontend/src/components/Layout.site_chrome.test.tsx`
+- `frontend/src/components/MainApp.docs-viewer.test.tsx`
+- `frontend/src/components/onepager/EvaluationCard.test.tsx`
 - `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx`
+- `frontend/src/components/onepager/PaperScene.spanish.test.tsx`
+- `frontend/src/components/onepager/ProductBenefitPills.interactions.test.tsx`
+- `frontend/src/components/onepager/SpanishOnePager.chrome.test.tsx`
+- `frontend/src/components/RetiredRouteStub.ssr.test.tsx`
+- `frontend/src/components/RetiredRouteStub.test.tsx`
+- `frontend/src/components/SeoHead.test.tsx`
 - `frontend/src/components/subpages/EvaluatePage.icp_fit.test.tsx`
+- `frontend/src/i18n/routing.spanish.test.ts`
 - `frontend/src/lib/idempotency.test.ts`
+- `frontend/src/main.storage_denied.test.tsx`
 - `frontend/src/site/mdx_site_registry.test.ts`
 - `frontend/src/site/repo_meta_client.test.ts`
 - `frontend/src/site/site_data.test.ts`
+- `frontend/src/site/spanish_route_set.test.ts`
 - `frontend/src/utils/csv.test.ts`
 - `frontend/src/utils/entity_display.test.ts`
+- `frontend/src/utils/reader_analytics.test.ts`
 - `frontend/src/utils/schema_icons.test.ts`
 - `frontend/src/utils/vite_chunk_recovery.test.ts`
 
@@ -918,7 +944,7 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e`
 **Requirements:** Playwright browsers installed; mock or real API configured per suite.
-**Files (22):**
+**Files (23):**
 - `playwright/tests/auto-enhancement.spec.ts`
 - `playwright/tests/design-system.spec.ts`
 - `playwright/tests/entity-detail.spec.ts`
@@ -932,6 +958,7 @@ flowchart TD
 - `playwright/tests/not-found.spec.ts`
 - `playwright/tests/oauth-flow.spec.ts`
 - `playwright/tests/observations.spec.ts`
+- `playwright/tests/onepager-mobile.spec.ts`
 - `playwright/tests/relationship-detail.spec.ts`
 - `playwright/tests/relationships-list.spec.ts`
 - `playwright/tests/schema-detail.spec.ts`

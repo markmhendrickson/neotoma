@@ -1,14 +1,11 @@
 import React from "react";
-import { SiteHeaderNav } from "@/components/SiteHeaderNav";
-import { SiteTailpiece } from "@/components/SiteTailpiece";
+import "@/components/onepager/onepager.css";
+import { SiteFooter, SiteHeader, SiteSkipLink } from "@/components/onepager/SiteChrome";
 import { SeoDevMetaFooter } from "@/components/SeoDevMetaFooter";
-import { DocsSidebar } from "@/components/DocsSidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { SiteAppNavProvider, useSiteAppNavBarVisible } from "@/context/SiteAppNavContext";
-import { cn } from "@/lib/utils";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { SiteAppNavProvider } from "@/context/SiteAppNavContext";
 import { normalizeToDefaultRoute } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
-import { isPathUnderDocsSidebarNav } from "@/site/docs_sidebar_nav";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
 
 /** True when the app is served under a product path (e.g. /neotoma-with-claude-code). */
@@ -23,29 +20,20 @@ interface LayoutProps {
   siteName?: string;
 }
 
-const DEFAULT_SITE_NAME = "Neotoma";
-
-export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) {
-  const effectivePath = useEffectiveRoutePath();
-  /** Normalize trailing slashes (e.g. static hosting /compliance/) so full-page routes match. */
-  const stripped = normalizeToDefaultRoute(effectivePath);
+export function Layout({ children }: LayoutProps) {
+  const stripped = normalizeToDefaultRoute(useEffectiveRoutePath());
   const isRawMarkdownRoute = stripped === "/raw";
   const isMarkdownMirrorRoute = stripped === "/markdown" || stripped.startsWith("/markdown/");
   const isRouteHome = stripped === "/";
-  /** One-pager site: the home page and /install draw their own minimal chrome (no app header, sidebar or footer). */
-  const isOnePagerShell = (isRouteHome && !isProductBasePath()) || stripped === "/install";
-  const isFullPageLanding = isMarketingFullPageRoute(stripped);
-  /** Full-bleed shell: home, marketing use case landings, product-at-root basenames. */
-  const isHomeShell = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
-  const showDocsSidebar = !isHomeShell && isPathUnderDocsSidebarNav(stripped);
-  /** Expanded by default; cookie `sidebar_state` overrides after first toggle. */
-  const docsSidebarDefaultOpen = true;
+  /** These pages render SiteHeader and SiteFooter in their own editorial composition. */
+  const ownsSiteChrome =
+    (isRouteHome && !isProductBasePath()) || stripped === "/install" || stripped === "/compare";
 
   if (isRawMarkdownRoute || isMarkdownMirrorRoute) {
     return <>{children}</>;
   }
 
-  if (isOnePagerShell) {
+  if (ownsSiteChrome) {
     return (
       <SiteAppNavProvider>
         <SidebarProvider defaultOpen={false} className="flex-col">
@@ -57,81 +45,24 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
     );
   }
 
-  /** Marketing `/` (and locale roots) scroll inside `SitePage`; dev SEO panel belongs in that scroll, not below `h-screen`. */
-  const seoDevMetaRenderedInsideSitePageScroll =
-    stripped === "/" && !isProductBasePath();
-
   return (
-    <SiteAppNavProvider>
-      <LayoutShell
-        siteName={siteName}
-        isHomeShell={isHomeShell}
-        showDocsSidebar={showDocsSidebar}
-        docsSidebarDefaultOpen={docsSidebarDefaultOpen}
-        omitHomeShellSeoDevMeta={seoDevMetaRenderedInsideSitePageScroll}
+    <div className="plan plan-reader-page">
+      <SiteSkipLink />
+      <div className="plan-sheet plan-hero">
+        <SiteHeader />
+      </div>
+      <main
+        data-site-markdown-root
+        className={
+          isMarketingFullPageRoute(stripped) ? "plan-reader-main" : "plan-reader-main post-prose"
+        }
+        id="main"
+        tabIndex={-1}
       >
         {children}
-      </LayoutShell>
-    </SiteAppNavProvider>
-  );
-}
-
-function LayoutShell({
-  children,
-  siteName,
-  isHomeShell,
-  showDocsSidebar,
-  docsSidebarDefaultOpen,
-  omitHomeShellSeoDevMeta,
-}: {
-  children: React.ReactNode;
-  siteName: string;
-  isHomeShell: boolean;
-  showDocsSidebar: boolean;
-  docsSidebarDefaultOpen: boolean;
-  omitHomeShellSeoDevMeta: boolean;
-}) {
-  const appNavBarVisible = useSiteAppNavBarVisible();
-
-  return (
-    <SidebarProvider defaultOpen={docsSidebarDefaultOpen} className="flex-col">
-      <SiteHeaderNav showSidebarTrigger={showDocsSidebar} />
-      <div
-        className={
-          isHomeShell
-            ? undefined
-            : cn(
-                "flex flex-1 min-h-0 min-w-0 overflow-hidden transition-[padding-top] duration-300 ease-out",
-                appNavBarVisible ? "pt-12" : "pt-0",
-              )
-        }
-      >
-        {isHomeShell ? (
-          <>
-            {/* No `post-prose` here: home and full-bleed marketing landings use explicit component
-                typography (SitePage, ICP landings). Doc link underlines / `text-foreground` on anchors
-                would fight hero CTAs (e.g. emerald evaluate button). */}
-            <div data-site-markdown-root className="contents">
-              {children}
-            </div>
-            {!omitHomeShellSeoDevMeta ? <SeoDevMetaFooter /> : null}
-          </>
-        ) : (
-          <>
-            {showDocsSidebar && <DocsSidebar siteName={siteName} belowHeader />}
-            <SidebarInset
-              data-site-header-scroll-root
-              className="min-h-0 min-w-0 flex-1 overflow-y-auto"
-            >
-              <div data-site-markdown-root className="post-prose contents min-w-0">
-                {children}
-              </div>
-              <SiteTailpiece />
-              <SeoDevMetaFooter />
-            </SidebarInset>
-          </>
-        )}
-      </div>
-    </SidebarProvider>
+      </main>
+      <SiteFooter />
+      <SeoDevMetaFooter />
+    </div>
   );
 }

@@ -24,6 +24,7 @@ import { getDriver } from "./drivers/index.js";
 import { createHostToolRegistry } from "./host_tools.js";
 import { BackupEvalSession, validateBackupCassette } from "./neotoma_cli.js";
 import { startIsolatedNeotomaServer, type IsolatedServer } from "./isolated_server.js";
+import { SITE_HTTP_SCENARIO, startStaticSiteServer, type StaticSiteServer } from "./site_http.js";
 import type {
   AssertionFailure,
   CellReport,
@@ -150,6 +151,8 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const effectiveProfile = classifyEffectiveProfile(plan.model, plan.instructionProfile);
   const cellLabel = `${plan.scenario.meta.id} | ${plan.model.provider}/${plan.model.model} | profile=${effectiveProfile} | hooks=${plan.hooksEnabled}`;
   const requiredBackup = plan.scenario.meta.id === "backup_restore_cli_safety";
+  const requiredSite = plan.scenario.meta.id === SITE_HTTP_SCENARIO;
+  const requiredScenario = requiredBackup || requiredSite;
   const requiredDeadline = Date.now() + (opts.cellTimeoutMs ?? 240_000);
   const requiredWorkMs = (): number => {
     const remaining = requiredDeadline - 30_000 - Date.now();
@@ -172,7 +175,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   // Quarantined scenarios are skipped (not failed) so the CI scenario lane
   // stays green on a clean main while a known gap is tracked + fixed.
   if (plan.scenario.meta.quarantine) {
-    if (requiredBackup) return requiredFailure("required restore eval cannot be quarantined");
+    if (requiredScenario) return requiredFailure("required eval cannot be quarantined");
     log(`[runner] QUARANTINED: ${plan.scenario.meta.id} — ${plan.scenario.meta.quarantine}`);
     return {
       scenario: plan.scenario.meta,
@@ -190,7 +193,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const driver = getDriver(plan.model.provider);
   const preflight = driver.preflight(opts.mode);
   if (!preflight.ok) {
-    if (requiredBackup)
+    if (requiredScenario)
       return requiredFailure(preflight.reason ?? "required restore eval preflight failed");
     return {
       scenario: plan.scenario.meta,
@@ -209,8 +212,8 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   if (opts.mode === "replay") {
     const cassetteResult = readCassette(plan.cassettePath);
     if (!cassetteResult) {
-      if (requiredBackup)
-        return requiredFailure(`required restore eval cassette missing: ${plan.cassettePath}`);
+      if (requiredScenario)
+        return requiredFailure(`required eval cassette missing: ${plan.cassettePath}`);
       return {
         scenario: plan.scenario.meta,
         model: plan.model,
@@ -240,6 +243,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   }
 
   let server: IsolatedServer | null = null;
+  let siteServer: StaticSiteServer | null = null;
   let backupSession: BackupEvalSession | null = null;
   let driverResult: DriverResult | undefined;
   let assertionFailures: AssertionFailure[] = [];
@@ -292,15 +296,18 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       if (!pass)
         errorMessage = assertionFailures.map((failure) => `• ${failure.message}`).join("\n");
     } else {
+      if (requiredSite && opts.mode !== "replay") throw new Error("site_http eval is replay-only");
       server = await startIsolatedNeotomaServer({
         hooksEnabled: plan.hooksEnabled,
         env: {
           NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
+          ...(requiredSite ? { NEOTOMA_ROOT_LANDING_MODE: "personal" } : {}),
           ...(plan.scenario.real_storage ? { NEOTOMA_TEST_REAL_STORAGE: "1" } : {}),
         },
         faults: plan.scenario.server_faults,
       });
       log(`[runner] isolated server up at ${server.baseUrl} (data=${server.dataDir})`);
+      if (requiredSite) siteServer = await startStaticSiteServer();
 
       if (plan.scenario.seed_entities && plan.scenario.seed_entities.length > 0) {
         log(`[runner] seeding ${plan.scenario.seed_entities.length} entities into isolated DB`);
@@ -316,6 +323,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         mode: opts.mode,
         cassettePath: plan.cassettePath,
         timeoutMs: opts.cellTimeoutMs ?? 120_000,
+        siteBaseUrl: siteServer?.baseUrl,
       };
       driverResult = await runWithTimeout(driver.runOnce(invocation), invocation.timeoutMs!);
 
@@ -358,6 +366,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         errorMessage = `restore eval cleanup failed: ${(error as Error).message}`;
       }
     }
+    if (siteServer) await siteServer.stop();
     if (server) await server.stop();
   }
 

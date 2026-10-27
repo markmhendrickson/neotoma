@@ -141,7 +141,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
       'Start with what your agent already produces: conversations, contacts mentioned in chat, tasks and commitments ("I need to", "remind me"), and decisions. These store automatically with zero configuration once the agent rules are active. Within the first week, add financial data, calendar events, and project context as your personal OS grows.',
     detail:
       "Priority 1 (day one): conversations, contacts, tasks, decisions - lowest friction, highest compound value. Priority 2 (first week): financial data, calendar, email, health. Priority 3 (as the OS matures): content pipeline, project context, agent session state. The heuristic: if it benefits from recall, audit, replay, or linking to other entities, store it.",
-    link: { href: "/docs", label: "Documentation" },
+    link: { href: "/readme/", label: "README" },
   },
   {
     sectionId: "is-neotoma-a-note-taking-app-or-thought-partner-tool",
@@ -171,7 +171,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     question: "What AI tools does Neotoma work with?",
     answer:
       "Neotoma works with any MCP-compatible AI tool: Cursor, Claude (Desktop and claude.ai), Claude Code, ChatGPT, Codex, OpenCode, OpenClaw, and IronClaw. It also provides a REST API and CLI for direct programmatic access.",
-    link: { href: "/docs", label: "Integration guides" },
+    link: { href: "/integrations/", label: "Integrations" },
   },
   {
     sectionId: "is-neotoma-free-and-open-source",

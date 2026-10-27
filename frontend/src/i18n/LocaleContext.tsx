@@ -59,3 +59,8 @@ export function useLocale() {
   }
   return value;
 }
+
+/** Static reader chrome renders outside the app provider; callers may supply locale explicitly. */
+export function useOptionalLocale() {
+  return useContext(LocaleContext);
+}

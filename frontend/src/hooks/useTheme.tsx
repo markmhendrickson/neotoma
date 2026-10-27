@@ -2,13 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 export type Theme = "light" | "dark" | "system";
 
-function readStoredTheme(): Theme {
+export function readStoredTheme(): Theme {
   if (typeof window === "undefined") return "system";
-  const stored = localStorage.getItem("theme") as Theme | null;
-  return stored && ["light", "dark", "system"].includes(stored) ? stored : "system";
+  try {
+    const stored = window.localStorage.getItem("theme") as Theme | null;
+    return stored && ["light", "dark", "system"].includes(stored) ? stored : "system";
+  } catch {
+    return "system";
+  }
 }
 
-function applyThemeToDOM(themeValue: Theme) {
+export function applyThemeToDOM(themeValue: Theme) {
   const root = document.documentElement;
   root.classList.remove("dark");
   if (themeValue === "system") {
@@ -42,7 +46,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     applyThemeToDOM(theme);
-    localStorage.setItem("theme", theme);
+    try {
+      window.localStorage.setItem("theme", theme);
+    } catch {
+      // Theme remains usable in memory when storage is unavailable.
+    }
     if (theme === "system") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
       const handleChange = () => applyThemeToDOM("system");

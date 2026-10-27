@@ -11,6 +11,7 @@ import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
 import { isRetiredRoute, servesRealPage } from "@/site/route_retirement";
 import { isDocsViewerRoute } from "@/site/docs_viewer_manifest";
+import { SPANISH_PUBLIC_SEO } from "@/site/spanish_public_seo";
 
 export interface SeoRouteMetadata {
   title: string;
@@ -68,6 +69,14 @@ export const SEO_DEFAULTS = {
   author: "Neotoma",
 };
 
+/** The server export and browser bundle must agree on preview indexing. */
+export function isSitePreview(): boolean {
+  return (
+    import.meta.env?.VITE_SITE_PREVIEW === "1" ||
+    (typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1")
+  );
+}
+
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Neotoma: the system of record for AI agents",
@@ -107,10 +116,21 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       ],
     },
   },
+  "/compare": {
+    title: "Compare recall, retrieval and a system of record | Neotoma",
+    description:
+      "Compare session memory, document retrieval, memory services, custom state and Neotoma against the need for current values and inspectable evidence.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Compare approaches", path: "/compare" },
+    ],
+  },
   "/install": {
     title: "Install | Neotoma",
     description:
-      "Install Neotoma in a few minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
+      "Choose a supported Neotoma connection path for your AI tool, review system effects, and verify the resulting connection.",
     robots: "index,follow",
     // Uses the default card (neotoma-og-1200x630.png); a dedicated install image never existed in the build.
     ogImageAlt:
@@ -119,21 +139,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Install", path: "/install" },
-    ],
-    howToName: "How to install Neotoma",
-    howToSteps: [
-      {
-        name: "Install the package",
-        text: "Run 'npm install -g neotoma' to install the Neotoma CLI globally.",
-      },
-      {
-        name: "Initialize",
-        text: "Run 'neotoma init' to create the config directory, the local databases and an env file.",
-      },
-      {
-        name: "Set up your tool",
-        text: "Run 'neotoma setup --tool claude-code'. Replace 'claude-code' with cursor, codex, openclaw or claude-desktop.",
-      },
     ],
   },
   "/install/manual": {
@@ -257,16 +262,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/docs": {
-    title: "Neotoma Documentation | Setup, API, MCP, CLI References",
-    description:
-      "Documentation for Neotoma: setup, architecture, API references, and operational guides.",
-    robots: "index,follow",
+    title: "References moved | Neotoma",
+    description: "Technical topics are linked directly from the Neotoma homepage.",
+    robots: "noindex,follow",
     ogType: "website",
     jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Docs", path: "/docs" },
-    ],
+    breadcrumb: [{ name: "Home", path: "/" }],
   },
   "/terminology": {
     title: "Core Terminology | Neotoma",
@@ -969,7 +970,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     howToSteps: [
       {
         name: "Install Neotoma",
-        text: "Run 'npm install -g neotoma' to install the CLI globally.",
+        text: `Run 'npm install -g neotoma@${REPO_VERSION}' to install the published CLI globally.`,
       },
       {
         name: "Start the API server",
@@ -977,7 +978,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       },
       {
         name: "Configure Claude Desktop",
-        text: "Add the Neotoma MCP server entry to your Claude Desktop configuration file (claude_desktop_config.json) with stdio transport.",
+        text: "Run 'neotoma setup --tool claude-desktop --install-scope user' for the local stdio entry, then inspect claude_desktop_config.json.",
       },
       {
         name: "Restart Claude Desktop",
@@ -1106,11 +1107,11 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     howToSteps: [
       {
         name: "Install Neotoma",
-        text: "Run 'npm install -g neotoma' to install the CLI globally.",
+        text: `Run 'npm install -g neotoma@${REPO_VERSION}' to install the published CLI globally.`,
       },
       {
         name: "Configure Codex",
-        text: "Add the Neotoma MCP server to your .codex/config.toml file with stdio transport settings.",
+        text: "Run 'neotoma setup --tool codex' for the local stdio entry, then inspect ~/.codex/config.toml and run 'codex mcp list'.",
       },
       {
         name: "Verify",
@@ -2698,6 +2699,7 @@ function normalizePath(pathname: string): string {
 }
 
 export function buildCanonicalUrl(pathname: string): string {
+  if (normalizePath(pathname) === "/en") return `${SEO_DEFAULTS.baseUrl.replace(/\/$/, "")}/`;
   const locale = getLocaleFromPath(pathname) ?? DEFAULT_LOCALE;
   const normalizedPath = normalizePath(localizePath(stripLocaleFromPath(pathname), locale));
   const base = SEO_DEFAULTS.baseUrl.replace(/\/$/, "");
@@ -2969,16 +2971,21 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
               ? pack.seo.memoryGuarantees
               : {};
   const resolvedRouteMetadata = { ...routeMetadata, ...localizedOverride };
+  if (locale === "es" && SPANISH_PUBLIC_SEO[normalizedPath]) {
+    const spanish = SPANISH_PUBLIC_SEO[normalizedPath];
+    Object.assign(resolvedRouteMetadata, {
+      title: spanish.title,
+      description: spanish.description,
+      ogImageAlt: `Neotoma: ${spanish.title}. ${spanish.description}`,
+    });
+  }
   if (normalizedPath === "/faq") {
     resolvedRouteMetadata.faqItems = getFaqItems(locale).map((item) => ({
       question: item.question,
       answer: item.answer,
     }));
   }
-  const robots =
-    typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
-      ? "noindex,follow"
-      : resolvedRouteMetadata.robots;
+  const robots = isSitePreview() || normalizePath(pathname) === "/en" ? "noindex,follow" : resolvedRouteMetadata.robots;
   const ogImageUrl = resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
   const ogImageAlt =
     resolvedRouteMetadata.ogImageAlt ??
@@ -3009,15 +3016,17 @@ export function buildSitemapXml(
   // Docs viewer pages are listed by the static build, with their trailing slash.
   paths: readonly string[] = SITEMAP_PATHS.filter(
     (p) => !isRetiredRoute(p) && !isDocsViewerRoute(p)
-  )
+  ),
+  preview = isSitePreview()
 ): string {
-  const urlEntries = paths
+  const urlEntries = (preview ? [] : paths)
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>\n`;
 }
 
-export function buildRobotsTxt(): string {
+export function buildRobotsTxt(preview = isSitePreview()): string {
+  if (preview) return "User-agent: *\nDisallow: /\n";
   const base = SEO_DEFAULTS.baseUrl.replace(/\/$/, "");
   const sitemapUrl = `${base}/sitemap.xml`;
   return `User-agent: *\nAllow: /\n\nSitemap: ${sitemapUrl}\n`;
@@ -3184,9 +3193,12 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
   );
 
   out = out.replace(
-    /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    /<script type="application\/ld\+json"(?: [^>]*)?>[\s\S]*?<\/script>/,
     meta.jsonLd
-      .map((entry) => `<script type="application/ld+json">${JSON.stringify(entry)}</script>`)
+      .map(
+        (entry) =>
+          `<script type="application/ld+json" data-rh="true">${JSON.stringify(entry)}</script>`
+      )
       .join("\n    ")
   );
 
@@ -3194,7 +3206,7 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
   const alternatesHtml = meta.alternates
     .map(
       (alternate) =>
-        `<link rel="alternate" hrefLang="${escapeHtml(alternate.hrefLang)}" href="${escapeHtml(alternate.href)}" />`
+        `<link rel="alternate" hrefLang="${escapeHtml(alternate.hrefLang)}" href="${escapeHtml(alternate.href)}" data-rh="true" />`
     )
     .join("\n    ");
   if (alternatesHtml) {

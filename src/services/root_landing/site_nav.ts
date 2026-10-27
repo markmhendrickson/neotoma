@@ -29,7 +29,7 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
   {
     title: "Getting started",
     items: [
-      { label: "Documentation", href: "/docs", icon: "Home" },
+      { label: "README", href: "/readme/", icon: "Home" },
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },

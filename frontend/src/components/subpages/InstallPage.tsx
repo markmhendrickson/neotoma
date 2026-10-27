@@ -1,8 +1,6 @@
-import { Link } from "react-router-dom";
-import { SolidLockup } from "@/components/onepager/NeotomaLogos";
 import "@/components/onepager/onepager.css";
 import { useLocale } from "@/i18n/LocaleContext";
-import { NEOTOMA_GITHUB_REPO } from "@/site/neotoma_repo";
+import { SiteFooter, SiteHeader, SiteSkipLink } from "@/components/onepager/SiteChrome";
 import { MdxSitePage } from "./MdxSitePage";
 
 /**
@@ -13,22 +11,19 @@ export function InstallPage() {
   const { subpage } = useLocale();
   return (
     <div className="plan plan-install">
-      <div className="plan-install-masthead">
-        <Link to="/" aria-label="Neotoma, back to the home page">
-          <SolidLockup />
-        </Link>
-        <nav aria-label="Install page" className="plan-install-links">
-          <Link to="/" className="plan-link">
-            Back to neotoma.io
-          </Link>
-          <a href={NEOTOMA_GITHUB_REPO} className="plan-link">
-            GitHub
-          </a>
-        </nav>
+      <SiteSkipLink />
+      <div className="plan-sheet plan-hero">
+        <SiteHeader />
       </div>
-      <section className="plan-sheet plan-install-sheet" aria-label="Install Neotoma">
+      <main
+        className="plan-sheet plan-install-sheet"
+        id="main"
+        tabIndex={-1}
+        aria-label={subpage.install.title}
+      >
         <MdxSitePage canonicalPath="/install" detailTitle={subpage.install.title} />
-      </section>
+      </main>
+      <SiteFooter />
     </div>
   );
 }

@@ -70,12 +70,18 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build site
+        env:
+          VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
         run: npm run build:site:pages
 
       - name: Validate locale parity
         run: npm run validate:locales
 
       - name: Validate site export
+        env:
+          VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
         run: npm run validate:site-export
 
       - name: Configure Pages

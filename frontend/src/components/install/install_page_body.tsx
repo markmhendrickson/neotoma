@@ -1,137 +1,15 @@
-import type { ElementType } from "react";
+import { staticAssetPath } from "@/site/spa_path";
 import { Clock } from "lucide-react";
-import { SiClaude, SiOpenai } from "react-icons/si";
-import { SITE_CODE_SNIPPETS } from "@/site/site_data";
-import { CodeBlock } from "@/components/InstallCodeBlock";
-import { INSTALL_COMMANDS } from "@/components/onepager/onepager_copy";
-import { PermissionsPreflight } from "@/components/PermissionsPreflight";
-import { Card, CardContent } from "@/components/ui/card";
-import { CodexIcon } from "@/components/icons/CodexIcon";
-import { CursorIcon } from "@/components/icons/CursorIcon";
-import { IronClawIcon } from "@/components/icons/IronClawIcon";
-import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
-import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
+import { ToolInstall } from "@/components/onepager/ToolInstall";
+import { TopicVisual } from "@/components/onepager/TopicVisual";
 import { useLocale } from "@/i18n/LocaleContext";
-import type { InstallTextSegment } from "@/i18n/locales/install_page_strings";
 import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { neotomaGithubBlobUrl } from "@/site/neotoma_repo";
 
-const INSTALL_INTEGRATION_ICONS: Record<string, ElementType> = {
-  "/neotoma-with-claude-code": SiClaude,
-  "/neotoma-with-claude": SiClaude,
-  "/neotoma-with-chatgpt": SiOpenai,
-  "/neotoma-with-codex": CodexIcon,
-  "/neotoma-with-opencode": OpenCodeIcon,
-  "/neotoma-with-cursor": CursorIcon,
-  "/neotoma-with-openclaw": OpenClawIcon,
-  "/neotoma-with-ironclaw": IronClawIcon,
-};
-
-const codeSm = "text-sm bg-muted px-1.5 py-0.5 rounded";
-const codeXs = "text-[12px] bg-muted px-1 py-0.5 rounded";
-
-function renderInstallSegments(segments: InstallTextSegment[]) {
-  return segments.map((seg, i) =>
-    typeof seg === "string" ? (
-      <span key={i}>{seg}</span>
-    ) : (
-      <code key={i} className={codeSm}>
-        {seg.code}
-      </code>
-    )
-  );
-}
-
-function renderInstallSegmentsTight(segments: InstallTextSegment[]) {
-  return segments.map((seg, i) =>
-    typeof seg === "string" ? (
-      <span key={i}>{seg}</span>
-    ) : (
-      <code key={i} className={codeXs}>
-        {seg.code}
-      </code>
-    )
-  );
-}
-
-function WhatChangesSection({
-  heading,
-  introParagraphs,
-  footnoteSegments,
-  tableCreated,
-  tablePath,
-  tableScope,
-  tableReset,
-  rows,
-}: {
-  heading: string;
-  introParagraphs: InstallTextSegment[][];
-  footnoteSegments: InstallTextSegment[];
-  tableCreated: string;
-  tablePath: string;
-  tableScope: string;
-  tableReset: string;
-  rows: { what: string; path: string; scope: string; reset: string }[];
-}) {
-  return (
-    <div className="mb-8">
-      <hr className="mb-6 border-border" />
-      <h2 className="text-[20px] font-medium tracking-[-0.01em]">{heading}</h2>
-      {introParagraphs.map((segments, i) => (
-        <p key={i} className="text-[14px] leading-6 text-muted-foreground mt-2 mb-3">
-          {renderInstallSegmentsTight(segments)}
-        </p>
-      ))}
-
-      {/* Narrow screens: a list, so the table never scrolls sideways. */}
-      <ul className="md:hidden mb-3 space-y-2 list-none pl-0">
-        {rows.map((row) => (
-          <li key={row.what} className="rounded-lg border border-border px-3 py-2 text-[13px]">
-            <div className="font-medium text-foreground break-words">{row.what}</div>
-            <div className="mt-1 font-mono text-[12px] text-muted-foreground break-words">
-              {row.path}
-            </div>
-            <div className="mt-1 text-muted-foreground">
-              {tableScope}: {row.scope}. <code className={codeXs}>{tableReset}</code>: {row.reset}
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      <div className="hidden md:block rounded-lg border border-border overflow-x-auto mb-3">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th className="px-3 py-2 text-left font-medium text-foreground">{tableCreated}</th>
-              <th className="px-3 py-2 text-left font-medium text-foreground">{tablePath}</th>
-              <th className="px-3 py-2 text-left font-medium text-foreground">{tableScope}</th>
-              <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap">
-                <code className={codeXs}>{tableReset}</code>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="text-muted-foreground">
-            {rows.map((row) => (
-              <tr key={row.what} className="border-b border-border/50 last:border-0">
-                <td className="px-3 py-2 text-foreground">{row.what}</td>
-                <td className="px-3 py-2 font-mono text-[12px]">{row.path}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{row.scope}</td>
-                <td className="px-3 py-2">{row.reset}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <p className="text-[13px] leading-5 text-muted-foreground">
-        {renderInstallSegmentsTight(footnoteSegments)}
-      </p>
-    </div>
-  );
-}
-
-/** Main install page body (MDX-backed); shell title comes from `MdxSitePage` `detailTitle` + i18n. */
+/** Human install page: one selected host controls both steps; detail remains source-owned. */
 export function InstallPageBody() {
-  const { subpage } = useLocale();
+  const { subpage, locale } = useLocale();
+  const es = locale === "es";
   const s = subpage.install;
 
   return (
@@ -143,205 +21,34 @@ export function InstallPageBody() {
         </span>
       </div>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Install</h2>
       <p className="text-[15px] leading-7 mb-4">
-        The same commands as the home page. Swap <code>claude-code</code> for your tool: cursor,
-        codex, openclaw or claude-desktop.
+        {es ? "Elige la herramienta de IA que utilizas. La vía seleccionada muestra cómo conectarla con una instancia de Neotoma, cómo comprobar la conexión y qué guía seguir. La configuración local, el acceso remoto autenticado, los complementos nativos, los adaptadores SDK y los registros tienen requisitos distintos." : "Choose the AI tool you use. The selected path shows how to connect it to a Neotoma instance, how to check the connection, and the matching guide. Local setup, authenticated remote access, native plugins, SDK adapters, and registries have different prerequisites."}
       </p>
-      <div className="plan-install-commands">
-        <CodeBlock
-          code={INSTALL_COMMANDS}
-          copyFeedbackId="install-copy-quick"
-          installBlock="manual_commands"
-          scrollLabel="Install commands."
-        />
-      </div>
-
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">{s.agentAssistedInstall}</h2>
-      <p className="text-[15px] leading-7 mb-4">{s.agentAssistedLead}</p>
-      <CodeBlock
-        code={SITE_CODE_SNIPPETS.agentInstallPrompt}
-        copyFeedbackId="install-copy-agent-assisted"
-        installBlock="agent_assisted"
-      />
-
-      <div className="mb-6 rounded-lg border border-sky-500/20 bg-sky-500/5 p-4">
-        <p className="text-[14px] leading-6 text-sky-900 dark:text-sky-50 mb-2">
-          <strong>{s.expandedPromptLeadBold}</strong>
-          {s.expandedPromptLeadAfterBold}
-        </p>
-        <ol className="list-decimal pl-5 space-y-1 text-[14px] leading-6 text-sky-900 dark:text-sky-50">
-          {s.expandedPromptBullets.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ol>
-      </div>
-
-      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">
-        {s.expandedInstallFirstSequence}
-      </h3>
-      <p className="text-[15px] leading-7 mb-3">
-        {s.expandedSequenceIntroPrefix}
-        <code>/evaluate</code>
-        {s.expandedSequenceIntroSuffix}
+      <p className="text-[14px] leading-6 mb-5 rounded-lg border border-border bg-muted/30 p-4">
+        <strong>{es ? "Antes de empezar:" : "Before you begin:"}</strong> {es ? "una instalación local del paquete añade una CLI; la inicialización crea configuración y bases de datos locales. Configurar el entorno puede cambiar archivos de permisos o habilitar una captura posterior, y la comprobación de actualizaciones puede contactar con el registro npm. Un cliente remoto puede utilizar un punto de acceso autenticado existente sin instalar Neotoma localmente. Revisa " : "a local package install adds a CLI; initialization creates configuration and local databases. Host setup can change permission files or enable later capture, and update checks can contact the npm registry. A remote client can instead use an existing authenticated endpoint without a local Neotoma install. Review the complete "}
+        <a href={staticAssetPath(es ? "/es/install/system-changes/" : "/install/system-changes/")} className="underline underline-offset-2">
+          {es ? "todos los cambios en el sistema, los límites del reinicio y los efectos sobre los permisos" : "system changes, reset limits, and permission effects"}
+        </a>{" "}
+        {es ? "antes de copiar un paso." : "before copying a step."}
       </p>
-      <ol className="list-decimal pl-5 space-y-2 mb-4">
-        {s.expandedSteps.map((step) => (
-          <li key={step.title} className="text-[15px] leading-7 text-muted-foreground">
-            <strong className="text-foreground">{step.title}</strong>
-            {renderInstallSegments(step.segments)}
-          </li>
-        ))}
-      </ol>
-      <div className="plan-install-preflight mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
-        <p className="text-[14px] leading-6 text-muted-foreground mb-3">{s.permissionsNote}</p>
-        <PermissionsPreflight />
-      </div>
-      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
-        {s.canonicalRefPrefix}{" "}
-        <a
-          href="https://github.com/markmhendrickson/neotoma/blob/main/install.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-        >
-          install.md
-        </a>
-        {s.canonicalRefAfterInstallMd}
-        <code>/evaluate</code>
-        {s.canonicalRefSuffix}
-      </p>
-
-      <p className="text-[13px] leading-5 text-muted-foreground mb-4">
-        {s.moreOptions}{" "}
-        <MdxI18nLink
-          to="/install/manual"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-        >
-          {s.manualInstallLinkLabel}
-        </MdxI18nLink>
-        {" · "}
-        <MdxI18nLink
-          to="/install/docker"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-        >
-          {s.dockerLinkLabel}
-        </MdxI18nLink>
-        {" · "}
-        <MdxI18nLink
-          to="/cli"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-        >
-          {s.cliReferenceLinkLabel}
-        </MdxI18nLink>
-      </p>
-
-      <WhatChangesSection
-        heading={s.whatChangesOnSystem}
-        introParagraphs={s.whatChangesIntroParagraphs}
-        footnoteSegments={s.whatChangesFootnoteSegments}
-        tableCreated={s.impactTableCreated}
-        tablePath={s.impactTablePath}
-        tableScope={s.impactTableScope}
-        tableReset={s.impactTableReset}
-        rows={s.impactRows}
-      />
-
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">
-        {s.directIntegrationDocs}
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-6 mb-3">
+        {es ? "Conecta tu herramienta" : "Connect the tool you use"}
       </h2>
-      <p className="text-[13px] leading-6 text-muted-foreground mb-3">
-        {s.hostedConnectLeadPrefix}
-        <MdxI18nLink
-          to="/connect"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-        >
-          {s.hostedConnectConnectLink}
-        </MdxI18nLink>
-        {s.hostedConnectMiddle}
-        <MdxI18nLink
-          to="/sandbox"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-        >
-          {s.hostedConnectSandboxLink}
-        </MdxI18nLink>
-        {s.hostedConnectSuffix}
-      </p>
-      <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3 mb-10 [&_a]:!no-underline [&_a]:hover:!no-underline">
-        {s.integrationCards.map(({ href, label, desc }) => {
-          const Icon = INSTALL_INTEGRATION_ICONS[href] ?? SiClaude;
-          return (
-            <li key={href} className="h-full">
-              <MdxI18nLink
-                to={href}
-                className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
-              >
-                <Card className="h-full transition-colors hover:bg-muted/50 border border-border">
-                  <CardContent className="p-4 h-full">
-                    <div className="flex items-start gap-3">
-                      <span
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
-                        aria-hidden
-                      >
-                        <Icon className="h-5 w-5 shrink-0" aria-hidden />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium text-[15px] text-foreground block">
-                          {label}
-                        </span>
-                        <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
-                          {desc}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </MdxI18nLink>
-            </li>
-          );
-        })}
-      </ul>
+      <ToolInstall showPermissionsPreflight includeVerificationNote />
+      <TopicVisual visualId="install" className="mt-8" />
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
         {s.manualInstallAndDocker}
       </h2>
-      <div className="grid gap-4 sm:grid-cols-2 mb-8">
-        <MdxI18nLink
-          to="/install/manual"
-          className="group rounded-lg border border-border bg-card p-4 hover:bg-muted/50 transition-colors no-underline"
-        >
-          <span className="text-[15px] font-medium text-foreground group-hover:underline block mb-1">
-            {s.manualInstall}
-          </span>
-          <p className="text-[13px] leading-5 text-muted-foreground">{s.manualCardDesc}</p>
-        </MdxI18nLink>
-        <MdxI18nLink
-          to="/install/docker"
-          className="group rounded-lg border border-border bg-card p-4 hover:bg-muted/50 transition-colors no-underline"
-        >
-          <span className="text-[15px] font-medium text-foreground group-hover:underline block mb-1">
-            {s.dockerInstall}
-          </span>
-          <p className="text-[13px] leading-5 text-muted-foreground">{s.dockerCardDesc}</p>
-        </MdxI18nLink>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <MdxI18nLink
-          to="/cli"
-          className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-        >
-          {s.cliReference}
-        </MdxI18nLink>
-        <a
-          href="https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#install"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-        >
-          {s.fullReadme}
-        </a>
-      </div>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        {es ? "Estas vías de referencia siguen disponibles cuando la guía del entorno elegido no cubre cómo administras la instancia." : "These reference paths remain available when the selected host guide does not cover how you operate the instance."}
+      </p>
+      <ul className="list-none pl-0 space-y-2 mb-8">
+        <li><a href={neotomaGithubBlobUrl("install.md")} className="underline underline-offset-2">{es ? "Instalación manual (fuente en inglés)" : s.manualInstallLinkLabel}</a></li>
+        <li><a href={neotomaGithubBlobUrl("docs/developer/docker.md")} className="underline underline-offset-2">{es ? "Instalación con Docker (fuente en inglés)" : s.dockerLinkLabel}</a></li>
+        <li><MdxI18nLink to="/cli" className="underline underline-offset-2">{s.cliReferenceLinkLabel}</MdxI18nLink></li>
+        <li><a href="https://github.com/markmhendrickson/neotoma/blob/main/install.md" className="underline underline-offset-2">{es ? "Protocolo de instalación para agentes (en inglés)" : "Agent installation protocol"}</a></li>
+      </ul>
     </>
   );
 }

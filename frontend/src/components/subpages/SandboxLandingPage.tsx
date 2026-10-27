@@ -5,6 +5,8 @@ import { MdxSitePage } from "./MdxSitePage";
 import { IntegrationSection } from "../IntegrationSection";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { InspectorPreviewIllustration } from "../illustrations/InspectorPreviewIllustration";
+import { useLocale } from "@/i18n/LocaleContext";
+import { SpanishSandboxLandingPageBody } from "./SpanishSandboxLandingPageBody";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -29,6 +31,8 @@ It is a public sandbox with ephemeral per-session workspaces. Anything I store i
 Add the server to my current tool's MCP config, then confirm it is reachable with a single retrieve call.`;
 
 export function SandboxLandingPageBody() {
+  const es = useLocale().locale === "es";
+  if (es) return <SpanishSandboxLandingPageBody />;
   return (
     <>
       <div className="flex flex-wrap gap-2 mb-6">
@@ -133,7 +137,7 @@ export function SandboxLandingPageBody() {
         <CopyableCodeBlock code={CLAUDE_CODE_REMOTE_MCP} className="mb-6" />
 
         <p className="text-[14px] leading-6 text-muted-foreground">
-          Other harnesses: see <Link to="/connect" className={extLink}>Connect remotely</Link>{" "}
+          Other harnesses: see <Link to="/install" className={extLink}>Connect your tool</Link>{" "}
           for per-tool snippets (Claude Desktop, ChatGPT, Codex, OpenClaw). The live sandbox also
           renders a harness picker directly at its root URL -{" "}
           <a
@@ -200,8 +204,6 @@ export function SandboxLandingPageBody() {
         </ul>
         <p className="text-[14px] leading-6 text-muted-foreground">
           <Link to="/install" className={extLink}>Install guide →</Link>
-          {" · "}
-          <Link to="/hosted" className={extLink}>Hosted options overview →</Link>
         </p>
       </IntegrationSection>
     </>
@@ -209,5 +211,5 @@ export function SandboxLandingPageBody() {
 }
 
 export function SandboxLandingPage() {
-  return <MdxSitePage canonicalPath="/sandbox" detailTitle="Neotoma sandbox" />;
+  return <MdxSitePage canonicalPath="/sandbox" />;
 }

@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "site_publication_http_contract",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-27T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Read the six harness connection guidance at GET / as JSON, then inspect the English and Spanish public site, integration, installation, evaluation, and system-change routes.",
+  "system_prompt": "Read the Neotoma root guidance and public website routes before advising an evaluator.",
+  "tool_calls": [
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "root_json",
+        "path": "/"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/es"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/install/claude-code"
+      },
+      "sequence": 3
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/install/openclaw"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/install"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/es/install"
+      },
+      "sequence": 6
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/evaluate"
+      },
+      "sequence": 7
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/es/evaluate"
+      },
+      "sequence": 8
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/install/system-changes"
+      },
+      "sequence": 9
+    },
+    {
+      "name": "site_http",
+      "input": {
+        "operation": "static_html",
+        "path": "/es/install/system-changes"
+      },
+      "sequence": 10
+    }
+  ],
+  "assistant_text": "Read the live six-harness guidance and the built English and Spanish publication routes."
+}

@@ -17,6 +17,7 @@ import { isDeepStrictEqual } from "node:util";
 import * as yaml from "yaml";
 
 import type { ScenarioFile } from "./types.js";
+import { SITE_HTTP_SCENARIO, validateSiteScenario } from "./site_http.js";
 
 const RESTORE_SCENARIO = "backup_restore_cli_safety";
 
@@ -213,6 +214,7 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
         : undefined,
     expected: o.expected as ScenarioFile["expected"],
   };
+  if (scenario.meta.id === SITE_HTTP_SCENARIO) validateSiteScenario(scenario);
   return scenario;
 }
 

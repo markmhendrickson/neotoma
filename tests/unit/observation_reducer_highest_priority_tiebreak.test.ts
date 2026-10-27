@@ -205,3 +205,59 @@ describe("ObservationReducer highest_priority same-tier scalar ordering (#2394)"
     expect(snapshot!.provenance.notes).toBe("obs_sensor_older");
   });
 });
+
+describe("invoice example: explicit priority versus default recency", () => {
+  for (const strategy of ["last_write", "highest_priority"] as const) {
+    it(`${strategy} keeps its declared winner when a later unsupported date disagrees`, async () => {
+      vi.mocked(schemaRegistry.loadActiveSchema).mockResolvedValue({
+        id: "invoice-policy-fixture",
+        entity_type: entityType,
+        schema_version: "1.0.0",
+        schema_definition: {
+          fields: {
+            date_due: { type: "date", required: false },
+            amount_due: { type: "number", required: false },
+          },
+          identity_opt_out: "heuristic_canonical_name",
+        },
+        reducer_config: {
+          merge_policies: { date_due: { strategy }, amount_due: { strategy: "last_write" } },
+        },
+        active: true,
+      } as Awaited<ReturnType<typeof schemaRegistry.loadActiveSchema>>);
+      const pdf = obs({
+        id: "obs_invoice_pdf",
+        source_priority: 100,
+        observation_source: "import",
+        fields: { date_due: "2026-10-22", amount_due: 3200 },
+        observed_at: "2026-10-01T00:00:00Z",
+      });
+      const email = obs({
+        id: "obs_vendor_email",
+        source_priority: 200,
+        observation_source: "import",
+        fields: { date_due: "2026-10-29" },
+        observed_at: "2026-10-02T00:00:00Z",
+      });
+      const unsupported = obs({
+        id: "obs_unsupported_claim",
+        source_priority: 50,
+        observation_source: "llm_summary",
+        fields: { date_due: "2026-11-05" },
+        observed_at: "2026-10-03T00:00:00Z",
+      });
+      const observations = [unsupported, pdf, email];
+      const original = JSON.stringify(observations);
+      const snapshot = await new ObservationReducer().computeSnapshot(entityId, observations);
+      expect(snapshot!.snapshot.date_due).toBe(
+        strategy === "highest_priority" ? "2026-10-29" : "2026-11-05"
+      );
+      expect(snapshot!.provenance.date_due).toBe(
+        strategy === "highest_priority" ? email.id : unsupported.id
+      );
+      expect(snapshot!.snapshot.amount_due).toBe(3200);
+      expect(snapshot!.provenance.amount_due).toBe(pdf.id);
+      expect(JSON.stringify(observations)).toBe(original);
+    });
+  }
+});

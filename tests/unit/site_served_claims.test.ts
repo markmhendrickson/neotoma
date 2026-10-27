@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { LocaleProvider } from "../../frontend/src/i18n/LocaleContext";
 import { describe, expect, it } from "vitest";
 import { NeotomaOnePager } from "../../frontend/src/components/onepager/NeotomaOnePager";
 import { isRetiredRoute, resolveDestination } from "../../frontend/src/site/route_retirement";
@@ -16,6 +17,7 @@ import {
   findClaimProblems,
 } from "../../scripts/docs_viewer/claim_patterns";
 import { resolveSeoMetadata } from "../../frontend/src/site/seo_metadata";
+import { REPO_VERSION } from "../../frontend/src/site/site_data";
 import {
   EVALUATE_SUBPAGE_EN,
   EVALUATE_SUBPAGE_ES,
@@ -32,7 +34,7 @@ const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
 
 describe("one-pager sheets 02 to 04", () => {
   const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
   );
   const text = pageText(markup).replace(/\s+/g, " ");
   const examples = read("frontend", "src", "components", "onepager", "InterfaceExplorer.tsx");
@@ -45,20 +47,21 @@ describe("one-pager sheets 02 to 04", () => {
     ]) {
       expect(text, cmd).toContain(cmd);
     }
-    expect(text).toContain("Read the store response for the actual entity ID");
+    expect(text).toContain("Read the returned entity_id as INVOICE_ID.");
     expect(text).toContain("$INVOICE_ID");
     expect(text).not.toMatch(
       /ids are from one run|\$ neotoma (store|corrections|entities|observations)\b/i
     );
-    expect(text).toMatch(/store\(\{\s*"entities":\s*\[\s*\{\s*"entity_type":\s*"invoice"/);
-    expect(text).toMatch(/correct\(\{\s*"entity_id":\s*"\$INVOICE_ID"/);
-    expect(text).toMatch(/retrieve_entity_snapshot\(\{\s*"entity_id":\s*"\$INVOICE_ID"/);
+    expect(text).toContain("Gmail MCP");
+    expect(text).toContain("Neotoma MCP");
+    expect(text).toContain("Observation history retains the original October 22 date");
+    expect(text).not.toContain("Read the store response for the actual entity ID");
     expect(text).toContain('"$NEOTOMA_URL/store"');
     expect(text).toContain('"$NEOTOMA_URL/correct"');
     expect(examples).toContain("Authorization: Bearer $NEOTOMA_TOKEN");
   });
   it("limits shared reads to a configured instance and matching entry or profile", () => {
-    expect(text).toContain("same instance and data profile or MCP entry");
+    expect(text).toContain("same instance and data profile");
     expect(text).toContain("separate entries can use separate databases");
     expect(text).not.toMatch(
       /what one agent stored is what the next one reads|agents connected to the same instance read the same record/i
@@ -67,43 +70,77 @@ describe("one-pager sheets 02 to 04", () => {
 });
 
 describe("/install", () => {
-  const strings = read("frontend", "src", "i18n", "locales", "install_page_strings.ts");
-  const en = strings.slice(
-    strings.indexOf("export const INSTALL_PAGE_EN"),
-    strings.indexOf("export const INSTALL_PAGE_ES")
-  );
-  it("describes what init and setup write, and the npm_check_update tool", () => {
-    expect(en).not.toMatch(/Optional prompts/i);
-    expect(en).toContain("two local SQLite databases");
-    expect(en).toContain("~/.cursor/mcp.json");
-    expect(en).toContain("neotoma init --interactive");
-    expect(en).toContain("two MCP entries (neotoma-dev and neotoma");
-    expect(en).toContain("5 hooks");
-    expect(en).toContain("12 user-level skills under ~/.claude when that directory exists");
-    expect(strings).toContain("claude plugin marketplace add");
-    expect(strings).toContain("claude plugin install neotoma@neotoma-marketplace");
-    // The allow rules go to the project permissions file by default; no settings-file edit is claimed.
-    expect(en).toContain("Bash(neotoma:*)");
-    expect(en).toContain("Bash(npm install -g neotoma:*)");
-    expect(strings).toContain(".claude/settings.local.json (default)");
-    expect(en).toContain("--skip-permissions");
-    expect(en).not.toMatch(/edits to ~\/\.claude\/settings\.json|Claude Code settings edits/);
-    expect(strings).not.toContain("12 Claude Code skills (only when claude is on your PATH)");
-    expect(en).toContain("npm_check_update");
-    expect(en).toContain("is not turned off by NO_UPDATE_NOTIFIER");
+  const effects = read("docs", "topics", "install", "system-changes.md");
+  const body = read("frontend", "src", "components", "install", "install_page_body.tsx");
+
+  it("discloses complete local effects in the linked source reader before actions", () => {
+    expect(body.indexOf("/install/system-changes/")).toBeLessThan(body.indexOf("<ToolInstall showPermissionsPreflight includeVerificationNote />"));
+    for (const detail of [
+      "two local SQLite databases",
+      "~/.cursor/mcp.json",
+      "neotoma init --interactive",
+      "Claude Code plugin with five hooks",
+      "Twelve Claude Code skills",
+      ".claude/settings.local.json",
+      ".cursor/allowlist.json",
+      "~/.codex/config.toml",
+      "Bash(neotoma:*)",
+      "--skip-permissions",
+      "sources_prod/",
+      "logs_prod/",
+      "events.prod.log",
+      "npm_check_update",
+      "NO_UPDATE_NOTIFIER=1",
+      "without interactive confirmation",
+      "NEOTOMA_DATA_DIR",
+    ]) expect(effects, detail).toContain(detail);
+    expect(effects).toMatch(/Cursor[^\n]*`neotoma \*`[^\n]*including reset/);
+    expect(effects).toMatch(/Codex[^\n]*`neotoma \*`[^\n]*including reset/);
+    expect(effects).toContain("Claude Code setup example");
+    expect(effects).not.toContain("writes two MCP entries, CLI instruction files for Claude Code, Cursor, and Codex in the project, and the host permission rules above");
   });
   it("points at blocks that exist", () => {
-    expect(strings).not.toMatch(/pre-flight block above|activation sequence linked below/i);
+    expect(body).toContain("<ToolInstall showPermissionsPreflight includeVerificationNote />");
+    expect(read("frontend", "src", "components", "onepager", "ToolInstall.tsx"))
+      .toContain("<PermissionsPreflight harness={preflightHost} />");
   });
-  it("keeps the HowTo to the three visible install lines", () => {
+  it("uses neutral WebPage metadata for the selected-host install flow", () => {
     const steps = resolveSeoMetadata("/install").jsonLd.flatMap((e) =>
       e["@type"] === "HowTo" ? (e["step"] as { text: string }[]) : []
     );
-    expect(steps).toHaveLength(3);
-    const joined = steps.map((s) => s.text).join(" ");
-    expect(joined).toContain("neotoma init");
-    expect(joined).toContain("--tool claude-code");
-    expect(joined).not.toContain("--tool cursor");
+    expect(steps).toHaveLength(0);
+    expect(resolveSeoMetadata("/install").jsonLd.some((e) => e["@type"] === "WebPage")).toBe(true);
+  });
+  it("keeps remaining setup-specific HowTo routes pinned", () => {
+    const routes = [
+      "/neotoma-with-claude-connect-desktop",
+      "/neotoma-with-codex-connect-local-stdio",
+    ];
+    for (const route of routes) {
+      const steps = resolveSeoMetadata(route).jsonLd.flatMap((entry) =>
+        entry["@type"] === "HowTo" ? (entry.step as { text: string }[]) : []
+      );
+      expect(steps.length, route).toBeGreaterThan(0);
+      const text = steps.map((step) => step.text).join(" ");
+      expect(text, route).toContain(`npm install -g neotoma@${REPO_VERSION}`);
+      expect(text, route).not.toMatch(/npm install -g neotoma(?:['\s]|$)/);
+      expect(text, route).not.toContain("setup --tool openclaw");
+    }
+    const desktop = resolveSeoMetadata("/neotoma-with-claude-connect-desktop")
+      .jsonLd.flatMap((entry) =>
+        entry["@type"] === "HowTo" ? (entry.step as { text: string }[]) : []
+      )
+      .map((step) => step.text)
+      .join(" ");
+    expect(desktop).toContain("neotoma setup --tool claude-desktop --install-scope user");
+  });
+});
+
+describe("legal prose wrapping", () => {
+  it("wraps inline references without changing list-nested pre blocks", () => {
+    const css = read("frontend", "src", "index.css");
+    expect(css).toMatch(/\.post-prose :where\(p, li\) code:not\(pre code\)/);
+    expect(css).toMatch(/\.mdx-site-page-content pre \{[^}]*overflow-x-auto/);
   });
 });
 
@@ -219,75 +256,60 @@ describe("markdown mirrors of retired pages", () => {
   });
 });
 
-describe("sheet 06 limits", () => {
-  const page = read("frontend", "src", "components", "onepager", "NeotomaOnePager.tsx");
+describe("advanced capability boundaries", () => {
   const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
   );
   const text = pageText(markup).replace(/\s+/g, " ");
-  const direction = text.slice(
-    text.indexOf("Where this is going"),
-    text.indexOf("Explore the source")
+  const advanced = text.slice(
+    text.indexOf("Build a shared foundation for agent work"),
+    text.indexOf("Evaluate the fit")
   );
-  it("separates the current record from planned governance", () => {
-    expect(direction).toContain("The source, observation and snapshot foundation is here today");
-    expect(direction).toContain("Planned governance, with no promised timeline");
-    for (const ambition of [
-      "Give each domain a clear owner",
-      "Keep disagreement on the record",
-      "Make authority easier to inspect",
-    ]) {
-      expect(direction).toContain(ambition);
-    }
-    expect((direction.match(/Planned direction/g) ?? []).length).toBe(3);
-    expect(direction).toContain("authority scoped to the domain");
-    expect(direction).toContain("competing claims, unresolved disputes and official positions");
-    expect(direction.indexOf("foundation is here today")).toBeLessThan(
-      direction.indexOf("Planned direction")
-    );
-    expect(direction).not.toMatch(
-      /correction rights (ship|are available)|disputes (ship|are available)/i
-    );
+  const cards = [
+    ...markup.matchAll(
+      /<div class="plan-vision-content"><p class="plan-label">([^<]+)<\/p><h3>([^<]+)<\/h3><p>([^<]+)<\/p>/g
+    ),
+  ].map(([, status, title, detail]) => ({ status, title, detail }));
+  it("shows three supported and three planned visual capabilities", () => {
+    expect(cards.map(({ status, title }) => ({ status, title }))).toEqual([
+      { status: "Supported", title: "A shared system of record" },
+      { status: "Supported", title: "Verified identity and scoped access" },
+      { status: "Supported", title: "Selected record exchange" },
+      { status: "Planned", title: "Bounded domain ownership" },
+      { status: "Planned", title: "Retained positions" },
+      { status: "Planned", title: "Inspectable explanations" },
+    ]);
+    expect(markup).toContain('data-paper-scene="peering"');
+    expect(markup).toContain('data-paper-scene="visionDomain"');
   });
-  it("names all four current limits in the served direction section", () => {
-    for (const statement of [
-      "later ordinary writes can replace corrections",
-      "export contains current values without observation history",
-      "authorship is verified only for signed requests, and some paths record no writer",
-      "One entity can be read as of a past time; the whole record cannot",
-    ]) {
-      expect(direction, statement).toContain(statement);
-    }
-  });
-  it("states local operator scope and links full limitations without issue numbers", () => {
-    expect(direction).toContain("Current boundaries: one local operator");
-    expect(markup).toContain("docs/known_limitations.md");
-    expect(direction).not.toMatch(
-      /One operator per instance|users are separate tenants|#\d{3,}|issue \d{3,}/i
+  it("keeps qualifications local to their capability", () => {
+    const detail = (title: string) => cards.find((card) => card.title === title)?.detail;
+    expect(detail("A shared system of record")).toContain(
+      "configured access to one instance and data profile"
     );
-    expect(page).toContain("known_limitations.md");
+    expect(detail("Verified identity and scoped access")).toContain(
+      "active scoped grants determine permitted actions"
+    );
+    expect(detail("Verified identity and scoped access")).toContain(
+      "Other paths may have self-reported or absent writer identity"
+    );
+    expect(detail("Selected record exchange")).toContain(
+      "without claiming complete history, files or deletions"
+    );
+    for (const card of cards.slice(3)) expect(card.detail).toMatch(/^Planned /);
+    expect(advanced).not.toMatch(
+      /every agent can read all records|any signed request can act|all history, files and deletions/i
+    );
+    expect(advanced).not.toContain("Current scope and limits");
   });
 });
 
-describe("/install intro and table", () => {
-  const strings = read("frontend", "src", "i18n", "locales", "install_page_strings.ts");
-  const en = strings.slice(
-    strings.indexOf("export const INSTALL_PAGE_EN"),
-    strings.indexOf("export const INSTALL_PAGE_ES")
-  );
-  it("splits the intro into what init does, what setup writes and what is sent over the network", () => {
-    const start = en.indexOf("whatChangesIntroParagraphs: [");
-    const end = en.indexOf("whatChangesFootnoteSegments", start);
-    const block = en.slice(start, end);
-    expect(block).toContain("neotoma init");
-    expect(block.match(/\n    \[\n/g)?.length).toBe(3);
-    expect(block).not.toContain("whatChangesIntroSegments");
-  });
-  it("does not let the table scroll sideways on narrow screens", () => {
-    const body = read("frontend", "src", "components", "install", "install_page_body.tsx");
-    expect(body).toContain("md:hidden");
-    expect(body).toContain("hidden md:block");
-    expect(body).not.toMatch(/<td className="px-3 py-2 text-foreground whitespace-nowrap">/);
+describe("/install effects reader", () => {
+  it("uses a semantic table in the passive source document", () => {
+    const effects = read("docs", "topics", "install", "system-changes.md");
+    expect(effects).toContain("| Created or changed | Path | Scope | `neotoma reset` behavior |");
+    expect(effects).toContain("## Capture and network behavior");
+    expect(effects).toContain("## Reset and verify");
   });
 });
 

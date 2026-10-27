@@ -66,7 +66,7 @@ export function NotFound() {
     <>
       <SeoHead routePath="/404" />
       <div className="min-h-0 bg-background text-foreground">
-        <main className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
+        <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
           <div className="mb-6 inline-flex items-center gap-2 rounded border border-border bg-muted/40 px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
             <Search className="h-3.5 w-3.5" aria-hidden />
             Missing page
@@ -127,7 +127,7 @@ export function NotFound() {
               ))}
             </ul>
           </section>
-        </main>
+        </div>
       </div>
     </>
   );
