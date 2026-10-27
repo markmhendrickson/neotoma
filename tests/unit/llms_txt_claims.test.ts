@@ -126,8 +126,8 @@ function openApiPathCount(yaml: string): number {
   return (body.slice(0, end === -1 ? undefined : end).match(/^ {2}\//gm) ?? []).length;
 }
 
-const MAIN_SURFACE_COUNT_CLAIM =
-  /On main \(unreleased v(\d+\.\d+\.\d+) candidate\), Neotoma v\1 exposes (\d+) MCP tools and (\d+) REST paths in its OpenAPI spec\./;
+const SURFACE_COUNT_CLAIM =
+  /^Neotoma v(\d+\.\d+\.\d+) exposes (\d+) MCP tools and (\d+) REST paths in its OpenAPI spec\./m;
 
 function surfaceOverclaims(text: string): string[] {
   return SURFACE_AND_ATTRIBUTION_OVERCLAIMS.filter((re) => re.test(text)).map((re) => String(re));
@@ -273,13 +273,14 @@ describe("README checkable claims", () => {
   ).version;
 
   it("states this package version and its registered MCP tool count", () => {
-    const m = MAIN_SURFACE_COUNT_CLAIM.exec(readme);
+    const m = SURFACE_COUNT_CLAIM.exec(readme);
     expect(
       m,
-      "README must scope the main-branch MCP tool count to its unreleased candidate"
+      "README must state this package version and its registered MCP tool count"
     ).not.toBeNull();
     expect(m![1]).toBe(packageVersion);
     expect(Number(m![2])).toBe(NEOTOMA_TOOL_NAMES.length);
+    expect(readme).not.toMatch(/MCP tools \(as of v\d/);
   });
 
   it("opens with the lead contrast and the category sentence", () => {
@@ -345,10 +346,10 @@ describe("README checkable claims", () => {
   });
 
   it("states the REST path count that openapi.yaml has", () => {
-    const m = MAIN_SURFACE_COUNT_CLAIM.exec(readme);
+    const m = SURFACE_COUNT_CLAIM.exec(readme);
     expect(
       m,
-      "README must scope the main-branch REST path count to its unreleased candidate"
+      "README must state this package version and its declared REST path count"
     ).not.toBeNull();
     expect(m![1]).toBe(packageVersion);
     expect(Number(m![3])).toBe(openApiPathCount(readFileSync(join(root, "openapi.yaml"), "utf-8")));
@@ -395,10 +396,15 @@ describe("README checkable claims", () => {
     expect(PREVIEW_LABEL.test(`${readme}\nNeotoma is in developer preview.\n`)).toBe(true);
   });
 
-  it("opens with the same three-line install block as the one-pager, then the permissions note", () => {
+  it("keeps the README install steps aligned with the version-pinned one-pager, then the permissions note", () => {
     const block = /```bash\n([\s\S]*?)```/.exec(readme);
     expect(block).not.toBeNull();
-    expect(block![1].trim()).toBe(INSTALL_COMMANDS.trim());
+    const steps = ["neotoma init", "neotoma setup --tool claude-code"];
+    expect(block![1].trim().split("\n")).toEqual(["npm install -g neotoma", ...steps]);
+    expect(INSTALL_COMMANDS.trim().split("\n")).toEqual([
+      `npm install -g neotoma@${packageVersion}`,
+      ...steps,
+    ]);
     expect(block![1]).not.toContain("neotoma mcp config");
     expect(block![1]).not.toContain("--yes");
     const after = readme.slice(block!.index + block![0].length).trimStart();
@@ -408,11 +414,14 @@ describe("README checkable claims", () => {
       )
     ).toBe(true);
     expect(after).toContain("Omission does not prevent every setup write.");
-    const steps = resolveSeoMetadata("/install").jsonLd.flatMap((entry) =>
+    const seoSteps = resolveSeoMetadata("/install").jsonLd.flatMap((entry) =>
       entry["@type"] === "HowTo" ? (entry.step as { text: string }[]) : []
     );
-    expect(steps.map((step) => step.text).join(" ")).toContain("neotoma setup --tool claude-code");
-    expect(steps.map((step) => step.text).join(" ")).not.toContain("--yes");
+    // The selected-host chooser has no universal local-install sequence: remote and
+    // adapter paths can use an already operated instance. Setup-specific HowTo routes
+    // retain their own command guards in site_served_claims.test.ts.
+    expect(seoSteps).toHaveLength(0);
+    expect(resolveSeoMetadata("/install").jsonLd.some((entry) => entry["@type"] === "WebPage")).toBe(true);
   });
 
   it("keeps the note under the install block to one setup sentence plus the token workaround", () => {
@@ -551,13 +560,13 @@ describe("claims true for this package", () => {
     expect(readme).toContain("fail quietly when nothing is listening there");
   });
 
-  it("marks atomic corrections as an unreleased candidate absent from the latest release", () => {
+  it("marks atomic corrections as part of this released version in docs/README.md", () => {
     const version = (
       JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
         version: string;
       }
     ).version;
-    expect(docsReadme).toContain(`one transaction (v${version} candidate; absent from v0.25.0)`);
+    expect(docsReadme).toContain(`one transaction (added in v${version})`);
   });
 });
 

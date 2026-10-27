@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Local-preview reader tests resolve pinned source links against repository history.
+          fetch-depth: 0
 
       # Real Docker matcher, synthetic-only FROM scratch context; no registry pull.
       # Fail the required baseline lane if a local environment variant is copied.

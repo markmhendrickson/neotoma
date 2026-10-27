@@ -20,12 +20,18 @@ describe("sitemap migration audit", () => {
     ]);
   });
 
-  it("maps retired locale routes to the corresponding English topic", () => {
+  it("retains the live Spanish install page and redirects retired locale routes", () => {
     const rows = auditMigrationPaths([
       "https://neotoma.io/es/install",
       "https://neotoma.io/fr/backup",
     ]);
-    expect(rows[0].destination).toBe("https://neotoma.io/install");
+    expect(rows[0]).toMatchObject({
+      disposition: "retained",
+      destination: "https://neotoma.io/es/install",
+      needsHttpRedirect: false,
+    });
+    expect(rows[1].disposition).toBe("redirect");
+    expect(rows[1].needsHttpRedirect).toBe(true);
     expect(rows[1].destination).toBe(
       "https://github.com/markmhendrickson/neotoma/blob/main/docs/operations/runbook.md"
     );

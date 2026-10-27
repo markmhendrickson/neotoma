@@ -919,6 +919,10 @@ describe("local docs preview source contract", () => {
   });
 
   it("gives the preview build and validator the same source mode and full reference history", () => {
+    const baselineWorkflow = readFileSync(join(root, ".github/workflows/ci_test_lanes.yml"), "utf8");
+    const baseline = baselineWorkflow.slice(baselineWorkflow.indexOf("  baseline:"), baselineWorkflow.indexOf("  contract_parity:"));
+    expect(baseline).toMatch(/uses: actions\/checkout@v4\n\s+with:\n(?:\s+#.*\n)*\s+fetch-depth: 0/);
+
     for (const workflow of ["docs_pr_preview.yml", "deploy-pages-dev-site.yml"]) {
       const yaml = readFileSync(join(root, ".github/workflows", workflow), "utf8");
       expect(yaml).toMatch(
