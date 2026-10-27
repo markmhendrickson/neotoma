@@ -1,0 +1,95 @@
+.paper-scene {
+  --paper-navy: #223e50;
+  --paper-cream: #eee6d6;
+  --paper-sage: #98a48b;
+  --paper-blue: #a7bfcc;
+  --paper-rust: #ae5632;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+  border-radius: inherit;
+  isolation: isolate;
+}
+.paper-edge {
+  stroke: #fff9ec;
+  stroke-width: 0.7;
+  stroke-opacity: 0.7;
+}
+.paper-underedge {
+  fill: none;
+  stroke: #89765b;
+  stroke-width: 1.4;
+  opacity: 0.24;
+}
+.paper-writing {
+  fill: none;
+  stroke: var(--paper-navy);
+  stroke-width: 1.2;
+  opacity: 0.83;
+}
+.paper-fold {
+  fill: none;
+  stroke: #a99a80;
+  stroke-width: 1;
+  opacity: 0.45;
+}
+.paper-thread {
+  color: var(--paper-navy);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.paper-thread path {
+  vector-effect: non-scaling-stroke;
+}
+.paper-thread-dashed {
+  stroke-dasharray: 0.018 0.012;
+}
+.paper-hole {
+  fill: #3d392b;
+}
+.paper-hole-rim {
+  fill: #9f937d;
+}
+.paper-scene [data-paper-object] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.plan-contrast .paper-scene {
+  aspect-ratio: 3/2;
+  margin: 1.2rem 0 1.5rem;
+  border-radius: 10px;
+}
+.plan-section-cut .paper-scene {
+  aspect-ratio: 3/2;
+  border-radius: 12px;
+}
+.plan-section-cut li:nth-child(even) .paper-scene {
+  order: 1;
+}
+.plan-example-content .paper-scene {
+  aspect-ratio: 3/2;
+  border-radius: 12px;
+}
+@media (max-width: 760px) {
+  .plan-section-cut li:nth-child(even) .paper-scene {
+    order: initial;
+  }
+}
+.paper-bracket {
+  fill: none;
+  stroke: var(--paper-rust);
+  stroke-width: 2.6;
+}
+.paper-table {
+  fill: none;
+  stroke: var(--paper-navy);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.paper-clip {
+  fill: none;
+  stroke: #646359;
+  stroke-width: 2;
+}

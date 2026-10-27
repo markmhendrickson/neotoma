@@ -132,7 +132,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       },
       {
         name: "Set up your tool",
-        text: "Run 'neotoma setup --tool claude-code --yes'. Replace 'claude-code' with cursor, codex, openclaw or claude-desktop.",
+        text: "Run 'neotoma setup --tool claude-code'. Replace 'claude-code' with cursor, codex, openclaw or claude-desktop.",
       },
     ],
   },
@@ -151,7 +151,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/install/docker": {
     title: "Docker Install | Neotoma",
     description:
-      "Run Neotoma in Docker using docker-compose or standalone containers with persistent storage.",
+      "Run Neotoma in Docker with docker build and docker run, with persistent storage.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -1678,7 +1678,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/skills/recover-sqlite-database": {
     title: "Recover SQLite Database Skill | Neotoma",
-    description: "Check the integrity of Neotoma's local SQLite database and recover it if it is corrupted.",
+    description:
+      "Check the integrity of Neotoma's local SQLite database and recover it if it is corrupted.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -2940,7 +2941,7 @@ function buildAlternates(pathname: string): { hrefLang: string; href: string }[]
   // Only locales that serve a real page for this path get an alternate. Retired locale routes are
   // noindex redirect stubs, and hreflang pointing at them is ignored or flagged by search engines.
   const alternates = SUPPORTED_LOCALES.filter((locale) =>
-    servesRealPage(localizePath(basePath, locale)),
+    servesRealPage(localizePath(basePath, locale))
   ).map((locale) => ({
     hrefLang: locale,
     href: buildCanonicalUrl(localizePath(basePath, locale)),
@@ -3006,7 +3007,9 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
 
 export function buildSitemapXml(
   // Docs viewer pages are listed by the static build, with their trailing slash.
-  paths: readonly string[] = SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p)),
+  paths: readonly string[] = SITEMAP_PATHS.filter(
+    (p) => !isRetiredRoute(p) && !isDocsViewerRoute(p)
+  )
 ): string {
   const urlEntries = paths
     .map((path) => `  <url><loc>${buildCanonicalUrl(path)}</loc></url>`)

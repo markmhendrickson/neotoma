@@ -1,19 +1,5 @@
-import { Check, Copy } from "lucide-react";
-import { useCopyFeedback } from "@/lib/copy_feedback";
-import { copyTextToClipboard } from "@/lib/copy_to_clipboard";
-import {
-  sendFunnelInstallPromptCopy,
-  type InstallPromptCopyBlock,
-} from "@/utils/analytics";
-import {
-  CODE_BLOCK_CARD_INNER_CLASS,
-  CODE_BLOCK_CARD_SHELL_CLASS,
-  CODE_BLOCK_CHROME_STACK_CLASS,
-  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
-  CODE_BLOCK_COPY_BUTTON_INLINE,
-  EVALUATE_PROMPT_PILL_CLASS,
-} from "./code_block_copy_button_classes";
-import { Button } from "./ui/button";
+import { sendFunnelInstallPromptCopy, type InstallPromptCopyBlock } from "@/utils/analytics";
+import { SiteSnippet } from "./SiteSnippet";
 
 const INSTALL_BLOCK_CHROME: Record<InstallPromptCopyBlock, { title: string; subtitle: string }> = {
   agent_assisted: {
@@ -78,21 +64,6 @@ const INSTALL_BLOCK_CHROME: Record<InstallPromptCopyBlock, { title: string; subt
   },
 };
 
-function sanitizeCodeForCopy(rawCode: string): string {
-  return rawCode
-    .split("\n")
-    .map((line) => {
-      const trimmed = line.trim();
-      if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("//")) return "";
-      const commentIndex = line.indexOf("#");
-      if (commentIndex >= 0 && !line.trimStart().startsWith('"'))
-        return line.slice(0, commentIndex).trimEnd();
-      return line;
-    })
-    .filter((line) => line !== "")
-    .join("\n");
-}
-
 export function CodeBlock({
   code,
   copyFeedbackId,
@@ -102,49 +73,18 @@ export function CodeBlock({
   code: string;
   copyFeedbackId: string;
   installBlock: InstallPromptCopyBlock;
-  /** When set, the code area is a focusable, labelled region so keyboard users can scroll a clipped line. */
   scrollLabel?: string;
 }) {
-  const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
   const chrome = INSTALL_BLOCK_CHROME[installBlock];
-
-  const onCopy = async () => {
-    const ok = await copyTextToClipboard(sanitizeCodeForCopy(code));
-    if (!ok) return;
-    markCopied();
-    sendFunnelInstallPromptCopy(installBlock);
-  };
-
   return (
-    <div className={`relative mb-4 w-full text-left ${CODE_BLOCK_CARD_SHELL_CLASS}`}>
-      <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
-        <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
-          <div className={EVALUATE_PROMPT_PILL_CLASS}>
-            <span
-              className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80"
-              aria-hidden
-            />
-            {chrome.title}
-          </div>
-          <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>{chrome.subtitle}</div>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={CODE_BLOCK_COPY_BUTTON_INLINE}
-          aria-label={copied ? "Copied" : "Copy"}
-          onClick={onCopy}
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
-      <pre
-        className={`${CODE_BLOCK_CARD_INNER_CLASS} code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words`}
-        {...(scrollLabel ? { tabIndex: 0, role: "region", "aria-label": scrollLabel } : {})}
-      >
-        <code>{code}</code>
-      </pre>
-    </div>
+    <SiteSnippet
+      text={code}
+      title={chrome.title}
+      subtitle={chrome.subtitle}
+      copyFeedbackId={copyFeedbackId}
+      label={scrollLabel}
+      successMessage="Commands copied"
+      onAfterCopy={() => sendFunnelInstallPromptCopy(installBlock)}
+    />
   );
 }

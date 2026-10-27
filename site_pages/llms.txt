@@ -24,7 +24,7 @@ Neotoma is open source and local-first. It stores each fact as an observation (a
 - Provenance: each current field names the observation that set it, and a stored observation names its source
 - Corrections as observations: a correction adds a new observation and does not overwrite the earlier one
 - Entity resolution: entity IDs are hashes derived from the identity fields of the entity type
-- Idempotent writes through an `idempotency_key` (on the published v0.25.0, a same-key retry of a write that stopped partway reports success without finishing it)
+- A committed, keyed structured store started on v0.26.0 that stops partway finishes its missing observations on a same-key retry; a store carrying an interpretation returns `ERR_STORE_WRITE_INCOMPLETE`, and keys left over from earlier versions behave differently over MCP and HTTP (see Known limitations)
 
 ## Limits
 

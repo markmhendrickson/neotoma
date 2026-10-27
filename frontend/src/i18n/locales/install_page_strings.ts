@@ -104,13 +104,13 @@ const IMPACT_ROWS_EN: InstallImpactRow[] = [
     what: "MCP config entries: neotoma-dev and neotoma, with separate databases (init adds one to Cursor by default)",
     path: "~/.cursor/mcp.json, .mcp.json, claude.json, etc.",
     scope: "User / Project",
-    reset: "Entries stripped from configs",
+    reset: "User-level entries stripped; project .mcp.json entries can remain when reset runs outside a Neotoma repo",
   },
   {
     what: "CLI instruction files for Claude Code, Cursor and Codex",
     path: ".cursor/rules/, .claude/rules/, and the Codex equivalent",
     scope: "Project",
-    reset: "Backed up, then removed",
+    reset: "Can remain when reset runs outside a Neotoma repo; remove them by hand",
   },
   {
     what: "Claude Code plugin with 5 hooks: setup runs claude plugin marketplace add and claude plugin install neotoma@neotoma-marketplace (only when claude is on your PATH)",
@@ -156,7 +156,7 @@ const INTEGRATION_CARDS_EN: InstallIntegrationCard[] = [
   {
     href: "/neotoma-with-opencode",
     label: "OpenCode",
-    desc: "Lifecycle hooks and MCP for OpenCode",
+    desc: "MCP for OpenCode",
   },
   {
     href: "/neotoma-with-cursor",
@@ -332,7 +332,7 @@ export const INSTALL_PAGE_EN: InstallPageStrings = {
     ", that directory is protected and not removed.",
   ],
   manualCardDesc: "npm install, post-install verification, start the API server, and connect MCP.",
-  dockerCardDesc: "Run Neotoma in Docker with docker-compose or standalone containers.",
+  dockerCardDesc: "Run Neotoma in Docker with docker build and docker run.",
   integrationCards: INTEGRATION_CARDS_EN,
 };
 
@@ -452,13 +452,13 @@ export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
       what: "Entradas de config MCP: neotoma-dev y neotoma, con bases separadas (init a\u00f1ade una a Cursor por defecto)",
       path: "~/.cursor/mcp.json, .mcp.json, claude.json, etc.",
       scope: "Usuario / Proyecto",
-      reset: "Entradas eliminadas de las configs",
+      reset: "Entradas de usuario eliminadas; las de .mcp.json del proyecto pueden quedar si reset se ejecuta fuera de un repo de Neotoma",
     },
     {
       what: "Archivos de instrucciones CLI para Claude Code, Cursor y Codex",
       path: ".cursor/rules/, .claude/rules/ y el equivalente de Codex",
       scope: "Proyecto",
-      reset: "Copia de seguridad y eliminaci\u00f3n",
+      reset: "Pueden quedar si reset se ejecuta fuera de un repo de Neotoma; elim\u00ednalos a mano",
     },
     {
       what: "Plugin de Claude Code con 5 hooks: setup ejecuta claude plugin marketplace add y claude plugin install neotoma@neotoma-marketplace (solo si claude est\u00e1 en el PATH)",
@@ -515,7 +515,7 @@ export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
     ", ese directorio queda protegido y no se elimina.",
   ],
   manualCardDesc: "npm install, verificaci\u00f3n post-instalaci\u00f3n, arranque del servidor API y conexi\u00f3n MCP.",
-  dockerCardDesc: "Ejecuta Neotoma en Docker con docker-compose o contenedores independientes.",
+  dockerCardDesc: "Ejecuta Neotoma en Docker con docker build y docker run.",
   integrationCards: [
     {
       href: "/neotoma-with-claude-code",
@@ -540,7 +540,7 @@ export const INSTALL_PAGE_ES: Partial<InstallPageStrings> = {
     {
       href: "/neotoma-with-opencode",
       label: "OpenCode",
-      desc: "Hooks de ciclo de vida y memoria MCP para OpenCode",
+      desc: "MCP para OpenCode",
     },
     {
       href: "/neotoma-with-cursor",
