@@ -21,7 +21,7 @@ const WINNER_CHUNK = 400;
 /** Pre-cutover only: no lifecycle authority exists anywhere in the store, so a
  * target's visibility is decided by the legacy comparator alone.
  */
-async function legacyOnlyStore(connection: DbConnection): Promise<boolean> {
+export async function legacyOnlyStore(connection: DbConnection): Promise<boolean> {
   const columns = (await connection.prepare("PRAGMA table_info(observations)").all()) as {
     name: string;
   }[];
@@ -126,11 +126,25 @@ async function certifyHiddenTargetsFromWinners(
   return true;
 }
 
+/** Production signature: the path is chosen from the store, never by the caller. */
 export async function certifySnapshotPopulation(
   userId: string,
   entityTypes: string[],
-  candidateIds?: string[],
-  options: { winnerOnly?: boolean } = {}
+  candidateIds?: string[]
+): Promise<boolean> {
+  return certifySnapshotPopulationVia("auto", userId, entityTypes, candidateIds);
+}
+
+/**
+ * Test seam. `"exhaustive"` forces the all-observations path so a test can compare
+ * it with the deciding-observation path on the same store; `"auto"` is what
+ * production uses. Not part of the supported surface.
+ */
+export async function certifySnapshotPopulationVia(
+  path: "auto" | "exhaustive",
+  userId: string,
+  entityTypes: string[],
+  candidateIds?: string[]
 ): Promise<boolean> {
   const connection = await getDb();
   const types = (alias: string) =>
@@ -152,7 +166,7 @@ export async function certifySnapshotPopulation(
       )
       .all(userId, ...entityTypes)) as LifecycleTarget[];
     const toCheck = candidates ? missing.filter((t) => candidates.has(t.id)) : missing;
-    if (toCheck.length && options.winnerOnly !== false && (await legacyOnlyStore(connection)))
+    if (toCheck.length && path === "auto" && (await legacyOnlyStore(connection)))
       return await certifyHiddenTargetsFromWinners(connection, toCheck);
     let legacyContext: EntityLifecycleContext | undefined;
     for (const target of missing) {
