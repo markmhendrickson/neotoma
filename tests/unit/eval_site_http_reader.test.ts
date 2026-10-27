@@ -1,18 +1,60 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   assertSiteBuildHead,
   parseSiteHttpInput,
   readSiteHttp,
   resolveStaticFile,
+  validateSiteCassette,
+  validateSiteScenario,
 } from "../../packages/eval-harness/src/site_http";
+import { readCassette } from "../../packages/eval-harness/src/cassette";
+import { loadScenarioFile } from "../../packages/eval-harness/src/scenario";
 
 const BASE = "http://127.0.0.1:41234";
+const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..", "..");
 afterEach(() => vi.unstubAllGlobals());
 
 describe("closed website eval HTTP reader", () => {
+  it("rejects a weakened assertion contract or canned cassette output", () => {
+    const packageRoot = join(repoRoot, "packages", "eval-harness");
+    const scenario = loadScenarioFile(
+      join(packageRoot, "scenarios", "site_publication_http_contract.scenario.yaml")
+    );
+    const cassette = readCassette(
+      join(
+        packageRoot,
+        "cassettes",
+        "site_publication_http_contract__stub__replay-only.cassette.json"
+      )
+    )?.cassette;
+    expect(cassette).toBeDefined();
+    validateSiteScenario(scenario);
+    validateSiteCassette(cassette!, scenario);
+    expect(() =>
+      validateSiteScenario({
+        ...scenario,
+        expected: scenario.expected.filter(
+          (assertion) => !(assertion.tool_name === "site_http" && assertion.which === 0)
+        ),
+      })
+    ).toThrow(/root guidance/);
+    expect(() =>
+      validateSiteCassette(
+        {
+          ...cassette!,
+          tool_calls: [
+            { ...cassette!.tool_calls[0], output: { canned: true } },
+            ...cassette!.tool_calls.slice(1),
+          ],
+        },
+        scenario
+      )
+    ).toThrow(/closed contract/);
+  });
   it("rejects URLs, traversal, encoded paths, and unknown fields before fetch", () => {
     for (const path of [
       "https://example.invalid/",
@@ -80,8 +122,13 @@ describe("closed website eval HTTP reader", () => {
       new Response("{", { status: 200, headers: { "content-type": "application/json" } }),
     ],
   ])("fails closed on %s", async (_label, response) => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
     await expect(readSiteHttp({ operation: "root_json", path: "/" }, BASE, BASE)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ redirect: "manual", method: "GET" })
+    );
   });
 
   it("rejects an oversized body before consuming it", async () => {

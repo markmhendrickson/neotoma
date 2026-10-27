@@ -471,6 +471,9 @@ jobs:
           npm run build:server
           npm --prefix packages/eval-harness run build
 
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
       - name: Build exact-head public site for closed HTTP eval
         run: |
           npm run build:ui
@@ -543,6 +546,9 @@ jobs:
         run: |
           npm exec --yes --package=npm@10 -- npm ci --prefix writ
           npm run build --prefix writ
+
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
 
       - name: Build exact-head public site for closed HTTP eval
         run: |

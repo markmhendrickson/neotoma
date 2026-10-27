@@ -4,6 +4,7 @@ import { readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { isDeepStrictEqual } from "node:util";
 import type { CassetteFile } from "./cassette.js";
 import type { ScenarioFile } from "./types.js";
 
@@ -56,6 +57,46 @@ export function validateSiteScenario(scenario: ScenarioFile): void {
     );
   if (scenario.expected.length < 20)
     throw new Error("site_http eval is missing required assertions");
+  const rootContract = {
+    status: 200,
+    content_type: "application/json",
+    harness_ids: ["claude-code", "claude-desktop", "chatgpt", "codex", "cursor", "openclaw"],
+    guidance_complete: true,
+    remote_url_consistent: true,
+    claude_code_remote_command: true,
+    openclaw_plugin_caveat: true,
+  };
+  if (
+    !scenario.expected.some(
+      (assertion) =>
+        assertion.type === "tool_result.matches" &&
+        assertion.tool_name === "site_http" &&
+        assertion.which === 0 &&
+        isDeepStrictEqual(assertion.result_subset, rootContract)
+    )
+  )
+    throw new Error("site_http eval is missing the live root guidance contract");
+  for (let index = 0; index < STATIC_ROUTES.length; index++) {
+    const which = index + 1;
+    if (
+      !scenario.expected.some(
+        (assertion) =>
+          assertion.type === "tool_result.matches" &&
+          assertion.tool_name === "site_http" &&
+          assertion.which === which &&
+          isDeepStrictEqual(assertion.result_subset, { status: 200, content_type: "text/html" })
+      ) ||
+      !scenario.expected.some(
+        (assertion) =>
+          assertion.type === "tool_result.matches" &&
+          assertion.tool_name === "site_http" &&
+          assertion.which === which &&
+          assertion.result_key === "body" &&
+          typeof assertion.result_contains === "string"
+      )
+    )
+      throw new Error(`site_http eval is missing static route assertion ${STATIC_ROUTES[index]}`);
+  }
 }
 
 export function validateSiteCassette(cassette: CassetteFile, scenario: ScenarioFile): void {
@@ -108,6 +149,8 @@ export function assertSiteBuildHead(rootPath: string, head: string): void {
 
 export async function startStaticSiteServer(): Promise<StaticSiteServer> {
   // Fail before listening when the exact-head build is unavailable.
+  if (realpathSync(SITE_ROOT) !== join(realpathSync(REPO_ROOT), "site_pages"))
+    throw new Error("site_http build root escaped repository");
   const head = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: REPO_ROOT,
     encoding: "utf-8",
@@ -120,7 +163,9 @@ export async function startStaticSiteServer(): Promise<StaticSiteServer> {
         res.writeHead(404).end();
         return;
       }
-      const body = readFileSync(staticFile(req.url));
+      const file = staticFile(req.url);
+      if (statSync(file).size > MAX_BYTES) throw new Error("static response too large");
+      const body = readFileSync(file);
       if (body.length === 0 || body.length > MAX_BYTES)
         throw new Error("invalid static response size");
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(body);
