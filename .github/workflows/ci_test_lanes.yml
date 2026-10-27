@@ -109,6 +109,35 @@ jobs:
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 
+      # The required `baseline` status check runs its regular suite on Node 20
+      # above. The native backup-create effect must run in this same required
+      # job: a separate job is not merge-enforced by the main ruleset.
+      # node:sqlite is the production-default driver on current Node, so prove
+      # this path on a runtime that actually supplies it.
+      # NEOTOMA_REQUIRE_NATIVE_SQLITE makes a missing DatabaseSync a loud failure,
+      # rather than allowing Vitest's skip mechanism to turn missing coverage green.
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Node 24 dependencies
+        # Node 24 ships npm 11, which rejects sqlite-vec's upstream optional
+        # linux-arm64 manifest entry even on this x64 runner. The established
+        # Node 20 lane uses npm 10 and can reproduce the checked-in lockfile;
+        # pin that installer only, while the build and effect test still run on
+        # Node 24's node:sqlite runtime.
+        run: npm exec --yes --package=npm@10 -- npm ci
+
+      - name: Build server for Node 24 native backup test
+        run: npm run build:server
+
+      - name: Require native node:sqlite DatabaseSync
+        run: node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+
+      - name: Run healthy native backup-create effect regression
+        run: NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts
+
   contract_parity:
     # Focused PR-time cross-surface contract-parity lane.
     #
@@ -404,8 +433,9 @@ jobs:
 
   eval_scenarios:
     # eval-harness SCENARIO lane (Tier 2). Runs the agent-driving scenarios in
-    # packages/eval-harness/scenarios/ against a real in-process isolated
-    # Neotoma server in REPLAY mode (committed cassettes — no API key required).
+    # packages/eval-harness/scenarios/ in REPLAY mode (committed cassettes —
+    # no API key required). The required backup CLI scenario uses Node 24's
+    # native SQLite and a verified local Docker boundary on this Linux runner.
     # This is the CI gate for tool-behavior evals (agent calls correct / merge /
     # subscribe / …), which the hook-lifecycle agentic_evals lane cannot model.
     # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
@@ -415,16 +445,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Set isolated npm cache for subsequent steps
+        run: |
+          test -n "$RUNNER_TEMP"
+          test -n "$GITHUB_ENV"
+          cache_dir="$RUNNER_TEMP/neotoma-eval-npm-cache"
+          mkdir -p "$cache_dir"
+          chmod 700 "$cache_dir"
+          printf 'NPM_CONFIG_CACHE=%s\nNEOTOMA_EVAL_NPM_CACHE=%s\n' "$cache_dir" "$cache_dir" >> "$GITHUB_ENV"
+
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies with npm 10
+        run: npm exec --yes --package=npm@10 -- npm ci
+
+      - name: Build exact-head server and eval executor
+        run: |
+          npm run build:server
+          npm --prefix packages/eval-harness run build
+
+      - name: Require native SQLite and local Docker socket
+        run: |
+          node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+          test -S /var/run/docker.sock
+          test "$(docker --host unix:///var/run/docker.sock info --format '{{.OSType}}')" = linux
+
+      - name: Verify sealed CLI executor and boundary failure controls
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: ./node_modules/.bin/vitest run tests/unit/eval_backup_cli_contract.test.ts tests/cli/eval_backup_cli_boundary.test.ts
 
       - name: Run eval-harness scenarios (replay)
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: npm run eval:scenarios
 
   eval_combined:
@@ -436,6 +493,8 @@ jobs:
     # key (WRIT degrades to a substring judge; OPENAI_API_KEY/WRIT_JUDGE_API_KEY
     # gives higher-fidelity llm_judge scoring). The runner fails closed if a
     # requested WRIT run errors (neotoma#1738/#1739).
+    # Tier 2 includes the required native backup CLI cell, so this job needs
+    # the same Node 24 build, pinned cache, and local Docker boundary as eval_scenarios.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (with writ submodule)
@@ -443,24 +502,46 @@ jobs:
         # NOT submodules:recursive — other submodules (e.g. foundation) use SSH
         # URLs that fail in CI. writ is public HTTPS, so init ONLY it explicitly.
 
-      - name: Setup Node
+      - name: Set isolated npm cache for subsequent steps
+        run: |
+          test -n "$RUNNER_TEMP"
+          test -n "$GITHUB_ENV"
+          cache_dir="$RUNNER_TEMP/neotoma-eval-npm-cache"
+          mkdir -p "$cache_dir"
+          chmod 700 "$cache_dir"
+          printf 'NPM_CONFIG_CACHE=%s\nNEOTOMA_EVAL_NPM_CACHE=%s\n' "$cache_dir" "$cache_dir" >> "$GITHUB_ENV"
+
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Init writ submodule (public HTTPS)
         run: git submodule update --init writ
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies with npm 10
+        run: npm exec --yes --package=npm@10 -- npm ci
+
+      - name: Build exact-head server and eval executor
+        run: |
+          npm run build:server
+          npm --prefix packages/eval-harness run build
 
       - name: Build writ (eval-combined imports writ/dist)
         run: |
-          npm ci --prefix writ
+          npm exec --yes --package=npm@10 -- npm ci --prefix writ
           npm run build --prefix writ
 
+      - name: Require native SQLite and local Docker socket
+        run: |
+          node -e 'const { DatabaseSync } = require("node:sqlite"); if (typeof DatabaseSync !== "function") throw new Error("node:sqlite DatabaseSync is unavailable")'
+          test -S /var/run/docker.sock
+          test "$(docker --host unix:///var/run/docker.sock info --format '{{.OSType}}')" = linux
+
       - name: Run combined WRIT + Tier-2 matrix
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: npm run eval:combined
 
   python_sdk:

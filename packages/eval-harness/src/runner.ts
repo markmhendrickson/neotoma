@@ -22,10 +22,8 @@ import { evaluateExpectations } from "./assertions.js";
 import { cassetteFilename, readCassette, staleness } from "./cassette.js";
 import { getDriver } from "./drivers/index.js";
 import { createHostToolRegistry } from "./host_tools.js";
-import {
-  startIsolatedNeotomaServer,
-  type IsolatedServer,
-} from "./isolated_server.js";
+import { BackupEvalSession, validateBackupCassette } from "./neotoma_cli.js";
+import { startIsolatedNeotomaServer, type IsolatedServer } from "./isolated_server.js";
 import type {
   AssertionFailure,
   CellReport,
@@ -70,9 +68,22 @@ interface CellPlan {
   cassettePath: string;
 }
 
-const SMALL_MODEL_HINTS = ["haiku", "mini", "nano", "fast", "small", "composer-2", "8b", "1.5b", "3b"];
+const SMALL_MODEL_HINTS = [
+  "haiku",
+  "mini",
+  "nano",
+  "fast",
+  "small",
+  "composer-2",
+  "8b",
+  "1.5b",
+  "3b",
+];
 
-function classifyEffectiveProfile(model: ModelEntry, requested: InstructionProfile): InstructionProfile {
+function classifyEffectiveProfile(
+  model: ModelEntry,
+  requested: InstructionProfile
+): InstructionProfile {
   if (requested === "compact" || requested === "full") return requested;
   // auto = compact for small models, full otherwise. Mirrors the cursor-hooks heuristic.
   const lower = model.model.toLowerCase();
@@ -128,7 +139,7 @@ async function seedEntities(
     log(`[runner] seed failed (${res.status}): ${text.slice(0, 300)}`);
     throw new Error(`seed_entities failed: HTTP ${res.status}`);
   }
-  const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+  const result = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   const created = (result as { entities?: unknown[] }).entities?.length ?? 0;
   log(`[runner] seeded ${created} entities`);
 }
@@ -138,11 +149,30 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const startedAt = new Date().toISOString();
   const effectiveProfile = classifyEffectiveProfile(plan.model, plan.instructionProfile);
   const cellLabel = `${plan.scenario.meta.id} | ${plan.model.provider}/${plan.model.model} | profile=${effectiveProfile} | hooks=${plan.hooksEnabled}`;
+  const requiredBackup = plan.scenario.meta.id === "backup_restore_cli_safety";
+  const requiredDeadline = Date.now() + (opts.cellTimeoutMs ?? 240_000);
+  const requiredWorkMs = (): number => {
+    const remaining = requiredDeadline - 30_000 - Date.now();
+    if (remaining <= 0) throw new Error("required restore eval aggregate deadline expired");
+    return remaining;
+  };
   log(`[runner] starting cell: ${cellLabel}`);
+  const requiredFailure = (message: string): CellReport => ({
+    scenario: plan.scenario.meta,
+    model: plan.model,
+    effectiveProfile,
+    mode: opts.mode,
+    assertionFailures: [],
+    startedAt,
+    endedAt: new Date().toISOString(),
+    pass: false,
+    errorMessage: message,
+  });
 
   // Quarantined scenarios are skipped (not failed) so the CI scenario lane
   // stays green on a clean main while a known gap is tracked + fixed.
   if (plan.scenario.meta.quarantine) {
+    if (requiredBackup) return requiredFailure("required restore eval cannot be quarantined");
     log(`[runner] QUARANTINED: ${plan.scenario.meta.id} — ${plan.scenario.meta.quarantine}`);
     return {
       scenario: plan.scenario.meta,
@@ -160,6 +190,8 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   const driver = getDriver(plan.model.provider);
   const preflight = driver.preflight(opts.mode);
   if (!preflight.ok) {
+    if (requiredBackup)
+      return requiredFailure(preflight.reason ?? "required restore eval preflight failed");
     return {
       scenario: plan.scenario.meta,
       model: plan.model,
@@ -177,6 +209,8 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   if (opts.mode === "replay") {
     const cassetteResult = readCassette(plan.cassettePath);
     if (!cassetteResult) {
+      if (requiredBackup)
+        return requiredFailure(`required restore eval cassette missing: ${plan.cassettePath}`);
       return {
         scenario: plan.scenario.meta,
         model: plan.model,
@@ -186,8 +220,17 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
         startedAt,
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.` },
+        skipped: {
+          reason: `replay mode requires cassette ${plan.cassettePath}; run --mode=record to capture it.`,
+        },
       };
+    }
+    if (requiredBackup) {
+      try {
+        validateBackupCassette(cassetteResult.cassette, plan.scenario);
+      } catch (error) {
+        return requiredFailure((error as Error).message);
+      }
     }
     if (staleness(cassetteResult.ageDays) === "stale") {
       log(
@@ -197,68 +240,124 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   }
 
   let server: IsolatedServer | null = null;
+  let backupSession: BackupEvalSession | null = null;
   let driverResult: DriverResult | undefined;
   let assertionFailures: AssertionFailure[] = [];
   let errorMessage: string | undefined;
   let pass = false;
   try {
-    server = await startIsolatedNeotomaServer({
-      hooksEnabled: plan.hooksEnabled,
-      env: {
-        NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
-        ...(plan.scenario.real_storage ? { NEOTOMA_TEST_REAL_STORAGE: "1" } : {}),
-      },
-      faults: plan.scenario.server_faults,
-    });
-    log(`[runner] isolated server up at ${server.baseUrl} (data=${server.dataDir})`);
-
-    if (plan.scenario.seed_entities && plan.scenario.seed_entities.length > 0) {
-      log(`[runner] seeding ${plan.scenario.seed_entities.length} entities into isolated DB`);
-      await seedEntities(server.baseUrl, server.token, plan.scenario.seed_entities, log);
-    }
-
-    const invocation: DriverInvocation = {
-      scenario: plan.scenario,
-      model: plan.model,
-      neotomaBaseUrl: server.baseUrl,
-      neotomaToken: server.token,
-      effectiveProfile,
-      mode: opts.mode,
-      cassettePath: plan.cassettePath,
-      timeoutMs: opts.cellTimeoutMs ?? 120_000,
-    };
-    driverResult = await runWithTimeout(driver.runOnce(invocation), invocation.timeoutMs!);
-
-    const stats = await server.fetchInstructionProfileCounters();
-    const registryForAssertions = createHostToolRegistry(plan.scenario.host_tools);
-    // Replay the captured tool calls against the registry just so
-    // host_tool.invocations counters reflect what happened. (The driver
-    // already ran them, but the registry instance lives only inside the
-    // driver call site.)
-    for (const call of driverResult.toolCalls) {
-      if (registryForAssertions.stubs.has(call.name)) {
-        await registryForAssertions.invoke(call.name, call.input);
-      }
-    }
-    assertionFailures = await evaluateExpectations(plan.scenario.expected, {
-      baseUrl: server.baseUrl,
-      stats,
-      hostToolRegistry: registryForAssertions,
-      effectiveProfile,
-      assistantText: driverResult.assistantText,
-      toolCalls: driverResult.toolCalls,
-      dataDir: server.dataDir,
-    });
-    pass = assertionFailures.length === 0;
-    if (!pass) {
-      errorMessage = assertionFailures.map((f) => `• ${f.message}`).join("\n");
+    if (requiredBackup) {
+      if (opts.mode !== "replay") throw new Error("restore eval is replay-only");
+      // This cassette has only neotoma_cli calls. Do not start the ordinary
+      // isolated HTTP server: its raw-checkout config import can read .env.
+      const stageAbort = new AbortController();
+      backupSession = await runWithTimeout(
+        BackupEvalSession.create(requiredDeadline, stageAbort.signal),
+        requiredWorkMs(),
+        () => stageAbort.abort()
+      );
+      const invocation: DriverInvocation = {
+        scenario: plan.scenario,
+        model: plan.model,
+        neotomaBaseUrl: "",
+        neotomaToken: "",
+        effectiveProfile,
+        mode: opts.mode,
+        cassettePath: plan.cassettePath,
+        timeoutMs: requiredWorkMs(),
+        backupEval: backupSession,
+      };
+      const driverMs = requiredWorkMs();
+      driverResult = await runWithTimeout(driver.runOnce(invocation), driverMs, () =>
+        backupSession?.abort()
+      );
+      const effectsMs = requiredWorkMs();
+      const effects = await runWithTimeout(backupSession.finish(), effectsMs, () =>
+        backupSession?.abort()
+      );
+      assertionFailures = await evaluateExpectations(plan.scenario.expected, {
+        baseUrl: "",
+        stats: null,
+        hostToolRegistry: createHostToolRegistry([]),
+        effectiveProfile,
+        assistantText: driverResult.assistantText,
+        toolCalls: driverResult.toolCalls,
+        liveCliResults: driverResult.toolCalls.map(
+          (call) => call.output as import("./types.js").BackupCliResult
+        ),
+        causalProbeResults: effects.causalProbeResults,
+        fixtureState: effects.fixtureState,
+      });
+      pass = assertionFailures.length === 0;
+      if (!pass)
+        errorMessage = assertionFailures.map((failure) => `• ${failure.message}`).join("\n");
     } else {
-      log(`[runner] cell PASS (${shortToolCallSummary(driverResult)})`);
+      server = await startIsolatedNeotomaServer({
+        hooksEnabled: plan.hooksEnabled,
+        env: {
+          NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
+          ...(plan.scenario.real_storage ? { NEOTOMA_TEST_REAL_STORAGE: "1" } : {}),
+        },
+        faults: plan.scenario.server_faults,
+      });
+      log(`[runner] isolated server up at ${server.baseUrl} (data=${server.dataDir})`);
+
+      if (plan.scenario.seed_entities && plan.scenario.seed_entities.length > 0) {
+        log(`[runner] seeding ${plan.scenario.seed_entities.length} entities into isolated DB`);
+        await seedEntities(server.baseUrl, server.token, plan.scenario.seed_entities, log);
+      }
+
+      const invocation: DriverInvocation = {
+        scenario: plan.scenario,
+        model: plan.model,
+        neotomaBaseUrl: server.baseUrl,
+        neotomaToken: server.token,
+        effectiveProfile,
+        mode: opts.mode,
+        cassettePath: plan.cassettePath,
+        timeoutMs: opts.cellTimeoutMs ?? 120_000,
+      };
+      driverResult = await runWithTimeout(driver.runOnce(invocation), invocation.timeoutMs!);
+
+      const stats = await server.fetchInstructionProfileCounters();
+      const registryForAssertions = createHostToolRegistry(plan.scenario.host_tools);
+      // Replay the captured tool calls against the registry just so
+      // host_tool.invocations counters reflect what happened. (The driver
+      // already ran them, but the registry instance lives only inside the
+      // driver call site.)
+      for (const call of driverResult.toolCalls) {
+        if (registryForAssertions.stubs.has(call.name)) {
+          await registryForAssertions.invoke(call.name, call.input);
+        }
+      }
+      assertionFailures = await evaluateExpectations(plan.scenario.expected, {
+        baseUrl: server.baseUrl,
+        stats,
+        hostToolRegistry: registryForAssertions,
+        effectiveProfile,
+        assistantText: driverResult.assistantText,
+        toolCalls: driverResult.toolCalls,
+        dataDir: server.dataDir,
+      });
+      pass = assertionFailures.length === 0;
+      if (!pass) {
+        errorMessage = assertionFailures.map((f) => `• ${f.message}`).join("\n");
+      } else {
+        log(`[runner] cell PASS (${shortToolCallSummary(driverResult)})`);
+      }
     }
   } catch (err) {
     errorMessage = (err as Error).message;
     pass = false;
   } finally {
+    if (backupSession) {
+      try {
+        await backupSession.close();
+      } catch (error) {
+        pass = false;
+        errorMessage = `restore eval cleanup failed: ${(error as Error).message}`;
+      }
+    }
     if (server) await server.stop();
   }
 
@@ -276,17 +375,27 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
   };
 }
 
-function runWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+function runWithTimeout<T>(p: Promise<T>, ms: number, abort?: () => void): Promise<T> {
   return new Promise<T>((resolveT, reject) => {
-    const t = setTimeout(() => reject(new Error(`cell timed out after ${ms}ms`)), ms);
+    let timedOut = false;
+    const t = setTimeout(() => {
+      timedOut = true;
+      abort?.();
+      if (abort) {
+        void p.then(
+          () => reject(new Error(`cell timed out after ${ms}ms`)),
+          () => reject(new Error(`cell timed out after ${ms}ms`))
+        );
+      } else reject(new Error(`cell timed out after ${ms}ms`));
+    }, ms);
     p.then(
       (v) => {
         clearTimeout(t);
-        resolveT(v);
+        if (!timedOut) resolveT(v);
       },
       (e) => {
         clearTimeout(t);
-        reject(e);
+        if (!timedOut) reject(e);
       }
     );
   });
@@ -312,9 +421,13 @@ export async function runScenarios(opts: RunnerOptions): Promise<RunSummary> {
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
         pass: false,
-        skipped: { reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}` },
+        skipped: {
+          reason: `budget guard: estimated $${estimatedCostUsd.toFixed(4)} ≥ cap $${opts.maxSpendUsd}`,
+        },
       });
-      log(`[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`);
+      log(
+        `[runner] budget guard tripped at $${estimatedCostUsd.toFixed(4)}; remaining cells skipped.`
+      );
       continue;
     }
     const report = await runCell(plan, opts);

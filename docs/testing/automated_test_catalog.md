@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **741**
-- Backend and repo Vitest files: **704**
+- Total automated test files: **746**
+- Backend and repo Vitest files: **709**
 - Frontend Vitest files: **11**
 - Playwright spec files: **26**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 205 |
+| Vitest unit tests | 208 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 223 |
-| Vitest CLI tests | 88 |
-| Vitest contract tests | 25 |
+| Vitest CLI tests | 89 |
+| Vitest contract tests | 26 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
 | Vitest agent tests | 1 |
@@ -97,7 +97,7 @@ flowchart TD
 - `npm run validate:doc-deps`
 
 ## CI lanes
-- Baseline CI runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps`.
+- Required baseline CI runs `type-check`, `lint`, `lint:site-copy`, `test:unit`, `validate:coverage`, `generate:test-catalog`, and `validate:doc-deps` on Node 20; it then rebuilds on Node 24 and runs `NEOTOMA_REQUIRE_NATIVE_SQLITE=1 ./node_modules/.bin/vitest run tests/cli/backup_verify.test.ts` in the same required job. Missing native `DatabaseSync` fails rather than skips.
 - Baseline CI also runs `python3 -m unittest discover -s tests/scripts -p test_schema_release_gate.py -v`: six owned native SQLite cases executing the freshly compiled schema release entry, with exact vocabulary/custom-row preservation and nonzero failure assertions. Required prerequisites fail rather than skip.
 - Frontend CI runs `npm run test:frontend`.
 - Site/export CI runs route, locale, and export validation tasks.
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (205):**
+**Files (208):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -186,6 +186,7 @@ flowchart TD
 - `tests/unit/entity_id_tenant_scope.test.ts`
 - `tests/unit/entity_queries_status_projection.test.ts`
 - `tests/unit/env_contamination_audit.test.ts`
+- `tests/unit/eval_backup_cli_contract.test.ts`
 - `tests/unit/eval_harness_assertion_primitives.test.ts`
 - `tests/unit/eval_harness_error_result.test.ts`
 - `tests/unit/eval_harness_quarantine.test.ts`
@@ -225,6 +226,7 @@ flowchart TD
 - `tests/unit/mcp_instance_skill_hints.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
 - `tests/unit/mcp_instruction_token_budget.test.ts`
+- `tests/unit/mcp_instructions_backup_restore.test.ts`
 - `tests/unit/mcp_instructions_fallback_invariants.test.ts`
 - `tests/unit/mcp_instructions_schema_scope_mismatch.test.ts`
 - `tests/unit/mcp_instructions_skill_auto_loading.test.ts`
@@ -296,6 +298,7 @@ flowchart TD
 - `tests/unit/source_priority_ignored_warning.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/sqlite_connection_pragmas.test.ts`
+- `tests/unit/sqlite_driver_pragma.test.ts`
 - `tests/unit/sqlite_schema_init_concurrency.test.ts`
 - `tests/unit/standing_rules.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
@@ -694,7 +697,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (88):**
+**Files (89):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -754,6 +757,7 @@ flowchart TD
 - `tests/cli/discovery_codex_sessions.test.ts`
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/docs_cli_commands.test.ts`
+- `tests/cli/eval_backup_cli_boundary.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
 - `tests/cli/ingest_agent_sessions.test.ts`
 - `tests/cli/instance_scripts.test.ts`
@@ -789,7 +793,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (25):**
+**Files (26):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
@@ -801,6 +805,7 @@ flowchart TD
 - `tests/contract/mcp_oauth_authorize_responses.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
 - `tests/contract/mcp_tool_dispatch_coverage.test.ts`
+- `tests/contract/native_sqlite_backup_ci_wiring.test.ts`
 - `tests/contract/openapi_schema.test.ts`
 - `tests/contract/openclaw_plugin.test.ts`
 - `tests/contract/package_contents.test.ts`
