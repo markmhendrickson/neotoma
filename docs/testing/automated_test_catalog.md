@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **748**
-- Backend and repo Vitest files: **711**
+- Total automated test files: **749**
+- Backend and repo Vitest files: **712**
 - Frontend Vitest files: **11**
 - Playwright spec files: **26**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 208 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 224 |
+| Vitest integration tests | 225 |
 | Vitest CLI tests | 90 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
@@ -467,7 +467,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (224):**
+**Files (225):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -668,6 +668,7 @@ flowchart TD
 - `tests/integration/store_prefix_duplicate_candidates.test.ts`
 - `tests/integration/store_reference_source_parity.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
+- `tests/integration/store_related_entities_compact.test.ts`
 - `tests/integration/store_required_unknown_field_signals.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/store_source_priority_ignored_warning.test.ts`

@@ -307,7 +307,24 @@ type StoreStructuredInternalOptions = {
   interpretationSourceId?: string;
   /** Effective data origin per entity index (#2242); see provenance_data_origin.ts. */
   dataOrigins?: Array<DataOrigin | undefined>;
+  /**
+   * When true, `related_entities` in the response carries each related
+   * entity's full row and current snapshot. Default (omitted/false): compact
+   * `{id, entity_type, canonical_name}` entries only.
+   */
+  includeRelatedSnapshots?: boolean;
 };
+
+/**
+ * One entry of the store response's `related_entities` array in its compact
+ * (default) form. The full entity row and snapshot are available on request
+ * (`include_related_snapshots`) or by retrieving the entity by id.
+ */
+export interface CompactRelatedEntity {
+  id: string;
+  entity_type: string;
+  canonical_name: string | null;
+}
 
 export class NeotomaServer {
   private readonly mcpServer: McpServer;
@@ -5733,6 +5750,7 @@ export class NeotomaServer {
     const schema = z
       .object({
         expected_entity_absent: z.boolean().optional(),
+        include_related_snapshots: z.boolean().optional(),
         user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1).optional(),
         file_idempotency_key: z.string().min(1).optional(),
@@ -5889,6 +5907,7 @@ export class NeotomaServer {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
           expectedEntityAbsent: parsed.expected_entity_absent,
+          includeRelatedSnapshots: parsed.include_related_snapshots === true,
           observationSource: parsed.observation_source,
           sourcePeerId: parsed.source_peer_id,
           interpretation: parsed.interpretation,
@@ -5956,6 +5975,7 @@ export class NeotomaServer {
           {
             commit: parsed.commit !== false,
             observationSource: parsed.observation_source,
+            includeRelatedSnapshots: parsed.include_related_snapshots === true,
           }
         );
       }
@@ -6268,8 +6288,10 @@ export class NeotomaServer {
   // Helper method to retrieve related entities and relationships for entity IDs
   private async getRelatedEntitiesAndRelationships(
     entityIds: string[],
-    userId: string
+    userId: string,
+    options: { includeSnapshots?: boolean } = {}
   ): Promise<{ entities: any[]; relationships: any[] }> {
+    const includeSnapshots = options.includeSnapshots === true;
     if (entityIds.length === 0) {
       return { entities: [], relationships: [] };
     }
@@ -6304,16 +6326,28 @@ export class NeotomaServer {
       }
     }
 
-    // Get related entity details with snapshots
+    // Get related entity details. By default these are compact
+    // ({id, entity_type, canonical_name}): a related entity can carry a very
+    // large snapshot (a plan or a long-running record), and echoing it back on
+    // every store made a one-entity write return hundreds of kilobytes. Full
+    // rows plus snapshots are opt-in via `include_related_snapshots`.
     let entities: any[] = [];
     if (relatedEntityIds.size > 0) {
       const { data: entityData, error: entityError } = await db
         .from("entities")
-        .select("*")
+        .select(includeSnapshots ? "*" : "id, entity_type, canonical_name")
         .in("id", Array.from(relatedEntityIds))
         .eq("user_id", userId);
 
-      if (!entityError && entityData) {
+      if (!entityError && entityData && !includeSnapshots) {
+        entities = entityData.map(
+          (entity: { id: string; entity_type: string; canonical_name?: string | null }) => ({
+            id: entity.id,
+            entity_type: entity.entity_type,
+            canonical_name: entity.canonical_name ?? null,
+          })
+        ) satisfies CompactRelatedEntity[];
+      } else if (!entityError && entityData) {
         entities = entityData;
 
         // Include snapshots
@@ -6780,7 +6814,8 @@ export class NeotomaServer {
           ) ?? [];
         const relatedData = await this.getRelatedEntitiesAndRelationships(
           existingEntityIds,
-          userId
+          userId,
+          { includeSnapshots: options.includeRelatedSnapshots }
         );
         const { data: fragmentRows } = await db
           .from("raw_fragments")
@@ -7845,7 +7880,8 @@ export class NeotomaServer {
     // Get related entities and relationships for all created entities
     const relatedData = await this.getRelatedEntitiesAndRelationships(
       createdEntities.map((e) => e.entityId),
-      userId
+      userId,
+      { includeSnapshots: options.includeRelatedSnapshots }
     );
 
     // Schema-driven store_warnings: non-blocking warnings declared in the schema
