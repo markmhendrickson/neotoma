@@ -169,8 +169,8 @@ export function NeotomaOnePager() {
           <div className="plan-invoice-story" id="example">
             <p className="plan-label">Example</p>
             <p>
-              Invoice INV-2041 arrives as a PDF due 22 October. A later supplied email changes the
-              due date to 29 October. A connected agent reading the invoice sees the selected 29
+              Invoice INV-2041 arrives as a PDF due 22 October. A later email moves the due date to 29
+              October, and the date is entered as a correction. A connected agent reading the invoice sees the selected 29
               October value and can inspect which observation supplied it. The amount still comes
               from the PDF.
             </p>
@@ -220,7 +220,7 @@ export function NeotomaOnePager() {
             <InspectorPreview />
           </section>
           <section className="plan-interface-section" aria-labelledby="interface-title">
-            <h3 id="interface-title">One record, three interfaces</h3>
+            <h3 id="interface-title">Three interfaces</h3>
             <InterfaceExplorer />
           </section>
         </section>

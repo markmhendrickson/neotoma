@@ -29,19 +29,19 @@ export function InspectorPreview() {
               <div>
                 <dt>date_due</dt>
                 <dd>
-                  29 October 2026 <small>from later email observation</small>
+                  29 October 2026 <small>from correction observation</small>
                 </dd>
               </div>
             </dl>
-            <p className="plan-inspector-trace">Field provenance · date_due → later observation</p>
+            <p className="plan-inspector-trace">Field provenance · date_due → correction observation</p>
           </section>
           <section className="plan-inspector-card" aria-label="Observation history">
             <h4>Observation history</h4>
             <ol className="plan-inspector-history">
               <li>
-                <strong>Later email</strong>
+                <strong>Correction, from the later email</strong>
                 <span>date_due: 29 October 2026</span>
-                <small>Source: supplied email</small>
+                <small>No source document stored</small>
               </li>
               <li>
                 <strong>Invoice PDF</strong>

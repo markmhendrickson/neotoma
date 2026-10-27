@@ -508,6 +508,30 @@ describe("/install polish", () => {
       expect(explorer).not.toMatch(/corrections create ent_[a-f0-9]+/);
     });
 
+    it("gives the MCP and REST store examples the idempotency key the server requires", () => {
+      // MCP `store` and REST `/store` refuse a committing structured store with no
+      // idempotency_key; only the CLI generates one. The printed examples must run.
+      const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
+      expect(explorer).toMatch(/mcp\("store", \{[^}]*idempotency_key:/);
+      expect(explorer).toMatch(/curl\("store", \{[^}]*idempotency_key:/);
+      expect(explorer).toMatch(/each store and each correction needs\s+its own idempotency key/);
+    });
+
+    it("does not promise one shared record across a default install's interfaces", () => {
+      // Default install: stdio MCP and CLI/REST write as different local users.
+      const page = readSrc("frontend/src/components/onepager/NeotomaOnePager.tsx");
+      const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
+      expect(page).not.toContain("One record, three interfaces");
+      expect(explorer).toMatch(/keep separate records unless they share an instance and\s+user/);
+    });
+
+    it("labels the later email change as a correction with no source document", () => {
+      // A correction observation has no source_id, so the preview must not name one.
+      const preview = readSrc("frontend/src/components/onepager/InspectorPreview.tsx");
+      expect(preview).not.toContain("Source: supplied email");
+      expect(preview).toContain("No source document stored");
+    });
+
     it("marks the interface calls illustrative and keeps IDs variable", () => {
       expect(page2).not.toContain("published npm package (0.25.0) and on main");
       const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
@@ -573,8 +597,13 @@ describe("/install polish", () => {
       }
     });
 
-    it("says OpenCode uses a plugin or MCP", () => {
-      expect(copy2).toContain("OpenCode uses a plugin or MCP");
+    it("says OpenCode uses MCP, not an unpublished plugin package", () => {
+      // @neotoma/opencode-plugin is not published to npm, so the site offers MCP only.
+      expect(copy2).toContain("OpenCode uses MCP");
+      expect(copy2).not.toContain("OpenCode uses a plugin");
+      const strings = readSrc("frontend/src/i18n/locales/install_page_strings.ts");
+      expect(strings).not.toContain("Lifecycle hooks and MCP for OpenCode");
+      expect(strings).not.toContain("docker-compose");
     });
 
     it("install page: no unevidenced reversibility, 5-minute, or telemetry-absolute claims", () => {

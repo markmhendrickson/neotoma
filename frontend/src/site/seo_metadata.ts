@@ -151,7 +151,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/install/docker": {
     title: "Docker Install | Neotoma",
     description:
-      "Run Neotoma in Docker using docker-compose or standalone containers with persistent storage.",
+      "Run Neotoma in Docker with docker build and docker run, with persistent storage.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

@@ -107,7 +107,7 @@ export const CONNECTIONS_SETUP: readonly { host: string; tool: string }[] = [
 ];
 
 export const CONNECTIONS_OTHER =
-  "ChatGPT, Windsurf, Continue, VS Code, IronClaw and Letta use MCP or an HTTP connector, configured by hand, and OpenCode uses a plugin or MCP";
+  "ChatGPT, Windsurf, Continue, VS Code, IronClaw and Letta use MCP or an HTTP connector, configured by hand, and OpenCode uses MCP";
 
 export const installCommands = (tool: string) => `npm install -g neotoma
 neotoma init

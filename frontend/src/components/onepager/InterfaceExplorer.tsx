@@ -59,7 +59,11 @@ const examples: Record<Interface, string> = {
   ].join("\n\n"),
   MCP: [
     "// Calls your configured MCP server. Replace $INVOICE_ID with the store result.",
-    mcp("store", { entities: [invoice], observation_source: "import" }),
+    mcp("store", {
+      entities: [invoice],
+      observation_source: "import",
+      idempotency_key: "unique-store-key",
+    }),
     mcp("correct", amended),
     mcp("retrieve_entity_snapshot", { entity_id: "$INVOICE_ID", format: "json" }),
     mcp("list_observations", { entity_id: "$INVOICE_ID" }),
@@ -67,7 +71,11 @@ const examples: Record<Interface, string> = {
   ].join("\n\n"),
   "REST API": [
     "# Set NEOTOMA_URL and your owner token. Replace INVOICE_ID after store.",
-    curl("store", { entities: [invoice], observation_source: "import" }),
+    curl("store", {
+      entities: [invoice],
+      observation_source: "import",
+      idempotency_key: "unique-store-key",
+    }),
     curl("correct", amended, true),
     curl("get_entity_snapshot", { entity_id: "$INVOICE_ID" }, true),
     curl("list_observations", { entity_id: "$INVOICE_ID" }, true),
@@ -101,8 +109,9 @@ export function InterfaceExplorer() {
       <p className="plan-small">
         Illustrative calls, never run by this page. Read the store response for the actual entity
         ID. The snippets record fields and their observation history; they do not upload the
-        fictional PDF or email shown above. Each correction needs its own idempotency key and does
-        not edit the earlier observation.
+        fictional PDF or email shown above. Over MCP and REST, each store and each correction needs
+        its own idempotency key (the CLI generates one). A correction does not edit the earlier
+        observation, and it stores no source document.
       </p>
       <div className="plan-tabs" role="tablist" aria-label="Invoice operation interface">
         {interfaces.map((name, index) => (
@@ -150,7 +159,9 @@ export function InterfaceExplorer() {
       ))}
       <p className="plan-small">
         All three paths store, amend, read the snapshot and inspect observations and field
-        provenance. Observation history is distinct from date-derived timeline events.
+        provenance. In a default local install the stdio MCP server and the CLI or REST API write
+        as different local users, so they keep separate records unless they share an instance and
+        user. Observation history is distinct from date-derived timeline events.
       </p>
     </div>
   );
