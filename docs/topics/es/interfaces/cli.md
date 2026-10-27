@@ -2,7 +2,7 @@
 
 La CLI de Neotoma es una vía de acceso desde la terminal al mismo registro que exponen MCP y HTTP.
 
-Se aplica a la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. Las opciones de los comandos pueden diferir entre ambas; comprueba la versión instalada en tu entorno.
+Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Empieza con una lectura
 
@@ -29,4 +29,4 @@ neotoma entities list --limit 5
 
 ## Consulta la referencia completa
 
-La [referencia de la CLI](../../../developer/cli_reference.md) contiene opciones, precedencia de variables de entorno, operaciones del servidor y comandos ajenos al flujo de lectura habitual. Señala las diferencias conocidas entre v0.26.0 y el código fuente actual. Para una llamada OpenAPI directa mediante la CLI, consulta su sección `request --operation`. Esta página es un punto de partida, no un sustituto del contrato detallado.
+La [referencia de la CLI](../../../developer/cli_reference.md) contiene opciones, precedencia de variables de entorno, operaciones del servidor y comandos ajenos al flujo de lectura habitual. Describe el contrato de los comandos instalados; comprueba la versión antes de usar una opción. Para una llamada OpenAPI directa mediante la CLI, consulta su sección `request --operation`. Esta página es un punto de partida, no un sustituto del contrato detallado.

@@ -2,7 +2,7 @@
 
 A current entity value is useful only when a reader can tell which recorded evidence supports it.
 
-Applies to release source inspected at `b6ae615` on October 27th, 2026. Published v0.26.0 is pinned at `b6ae615`; confirm individual feature availability against that release.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## Follow a value backward
 

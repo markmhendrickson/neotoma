@@ -2,7 +2,7 @@
 
 The Neotoma repository's LICENSE file contains the MIT license text that governs the source code.
 
-Applies to the source tree at the build commit shown on this page.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## Read the license
 

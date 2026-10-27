@@ -1,5 +1,5 @@
 ---
-applies_to: Source inspected at b6ae615; published v0.26.0 pinned at b6ae615.
+applies_to: Released v0.26.0 at b6ae615 (27 October 2026); original source check 4779784 (24 October 2026), included in this release.
 ---
 
 # How the system of record works

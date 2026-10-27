@@ -2,7 +2,7 @@
 
 Neotoma's record is useful when its boundaries are visible: an interface can accept a request without proving the intended state or deployment path.
 
-Applies to release source inspected at `b6ae615` on October 27th, 2026. Published v0.26.0 is pinned at `b6ae615`; confirm individual feature availability against that release. Host compatibility, external services and release status need separate verification in the environment you use.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## A successful call is not the effect
 

@@ -16,10 +16,13 @@ export interface Connection {
   verification: string;
   caveat: string;
   evidence: {
+    /** Published release reference selected for this site; not the historical inspection date. */
     releasePin: string;
+    /** Historical source revision inspected on checkedOn, retained separately from releasePin. */
     mainPin: string;
     repoPaths: string;
     vendorUrl: string;
+    /** Date of the original source/vendor documentation check; no installed-host smoke is implied. */
     checkedOn: string;
   };
 }

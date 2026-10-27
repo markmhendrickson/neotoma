@@ -2,7 +2,7 @@
 
 Empieza por la identidad y el tipo de lo que necesitas; después examina el valor actual y su evidencia.
 
-Se aplica a la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. El comportamiento de búsqueda y los modos opcionales dependen de la configuración de la instancia.
+Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Acota la pregunta
 

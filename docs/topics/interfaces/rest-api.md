@@ -2,7 +2,7 @@
 
 Use Neotoma's HTTP API when an application needs a structured request and response contract for the record.
 
-Applies to published v0.26.0 (`b6ae615`) and release source inspected at `b6ae615` on October 27th, 2026. Read the OpenAPI document served by the instance you call for its exact route and schema version.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## Check the target first
 

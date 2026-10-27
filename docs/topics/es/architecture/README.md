@@ -1,5 +1,5 @@
 ---
-applies_to: Código fuente examinado en b6ae615; versión publicada v0.26.0 fijada en b6ae615.
+applies_to: Versión publicada v0.26.0 en b6ae615 (27 de octubre de 2026); examen original 4779784 (24 de octubre de 2026), incluido en esta versión.
 ---
 
 # Cómo funciona el sistema de registro

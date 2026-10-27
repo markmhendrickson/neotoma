@@ -2,7 +2,7 @@
 
 Smithery puede publicar para descubrimiento un endpoint MCP HTTPS de Neotoma ya existente. La publicación en el registro y una conexión autenticada que permita usar herramientas necesitan comprobaciones distintas.
 
-Esta vía está descrita por el código principal de Neotoma examinado (`b6ae615`); no se afirma que una versión publicada de Neotoma sea compatible con Smithery. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+Referencia publicada: v0.26.0 (`b6ae615`, 27 de octubre de 2026). La vía se examinó en el código `4779784` y en la documentación del proveedor el 24 de octubre de 2026; ese código está incluido en la versión publicada. La compatibilidad con la versión instalada del entorno y con Windows no se probó.
 
 **Vía:** registro externo de una URL HTTPS.
 

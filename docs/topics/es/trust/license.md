@@ -2,7 +2,7 @@
 
 El archivo LICENSE del repositorio de Neotoma contiene el texto de la licencia MIT que rige el código fuente.
 
-Se aplica al árbol de código fuente del commit de compilación indicado en esta página.
+Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Lee la licencia
 

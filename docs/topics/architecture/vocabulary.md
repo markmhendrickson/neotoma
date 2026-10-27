@@ -2,7 +2,7 @@
 
 These names separate the recorded input from the current answer an agent reads.
 
-Applies to the model described in the [canonical vocabulary](../../vocabulary/canonical_terms.md), inspected at `b6ae615` on October 24th, 2026. Published v0.26.0 is pinned at `b6ae615`.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## The path from input to answer
 

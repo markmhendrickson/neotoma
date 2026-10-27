@@ -61,9 +61,9 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **773**
+- Total automated test files: **774**
 - Backend and repo Vitest files: **723**
-- Frontend Vitest files: **23**
+- Frontend Vitest files: **24**
 - Playwright spec files: **27**
 
 ### Suite counts
@@ -81,7 +81,7 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 23 |
+| Frontend Vitest tests | 24 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
@@ -911,10 +911,11 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (23):**
+**Files (24):**
 - `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/Layout.site_chrome.test.tsx`
 - `frontend/src/components/MainApp.docs-viewer.test.tsx`
+- `frontend/src/components/onepager/EvaluationCard.test.tsx`
 - `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx`
 - `frontend/src/components/onepager/PaperScene.spanish.test.tsx`
 - `frontend/src/components/onepager/ProductBenefitPills.interactions.test.tsx`

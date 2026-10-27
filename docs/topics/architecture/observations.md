@@ -2,7 +2,7 @@
 
 An observation records a claim about an entity at a point in the record's history; a later claim does not edit the earlier one.
 
-Applies to release source inspected at `b6ae615` on October 27th, 2026. Published v0.26.0 is pinned at `b6ae615`; confirm individual feature availability against that release.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## What an observation carries
 

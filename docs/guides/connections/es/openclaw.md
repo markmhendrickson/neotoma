@@ -2,7 +2,7 @@
 
 OpenClaw se conecta primero mediante el plugin nativo de Neotoma. El comando de configuración de Neotoma puede añadir después capas de instrucciones y MCP, pero no instala ese plugin.
 
-La opción de configuración opcional de Neotoma existe en v0.26.0 (`b6ae615`) y en el código principal comprobado (`b6ae615`); OpenClaw documenta por separado el funcionamiento del plugin nativo. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+Referencia publicada: v0.26.0 (`b6ae615`, 27 de octubre de 2026). La vía se examinó en el código `4779784` y en la documentación del proveedor el 24 de octubre de 2026; ese código está incluido en la versión publicada. La compatibilidad con la versión instalada del entorno y con Windows no se probó.
 
 **Vía:** primero el plugin nativo; la configuración por CLI es una capa distinta de Neotoma.
 

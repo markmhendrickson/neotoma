@@ -2,7 +2,7 @@
 
 Escribe un campo declarado en la entidad prevista y después vuelve a leer su valor actual y la observación que lo produjo.
 
-Se aplica a la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. La versión incluye operaciones condicionales y de corrección de varias entidades; usa el contrato de la instancia en ejecución.
+Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Antes de una escritura estructurada
 

@@ -2,7 +2,7 @@
 
 Neotoma can run as a user-controlled instance. A user explicitly chooses ingestion and may separately enable hooks that capture later events.
 
-Applies to release source inspected at `b6ae615` on October 27th, 2026. Published v0.26.0 is pinned at `b6ae615`; confirm individual feature availability against that release.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## Control the input
 

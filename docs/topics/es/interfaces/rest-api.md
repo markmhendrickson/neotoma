@@ -2,7 +2,7 @@
 
 Usa la API HTTP de Neotoma cuando una aplicación necesite un contrato estructurado de solicitud y respuesta para el registro.
 
-Se aplica a la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. Consulta el documento OpenAPI servido por la instancia a la que llamas para conocer su versión exacta de rutas y esquemas.
+Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Comprueba primero el destino
 

@@ -2,7 +2,7 @@
 
 Compara el campo actual de una entidad con las observaciones que lo produjeron antes de concluir qué cambió.
 
-Se aplica al modelo de observaciones e instantáneas de la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. Para conocer el comportamiento exacto, usa las rutas de esquema e historial de la instancia en ejecución.
+Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Empieza por el campo actual
 

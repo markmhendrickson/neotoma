@@ -2,7 +2,7 @@
 
 Windsurf’s legacy Cascade agent accepts manual MCP configuration. Check which agent and configuration format your installed version uses before adding Neotoma.
 
-This path is described by checked Neotoma main (`b6ae615`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+Release reference: v0.26.0 (`b6ae615`, October 27th, 2026). The path was checked against source `4779784` and vendor documentation on October 24th, 2026; that source is included in this release. Installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** manual MCP configuration.
 

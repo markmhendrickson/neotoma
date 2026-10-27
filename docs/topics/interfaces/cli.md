@@ -2,7 +2,7 @@
 
 The Neotoma CLI is a terminal entrance to the same record exposed through MCP and HTTP.
 
-Applies to published v0.26.0 (`b6ae615`) and release source inspected at `b6ae615` on October 27th, 2026. Command options can differ between them; check the version installed in your environment.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## Start with a read
 
@@ -29,4 +29,4 @@ Use [Find and read a record](https://neotoma.io/read-search/) for the search seq
 
 ## Go to the full reference
 
-The [CLI reference](../../developer/cli_reference.md) holds flags, environment precedence, server operations, and commands outside the normal reader workflow. It marks differences between v0.26.0 and current source where known. For a direct OpenAPI call through the CLI, see its `request --operation` section. This overview is a starting path, not a substitute for the detailed contract.
+The [CLI reference](../../developer/cli_reference.md) holds flags, environment precedence, server operations, and commands outside the normal reader workflow. It describes the installed command contract; check the running version before using a flag. For a direct OpenAPI call through the CLI, see its `request --operation` section. This overview is a starting path, not a substitute for the detailed contract.

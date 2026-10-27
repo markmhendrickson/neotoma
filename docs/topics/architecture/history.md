@@ -2,7 +2,7 @@
 
 Compare an entity's current field with the observations that led to it before drawing a conclusion about what changed.
 
-Applies to the observation and snapshot model in published v0.26.0 (`b6ae615`) and release source inspected at `b6ae615` on October 27th, 2026. Use the running instance's schema and history routes for exact behavior.
+Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
 
 ## Start from the current field
 
