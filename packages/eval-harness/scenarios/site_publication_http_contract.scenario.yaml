@@ -48,11 +48,17 @@ expected:
     result_subset:
       status: 200
       content_type: text/html
+      h1: The system of record for AI agents.
   - type: tool_result.matches
     tool_name: site_http
     which: 1
     result_key: body
     result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 1
+    result_key: h2_text
+    result_contains: See whether Neotoma fits your workflow
   - type: tool_result.matches
     tool_name: site_http
     which: 1
@@ -69,11 +75,17 @@ expected:
     result_subset:
       status: 200
       content_type: text/html
+      h1: El sistema de registro para agentes de IA.
   - type: tool_result.matches
     tool_name: site_http
     which: 2
     result_key: body
     result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 2
+    result_key: h2_text
+    result_contains: Comprueba si Neotoma encaja en tu trabajo
   - type: tool_result.matches
     tool_name: site_http
     which: 2
@@ -90,6 +102,7 @@ expected:
     result_subset:
       status: 200
       content_type: text/html
+      h1: Connect Claude Code
   - type: tool_result.matches
     tool_name: site_http
     which: 3
@@ -98,14 +111,20 @@ expected:
   - type: tool_result.matches
     tool_name: site_http
     which: 3
+    result_key: h2_text
+    result_contains: Before connecting
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 3
     result_key: body
-    result_contains: Claude Code
+    result_contains: The setup target writes Neotoma's Claude Code MCP entry
   - type: tool_result.matches
     tool_name: site_http
     which: 4
     result_subset:
       status: 200
       content_type: text/html
+      h1: Connect OpenClaw
   - type: tool_result.matches
     tool_name: site_http
     which: 4
@@ -114,19 +133,30 @@ expected:
   - type: tool_result.matches
     tool_name: site_http
     which: 4
+    result_key: h2_text
+    result_contains: Before connecting
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 4
     result_key: body
-    result_contains: OpenClaw
+    result_contains: The native plugin command below is distinct from
   - type: tool_result.matches
     tool_name: site_http
     which: 5
     result_subset:
       status: 200
       content_type: text/html
+      h1: Install options
   - type: tool_result.matches
     tool_name: site_http
     which: 5
     result_key: body
     result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 5
+    result_key: h2_text
+    result_contains: Connect the tool you use
   - type: tool_result.matches
     tool_name: site_http
     which: 5
@@ -138,11 +168,17 @@ expected:
     result_subset:
       status: 200
       content_type: text/html
+      h1: Opciones de instalación
   - type: tool_result.matches
     tool_name: site_http
     which: 6
     result_key: body
     result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 6
+    result_key: h2_text
+    result_contains: Conecta tu herramienta
   - type: tool_result.matches
     tool_name: site_http
     which: 6
@@ -154,6 +190,7 @@ expected:
     result_subset:
       status: 200
       content_type: text/html
+      h1: Evaluate Neotoma
   - type: tool_result.matches
     tool_name: site_http
     which: 7
@@ -161,10 +198,16 @@ expected:
     result_contains: <html lang="en"
   - type: tool_result.matches
     tool_name: site_http
+    which: 7
+    result_key: h2_text
+    result_contains: Who Neotoma is built for
+  - type: tool_result.matches
+    tool_name: site_http
     which: 8
     result_subset:
       status: 200
       content_type: text/html
+      h1: Evaluar Neotoma
   - type: tool_result.matches
     tool_name: site_http
     which: 8
@@ -172,15 +215,26 @@ expected:
     result_contains: <html lang="es"
   - type: tool_result.matches
     tool_name: site_http
+    which: 8
+    result_key: h2_text
+    result_contains: Para quién está hecho Neotoma
+  - type: tool_result.matches
+    tool_name: site_http
     which: 9
     result_subset:
       status: 200
       content_type: text/html
+      h1: What changes on your system
   - type: tool_result.matches
     tool_name: site_http
     which: 9
     result_key: body
     result_contains: <html lang="en"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 9
+    result_key: h2_text
+    result_contains: Files and permissions for a local installation
   - type: tool_result.matches
     tool_name: site_http
     which: 9
@@ -192,11 +246,17 @@ expected:
     result_subset:
       status: 200
       content_type: text/html
+      h1: Qué cambia en tu sistema
   - type: tool_result.matches
     tool_name: site_http
     which: 10
     result_key: body
     result_contains: <html lang="es"
+  - type: tool_result.matches
+    tool_name: site_http
+    which: 10
+    result_key: h2_text
+    result_contains: Archivos y permisos de una instalación local
   - type: tool_result.matches
     tool_name: site_http
     which: 10

@@ -54,6 +54,24 @@ describe("closed website eval HTTP reader", () => {
         ),
       })
     ).toThrow(/static route assertion/);
+    for (let which = 1; which <= 10; which++) {
+      for (const identityCheck of ["h1", "h2_text"]) {
+        expect(() =>
+          validateSiteScenario({
+            ...scenario,
+            expected: scenario.expected.filter(
+              (assertion) =>
+                !(
+                  assertion.which === which &&
+                  (identityCheck === "h1"
+                    ? assertion.result_subset?.h1 !== undefined
+                    : assertion.result_key === "h2_text")
+                )
+            ),
+          })
+        ).toThrow(/static route assertion/);
+      }
+    }
     expect(() =>
       validateSiteCassette(
         {
@@ -66,6 +84,15 @@ describe("closed website eval HTTP reader", () => {
         scenario
       )
     ).toThrow(/closed contract/);
+    expect(() =>
+      validateSiteCassette(
+        { ...cassette!, meta: { ...cassette!.meta, scenario_id: "another_scenario" } },
+        scenario
+      )
+    ).toThrow(/identity or prompt/);
+    expect(() =>
+      validateSiteCassette({ ...cassette!, user_prompt: "Different request" }, scenario)
+    ).toThrow(/identity or prompt/);
   });
   it("rejects URLs, traversal, encoded paths, and unknown fields before fetch", () => {
     for (const path of [

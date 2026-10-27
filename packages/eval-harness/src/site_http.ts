@@ -26,8 +26,11 @@ export const STATIC_ROUTES = [
 const STATIC_MARKERS: Record<(typeof STATIC_ROUTES)[number], readonly string[]> = {
   "/": ['<html lang="en"', "Ask your agent to evaluate", 'href="/install/system-changes/"'],
   "/es": ['<html lang="es"', "Pide a tu agente que evalúe", 'href="/es/install/system-changes/"'],
-  "/install/claude-code": ['<html lang="en"', "Claude Code"],
-  "/install/openclaw": ['<html lang="en"', "OpenClaw"],
+  "/install/claude-code": [
+    '<html lang="en"',
+    "The setup target writes Neotoma's Claude Code MCP entry",
+  ],
+  "/install/openclaw": ['<html lang="en"', "The native plugin command below is distinct from"],
   "/install": ['<html lang="en"', 'href="/install/system-changes/"'],
   "/es/install": ['<html lang="es"', 'href="/es/install/system-changes/"'],
   "/evaluate": ['<html lang="en"'],
@@ -35,8 +38,39 @@ const STATIC_MARKERS: Record<(typeof STATIC_ROUTES)[number], readonly string[]> 
   "/install/system-changes": ['<html lang="en"', "What changes on your system"],
   "/es/install/system-changes": ['<html lang="es"', "Qué cambia en tu sistema"],
 };
+const STATIC_HEADINGS: Record<(typeof STATIC_ROUTES)[number], { h1: string; h2: string }> = {
+  "/": { h1: "The system of record for AI agents.", h2: "See whether Neotoma fits your workflow" },
+  "/es": {
+    h1: "El sistema de registro para agentes de IA.",
+    h2: "Comprueba si Neotoma encaja en tu trabajo",
+  },
+  "/install/claude-code": { h1: "Connect Claude Code", h2: "Before connecting" },
+  "/install/openclaw": { h1: "Connect OpenClaw", h2: "Before connecting" },
+  "/install": { h1: "Install options", h2: "Connect the tool you use" },
+  "/es/install": { h1: "Opciones de instalación", h2: "Conecta tu herramienta" },
+  "/evaluate": { h1: "Evaluate Neotoma", h2: "Who Neotoma is built for" },
+  "/es/evaluate": { h1: "Evaluar Neotoma", h2: "Para quién está hecho Neotoma" },
+  "/install/system-changes": {
+    h1: "What changes on your system",
+    h2: "Files and permissions for a local installation",
+  },
+  "/es/install/system-changes": {
+    h1: "Qué cambia en tu sistema",
+    h2: "Archivos y permisos de una instalación local",
+  },
+};
 const ROUTES = new Set<string>(STATIC_ROUTES);
 const MAX_BYTES = 2_000_000;
+
+function headingText(body: string, level: 1 | 2): string[] {
+  const matches = body.matchAll(new RegExp(`<h${level}\\b[^>]*>([\\s\\S]*?)<\\/h${level}>`, "gi"));
+  return Array.from(matches, ([, contents]) =>
+    contents
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
 
 export type SiteHttpInput =
   | { operation: "root_json"; path: "/" }
@@ -100,13 +134,26 @@ export function validateSiteScenario(scenario: ScenarioFile): void {
     throw new Error("site_http eval is missing the live root guidance contract");
   for (let index = 0; index < STATIC_ROUTES.length; index++) {
     const which = index + 1;
+    const identity = STATIC_HEADINGS[STATIC_ROUTES[index]];
     if (
       !scenario.expected.some(
         (assertion) =>
           assertion.type === "tool_result.matches" &&
           assertion.tool_name === "site_http" &&
           assertion.which === which &&
-          isDeepStrictEqual(assertion.result_subset, { status: 200, content_type: "text/html" })
+          isDeepStrictEqual(assertion.result_subset, {
+            status: 200,
+            content_type: "text/html",
+            h1: identity.h1,
+          })
+      ) ||
+      !scenario.expected.some(
+        (assertion) =>
+          assertion.type === "tool_result.matches" &&
+          assertion.tool_name === "site_http" &&
+          assertion.which === which &&
+          assertion.result_key === "h2_text" &&
+          assertion.result_contains === identity.h2
       ) ||
       !STATIC_MARKERS[STATIC_ROUTES[index]].every((marker) =>
         scenario.expected.some(
@@ -125,6 +172,15 @@ export function validateSiteScenario(scenario: ScenarioFile): void {
 
 export function validateSiteCassette(cassette: CassetteFile, scenario: ScenarioFile): void {
   validateSiteScenario(scenario);
+  if (
+    cassette.meta.scenario_id !== scenario.meta.id ||
+    cassette.meta.provider !== "stub" ||
+    cassette.meta.model !== "replay-only" ||
+    cassette.user_prompt !== scenario.user_prompt ||
+    cassette.system_prompt !== scenario.system_prompt ||
+    !Array.isArray(cassette.tool_calls)
+  )
+    throw new Error("site_http cassette identity or prompt mismatch");
   const calls = cassette.tool_calls;
   if (calls.length !== STATIC_ROUTES.length + 1)
     throw new Error("site_http cassette call count changed");
@@ -336,5 +392,13 @@ export async function readSiteHttp(
   }
   if (!/<!doctype html/i.test(body) || !/<html\s/i.test(body))
     throw new Error("site_http malformed static HTML");
-  return { status: res.status, content_type: expected, body };
+  const h1 = headingText(body, 1);
+  if (h1.length !== 1 || !h1[0]) throw new Error("site_http missing unique H1");
+  return {
+    status: res.status,
+    content_type: expected,
+    h1: h1[0],
+    h2_text: headingText(body, 2).join("\n"),
+    body,
+  };
 }
