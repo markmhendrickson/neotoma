@@ -8,12 +8,13 @@ const root = resolve(fileURLToPath(import.meta.url), "..", "..", "..");
 const workflow = YAML.parse(
   readFileSync(resolve(root, ".github/workflows/ci_test_lanes.yml"), "utf-8")
 ) as {
-  jobs: Record<string, { steps: Array<{ name?: string; run?: string }> }>;
+  jobs: Record<string, { "runs-on": string; steps: Array<{ name?: string; run?: string }> }>;
 };
 
 describe("closed site HTTP evaluation CI wiring", () => {
   for (const job of ["eval_scenarios", "eval_combined"]) {
     it(`${job} installs Chromium before building the exact-head site`, () => {
+      expect(workflow.jobs[job]["runs-on"]).toBe("ubuntu-24.04");
       const steps = workflow.jobs[job].steps;
       const names = steps.map((step) => step.name);
       const browser = names.indexOf("Install Playwright browser (Chromium)");

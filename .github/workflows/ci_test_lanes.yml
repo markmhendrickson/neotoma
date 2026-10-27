@@ -443,7 +443,8 @@ jobs:
     # subscribe / …), which the hook-lifecycle agentic_evals lane cannot model.
     # Quarantined scenarios (meta.quarantine, tracked by neotoma#1726) are
     # skipped, not failed; cassette-less scenarios skip until recorded.
-    runs-on: ubuntu-latest
+    # Match the supported Playwright runtime used by the production site build.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -509,7 +510,8 @@ jobs:
     # requested WRIT run errors (neotoma#1738/#1739).
     # Tier 2 includes the required native backup CLI cell, so this job needs
     # the same Node 24 build, pinned cache, and local Docker boundary as eval_scenarios.
-    runs-on: ubuntu-latest
+    # Match the supported Playwright runtime used by the production site build.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout (with writ submodule)
         uses: actions/checkout@v4
