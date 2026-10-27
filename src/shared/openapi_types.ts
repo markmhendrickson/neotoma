@@ -4274,6 +4274,20 @@ export interface components {
      */
     StoreRequest: {
       /**
+       * @description Shapes the `related_entities` array in the MCP `store` response for
+       *     structured stores. By default each entry is compact:
+       *     `{id, entity_type, canonical_name}`. When true, each entry is the
+       *     full entity row plus its current `snapshot` (the pre-compaction
+       *     response shape), which can be very large when a related entity has a
+       *     large snapshot. Retrieve an entity by id for its snapshot instead
+       *     where possible. Does not change what is written or which entities
+       *     are related, and is not part of the idempotency fingerprint. The
+       *     REST `/store` response carries no `related_entities`, so the flag is
+       *     accepted there and has no effect.
+       * @default false
+       */
+      include_related_snapshots?: boolean;
+      /**
        * @description When true, atomically create exactly one structured entity only if
        *     its complete schema-declared physical identity is absent. Requires
        *     commit=true and a nonempty idempotency_key; file, relationship,

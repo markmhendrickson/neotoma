@@ -922,6 +922,12 @@ export const ExternalActorInputSchema = z
 export const StoreRequestSchema = z
   .object({
     expected_entity_absent: z.boolean().optional(),
+    /**
+     * MCP `store` response shape: full snapshots in `related_entities` instead
+     * of the compact `{id, entity_type, canonical_name}` default. No effect on
+     * what is written.
+     */
+    include_related_snapshots: z.boolean().optional(),
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),
