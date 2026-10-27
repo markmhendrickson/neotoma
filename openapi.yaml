@@ -8754,6 +8754,12 @@ paths:
         of rejecting them. The response sets `unknown_field: true` and includes a
         `hint` so the caller knows the value will not surface in the entity
         snapshot until the field is added to the schema.
+
+        On an array field with the `merge_array` strategy, a later correction
+        replaces the whole array with exactly the `value` sent (`[]` clears
+        it), so send the complete list you want, not just the change. Two
+        corrections made in the same millisecond are ordered by `created_at`,
+        then `id`.
       operationId: correct
       requestBody:
         required: true

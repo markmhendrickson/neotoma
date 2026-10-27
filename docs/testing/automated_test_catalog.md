@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **746**
-- Backend and repo Vitest files: **709**
+- Total automated test files: **748**
+- Backend and repo Vitest files: **711**
 - Frontend Vitest files: **11**
 - Playwright spec files: **26**
 
@@ -72,8 +72,8 @@ flowchart TD
 | Vitest unit tests | 208 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 223 |
-| Vitest CLI tests | 89 |
+| Vitest integration tests | 224 |
+| Vitest CLI tests | 90 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -467,7 +467,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (223):**
+**Files (224):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -499,6 +499,7 @@ flowchart TD
 - `tests/integration/company_entity_resolution_leads.test.ts`
 - `tests/integration/conversation_turn_accrual.test.ts`
 - `tests/integration/conversation_turn_index.test.ts`
+- `tests/integration/correct_array_replaces.test.ts`
 - `tests/integration/correct_http_mcp_parity.test.ts`
 - `tests/integration/correct_unknown_field_append.test.ts`
 - `tests/integration/correction_scalar_tiebreak_surfaces.test.ts`
@@ -697,7 +698,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (89):**
+**Files (90):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -708,6 +709,7 @@ flowchart TD
 - `tests/cli/cli_array_item_patch_commands.test.ts`
 - `tests/cli/cli_auth_commands.test.ts`
 - `tests/cli/cli_command_coverage_guard.test.ts`
+- `tests/cli/cli_correction_array_replace.test.ts`
 - `tests/cli/cli_correction_commands.test.ts`
 - `tests/cli/cli_cursor_offset_conflict.test.ts`
 - `tests/cli/cli_direct_invocation_parity.test.ts`

@@ -101,6 +101,10 @@ obs_b: { location: "Calle Mayor 1, Madrid", specificity_score: 85 }
 - `null` entries inside contributed arrays are dropped; they are not meaningful elements.
 - A correction (`source_priority: 1000`) fully **replaces** lower-priority array
   contributions rather than merging into them.
+- A **later correction replaces an earlier one** (#2341): among corrections the latest
+  (`observed_at`, then `created_at`, then `id`) is the only contribution, so a correction
+  can remove members an earlier correction added, and `[]` clears the field. Callers must
+  send the complete list. See [reducer.md §3.4](reducer.md).
 
 Use `merge_array` for accumulative sets where every same-priority value is valid — tags,
 aliases, category labels, related IDs.

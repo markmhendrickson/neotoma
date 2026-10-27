@@ -16624,7 +16624,10 @@ correctionsCommand
   .option("--entity-id <id>", "Entity ID to correct")
   .option("--entity-type <type>", "Entity type (optional, looked up if not provided)")
   .option("--field-name <field>", "Field name to correct (required)")
-  .option("--corrected-value <value>", "Corrected value (required)")
+  .option(
+    "--corrected-value <value>",
+    "Corrected value (required). A JSON array replaces a merge_array field in full ('[]' clears it); send the complete list"
+  )
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
   .option("--expected-version <version>", "Entity version read from the current snapshot")

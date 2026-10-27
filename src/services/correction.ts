@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
+import { CORRECTION_SOURCE_PRIORITY, CORRECTION_SPECIFICITY_SCORE } from "./correction_identity.js";
 import { buildObservationRow, insertObservationRow } from "./observation_insert.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
 import { getEntityWithProvenance } from "./entity_queries.js";
@@ -382,8 +383,10 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     source_id: null,
     interpretation_id: null,
     observed_at: new Date().toISOString(),
-    specificity_score: 1.0,
-    source_priority: 1000,
+    // The correction shape the reducer recognises (see correction_identity.ts).
+    // Do not write these two values anywhere else without an observation_source.
+    specificity_score: CORRECTION_SPECIFICITY_SCORE,
+    source_priority: CORRECTION_SOURCE_PRIORITY,
     fields: { [field]: value },
     user_id,
     idempotency_key: idempotency_key || undefined,
