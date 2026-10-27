@@ -43,6 +43,18 @@ describe("closed website eval HTTP reader", () => {
       })
     ).toThrow(/root guidance/);
     expect(() =>
+      validateSiteScenario({
+        ...scenario,
+        expected: scenario.expected.filter(
+          (assertion) =>
+            !(
+              assertion.which === 1 &&
+              assertion.result_contains === 'href="/install/system-changes/"'
+            )
+        ),
+      })
+    ).toThrow(/static route assertion/);
+    expect(() =>
       validateSiteCassette(
         {
           ...cassette!,
@@ -118,6 +130,10 @@ describe("closed website eval HTTP reader", () => {
       new Response("{}", { status: 200, headers: { "content-type": "text/plain" } }),
     ],
     [
+      "JSONP content type",
+      new Response("{}", { status: 200, headers: { "content-type": "application/jsonp" } }),
+    ],
+    [
       "malformed JSON",
       new Response("{", { status: 200, headers: { "content-type": "application/json" } }),
     ],
@@ -128,6 +144,21 @@ describe("closed website eval HTTP reader", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(URL),
       expect.objectContaining({ redirect: "manual", method: "GET" })
+    );
+  });
+
+  it("rejects an HTML media type prefix with a different subtype", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<!DOCTYPE html><html></html>", {
+          status: 200,
+          headers: { "content-type": "text/html-unsafe" },
+        })
+      )
+    );
+    await expect(readSiteHttp({ operation: "static_html", path: "/" }, BASE, BASE)).rejects.toThrow(
+      /content type/
     );
   });
 

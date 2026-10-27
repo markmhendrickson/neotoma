@@ -23,6 +23,18 @@ export const STATIC_ROUTES = [
   "/install/system-changes",
   "/es/install/system-changes",
 ] as const;
+const STATIC_MARKERS: Record<(typeof STATIC_ROUTES)[number], readonly string[]> = {
+  "/": ['<html lang="en"', "Ask your agent to evaluate", 'href="/install/system-changes/"'],
+  "/es": ['<html lang="es"', "Pide a tu agente que evalúe", 'href="/es/install/system-changes/"'],
+  "/install/claude-code": ['<html lang="en"', "Claude Code"],
+  "/install/openclaw": ['<html lang="en"', "OpenClaw"],
+  "/install": ['<html lang="en"', 'href="/install/system-changes/"'],
+  "/es/install": ['<html lang="es"', 'href="/es/install/system-changes/"'],
+  "/evaluate": ['<html lang="en"'],
+  "/es/evaluate": ['<html lang="es"'],
+  "/install/system-changes": ['<html lang="en"', "What changes on your system"],
+  "/es/install/system-changes": ['<html lang="es"', "Qué cambia en tu sistema"],
+};
 const ROUTES = new Set<string>(STATIC_ROUTES);
 const MAX_BYTES = 2_000_000;
 
@@ -57,6 +69,16 @@ export function validateSiteScenario(scenario: ScenarioFile): void {
     );
   if (scenario.expected.length < 20)
     throw new Error("site_http eval is missing required assertions");
+  if (
+    !scenario.expected.some(
+      (assertion) =>
+        assertion.type === "mcp_tool.invocations" &&
+        assertion.tool_name === "site_http" &&
+        assertion.op === "eq" &&
+        assertion.value === STATIC_ROUTES.length + 1
+    )
+  )
+    throw new Error("site_http eval is missing the exact live-read count");
   const rootContract = {
     status: 200,
     content_type: "application/json",
@@ -86,13 +108,15 @@ export function validateSiteScenario(scenario: ScenarioFile): void {
           assertion.which === which &&
           isDeepStrictEqual(assertion.result_subset, { status: 200, content_type: "text/html" })
       ) ||
-      !scenario.expected.some(
-        (assertion) =>
-          assertion.type === "tool_result.matches" &&
-          assertion.tool_name === "site_http" &&
-          assertion.which === which &&
-          assertion.result_key === "body" &&
-          typeof assertion.result_contains === "string"
+      !STATIC_MARKERS[STATIC_ROUTES[index]].every((marker) =>
+        scenario.expected.some(
+          (assertion) =>
+            assertion.type === "tool_result.matches" &&
+            assertion.tool_name === "site_http" &&
+            assertion.which === which &&
+            assertion.result_key === "body" &&
+            assertion.result_contains === marker
+        )
       )
     )
       throw new Error(`site_http eval is missing static route assertion ${STATIC_ROUTES[index]}`);
@@ -303,7 +327,7 @@ export async function readSiteHttp(
     throw new Error(`site_http GET ${input.path} returned ${res.status}`);
   const contentType = res.headers.get("content-type") ?? "";
   const expected = input.operation === "root_json" ? "application/json" : "text/html";
-  if (!contentType.toLowerCase().startsWith(expected))
+  if (contentType.split(";", 1)[0].trim().toLowerCase() !== expected)
     throw new Error(`site_http unexpected content type: ${contentType}`);
   const body = await readBodyLimited(res);
   if (input.operation === "root_json") {
