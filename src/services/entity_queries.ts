@@ -812,40 +812,70 @@ export async function queryEntities(
 
       if (sourceIdsForType.size > 0) {
         const defaultUserId = "00000000-0000-0000-0000-000000000000";
-        let fragmentQuery = db
-          .from("raw_fragments")
-          .select("fragment_key, fragment_value, last_seen, source_id, entity_id")
-          .eq("entity_type", entityType)
-          .in("source_id", Array.from(sourceIdsForType));
+        const sourceIdList = Array.from(sourceIdsForType);
+        const entityIdSetOfType = new Set<string>(entityIdsOfType);
 
         // Handle user_id
-        if (userIdsForType.size > 0) {
-          const userIdFilters = Array.from(userIdsForType).map((uid: string) =>
-            uid === defaultUserId
-              ? `user_id.eq.${defaultUserId},user_id.is.null`
-              : `user_id.eq.${uid}`
-          );
-          fragmentQuery = fragmentQuery.or(userIdFilters.join(","));
-        } else {
-          fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
-        }
+        const userFilter =
+          userIdsForType.size > 0
+            ? Array.from(userIdsForType)
+                .map((uid: string) =>
+                  uid === defaultUserId
+                    ? `user_id.eq.${defaultUserId},user_id.is.null`
+                    : `user_id.eq.${uid}`
+                )
+                .join(",")
+            : `user_id.is.null,user_id.eq.${defaultUserId}`;
+        const fragmentSelect = () =>
+          db
+            .from("raw_fragments")
+            .select("fragment_key, fragment_value, last_seen, source_id, entity_id")
+            .eq("entity_type", entityType)
+            .in("source_id", sourceIdList);
 
-        const { data: observationsForSources, error: sourceLinkError } = await db
-          .from("observations")
-          .select("entity_id, source_id")
-          .eq("entity_type", entityType)
-          .in("source_id", Array.from(sourceIdsForType));
-        if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
+        // Bound the fragment fetch to this page. A fragment that names its entity
+        // is fetched by the page's own entity ids (idx_raw_fragments_entity_source)
+        // instead of by source: a source is shared by every entity it stored, and
+        // the page's entities are spread across all of them, so a source-only
+        // filter returned (and JSON-parsed) the fragments of the whole entity type
+        // on every request -- cost that tracked the type's size, not the page's.
+        // Fragments with no entity_id are legacy rows attributed through their
+        // source (below); they are fetched separately and are normally absent.
+        const { data: directFragments, error: directFragmentError } = await fragmentSelect()
+          .in("entity_id", entityIdsOfType)
+          .or(userFilter);
+        const { data: legacyFragments, error: legacyFragmentError } = await fragmentSelect()
+          .is("entity_id", null)
+          .or(userFilter);
+        const fragmentError = directFragmentError ?? legacyFragmentError;
+        const fragments = [...(directFragments ?? []), ...(legacyFragments ?? [])];
+
+        // Only legacy fragments need the source -> entity link, and only for their
+        // own sources; the link query is skipped entirely when there are none.
         const legacyEntityCountsBySource = new Map<string, Set<string>>();
-        for (const obs of observationsForSources || []) {
-          if (!obs.source_id || !obs.entity_id) continue;
-          if (!legacyEntityCountsBySource.has(obs.source_id)) {
-            legacyEntityCountsBySource.set(obs.source_id, new Set());
+        const legacySourceIds = Array.from(
+          new Set<string>(
+            ((legacyFragments ?? []) as Array<{ source_id?: string | null }>)
+              .map((fragment) => fragment.source_id)
+              .filter((sourceId): sourceId is string => typeof sourceId === "string")
+          )
+        );
+        if (legacySourceIds.length > 0) {
+          const { data: observationsForSources, error: sourceLinkError } = await db
+            .from("observations")
+            .select("entity_id, source_id")
+            .eq("entity_type", entityType)
+            .in("source_id", legacySourceIds);
+          if (sourceLinkError) readTrace?.reasons.add("raw_fragment_links_unavailable");
+          for (const obs of observationsForSources || []) {
+            if (!obs.source_id || !obs.entity_id) continue;
+            if (!legacyEntityCountsBySource.has(obs.source_id)) {
+              legacyEntityCountsBySource.set(obs.source_id, new Set());
+            }
+            legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
           }
-          legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
         }
 
-        const { data: fragments, error: fragmentError } = await fragmentQuery;
         if (fragmentError) readTrace?.reasons.add("raw_fragments_unavailable");
 
         if (fragments && fragments.length > 0) {
@@ -862,7 +892,7 @@ export async function queryEntities(
                 : [];
 
             for (const entityId of candidateEntityIds) {
-              if (!entityIdsOfType.includes(entityId)) continue;
+              if (!entityIdSetOfType.has(entityId)) continue;
               if (!rawFragmentsByEntity.has(entityId)) {
                 rawFragmentsByEntity.set(entityId, {});
               }
