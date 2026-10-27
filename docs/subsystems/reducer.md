@@ -266,9 +266,14 @@ interpretation, no `observation_source`, priority 1000, specificity 1.0), the **
 correction** — ordered by `observed_at`, then `created_at`, then `id` — is the field's only
 contribution. A later `correct` therefore sets the array to exactly its members, can remove
 members an earlier correction added, and `[]` (or `null`) clears the field to `[]`. A request
-cannot forge a correction: every public write path stamps a non-null `observation_source`
-and, outside internal priority-0 writers, a `source_id`, so an ordinary write that merely
-carries `source_priority: 1000` keeps the same-priority union. The append-only log is
+cannot forge a correction: the shape needs a NULL `observation_source`, and every public
+writer stamps a non-null one (`createObservation` defaults it to `unspecified`). Some routes
+do write a null `source_id` and a caller-chosen priority (`POST /observations/create`), so the
+`observation_source`, not the `source_id`, is the guard; an integration test sends
+`source_priority: 1000` through that route and checks the stored row is not a correction. An
+ordinary write that merely carries `source_priority: 1000` keeps the same-priority union, and
+is ignored while a correction exists on the field (so `resolve_sync_conflict` `prefer_remote`,
+stored at 1000, cannot override a correction on an array field). The append-only log is
 unchanged: each correction is still its own observation, and supersession happens in the
 reducer. `merge_array_by_key` is not affected; its keyed reconciliation across the top tier
 is what `patch_array_item` relies on. Snapshots computed before this change keep the union

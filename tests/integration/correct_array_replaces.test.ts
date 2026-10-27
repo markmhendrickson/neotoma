@@ -20,6 +20,7 @@ import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { LOCAL_DEV_USER_ID } from "../../src/services/local_auth.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
+import { isCorrectionObservation } from "../../src/services/correction_identity.js";
 
 vi.mock("../../src/embeddings.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../src/embeddings.js")>();
@@ -87,7 +88,7 @@ describe("correct() replaces a merge_array field (#2341)", () => {
         user_id: USER_ID,
         idempotency_key: `seed-2341-${label}-${randomUUID()}`,
         commit: true,
-        entities: [{ entity_type: TYPE, label, members }],
+        entities: [{ entity_type: TYPE, name: label, members }],
       })
     );
     const entityId = stored.entities?.[0]?.entity_id;
@@ -154,14 +155,14 @@ describe("correct() replaces a merge_array field (#2341)", () => {
       schema_version: "1.0",
       schema_definition: {
         fields: {
-          label: { type: "string", required: true },
+          name: { type: "string", required: true },
           members: { type: "array", required: false },
         },
-        canonical_name_fields: ["label"],
+        canonical_name_fields: ["name"],
       },
       reducer_config: {
         merge_policies: {
-          label: { strategy: "last_write" },
+          name: { strategy: "last_write" },
           members: { strategy: "merge_array" },
         },
       },
@@ -237,5 +238,60 @@ describe("correct() replaces a merge_array field (#2341)", () => {
     const entityId = await storeEntity(label, ["alpha"]);
     await storeEntity(label, ["beta"]);
     expect([...(await members(entityId))].sort()).toEqual(["alpha", "beta"]);
+  });
+
+  describe("a request cannot forge the correction shape", () => {
+    // POST /observations/create is the REST route closest to the correction
+    // shape: no source, no interpretation, specificity 1.0, and a priority the
+    // caller chooses. The only thing that keeps a priority-1000 write from
+    // looking like a correction is the non-null observation_source the write
+    // path stamps, so this runs the real route and reads the stored row.
+    async function restObservation(name: string, members: string[], priority: number) {
+      const res = await fetch(`${apiBase}/observations/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entity_type: TYPE,
+          entity_identifier: name,
+          fields: { members },
+          source_priority: priority,
+          user_id: USER_ID,
+        }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const { data: row } = await db
+        .from("observations")
+        .select("*")
+        .eq("id", body.observation_id)
+        .single();
+      return { entityId: body.entity_id as string, row };
+    }
+
+    it("a priority-1000 write sent through the REST route is not a correction", async () => {
+      const name = `forge-${randomUUID()}`;
+      const entityId = await storeEntity(name, wide);
+      await mcpCorrect(entityId, narrow);
+
+      const { entityId: sameEntity, row } = await restObservation(name, ["forged"], 1000);
+
+      expect(sameEntity).toBe(entityId);
+      expect(row.source_priority).toBe(1000);
+      expect(row.observation_source).toBeTruthy();
+      expect(isCorrectionObservation(row)).toBe(false);
+      // The genuine correction still decides the field; the forged write neither
+      // replaces it nor unions into it.
+      expect([...(await members(entityId))].sort()).toEqual([...narrow].sort());
+    });
+
+    it("ordinary priority-1000 writes keep the same-priority union", async () => {
+      const name = `plain-${randomUUID()}`;
+      const entityId = await storeEntity(name, ["seed"]);
+
+      await restObservation(name, ["a", "b"], 1000);
+      await restObservation(name, ["b", "c"], 1000);
+
+      expect([...(await members(entityId))].sort()).toEqual(["a", "b", "c"]);
+    });
   });
 });

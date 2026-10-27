@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **747**
-- Backend and repo Vitest files: **710**
+- Total automated test files: **748**
+- Backend and repo Vitest files: **711**
 - Frontend Vitest files: **11**
 - Playwright spec files: **26**
 
@@ -73,7 +73,7 @@ flowchart TD
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
 | Vitest integration tests | 224 |
-| Vitest CLI tests | 89 |
+| Vitest CLI tests | 90 |
 | Vitest contract tests | 26 |
 | Vitest security tests | 18 |
 | Vitest subscription tests | 7 |
@@ -698,7 +698,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (89):**
+**Files (90):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -709,6 +709,7 @@ flowchart TD
 - `tests/cli/cli_array_item_patch_commands.test.ts`
 - `tests/cli/cli_auth_commands.test.ts`
 - `tests/cli/cli_command_coverage_guard.test.ts`
+- `tests/cli/cli_correction_array_replace.test.ts`
 - `tests/cli/cli_correction_commands.test.ts`
 - `tests/cli/cli_cursor_offset_conflict.test.ts`
 - `tests/cli/cli_direct_invocation_parity.test.ts`

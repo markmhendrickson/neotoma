@@ -539,7 +539,7 @@ export function buildToolDefinitions(
     {
       name: "correct",
       description:
-        "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect. On a merge_array field a later correction replaces the whole array with exactly the value you pass (pass [] to clear it), so send the complete list you want, not just the change.",
+        "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect. On a merge_array field a later correction replaces the whole array with exactly the value you pass (pass [] to clear it), so send the complete list you want, not just the change (pass expected_version if another writer may change it concurrently).",
       inputSchema: {
         type: "object",
         properties: {

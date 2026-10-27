@@ -6,18 +6,28 @@
  * an array field instead of unioning with it.
  *
  * This module is the single definition. It is dependency-free so that the write
- * side (`createCorrection`) and the read side (the reducer) share the same
- * constants and cannot drift apart, and so modules that mock the schema registry
- * in tests still get the real predicate.
+ * side (`createCorrection`, which imports the two constants below) and the read
+ * side (the reducer) cannot drift apart, and so modules that mock the schema
+ * registry in tests still get the real predicate.
  *
  * Why a derived predicate and not a stored flag: it needs no schema change and
  * no backfill, and it recognises every correction already in the log, because
- * `createCorrection` has always written this exact shape. A request cannot
- * produce it: every public write path (`store`, `store_structured`,
- * `createObservation`, interpretation and schema-promotion writers) stamps a
- * non-null `observation_source` (default `unspecified`) and, except for internal
- * priority-0 writers, a `source_id`. Sending `source_priority: 1000` therefore
- * does not yield the correction shape.
+ * `createCorrection` has always written this exact shape.
+ *
+ * Why a request cannot produce it. The shape requires a NULL `observation_source`,
+ * and the one guard that keeps that true is the non-null `observation_source`
+ * every public writer stamps (`createObservation` falls back to
+ * `DEFAULT_OBSERVATION_SOURCE`; the store paths and the interpretation and
+ * schema-promotion writers stamp their own). Some public routes DO write a null
+ * `source_id` and a caller-chosen priority (`POST /observations/create` is the
+ * closest to the correction shape), so `source_id` is not what protects this:
+ * the `observation_source` is. An integration test sends `source_priority: 1000`
+ * through that route and asserts the stored row is not a correction, and it goes
+ * red if the fallback is removed. Deletion and restore observations are excluded
+ * because they carry no `specificity_score`, and write no schema field the
+ * reducer merges. A new internal writer that omits `observation_source` while
+ * using priority 1000 and specificity 1.0 would look like a correction; keep
+ * that combination reserved for `createCorrection`.
  */
 
 /** `source_priority` of every correction. */
