@@ -2581,10 +2581,10 @@
   }
   .plan-nav {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-start;
     gap: 0.45rem;
-    overflow-x: auto;
+    overflow-x: visible;
     width: 100%;
     max-width: 100%;
     scrollbar-width: thin;

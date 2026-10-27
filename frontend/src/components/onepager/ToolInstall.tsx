@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { staticAssetPath } from "@/site/spa_path";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { SiteSnippet } from "../SiteSnippet";
 import { sendFunnelInstallPromptCopy } from "@/utils/analytics";
@@ -69,7 +70,7 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
       </div>
       <p className="plan-tool-prerequisite">{spanish ? `${spanish.mode} Consulta la guía de ${host.host} para comprobar los requisitos y límites de esta vía.` : `${host.prerequisites} ${host.caveat}`}</p>
       <p className="plan-install-guide">
-        <a href={es ? "/es/install/system-changes/" : "/install/system-changes/"}>{es ? "Revisa los cambios en el sistema antes de copiar un paso" : "Review what changes on your system before copying a step"}</a>
+        <a href={staticAssetPath(es ? "/es/install/system-changes/" : "/install/system-changes/")}>{es ? "Revisa los cambios en el sistema antes de copiar un paso" : "Review what changes on your system before copying a step"}</a>
       </p>
       {showPermissionsPreflight && preflightHost ? (
         <details className="plan-tool-preflight">
@@ -98,7 +99,7 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
         <p className="plan-selected-verification">{spanish?.verification ?? connectionVerification(host)}</p>
       ) : null}
       <p className="plan-install-guide">
-        <a href={es ? `/es${host.guideRoute}` : host.guideRoute}>{es ? `Lee más sobre Neotoma con ${host.host}` : `Learn more about using Neotoma with ${host.host}`}</a>
+        <a href={staticAssetPath(es ? `/es${host.guideRoute}` : host.guideRoute)}>{es ? `Lee más sobre Neotoma con ${host.host}` : `Learn more about using Neotoma with ${host.host}`}</a>
       </p>
     </div>
   );

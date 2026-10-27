@@ -1,3 +1,4 @@
+import { staticAssetPath } from "@/site/spa_path";
 import { Clock } from "lucide-react";
 import { ToolInstall } from "@/components/onepager/ToolInstall";
 import { TopicVisual } from "@/components/onepager/TopicVisual";
@@ -25,7 +26,7 @@ export function InstallPageBody() {
       </p>
       <p className="text-[14px] leading-6 mb-5 rounded-lg border border-border bg-muted/30 p-4">
         <strong>{es ? "Antes de empezar:" : "Before you begin:"}</strong> {es ? "una instalación local del paquete añade una CLI; la inicialización crea configuración y bases de datos locales. Configurar el entorno puede cambiar archivos de permisos o habilitar una captura posterior, y la comprobación de actualizaciones puede contactar con el registro npm. Un cliente remoto puede utilizar un punto de acceso autenticado existente sin instalar Neotoma localmente. Revisa " : "a local package install adds a CLI; initialization creates configuration and local databases. Host setup can change permission files or enable later capture, and update checks can contact the npm registry. A remote client can instead use an existing authenticated endpoint without a local Neotoma install. Review the complete "}
-        <a href={es ? "/es/install/system-changes/" : "/install/system-changes/"} className="underline underline-offset-2">
+        <a href={staticAssetPath(es ? "/es/install/system-changes/" : "/install/system-changes/")} className="underline underline-offset-2">
           {es ? "todos los cambios en el sistema, los límites del reinicio y los efectos sobre los permisos" : "system changes, reset limits, and permission effects"}
         </a>{" "}
         {es ? "antes de copiar un paso." : "before copying a step."}

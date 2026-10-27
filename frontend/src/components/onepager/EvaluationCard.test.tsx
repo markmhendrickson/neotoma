@@ -7,6 +7,7 @@ import { MemoryRouter } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { LocaleProvider } from "@/i18n/LocaleContext";
 import { EvaluationCard, EVALUATION_PROMPT_EN, EVALUATION_PROMPT_ES } from "./EvaluationCard";
+import { InstallPageBody } from "../install/install_page_body";
 import { EvaluateAgentInstructionsPage } from "../subpages/EvaluateAgentInstructionsPage";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, "", "/"); });
@@ -20,6 +21,22 @@ describe("shared evaluation handoff", () => {
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(locale === "es" ? "Comprueba si Neotoma encaja" : "See whether Neotoma fits");
     fireEvent.click(screen.getByRole("button", { name: locale === "es" ? /copiar/i : /copy/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(locale === "es" ? EVALUATION_PROMPT_ES : EVALUATION_PROMPT_EN));
+  });
+
+  it.each(["en", "es"])("keeps %s installation reader handoffs inside the preview mount", (locale) => {
+    const localized = locale === "es" ? "/es" : "";
+    const path = `/pr-314${localized}/install`;
+    window.history.replaceState({}, "", path);
+    const tree = <MemoryRouter basename="/pr-314" initialEntries={[path]}><LocaleProvider><InstallPageBody /></LocaleProvider></MemoryRouter>;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    container.innerHTML = renderToString(tree);
+    const view = render(tree, { container, hydrate: true });
+    for (const link of view.container.querySelectorAll(".plan-install-guide a"))
+      expect(link.getAttribute("href")).toMatch(new RegExp(`^/pr-314${localized}/install/`));
+    expect(view.container.querySelector(`a[href="/pr-314${localized}/install/system-changes/"]`)).toBeInTheDocument();
+    expect(view.container.querySelector(`a[href="/pr-314${localized}/install/claude-code/"]`)).toBeInTheDocument();
+    expect(view.container.querySelector(`a[href^="${localized}/install/"]`)).toBeNull();
   });
 
   it.each(["en", "es"])("keeps %s agent-guide links inside a hydrated preview mount", (locale) => {
