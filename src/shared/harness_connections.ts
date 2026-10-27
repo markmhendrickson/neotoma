@@ -23,7 +23,7 @@ export interface Connection {
     checkedOn: string;
   };
 }
-const RELEASE_PIN = "8ca1f0a31cb2e40619292e9974177d06d62626ab";
+const RELEASE_PIN = "b6ae615964bdc4ac2eed4bbd7b0429c4107afc0d";
 const MAIN_PIN = "477978471c5933e26fa07a0d28633382ec4bedb2";
 export const CONNECTIONS: readonly Connection[] = [
   {

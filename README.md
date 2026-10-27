@@ -1,15 +1,11 @@
 # Neotoma
 
-Neotoma keeps sourced observations and current entity values for connected AI agents.
-
-Applies to v0.25.0 and main; features identified as v0.26.0 candidates are not yet released.
-
 **A record, not recall.**
 
 Neotoma is the system of record for AI agents. Without one, an agent works from whatever it happens to recall: part of the last session, a note its tool saved, or nothing. With one, it reads what was stored, from which source, and what is current now, so the agents you connect can defer to one answer.
 
 ```bash
-npm install -g neotoma@0.25.0
+npm install -g neotoma
 neotoma init
 neotoma setup --tool claude-code
 ```
@@ -65,9 +61,9 @@ graph LR
 
 ## What you can do with it
 
-On main (unreleased v0.26.0 candidate), Neotoma v0.26.0 exposes 67 MCP tools and 112 REST paths in its OpenAPI spec. The MCP server, REST API, and CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
+Neotoma v0.26.0 exposes 67 MCP tools and 112 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
 
-**Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. On main, for keys started on v0.26.0 (an unreleased candidate), a committed, keyed structured store that stops partway finishes its missing observations on a same-key retry; a store carrying an interpretation returns `ERR_STORE_WRITE_INCOMPLETE`, and keys left over from earlier versions behave differently over MCP and HTTP (see Known limitations).
+**Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. A committed, keyed structured store started on v0.26.0 that stops partway finishes its missing observations on a same-key retry; a store carrying an interpretation returns `ERR_STORE_WRITE_INCOMPLETE`, and keys left over from earlier versions behave differently over MCP and HTTP (see Known limitations). See Known limitations.
 
 **Resolve, retrieve, and search.** Look up entities by identifier (name, email, and similar), resolve identity from multiple signals with confidence scoring, list observations, retrieve a field's provenance chain, traverse the relationship graph N hops, and pull a full graph neighborhood. When an embedding key is configured, semantic vector search runs over entity snapshots (stored locally in sqlite-vec); keyword filtering works without it.
 
@@ -110,12 +106,12 @@ The Inspector is a single-page web app bundled into the build and served by the 
 ## Install
 
 ```bash
-npm install -g neotoma@0.25.0
+npm install -g neotoma
 neotoma init
 neotoma setup --tool claude-code
 ```
 
-On main, as a v0.26.0 candidate, `neotoma setup --tool claude-code` writes the MCP entries and more:
+In v0.26.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
 
 - Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
 - CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.
@@ -169,11 +165,11 @@ As agent use expands, reality fragments across chat histories, agent memories, f
 
 | Vision phase | What it means | Status |
 | --- | --- | --- |
-| **P0: Deterministic single-writer state** | Observations the write path does not edit, hash-derived entity IDs, deterministic reduction, field-level provenance, corrections as new observations, per-entity observation history | **Shipped**: in daily use; a later ordinary write can still replace a correction (see Known limitations) |
-| **P1: Multi-user state foundations** | Human and agent identities, attributed writes, tenant isolation, access controls, shared instances | **Partially shipped**: hosted multi-user mode with `user_id` tenancy, per-agent identity (AAuth, optional hardware attestation), capability grants, guest tokens, peer federation. Not yet: organizations/workspaces, membership lifecycle, invitations, offboarding |
-| **P2: Authority over state** | Domain ownership, correction rights, supersession, policy ownership, temporary grants, disclosure logs | **Mechanisms exist** (corrections, `SUPERSEDES` relationships, per-operation access controls); authority *semantics* (who may correct what, scoped by domain) are future work |
-| **P3: Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | **Planned**: interpretations are first-class today; dispute/official-position semantics are not |
-| **P4: Organizational intelligence substrate** | Non-developer governance UI, "why does the system believe this?" explanations, impact analysis, authority-graph views, enterprise administration | **Vision**: the Inspector's provenance and audit views are the seed |
+| **P0: Deterministic single-writer state** | Observations the write path does not edit, hash-derived entity IDs, deterministic reduction, field-level provenance, corrections as new observations, per-entity observation history | ✅ **Shipped**: in daily use; a later ordinary write can still replace a correction (see Known limitations) |
+| **P1: Multi-user state foundations** | Human and agent identities, attributed writes, tenant isolation, access controls, shared instances | 🟡 **Partially shipped**: hosted multi-user mode with `user_id` tenancy, per-agent identity (AAuth, optional hardware attestation), capability grants, guest tokens, peer federation. Not yet: organizations/workspaces, membership lifecycle, invitations, offboarding |
+| **P2: Authority over state** | Domain ownership, correction rights, supersession, policy ownership, temporary grants, disclosure logs | 🟡 **Mechanisms exist** (corrections, `SUPERSEDES` relationships, per-operation access controls); authority *semantics* (who may correct what, scoped by domain) are future work |
+| **P3: Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | 🔜 Planned: interpretations are first-class today; dispute/official-position semantics are not |
+| **P4: Organizational intelligence substrate** | Non-developer governance UI, "why does the system believe this?" explanations, impact analysis, authority-graph views, enterprise administration | 🔭 Vision: the Inspector's provenance and audit views are the seed |
 
 [Ateles](https://github.com/markmhendrickson/ateles) is the other half. Its repository describes it as an operating system for humans and AI agents to jointly initiate, execute, approve, and reconcile work under explicit authority. Neotoma holds the record that this work runs against. Neither is sufficient alone. A record without authority tells you what happened but not whether it was permitted; authority without a record tells you who may act but not against what state.
 

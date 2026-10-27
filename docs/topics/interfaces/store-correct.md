@@ -2,7 +2,7 @@
 
 Write a declared field to the intended entity, then read back both its current value and the observation that produced it.
 
-Applies to published v0.25.0 (`8ca1f0a`) and current source inspected at `4779784` on October 24th, 2026. Current source adds some conditional and multi-entity correction operations that are not in that release; use the contract of the running instance.
+Applies to published v0.26.0 (`b6ae615`) and release source inspected at `b6ae615` on October 27th, 2026. The release includes conditional and multi-entity correction operations; use the contract of the running instance.
 
 ## Before a structured write
 
@@ -18,4 +18,4 @@ For a correction, read the current value and its observation history before chan
 
 ## Keep versions distinct
 
-The latest source contains conditional correction options and a bounded atomic transaction operation; these are not a promise that every installed v0.25.0 instance has them. Follow the installed CLI help or that instance's OpenAPI description. [Schemas and field rules](https://neotoma.io/schemas/) explains why a field appears in the current view. [Inspect a change](https://neotoma.io/history/) explains how to audit a correction.
+Version 0.26.0 includes conditional correction options and a bounded atomic transaction operation. Earlier installations can lack them. Follow the installed CLI help or that instance's OpenAPI description. [Schemas and field rules](https://neotoma.io/schemas/) explains why a field appears in the current view. [Inspect a change](https://neotoma.io/history/) explains how to audit a correction.

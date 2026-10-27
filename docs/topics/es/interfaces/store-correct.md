@@ -2,7 +2,7 @@
 
 Escribe un campo declarado en la entidad prevista y después vuelve a leer su valor actual y la observación que lo produjo.
 
-Se aplica a la versión publicada v0.25.0 (`8ca1f0a`) y al código fuente actual examinado en `4779784` el 24 de octubre de 2026. El código fuente actual añade ciertas operaciones condicionales y de corrección de varias entidades que no están en esa versión; usa el contrato de la instancia en ejecución.
+Se aplica a la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. La versión incluye operaciones condicionales y de corrección de varias entidades; usa el contrato de la instancia en ejecución.
 
 ## Antes de una escritura estructurada
 
@@ -18,4 +18,4 @@ Para corregir, lee antes el valor actual y su historial de observaciones. La acc
 
 ## Mantén distintas las versiones
 
-El código fuente más reciente contiene opciones de corrección condicional y una operación de transacción atómica acotada; esto no promete que todas las instancias v0.25.0 instaladas las tengan. Consulta la ayuda de la CLI instalada o la descripción OpenAPI de esa instancia. [Esquemas y reglas de campo](https://neotoma.io/es/schemas/) explica por qué aparece un campo en la vista actual. [Examinar un cambio](https://neotoma.io/es/history/) explica cómo auditar una corrección.
+La versión 0.26.0 incluye opciones de corrección condicional y una operación de transacción atómica acotada. Las instalaciones anteriores pueden carecer de ellas. Consulta la ayuda de la CLI instalada o la descripción OpenAPI de esa instancia. [Esquemas y reglas de campo](https://neotoma.io/es/schemas/) explica por qué aparece un campo en la vista actual. [Examinar un cambio](https://neotoma.io/es/history/) explica cómo auditar una corrección.

@@ -2,7 +2,7 @@
 
 El adaptador de Claude Agent SDK registra en Neotoma los eventos de aplicación compatibles. Incorpora sus hooks a la aplicación consumidora y verifica un evento capturado.
 
-Esta vía está descrita por el código principal de Neotoma examinado (`4779784`); no se afirma que una versión publicada de Neotoma sea compatible con Claude Agent SDK. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+Esta vía está descrita por el código principal de Neotoma examinado (`b6ae615`); no se afirma que una versión publicada de Neotoma sea compatible con Claude Agent SDK. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
 
 **Vía:** hooks de adaptador dentro del proceso.
 

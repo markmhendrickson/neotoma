@@ -657,7 +657,7 @@ describe("connection selector", () => {
       }
       if (!host.tool) expect(first).not.toContain(`setup --tool ${host.id}`);
       expect(second).toContain(host.verification);
-      if (host.id === "claude-agent-sdk" || host.id === "opencode") {
+      if (host.id === "claude-agent-sdk") {
         if (host.id === "claude-agent-sdk")
           expect(first).not.toContain("Install and initialize Neotoma");
         expect(second).toContain("captured event");

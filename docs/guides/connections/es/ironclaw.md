@@ -2,7 +2,7 @@
 
 IronClaw tiene su propio flujo de registro MCP. Neotoma no ofrece una opción de configuración para IronClaw; examina la versión del entorno y registra allí el servidor.
 
-Esta vía está descrita por el código principal de Neotoma examinado (`4779784`); no se afirma que una versión publicada de Neotoma sea compatible con IronClaw. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+Esta vía está descrita por el código principal de Neotoma examinado (`b6ae615`); no se afirma que una versión publicada de Neotoma sea compatible con IronClaw. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
 
 **Vía:** registro MCP manual en el entorno.
 

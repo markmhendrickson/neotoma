@@ -2,7 +2,7 @@
 
 MCP, the CLI, and the REST API expose the same Neotoma record to different kinds of clients.
 
-Applies to source inspected at `4779784` on October 24th, 2026. Published v0.25.0 is pinned at `8ca1f0a`; confirm individual feature availability against that release.
+Applies to release source inspected at `b6ae615` on October 27th, 2026. Published v0.26.0 is pinned at `b6ae615`; confirm individual feature availability against that release.
 
 ## Choose by client
 

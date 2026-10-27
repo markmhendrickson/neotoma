@@ -2,7 +2,7 @@
 
 Una observación registra una afirmación sobre una entidad en un momento del historial; una afirmación posterior no edita la anterior.
 
-Se aplica al código fuente examinado en `4779784` el 24 de octubre de 2026. La versión publicada v0.25.0 está fijada en `8ca1f0a`; confirma la disponibilidad de cada función en esa versión.
+Se aplica al código fuente examinado en `b6ae615` el 24 de octubre de 2026. La versión publicada v0.26.0 está fijada en `b6ae615`; confirma la disponibilidad de cada función en esa versión.
 
 ## Qué contiene una observación
 

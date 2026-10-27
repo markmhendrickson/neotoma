@@ -2,7 +2,7 @@
 
 Start with the identity and type of the thing you need, then inspect the current value and its evidence.
 
-Applies to published v0.25.0 (`8ca1f0a`) and current source inspected at `4779784` on October 24th, 2026. Search behavior and optional modes depend on the instance configuration.
+Applies to published v0.26.0 (`b6ae615`) and release source inspected at `b6ae615` on October 27th, 2026. Search behavior and optional modes depend on the instance configuration.
 
 ## Narrow the question
 

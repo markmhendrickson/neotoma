@@ -2,7 +2,7 @@
 
 ChatGPT reaches a Neotoma MCP server over authenticated HTTPS. A local stdio command on your computer is not a ChatGPT connection.
 
-This path is described by checked Neotoma main (`4779784`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+This path is described by checked Neotoma main (`b6ae615`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** manual remote MCP connector, or Custom GPT Actions.
 

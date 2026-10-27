@@ -2,7 +2,7 @@
 
 An entity snapshot is the current field view computed from observations under an active schema and its merge policies.
 
-Applies to source inspected at `4779784` on October 24th, 2026. Published v0.25.0 is pinned at `8ca1f0a`; confirm individual feature availability against that release.
+Applies to release source inspected at `b6ae615` on October 27th, 2026. Published v0.26.0 is pinned at `b6ae615`; confirm individual feature availability against that release.
 
 ## A view with a derivation
 

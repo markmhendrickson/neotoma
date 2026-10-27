@@ -1,5 +1,5 @@
 ---
-applies_to: Código fuente examinado en 4779784; versión publicada v0.25.0 fijada en 8ca1f0a.
+applies_to: Código fuente examinado en b6ae615; versión publicada v0.26.0 fijada en b6ae615.
 ---
 
 # Cómo funciona el sistema de registro

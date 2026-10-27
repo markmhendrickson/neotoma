@@ -2,7 +2,7 @@
 
 Compara el campo actual de una entidad con las observaciones que lo produjeron antes de concluir qué cambió.
 
-Se aplica al modelo de observaciones e instantáneas de la versión publicada v0.25.0 (`8ca1f0a`) y al código fuente actual examinado en `4779784` el 24 de octubre de 2026. Para conocer el comportamiento exacto, usa las rutas de esquema e historial de la instancia en ejecución.
+Se aplica al modelo de observaciones e instantáneas de la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. Para conocer el comportamiento exacto, usa las rutas de esquema e historial de la instancia en ejecución.
 
 ## Empieza por el campo actual
 

@@ -2,7 +2,7 @@
 
 Smithery can publish an existing Neotoma HTTPS MCP endpoint for discovery. Registry publication and a working authenticated tool connection require separate checks.
 
-This path is described by checked Neotoma main (`4779784`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+This path is described by checked Neotoma main (`b6ae615`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** external HTTPS URL registry.
 

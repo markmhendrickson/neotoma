@@ -2,7 +2,7 @@
 
 Estos nombres separan la entrada registrada de la respuesta actual que lee un agente.
 
-Se aplica al modelo descrito en el [vocabulario canónico](../../../vocabulary/canonical_terms.md), examinado en `4779784` el 24 de octubre de 2026. La versión publicada v0.25.0 está fijada en `8ca1f0a`.
+Se aplica al modelo descrito en el [vocabulario canónico](../../../vocabulary/canonical_terms.md), examinado en `b6ae615` el 24 de octubre de 2026. La versión publicada v0.26.0 está fijada en `b6ae615`.
 
 ## La ruta de la entrada a la respuesta
 

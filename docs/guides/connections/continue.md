@@ -2,7 +2,7 @@
 
 Continue loads MCP tools through its current agent configuration. Add Neotoma to the format your installed Continue version uses, then inspect Agent mode.
 
-This path is described by checked Neotoma main (`4779784`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+This path is described by checked Neotoma main (`b6ae615`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** manual MCP configuration.
 

@@ -79,6 +79,9 @@ jobs:
         run: npm run validate:locales
 
       - name: Validate site export
+        env:
+          VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
         run: npm run validate:site-export
 
       - name: Configure Pages

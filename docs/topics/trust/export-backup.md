@@ -2,7 +2,7 @@
 
 Choose an export for portable current fields, or a verified backup when recovery needs the database and source files.
 
-Applies to published v0.25.0 (`8ca1f0a`) and current source inspected at `4779784` on October 24th, 2026. The [CLI reference](../../developer/cli_reference.md) describes the exact installed command flags.
+Applies to published v0.26.0 (`b6ae615`) and release source inspected at `b6ae615` on October 27th, 2026. The [CLI reference](../../developer/cli_reference.md) describes the exact installed command flags.
 
 ## Choose what must survive
 

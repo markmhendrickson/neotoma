@@ -2,7 +2,7 @@
 
 El registro de Neotoma resulta útil cuando sus límites están claros: una interfaz puede aceptar una solicitud sin demostrar que se obtuvo el estado o la vía de despliegue previstos.
 
-Se aplica al código fuente examinado en `4779784` el 24 de octubre de 2026. La versión publicada v0.25.0 está fijada en `8ca1f0a`; confirma la disponibilidad de cada función en esa versión. La compatibilidad del entorno, los servicios externos y el estado de publicación necesitan verificarse por separado en el entorno que utilizas.
+Se aplica al código fuente examinado en `b6ae615` el 24 de octubre de 2026. La versión publicada v0.26.0 está fijada en `b6ae615`; confirma la disponibilidad de cada función en esa versión. La compatibilidad del entorno, los servicios externos y el estado de publicación necesitan verificarse por separado en el entorno que utilizas.
 
 ## Una llamada satisfactoria no demuestra el efecto
 

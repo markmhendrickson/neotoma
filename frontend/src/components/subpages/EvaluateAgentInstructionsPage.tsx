@@ -381,13 +381,13 @@ export function EvaluateAgentInstructionsPage() {
           </li>
           <li>
             <strong>Tooling config after activation:</strong>{" "}
-            <a href="/install/chatgpt/" className="underline">ChatGPT</a>,{" "}
-            <a href="/install/claude-desktop/" className="underline">Claude Desktop</a>,{" "}
-            <a href="/install/cursor/" className="underline">Cursor</a>,{" "}
-            <a href="/install/claude-code/" className="underline">Claude Code</a>,{" "}
-            <a href="/install/codex/" className="underline">Codex</a>,{" "}
-            <a href="/install/opencode/" className="underline">OpenCode</a>,{" "}
-            <a href="/install/openclaw/" className="underline">OpenClaw</a>
+            <Link to="/install/chatgpt/" className="underline">ChatGPT</Link>,{" "}
+            <Link to="/install/claude-desktop/" className="underline">Claude Desktop</Link>,{" "}
+            <Link to="/install/cursor/" className="underline">Cursor</Link>,{" "}
+            <Link to="/install/claude-code/" className="underline">Claude Code</Link>,{" "}
+            <Link to="/install/codex/" className="underline">Codex</Link>,{" "}
+            <Link to="/install/opencode/" className="underline">OpenCode</Link>,{" "}
+            <Link to="/install/openclaw/" className="underline">OpenClaw</Link>
           </li>
           <li>
             <strong>Deeper product context only if needed:</strong>{" "}

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { EvaluationCard } from "./EvaluationCard";
 import { SiteFooter, SiteHeader, SiteSkipLink } from "./SiteChrome";
 import { SeoHead } from "@/components/SeoHead";
 import { neotomaGithubBlobUrl } from "@/site/neotoma_repo";
@@ -88,16 +88,7 @@ export function CompareApproaches() {
             </article>
           ))}
         </div>
-        <section className="plan-compare-close">
-          <h2>{es ? "Elige el contrato que tu trabajo necesita." : "Choose the contract your work needs."}</h2>
-          <p>
-            {es ? "Compara el comportamiento configurado que necesitas con los flujos y herramientas que ya utilizas." : "Evaluate the configured behavior you need against the workflows and tools you already use."}
-          </p>
-          <p className="plan-small">
-            {es ? "Esta comparación continúa la revisión editorial del 6 de octubre de 2026; no es una prueba comparativa de productos competidores." : "This comparison continues the October 6th, 2026 editorial review; it is not a benchmark of competing products."}
-          </p>
-          <Link to={es ? "/es/#evaluate" : "/#evaluate"}>{es ? "Evalúa el encaje" : "Evaluate the fit"}</Link>
-        </section>
+        <EvaluationCard id="compare-evaluate" className="plan-compare-close" title={es ? "Elige el contrato que tu trabajo necesita." : "Choose the contract your work needs."} body={es ? "Compara el comportamiento configurado que necesitas con los flujos y herramientas que ya utilizas." : "Evaluate the configured behavior you need against the workflows and tools you already use."} note={es ? "Esta comparación continúa la revisión editorial del 6 de octubre de 2026; no es una prueba comparativa de productos competidores." : "This comparison continues the October 6th, 2026 editorial review; it is not a benchmark of competing products."} />
       </main>
       <SiteFooter />
     </div>

@@ -2,7 +2,7 @@
 
 Empieza por la identidad y el tipo de lo que necesitas; después examina el valor actual y su evidencia.
 
-Se aplica a la versión publicada v0.25.0 (`8ca1f0a`) y al código fuente actual examinado en `4779784` el 24 de octubre de 2026. El comportamiento de búsqueda y los modos opcionales dependen de la configuración de la instancia.
+Se aplica a la versión publicada v0.26.0 (`b6ae615`) y al código fuente actual examinado en `b6ae615` el 24 de octubre de 2026. El comportamiento de búsqueda y los modos opcionales dependen de la configuración de la instancia.
 
 ## Acota la pregunta
 

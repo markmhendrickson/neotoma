@@ -928,7 +928,7 @@ describe("local docs preview source contract", () => {
         /name: Build (?:static site|site for preview)\n\s+env:\n\s+SITE_PREVIEW: "1"/
       );
       expect(yaml).toMatch(
-        /name: Validate site export\n\s+env:\n\s+SITE_PREVIEW: "1"\n\s+run: npm run validate:site-export/
+        /name: Validate site export\n\s+env:\n\s+SITE_PREVIEW: "1"[^]*?run: npm run validate:site-export/
       );
     }
     const checkout = mkdtempSync(join(tmpdir(), "docs-preview-shallow-"));

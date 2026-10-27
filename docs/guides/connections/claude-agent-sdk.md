@@ -2,7 +2,7 @@
 
 The Claude Agent SDK adapter records supported application events in Neotoma. Mount its hooks in the consumer app and verify a captured event.
 
-This path is described by checked Neotoma main (`4779784`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+This path is described by checked Neotoma main (`b6ae615`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** in-process adapter hooks.
 

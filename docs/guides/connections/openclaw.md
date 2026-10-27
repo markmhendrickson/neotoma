@@ -2,7 +2,7 @@
 
 OpenClaw connects through Neotoma’s native plugin first. Neotoma’s setup command can add instruction and MCP layers afterward, but does not install that plugin.
 
-The optional Neotoma setup target exists at v0.25.0 (`8ca1f0a`) and checked main (`4779784`); native plugin behavior is documented separately by OpenClaw. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+The optional Neotoma setup target exists at v0.26.0 (`b6ae615`) and checked main (`b6ae615`); native plugin behavior is documented separately by OpenClaw. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** native plugin first; CLI setup is a separate Neotoma layer.
 

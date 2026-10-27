@@ -2,7 +2,7 @@
 
 Choose the documented connection path for each supported agent host, plugin, SDK, or registry.
 
-Neotoma setup targets were checked against published v0.25.0 (`8ca1f0a`) and main (`4779784`). Host documentation was checked on October 24th, 2026; installed-host and Windows behavior remain unverified.
+Neotoma setup targets were checked against published v0.26.0 (`b6ae615`) and main (`b6ae615`). Host documentation was checked on October 24th, 2026; installed-host and Windows behavior remain unverified.
 
 Choose the environment that will use Neotoma first. Follow the [Neotoma install and connection steps](#start-with-neotoma), then use the matching host path below. A completed command does not prove the host loaded the server: inspect the host's MCP tools or plugin state and make a read-only call. Local stdio runs on the host machine; a remote client needs a reachable, authenticated HTTPS `/mcp` endpoint.
 

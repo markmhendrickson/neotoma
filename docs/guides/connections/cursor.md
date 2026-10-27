@@ -2,7 +2,7 @@
 
 Cursor can load Neotoma from its project or user MCP configuration. Choose the scope you intend to use and check Cursor’s tools after setup.
 
-The Neotoma setup target is present in both published v0.25.0 (`8ca1f0a`) and checked main (`4779784`). Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+The Neotoma setup target is present in both published v0.26.0 (`b6ae615`) and checked main (`b6ae615`). Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** CLI setup for local stdio MCP.
 

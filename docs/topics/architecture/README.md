@@ -1,5 +1,5 @@
 ---
-applies_to: Source inspected at 4779784; published v0.25.0 pinned at 8ca1f0a.
+applies_to: Source inspected at b6ae615; published v0.26.0 pinned at b6ae615.
 ---
 
 # How the system of record works

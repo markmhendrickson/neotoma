@@ -61,6 +61,8 @@ jobs:
       - name: Validate site export
         env:
           SITE_PREVIEW: "1"
+          VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID_DEV }}
         run: npm run validate:site-export
 
       - name: Set custom domain for dev Pages site

@@ -2,7 +2,7 @@
 
 Claude Code puede iniciar Neotoma como proceso MCP local mientras trabajas en un proyecto. Usa la opción de configuración compatible de Neotoma y después examina la conexión en Claude Code.
 
-La opción de configuración de Neotoma existe tanto en la versión publicada v0.25.0 (`8ca1f0a`) como en el código principal comprobado (`4779784`). La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+La opción de configuración de Neotoma existe tanto en la versión publicada v0.26.0 (`b6ae615`) como en el código principal comprobado (`b6ae615`). La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
 
 **Vía:** configuración por CLI de MCP stdio local.
 

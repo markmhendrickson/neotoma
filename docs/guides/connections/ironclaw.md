@@ -2,7 +2,7 @@
 
 IronClaw uses its own MCP registration flow. Neotoma has no IronClaw setup target, so inspect the host version and register the server there.
 
-This path is described by checked Neotoma main (`4779784`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
+This path is described by checked Neotoma main (`b6ae615`); no released host-compatibility claim is made. Vendor documentation was checked on October 24th, 2026; installed-host compatibility and Windows behavior were not smoke tested.
 
 **Path:** manual host-side MCP registration.
 

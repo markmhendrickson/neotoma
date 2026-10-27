@@ -2,7 +2,7 @@
 
 Continue carga herramientas MCP mediante su configuración actual de agente. Añade Neotoma en el formato utilizado por la versión de Continue que tienes instalada y después examina el modo Agent.
 
-Esta vía está descrita por el código principal de Neotoma examinado (`4779784`); no se afirma que una versión publicada de Neotoma sea compatible con Continue. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+Esta vía está descrita por el código principal de Neotoma examinado (`b6ae615`); no se afirma que una versión publicada de Neotoma sea compatible con Continue. La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
 
 **Vía:** configuración MCP manual.
 

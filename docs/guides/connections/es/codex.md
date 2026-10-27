@@ -2,7 +2,7 @@
 
 Codex CLI lee los servidores MCP de su configuración. La opción de configuración de Neotoma escribe una entrada stdio local; un servidor remoto necesita el flujo HTTP y de autenticación independiente de Codex.
 
-La opción de configuración de Neotoma existe tanto en la versión publicada v0.25.0 (`8ca1f0a`) como en el código principal comprobado (`4779784`). La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
+La opción de configuración de Neotoma existe tanto en la versión publicada v0.26.0 (`b6ae615`) como en el código principal comprobado (`b6ae615`). La documentación del proveedor se consultó el 24 de octubre de 2026; no se hicieron pruebas de humo con la versión instalada del entorno ni en Windows.
 
 **Vía:** configuración por CLI de MCP stdio local.
 
