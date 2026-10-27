@@ -130,8 +130,10 @@ jobs:
         run: |
           set -euo pipefail
           NAME="$(node -p "require('./package.json').name")"
-          # Registry reads are cached briefly; retry rather than racing it.
-          for i in 1 2 3 4 5 6 7 8 9 10; do
+          # npm processes provenance publishes asynchronously ("may take a few
+          # minutes to become available"); v0.26.0 took about 5 minutes to appear,
+          # past the previous 150s window. Poll for up to 10 minutes.
+          for i in $(seq 1 40); do
             LIVE="$(npm view "$NAME" version 2>/dev/null || true)"
             if [ "$LIVE" = "$TAG" ]; then
               echo "OK: registry shows $NAME@$LIVE"
