@@ -4,8 +4,7 @@ import { SiteFooter, SiteHeader, SiteSkipLink } from "@/components/onepager/Site
 import { MdxSitePage } from "./MdxSitePage";
 
 /**
- * /install on the one-pager site: the real install page, with the same editorial chrome and minimal
- * chrome (masthead with the accepted lockup, a way back, GitHub). The page body is unchanged.
+ * /install keeps the shared editorial rails without nesting the narrow documentation shell.
  */
 export function InstallPage() {
   const { subpage } = useLocale();
@@ -21,7 +20,8 @@ export function InstallPage() {
         tabIndex={-1}
         aria-label={subpage.install.title}
       >
-        <MdxSitePage canonicalPath="/install" detailTitle={subpage.install.title} />
+        <h1>{subpage.install.title}</h1>
+        <MdxSitePage canonicalPath="/install" shell="bare" />
       </main>
       <SiteFooter />
     </div>

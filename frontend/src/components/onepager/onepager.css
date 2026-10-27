@@ -1278,7 +1278,7 @@
   --ring: 22 66% 69%;
 }
 .plan-install {
-  padding: 0 clamp(1.35rem, 5vw, 5rem) 4rem;
+  padding: 0;
 }
 .plan-install-masthead {
   max-width: 1240px;
@@ -2390,7 +2390,8 @@
     grid-template-columns: 1fr 1fr;
   }
 }
-.plan-compare-page {
+.plan-compare-page,
+.plan-install-sheet {
   max-width: 1400px;
   margin: auto;
   padding: clamp(2rem, 5vw, 5rem) clamp(1.35rem, 5vw, 5rem);
@@ -2957,6 +2958,16 @@
 }
 .plan-tool-preflight #permissions-preflight {
   margin: 0 1rem 1rem;
+}
+/* Install section headings can use the available rail; permission controls stay compact. */
+.plan-install-sheet > div > h2 {
+  max-width: none;
+  margin: 1.5rem 0 0.75rem;
+}
+.plan-tool-preflight #permissions-preflight-heading {
+  margin: 0;
+  font: 600 0.9375rem/1.6 var(--sans);
+  letter-spacing: -0.01em;
 }
 .plan-selected-verification {
   margin: 0.5rem 0 1.25rem;
