@@ -2960,11 +2960,12 @@
   margin: 0 1rem 1rem;
 }
 /* Install section headings can use the available rail; permission controls stay compact. */
-.plan-install-sheet > div > h2 {
+.plan .plan-install-sheet > div > h2 {
   max-width: none;
   margin: 1.5rem 0 0.75rem;
 }
 .plan-tool-preflight #permissions-preflight-heading {
+  max-width: none;
   margin: 0;
   font: 600 0.9375rem/1.6 var(--sans);
   letter-spacing: -0.01em;

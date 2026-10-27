@@ -61,15 +61,22 @@ test.describe("install reader formatting", () => {
         await expect(title).toHaveCount(1);
         expect(await title.evaluate((heading) => getComputedStyle(heading).fontSize)).toBe(reference.font);
         expect((await title.boundingBox())!.x).toBeCloseTo(reference.x, 0);
+        const bodyWidth = await page.locator(".plan-install-sheet > div").evaluate((body) => body.getBoundingClientRect().width);
+        for (const heading of await page.locator(".plan-install-sheet > div > h2").all()) {
+          expect((await heading.boundingBox())!.width).toBeCloseTo(bodyWidth, 0);
+        }
         await page.locator(".plan-tool-preflight > summary").click();
         const permissions = page.locator("#permissions-preflight-heading");
         await expect(permissions).toBeVisible();
         const type = await permissions.evaluate((heading) => ({
           size: parseFloat(getComputedStyle(heading).fontSize),
+          width: heading.getBoundingClientRect().width,
+          availableWidth: heading.parentElement!.getBoundingClientRect().width,
           family: getComputedStyle(heading).fontFamily,
           descriptionFamily: getComputedStyle(heading.nextElementSibling!).fontFamily,
         }));
         expect(type.size).toBeLessThanOrEqual(20);
+        expect(type.width).toBeCloseTo(type.availableWidth, 0);
         expect(type.family).toBe(type.descriptionFamily);
         await page.getByRole("combobox").click();
         await page.getByRole("option", { name: "Cursor", exact: true }).click();
