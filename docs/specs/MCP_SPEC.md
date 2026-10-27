@@ -882,7 +882,7 @@ When the type is one of the common types (contact, person, company, task, invoic
     observation_id: string;
   }>;
   unknown_fields_count?: number;       // Number of fields stored in raw_fragments (structured storage only)
-  related_entities?: Array<{           // Entities connected to stored entities via relationships (structured storage only)
+  related_entities?: Array<{           // Entities connected to stored entities via relationships (structured storage only; a file-only store returns the entities extracted from the file, in full)
     id: string;                        // Compact by default: id, entity_type, canonical_name only.
     entity_type: string;               // With include_related_snapshots: true, each entry is instead the full
     canonical_name: string | null;     // entity row plus its current `snapshot` (the previous shape). Retrieve by id for a snapshot.
