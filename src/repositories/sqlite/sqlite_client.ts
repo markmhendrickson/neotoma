@@ -561,6 +561,26 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
         "CREATE INDEX IF NOT EXISTS idx_observations_entity_id ON observations(entity_id, source_priority, observed_at)"
       )
       .run();
+    // Source-keyed lookups (hosted-instance list freeze). `observations` and
+    // `raw_fragments` were reachable by source_id only through a full table scan,
+    // and raw_fragments by entity_id the same way, so entity listing, per-fragment
+    // store upserts and per-source reads each cost O(table) instead of O(rows
+    // touched). All of them are plain additive CREATE INDEX IF NOT EXISTS: safe on
+    // a populated database, no data rewrite, and a no-op on every open after the
+    // first. On an existing database the FIRST open after upgrade builds each index
+    // synchronously on the single connection (before the server accepts requests),
+    // one sequential pass over its table: about 0.1-0.2 s per index at 130k rows on
+    // a laptop (docs/performance/entity_list_source_lookups.md), blocking only that
+    // first start.
+    //  - observations(source_id, entity_type, entity_id): covers the listing
+    //    link lookup (entity_type + source_id -> entity_id) without touching the
+    //    row, and serves every `WHERE source_id = ?` read.
+    //  - the two raw_fragments indexes follow the entity_id column add below.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_id, entity_type, entity_id)"
+      )
+      .run();
     await addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     await addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     await addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
@@ -571,6 +591,22 @@ export async function ensureSchema(database: DbDatabase): Promise<void> {
     await addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     await addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
     await addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
+    // raw_fragments source/entity indexes (see the source-keyed lookups note
+    // above). Created after the entity_id column is guaranteed to exist, so a
+    // database that predates that column upgrades in one open.
+    //  - (entity_id, source_id): the listing fetch bounded to the page's own ids.
+    //  - (source_id, fragment_key, entity_id): the per-fragment store upsert probe
+    //    (source + key [+ entity]) and the legacy NULL-entity fragment lookup.
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_raw_fragments_entity_source ON raw_fragments(entity_id, source_id)"
+      )
+      .run();
+    await db
+      .prepare(
+        "CREATE INDEX IF NOT EXISTS idx_raw_fragments_source_key ON raw_fragments(source_id, fragment_key, entity_id)"
+      )
+      .run();
     await addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
     await addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
     await addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
