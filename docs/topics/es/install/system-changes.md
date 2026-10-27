@@ -2,7 +2,7 @@
 
 La instalación, la inicialización y la conexión de un entorno pueden afectar a máquinas y archivos de configuración distintos.
 
-Se aplica a la versión publicada v0.25.0 (`8ca1f0a`) y al código fuente examinado en `5d3c3ca` el 26 de octubre de 2026. Comprueba la versión y la vía de entorno que vas a usar. Un cliente remoto que se conecta a una instancia ya operada no necesita que la CLI de Neotoma esté instalada en la máquina cliente.
+Se aplica a la versión publicada v0.26.0 (`b6ae615`) y a la comprobación de afirmaciones del 27 de octubre de 2026. Comprueba la versión y la vía de entorno que vas a usar. Un cliente remoto que se conecta a una instancia ya operada no necesita que la CLI de Neotoma esté instalada en la máquina cliente.
 
 ## Elige el efecto que buscas
 
@@ -12,7 +12,7 @@ Antes de ejecutar un comando, elige la [guía de conexión](https://neotoma.io/e
 
 ## Archivos y permisos de una instalación local
 
-`npm install -g neotoma@0.25.0` añade el binario CLI. `neotoma init` crea un directorio de configuración, dos bases de datos SQLite locales (perfiles de desarrollo y producción) y un archivo de entorno. Por defecto, init añade también una entrada de Neotoma a la configuración MCP de Cursor. Ejecuta `neotoma init --interactive` para elegir cada paso.
+`npm install -g neotoma@0.26.0` añade el binario CLI. `neotoma init` crea un directorio de configuración, dos bases de datos SQLite locales (perfiles de desarrollo y producción) y un archivo de entorno. Por defecto, init añade también una entrada de Neotoma a la configuración MCP de Cursor. Ejecuta `neotoma init --interactive` para elegir cada paso.
 
 El inventario siguiente describe rutas locales y efectos del flujo documentado de instalación y configuración de Claude Code. Otros entornos tienen sus propias guías y pueden afectar a otros archivos. Estas rutas y el comportamiento de reset no prometen que un cliente remoto escriba en su propia máquina.
 

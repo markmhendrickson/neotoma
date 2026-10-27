@@ -37,6 +37,6 @@ describe("static reader passive DOM grammar", () => {
     expect(unsafeMarkup(`<style></style>${body}`)).toEqual([]);
     const trusted =
       '<script defer src="/assets/reader-analytics.js" data-neotoma-reader-analytics="1" data-website-id="11111111-1111-4111-8111-111111111111" data-umami-url="https://metrics.example/analytics" data-page-path="/mcp/"></script>';
-    expect(unsafeMarkup(`<style></style>${body}${trusted}`)).toEqual([]);
+    expect(unsafeMarkup(`<html><head><style></style>${trusted}</head><body>${body}</body></html>`)).toEqual([]);
   });
 });

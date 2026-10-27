@@ -11,7 +11,7 @@ const turns: readonly Turn[] = [
   },
   {
     kind: "agent",
-    text: "I'll store the invoice fields you supplied, then read the record back to check the amount and due date.",
+    text: "I'll save the supplied invoice as a source with its fields, then read the record back to check the amount and due date.",
   },
   {
     kind: "tool",
@@ -24,7 +24,7 @@ const turns: readonly Turn[] = [
   },
   {
     kind: "agent",
-    text: "I’ll look up that invoice email through your configured Gmail MCP, then save the new evidence in Neotoma and check its current value and history.",
+    text: "I’ll look up that invoice email through your configured Gmail MCP, then save the retrieved email as a source in Neotoma and check its current value and history.",
   },
   {
     kind: "tool",
@@ -47,10 +47,10 @@ const turns: readonly Turn[] = [
 
 const turnsEs: readonly Turn[] = [
   { kind: "user", text: "Aquí está INV-2041.pdf de Acme: 3.200 USD, fechado el 1 de octubre de 2026 y con vencimiento el 22 de octubre. Guarda un registro." },
-  { kind: "agent", text: "Guardaré los campos de la factura que has facilitado y luego leeré el registro para comprobar importe y vencimiento." },
+  { kind: "agent", text: "Guardaré la factura facilitada como fuente junto con sus campos y luego leeré el registro para comprobar importe y vencimiento." },
   { kind: "tool", label: "Neotoma MCP · guardar y volver a leer", result: "INV-2041 guardada y recuperada · 3.200 USD · vence el 22 de octubre de 2026" },
   { kind: "user", text: "Usa mi MCP de Gmail conectado para buscar y leer el último correo sobre INV-2041. Comprueba si cambió el vencimiento y actualiza el registro." },
-  { kind: "agent", text: "Buscaré el correo mediante tu MCP de Gmail configurado; después guardaré la nueva prueba en Neotoma y comprobaré el valor actual y su historial." },
+  { kind: "agent", text: "Buscaré el correo mediante tu MCP de Gmail configurado; después guardaré el correo recuperado como fuente en Neotoma y comprobaré el valor actual y su historial." },
   { kind: "tool", label: "Gmail MCP · buscar y leer correo", result: "Último correo de INV-2041 recuperado · vencimiento cambiado al 29 de octubre de 2026 · importe sin cambios" },
   { kind: "tool", label: "Neotoma MCP · guardar prueba y volver a leer", result: "La instantánea y la procedencia del campo seleccionan el 29 de octubre · el 22 de octubre original permanece en el historial de observaciones · el importe sigue en 3.200 USD" },
   { kind: "user", text: "¿Cuándo vence ahora y qué respalda esa fecha?" },

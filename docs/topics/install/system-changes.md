@@ -2,7 +2,7 @@
 
 Installation, initialization, and host connection can affect different machines and configuration files.
 
-Applies to published v0.25.0 (`8ca1f0a`) and source inspected at `5d3c3ca` on October 26th, 2026. Check the version and host path you actually use. A remote client connecting to an already operated instance does not need the Neotoma CLI installed on the client machine.
+Applies to published v0.26.0 (`b6ae615`) and the release claims check on October 27th, 2026. Check the version and host path you actually use. A remote client connecting to an already operated instance does not need the Neotoma CLI installed on the client machine.
 
 ## Choose the effect you intend
 
@@ -12,7 +12,7 @@ Before running a command, choose the [connection guide](https://neotoma.io/insta
 
 ## Files and permissions for a local installation
 
-`npm install -g neotoma@0.25.0` adds the CLI binary. `neotoma init` creates a config directory, two local SQLite databases (development and production profiles), and an environment file. By default, init also adds a Neotoma entry to Cursor's MCP configuration. Run `neotoma init --interactive` to choose each step.
+`npm install -g neotoma@0.26.0` adds the CLI binary. `neotoma init` creates a config directory, two local SQLite databases (development and production profiles), and an environment file. By default, init also adds a Neotoma entry to Cursor's MCP configuration. Run `neotoma init --interactive` to choose each step.
 
 The following inventory describes the local paths and effects exposed by the documented install and Claude Code setup flow. Other hosts use their own guide and can affect different host files. The paths and reset behavior are not a promise that a remote client writes to its own machine.
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { LocaleProvider } from "../../frontend/src/i18n/LocaleContext";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -65,14 +66,14 @@ const all = [...files, readFileSync(join(dir, "onepager_plate.tsx"), "utf-8")]
 
 describe("neotoma.io one-pager copy", () => {
   it("makes every product pill a direct topic link", () => {
-    const html = renderToStaticMarkup(createElement(ProductBenefitPills));
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(ProductBenefitPills))));
     for (const href of ["/license/", "/local-first/", "/mcp/", "/rest-api/", "/cli/"])
       expect(html).toContain(`href="${href}"`);
     expect(html).not.toContain("<button");
   });
   it("renders the oriented invoice journey in the static page", () => {
     const html = renderToStaticMarkup(
-      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+      createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     expect(html).toContain('href="#plan-content"');
     expect(html).toContain('aria-label="Site"');
@@ -167,7 +168,7 @@ describe("neotoma.io one-pager copy", () => {
       expect(copy, `deeper material is missing ${needle}`).toContain(needle);
     }
     const html = renderToStaticMarkup(
-      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+      createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     expect(html).not.toContain('href="/docs/"');
     expect(html).not.toContain('href="/readme/"');
@@ -207,7 +208,7 @@ describe("neotoma.io one-pager copy", () => {
       "https://github.com/markmhendrickson/neotoma"
     );
     const home = renderToStaticMarkup(
-      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+      createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     const footer = home.slice(home.indexOf('<footer class="plan-site-footer"'));
     for (const [label, href] of [
@@ -453,7 +454,7 @@ describe("October visual variant", () => {
     // Authored SVG counterparts are present in the server HTML without a raster fetch.
     expect(page).toContain('<PaperScene scene="hero"');
     const home = renderToStaticMarkup(
-      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+      createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(16);
     expect(home).not.toMatch(/<img[^>]+brand\/october/);
@@ -488,14 +489,14 @@ describe("review fixes (install path, accessibility, wording)", () => {
     expect(copy).not.toContain("neotoma setup --tool ${tool} --yes");
     expect(read("frontend/src/components/onepager/ToolInstall.tsx")).toContain("value={host.id}");
     expect(connectionCommands(CONNECTIONS_SETUP[0])).toBe(
-      "npm install -g neotoma@0.25.0\nneotoma init\nneotoma setup --tool claude-code"
+      "npm install -g neotoma@0.26.0\nneotoma init\nneotoma setup --tool claude-code"
     );
     const html = renderToStaticMarkup(
-      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+      createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     expect(html).toContain('class="plan-tool-install"');
     expect(html).toContain('role="combobox"');
-    expect(html).toContain("npm install -g neotoma@0.25.0");
+    expect(html).toContain("npm install -g neotoma@0.26.0");
     expect(html).toContain("Step 1 · Install Neotoma for Claude Code");
     expect(html).toContain("Step 2 · Verify Claude Code and get started");
     expect(html.indexOf("Step 1 · Install Neotoma for Claude Code")).toBeLessThan(
@@ -576,7 +577,7 @@ describe("logo size rule and union outline", () => {
     expect(chrome).toContain("<SolidLockup />");
 
     const home = renderToStaticMarkup(
-      createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+      createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     const masthead = home.slice(home.indexOf('class="plan-masthead"'), home.indexOf("</nav>"));
     expect(masthead).toContain('class="selected-site-logo neotoma plan-animated-lockup"');
@@ -724,11 +725,31 @@ describe("/install polish", () => {
       expect(explorer).not.toMatch(/corrections create ent_[a-f0-9]+/);
     });
 
+    it("keeps the v0.26.0 store, user-profile and correction-source caveats", () => {
+      const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
+      expect(explorer).toMatch(/curl\("store", \{[^}]*idempotency_key:/);
+      expect(explorer).toContain("each store and each correction needs its own idempotency key");
+      expect(explorer).toContain("keep separate records unless they share an instance and user");
+      expect(explorer).toContain("Correction commands preserve the earlier observation but store no source document");
+      const conversation = readSrc("frontend/src/components/onepager/McpConversation.tsx");
+      expect(conversation).toContain("save the supplied invoice as a source with its fields");
+      expect(conversation).toContain("save the retrieved email as a source");
+    });
+
+    it("keeps the released reset limits on the linked system-effects reader in both languages", () => {
+      const en = readSrc("docs/topics/install/system-changes.md");
+      const es = readSrc("docs/topics/es/install/system-changes.md");
+      expect(en).toContain("project .mcp.json entries can remain when reset runs outside a Neotoma repository");
+      expect(en).toContain("Can remain when reset runs outside a Neotoma repository; remove manually");
+      expect(es).toContain("las de .mcp.json del proyecto pueden quedar");
+      expect(es).toContain("Pueden quedar si reset se ejecuta fuera de un repositorio de Neotoma");
+    });
+
     it("marks the interface calls illustrative and keeps IDs variable", () => {
       expect(page2).not.toContain("published npm package (0.25.0) and on main");
       const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
       const html = renderToStaticMarkup(
-        createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+        createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
       );
       expect(html).toContain("Example conversation; no commands or requests run.");
       expect(html).toContain("Read the returned entity_id as INVOICE_ID.");
@@ -749,7 +770,7 @@ describe("/install polish", () => {
     it("lists no interactive command in the pasted install block", () => {
       expect(copy2).not.toContain("neotoma mcp config");
       const html = renderToStaticMarkup(
-        createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+        createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
       );
       expect(html).toContain(
         'href="/install/claude-code/">Learn more about using Neotoma with Claude Code</a>'
@@ -801,10 +822,10 @@ describe("/install polish", () => {
       }
     });
 
-    it("says OpenCode uses a plugin or MCP", () => {
+    it("offers MCP instead of the unpublished OpenCode plugin", () => {
       expect(CONNECTIONS.find((connection) => connection.id === "opencode")).toMatchObject({
         host: "OpenCode",
-        kind: "plugin",
+        kind: "manual",
       });
     });
 
@@ -1223,14 +1244,14 @@ describe("/install code blocks (round 3)", () => {
     expect(read("frontend/src/components/onepager/ToolInstall.tsx")).toContain("<PermissionsPreflight harness={preflightHost} />");
     const pf = read("frontend/src/components/PermissionsPreflight.tsx");
     expect(pf).toContain("<SiteSnippet");
-    expect(pf).toContain('label="Permissions pre-flight snippet"');
+    expect(pf).toContain('"Permissions pre-flight snippet"');
     expect(css).toMatch(/white-space: pre-wrap !important/);
     expect(css).toMatch(/overflow-wrap: anywhere !important/);
   });
 
   it("keeps the wrapped install source labelled, focusable and selectable", () => {
     expect(body).toContain("<ToolInstall showPermissionsPreflight includeVerificationNote />");
-    expect(read("frontend/src/components/onepager/ToolInstall.tsx")).toContain('label={`Connection instructions for ${host.host}`}');
+    expect(read("frontend/src/components/onepager/ToolInstall.tsx")).toContain('"Connection instructions for"');
     const block = read("frontend/src/components/InstallCodeBlock.tsx");
     const shared = read("frontend/src/components/SiteSnippet.tsx");
     const sharedCss = read("frontend/src/components/site_snippet.css");

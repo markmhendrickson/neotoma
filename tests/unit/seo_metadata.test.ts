@@ -127,7 +127,7 @@ describe("seo_metadata", () => {
     const app = resolveSeoMetadata("/").jsonLd.find(
       (entry) => entry["@type"] === "SoftwareApplication"
     );
-    expect(app?.softwareVersion).toBe("0.25.0");
+    expect(app?.softwareVersion).toBe("0.26.0");
   });
 
   it("builds sitemap with expected canonical URLs", () => {
@@ -162,15 +162,16 @@ describe("seo_metadata", () => {
   });
 
   it("emits hreflang alternates only for locales that serve a real page", () => {
-    // Every locale route except the localized legal ones is a noindex redirect stub.
-    for (const path of ["/", "/install", "/evaluate", "/docs"]) {
+    // Spanish retained pages are real localized routes; other content locales remain retired.
+    for (const path of ["/", "/install", "/evaluate"]) {
       const locales = resolveSeoMetadata(path).alternates.map((entry) => entry.hrefLang);
-      expect(locales, path).not.toContain("es");
+      expect(locales, path).toContain("es");
       expect(locales, path).not.toContain("de");
     }
     expect(resolveSeoMetadata("/").alternates.map((entry) => entry.hrefLang)).toEqual([
       "x-default",
       "en",
+      "es",
     ]);
     expect(resolveSeoMetadata("/terms").alternates.map((entry) => entry.hrefLang)).toContain("de");
   });
@@ -219,10 +220,10 @@ describe("seo_metadata", () => {
 
     it("default buildSitemapXml lists live and held routes and no retired route", () => {
       const sitemap = buildSitemapXml();
-      for (const route of ["/", "/install", "/evaluate", "/privacy", "/terms", "/meet"]) {
+      for (const route of ["/", "/es", "/install", "/evaluate", "/privacy", "/terms", "/meet"]) {
         expect(sitemap, route).toContain(`<loc>${buildCanonicalUrl(route)}</loc>`);
       }
-      for (const route of ["/docs", "/architecture", "/faq", "/es", "/de/install"]) {
+      for (const route of ["/docs", "/architecture", "/faq", "/de/install"]) {
         expect(sitemap, route).not.toContain(`<loc>${buildCanonicalUrl(route)}</loc>`);
       }
       expect(INDEXABLE_ROUTES.length).toBeGreaterThan(10);

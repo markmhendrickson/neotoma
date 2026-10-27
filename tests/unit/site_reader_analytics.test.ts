@@ -21,7 +21,7 @@ describe("optional static reader analytics", () => {
     const tag = readerAnalyticsTag(reader);
     expect(tag).toContain('src="/assets/reader-analytics.js"');
     expect(tag).toContain('data-page-path="/mcp/"');
-    expect(unsafeMarkup(`<style></style>${tag}`)).toEqual([]);
+    expect(unsafeMarkup(`<html><head><style></style>${tag}</head><body></body></html>`)).toEqual([]);
     expect(unsafeMarkup(`<style></style>${tag}<script>alert(1)</script>`)).toContain(
       "contains a <script> element"
     );
@@ -47,7 +47,7 @@ describe("optional static reader analytics", () => {
     vi.stubEnv("VITE_UMAMI_WEBSITE_ID", "11111111-1111-4111-8111-111111111111");
     const tag = readerAnalyticsTag(reader);
     expect(tag).toContain('data-umami-url="https://metrics.example/analytics"');
-    expect(unsafeMarkup(`<style></style>${tag}`)).toEqual([]);
+    expect(unsafeMarkup(`<html><head><style></style>${tag}</head><body></body></html>`)).toEqual([]);
   });
 
   it("shares a fail-closed analytics base URL rule across SPA and reader", () => {

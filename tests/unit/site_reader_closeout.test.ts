@@ -11,6 +11,7 @@ const root = join(__dirname, "..", "..");
 // A route disappears or points at another source only after this acceptance map is reviewed.
 const INTENDED_READERS: Record<string, string> = {
   "/readme": "docs/topics/start.md",
+  "/install/system-changes": "docs/topics/install/system-changes.md",
   "/cli": "docs/topics/interfaces/cli.md",
   "/mcp": "docs/topics/interfaces/mcp.md",
   "/rest-api": "docs/topics/interfaces/rest-api.md",
@@ -49,7 +50,7 @@ const INTENDED_READERS: Record<string, string> = {
 
 describe("site reader closeout", () => {
   it("publishes the complete intended route and canonical source set", () => {
-    expect(Object.keys(INTENDED_READERS)).toHaveLength(35);
+    expect(Object.keys(INTENDED_READERS)).toHaveLength(36);
     expect(manifestProblems(DOCS_VIEWER_MANIFEST)).toEqual([]);
     const included = DOCS_VIEWER_MANIFEST.filter((entry) => entry.status === "included");
     expect(Object.fromEntries(included.map((entry) => [`/${entry.slug}`, entry.source]))).toEqual(
@@ -70,7 +71,7 @@ describe("site reader closeout", () => {
       const source = readFileSync(join(root, entry.source), "utf8");
       const words = source.trim().split(/\s+/).filter(Boolean).length;
       expect(words, `${entry.slug}: ${words} whitespace-delimited words`).toBeLessThanOrEqual(
-        entry.id === "architecture" ? 1800 : 900
+        entry.id === "architecture" ? 1800 : entry.id === "install-system-changes" ? 1300 : 900
       );
     }
   });
@@ -87,9 +88,11 @@ describe("architecture overview and distinct topic identities", () => {
     expect(source).toContain("# How the system of record works");
     expect(source.indexOf("`last_write`", example)).toBeGreaterThan(example);
   });
-  it("gives all35 readers and the virtual Install topic distinct compositions", () => {
+  it("gives the 35 illustrated readers and virtual Install topic distinct compositions", () => {
     const included = DOCS_VIEWER_MANIFEST.filter((entry) => entry.status === "included");
-    const ids = [...included.map((entry) => entry.visualId), "install"];
+    const illustrated = included.filter((entry) => entry.visualId);
+    expect(included.filter((entry) => !entry.visualId).map((entry) => entry.id)).toEqual(["install-system-changes"]);
+    const ids = [...illustrated.map((entry) => entry.visualId), "install"];
     expect(ids).toHaveLength(36);
     expect(ids.every(Boolean)).toBe(true);
     const scenes = ids.map((id) => TOPIC_VISUALS[id as keyof typeof TOPIC_VISUALS].scene);

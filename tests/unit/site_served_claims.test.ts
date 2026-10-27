@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { LocaleProvider } from "../../frontend/src/i18n/LocaleContext";
 import { describe, expect, it } from "vitest";
 import { NeotomaOnePager } from "../../frontend/src/components/onepager/NeotomaOnePager";
 import { isRetiredRoute, resolveDestination } from "../../frontend/src/site/route_retirement";
@@ -33,7 +34,7 @@ const read = (...p: string[]) => readFileSync(join(root, ...p), "utf-8");
 
 describe("one-pager sheets 02 to 04", () => {
   const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
   );
   const text = pageText(markup).replace(/\s+/g, " ");
   const examples = read("frontend", "src", "components", "onepager", "InterfaceExplorer.tsx");
@@ -257,7 +258,7 @@ describe("markdown mirrors of retired pages", () => {
 
 describe("advanced capability boundaries", () => {
   const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, null, createElement(NeotomaOnePager))
+    createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
   );
   const text = pageText(markup).replace(/\s+/g, " ");
   const advanced = text.slice(
