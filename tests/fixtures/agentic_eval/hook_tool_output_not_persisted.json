@@ -1,10 +1,9 @@
 {
   "meta": {
     "id": "hook_tool_output_not_persisted",
-    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, an ordinary shell command whose output carries a credential-shaped assignment, a file write, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks and claude-code-plugin hook scripts (claude-code-plugin reports tool failures inline through its postToolUse script, so the failed memory write is replayed as an error-bearing postToolUse there). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
+    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, an ordinary shell command whose output carries a credential-shaped assignment, a file write, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks hook scripts (the other harness packages are covered by the shared-vector unit tests in tests/unit/hook_output_capture.test.ts, because the Python hook scripts need an HTTP client dependency that the CI eval lane does not install). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
     "harnesses": [
-      "cursor-hooks",
-      "claude-code-plugin"
+      "cursor-hooks"
     ],
     "models": [
       "composer-2",
@@ -93,24 +92,6 @@
           "file_path": "/Users/agent/workspace/billing-service/.env"
         },
         "tool_error": "ERR_FILE_REJECTED while reading /Users/agent/workspace/billing-service/.env: PAYMENTS_API_KEY=fixture-placeholder-4"
-      },
-      "harnesses": [
-        "cursor-hooks"
-      ]
-    },
-    {
-      "hook": "postToolUse",
-      "harnesses": [
-        "claude-code-plugin"
-      ],
-      "payload": {
-        "tool_name": "mcp_neotoma_store",
-        "tool_input": {
-          "file_path": "/Users/agent/workspace/billing-service/.env"
-        },
-        "tool_output": {
-          "error": "ERR_FILE_REJECTED while reading /Users/agent/workspace/billing-service/.env: PAYMENTS_API_KEY=fixture-placeholder-4"
-        }
       }
     },
     {
