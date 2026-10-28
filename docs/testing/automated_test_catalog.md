@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **776**
-- Backend and repo Vitest files: **725**
+- Total automated test files: **781**
+- Backend and repo Vitest files: **730**
 - Frontend Vitest files: **24**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 220 |
+| Vitest unit tests | 221 |
 | Vitest service tests | 59 |
 | Source-adjacent tests | 69 |
-| Vitest integration tests | 225 |
+| Vitest integration tests | 228 |
 | Vitest CLI tests | 90 |
 | Vitest contract tests | 27 |
 | Vitest security tests | 18 |
@@ -84,7 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 24 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
-| Tests Performance | 2 |
+| Tests Performance | 3 |
 | Tests Scripts | 4 |
 
 ## Primary validation commands
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (220):**
+**Files (221):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -139,6 +139,7 @@ flowchart TD
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/authenticated_principal_provenance.test.ts`
 - `tests/unit/backfill_canonical_names_field_guard.test.ts`
+- `tests/unit/bearer_slots.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
 - `tests/unit/bundled_docs_nav.test.ts`
 - `tests/unit/bundles_activation.test.ts`
@@ -479,7 +480,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (225):**
+**Files (228):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -502,6 +503,7 @@ flowchart TD
 - `tests/integration/attachment_resolution_equivalence.test.ts`
 - `tests/integration/attribution_parity.test.ts`
 - `tests/integration/auto_link_retraction_organization_change.test.ts`
+- `tests/integration/bearer_handover_slot.test.ts`
 - `tests/integration/cli_init_bootstrap.test.ts`
 - `tests/integration/cli_to_mcp_entities.test.ts`
 - `tests/integration/cli_to_mcp_relationships.test.ts`
@@ -534,6 +536,8 @@ flowchart TD
 - `tests/integration/entity_lifecycle_ingress.test.ts`
 - `tests/integration/entity_lifecycle_inventory.test.ts`
 - `tests/integration/entity_lifecycle_legacy_native.test.ts`
+- `tests/integration/entity_lifecycle_visibility_plans.test.ts`
+- `tests/integration/entity_list_source_lookups.test.ts`
 - `tests/integration/entity_queries_contains_word.test.ts`
 - `tests/integration/entity_queries_cursor.test.ts`
 - `tests/integration/entity_queries_status_column.test.ts`
@@ -985,7 +989,8 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/performance`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (2):**
+**Files (3):**
+- `tests/performance/entity_list_page.bench.test.ts`
 - `tests/performance/entity_query_count.bench.test.ts`
 - `tests/performance/graph_traversal.bench.test.ts`
 
