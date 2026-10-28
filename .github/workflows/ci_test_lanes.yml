@@ -246,6 +246,14 @@ jobs:
       - name: Run authenticated lifecycle/cutover effects (#2588)
         run: npx vitest run --no-file-parallelism tests/services/entity_lifecycle_selector.test.ts tests/services/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_cutover.test.ts tests/integration/entity_lifecycle_executor_boundary.test.ts tests/integration/entity_lifecycle_executor_program.test.ts tests/integration/entity_lifecycle_inventory.test.ts tests/integration/entity_lifecycle_authority.test.ts tests/integration/entity_lifecycle_ingress.test.ts tests/integration/entity_lifecycle_legacy_native.test.ts
 
+      # Entity-list freeze regressions (hosted instance). These live under
+      # tests/integration, which test:unit excludes, so they gate nothing unless a
+      # lane names them. `if: !cancelled()` keeps them running when an earlier,
+      # unrelated step of this lane is red, so they can never be skipped silently.
+      - name: Run entity-list certification and cutover-plan regressions
+        if: ${{ !cancelled() }}
+        run: npx vitest run --no-file-parallelism tests/integration/entity_population_certificate_cost.test.ts tests/integration/entity_population_certificate_gate.test.ts tests/integration/entity_lifecycle_visibility_plans.test.ts
+
       # #2144 keyed store completion. The unit lane runs tests/unit, not
       # tests/integration, so without this step the effect tests for resuming an
       # interrupted keyed store (HTTP route, store core and MCP store) and for
