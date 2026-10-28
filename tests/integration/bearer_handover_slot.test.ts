@@ -198,6 +198,9 @@ describe("bearer handover slot (REST + MCP gates)", () => {
     expect(primaryRes.status).toBe(200);
     const previousRes = await mcpInitialize(harness.baseUrl, PREVIOUS);
     expect(previousRes.status).toBe(200);
+    // The MCP gate emits its own audit event for the retiring bearer.
+    expect(capturedText()).toContain('"surface":"mcp"');
+    expect(capturedText()).toContain("auth_bearer_previous_slot_used");
 
     const unknownRes = await mcpInitialize(harness.baseUrl, UNKNOWN);
     expect(unknownRes.status).toBe(401);

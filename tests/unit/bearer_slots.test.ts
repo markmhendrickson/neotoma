@@ -90,6 +90,19 @@ describe("matchConfiguredBearer", () => {
     expect(matchConfiguredBearer(PRIMARY, e, expiry + 1)).toBe("primary");
   });
 
+  it("logs once, value-free, when a window closes while the process runs", () => {
+    const e = env();
+    const expiry = Date.parse("2026-10-29T12:00:00Z");
+    expect(matchConfiguredBearer(PREVIOUS, e, expiry - 1)).toBe("previous");
+    logged = [];
+    matchConfiguredBearer(PREVIOUS, e, expiry + 1);
+    matchConfiguredBearer(PREVIOUS, e, expiry + 2);
+    matchConfiguredBearer(UNKNOWN, e, expiry + 3);
+    const lines = logged.filter((l) => l.includes("auth_bearer_handover_expired"));
+    expect(lines).toHaveLength(1);
+    assertNoValues(logged.join("\n"));
+  });
+
   it("rejects the previous bearer after an explicit retire", () => {
     const e = env({
       [BEARER_PREVIOUS_ENV]: undefined,
@@ -250,6 +263,26 @@ describe("status and audit logging", () => {
     expect(events[2]).toMatchObject({ user_agent: "daemon-a/1.0", uses_since_last_event: 3 });
     assertNoValues(logged.join("\n"));
     expect(console.warn).toHaveBeenCalled();
+  });
+
+  it("strips control characters, caps length, and takes the first of repeated headers", () => {
+    matchConfiguredBearer(PREVIOUS, env(), NOW);
+    logged = [];
+    recordPreviousBearerUse(
+      {
+        surface: "mcp",
+        method: "POST",
+        path: "/mcp",
+        userAgent: [`agent\u0000\n\u001b${"x".repeat(300)}`, "second"],
+        clientName: "\u0007\u007f",
+      },
+      NOW
+    );
+    const line = logged.find((l) => l.includes("auth_bearer_previous_slot_used"))!;
+    const event = JSON.parse(line.slice(line.indexOf("{")));
+    expect(event.user_agent).toBe(`agent${"x".repeat(115)}`);
+    expect(event.client_name).toBeNull();
+    expect(event.surface).toBe("mcp");
   });
 });
 

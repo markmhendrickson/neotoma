@@ -319,7 +319,7 @@ Three separate keys are derived from the root secret using HKDF (RFC 5869):
 
 - **Same principal, same grants.** A request with the retiring bearer takes exactly the branch a request with the current bearer takes, on both the REST middleware and the `/mcp` gate. The slot adds no scope.
 - **Bounded.** The retiring bearer is rejected from the expiry instant on, without a restart. The window bounds the credential being retired, so a rotation abandoned half-way ends with the old value dead rather than alive.
-- **Explicit retire.** Unsetting `NEOTOMA_BEARER_TOKEN_PREVIOUS` (and its expiry) retires the old value immediately.
+- **Explicit retire.** Unsetting `NEOTOMA_BEARER_TOKEN_PREVIOUS` and `NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT` together retires the old value immediately. Unsetting only the value also rejects it, but the leftover expiry is reported as `auth_bearer_handover_disabled` (`value_missing`) at ERROR.
 - **Constant time.** Both configured values are compared through SHA-256 digests and `timingSafeEqual`, and both comparisons always run, so neither the value, its length, nor which slot matched leaks through timing.
 - **Not accepted at OAuth key-auth preflight.** `/mcp/oauth/key-auth` accepts the current bearer only: that preflight mints a durable OAuth connection, and a retiring credential must not mint one that outlives its window.
 - **Only the static bearer.** The key-derived MCP token (`NEOTOMA_KEY_FILE_PATH` / `NEOTOMA_MNEMONIC`) has no slot; it rotates with the key. With `NEOTOMA_ENCRYPTION_ENABLED=true` the static bearer, and therefore the slot, is not consulted at all.
@@ -331,21 +331,21 @@ Three separate keys are derived from the root secret using HKDF (RFC 5869):
 | Event | Level | When |
 | --- | --- | --- |
 | `auth_bearer_handover_active` | WARN | Boot, while a window is open: `expires_at`, `seconds_remaining` |
-| `auth_bearer_handover_expired` | WARN | Boot, after the window closed with the variables still set |
+| `auth_bearer_handover_expired` | WARN | Boot, after the window closed with the variables still set; or once, at the first rejection of the retiring bearer after the window closes while the server runs |
 | `auth_bearer_handover_disabled` | ERROR | Boot, when the slot is misconfigured (reasons above) |
-| `auth_bearer_previous_slot_used` | WARN | A request authenticated with the retiring bearer: `surface` (`rest`/`mcp`), `method`, `path`, `user_agent`, `client_name` (`X-Client-Name`), `expires_at`, `uses_since_last_event`. At most one line per client per minute; uses in between are counted into the next line. |
+| `auth_bearer_previous_slot_used` | WARN | A request authenticated with the retiring bearer (REST or MCP): `surface` (`rest`/`mcp`), `method`, `path`, `user_agent`, `client_name` (`X-Client-Name`), `expires_at`, `uses_since_last_event`. At most one line per client per minute; uses in between are counted into the next line. |
 
 The REST request log line also reads `auth_method=bearer_env_previous` instead of `auth_method=bearer_env` for those requests.
 
 **Rotation procedure.**
 
 1. **Stage.** Generate the new value. In one secrets update (one restart), set `NEOTOMA_BEARER_TOKEN` to the new value, `NEOTOMA_BEARER_TOKEN_PREVIOUS` to the old value, and `NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT` to the end of the window. On Fly, pipe the three `NAME=value` lines into `fly secrets import -a <app>` from a program that holds the values, so no value reaches shell history or a terminal. Confirm the boot log shows `auth_bearer_handover_active`, not `auth_bearer_handover_disabled`.
-2. **Verify both.** `GET /session` with each value returns 200 and the same `user_id`.
-3. **Switch consumers** to the new value one at a time.
-4. **Watch for stragglers.** `auth_bearer_previous_slot_used` names each client still on the old value. When none has appeared for longer than your slowest consumer's polling interval, every consumer has switched.
+2. **Verify both.** After the deploy has finished on every machine, `GET /session` with each value returns 200 and the same `user_id`. (This check itself emits one `auth_bearer_previous_slot_used` line.)
+3. **Switch consumers** to the new value one at a time. Have each consumer send a distinct `X-Client-Name` (or `User-Agent`) first: the audit event identifies clients only by those two self-reported headers, so consumers that send the same ones share one line.
+4. **Watch for stragglers.** Each `auth_bearer_previous_slot_used` line is a client still on the old value, labelled by its `User-Agent` and `X-Client-Name`. The labels are advisory (self-reported); the line's existence is not. When no line has appeared for longer than your slowest consumer's polling interval, every consumer has switched.
 5. **Retire.** Unset `NEOTOMA_BEARER_TOKEN_PREVIOUS` and `NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT` (or let the window expire, then unset them). Verify `GET /session` with the old value returns 401 and with the new value returns 200.
 
-**Rollback** during the window: set `NEOTOMA_BEARER_TOKEN` back to the old value and unset the slot.
+**Rollback** during the window, without cutting consumers that already switched: swap the roles — `NEOTOMA_BEARER_TOKEN` = old value, `NEOTOMA_BEARER_TOKEN_PREVIOUS` = new value, with a fresh expiry — so both keep working while consumers move back. Setting the old value as primary and unsetting the slot is a hard cut for every consumer already on the new value; do that only when the new value itself must die at once.
 
 **What retiring does not undo.** Anything a retiring bearer created while it was valid — agent grants, guest tokens, OAuth connections minted before the rotation began — is not revoked by retiring it. When the reason for rotating is a suspected leak, review those after the retire.
 

@@ -92,6 +92,10 @@ const ISO_INSTANT_WITH_OFFSET =
 // eslint-disable-next-line no-control-regex
 const MALFORMED_VALUE = /[\s\u0000-\u001f\u007f]/;
 
+// ASCII control characters, stripped from client labels before logging.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+
 const REASON_DETAIL: Record<HandoverDisabledReason, string> = {
   primary_unset: `${BEARER_PREVIOUS_ENV} is set but ${BEARER_PRIMARY_ENV} is not; a handover slot needs a primary`,
   expiry_missing: `${BEARER_PREVIOUS_EXPIRES_AT_ENV} is not set; the handover window must be bounded`,
@@ -154,6 +158,8 @@ function digestEquals(a: string, b: string): boolean {
 // Memoised on the raw configuration so the status line is logged once per
 // distinct configuration rather than once per request.
 let memo: { key: string; parsed: ParsedHandover } | null = null;
+// One-shot flag for the mid-run expiry line; reset when the configuration changes.
+let expiredRejectionLogged = false;
 
 function configKey(env: Env): string {
   // Kept in memory only, exactly like process.env itself; never logged.
@@ -169,6 +175,9 @@ function loadHandover(env: Env, nowMs: number): ParsedHandover {
   if (memo && memo.key === key) return memo.parsed;
   const parsed = parseBearerHandover(env, nowMs);
   memo = { key, parsed };
+  // A window that is already closed at load time is reported by the status
+  // line below; do not repeat it at the first rejection.
+  expiredRejectionLogged = parsed.status.status === "expired";
   logHandoverStatus(parsed.status, nowMs);
   return parsed;
 }
@@ -257,8 +266,23 @@ export function matchConfiguredBearer(
     handover.previousValue !== null ? digestEquals(presented, handover.previousValue) : false;
 
   if (primaryMatch) return "primary";
-  if (previousMatch && handover.expiresAtMs !== null && nowMs < handover.expiresAtMs) {
-    return "previous";
+  if (previousMatch && handover.expiresAtMs !== null) {
+    if (nowMs < handover.expiresAtMs) return "previous";
+    // The window closed while this process was running. Say so once, at the
+    // first rejection, so a consumer's 401 has an explanation in the log
+    // (the boot-time status line only covers windows closed before boot).
+    if (!expiredRejectionLogged) {
+      expiredRejectionLogged = true;
+      logger.warn(
+        JSON.stringify({
+          event: "auth_bearer_handover_expired",
+          expires_at: new Date(handover.expiresAtMs).toISOString(),
+          message:
+            `Bearer handover window has closed; the previous bearer was just rejected. ` +
+            `Unset ${BEARER_PREVIOUS_ENV} and ${BEARER_PREVIOUS_EXPIRES_AT_ENV}.`,
+        })
+      );
+    }
   }
   return null;
 }
@@ -280,11 +304,7 @@ const auditState = new Map<string, { lastEmitMs: number; suppressed: number }>()
 function cleanClientLabel(value: string | string[] | undefined): string | null {
   const first = Array.isArray(value) ? value[0] : value;
   if (typeof first !== "string") return null;
-  // eslint-disable-next-line no-control-regex
-  const cleaned = first
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .trim()
-    .slice(0, 120);
+  const cleaned = first.replace(CONTROL_CHARS, "").trim().slice(0, 120);
   return cleaned.length > 0 ? cleaned : null;
 }
 
@@ -329,5 +349,6 @@ export function recordPreviousBearerUse(use: PreviousSlotUse, nowMs: number = Da
 /** Test hook: forget memoised configuration and audit throttling. */
 export function __resetBearerSlotsForTests(): void {
   memo = null;
+  expiredRejectionLogged = false;
   auditState.clear();
 }
