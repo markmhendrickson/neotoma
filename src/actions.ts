@@ -197,6 +197,11 @@ import type { SubstrateEvent } from "./events/types.js";
 import { getDb } from "./repositories/db/connection.js";
 import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
+  announceBearerHandoverStatus,
+  matchConfiguredBearer,
+  recordPreviousBearerUse,
+} from "./services/bearer_slots.js";
+import {
   isOauthKeyCredentialValid,
   normalizeOauthNextPath,
   OAuthKeySessionStore,
@@ -2167,7 +2172,20 @@ app.all("/mcp", async (req, res) => {
       }
       if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
-        if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
+        // Either configured slot (primary, or the retiring bearer while its
+        // handover window is open) takes the SAME branch: same principal,
+        // same grants. See src/services/bearer_slots.ts.
+        const slot = matchConfiguredBearer(token);
+        if (slot) {
+          if (slot === "previous") {
+            recordPreviousBearerUse({
+              surface: "mcp",
+              method: req.method,
+              path: req.path,
+              userAgent: req.headers["user-agent"],
+              clientName: req.headers["x-client-name"],
+            });
+          }
           setGateConnectionIdHeader(req, "dev-local");
           connectionIdHeader = "dev-local";
           bearerValidated = true;
@@ -4581,11 +4599,23 @@ app.use(async (req, res, next) => {
     }
     if (headerAuth.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
       const token = headerAuth.slice(7).trim();
-      if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
+      // Either configured slot takes the SAME branch: same principal, same
+      // grants. See src/services/bearer_slots.ts.
+      const slot = matchConfiguredBearer(token);
+      if (slot) {
+        if (slot === "previous") {
+          recordPreviousBearerUse({
+            surface: "rest",
+            method: req.method,
+            path: req.path,
+            userAgent: req.headers["user-agent"],
+            clientName: req.headers["x-client-name"],
+          });
+        }
         const devUser = await ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         logger.info(
-          `[Auth] ${req.method} ${req.path} auth_method=bearer_env user_id=${devUser.id}`
+          `[Auth] ${req.method} ${req.path} auth_method=${slot === "previous" ? "bearer_env_previous" : "bearer_env"} user_id=${devUser.id}`
         );
         return next();
       }
@@ -13837,6 +13867,11 @@ export async function startHTTPServer() {
     }
     throw err;
   }
+
+  // Report the bearer handover slot (NEOTOMA_BEARER_TOKEN_PREVIOUS) at boot,
+  // so a misconfigured slot is loud at startup rather than at the first
+  // consumer's 401. Fail-closed parsing lives in services/bearer_slots.ts.
+  announceBearerHandoverStatus();
 
   // Initialize encryption service
   await initServerKeys();

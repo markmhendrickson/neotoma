@@ -52,7 +52,7 @@ Do not use a tunnel when:
 
 - **Unauthenticated** requests to `/mcp` receive **401 Unauthorized**. Cursor uses this to show the **Connect** button and start OAuth.
 - **OAuth (key-gated):** Use the Connect flow only after completing `/mcp/oauth/key-auth` with private key hex or mnemonic. PKCE and encrypted refresh tokens apply; see [auth.md](../subsystems/auth.md) and [mcp_oauth_implementation.md](mcp_oauth_implementation.md).
-- **Optional shared secret:** Set `NEOTOMA_BEARER_TOKEN` in `.env`; clients can send `Authorization: Bearer <token>` (useful for scripts or non-OAuth clients).
+- **Optional shared secret:** Set `NEOTOMA_BEARER_TOKEN` in `.env`; clients can send `Authorization: Bearer <token>` (useful for scripts or non-OAuth clients). To rotate it without an outage, see [Rotating the static bearer](../subsystems/auth.md#rotating-the-static-bearer-handover-slot).
 - **Encryption on:** When `NEOTOMA_ENCRYPTION_ENABLED=true`, only the key-derived MCP token is accepted (`neotoma auth mcp-token`); OAuth is disabled.
 
 **Summary:** Tunnel traffic must always authenticate. OAuth is key-gated; non-key users should use `NEOTOMA_BEARER_TOKEN`.
