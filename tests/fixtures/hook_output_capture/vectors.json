@@ -1,0 +1,528 @@
+{
+  "description": "Shared behaviour vectors for the tool-capture policy duplicated across the hook packages (cursor-hooks, claude-code-plugin, codex-hooks, opencode-plugin, claude-agent-sdk-adapter). Every implementation must satisfy every vector, so the copies cannot drift. All paths and values are synthetic placeholders.",
+  "secret_paths": {
+    "secret": [
+      ".env",
+      "/work/app/.env",
+      "/work/app/.env.local",
+      "/work/app/.env.production",
+      "/work/app/prod.env",
+      "/home/user/.ssh/id_ed25519",
+      "/home/user/.ssh/config",
+      "C:\\Users\\user\\.aws\\credentials",
+      "/work/app/server.pem",
+      "/work/app/signing.key",
+      "id_rsa",
+      "/work/app/credentials.json",
+      "/work/app/secrets.yaml",
+      "/home/user/.npmrc",
+      "/home/user/.netrc",
+      "/work/infra/terraform.tfstate",
+      "/work/infra/prod.tfvars",
+      "/work/config/app.sops.yaml",
+      "/home/user/.config/sops/age/keys.txt",
+      "/home/user/.claude.json",
+      "/work/app/service-account.json",
+      "**/.env*"
+    ],
+    "not_secret": [
+      "README.md",
+      "/work/app/src/index.ts",
+      "/work/app/docs/env_vars.md",
+      "/work/app/.gitignore",
+      "/work/app/package.json",
+      "/work/app/design-tokens.css",
+      "/work/app/token_utils.ts",
+      "/work/app/environment.ts",
+      "/home/user/.ssh_notes_do_not_exist/readme.txt",
+      "/work/keys/id_ed25519.pub",
+      "/work/app/secretary.md",
+      "",
+      "/"
+    ]
+  },
+  "redaction": [
+    {
+      "name": "prefixed token",
+      "input": "failed with sk_FIXTUREPLACEHOLDER0000 in header",
+      "contains": [
+        "<TOKEN>"
+      ],
+      "excludes": [
+        "FIXTUREPLACEHOLDER0000"
+      ]
+    },
+    {
+      "name": "bearer header",
+      "input": "Authorization: Bearer FIXTUREPLACEHOLDERBEARER0000",
+      "contains": [
+        "Authorization: <REDACTED>"
+      ],
+      "excludes": [
+        "FIXTUREPLACEHOLDERBEARER0000"
+      ]
+    },
+    {
+      "name": "bearer in free text",
+      "input": "sent Bearer FIXTUREPLACEHOLDERBEARER0000 upstream",
+      "contains": [
+        "Bearer <REDACTED>",
+        "upstream"
+      ],
+      "excludes": [
+        "FIXTUREPLACEHOLDERBEARER0000"
+      ]
+    },
+    {
+      "name": "url credentials",
+      "input": "git clone https://someone:fixture-placeholder-pass@example.test/repo.git",
+      "contains": [
+        "https://<redacted>@example.test/repo.git"
+      ],
+      "excludes": [
+        "fixture-placeholder-pass"
+      ]
+    },
+    {
+      "name": "env assignment",
+      "input": "DATABASE_URL=fixture-placeholder-1\nPAYMENTS_API_KEY=fixture-placeholder-2\nPORT=8080",
+      "contains": [
+        "PAYMENTS_API_KEY=<REDACTED>",
+        "PORT=8080"
+      ],
+      "excludes": [
+        "fixture-placeholder-2"
+      ]
+    },
+    {
+      "name": "json assignment",
+      "input": "{\"api_key\":\"fixture-placeholder-3\",\"name\":\"visible\"}",
+      "contains": [
+        "\"name\":\"visible\""
+      ],
+      "excludes": [
+        "fixture-placeholder-3"
+      ]
+    },
+    {
+      "name": "json assignment inside a string",
+      "input": "{\\\"password\\\":\\\"fixture-placeholder-4\\\",\\\"name\\\":\\\"visible\\\"}",
+      "contains": [
+        "visible"
+      ],
+      "excludes": [
+        "fixture-placeholder-4"
+      ]
+    },
+    {
+      "name": "quoted yaml value with spaces",
+      "input": "password: \"fixture placeholder with spaces\"\nmode: test",
+      "contains": [
+        "mode: test"
+      ],
+      "excludes": [
+        "fixture placeholder with spaces"
+      ]
+    },
+    {
+      "name": "private key block",
+      "input": "before\n-----BEGIN OPENSSH PRIVATE KEY-----\nFIXTUREPLACEHOLDERKEYBODY\n-----END OPENSSH PRIVATE KEY-----\nafter",
+      "contains": [
+        "<PRIVATE_KEY>",
+        "before",
+        "after"
+      ],
+      "excludes": [
+        "FIXTUREPLACEHOLDERKEYBODY"
+      ]
+    },
+    {
+      "name": "unterminated private key block",
+      "input": "-----BEGIN RSA PRIVATE KEY-----\nFIXTUREPLACEHOLDERKEYBODY",
+      "contains": [
+        "<PRIVATE_KEY>"
+      ],
+      "excludes": [
+        "FIXTUREPLACEHOLDERKEYBODY"
+      ]
+    },
+    {
+      "name": "jwt",
+      "input": "token eyJfixtureplace.fixtureplaceholder.fixtureplaceholder end",
+      "contains": [
+        "<JWT>"
+      ],
+      "excludes": [
+        "fixtureplaceholder"
+      ]
+    },
+    {
+      "name": "cloud access key id",
+      "input": "id AKIAFIXTUREPLACEHOLD here",
+      "contains": [
+        "<TOKEN>"
+      ],
+      "excludes": [
+        "AKIAFIXTUREPLACEHOLD"
+      ]
+    },
+    {
+      "name": "ordinary text is untouched",
+      "input": "author: someone\nhello world 12345",
+      "contains": [
+        "author: someone",
+        "hello world 12345"
+      ],
+      "excludes": []
+    }
+  ],
+  "captures": [
+    {
+      "name": "plain file read stores metadata only",
+      "tool_name": "Read",
+      "tool_input": {
+        "path": "/work/app/README.md"
+      },
+      "tool_output": {
+        "content": "FIXTURE-FILE-BODY-LINE-1\nFIXTURE-FILE-BODY-LINE-2"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "input_capture": "redacted_summary",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "has_output_sha256": true,
+        "target_path": "/work/app/README.md"
+      }
+    },
+    {
+      "name": "file read with string output stores metadata only",
+      "tool_name": "read_file",
+      "tool_input": {
+        "target_file": "/work/app/src/index.ts"
+      },
+      "tool_output": "FIXTURE-FILE-BODY export const x = 1;",
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "has_output_sha256": true,
+        "output_bytes": 37
+      }
+    },
+    {
+      "name": "search tool stores metadata only",
+      "tool_name": "Grep",
+      "tool_input": {
+        "pattern": "needle",
+        "path": "/work/app/src"
+      },
+      "tool_output": {
+        "matches": [
+          "/work/app/src/a.ts:3:FIXTURE-FILE-BODY needle"
+        ]
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "has_output_sha256": true
+      }
+    },
+    {
+      "name": "document parse stores metadata only",
+      "tool_name": "mcp_neotoma_parse_file",
+      "tool_input": {
+        "file_path": "/work/app/report.pdf"
+      },
+      "tool_output": {
+        "text": "FIXTURE-FILE-BODY Glucose 95",
+        "pages": 1
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY",
+          "Glucose"
+        ],
+        "has_output_sha256": true
+      }
+    },
+    {
+      "name": "secret-path read stores no output text and no hash",
+      "tool_name": "Read",
+      "tool_input": {
+        "path": "/work/billing/.env"
+      },
+      "tool_output": {
+        "content": "DATABASE_URL=fixture-placeholder-1\nPAYMENTS_API_KEY=fixture-placeholder-2"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "input_capture": "metadata_only",
+        "output_summary_excludes": [
+          "fixture-placeholder",
+          "DATABASE_URL"
+        ],
+        "input_summary_excludes": [
+          "fixture-placeholder"
+        ],
+        "has_output_sha256": false,
+        "target_path": "/work/billing/.env"
+      }
+    },
+    {
+      "name": "secret-path under a non-read tool stores no output text",
+      "tool_name": "mcp_custom_inspect",
+      "tool_input": {
+        "file": "/home/user/.ssh/id_ed25519"
+      },
+      "tool_output": {
+        "summary": "FIXTURE-SECRET-BODY ssh key material"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ],
+        "has_output_sha256": false
+      }
+    },
+    {
+      "name": "secret path named in a search result withholds the output",
+      "tool_name": "Grep",
+      "tool_input": {
+        "pattern": "API_KEY",
+        "path": "/work/billing"
+      },
+      "tool_output": "/work/billing/.env:2:PAYMENTS_API_KEY=fixture-placeholder-2",
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "fixture-placeholder",
+          "API_KEY"
+        ],
+        "has_output_sha256": false
+      }
+    },
+    {
+      "name": "secret path named in a non-read tool output withholds the output",
+      "tool_name": "mcp_custom_report",
+      "tool_input": {
+        "scope": "workspace"
+      },
+      "tool_output": {
+        "note": "loaded /work/app/.env.production FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "shell cat of a secret path stores no output and no command content",
+      "tool_name": "Shell",
+      "tool_input": {
+        "command": "cat /home/user/.config/neotoma/.env"
+      },
+      "tool_output": {
+        "stdout": "NEOTOMA_TOKEN=fixture-placeholder-3"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "input_capture": "metadata_only",
+        "output_summary_excludes": [
+          "fixture-placeholder-3"
+        ],
+        "has_output_sha256": false
+      }
+    },
+    {
+      "name": "shell cat of an ordinary file stores metadata only",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "cat docs/notes.md"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY notes"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "has_output_sha256": true
+      }
+    },
+    {
+      "name": "shell pipeline that dumps a file stores metadata only",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "FOO=1 sudo /usr/bin/head -n 5 docs/notes.md | wc -l"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY notes"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "git diff stores metadata only",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "git -C /work/app diff HEAD~1"
+      },
+      "tool_output": {
+        "stdout": "+FIXTURE-FILE-BODY added line"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "non-read shell command keeps a redacted bounded summary",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "npm test"
+      },
+      "tool_output": {
+        "stdout": "ran 12 tests\nAPI_TOKEN=fixture-placeholder-5\nall passed"
+      },
+      "expect": {
+        "output_capture": "redacted_summary",
+        "input_capture": "redacted_summary",
+        "output_summary_contains": [
+          "ran 12 tests",
+          "API_TOKEN=<REDACTED>",
+          "all passed"
+        ],
+        "output_summary_excludes": [
+          "fixture-placeholder-5"
+        ],
+        "has_output_sha256": false
+      }
+    },
+    {
+      "name": "private key block in a non-read tool output is redacted",
+      "tool_name": "WebFetch",
+      "tool_input": {
+        "url": "https://example.test/page"
+      },
+      "tool_output": "intro -----BEGIN PRIVATE KEY-----\nFIXTURE-SECRET-BODY\n-----END PRIVATE KEY----- outro",
+      "expect": {
+        "output_capture": "redacted_summary",
+        "output_summary_contains": [
+          "<PRIVATE_KEY>",
+          "intro",
+          "outro"
+        ],
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "long non-read output is bounded",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "ls -la"
+      },
+      "tool_output": {
+        "stdout": "entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789"
+      },
+      "expect": {
+        "output_capture": "redacted_summary",
+        "output_summary_max_length": 400,
+        "output_summary_suffix": "..."
+      }
+    },
+    {
+      "name": "write tool stores input as metadata, never content",
+      "tool_name": "Write",
+      "tool_input": {
+        "path": "/work/app/src/new.ts",
+        "contents": "FIXTURE-FILE-BODY export {};"
+      },
+      "tool_output": {
+        "ok": true
+      },
+      "expect": {
+        "input_capture": "metadata_only",
+        "output_capture": "redacted_summary",
+        "input_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "input_summary_contains": [
+          "/work/app/src/new.ts",
+          "contents"
+        ],
+        "output_summary_contains": [
+          "ok"
+        ]
+      }
+    },
+    {
+      "name": "write to a secret path stores nothing about the content",
+      "tool_name": "Write",
+      "tool_input": {
+        "path": "/home/user/.aws/credentials",
+        "contents": "FIXTURE-SECRET-BODY"
+      },
+      "tool_output": {
+        "ok": true
+      },
+      "expect": {
+        "input_capture": "metadata_only",
+        "output_capture": "withheld_secret_path",
+        "input_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "memory write keeps its summaries (record shape unchanged)",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "entities": [
+          {
+            "entity_type": "contact",
+            "name": "Fixture Person"
+          }
+        ],
+        "idempotency_key": "fixture-key-001"
+      },
+      "tool_output": {
+        "entities": [
+          {
+            "entity_id": "ent_fixture_001",
+            "entity_type": "contact"
+          }
+        ]
+      },
+      "expect": {
+        "output_capture": "redacted_summary",
+        "input_capture": "redacted_summary",
+        "input_summary_contains": [
+          "\"entity_type\":\"contact\"",
+          "Fixture Person"
+        ],
+        "output_summary_contains": [
+          "ent_fixture_001"
+        ],
+        "has_output_sha256": false
+      }
+    }
+  ]
+}

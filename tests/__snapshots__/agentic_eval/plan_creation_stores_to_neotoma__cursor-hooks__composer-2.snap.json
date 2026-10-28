@@ -122,10 +122,14 @@
             "harness": "cursor",
             "has_error": false,
             "hook_event": "postToolUse",
-            "input_summary": "{\"path\":\"/repo/.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md\",\"content\":\"---\\nname: Add Rate Limiting\\noverview: Implement per-user rate limiting on all API endpoints.\\ntodos:\\n  - id: schema\\n    content: Add rate_limit field to schema.\\n    status: pending\\n  - id: middleware\\n    content: Write rate limiting middleware.\\n    status: pending\\nisProject: false\\n---\\n\\n# Add Rate Limiting\\n\\...",
+            "input_capture": "metadata_only",
+            "input_summary": "{\"paths\":[\"/repo/.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md\"],\"keys\":[\"path\",\"content\"]}",
             "invoked_at": "<ts>",
+            "output_bytes": 16,
+            "output_capture": "redacted_summary",
             "output_summary": "{\"success\":true}",
             "status": null,
+            "target_path": "/repo/.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md",
             "tool_name": "Write",
             "turn_key": "plan_creation_stores_to_neotoma__cursor-hooks__composer-2:turn-1"
           }

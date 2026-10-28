@@ -5,7 +5,10 @@ Fires after every tool call the agent makes. We use it as a passive
 observation capture layer: record which tool ran, its outcome, and
 links to the current conversation. We deliberately do NOT try to parse
 tool outputs into entities — that is the agent's job via MCP, and
-doing it here would violate the "no inference" principle.
+doing it here would violate the "no inference" principle. The record never
+carries output text for file reads (metadata only: path, byte length, content
+hash) and never carries any output text for a secret-bearing path; other tools
+keep a bounded, secret-redacted summary.
 
 This hook provides the "reliability floor" for observability: even if
 the agent never writes a memory, we know what it did.
@@ -19,7 +22,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
+    WITHHELD_SECRET_PATH_SUMMARY,
     classify_error_message,
+    describe_tool_capture,
     extract_error_message,
     extract_invocation_shape,
     get_client,
@@ -31,6 +36,7 @@ from _common import (  # noqa: E402
     read_hook_input,
     record_conversation_turn,
     scrub_error_message,
+    tool_input_mentions_secret_path,
     write_hook_output,
 )
 
@@ -52,7 +58,11 @@ def main() -> int:
     if has_error and is_neotoma_relevant_tool(tool_name, tool_input):
         error_message = extract_error_message(tool_result)
         error_class = classify_error_message(error_message)
-        scrubbed = scrub_error_message(error_message)
+        scrubbed = (
+            WITHHELD_SECRET_PATH_SUMMARY
+            if tool_input_mentions_secret_path(tool_input)
+            else scrub_error_message(error_message)
+        )
         counter = increment_failure_counter(session_id, tool_name, error_class)
         failure_entity = {
             "entity_type": "tool_invocation_failure",
@@ -99,8 +109,9 @@ def main() -> int:
         "turn_key": f"{session_id}:{turn_id}",
         "status": tool_result.get("status") if isinstance(tool_result, dict) else None,
         "has_error": has_error,
-        "input_summary": _summarize(tool_input),
-        "output_summary": _summarize(tool_result),
+        # Metadata-only for read-type tools; redacted bounded summary otherwise;
+        # nothing for secret-bearing paths. See describe_tool_capture in _common.py.
+        **describe_tool_capture(tool_name, tool_input, tool_result),
         **harness_provenance({"hook_event": "PostToolUse"}),
     }
 
@@ -131,17 +142,6 @@ def main() -> int:
 
     write_hook_output({})
     return 0
-
-
-def _summarize(value: object, max_len: int = 400) -> str:
-    """Short, safe string summary of a tool input/output."""
-    try:
-        text = str(value)
-    except Exception:
-        return "<unserializable>"
-    if len(text) <= max_len:
-        return text
-    return text[: max_len - 3] + "..."
 
 
 if __name__ == "__main__":

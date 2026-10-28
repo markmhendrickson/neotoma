@@ -131,10 +131,15 @@
             "harness": "cursor",
             "has_error": false,
             "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
             "input_summary": "{\"path\":\"src/auth/index.ts\"}",
             "invoked_at": "<ts>",
-            "output_summary": "{\"ok\":true,\"bytes_read\":1024}",
+            "output_bytes": 29,
+            "output_capture": "metadata_only",
+            "output_sha256": "59f7457a972b7628447f58a9db182c7991deff4668b8b17d9329cf6cd8f5ff6b",
+            "output_summary": "[output text not stored: read-type tool]",
             "status": null,
+            "target_path": "src/auth/index.ts",
             "tool_name": "Read",
             "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
           }
@@ -187,10 +192,15 @@
             "harness": "cursor",
             "has_error": false,
             "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
             "input_summary": "{\"pattern\":\"createSession\"}",
             "invoked_at": "<ts>",
-            "output_summary": "{\"ok\":true,\"matches\":3}",
+            "output_bytes": 23,
+            "output_capture": "metadata_only",
+            "output_sha256": "386004ca370ce926e63522ad3d1149736575c6e56695d9753dd60435ad417fa1",
+            "output_summary": "[output text not stored: read-type tool]",
             "status": null,
+            "target_path": "createSession",
             "tool_name": "Grep",
             "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
           }

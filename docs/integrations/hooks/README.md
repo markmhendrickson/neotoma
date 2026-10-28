@@ -29,7 +29,7 @@ Each integration implements the same five capabilities, adjusted for what its ha
 1. **Session anchor** — create/update a `conversation` entity at session start.
 2. **User prompt capture** — record every user message as `agent_message` with `turn_key = {session_id}:{turn_id}`.
 3. **Retrieval injection** — on each prompt, call `retrieveEntityByIdentifier` for any `@identifier` mentions and `listTimelineEvents` for a recent window, and return the result as `additionalContext`. Reliability floor for recall.
-4. **Tool invocation capture** — write a `tool_invocation` observation for each tool call, preserving name/input/output summary. No inference.
+4. **Tool invocation capture** — write a `tool_invocation` observation for each tool call with the tool name and a bounded, credential-redacted input/output summary. For file reads and searches, store metadata only (`output_capture: metadata_only`, `output_bytes`, `output_sha256`, `target_path`) and no output text; a call that touches a secret-bearing path stores no output text under any tool (`output_capture: withheld_secret_path`). No inference.
 5. **Compaction + Stop safety net** — write a `context_event` around compaction and an assistant `agent_message` at stop if the agent did not.
 
 Deep entity extraction is never done in a hook — that remains the agent's job via MCP, preserving Neotoma's "no inference" invariant.
