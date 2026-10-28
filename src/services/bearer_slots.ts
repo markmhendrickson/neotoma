@@ -136,9 +136,7 @@ export function parseBearerHandover(env: Env, nowMs: number): ParsedHandover {
 
   return {
     status:
-      expiresAtMs > nowMs
-        ? { status: "active", expiresAtMs }
-        : { status: "expired", expiresAtMs },
+      expiresAtMs > nowMs ? { status: "active", expiresAtMs } : { status: "expired", expiresAtMs },
     previousValue: rawPrevious,
     expiresAtMs,
   };
@@ -259,11 +257,7 @@ export function matchConfiguredBearer(
     handover.previousValue !== null ? digestEquals(presented, handover.previousValue) : false;
 
   if (primaryMatch) return "primary";
-  if (
-    previousMatch &&
-    handover.expiresAtMs !== null &&
-    nowMs < handover.expiresAtMs
-  ) {
+  if (previousMatch && handover.expiresAtMs !== null && nowMs < handover.expiresAtMs) {
     return "previous";
   }
   return null;
@@ -287,7 +281,10 @@ function cleanClientLabel(value: string | string[] | undefined): string | null {
   const first = Array.isArray(value) ? value[0] : value;
   if (typeof first !== "string") return null;
   // eslint-disable-next-line no-control-regex
-  const cleaned = first.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
+  const cleaned = first
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 120);
   return cleaned.length > 0 ? cleaned : null;
 }
 

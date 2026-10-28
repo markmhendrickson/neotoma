@@ -91,7 +91,10 @@ describe("matchConfiguredBearer", () => {
   });
 
   it("rejects the previous bearer after an explicit retire", () => {
-    const e = env({ [BEARER_PREVIOUS_ENV]: undefined, [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined });
+    const e = env({
+      [BEARER_PREVIOUS_ENV]: undefined,
+      [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined,
+    });
     expect(matchConfiguredBearer(PREVIOUS, e, NOW)).toBeNull();
     expect(matchConfiguredBearer(PRIMARY, e, NOW)).toBe("primary");
   });
@@ -118,18 +121,34 @@ describe("matchConfiguredBearer", () => {
 describe("parseBearerHandover (fail closed)", () => {
   const cases: Array<[string, Record<string, string | undefined>, string]> = [
     ["no expiry", { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined }, "expiry_missing"],
-    ["offset-less expiry", { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-10-29T12:00:00" }, "expiry_malformed"],
+    [
+      "offset-less expiry",
+      { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-10-29T12:00:00" },
+      "expiry_malformed",
+    ],
     ["date-only expiry", { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-10-29" }, "expiry_malformed"],
     ["garbage expiry", { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "soon" }, "expiry_malformed"],
-    ["impossible date", { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-13-45T99:00:00Z" }, "expiry_malformed"],
+    [
+      "impossible date",
+      { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-13-45T99:00:00Z" },
+      "expiry_malformed",
+    ],
     [
       "expiry past the maximum window",
-      { [BEARER_PREVIOUS_EXPIRES_AT_ENV]: new Date(NOW + MAX_HANDOVER_WINDOW_MS + 60_000).toISOString() },
+      {
+        [BEARER_PREVIOUS_EXPIRES_AT_ENV]: new Date(
+          NOW + MAX_HANDOVER_WINDOW_MS + 60_000
+        ).toISOString(),
+      },
       "expiry_beyond_max_window",
     ],
     ["whitespace in value", { [BEARER_PREVIOUS_ENV]: `${PREVIOUS} ` }, "value_malformed"],
     ["newline in value", { [BEARER_PREVIOUS_ENV]: `${PREVIOUS}\n` }, "value_malformed"],
-    ["control character in value", { [BEARER_PREVIOUS_ENV]: `${PREVIOUS}\u0007` }, "value_malformed"],
+    [
+      "control character in value",
+      { [BEARER_PREVIOUS_ENV]: `${PREVIOUS}\u0007` },
+      "value_malformed",
+    ],
     ["value equal to the primary", { [BEARER_PREVIOUS_ENV]: PRIMARY }, "value_equals_primary"],
     ["previous without a primary", { [BEARER_PRIMARY_ENV]: undefined }, "primary_unset"],
     ["expiry without a value", { [BEARER_PREVIOUS_ENV]: "" }, "value_missing"],
@@ -149,24 +168,32 @@ describe("parseBearerHandover (fail closed)", () => {
 
   it("accepts an expiry exactly at the maximum window and a numeric offset", () => {
     const atMax = new Date(NOW + MAX_HANDOVER_WINDOW_MS).toISOString();
-    expect(parseBearerHandover(env({ [BEARER_PREVIOUS_EXPIRES_AT_ENV]: atMax }), NOW).status.status).toBe(
-      "active"
-    );
     expect(
-      parseBearerHandover(env({ [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-10-29T14:00:00+02:00" }), NOW).status
-        .status
+      parseBearerHandover(env({ [BEARER_PREVIOUS_EXPIRES_AT_ENV]: atMax }), NOW).status.status
+    ).toBe("active");
+    expect(
+      parseBearerHandover(
+        env({ [BEARER_PREVIOUS_EXPIRES_AT_ENV]: "2026-10-29T14:00:00+02:00" }),
+        NOW
+      ).status.status
     ).toBe("active");
   });
 
   it("reports absent when no slot is configured", () => {
-    const e = env({ [BEARER_PREVIOUS_ENV]: undefined, [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined });
+    const e = env({
+      [BEARER_PREVIOUS_ENV]: undefined,
+      [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined,
+    });
     expect(parseBearerHandover(e, NOW).status).toEqual({ status: "absent" });
   });
 });
 
 describe("status and audit logging", () => {
   it("logs a disabled slot at ERROR with the reason and no value", () => {
-    const status = announceBearerHandoverStatus(env({ [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined }), NOW);
+    const status = announceBearerHandoverStatus(
+      env({ [BEARER_PREVIOUS_EXPIRES_AT_ENV]: undefined }),
+      NOW
+    );
     expect(status).toEqual({ status: "disabled", reason: "expiry_missing" });
     const text = logged.join("\n");
     expect(text).toContain("auth_bearer_handover_disabled");
