@@ -48,10 +48,15 @@
             "harness": "cursor",
             "has_error": false,
             "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
             "input_summary": "{\"path\":\"/tmp/example.txt\"}",
             "invoked_at": "<ts>",
-            "output_summary": "{\"content\":\"Hello world\"}",
+            "output_bytes": 25,
+            "output_capture": "metadata_only",
+            "output_sha256": "38a663789de1b4176227b9594a6deacfa1027d2ef78197aa1d59bb57a667a61f",
+            "output_summary": "[output text not stored: read-type tool]",
             "status": null,
+            "target_path": "/tmp/example.txt",
             "tool_name": "Read",
             "turn_key": "agent_skips_store_after_reminder__cursor-hooks__composer-2:turn-1"
           }

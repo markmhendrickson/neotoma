@@ -18,6 +18,7 @@
  * ones are ignored.
  */
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -91,17 +92,6 @@ function extractIdentifiers(prompt: string): string[] {
   return [...found];
 }
 
-function summarize(value: unknown, maxLen = 400): string {
-  let text: string;
-  try {
-    text = typeof value === "string" ? value : JSON.stringify(value);
-  } catch {
-    return "<unserializable>";
-  }
-  if (!text) return "";
-  return text.length <= maxLen ? text : `${text.slice(0, maxLen - 3)}...`;
-}
-
 function makeIdempotencyKey(
   sessionId: string,
   turnId: string,
@@ -170,6 +160,371 @@ function isNeotomaRelevantTool(
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Tool-capture policy
+//
+// Hooks persist a `tool_invocation` record per tool call. Tool output is the
+// bytes of whatever the tool touched, so the record carries METADATA ONLY for
+// read-type tools (tool name, path, byte length, content hash) and a bounded,
+// secret-redacted summary for every other tool. Nothing is stored for a call
+// that touches a secret-bearing path. Adds fields; never renames existing ones
+// (`input_summary`, `output_summary` keep their string shape).
+//
+// This block is intentionally duplicated in each hook package (cursor-hooks,
+// opencode-plugin, claude-agent-sdk-adapter; Python twins in claude-code-plugin
+// and codex-hooks) because the packages ship independently. Behaviour parity is
+// pinned by tests/fixtures/hook_output_capture/vectors.json.
+// ---------------------------------------------------------------------------
+
+const CAPTURE_SUMMARY_MAX_LEN = 400;
+const CAPTURE_SCAN_CAP = 8192;
+
+const WITHHELD_SECRET_PATH_SUMMARY =
+  "[withheld: secret-bearing path; output text not stored]";
+const WITHHELD_READ_SUMMARY = "[output text not stored: read-type tool]";
+
+const SECRET_BASENAME_PATTERNS: RegExp[] = [
+  /^\.env/i,
+  /\.env$/i,
+  /\.(?:pem|key|p12|pfx|jks|keystore|kdbx|ppk|gpg|pgp|jwk|keychain|keychain-db|tfvars|tfstate)$/i,
+  /^id_(?:rsa|dsa|ecdsa|ed25519)(?!.*\.pub$)/i,
+  /^_?\.?(?:npmrc|yarnrc|netrc|pgpass|pypirc|git-credentials|htpasswd|dockercfg|vault-token|kubeconfig)$/i,
+  /\.sops(?:\.|$)/i,
+  /^keys\.txt$/i,
+  /^\.claude\.json$/i,
+  /(?:^|[._-])(?:secrets?|credentials?|passwords?|private[_-]?keys?|service[_-]?account|client[_-]?secret|api[_-]?keys?)(?:[._-]|$)/i,
+];
+
+const SECRET_DIR_SEGMENTS = new Set([
+  ".ssh",
+  ".aws",
+  ".gnupg",
+  ".gpg",
+  ".kube",
+  ".docker",
+  ".azure",
+  ".password-store",
+  ".sops",
+]);
+
+/** True when a path names a secret-bearing file or sits inside a secret directory. */
+function isSecretBearingPath(raw: unknown): boolean {
+  if (typeof raw !== "string") return false;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 4096) return false;
+  const segments = trimmed.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+  for (const segment of segments) {
+    if (SECRET_DIR_SEGMENTS.has(segment.toLowerCase())) return true;
+  }
+  const base = segments[segments.length - 1];
+  return SECRET_BASENAME_PATTERNS.some((re) => re.test(base));
+}
+
+const SECRET_TEXT_ASSIGNMENT_RE =
+  /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|passphrase|api[_-]?key|access[_-]?key|private[_-]?key|credential|authorization)[A-Za-z0-9_.-]*\\?["']?\s*[:=]\s*)((?:(?:bearer|basic)\s+)?(?:\\?"(?:[^"\\]|\\(?!"))*\\?"|'[^']*'|[^\s"'\\,;&}\]]+))/gi;
+
+/**
+ * Redact credential-shaped text. Extends the token pattern already used by
+ * `scrubErrorMessage` (and the bearer / URL-credential patterns used elsewhere
+ * in the hooks) with private-key blocks, common provider tokens, JWTs, and
+ * `NAME=value` / `"name": "value"` assignments for secret-looking names.
+ */
+function redactSecretText(raw: unknown): string {
+  if (raw == null) return "";
+  let out = typeof raw === "string" ? raw : String(raw);
+  if (out.length > CAPTURE_SCAN_CAP) out = out.slice(0, CAPTURE_SCAN_CAP);
+  out = out.replace(
+    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g,
+    "<PRIVATE_KEY>"
+  );
+  out = out.replace(/\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b/g, "<TOKEN>");
+  out = out.replace(
+    /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b/g,
+    "<TOKEN>"
+  );
+  out = out.replace(
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+    "<JWT>"
+  );
+  out = out.replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}/gi, "$1<REDACTED>");
+  out = out.replace(/(:\/\/)[^/\s:@]+:[^/\s@]+@/g, "$1<redacted>@");
+  out = out.replace(SECRET_TEXT_ASSIGNMENT_RE, "$1<REDACTED>");
+  return out;
+}
+
+const CAPTURE_PATH_KEYS = new Set([
+  "path",
+  "paths",
+  "file",
+  "files",
+  "file_path",
+  "file_paths",
+  "filepath",
+  "filename",
+  "target_file",
+  "targetfile",
+  "target_directory",
+  "notebook_path",
+  "uri",
+  "directory",
+  "dir",
+  "glob",
+  "glob_pattern",
+  "include",
+  "pattern",
+]);
+const CAPTURE_COMMAND_KEYS = new Set(["command", "cmd", "script"]);
+
+function pathLikeToken(token: string): boolean {
+  return token.includes("/") || token.includes("\\") || token.includes(".");
+}
+
+function secretPathTokensIn(text: string, splitter: RegExp): boolean {
+  for (const raw of text.slice(0, CAPTURE_SCAN_CAP).split(splitter)) {
+    const token = raw.replace(/[.,;:!?]+$/, "");
+    if (token && pathLikeToken(token) && isSecretBearingPath(token)) return true;
+  }
+  return false;
+}
+
+interface CollectedInputPaths {
+  paths: string[];
+  secret: boolean;
+}
+
+function collectInputPaths(toolInput: unknown): CollectedInputPaths {
+  const paths: string[] = [];
+  let secret = false;
+  let budget = 200;
+  const walk = (value: unknown, key: string, depth: number): void => {
+    if (budget-- <= 0 || depth > 4 || value == null) return;
+    if (typeof value === "string") {
+      const lowered = key.toLowerCase();
+      if (CAPTURE_PATH_KEYS.has(lowered)) {
+        if (paths.length < 8) paths.push(value.slice(0, 512));
+        if (isSecretBearingPath(value)) secret = true;
+      } else if (CAPTURE_COMMAND_KEYS.has(lowered)) {
+        if (secretPathTokensIn(value, /[\s"'`;|&<>()=,]+/)) secret = true;
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value.slice(0, 50)) walk(item, key, depth + 1);
+      return;
+    }
+    if (typeof value === "object") {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        walk(v, k, depth + 1);
+      }
+    }
+  };
+  walk(toolInput, "", 0);
+  return { paths, secret };
+}
+
+/** True when a tool input names a secret-bearing path (path field or shell token). */
+function toolInputMentionsSecretPath(toolInput: unknown): boolean {
+  return collectInputPaths(toolInput).secret;
+}
+
+function toolNameTokens(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+const READ_TOOL_TOKENS = new Set([
+  "read",
+  "cat",
+  "view",
+  "open",
+  "grep",
+  "glob",
+  "search",
+  "find",
+  "head",
+  "tail",
+  "ripgrep",
+  "rg",
+  "parse",
+  "ls",
+  "dir",
+  "directory",
+]);
+const WRITE_TOOL_TOKENS = new Set([
+  "write",
+  "edit",
+  "editor",
+  "replace",
+  "patch",
+  "append",
+  "insert",
+]);
+const SHELL_READ_PROGRAMS = new Set([
+  "cat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "bat",
+  "nl",
+  "tac",
+  "sed",
+  "awk",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "ag",
+  "ack",
+  "strings",
+  "xxd",
+  "od",
+  "hexdump",
+  "base64",
+  "cut",
+  "jq",
+  "yq",
+  "sort",
+  "uniq",
+  "type",
+  "get-content",
+  "gc",
+]);
+const SHELL_WRAPPERS = new Set(["sudo", "env", "command", "time", "nohup", "exec", "builtin"]);
+const GIT_CONTENT_SUBCOMMANDS = new Set(["show", "diff", "blame", "cat-file", "grep"]);
+
+function commandReadsFiles(command: string): boolean {
+  for (const segment of command.slice(0, CAPTURE_SCAN_CAP).split(/[|;&\n]+/)) {
+    const words = segment.trim().split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (
+      i < words.length &&
+      (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || SHELL_WRAPPERS.has(words[i]))
+    ) {
+      i += 1;
+    }
+    const program = (words[i] ?? "").replace(/^.*[\\/]/, "").toLowerCase();
+    if (SHELL_READ_PROGRAMS.has(program)) return true;
+    if (program === "git") {
+      if (words.slice(i + 1).some((w) => GIT_CONTENT_SUBCOMMANDS.has(w))) return true;
+    }
+  }
+  return false;
+}
+
+function shellCommandOf(toolInput: unknown): string | null {
+  if (!toolInput || typeof toolInput !== "object") return null;
+  const record = toolInput as Record<string, unknown>;
+  const command = record.command ?? record.cmd;
+  return typeof command === "string" ? command : null;
+}
+
+/** File reads and searches that return file content, including shell `cat`/`grep`/`git show`. */
+function isReadTypeTool(toolName: unknown, toolInput: unknown): boolean {
+  const tokens = toolNameTokens(typeof toolName === "string" ? toolName : "");
+  if (tokens.some((t) => READ_TOOL_TOKENS.has(t))) return true;
+  const command = shellCommandOf(toolInput);
+  return command !== null && commandReadsFiles(command);
+}
+
+/** Tools whose INPUT carries the file content being written. */
+function isWriteTypeTool(toolName: unknown): boolean {
+  const tokens = toolNameTokens(typeof toolName === "string" ? toolName : "");
+  if (tokens.some((t) => WRITE_TOOL_TOKENS.has(t))) return true;
+  return tokens.includes("create") && tokens.includes("file");
+}
+
+function serializeForCapture(value: unknown): string | null {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return null;
+  }
+}
+
+function boundCapture(text: string, maxLen = CAPTURE_SUMMARY_MAX_LEN): string {
+  return text.length <= maxLen ? text : `${text.slice(0, maxLen - 3)}...`;
+}
+
+interface ToolCaptureFields {
+  input_summary: string;
+  output_summary: string;
+  input_capture: "redacted_summary" | "metadata_only";
+  output_capture: "redacted_summary" | "metadata_only" | "withheld_secret_path";
+  output_bytes: number;
+  output_sha256?: string;
+  target_path?: string;
+}
+
+/**
+ * Build the capture fields for a `tool_invocation` record.
+ *
+ * - read-type tool: metadata only (`output_bytes`, `output_sha256`, path); no text.
+ * - any tool touching a secret-bearing path (input path, shell token, or a path
+ *   named in the output): no output text and no input content; byte length only.
+ * - write-type tool: input stored as metadata (paths, key names), never content.
+ * - everything else: bounded summary with credential-shaped text redacted.
+ */
+function describeToolCapture(args: {
+  toolName: unknown;
+  toolInput: unknown;
+  toolOutput: unknown;
+}): ToolCaptureFields {
+  const { toolName, toolInput, toolOutput } = args;
+  const collected = collectInputPaths(toolInput);
+  const outText = serializeForCapture(toolOutput);
+  const outputBytes = outText === null ? 0 : Buffer.byteLength(outText, "utf8");
+  const secret =
+    collected.secret ||
+    (outText !== null && secretPathTokensIn(outText, /[\s"'`;|&<>()=,:[\]{}]+/));
+  const read = isReadTypeTool(toolName, toolInput);
+
+  const fields: Partial<ToolCaptureFields> = { output_bytes: outputBytes };
+  if (collected.paths.length > 0) fields.target_path = collected.paths[0];
+
+  if (secret) {
+    fields.output_summary = WITHHELD_SECRET_PATH_SUMMARY;
+    fields.output_capture = "withheld_secret_path";
+  } else if (read) {
+    fields.output_summary = WITHHELD_READ_SUMMARY;
+    fields.output_capture = "metadata_only";
+    if (outText !== null) {
+      fields.output_sha256 = createHash("sha256").update(outText, "utf8").digest("hex");
+    }
+  } else {
+    fields.output_summary =
+      outText === null ? "<unserializable>" : boundCapture(redactSecretText(outText));
+    fields.output_capture = "redacted_summary";
+  }
+
+  if (secret || isWriteTypeTool(toolName)) {
+    const record =
+      toolInput && typeof toolInput === "object" && !Array.isArray(toolInput)
+        ? (toolInput as Record<string, unknown>)
+        : {};
+    const command = shellCommandOf(toolInput);
+    const meta: Record<string, unknown> = {
+      paths: collected.paths.slice(0, 5),
+      keys: Object.keys(record).slice(0, 32),
+    };
+    if (command !== null) meta.command = boundCapture(redactSecretText(command), 200);
+    fields.input_summary = boundCapture(JSON.stringify(meta));
+    fields.input_capture = "metadata_only";
+  } else {
+    const inText = serializeForCapture(toolInput);
+    fields.input_summary =
+      inText === null ? "<unserializable>" : boundCapture(redactSecretText(inText));
+    fields.input_capture = "redacted_summary";
+  }
+  return fields as ToolCaptureFields;
+}
+
 function homeDirPattern(): RegExp | null {
   try {
     const dir = homedir();
@@ -182,7 +537,7 @@ function homeDirPattern(): RegExp | null {
 
 function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
-  let text = typeof raw === "string" ? raw : String(raw);
+  let text = redactSecretText(typeof raw === "string" ? raw : String(raw));
   text = text.replace(
     /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
     "<EMAIL>"
@@ -881,8 +1236,13 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
               tool_name: toolName,
               turn_key: `${sessionId}:${turnId}`,
               has_error: hasError,
-              input_summary: summarize(event.tool?.input),
-              output_summary: summarize(event.tool?.output),
+              // Metadata-only for read-type tools; redacted bounded summary
+              // otherwise; nothing for secret-bearing paths.
+              ...describeToolCapture({
+                toolName,
+                toolInput: event.tool?.input,
+                toolOutput: event.tool?.output,
+              }),
               ...harnessProvenance(cwd, { hook_event: "tool.called" }),
             },
           ],
@@ -911,7 +1271,9 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
           event.tool?.output
         );
         const errorClass = classifyErrorMessage(rawError);
-        const scrubbed = scrubErrorMessage(rawError);
+        const scrubbed = toolInputMentionsSecretPath(event.tool?.input)
+          ? WITHHELD_SECRET_PATH_SUMMARY
+          : scrubErrorMessage(rawError);
         const counter = incrementFailureCounter(
           sessionId,
           toolName,

@@ -16,7 +16,10 @@
  *    trying to fill — Cursor drops it there but accepts it here.
  *
  * Per Option C we still do not parse tool output into entities; that is
- * the agent's job via MCP.
+ * the agent's job via MCP. The record never carries output text for file
+ * reads (metadata only: path, byte length, content hash) and never carries
+ * any output text for a secret-bearing path; other tools keep a bounded,
+ * secret-redacted summary.
  */
 
 import { type StoreEntityInput } from "@neotoma/client";
@@ -24,6 +27,7 @@ import { type StoreEntityInput } from "@neotoma/client";
 import {
   buildCompactReminder,
   collectHookWorkspaceContext,
+  describeToolCapture,
   formatFailureHint,
   getClient,
   harnessProvenance,
@@ -39,17 +43,6 @@ import {
   turnContextFields,
   updateTurnState,
 } from "./_common.js";
-
-function summarize(value: unknown, maxLen = 400): string {
-  let text: string;
-  try {
-    text = typeof value === "string" ? value : JSON.stringify(value);
-  } catch {
-    return "<unserializable>";
-  }
-  if (!text) return "";
-  return text.length <= maxLen ? text : `${text.slice(0, maxLen - 3)}...`;
-}
 
 function shouldNudgeForReply(toolName: string): boolean {
   const lower = toolName.toLowerCase();
@@ -137,8 +130,9 @@ async function handle(
       invoked_at: invokedAt,
       status: (toolResult as { status?: unknown }).status ?? null,
       has_error: Boolean((toolResult as { error?: unknown }).error),
-      input_summary: summarize(toolInput),
-      output_summary: summarize(toolResult),
+      // Metadata-only for read-type tools; redacted bounded summary otherwise;
+      // nothing for secret-bearing paths. See describeToolCapture in _common.ts.
+      ...describeToolCapture({ toolName, toolInput, toolOutput: toolResult }),
       ...harnessProvenance({ hook_event: hookEventName }),
     };
     try {

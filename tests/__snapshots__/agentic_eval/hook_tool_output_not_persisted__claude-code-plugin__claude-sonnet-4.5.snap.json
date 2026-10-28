@@ -1,0 +1,232 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "endpoint": "/mcp-interaction-instructions",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Look at the project notes and the service configuration, then run the tests.",
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "conversation_message",
+            "harness": "claude-code",
+            "hook_event": "UserPromptSubmit",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:1>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "tool_invocation",
+            "harness": "claude-code",
+            "has_error": false,
+            "hook_event": "PostToolUse",
+            "input_capture": "redacted_summary",
+            "input_summary": "{\"path\":\"/Users/agent/workspace/notes/README.md\"}",
+            "output_bytes": 107,
+            "output_capture": "metadata_only",
+            "output_sha256": "05153cea4c1a2f972420ecb6e0e842440a6f29e27fd96891cda9be085db64ccd",
+            "output_summary": "[output text not stored: read-type tool]",
+            "status": null,
+            "target_path": "/Users/agent/workspace/notes/README.md",
+            "tool_name": "Read",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:2>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "tool_invocation",
+            "harness": "claude-code",
+            "has_error": false,
+            "hook_event": "PostToolUse",
+            "input_capture": "metadata_only",
+            "input_summary": "{\"paths\":[\"/Users/agent/workspace/billing-service/.env\"],\"keys\":[\"path\"]}",
+            "output_bytes": 88,
+            "output_capture": "withheld_secret_path",
+            "output_summary": "[withheld: secret-bearing path; output text not stored]",
+            "status": null,
+            "target_path": "/Users/agent/workspace/billing-service/.env",
+            "tool_name": "Read",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:3>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "tool_invocation",
+            "harness": "claude-code",
+            "has_error": false,
+            "hook_event": "PostToolUse",
+            "input_capture": "redacted_summary",
+            "input_summary": "{\"command\":\"cat /Users/agent/workspace/notes/todo.txt\"}",
+            "output_bytes": 46,
+            "output_capture": "metadata_only",
+            "output_sha256": "62308c4627bd66357191ab7e0fa4fa8eef51d143160882d335f98e182f613cd4",
+            "output_summary": "[output text not stored: read-type tool]",
+            "status": null,
+            "tool_name": "Shell",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "tool_invocation",
+            "harness": "claude-code",
+            "has_error": false,
+            "hook_event": "PostToolUse",
+            "input_capture": "redacted_summary",
+            "input_summary": "{\"command\":\"npm test\"}",
+            "output_bytes": 70,
+            "output_capture": "redacted_summary",
+            "output_summary": "{\"stdout\":\"ran 12 tests\\nAPI_TOKEN=<REDACTED>\\nall passed\"}",
+            "status": null,
+            "tool_name": "Shell",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "tool_invocation",
+            "harness": "claude-code",
+            "has_error": false,
+            "hook_event": "PostToolUse",
+            "input_capture": "metadata_only",
+            "input_summary": "{\"paths\":[\"/Users/agent/workspace/notes/summary.md\"],\"keys\":[\"path\",\"contents\"]}",
+            "output_bytes": 11,
+            "output_capture": "redacted_summary",
+            "output_summary": "{\"ok\":true}",
+            "status": null,
+            "target_path": "/Users/agent/workspace/notes/summary.md",
+            "tool_name": "Write",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "claude-code-hook",
+            "entity_type": "tool_invocation_failure",
+            "error_class": "ERR_FILE_REJECTED",
+            "error_message_redacted": "[withheld: secret-bearing path; output text not stored]",
+            "harness": "claude-code",
+            "hit_count_session": 1,
+            "hook_event": "PostToolUse.failure",
+            "invocation_shape": {},
+            "tool_name": "mcp_neotoma_store",
+            "turn_key": "hook_tool_output_not_persisted__claude-code-plugin__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/timeline",
+      "body": {
+        "limit": 5
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {
+        "additionalContext": "## Recent timeline\n{'entities': [], 'total': 0, 'excluded_merged': True}"
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}

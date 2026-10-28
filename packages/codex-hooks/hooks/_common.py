@@ -211,10 +211,56 @@ _UUID_RE = re.compile(
 _PHONE_RE = re.compile(r"\b(?:\+?\d[\s-]?){7,}\d\b")
 
 
+# Credential-shaped text redaction. Python twin of `redactSecretText` in
+# packages/cursor-hooks/hooks/_common.ts; parity pinned by
+# tests/fixtures/hook_output_capture/vectors.json. This package captures no tool
+# output, so only the redaction applies (to persisted error messages).
+CAPTURE_SCAN_CAP = 8192
+
+
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)"
+)
+_PREFIXED_TOKEN_RE = re.compile(r"\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b")
+_PROVIDER_TOKEN_RE = re.compile(
+    r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b"
+)
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+_BEARER_RE = re.compile(r"\b(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}", re.I)
+_URL_CREDENTIALS_RE = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|passphrase|api[_-]?key|access[_-]?key|private[_-]?key|credential|authorization)[A-Za-z0-9_.-]*\\?[\"']?\s*[:=]\s*)((?:(?:bearer|basic)\s+)?(?:\\?\"(?:[^\"\\]|\\(?!\"))*\\?\"|'[^']*'|[^\s\"'\\,;&}\]]+))",
+    re.I,
+)
+
+
+def redact_secret_text(raw: Any) -> str:
+    """Redact credential-shaped text.
+
+    Extends the token pattern already used by `scrub_error_message` (plus the
+    bearer / URL-credential patterns used elsewhere in the hooks) with
+    private-key blocks, common provider tokens, JWTs, and `NAME=value` /
+    `"name": "value"` assignments for secret-looking names.
+    """
+    if raw is None:
+        return ""
+    out = raw if isinstance(raw, str) else str(raw)
+    if len(out) > CAPTURE_SCAN_CAP:
+        out = out[:CAPTURE_SCAN_CAP]
+    out = _PRIVATE_KEY_RE.sub("<PRIVATE_KEY>", out)
+    out = _PREFIXED_TOKEN_RE.sub("<TOKEN>", out)
+    out = _PROVIDER_TOKEN_RE.sub("<TOKEN>", out)
+    out = _JWT_RE.sub("<JWT>", out)
+    out = _BEARER_RE.sub(r"\1<REDACTED>", out)
+    out = _URL_CREDENTIALS_RE.sub(r"\1<redacted>@", out)
+    out = _SECRET_ASSIGNMENT_RE.sub(r"\1<REDACTED>", out)
+    return out
+
+
 def scrub_error_message(raw: Any) -> str:
     if raw is None:
         return ""
-    text = raw if isinstance(raw, str) else str(raw)
+    text = redact_secret_text(raw if isinstance(raw, str) else str(raw))
     text = _EMAIL_RE.sub("<EMAIL>", text)
     text = _TOKEN_RE.sub("<TOKEN>", text)
     text = _UUID_RE.sub("<UUID>", text)

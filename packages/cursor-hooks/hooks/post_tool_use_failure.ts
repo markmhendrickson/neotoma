@@ -30,6 +30,8 @@ import {
   runHook,
   turnContextFields,
   scrubErrorMessage,
+  toolInputMentionsSecretPath,
+  WITHHELD_SECRET_PATH_SUMMARY,
   updateTurnState,
 } from "./_common.js";
 
@@ -99,7 +101,9 @@ async function handle(
 
   const rawError = extractErrorMessage(toolResult);
   const errorClass = classifyErrorMessage(rawError);
-  const scrubbed = scrubErrorMessage(rawError);
+  const scrubbed = toolInputMentionsSecretPath(toolInput)
+    ? WITHHELD_SECRET_PATH_SUMMARY
+    : scrubErrorMessage(rawError);
   const counter = incrementFailureCounter(sessionId, toolName, errorClass);
   const isTransportFailure =
     errorClass === "fetch_failed" ||

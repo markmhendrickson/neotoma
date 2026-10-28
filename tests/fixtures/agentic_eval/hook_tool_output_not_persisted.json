@@ -1,0 +1,212 @@
+{
+  "meta": {
+    "id": "hook_tool_output_not_persisted",
+    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, an ordinary shell command whose output carries a credential-shaped assignment, a file write, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks and claude-code-plugin hook scripts (claude-code-plugin reports tool failures inline through its postToolUse script, so the failed memory write is replayed as an error-bearing postToolUse there). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
+    "harnesses": [
+      "cursor-hooks",
+      "claude-code-plugin"
+    ],
+    "models": [
+      "composer-2",
+      "claude-sonnet-4.5"
+    ],
+    "tags": [
+      "hook-capture",
+      "secret-file",
+      "security",
+      "turn-lifecycle"
+    ]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Look at the project notes and the service configuration, then run the tests."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "path": "/Users/agent/workspace/notes/README.md"
+        },
+        "tool_output": {
+          "content": "FIXTURE-FILE-BODY-ALPHA project notes line one\nFIXTURE-FILE-BODY-BETA project notes line two"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": {
+          "path": "/Users/agent/workspace/billing-service/.env"
+        },
+        "tool_output": {
+          "content": "DATABASE_URL=fixture-placeholder-1\nPAYMENTS_API_KEY=fixture-placeholder-2"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "cat /Users/agent/workspace/notes/todo.txt"
+        },
+        "tool_output": {
+          "stdout": "FIXTURE-FILE-BODY-GAMMA todo list"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "npm test"
+        },
+        "tool_output": {
+          "stdout": "ran 12 tests\nAPI_TOKEN=fixture-placeholder-3\nall passed"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Write",
+        "tool_input": {
+          "path": "/Users/agent/workspace/notes/summary.md",
+          "contents": "FIXTURE-FILE-BODY-DELTA written summary"
+        },
+        "tool_output": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "hook": "postToolUseFailure",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "file_path": "/Users/agent/workspace/billing-service/.env"
+        },
+        "tool_error": "ERR_FILE_REJECTED while reading /Users/agent/workspace/billing-service/.env: PAYMENTS_API_KEY=fixture-placeholder-4"
+      },
+      "harnesses": [
+        "cursor-hooks"
+      ]
+    },
+    {
+      "hook": "postToolUse",
+      "harnesses": [
+        "claude-code-plugin"
+      ],
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "file_path": "/Users/agent/workspace/billing-service/.env"
+        },
+        "tool_output": {
+          "error": "ERR_FILE_REJECTED while reading /Users/agent/workspace/billing-service/.env: PAYMENTS_API_KEY=fixture-placeholder-4"
+        }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "Reviewed the notes and the service configuration and ran the tests; all passed."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "Read"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "FIXTURE-FILE-BODY|fixture-placeholder",
+        "where": {
+          "tool_name": "Read"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_capture",
+        "matches": "^redacted_summary$",
+        "where": {
+          "tool_name": "Read"
+        }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_sha256",
+        "where": {
+          "tool_name": "Read"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "Read",
+          "output_capture": "withheld_secret_path"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "matches": "FIXTURE-FILE-BODY|fixture-placeholder",
+        "where": {
+          "tool_name": "Write"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "FIXTURE-FILE-BODY|fixture-placeholder",
+        "where": {
+          "tool_name": "Shell"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "Shell",
+          "output_capture": "redacted_summary"
+        }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "where": {
+          "tool_name": "Shell",
+          "output_capture": "redacted_summary"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation_failure",
+        "field": "error_message_redacted",
+        "matches": "fixture-placeholder|API_KEY",
+        "where": {
+          "tool_name": "mcp_neotoma_store"
+        }
+      }
+    ]
+  }
+}

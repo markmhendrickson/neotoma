@@ -9,6 +9,7 @@ Code prints it in verbose mode but the turn still proceeds.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -244,11 +245,377 @@ _UUID_RE = re.compile(
 _PHONE_RE = re.compile(r"\b(?:\+?\d[\s-]?){7,}\d\b")
 
 
+# ---------------------------------------------------------------------------
+# Tool-capture policy
+#
+# Hooks persist a `tool_invocation` record per tool call. Tool output is the
+# bytes of whatever the tool touched, so the record carries METADATA ONLY for
+# read-type tools (tool name, path, byte length, content hash) and a bounded,
+# secret-redacted summary for every other tool. Nothing is stored for a call
+# that touches a secret-bearing path. Adds fields; never renames existing ones
+# (`input_summary`, `output_summary` keep their string shape).
+#
+# Python twin of the block in packages/cursor-hooks/hooks/_common.ts. The
+# packages ship independently, so the logic is duplicated; behaviour parity is
+# pinned by tests/fixtures/hook_output_capture/vectors.json.
+# ---------------------------------------------------------------------------
+
+CAPTURE_SUMMARY_MAX_LEN = 400
+CAPTURE_SCAN_CAP = 8192
+
+WITHHELD_SECRET_PATH_SUMMARY = "[withheld: secret-bearing path; output text not stored]"
+WITHHELD_READ_SUMMARY = "[output text not stored: read-type tool]"
+
+_SECRET_BASENAME_PATTERNS = [
+    re.compile(r"^\.env", re.I),
+    re.compile(r"\.env$", re.I),
+    re.compile(
+        r"\.(?:pem|key|p12|pfx|jks|keystore|kdbx|ppk|gpg|pgp|jwk|keychain|keychain-db|tfvars|tfstate)$",
+        re.I,
+    ),
+    re.compile(r"^id_(?:rsa|dsa|ecdsa|ed25519)(?!.*\.pub$)", re.I),
+    re.compile(
+        r"^_?\.?(?:npmrc|yarnrc|netrc|pgpass|pypirc|git-credentials|htpasswd|dockercfg|vault-token|kubeconfig)$",
+        re.I,
+    ),
+    re.compile(r"\.sops(?:\.|$)", re.I),
+    re.compile(r"^keys\.txt$", re.I),
+    re.compile(r"^\.claude\.json$", re.I),
+    re.compile(
+        r"(?:^|[._-])(?:secrets?|credentials?|passwords?|private[_-]?keys?|service[_-]?account|client[_-]?secret|api[_-]?keys?)(?:[._-]|$)",
+        re.I,
+    ),
+]
+
+_SECRET_DIR_SEGMENTS = frozenset(
+    {".ssh", ".aws", ".gnupg", ".gpg", ".kube", ".docker", ".azure", ".password-store", ".sops"}
+)
+
+
+def is_secret_bearing_path(raw: Any) -> bool:
+    """True when a path names a secret-bearing file or sits inside a secret directory."""
+    if not isinstance(raw, str):
+        return False
+    trimmed = raw.strip()
+    if not trimmed or len(trimmed) > 4096:
+        return False
+    segments = [s for s in trimmed.replace("\\", "/").split("/") if s]
+    if not segments:
+        return False
+    for segment in segments:
+        if segment.lower() in _SECRET_DIR_SEGMENTS:
+            return True
+    base = segments[-1]
+    return any(p.search(base) for p in _SECRET_BASENAME_PATTERNS)
+
+
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)"
+)
+_PREFIXED_TOKEN_RE = re.compile(r"\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b")
+_PROVIDER_TOKEN_RE = re.compile(
+    r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b"
+)
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+_BEARER_RE = re.compile(r"\b(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}", re.I)
+_URL_CREDENTIALS_RE = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|passphrase|api[_-]?key|access[_-]?key|private[_-]?key|credential|authorization)[A-Za-z0-9_.-]*\\?[\"']?\s*[:=]\s*)((?:(?:bearer|basic)\s+)?(?:\\?\"(?:[^\"\\]|\\(?!\"))*\\?\"|'[^']*'|[^\s\"'\\,;&}\]]+))",
+    re.I,
+)
+
+
+def redact_secret_text(raw: Any) -> str:
+    """Redact credential-shaped text.
+
+    Extends the token pattern already used by `scrub_error_message` (plus the
+    bearer / URL-credential patterns used elsewhere in the hooks) with
+    private-key blocks, common provider tokens, JWTs, and `NAME=value` /
+    `"name": "value"` assignments for secret-looking names.
+    """
+    if raw is None:
+        return ""
+    out = raw if isinstance(raw, str) else str(raw)
+    if len(out) > CAPTURE_SCAN_CAP:
+        out = out[:CAPTURE_SCAN_CAP]
+    out = _PRIVATE_KEY_RE.sub("<PRIVATE_KEY>", out)
+    out = _PREFIXED_TOKEN_RE.sub("<TOKEN>", out)
+    out = _PROVIDER_TOKEN_RE.sub("<TOKEN>", out)
+    out = _JWT_RE.sub("<JWT>", out)
+    out = _BEARER_RE.sub(r"\1<REDACTED>", out)
+    out = _URL_CREDENTIALS_RE.sub(r"\1<redacted>@", out)
+    out = _SECRET_ASSIGNMENT_RE.sub(r"\1<REDACTED>", out)
+    return out
+
+
+_CAPTURE_PATH_KEYS = frozenset(
+    {
+        "path",
+        "paths",
+        "file",
+        "files",
+        "file_path",
+        "file_paths",
+        "filepath",
+        "filename",
+        "target_file",
+        "targetfile",
+        "target_directory",
+        "notebook_path",
+        "uri",
+        "directory",
+        "dir",
+        "glob",
+        "glob_pattern",
+        "include",
+        "pattern",
+    }
+)
+_CAPTURE_COMMAND_KEYS = frozenset({"command", "cmd", "script"})
+_COMMAND_TOKEN_SPLIT_RE = re.compile(r"[\s\"'`;|&<>()=,]+")
+_OUTPUT_TOKEN_SPLIT_RE = re.compile(r"[\s\"'`;|&<>()=,:\[\]{}]+")
+
+
+def _path_like_token(token: str) -> bool:
+    return "/" in token or "\\" in token or "." in token
+
+
+def _secret_path_tokens_in(text: str, splitter: "re.Pattern[str]") -> bool:
+    for raw in splitter.split(text[:CAPTURE_SCAN_CAP]):
+        token = re.sub(r"[.,;:!?]+$", "", raw)
+        if token and _path_like_token(token) and is_secret_bearing_path(token):
+            return True
+    return False
+
+
+def _collect_input_paths(tool_input: Any) -> tuple[list[str], bool]:
+    paths: list[str] = []
+    secret = False
+    budget = 200
+
+    def walk(value: Any, key: str, depth: int) -> None:
+        nonlocal secret, budget
+        budget -= 1
+        if budget < 0 or depth > 4 or value is None:
+            return
+        if isinstance(value, str):
+            lowered = key.lower()
+            if lowered in _CAPTURE_PATH_KEYS:
+                if len(paths) < 8:
+                    paths.append(value[:512])
+                if is_secret_bearing_path(value):
+                    secret = True
+            elif lowered in _CAPTURE_COMMAND_KEYS:
+                if _secret_path_tokens_in(value, _COMMAND_TOKEN_SPLIT_RE):
+                    secret = True
+            return
+        if isinstance(value, (list, tuple)):
+            for item in list(value)[:50]:
+                walk(item, key, depth + 1)
+            return
+        if isinstance(value, dict):
+            for k, v in value.items():
+                walk(v, str(k), depth + 1)
+
+    walk(tool_input, "", 0)
+    return paths, secret
+
+
+def tool_input_mentions_secret_path(tool_input: Any) -> bool:
+    """True when a tool input names a secret-bearing path (path field or shell token)."""
+    return _collect_input_paths(tool_input)[1]
+
+
+def _tool_name_tokens(name: str) -> list[str]:
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name).lower()
+    return [t for t in re.split(r"[^a-z0-9]+", spaced) if t]
+
+
+_READ_TOOL_TOKENS = frozenset(
+    {
+        "read",
+        "cat",
+        "view",
+        "open",
+        "grep",
+        "glob",
+        "search",
+        "find",
+        "head",
+        "tail",
+        "ripgrep",
+        "rg",
+        "parse",
+        "ls",
+        "dir",
+        "directory",
+    }
+)
+_WRITE_TOOL_TOKENS = frozenset({"write", "edit", "editor", "replace", "patch", "append", "insert"})
+_SHELL_READ_PROGRAMS = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "less",
+        "more",
+        "bat",
+        "nl",
+        "tac",
+        "sed",
+        "awk",
+        "grep",
+        "egrep",
+        "fgrep",
+        "rg",
+        "ag",
+        "ack",
+        "strings",
+        "xxd",
+        "od",
+        "hexdump",
+        "base64",
+        "cut",
+        "jq",
+        "yq",
+        "sort",
+        "uniq",
+        "type",
+        "get-content",
+        "gc",
+    }
+)
+_SHELL_WRAPPERS = frozenset({"sudo", "env", "command", "time", "nohup", "exec", "builtin"})
+_GIT_CONTENT_SUBCOMMANDS = frozenset({"show", "diff", "blame", "cat-file", "grep"})
+_ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _command_reads_files(command: str) -> bool:
+    for segment in re.split(r"[|;&\n]+", command[:CAPTURE_SCAN_CAP]):
+        words = segment.split()
+        i = 0
+        while i < len(words) and (
+            _ENV_ASSIGNMENT_RE.match(words[i]) or words[i] in _SHELL_WRAPPERS
+        ):
+            i += 1
+        program = re.sub(r"^.*[\\/]", "", words[i] if i < len(words) else "").lower()
+        if program in _SHELL_READ_PROGRAMS:
+            return True
+        if program == "git":
+            if any(w in _GIT_CONTENT_SUBCOMMANDS for w in words[i + 1 :]):
+                return True
+    return False
+
+
+def _shell_command_of(tool_input: Any) -> str | None:
+    if not isinstance(tool_input, dict):
+        return None
+    command = tool_input.get("command")
+    if command is None:
+        command = tool_input.get("cmd")
+    return command if isinstance(command, str) else None
+
+
+def is_read_type_tool(tool_name: Any, tool_input: Any) -> bool:
+    """File reads and searches that return file content, including shell `cat`/`grep`/`git show`."""
+    tokens = _tool_name_tokens(tool_name if isinstance(tool_name, str) else "")
+    if any(t in _READ_TOOL_TOKENS for t in tokens):
+        return True
+    command = _shell_command_of(tool_input)
+    return command is not None and _command_reads_files(command)
+
+
+def is_write_type_tool(tool_name: Any) -> bool:
+    """Tools whose INPUT carries the file content being written."""
+    tokens = _tool_name_tokens(tool_name if isinstance(tool_name, str) else "")
+    if any(t in _WRITE_TOOL_TOKENS for t in tokens):
+        return True
+    return "create" in tokens and "file" in tokens
+
+
+def _serialize_for_capture(value: Any) -> str | None:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    except Exception:
+        return None
+
+
+def _bound_capture(text: str, max_len: int = CAPTURE_SUMMARY_MAX_LEN) -> str:
+    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+
+
+def describe_tool_capture(tool_name: Any, tool_input: Any, tool_output: Any) -> dict[str, Any]:
+    """Build the capture fields for a `tool_invocation` record.
+
+    - read-type tool: metadata only (`output_bytes`, `output_sha256`, path); no text.
+    - any tool touching a secret-bearing path (input path, shell token, or a path
+      named in the output): no output text and no input content; byte length only.
+    - write-type tool: input stored as metadata (paths, key names), never content.
+    - everything else: bounded summary with credential-shaped text redacted.
+    """
+    paths, input_secret = _collect_input_paths(tool_input)
+    out_text = _serialize_for_capture(tool_output)
+    output_bytes = 0 if out_text is None else len(out_text.encode("utf-8", errors="replace"))
+    secret = input_secret or (
+        out_text is not None and _secret_path_tokens_in(out_text, _OUTPUT_TOKEN_SPLIT_RE)
+    )
+    read = is_read_type_tool(tool_name, tool_input)
+
+    fields: dict[str, Any] = {}
+    if secret:
+        fields["output_summary"] = WITHHELD_SECRET_PATH_SUMMARY
+        fields["output_capture"] = "withheld_secret_path"
+    elif read:
+        fields["output_summary"] = WITHHELD_READ_SUMMARY
+        fields["output_capture"] = "metadata_only"
+        if out_text is not None:
+            fields["output_sha256"] = hashlib.sha256(
+                out_text.encode("utf-8", errors="replace")
+            ).hexdigest()
+    else:
+        fields["output_summary"] = (
+            "<unserializable>"
+            if out_text is None
+            else _bound_capture(redact_secret_text(out_text))
+        )
+        fields["output_capture"] = "redacted_summary"
+    fields["output_bytes"] = output_bytes
+    if paths:
+        fields["target_path"] = paths[0]
+
+    if secret or is_write_type_tool(tool_name):
+        record = tool_input if isinstance(tool_input, dict) else {}
+        meta: dict[str, Any] = {
+            "paths": paths[:5],
+            "keys": [str(k) for k in list(record.keys())[:32]],
+        }
+        command = _shell_command_of(tool_input)
+        if command is not None:
+            meta["command"] = _bound_capture(redact_secret_text(command), 200)
+        fields["input_summary"] = _bound_capture(
+            json.dumps(meta, separators=(",", ":"), ensure_ascii=False)
+        )
+        fields["input_capture"] = "metadata_only"
+    else:
+        in_text = _serialize_for_capture(tool_input)
+        fields["input_summary"] = (
+            "<unserializable>"
+            if in_text is None
+            else _bound_capture(redact_secret_text(in_text))
+        )
+        fields["input_capture"] = "redacted_summary"
+    return fields
+
+
 def scrub_error_message(raw: Any) -> str:
     """Light PII scrub for short error messages persisted via hooks."""
     if raw is None:
         return ""
-    text = raw if isinstance(raw, str) else str(raw)
+    text = redact_secret_text(raw if isinstance(raw, str) else str(raw))
     text = _EMAIL_RE.sub("<EMAIL>", text)
     text = _TOKEN_RE.sub("<TOKEN>", text)
     text = _UUID_RE.sub("<UUID>", text)
