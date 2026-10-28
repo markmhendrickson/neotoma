@@ -19,11 +19,21 @@ export function isHostedMode(): boolean {
 /**
  * True when `hostname` is private, loopback, or link-local (RFC 1918,
  * `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `::1` / `fc00::/7` / `fe80::/10`, the
- * `localhost` family, and `0.0.0.0`). Used to reject `sender_peer_url` /
- * `peer.url` hosts under hosted mode before any outbound fetch.
+ * `localhost` family, `0.0.0.0`, and the unspecified IPv6 address `::`). Used to
+ * reject `sender_peer_url` / `peer.url` hosts under hosted mode before any
+ * outbound fetch.
+ *
+ * A fully qualified name may end in a dot (`localhost.` names the same host as
+ * `localhost`), so trailing dots and IPv6 brackets are removed before any check.
  */
 export function isPrivateOrLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.+$/, "");
+  // The unspecified address (`::`, `0::`, `0:0:0:0:0:0:0:0`) connects to the
+  // local host, like `0.0.0.0`.
+  if (/^[0:]+$/.test(normalized) && normalized.includes(":")) return true;
   if (normalized === "localhost" || normalized.endsWith(".localhost")) return true;
   // Platform-internal service discovery suffixes (Fly.io `*.internal`,
   // Kubernetes `*.cluster.local`). These resolve only inside the deployment

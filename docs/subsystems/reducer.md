@@ -98,7 +98,8 @@ interface EntitySnapshot {
 
 ### 3.1 Last Write Wins
 
-**Strategy:** Most recent observation wins.
+**Strategy:** Most recent observation wins, except that a correction beats every ordinary
+write however recent (§3.6); among corrections the most recent wins.
 **Use When:** Field values change over time, latest is most accurate.
 **Example:**
 
@@ -107,8 +108,14 @@ function lastWriteWins(
   field: string,
   observations: Observation[]
 ): { value: any; source_observation_id: string } {
-  // Observations already sorted by observed_at DESC
-  const latest = observations[0];
+  // Observations already sorted by observed_at DESC.
+  // A correction outranks any ordinary write; among corrections the latest wins
+  // by observed_at, then created_at, then id (§3.6).
+  const corrections = observations.filter(isCorrectionObservation);
+  const latest =
+    corrections.length > 0
+      ? [...corrections].sort(compareObservationRecencyThenId)[0]
+      : observations[0];
   return {
     value: latest.fields[field],
     source_observation_id: latest.id,
@@ -148,7 +155,9 @@ function highestPriority(
 }
 ```
 
-Same-priority scalar corrections use that same order. A correction does not need
+A correction is the one exception to this ranking: it beats every other write to the field
+whatever its `source_priority` or `observation_source` (§3.6). Same-priority scalar
+corrections use that same order. A correction does not need
 to invent priority `1001` to replace an earlier normal correction: two correction
 observations at priority `1000` keep higher `observation_source` precedence, then
 the later `observed_at`/`created_at` wins, with `id ASC` used only when both
@@ -178,7 +187,8 @@ history.
 
 ### 3.3 Most Specific
 
-**Strategy:** Observation with highest `specificity_score` wins.
+**Strategy:** Observation with highest `specificity_score` wins. When the field has any
+correction, only corrections compete (§3.6).
 **Use When:** More specific observations are more accurate.
 **Example:**
 
@@ -252,32 +262,32 @@ function mergeArrays(
 at the **maximum present `source_priority`** participate in the union. Corrections are
 created with `source_priority: 1000` (the highest tier), so a correction fully **replaces**
 any lower-priority array contributions rather than unioning with them — consistent with the
-rule that corrections "always win" (§4.2). The gate is `source_priority`-based and applies
-to any higher-priority write (e.g. a sensor), with corrections being the motivating case.
-Two ordinary writes at the **same** top priority still union with each other.
-Consequence: `source_observation_id` / `provenance[field]` lists only the top-priority
-contributing observation IDs, not every observation that ever contributed an element.
+rule that corrections "always win" (§3.6). Among non-correction writes the gate is
+`source_priority`-based and applies to any higher-priority write (e.g. a sensor). A
+correction is outside that comparison: it replaces every other array contribution
+whatever its priority (§3.6). Two ordinary writes at the **same** top priority still union
+with each other. Consequence: `source_observation_id` / `provenance[field]` lists only the
+top-priority contributing observation IDs, not every observation that ever contributed an
+element.
 
 **Later correction replaces earlier correction (issue #2341):** every correction is written
 at the same priority (1000), so the priority gate alone cannot let one correction supersede
-another. Within the top-priority tier, when any observation is a correction (recognised by
-`isCorrectionObservation` in `src/services/correction_identity.ts`: no source, no
-interpretation, no `observation_source`, priority 1000, specificity 1.0), the **latest
-correction** — ordered by `observed_at`, then `created_at`, then `id` — is the field's only
-contribution. A later `correct` therefore sets the array to exactly its members, can remove
-members an earlier correction added, and `[]` (or `null`) clears the field to `[]`. A request
-cannot forge a correction: the shape needs a NULL `observation_source`, and every public
-writer stamps a non-null one (`createObservation` defaults it to `unspecified`). Some routes
-do write a null `source_id` and a caller-chosen priority (`POST /observations/create`), so the
+another. When any observation is a correction (recognised by `isCorrectionObservation` in
+`src/services/correction_identity.ts`: no source, no interpretation, no
+`observation_source`, priority 1000, specificity 1.0), the **latest correction** — ordered
+by `observed_at`, then `created_at`, then `id` — is the field's only contribution. A later
+`correct` therefore sets the array to exactly its members, can remove members an earlier
+correction added, and `[]` (or `null`) clears the field to `[]`. A request cannot forge a
+correction: the shape needs a NULL `observation_source`, and every public writer stamps a
+non-null one (`createObservation` defaults it to `unspecified`). Some routes do write a null
+`source_id` and a caller-chosen priority (`POST /observations/create`), so the
 `observation_source`, not the `source_id`, is the guard; an integration test sends
-`source_priority: 1000` through that route and checks the stored row is not a correction. An
-ordinary write that merely carries `source_priority: 1000` keeps the same-priority union, and
-is ignored while a correction exists on the field (so `resolve_sync_conflict` `prefer_remote`,
-stored at 1000, cannot override a correction on an array field). The append-only log is
-unchanged: each correction is still its own observation, and supersession happens in the
-reducer. `merge_array_by_key` is not affected; its keyed reconciliation across the top tier
-is what `patch_array_item` relies on. Snapshots computed before this change keep the union
-until recomputed (`POST /recompute_snapshots_by_type`, `dry_run` first).
+`source_priority: 1000` through that route and checks the stored row is not a correction.
+The append-only log is unchanged: each correction is still its own observation, and
+supersession happens in the reducer. `merge_array_by_key` is not affected; its keyed
+reconciliation is what `patch_array_item` relies on, so corrections there combine by key.
+Snapshots computed before this change keep the union until recomputed
+(`POST /recompute_snapshots_by_type`, `dry_run` first).
 
 > The gate is currently implicit in the `merge_array` strategy. A planned follow-up adds
 > an explicit `merge_policy.priority_gate: "max" | "all"` knob (default `"max"`) so a
@@ -380,6 +390,94 @@ order-preserving arrays, JSON scalar spellings), so callers can reproduce it por
 contract. Originating ADR: `ent_4b41bb83a4faf4428a73bfc8` (Neotoma task entity) — the
 `session_digest.tasks_claimed` lost-update reproduction this strategy exists to fix.
 
+### 3.6 Corrections Win Until a Later Correction Replaces Them
+
+**Rule.** A correction is authoritative on its field until a later correction for the same
+field replaces it. No other write displaces it, however recent its `observed_at` and
+whatever its `source_priority` or `observation_source`, and whatever merge rule the field
+declares. This holds on a `last_write` field (including every field of an auto-discovered
+schema, where `last_write` is the default) exactly as on `highest_priority`,
+`most_specific`, `merge_array` and `merge_array_by_key`. There is no exception for a write
+at a higher priority: a store at `source_priority: 5000`, or at exactly 1000 with a source
+kind that outranks a correction, loses to a correction. A correction to `null` holds too: a
+later ordinary write does not revive the cleared field.
+
+A deliberate authoritative override, if one is ever needed, is a feature of its own
+(#2666, a child of the authority work in #2081), not a side effect of `source_priority`
+ordering.
+
+**`correct` is now a stronger capability.** A correction can no longer be displaced by any
+later non-correction write, at any priority. That is the point, and it also means a field
+that has been corrected changes only through a later `correct`: importers and sync
+pipelines that `store` into it are not projected, and the store response does not say so
+(a `store_warnings` signal for a held field belongs with the contested-fields work, #951).
+Corrections also cover system bookkeeping fields written through `createCorrection` (for
+example peer sync watermarks and `sync_conflict`), not only human intent.
+
+**What counts as a correction.** The observation `createCorrection` writes (`correct`,
+`correct_transaction`, `patch_array_item`, `/correct`): no source document,
+no interpretation run, no `observation_source`, `source_priority` 1000, `specificity_score`
+1.0. This is the shape shown in [observation architecture §2.2](observation_architecture.md).
+The reducer recognises it from those columns (`isCorrectionObservation` in
+`src/services/correction_identity.ts`), and `createCorrection` has written that shape since
+it was introduced, so corrections already in the log qualify and no migration or backfill is
+needed. A caller cannot forge one through the public write paths: `store`,
+`store_structured` and the other writers always stamp a non-null `observation_source` (the
+default is `unspecified`), so an observation sent with `source_priority: 1000` is still an
+ordinary write. An integration test pins both halves against real rows.
+
+**How each strategy applies it.**
+
+| Strategy                            | Effect                                                                                                                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `last_write`                        | Only corrections compete. The latest wins by `observed_at`, then `created_at`, then `id`.                                                                                                 |
+| `most_specific`                     | Only corrections compete; the strategy's own ordering then picks among them.                                                                                                              |
+| `highest_priority`                  | Only corrections compete; the strategy's own ordering (§3.2) then picks the later of two corrections. A write at any priority loses to a correction.                                      |
+| `merge_array` | Only corrections contribute, and the latest correction alone sets the array (#2341). |
+| `merge_array_by_key` | Only corrections contribute. Corrections combine by key, which `patch_array_item` relies on. |
+
+**Determinism.** Whether an observation is a correction depends only on its own stored
+columns, never on its position in the input, its arrival order, or the clock. Narrowing a
+field's candidates to its corrections is therefore the same for every ordering of the same
+observation set, and what is left is ordered by a deterministic total order, so the same
+observations reduce to the same snapshot and the same provenance in any order. For
+`last_write` and `highest_priority` that order is `observed_at`, then `created_at`, then
+`id` (ids are unique). `most_specific` ends at `observed_at` and then keeps the
+reducer's input order (`observed_at`, `id`), so two same-millisecond corrections on a
+`most_specific` field resolve by `id`, not `created_at`; still deterministic. `created_at`
+is stored data, written once when the row is accepted, not read from a clock during
+reduction. The unit suite reduces every permutation of a mixed
+set of corrections and ordinary writes and requires one identical result.
+
+**Compatibility and recompute.** Observations are not rewritten and no column is added. A
+stored snapshot changes only where another write had displaced a correction: an ordinary
+write that landed after it on a `last_write` or `most_specific` field, or a write above
+priority 1000 (or at 1000 with an outranking source kind) on a `highest_priority` or array
+field. The only in-tree writer that stored field data in the second group was
+`resolve_sync_conflict` with `prefer_remote`, which stored at priority 1000 with source kind
+`human` and now applies the differing declared fields as one atomic correction transaction
+instead (so an explicit remote preference still wins, by recency; it reports array fields that
+already hold a correction and undeclared fields as withheld, since a correction would not make
+the remote value land there). When no local entity exists it still ingests the remote snapshot
+as a normal write, with no correction in the way. Other in-tree writers store field data below 1000, so
+the second group is expected to flip little; external callers can store at any priority
+and are covered by the recompute check below. Snapshots that did flip keep their old value
+until recomputed; the next store, correction or other write to the entity recomputes it,
+and an explicit recompute does the rest. For a deliberate rollout, call
+`POST /recompute_snapshots_by_type` with `dry_run: true` per entity type, then without it,
+and verify the returned counts and errors plus representative values and provenance. To roll
+back, revert the reducer before further bulk recomputation, then recompute the affected
+types again.
+
+One historical case to check before recomputing. Before v0.6.0 the store path did not
+default `observation_source`, so a row written then through `/observations/create` at
+exactly `source_priority: 1000` with no source and no interpretation has the same shape as
+a correction and is now read as one. Such rows are expected to be rare. To find them, list
+observations with `source_priority = 1000`, `specificity_score = 1`, null `source_id`,
+null `interpretation_id` and null `observation_source` that predate v0.6.0, and review
+any field they would now pin. The `dry_run` recompute lists the entities whose snapshots
+would be rewritten, which is the set to compare.
+
 ## 4. Merge Policy Configuration
 
 ### 4.1 Schema Registry Configuration
@@ -480,6 +578,7 @@ function sortObservations(observations: Observation[]): Observation[] {
 ```
 
 This order is exported from `src/reducers/observation_reducer.ts` as `compareObservationsByReducerOrder` (and `sortObservationsInReducerOrder`), and the reducer's own sort calls it. Code that needs to agree with the reducer about which observation is first (the current winner of an entity) must use the exported comparator rather than copying the ordering. It is distinct from the module-private recency comparator used for deletion handling, which also consults `created_at`.
+
 ## 6. Type Conversion During Snapshot Computation
 
 ### 6.1 Converter Application

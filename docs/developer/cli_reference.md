@@ -726,10 +726,12 @@ Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` s
   - `--peer-public-key-thumbprint <thumbprint>`: Expected AAuth thumbprint when `auth-method=aauth`.
   - `--conflict-strategy <last_write_wins|source_priority|manual>` (default `last_write_wins`).
   - `--target-user-id <id>`: Receiver `user_id` on the peer instance.
+  - Governance entity types (for example `issue`, `subscription`, `skill`) listed in `--types` are still refused from the peer until you accept them for it: `neotoma corrections create <peer_config_entity_id> --entity-type peer_config --field-name accept_governance_entity_types --corrected-value '["issue"]'`. `peers add` has no flag for this. See [Remote Snapshot Admission](../subsystems/peer_sync.md#remote-snapshot-admission).
 - `neotoma peers list`: List configured peers.
 - `neotoma peers status <peer_id>`: Show peer config plus `remote_health` (probed `{peer_url}/health`) and semver compatibility vs the local package version.
 - `neotoma peers sync <peer_id>`: Run a bounded bilateral catch-up against the peer (push local changed observations, pull remote snapshots through `/sync/entities`).
   - `--limit <n>`: Cap observations / snapshots per direction.
+  - Pulled rows whose `entity_type` is not admitted are skipped and reported as `refused`; pushed rows the peer refuses by entity type are reported as `refused_by_peer`, not `failed`.
 - `neotoma peers remove <peer_id>`: Deactivate the peer (does not delete prior `observation_source: "sync"` rows).
 
 ### Interpretations
@@ -913,7 +915,7 @@ Main only; not in v0.25.0.
   - Two patches against DIFFERENT keys on the same field both succeed regardless of ordering. This is the fix for the lost-update pattern where a caller reads the whole array, edits one row locally, and writes the full array back, which can silently discard a concurrent writer's disjoint row.
   - Only applies to array fields whose active schema declares `merge_policies.<field>.strategy: "merge_array_by_key"` with the same `key_field` (see `docs/subsystems/reducer.md` §3.5); missing or mismatched policy fails closed before any write.
 
-For non-array fields, `neotoma corrections create <entityId> --field-name <field> --corrected-value <value> --expected-version <entity_version>` provides entity-level CAS (main only; v0.25.0 has no `--expected-version`). The CLI resolves the stored entity type when `--entity-type` is omitted. A stale token exits non-zero with `ERR_FIELD_VERSION_CONFLICT`, the stored token, and retry guidance; an identical idempotency replay returns the original observation and value before evaluating the now-stale CAS token. On a `merge_array` field, `--corrected-value` with a JSON array replaces the whole array (`'[]'` clears it); send the complete list. The default idempotency key is derived from the entity, field and value, so restoring an earlier list needs a fresh `--idempotency-key`.
+For non-array fields, `neotoma corrections create <entityId> --field-name <field> --corrected-value <value> --expected-version <entity_version>` provides entity-level CAS (main only; v0.25.0 has no `--expected-version`). The CLI resolves the stored entity type when `--entity-type` is omitted. A stale token exits non-zero with `ERR_FIELD_VERSION_CONFLICT`, the stored token, and retry guidance; an identical idempotency replay returns the original observation and value before evaluating the now-stale CAS token. On a `merge_array` field, `--corrected-value` with a JSON array replaces the whole array (`'[]'` clears it); send the complete list. The default idempotency key is derived from the entity, field and value, so any correction that repeats a value the field held before (restoring an earlier list, setting `last_sync_at` or `active` back to an earlier value) is answered as a replay: it reports success and writes nothing. Pass a fresh `--idempotency-key` whenever you repeat a value, and read the field back to confirm.
 
 ### Memory export
 

@@ -86,6 +86,15 @@ import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { AgentCapabilityError } from "./services/agent_capabilities.js";
 import {
+  ISSUE_THREAD_ENTITY_TYPES,
+  assertCurrentAgentMay,
+  assertCurrentAgentMayOnEntities,
+  assertCurrentAgentMayLink,
+  assertCurrentAgentMayStoreEntities,
+  assetEntityTypeForMimeType,
+  storeEntityTypeOf,
+} from "./services/mutation_capability.js";
+import {
   DEFAULT_OBSERVATION_SOURCE,
   buildObservationRow,
   findExistingObservation,
@@ -1778,6 +1787,19 @@ export class NeotomaServer {
     const visibility: "public" | "private" =
       usedAdvisoryAlias || parsed.visibility === "private" ? "private" : "public";
 
+    // Agent grants: submitting writes an issue thread (and may open a GitHub
+    // issue). The in-process operations layer below does not carry the
+    // caller's grant, so the check runs here, before anything is written.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES, { guestCapable: true });
+    // Edges from the new issue to entities the caller names.
+    await assertCurrentAgentMayLink(
+      userId,
+      "issue",
+      "REFERS_TO",
+      [...(parsed.entity_ids_to_link ?? []), parsed.conversation_turn_id ?? ""],
+      { guestCapable: true }
+    );
+
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
 
@@ -1943,6 +1965,11 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ entity_type: z.string().optional() });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: the issue provider runs sync_issues (see handleSyncIssues).
+    if ((parsed.entity_type ?? "issue") === "issue") {
+      assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES);
+      assertCurrentAgentMay("correct", ISSUE_THREAD_ENTITY_TYPES);
+    }
     const { syncEntitySubmissions } =
       await import("./services/entity_submission/submission_service.js");
     const { createOperations } = await import("./core/operations.js");
@@ -1981,6 +2008,14 @@ export class NeotomaServer {
         { message: "Provide entity_id or issue_number" }
       );
     const parsed = schema.parse(args ?? {});
+
+    // Agent grants: a thread message is an issue-thread write (and a GitHub
+    // comment); checked before the operations layer, which does not carry it.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES, { guestCapable: true });
+    // Edges from the issue to entities the caller names.
+    await assertCurrentAgentMayLink(userId, "issue", "REFERS_TO", parsed.entity_ids_to_link ?? [], {
+      guestCapable: true,
+    });
 
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
@@ -2066,6 +2101,11 @@ export class NeotomaServer {
     });
     const parsed = schema.parse(args ?? {});
 
+    // Agent grants: a sync stores new issue threads, corrects existing ones
+    // and can push local issues to GitHub.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES);
+    assertCurrentAgentMay("correct", ISSUE_THREAD_ENTITY_TYPES);
+
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
 
@@ -2115,6 +2155,9 @@ export class NeotomaServer {
       sync_peer_id: z.string().min(1).optional(),
     });
     const parsed = schema.parse(args ?? {});
+    // Same check the store admission inside subscribeUser applies, run first so
+    // a refusal keeps the capability_denied envelope instead of being wrapped.
+    assertCurrentAgentMay("store", ["subscription"], { guestCapable: true });
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     try {
       const result = await subscribeUser({
@@ -2145,6 +2188,8 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ subscription_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: unsubscribing corrects the subscription (active=false).
+    assertCurrentAgentMay("correct", ["subscription"], { guestCapable: true });
     const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     try {
       await unsubscribeUser({ userId, subscription_id: parsed.subscription_id });
@@ -2204,8 +2249,8 @@ export class NeotomaServer {
       UnknownBundleError,
     } = await import("./services/bundles/index.js");
 
-    // m3 follow-up: AAuth admin-tier gating of install/disable belongs here,
-    // before the mutating actions below. Intentionally not implemented in m3.
+    // Agent callers are gated in services/bundles/activation.ts
+    // (assertAdminGateHook) before any state change.
 
     try {
       if (parsed.action === "list") {
@@ -2239,6 +2284,8 @@ export class NeotomaServer {
       return this.buildTextResponse({ ok: true, action: parsed.action, ...result });
     } catch (err) {
       if (err instanceof McpError) throw err;
+      // A grant refusal keeps its capability_denied envelope (mapped centrally).
+      if (err instanceof AgentCapabilityError) throw err;
       if (err instanceof BundleStateError || err instanceof UnknownBundleError) {
         return this.buildTextResponse({
           ok: false,
@@ -2272,6 +2319,9 @@ export class NeotomaServer {
       sync_target_user_id: z.string().uuid().optional(),
     });
     const parsed = schema.parse(args ?? {});
+    // Same check the store admission inside addPeerForUser applies, run first
+    // so a refusal keeps the capability_denied envelope.
+    assertCurrentAgentMay("store", ["peer_config"]);
     const { addPeerForUser } = await import("./services/sync/peer_ops.js");
     try {
       const out = await addPeerForUser({ userId, ...parsed });
@@ -2290,6 +2340,8 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ peer_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: removing a peer corrects its peer_config.
+    assertCurrentAgentMay("correct", ["peer_config"]);
     const { removePeerForUser } = await import("./services/sync/peer_ops.js");
     try {
       await removePeerForUser({ userId, peer_id: parsed.peer_id });
@@ -2333,6 +2385,9 @@ export class NeotomaServer {
       limit: z.number().int().positive().max(500).optional(),
     });
     const parsed = schema.parse(args ?? {});
+    // Agent grants: a sync run sends local data to the peer and advances the
+    // peer_config watermark; pulled rows are still checked per type by store.
+    assertCurrentAgentMay("correct", ["peer_config"]);
     const { syncPeerFull } = await import("./services/sync/full_sync.js");
     const result = await syncPeerFull({
       userId,
@@ -5209,6 +5264,9 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `register_schema` on the entity type, before any write.
+    assertCurrentAgentMay("register_schema", [parsed.entity_type]);
+
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
@@ -5569,6 +5627,9 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `register_schema` on the entity type, before any write.
+    assertCurrentAgentMay("register_schema", [parsed.entity_type]);
+
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const { lintEntityTypeName } = await import("./services/entity_type_guard.js");
     const schemaRegistry = new SchemaRegistryService();
@@ -5648,6 +5709,10 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = CreateInterpretationRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+    // Same per-type `store` capability scope MCP `store` applies, before any
+    // source lookup or write. No-op without an agent identity.
+    const { assertInterpretationStoreCapability } = await import("./services/interpretation.js");
+    await assertInterpretationStoreCapability(userId, parsed.entities as Record<string, unknown>[]);
     const { data: source, error: sourceError } = await db
       .from("sources")
       .select("id")
@@ -5835,6 +5900,14 @@ export class NeotomaServer {
           overflowed: false,
         });
       }
+      // Agent grants: overflow intake is a store into the sink, judged on the
+      // entity types the request carries (a request with none needs "*").
+      assertCurrentAgentMay(
+        "store",
+        (parsed.entities ?? []).map((entity) =>
+          storeEntityTypeOf(entity as Record<string, unknown>)
+        )
+      );
       const { writeToOverflowSink } = await import("./services/overflow_sink.js");
       const result = writeToOverflowSink(args, parsed.intake.reason);
       return this.buildTextResponse(result);
@@ -5847,6 +5920,19 @@ export class NeotomaServer {
 
     const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
     const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+
+    // Agent grants on the file leg, before either leg writes, so a combined
+    // entities-and-file call refused on the file writes no entities either.
+    if (hasUnstructured && parsed.commit !== false) {
+      const { resolveMimeTypeFromExtension } = await import("./services/raw_storage.js");
+      const { extname } = await import("node:path");
+      const uploadMime =
+        parsed.mime_type ||
+        (parsed.file_path ? resolveMimeTypeFromExtension(extname(parsed.file_path)) : undefined);
+      assertCurrentAgentMay("store", [assetEntityTypeForMimeType(uploadMime)], {
+        guestCapable: true,
+      });
+    }
 
     if (hasEntities && hasUnstructured && parsed.commit !== false) {
       const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
@@ -6007,6 +6093,20 @@ export class NeotomaServer {
           mime_type: resolvedMimeType,
         });
       }
+      {
+        // Agent grants: the reference is recorded under its asset type.
+        const { resolveMimeTypeFromExtension } = await import("./services/raw_storage.js");
+        const { extname } = await import("node:path");
+        assertCurrentAgentMay(
+          "store",
+          [
+            assetEntityTypeForMimeType(
+              parsed.mime_type || resolveMimeTypeFromExtension(extname(parsed.file_path))
+            ),
+          ],
+          { guestCapable: true }
+        );
+      }
       const { storeRawReference } = await import("./services/raw_storage.js");
       const refResult = await storeRawReference({
         userId,
@@ -6087,6 +6187,10 @@ export class NeotomaServer {
       });
     }
 
+    // Agent grants: the upload is recorded under its asset type; checked before
+    // the source is stored.
+    assertCurrentAgentMay("store", [assetEntityTypeForMimeType(mimeType)], { guestCapable: true });
+
     const storageResult = await storeRawContent({
       userId,
       fileBuffer,
@@ -6161,11 +6265,7 @@ export class NeotomaServer {
 
   // Helper method to get entity IDs from a source_id
   private getAssetEntityType(mimeType: string): string {
-    const normalized = (mimeType || "").toLowerCase();
-    if (normalized.startsWith("image/")) return "image_asset";
-    if (normalized.startsWith("audio/")) return "audio_asset";
-    if (normalized.startsWith("video/")) return "video_asset";
-    return "file_asset";
+    return assetEntityTypeForMimeType(mimeType);
   }
 
   private async ensureUnstructuredAssetEntity(params: {
@@ -6438,6 +6538,15 @@ export class NeotomaServer {
       });
       return this.buildTextResponse(result);
     }
+
+    // Before the first write (no `sources` row, no schema auto-create, no
+    // entity of the batch), as the REST preflight does: `store` on every
+    // named type, the protected-type guard, `store` on the stored type of an
+    // entity being extended, and the reserved lifecycle marker as a delete or
+    // restore. The per-entity gate inside the write loop runs again on the
+    // alias- or equivalence-resolved type.
+    assertCurrentAgentMay("store", entities.map(storeEntityTypeOf));
+    await assertCurrentAgentMayStoreEntities(userId, entities);
     const commit = options.commit !== false;
     const strict = options.strict === true;
     const observationSource = options.observationSource;
@@ -6582,8 +6691,7 @@ export class NeotomaServer {
       const issues: Array<{ observation_index: number; entity_type: string; message: string }> = [];
       for (let i = 0; i < entities.length; i++) {
         const entityData = entities[i] ?? {};
-        const entityType =
-          (entityData.entity_type as string) || (entityData.type as string) || "generic";
+        const entityType = storeEntityTypeOf(entityData);
         const fieldsForPlan = { ...entityData };
         delete fieldsForPlan.entity_type;
         delete fieldsForPlan.type;
@@ -6904,6 +7012,16 @@ export class NeotomaServer {
     );
     const fileBuffer = Buffer.from(jsonContent, "utf-8");
 
+    // The interpretation leg below writes through runInterpretation and returns
+    // before the per-entity `store` capability check in the direct-store loop,
+    // so it applies the same scope here, before the raw source or any entity is
+    // written: the declared type and the type each entity resolves to, as
+    // create_interpretation does. No-op without an agent identity.
+    if (interpretation) {
+      const { assertInterpretationStoreCapability } = await import("./services/interpretation.js");
+      await assertInterpretationStoreCapability(userId, entities as Record<string, unknown>[]);
+    }
+
     // Omit filename when not provided: agent-provided structured data has no real file origin.
     const filenameForStorage = originalFilename?.trim() || undefined;
     let storageResult: Awaited<ReturnType<typeof storeRawContent>>;
@@ -7123,8 +7241,7 @@ export class NeotomaServer {
 
     for (const [entityIndex, entityData] of entities.entries()) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
-      let entityType =
-        (entityData.entity_type as string) || (entityData.type as string) || "generic";
+      let entityType = storeEntityTypeOf(entityData);
 
       // Exclude entity_type, type, target_id, and schema_version from field
       // validation — they are metadata consumed by the store pipeline, not
@@ -8478,6 +8595,8 @@ export class NeotomaServer {
           stored_entity_type: corrErr.storedEntityType,
         });
       }
+      // A grant refusal keeps its capability_denied envelope (mapped centrally).
+      if (corrErr instanceof AgentCapabilityError) throw corrErr;
       if (corrErr instanceof EntityOwnerConflictError) {
         // Re-throw as-is (not wrapped in McpError) so the outer MCP
         // dispatcher's EntityOwnerConflictError branch runs
@@ -8578,6 +8697,7 @@ export class NeotomaServer {
     } catch (patchErr) {
       if (patchErr instanceof McpError) throw patchErr;
       if (patchErr instanceof EntityOwnerConflictError) throw patchErr;
+      if (patchErr instanceof AgentCapabilityError) throw patchErr;
       // Instance store-policy denials/unavailability: re-throw as-is (not
       // wrapped in McpError) so the outer executeTool dispatcher's dedicated
       // branches run `error.toErrorEnvelope()` and report the structured
@@ -8629,6 +8749,10 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(
       typeof a.user_id === "string" ? a.user_id : undefined
     );
+
+    // Agent grants: publishing mints a guest_access_token for the page (a new
+    // page is also stored as a rendered_page, checked by the store below).
+    assertCurrentAgentMay("store", ["guest_access_token"]);
 
     const { publishRenderedPage, PublishRenderedPageError } =
       await import("./services/rendered_page/publish.js");
@@ -8694,6 +8818,13 @@ export class NeotomaServer {
     const parsed = MergeEntitiesRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `merge` on both entities' stored types, before any write
+    // (outside the try below so a refusal keeps its capability_denied envelope).
+    await assertCurrentAgentMayOnEntities("merge", userId, [
+      parsed.from_entity_id,
+      parsed.to_entity_id,
+    ]);
+
     const {
       mergeEntities: mergeEntitiesService,
       EntityNotFoundError,
@@ -8740,6 +8871,15 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = SplitEntityRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    // Agent grants: `split` on the source's stored type, the new entity's type
+    // and, when the split targets an existing entity, its stored type.
+    await assertCurrentAgentMayOnEntities(
+      "split",
+      userId,
+      [parsed.source_entity_id, parsed.new_entity.target_entity_id ?? ""],
+      [parsed.new_entity.entity_type]
+    );
 
     const {
       splitEntity: splitEntityService,
@@ -8857,6 +8997,15 @@ export class NeotomaServer {
     const parsed = DeleteEntityRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
+    // Agent grants: `delete` on the stored type (and the type the request
+    // names), before the deletion observation is written.
+    await assertCurrentAgentMayOnEntities(
+      "delete",
+      userId,
+      [parsed.entity_id],
+      [parsed.entity_type]
+    );
+
     const result = await softDeleteEntityService(
       parsed.entity_id,
       parsed.entity_type,
@@ -8961,6 +9110,15 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RestoreEntityRequestSchema.parse(args);
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    // Agent grants: `restore` on the stored type (and the type the request
+    // names), before the restoration observation is written.
+    await assertCurrentAgentMayOnEntities(
+      "restore",
+      userId,
+      [parsed.entity_id],
+      [parsed.entity_type]
+    );
 
     const result = await restoreEntityService(
       parsed.entity_id,

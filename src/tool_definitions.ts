@@ -1,7 +1,16 @@
 import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
 import { REPO_SLUG_PATTERN } from "./shared/repo_slug.js";
+import { CORRECTION_RULE_TEXT } from "./services/correction_identity.js";
 
 export type ToolInputSchema = Record<string, unknown>;
+
+/**
+ * The `resolve_sync_conflict` description. The YAML mirror in
+ * docs/developer/mcp/tool_descriptions.yaml must carry the same text; a unit test
+ * (tests/unit/correct_description_parity.test.ts) fails if the two drift.
+ */
+export const RESOLVE_SYNC_CONFLICT_DESCRIPTION =
+  "Resolve a replication conflict. prefer_remote (needs sender_peer_url) applies the remote snapshot's differing declared fields as one atomic correction transaction, so they hold until corrected again, and returns fields_applied, fields_withheld (array fields that already hold a local correction, undeclared fields; capped, names never repeated in the message) and fields_withheld_count; ok:true with a non-empty fields_withheld means a partial apply. A remote entity_type that is protected, or a governance type not named in both the matching configured peer's entity_types and accept_governance_entity_types, is refused with ok false and nothing written. manual flags sync_conflict. prefer_remote and manual need the correct capability. prefer_local and last_write_wins keep local state; source_priority only explains that a corrected field is never displaced by priority.";
 
 export interface ToolDefinition {
   name: string;
@@ -538,8 +547,7 @@ export function buildToolDefinitions(
     },
     {
       name: "correct",
-      description:
-        "Create a priority-1000 correction observation to override lower-priority extracted fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence, then deterministic recency. Read back the entity snapshot and field provenance before claiming the correction took effect. On a merge_array field a later correction replaces the whole array with exactly the value you pass (pass [] to clear it), so send the complete list you want, not just the change (pass expected_version if another writer may change it concurrently).",
+      description: `Create a priority-1000 correction observation to override lower-priority extracted fields. ${CORRECTION_RULE_TEXT} Read back the entity snapshot and field provenance before claiming the correction took effect. On a merge_array field send the complete list you want, not just the change (pass [] to clear it, and expected_version if another writer may change it concurrently).`,
       inputSchema: {
         type: "object",
         properties: {
@@ -1457,7 +1465,7 @@ export function buildToolDefinitions(
       name: "add_peer",
       description: desc(
         "add_peer",
-        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied."
+        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied. Governance entity types (e.g. issue, subscription) are refused from a peer until accept_governance_entity_types is set with correct on its peer_config; add_peer does not set it."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("add_peer"),
     },
@@ -1489,16 +1497,13 @@ export function buildToolDefinitions(
       name: "sync_peer",
       description: desc(
         "sync_peer",
-        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up."
+        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up. Pulled rows whose entity_type is not admitted are counted in refused; pushed rows the peer refuses by entity type are counted in refused_by_peer, not failed."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("sync_peer"),
     },
     {
       name: "resolve_sync_conflict",
-      description: desc(
-        "resolve_sync_conflict",
-        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url."
-      ),
+      description: desc("resolve_sync_conflict", RESOLVE_SYNC_CONFLICT_DESCRIPTION),
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
     {

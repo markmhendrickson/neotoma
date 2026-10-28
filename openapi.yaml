@@ -1591,6 +1591,12 @@ components:
             - create_relationship
             - correct
             - retrieve
+            - register_relationship_type
+            - delete
+            - restore
+            - merge
+            - split
+            - register_schema
             - github_harness:read
             - github_harness:write
             - "github_harness:*"
@@ -1600,9 +1606,14 @@ components:
             type: string
           description: |
             Allowed entity types for this op. The single string `*` widens
-            to any entity_type that is not protected (see
-            `protected_entity_types`). Empty array is valid for
-            `github_harness:*` ops, which use `repos` instead.
+            to any entity_type. A protected type (see
+            `protected_entity_types`) additionally requires the caller to be
+            admitted; `*` on the same op covers it. Empty array is valid for
+            `github_harness:*` ops, which use `repos` instead. `delete`,
+            `restore`, `merge`, `split` and `register_schema` are granted
+            only by an entry that names them: `store` and `correct` do not
+            imply them. Bundle install, enable and disable need
+            `register_schema` with `["*"]`.
         repos:
           type: array
           items:
@@ -4965,6 +4976,13 @@ paths:
                   merged_at:
                     type: string
                     format: date-time
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `merge` capability
+            covering both entities' stored types, or a type is protected. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /entities/split:
     post:
@@ -5017,6 +5035,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `split` capability
+            covering the source's stored type, the new entity's type and any existing
+            target's stored type, or a type is protected. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "404":
           description: Source entity not found.
           content:
@@ -5923,6 +5949,14 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover `store`
+            on the entity type, or a signed agent that was not admitted writes a
+            protected type. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /relationships:
     get:
@@ -6199,6 +6233,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CreateInterpretationResponse" }
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover `store`
+            on every entity type the interpretation would write (judged after alias
+            resolution and refinement), or a signed agent that was not admitted
+            writes a protected type. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /stats:
     get:
@@ -6328,6 +6371,13 @@ paths:
             when an `agent_definition` entity's `override_policy` denies the
             calling agent role a field being written; the envelope details
             carry `field_name`, `agent_role`, and `entity_id`.
+            `capability_denied` also covers a file upload (unstructured leg) when the
+            admitted agent's grant has no `store` capability for the upload's asset
+            type (`image_asset`, `audio_asset`, `video_asset` or `file_asset`, by MIME
+            type), checked before either leg writes; an entity that extends an
+            existing one (`target_id`) without `store` on that entity's stored type;
+            and an entity that sets `_deleted` without `delete` (for `true`) or
+            `restore` (any other value) on its type.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -7311,6 +7361,13 @@ paths:
                     items:
                       type: object
                       additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `correct` capability
+            for `issue` (and each listed entity's stored type). Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /issues/bulk_remove:
     post:
@@ -7353,6 +7410,13 @@ paths:
                     items:
                       type: object
                       additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `delete` capability
+            for `issue` (and each listed entity's stored type). Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /issues/add_message:
     post:
@@ -7449,6 +7513,15 @@ paths:
                     type: string
                     nullable: true
                     description: Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded.
+        "403":
+          description: |
+            `capability_denied` — on the owner path, the admitted agent's grant has no
+            `store` capability for `issue`, `conversation` and `conversation_message`,
+            or no `create_relationship` capability for `REFERS_TO` from `issue` to a
+            linked entity's type. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /issues/submit:
     post:
@@ -7616,6 +7689,15 @@ paths:
             is returned when neither `reporter_git_sha` nor
             `reporter_app_version` is provided. `details.acceptable_field_groups`
             lists the alternatives the caller can supply.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: |
+            `capability_denied` — on the owner path, the admitted agent's grant has no
+            `store` capability for `issue`, `conversation` and `conversation_message`,
+            or no `create_relationship` capability for `REFERS_TO` from `issue` to a
+            linked entity's type. Checked before any write; nothing was written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -7801,7 +7883,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "403":
-          description: The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist)
+          description: |
+            The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist)
+            Also `capability_denied` when the admitted agent's grant lacks `store` or
+            `correct` for `issue`, `conversation` and `conversation_message`; nothing
+            was written or pushed.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -7837,6 +7923,14 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `delete` capability
+            covering the entity's stored type (and the type the request names), or the
+            type is protected. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /restore_entity:
     post:
@@ -7869,6 +7963,14 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `restore` capability
+            covering the entity's stored type (and the type the request names), or the
+            type is protected. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /delete_relationship:
     post:
@@ -8139,6 +8241,7 @@ paths:
               properties:
                 entity_type:
                   type: string
+                  minLength: 1
                 fields_to_add:
                   type: array
                   items:
@@ -8337,6 +8440,13 @@ paths:
                           was written.
                     additionalProperties: true
                   - $ref: "#/components/schemas/SchemaRegistryToolErrorResponse"
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `register_schema`
+            capability for the entity type, or the type is protected. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /register_relationship_type:
     post:
@@ -8565,6 +8675,7 @@ paths:
               properties:
                 entity_type:
                   type: string
+                  minLength: 1
                 schema_definition:
                   type: object
                   additionalProperties: true
@@ -8626,6 +8737,13 @@ paths:
                     items:
                       type: string
                 additionalProperties: false
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `register_schema`
+            capability for the entity type, or the type is protected. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /corrections/transaction:
     post:
@@ -9222,6 +9340,14 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant does not cover `correct`
+            on the entity's stored type, or the entity type is protected and the
+            caller may not correct it. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "404":
           description: Entity not found (or not owned by the authenticated user).
           content:
@@ -9553,7 +9679,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "403":
-          description: Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
+          description: |
+            Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
+            Also `capability_denied` when the admitted agent's grant has no `store`
+            capability for `subscription`; nothing was written.
           content:
             application/json:
               schema:
@@ -9594,7 +9723,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "403":
-          description: Subscription is not wholly inside the guest entity grant
+          description: |
+            Subscription is not wholly inside the guest entity grant
+            Also `capability_denied` when the admitted agent's grant has no `correct`
+            capability for `subscription`; nothing was written.
           content:
             application/json:
               schema:
@@ -9716,6 +9848,11 @@ paths:
     post:
       summary: Add a Neotoma peer configuration
       operationId: addPeer
+      description: |
+        Registers a peer_config. The request does not set `accept_governance_entity_types`,
+        so a new peer is accepted for no governance entity types. To accept governance types
+        (for example `issue`) from this peer, correct that field on the created peer_config
+        entity afterwards. See docs/subsystems/peer_sync.md, Remote Snapshot Admission.
       requestBody:
         required: true
         content:
@@ -9773,6 +9910,13 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `store` capability
+            for `peer_config`. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /peers/{peer_id}:
     get:
@@ -9803,6 +9947,7 @@ paths:
                   peer:
                     type: object
                     additionalProperties: true
+                    description: The peer_config snapshot with the shared secret redacted, including `entity_types` and `accept_governance_entity_types`.
                   remote_health:
                     type: object
                     additionalProperties: false
@@ -9845,6 +9990,13 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `correct` capability
+            for `peer_config`. Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /peers/{peer_id}/sync:
     post:
@@ -9877,6 +10029,41 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+                    description: Summary of the run. When pulled rows were refused, ends with a sentence giving that count.
+                  batches:
+                    type: integer
+                    minimum: 0
+                  succeeded:
+                    type: integer
+                    minimum: 0
+                  failed:
+                    type: integer
+                    minimum: 0
+                  pulled:
+                    type: integer
+                    minimum: 0
+                    description: Rows pulled from the peer and ingested.
+                  refused:
+                    type: integer
+                    minimum: 0
+                    description: Rows pulled from the peer and not ingested because their entity_type was not admitted (a protected type, a governance type not in this peer's accept_governance_entity_types, or a type not in the peer's entity_types). Refused rows still advance the watermark.
+                  refused_by_peer:
+                    type: integer
+                    minimum: 0
+                    description: Rows pushed to the peer that it refused by entity type (403 SYNC_ENTITY_TYPE_REFUSED). Not counted in failed and not retried as a failure; the peer's operator must admit the type on their peer_config for this instance. The watermark moves past refused rows as on the pull leg; after the peer's operator admits the type, set last_sync_at back to resend them. A run whose only problem is refused rows still returns ok true.
+        "403":
+          description: |
+            `capability_denied` — the admitted agent's grant has no `correct` capability
+            for `peer_config` (a sync run sends local data to the peer and advances its
+            watermark). Checked before any write; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /peers/resolve_sync_conflict:
     post:
@@ -9912,6 +10099,45 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  ok:
+                    type: boolean
+                    description: False when nothing was written, including when the remote snapshot's entity_type is not admitted.
+                  message:
+                    type: string
+                    description: Never repeats the remote entity_type or a withheld field name (those are only in fields_withheld). A failed fetch, a redirect to a non-public host, or a body that is not JSON is reported as fixed text.
+                  fields_applied:
+                    type: array
+                    description: prefer_remote only. Fields whose remote value was written as a correction and now stands.
+                    items:
+                      type: string
+                  fields_withheld:
+                    type: array
+                    maxItems: 50
+                    description: prefer_remote only. Differing remote fields that were not applied, with the reason. Field names come from the remote snapshot, so they are reported here and never in `message`; the list holds at most 50 entries and each name at most 128 characters.
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [field, reason]
+                      properties:
+                        field:
+                          type: string
+                          maxLength: 128
+                        reason:
+                          type: string
+                          enum: [undeclared_field, array_corrections_combine]
+                  fields_withheld_count:
+                    type: integer
+                    minimum: 0
+                    description: prefer_remote only. How many differing remote fields were withheld, before the fields_withheld cap.
+        "403":
+          description: |
+            `capability_denied` — `prefer_remote` or `manual` against an entity that
+            exists locally, from an admitted agent whose grant does not cover
+            `correct` on its type. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /sync/webhook:
     post:
@@ -9952,6 +10178,15 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "403":
+          description: |
+            `SYNC_ENTITY_TYPE_REFUSED`: the fetched snapshot's entity_type is not admitted from this peer and nothing was stored.
+            `message` is `REMOTE_ENTITY_TYPE_REFUSED:<reason>`, where reason is one of `invalid_entity_type`,
+            `protected_entity_type`, `peer_configuration_entity_type`, `governance_entity_type`, or
+            `entity_type_not_synced`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   /sync/entities:
     post:

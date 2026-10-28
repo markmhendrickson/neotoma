@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "correction_wins_every_field",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-10-16T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Store a task, correct its status and notes, store the same task again at a much higher source priority, read the snapshot back, correct the status once more, and read the snapshot back again.",
+  "system_prompt": "Store each supplied synthetic task update with the source_priority and observation_source given, apply each requested correction, then read the task's snapshot back.",
+  "tool_calls": [
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "task",
+            "title": "Correction wins eval target",
+            "status": "open",
+            "notes": "original note"
+          }
+        ],
+        "idempotency_key": "correction_wins_every_field-seed",
+        "observation_source": "import",
+        "source_priority": 100
+      },
+      "sequence": 0
+    },
+    {
+      "name": "correct",
+      "input": {
+        "entity_id": "ent_ee142b5000ea1b25aa951449",
+        "entity_type": "task",
+        "field": "status",
+        "value": "done",
+        "idempotency_key": "correction_wins_every_field-correct-status-1"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "correct",
+      "input": {
+        "entity_id": "ent_ee142b5000ea1b25aa951449",
+        "entity_type": "task",
+        "field": "notes",
+        "value": "corrected note",
+        "idempotency_key": "correction_wins_every_field-correct-notes-1"
+      },
+      "sequence": 2
+    },
+    {
+      "name": "store",
+      "input": {
+        "entities": [
+          {
+            "entity_type": "task",
+            "title": "Correction wins eval target",
+            "status": "open",
+            "notes": "assertive re-ingest note"
+          }
+        ],
+        "idempotency_key": "correction_wins_every_field-reingest-5000",
+        "observation_source": "human",
+        "source_priority": 5000
+      },
+      "sequence": 3
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_ee142b5000ea1b25aa951449"
+      },
+      "sequence": 4
+    },
+    {
+      "name": "correct",
+      "input": {
+        "entity_id": "ent_ee142b5000ea1b25aa951449",
+        "entity_type": "task",
+        "field": "status",
+        "value": "blocked",
+        "idempotency_key": "correction_wins_every_field-correct-status-2"
+      },
+      "sequence": 5
+    },
+    {
+      "name": "retrieve_entity_snapshot",
+      "input": {
+        "entity_id": "ent_ee142b5000ea1b25aa951449"
+      },
+      "sequence": 6
+    }
+  ],
+  "assistant_text": ""
+}

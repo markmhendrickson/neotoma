@@ -7,16 +7,36 @@
 import { createCorrection } from "../correction.js";
 import { listPeersWithSecrets } from "./peer_ops.js";
 import { PEER_CONFIG_ENTITY_TYPE } from "./seed_peer_schema.js";
+import { logger } from "../../utils/logger.js";
 import { listObservationsForPeerSyncOutbound } from "./peer_sync_batch.js";
+import { admitRemoteSnapshotType, remoteSnapshotStoreEntity } from "./remote_snapshot_admission.js";
 import {
   getLocalPeerIdForOutboundSync,
   getNeotomaPublicBaseUrl,
+  PEER_REFUSED_ENTITY_TYPE,
   postOutboundSyncEntitiesRequest,
   postOutboundSyncWebhook,
 } from "./sync_webhook_outbound.js";
 
 const DEFAULT_BATCH = 200;
 const MAX_BATCH = 500;
+
+/** Clock skew allowed on a pulled row's observed_at before it is ignored for the watermark. */
+const PEER_WATERMARK_MAX_SKEW_MS = 5 * 60 * 1000;
+
+/**
+ * A pulled row's `observed_at` as a watermark candidate, or null. The peer
+ * chooses this value, and the watermark is written to this peer's own
+ * `peer_config.last_sync_at`, which bounds the next push and pull. So only a
+ * timestamp that parses and is no later than now (plus skew) is used, and it is
+ * returned in canonical ISO form rather than as the peer's text.
+ */
+export function peerWatermarkCandidate(observedAt: unknown, nowMs = Date.now()): string | null {
+  if (typeof observedAt !== "string" || observedAt.length > 64) return null;
+  const ms = Date.parse(observedAt);
+  if (!Number.isFinite(ms) || ms > nowMs + PEER_WATERMARK_MAX_SKEW_MS) return null;
+  return new Date(ms).toISOString();
+}
 
 export async function syncPeerFull(params: {
   userId: string;
@@ -29,6 +49,10 @@ export async function syncPeerFull(params: {
   succeeded?: number;
   failed?: number;
   pulled?: number;
+  /** Pulled rows not ingested because the peer's entity_type was refused. */
+  refused?: number;
+  /** Pushed rows the receiving peer refused by entity type (not counted in failed). */
+  refused_by_peer?: number;
 }> {
   const peers = await listPeersWithSecrets(params.userId);
   const peer = peers.find((p) => p.peer_id === params.peer_id);
@@ -90,6 +114,7 @@ export async function syncPeerFull(params: {
 
   let succeeded = 0;
   let failed = 0;
+  let refusedByPeer = 0;
   let watermark: string | null = null;
 
   for (const row of rows) {
@@ -110,12 +135,24 @@ export async function syncPeerFull(params: {
       if (!watermark || row.observed_at > watermark) {
         watermark = row.observed_at;
       }
+    } else if (out.error === PEER_REFUSED_ENTITY_TYPE) {
+      // The receiver does not admit this type from this instance: its
+      // configuration, not a delivery failure. Not counted in `failed`, and the
+      // watermark moves past it as on the pull leg, so a batch of refused rows
+      // cannot hold back the rows behind it. After the receiving operator opts
+      // in, a last_sync_at reset resends it (docs/subsystems/peer_sync.md).
+      refusedByPeer++;
+      if (!watermark || row.observed_at > watermark) {
+        watermark = row.observed_at;
+      }
     } else {
       failed++;
     }
   }
 
   let pulled = 0;
+  let refused = 0;
+  const refusedReasons: Record<string, number> = {};
   if (peer.direction !== "push") {
     const pull = await postOutboundSyncEntitiesRequest({
       peerUrlBase: peer.peer_url,
@@ -132,24 +169,49 @@ export async function syncPeerFull(params: {
     if (pull.ok) {
       const { storeStructuredForApi } = await import("../../actions.js");
       for (const row of pull.rows ?? []) {
-        const fields = { ...row.snapshot };
-        delete (fields as Record<string, unknown>).entity_id;
+        // The peer names each row's entity_type. Ingest only a type configured
+        // for this peer, never a protected one, and a governance type only when
+        // this peer's accept_governance_entity_types names it
+        // (remote_snapshot_admission). A refused row still advances the
+        // watermark: the refusal is permanent until the operator changes config.
+        const rowWatermark = peerWatermarkCandidate(row.observed_at);
+        const rowRefusal = await admitRemoteSnapshotType(row.entity_type, {
+          userId: params.userId,
+          peerEntityTypes: peer.entity_types,
+          acceptGovernanceEntityTypes: peer.accept_governance_entity_types,
+        });
+        if (rowRefusal) {
+          refused++;
+          refusedReasons[rowRefusal.reason] = (refusedReasons[rowRefusal.reason] ?? 0) + 1;
+          if (rowWatermark && (!watermark || rowWatermark > watermark)) {
+            watermark = rowWatermark;
+          }
+          continue;
+        }
         await storeStructuredForApi({
           userId: params.userId,
-          entities: [{ entity_type: row.entity_type, ...fields }],
+          entities: [remoteSnapshotStoreEntity(row.entity_type, row.snapshot ?? {})],
           sourcePriority: 40,
           observationSource: "sync",
           sourcePeerId: peer.peer_id,
           idempotencyKey: `sync:${peer.peer_id}:${row.source_observation_id}:${row.entity_id}`,
         });
         pulled++;
-        if (!watermark || row.observed_at > watermark) {
-          watermark = row.observed_at;
+        if (rowWatermark && (!watermark || rowWatermark > watermark)) {
+          watermark = rowWatermark;
         }
       }
     } else if (peer.direction === "pull") {
       failed++;
     }
+  }
+
+  if (refused > 0) {
+    logger.warn("[sync] refused pulled peer rows by entity type", {
+      peer_id: peer.peer_id,
+      refused,
+      reasons: refusedReasons,
+    });
   }
 
   let nextCf = peer.consecutive_failures ?? 0;
@@ -178,19 +240,32 @@ export async function syncPeerFull(params: {
       value: watermark,
       schema_version: "1.0",
       user_id: params.userId,
-      idempotency_key: `peer-sync-lsa:${peer.entity_id}:${watermark}:${tailId}`,
+      // The previous value is part of the key: after an operator sets last_sync_at
+      // back, a run that ends at the same watermark and tail must still write.
+      idempotency_key: `peer-sync-lsa:${peer.entity_id}:${watermark}:${tailId}:${peer.last_sync_at ?? ""}`,
     });
   }
 
   const ok = failed === 0;
+  const refusedNote = refused
+    ? ` Refused ${refused} pulled row(s) whose entity_type is protected, governance not accepted from this peer, or not configured for this peer.`
+    : "";
+  const refusedByPeerNote = refusedByPeer
+    ? ` The peer refused ${refusedByPeer} pushed row(s) by entity type; its operator must list the type in the entity_types of their peer_config for this instance, and also in accept_governance_entity_types for a governance type such as issue.`
+    : "";
   return {
     ok,
-    message: ok
-      ? `Posted ${succeeded} sync webhook(s) to peer; pulled ${pulled} remote row(s).`
-      : `Partial sync: ${succeeded} succeeded, ${failed} failed, ${pulled} pulled; consecutive_failures=${nextCf}.`,
+    message:
+      (ok
+        ? `Posted ${succeeded} sync webhook(s) to peer; pulled ${pulled} remote row(s).`
+        : `Partial sync: ${succeeded} succeeded, ${failed} failed, ${pulled} pulled; consecutive_failures=${nextCf}.`) +
+      refusedNote +
+      refusedByPeerNote,
     batches: rows.length,
     succeeded,
     failed,
     pulled,
+    refused,
+    refused_by_peer: refusedByPeer,
   };
 }

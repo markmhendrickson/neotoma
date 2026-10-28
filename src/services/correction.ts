@@ -21,6 +21,7 @@ import {
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
+import { assertCurrentAgentMayWriteLifecycleMarker } from "./mutation_capability.js";
 import { enforceOverridePolicy } from "./override_validation.js";
 import { assertNoOwnerConflict } from "./entity_resolution.js";
 import {
@@ -266,6 +267,12 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
+  // A correction of the reserved lifecycle marker is a delete or restore; an
+  // agent needs that grant op as well as `correct`. Covers /correct, MCP
+  // correct, batch_correct, correction transactions and patch_array_item.
+  assertCurrentAgentMayWriteLifecycleMarker(params.entity_type, {
+    [params.field]: params.value,
+  });
   // Pre-persist shape guard for agent_grant fields (no-op for every other
   // entity_type). Throws before any row is written. `correct()` is the raw
   // entity-store surface that bypasses agent_grants.ts's own
@@ -383,8 +390,10 @@ export async function createCorrection(params: CreateCorrectionParams): Promise<
     source_id: null,
     interpretation_id: null,
     observed_at: new Date().toISOString(),
-    // The correction shape the reducer recognises (see correction_identity.ts).
-    // Do not write these two values anywhere else without an observation_source.
+    // Together with a null source, no interpretation and no observation_source,
+    // these two make the row recognisable as a correction to the reducer
+    // (correction_identity.ts). Do not set observation_source here without
+    // changing that predicate in the same change.
     specificity_score: CORRECTION_SPECIFICITY_SCORE,
     source_priority: CORRECTION_SOURCE_PRIORITY,
     fields: { [field]: value },

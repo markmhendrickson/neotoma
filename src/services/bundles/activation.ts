@@ -6,12 +6,15 @@
  * Each mutation invalidates the cached registry so the next read (and the
  * schema-mode enforcement that consults it) reflects the new enabled set.
  *
- * AAuth admin-tier gating of install/disable is OUT OF SCOPE for m3 — see the
- * TODO marker in {@link assertAdminGateHook}. Do NOT implement AAuth here.
+ * Agent callers are gated in {@link assertAdminGateHook}: an AAuth-admitted
+ * agent needs `register_schema` with `entity_types: ["*"]`, since a bundle
+ * changes schema behaviour for many types instance-wide. A caller with no
+ * agent identity (the CLI, an owner session) is not gated.
  *
  * Tracking: Neotoma plan `ent_089da2ecebc3bd804d63dcf2` (Bundles Strategy, m3).
  */
 
+import { assertCurrentAgentMay } from "../mutation_capability.js";
 import {
   BundleStateError,
   getBundle,
@@ -26,17 +29,18 @@ import {
 } from "./loader.js";
 
 /**
- * m3 follow-up hook: AAuth admin-tier gating of install/disable lands later
- * (see PR body "m3 follow-ups"). Today this is a no-op so the machinery ships
- * un-gated. When implemented, the gate belongs HERE — before any state mutation
- * in {@link installBundle}/{@link enableBundle}/{@link disableBundle} — so both
- * the CLI and MCP surfaces inherit it without duplication.
+ * Gate for install / enable / disable, before any state mutation in
+ * {@link installBundle}/{@link enableBundle}/{@link disableBundle}, so the CLI
+ * and MCP surfaces share it. An agent caller needs `register_schema` over
+ * every type (`entity_types: ["*"]`): a bundle changes which schemas
+ * auto-create for many types, for every user on the instance. A request with
+ * no agent identity (the CLI, an owner session) is not gated, which keeps
+ * today's behaviour for those callers.
  *
  * @param _action the mutating action being attempted.
  */
 function assertAdminGateHook(_action: "install" | "enable" | "disable"): void {
-  // TODO(bundles-m3-followup): require AAuth admin tier for install/disable.
-  // Intentionally a no-op in this PR.
+  assertCurrentAgentMay("register_schema", ["*"]);
 }
 
 /** A bundle's full manifest detail, for the `info` surface. */

@@ -1193,7 +1193,7 @@ export const GetSchemaRecommendationsRequestSchema = z.object({
 
 export const UpdateSchemaIncrementalRequestSchema = z
   .object({
-    entity_type: z.string(),
+    entity_type: z.string().min(1),
     fields_to_add: z
       .array(
         z.object({
@@ -1258,7 +1258,7 @@ export const UpdateSchemaIncrementalRequestSchema = z
   });
 
 export const RegisterSchemaRequestSchema = z.object({
-  entity_type: z.string(),
+  entity_type: z.string().min(1),
   schema_definition: z.record(z.unknown()),
   reducer_config: z.record(z.unknown()),
   schema_version: z.string().default("1.0"),

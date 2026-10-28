@@ -236,18 +236,51 @@ describe("OpenAPI tool schemas", () => {
       paths?: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
     };
 
-    it.each(["/create_relationship", "/delete_relationship", "/restore_relationship"])(
-      "%s declares 403 capability_denied as ErrorEnvelope",
-      (route) => {
-        const declared = spec.paths?.[route]?.post?.responses?.["403"];
-        expect(
-          declared,
-          `${route} emits 403 capability_denied at runtime but does not declare it`
-        ).toBeTruthy();
-        expect(JSON.stringify(declared)).toContain("capability_denied");
-        expect(JSON.stringify(declared)).toContain("#/components/schemas/ErrorEnvelope");
-      }
-    );
+    it.each([
+      "/create_relationship",
+      "/delete_relationship",
+      "/restore_relationship",
+      "/observations/create",
+      "/interpretations/create",
+      "/entities/{id}/batch_correct",
+      "/peers/resolve_sync_conflict",
+    ])("%s declares 403 capability_denied as ErrorEnvelope", (route) => {
+      const declared = spec.paths?.[route]?.post?.responses?.["403"];
+      expect(
+        declared,
+        `${route} emits 403 capability_denied at runtime but does not declare it`
+      ).toBeTruthy();
+      expect(JSON.stringify(declared)).toContain("capability_denied");
+      expect(JSON.stringify(declared)).toContain("#/components/schemas/ErrorEnvelope");
+    });
+
+    it.each([
+      ["/delete_entity", "post"],
+      ["/restore_entity", "post"],
+      ["/entities/merge", "post"],
+      ["/entities/split", "post"],
+      ["/register_schema", "post"],
+      ["/update_schema_incremental", "post"],
+      ["/store", "post"],
+      ["/subscribe", "post"],
+      ["/unsubscribe", "post"],
+      ["/peers", "post"],
+      ["/peers/{peer_id}", "delete"],
+      ["/peers/{peer_id}/sync", "post"],
+      ["/issues/submit", "post"],
+      ["/issues/add_message", "post"],
+      ["/issues/sync", "post"],
+      ["/issues/bulk_close", "post"],
+      ["/issues/bulk_remove", "post"],
+    ])("%s %s declares 403 capability_denied as ErrorEnvelope", (route, method) => {
+      const declared = spec.paths?.[route]?.[method]?.responses?.["403"];
+      expect(
+        declared,
+        `${method.toUpperCase()} ${route} emits 403 capability_denied at runtime but does not declare it`
+      ).toBeTruthy();
+      expect(JSON.stringify(declared)).toContain("capability_denied");
+      expect(JSON.stringify(declared)).toContain("#/components/schemas/ErrorEnvelope");
+    });
 
     it("declares structured per-item capability denials on create_relationships", () => {
       const response = spec.paths?.["/create_relationships"]?.post?.responses?.["200"];
