@@ -1,4 +1,5 @@
 import {
+  assertCurrentAgentMayStoreEntityTypes,
   preflightStructuredStoreAdmission,
   type StructuredStoreApiParams,
   type StoreRelationshipRef,
@@ -61,6 +62,13 @@ import {
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
+import {
+  ISSUE_THREAD_ENTITY_TYPES,
+  assertCurrentAgentMay,
+  assertCurrentAgentMayLink,
+  assertCurrentAgentMayOnEntities,
+  assetEntityTypeForMimeType,
+} from "./services/mutation_capability.js";
 import { AccessPolicyError, type GuestIdentity } from "./services/access_policy.js";
 import { hashGuestAccessToken } from "./services/guest_access_token.js";
 import { subscriptionWithinGuestScope } from "./services/subscriptions/guest_scope.js";
@@ -5615,6 +5623,17 @@ app.post("/entities/:id/batch_correct", async (req, res) => {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
+    // Capability denial: same 403 `capability_denied` envelope as /correct.
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(
+        req,
+        res,
+        error,
+        "Failed to apply batch correction",
+        "DB_QUERY_FAILED",
+        "AgentCapabilityRejection:entity_batch_correct"
+      );
+    }
     logError("APIError:entity_batch_correct", req, error);
     const message = error instanceof Error ? error.message : "Failed to apply batch correction";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -7410,6 +7429,14 @@ app.post("/interpretations/create", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    // Same per-type `store` capability scope `/store` applies, before any
+    // source lookup or write. No-op without an agent identity.
+    const { assertInterpretationStoreCapability, runInterpretation } =
+      await import("./services/interpretation.js");
+    await assertInterpretationStoreCapability(
+      userId,
+      parsed.data.entities as Record<string, unknown>[]
+    );
     const { data: source, error: sourceError } = await db
       .from("sources")
       .select("id")
@@ -7421,7 +7448,6 @@ app.post("/interpretations/create", async (req, res) => {
       return sendError(res, 404, "SOURCE_NOT_FOUND", "Source not found for authenticated user");
     }
 
-    const { runInterpretation } = await import("./services/interpretation.js");
     const interpretationResult = await runInterpretation({
       userId,
       sourceId: parsed.data.source_id,
@@ -7519,6 +7545,17 @@ app.post("/interpretations/create", async (req, res) => {
         : {}),
     });
   } catch (error) {
+    // Capability denial: same 403 `capability_denied` envelope as `/store`.
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(
+        req,
+        res,
+        error,
+        "Failed to create interpretation",
+        "INTERPRETATION_CREATE_FAILED",
+        "AgentCapabilityRejection:interpretations_create"
+      );
+    }
     logError("APIError:interpretations_create", req, error);
     const message = error instanceof Error ? error.message : "Failed to create interpretation";
     return sendError(res, 500, "INTERPRETATION_CREATE_FAILED", message);
@@ -7687,6 +7724,10 @@ app.post("/observations/create", async (req, res) => {
         .json(buildErrorEnvelope("FORBIDDEN", "user_id does not match authenticated user."));
     }
 
+    // Same per-type `store` capability scope `/store` applies, before the
+    // entity is resolved or created. No-op without an agent identity.
+    assertCurrentAgentMayStoreEntityTypes([entity_type]);
+
     const { resolveEntity } = await import("./services/entity_resolution.js");
     const { createObservation } = await import("./services/observation_storage.js");
     const { getSnapshot, recomputeSnapshot } = await import("./services/snapshot_computation.js");
@@ -7721,6 +7762,17 @@ app.post("/observations/create", async (req, res) => {
       snapshot: snapshot?.snapshot || {},
     });
   } catch (error) {
+    // Capability denial: same 403 `capability_denied` envelope as `/store`.
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(
+        req,
+        res,
+        error,
+        "Failed to create observation",
+        "DB_QUERY_FAILED",
+        "AgentCapabilityRejection:observations_create"
+      );
+    }
     logError("APIError:observations_create", req, error);
     const message = error instanceof Error ? error.message : "Failed to create observation";
     return res.status(500).json(buildErrorEnvelope("DB_QUERY_FAILED", message));
@@ -9350,6 +9402,10 @@ export async function storeUnstructuredForApi(params: {
     };
   }
 
+  // Agent grants: an upload is recorded under its asset type (the type the
+  // MCP leg writes for the same bytes). Checked before the source is stored.
+  assertCurrentAgentMay("store", [assetEntityTypeForMimeType(mimeType)], { guestCapable: true });
+
   if (storageMode === "reference") {
     if (!filePath) {
       throw new Error("filePath is required for reference storage mode");
@@ -9439,6 +9495,19 @@ async function handleStorePost(
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
     const hasUnstructured = hasFileContent || hasFilePath;
+
+    // Agent grants on the file leg, before either leg writes, so a combined
+    // entities-and-file call refused on the file writes no entities either.
+    if (hasUnstructured && parsed.data.commit !== false) {
+      const uploadMime =
+        parsed.data.mime_type ||
+        (parsed.data.file_path
+          ? getMimeTypeFromExtension(path.extname(parsed.data.file_path).toLowerCase())
+          : undefined);
+      assertCurrentAgentMay("store", [assetEntityTypeForMimeType(uploadMime)], {
+        guestCapable: true,
+      });
+    }
 
     if (hasEntities && hasUnstructured && parsed.data.commit !== false) {
       const { claimCombinedStoreKeys } = await import("./services/store_combined_admission.js");
@@ -9911,6 +9980,11 @@ app.post(
       if (msg === "INVALID_JSON" || msg.startsWith("VALIDATION_ERROR")) {
         return sendError(res, 400, "VALIDATION_ERROR", msg);
       }
+      if (msg.startsWith("REMOTE_ENTITY_TYPE_REFUSED")) {
+        const { SYNC_ENTITY_TYPE_REFUSED_ERROR_CODE } =
+          await import("./services/sync/remote_snapshot_admission.js");
+        return sendError(res, 403, SYNC_ENTITY_TYPE_REFUSED_ERROR_CODE, msg);
+      }
       logError("APIError:sync_webhook", req, err);
       return sendError(res, 500, "SYNC_WEBHOOK_FAILED", msg);
     }
@@ -9994,6 +10068,9 @@ app.post("/peers", express.json(), async (req, res) => {
     const out = await addPeerForUser({ userId, ...parsed.data });
     return res.status(201).json(out);
   } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "Failed to add peer");
+    }
     logError("APIError:peers_add", req, error);
     const message = error instanceof Error ? error.message : "Failed to add peer";
     if (message.includes("Maximum peers")) {
@@ -10003,8 +10080,11 @@ app.post("/peers", express.json(), async (req, res) => {
   }
 });
 
-// POST /peers/resolve_sync_conflict — stub (use `correct` today). Registered
-// before `/peers/:peer_id` so `resolve_sync_conflict` is not captured as a peer_id.
+// POST /peers/resolve_sync_conflict — resolve a replication conflict. `prefer_remote`
+// and `manual` write correction-tier values, so they run the same `correct` capability
+// gate as `/correct`; `prefer_remote` applies the differing fields as one correction
+// transaction and reports applied and withheld fields. Registered before
+// `/peers/:peer_id` so `resolve_sync_conflict` is not captured as a peer_id.
 app.post("/peers/resolve_sync_conflict", express.json(), async (req, res) => {
   const schema = z.object({
     entity_id: z.string().min(1),
@@ -10034,6 +10114,14 @@ app.post("/peers/resolve_sync_conflict", express.json(), async (req, res) => {
     });
     return res.json(result);
   } catch (error) {
+    // A capability or protected-type refusal is the caller's authorization,
+    // not a server fault: 403 with the envelope `/correct` returns.
+    if (error instanceof AgentCapabilityError) {
+      logWarn("AgentCapabilityRejection:peers_resolve", req, error.toErrorEnvelope());
+      return res
+        .status(403)
+        .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+    }
     logError("APIError:peers_resolve", req, error);
     const message = error instanceof Error ? error.message : "resolve failed";
     return sendError(res, 500, "PEER_RESOLVE_FAILED", message);
@@ -10061,10 +10149,15 @@ app.get("/peers/:peer_id", async (req, res) => {
 app.delete("/peers/:peer_id", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req);
+    // Agent grants: removing a peer corrects its peer_config.
+    assertCurrentAgentMay("correct", ["peer_config"]);
     const { removePeerForUser } = await import("./services/sync/peer_ops.js");
     await removePeerForUser({ userId, peer_id: req.params.peer_id });
     return res.json({ success: true });
   } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "Failed to remove peer");
+    }
     logError("APIError:peers_remove", req, error);
     const message = error instanceof Error ? error.message : "Failed to remove peer";
     if (message.includes("not found")) {
@@ -10081,10 +10174,16 @@ app.post("/peers/:peer_id/sync", express.json(), async (req, res) => {
     const bodySchema = z.object({ limit: z.number().int().positive().max(500).optional() });
     const bodyParsed = bodySchema.safeParse(req.body ?? {});
     const limit = bodyParsed.success ? bodyParsed.data.limit : undefined;
+    // Agent grants: a sync run sends local data to the peer and advances the
+    // peer_config watermark; pulled rows are still checked per type by store.
+    assertCurrentAgentMay("correct", ["peer_config"]);
     const { syncPeerFull } = await import("./services/sync/full_sync.js");
     const result = await syncPeerFull({ userId, peer_id: req.params.peer_id, limit });
     return res.json(result);
   } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "sync_peer failed");
+    }
     logError("APIError:peers_sync", req, error);
     const message = error instanceof Error ? error.message : "sync_peer failed";
     return sendError(res, 500, "PEER_SYNC_FAILED", message);
@@ -10220,6 +10319,9 @@ app.post("/entities/merge", async (req, res) => {
       return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
     }
 
+    // Agent grants: `merge` on both entities' stored types, before any write.
+    await assertCurrentAgentMayOnEntities("merge", user_id, [from_entity_id, to_entity_id]);
+
     const { mergeEntities } = await import("./services/entity_merge.js");
     const result = await mergeEntities({
       fromEntityId: from_entity_id,
@@ -10231,6 +10333,9 @@ app.post("/entities/merge", async (req, res) => {
 
     return res.json(result);
   } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "Failed to merge entities");
+    }
     const { EntityNotFoundError, EntityAlreadyMergedError } =
       await import("./services/entity_merge.js");
     if (error instanceof EntityNotFoundError) {
@@ -10264,6 +10369,15 @@ app.post("/entities/split", async (req, res) => {
     }
     const userId = providedUserId || authenticatedUserId;
 
+    // Agent grants: `split` on the source's stored type, the new entity's
+    // type and, when the split targets an existing entity, its stored type.
+    await assertCurrentAgentMayOnEntities(
+      "split",
+      userId,
+      [parsed.data.source_entity_id, parsed.data.new_entity.target_entity_id ?? ""],
+      [parsed.data.new_entity.entity_type]
+    );
+
     const { splitEntity } = await import("./services/entity_split.js");
     const result = await splitEntity({
       sourceEntityId: parsed.data.source_entity_id,
@@ -10281,6 +10395,9 @@ app.post("/entities/split", async (req, res) => {
 
     return res.json(result);
   } catch (error) {
+    if (error instanceof AgentCapabilityError) {
+      return handleApiError(req, res, error, "Failed to split entity");
+    }
     const {
       EntityNotFoundError,
       EntityAlreadyMergedError,
@@ -11219,6 +11336,10 @@ app.post("/delete_entity", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { entity_id, entity_type, reason } = parsed.data;
 
+    // Agent grants: `delete` on the stored type (and the type the request
+    // names), before the deletion observation is written.
+    await assertCurrentAgentMayOnEntities("delete", userId, [entity_id], [entity_type]);
+
     const { softDeleteEntity } = await import("./services/deletion.js");
 
     const result = await softDeleteEntity(entity_id, entity_type, userId, reason);
@@ -11251,6 +11372,8 @@ app.post("/issues/bulk_close", async (req, res) => {
   }
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    // Agent grants: closing corrects the issue (and its GitHub state).
+    await assertCurrentAgentMayOnEntities("correct", userId, parsed.data.entity_ids, ["issue"]);
     const { bulkCloseIssues } = await import("./services/issues/inspector_bulk.js");
     const { results } = await bulkCloseIssues(userId, parsed.data.entity_ids);
     logDebug("Success:issues_bulk_close", req, { count: results.length });
@@ -11276,6 +11399,8 @@ app.post("/issues/bulk_remove", async (req, res) => {
   }
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    // Agent grants: removal closes and soft-deletes the issue.
+    await assertCurrentAgentMayOnEntities("delete", userId, parsed.data.entity_ids, ["issue"]);
     const { bulkRemoveIssues } = await import("./services/issues/inspector_bulk.js");
     const { results } = await bulkRemoveIssues(userId, parsed.data.entity_ids);
     logDebug("Success:issues_bulk_remove", req, { count: results.length });
@@ -11312,6 +11437,21 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
             )
           ).userId
         : await getAuthenticatedUserId(req, parsed.data.user_id);
+    // Agent grants on the owner path: a thread message is an issue-thread
+    // write (and a GitHub comment). The in-process operations layer below does
+    // not carry the caller's grant, so the check runs here, before anything is
+    // written. The guest path stays scoped by its guest access token.
+    if (principal.kind !== "guest") {
+      assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES, { guestCapable: true });
+      // Edges from the issue to entities the caller names.
+      await assertCurrentAgentMayLink(
+        userId,
+        "issue",
+        "REFERS_TO",
+        parsed.data.entity_ids_to_link ?? [],
+        { guestCapable: true }
+      );
+    }
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
     const { addIssueMessage, appendGuestIssueMessage } =
@@ -11395,6 +11535,22 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           ? ((await resolveGuestUserId(req, principal)) ??
             (await getAuthenticatedUserId(req, parsed.data.user_id)))
           : await getAuthenticatedUserId(req, parsed.data.user_id);
+    // Agent grants on the owner path: it writes an issue thread under the
+    // owner and may open a GitHub issue. The in-process operations layer below
+    // does not carry the caller's grant, so the check runs here, before
+    // anything is written. The guest path stays under access policy, as for
+    // any guest.
+    if (!(principal.kind === "guest" || guestSubmitPayload)) {
+      assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES, { guestCapable: true });
+      // Edges from the new issue to entities the caller names.
+      await assertCurrentAgentMayLink(
+        userId,
+        "issue",
+        "REFERS_TO",
+        [...(parsed.data.entity_ids_to_link ?? []), parsed.data.conversation_turn_id ?? ""],
+        { guestCapable: true }
+      );
+    }
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
     const { submitIssue, submitGuestIssue } = await import("./services/issues/issue_operations.js");
@@ -11533,6 +11689,10 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
   }
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    // Agent grants: a sync stores new issue threads, corrects existing ones
+    // and can push local issues to GitHub.
+    assertCurrentAgentMay("store", ISSUE_THREAD_ENTITY_TYPES);
+    assertCurrentAgentMay("correct", ISSUE_THREAD_ENTITY_TYPES);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
     const { syncIssuesFromGitHub } = await import("./services/issues/sync_issues_from_github.js");
@@ -11586,6 +11746,10 @@ app.post("/restore_entity", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { entity_id, entity_type, reason } = parsed.data;
+
+    // Agent grants: `restore` on the stored type (and the type the request
+    // names), before the restoration observation is written.
+    await assertCurrentAgentMayOnEntities("restore", userId, [entity_id], [entity_type]);
 
     const { restoreEntity } = await import("./services/deletion.js");
 
@@ -11978,6 +12142,9 @@ app.post("/update_schema_incremental", async (req, res) => {
       force = false,
     } = parsed.data;
 
+    // Agent grants: `register_schema` on the entity type, before any write.
+    assertCurrentAgentMay("register_schema", [entity_type]);
+
     const { schemaRegistry, loadCodeDefinedSchemaEntry } =
       await import("./services/schema_registry.js");
 
@@ -12319,6 +12486,9 @@ app.post("/register_schema", async (req, res) => {
       activate = false,
       force = false,
     } = parsed.data;
+
+    // Agent grants: `register_schema` on the entity type, before any write.
+    assertCurrentAgentMay("register_schema", [entity_type]);
 
     const { schemaRegistry } = await import("./services/schema_registry.js");
 
@@ -13013,6 +13183,8 @@ app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
         );
       }
     }
+    // Agent grants: unsubscribing corrects the subscription (active=false).
+    assertCurrentAgentMay("correct", ["subscription"], { guestCapable: true });
     await unsubscribeUser({ userId, subscription_id: parsed.data.subscription_id });
     return res.json({ success: true });
   } catch (error) {

@@ -67,6 +67,13 @@ const ALLOWED_OPS: ReadonlySet<AgentCapabilityOp> = new Set([
   // read since the op was introduced, independent of the entity_types /
   // relationship_types fix above.
   "register_relationship_type",
+  // Entity lifecycle / structure and schema-governance ops (v0.26.1). Each
+  // is granted only by an entry that names it; see agent_capabilities.ts.
+  "delete",
+  "restore",
+  "merge",
+  "split",
+  "register_schema",
   "github_harness:read",
   "github_harness:write",
   "github_harness:*",

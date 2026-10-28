@@ -71,7 +71,7 @@ Use peer sync when:
 
 - `NEOTOMA_PUBLIC_BASE_URL` — public base URL of this API (no trailing slash). Used as `sender_peer_url` on outbound sync so the peer can fetch entity snapshots back.
 - `NEOTOMA_LOCAL_PEER_ID` — stable id this instance presents as `sender_peer_id`. Must match the value the peer recorded as their `peer_id` for you.
-- `NEOTOMA_HOSTED_MODE=1` — operator opt-in for hosted / multi-tenant deployments. When set, the inbound webhook handler rejects any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback.
+- `NEOTOMA_HOSTED_MODE=1` — operator opt-in for hosted / multi-tenant deployments. When set, the inbound webhook handler rejects any `sender_peer_url` whose host is a private, loopback, or link-local address or a local name. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback.
 
 ## Example
 
@@ -91,6 +91,17 @@ neotoma peers sync central
 ```
 
 The personal instance batches up to 200 changed observations (default `limit`), POSTs them to `https://central.example.com/sync/webhook` with `X-Neotoma-Sync-Signature-256`, and writes the resulting `last_sync_at` watermark back to its own `peer_config` row. Replays of the same signed payload are deduplicated by idempotency key so a flaky network does not produce duplicate observations.
+
+`issue` is a governance entity type, so the central instance refuses issues from this peer until its operator accepts them. On the central instance, correct the `peer_config` that describes the personal instance:
+
+```bash
+neotoma corrections create <peer_config_entity_id> \
+  --entity-type peer_config \
+  --field-name accept_governance_entity_types \
+  --corrected-value '["issue"]'
+```
+
+If the personal instance also pulls issues back from central, run the same correction there on its `central` peer. `product_feedback` needs no opt-in. Until then, central answers each issue delivery with `403 SYNC_ENTITY_TYPE_REFUSED` and a pull counts issue rows as `refused`.
 
 ## Selective sync
 

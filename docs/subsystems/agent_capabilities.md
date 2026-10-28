@@ -54,11 +54,15 @@ ceiling regardless of how it reaches Neotoma:
   the MCP tools ran only the protected-entity-types guard; the capability
   gate was added alongside MCP admission so the two transports stay at
   parity.)
+- Every other entry point that changes data — see
+  [Coverage by entry point](#coverage-by-entry-point).
 
 The protected-entity-types guard (`assertCanWriteProtected`) runs in addition
-to capability scoping on both transports, so governance state such as
-`agent_grant` is never writable via a `*` capability — `*` widens only to
-non-protected types.
+to capability scoping on both transports, with the same op. For a protected
+type such as `agent_grant` it refuses any agent that was not admitted, and
+requires an admitted agent's grant to hold that op for the type, either by
+name or through `*` on the same op. A grant meant to reach ordinary types
+only should therefore list them rather than use `*`.
 
 ## Grant shape
 
@@ -196,12 +200,105 @@ today. Give an agent that needs a grant a long-lived signing key
 | Op                   | Covers                                                 |
 | -------------------- | ------------------------------------------------------ |
 | `store` / `store_structured` | Creating / observing entities (write path). `store_structured` remains accepted on persisted grants as a legacy synonym. |
-| `create_relationship`| Creating relationships between entities.               |
+| `create_relationship`| Creating relationships between entities; also deleting and restoring them. |
 | `correct`            | Correcting / updating existing observations / fields.  |
 | `retrieve`           | Reading entities and observations.                     |
+| `register_relationship_type` | Registering a relationship type (scoped by `relationship_types`). |
+| `delete`             | Soft-deleting an entity of the listed types.           |
+| `restore`            | Restoring a soft-deleted entity of the listed types.   |
+| `merge`              | Merging two entities; both types must be listed.       |
+| `split`              | Splitting an entity; the source type and the new entity's type must be listed. |
+| `register_schema`    | Registering or incrementally updating the schema of the listed types. With `["*"]`, also installing, enabling and disabling bundles. |
 
 `entity_types` is a string array of permitted entity types for that op.
 Use `["*"]` to widen to every type — only do this for trusted grants.
+
+`delete`, `restore`, `merge`, `split` and `register_schema` are granted only
+by an entry that names them. `store` and `correct` do not imply them, and
+`"*"` on another op does not either. On a protected type such as
+`agent_grant` they also need the type named: `"*"` on the op does not cover
+it. Relationship deletion and restoration stay under `create_relationship`,
+scoped by `relationship_types`, as before. For example, this lets an agent
+delete and restore tasks and notes, and nothing else:
+
+```json
+[
+  { "op": "delete", "entity_types": ["task", "note"] },
+  { "op": "restore", "entity_types": ["task", "note"] }
+]
+```
+
+#### Coverage by entry point
+
+Every entry point that changes data checks the caller's grant before its first
+write, on REST and MCP alike. A request with no agent identity (an owner
+session: Bearer, OAuth or local without an agent signature, Inspector) is not
+capability-gated. For every id a call names, the grant must cover the entity's
+stored type, as well as any type the request names. A blank or missing type is
+judged as `"*"`.
+
+| Entry point (REST / MCP) | Grant needed |
+| --- | --- |
+| `/store`, `store` (entities) | `store` on each entity type as named (MCP `store` checks again on the type an alias resolves to), and on the stored type of an entity the request extends (`target_id`); edges as under `create_relationship` |
+| `/store`, `store` (file upload) | `store` on the asset type: `image_asset`, `audio_asset`, `video_asset` or `file_asset`, by MIME type, checked before either leg of a combined call writes |
+| MCP `store` with `intake.mode: "overflow"` | `store` on each entity type the request carries |
+| `/observations/create`, `/interpretations/create`, `create_interpretation` | `store` on each entity type |
+| `/correct`, `correct`, `/entities/{id}/batch_correct`, `/corrections/transaction`, `correct_transaction`, `/patch_array_item`, `patch_array_item` | `correct` on the stored type |
+| `/create_relationship(s)`, `create_relationship(s)`, `/delete_relationship`, `delete_relationship`, `/restore_relationship`, `restore_relationship` | `create_relationship` covering both endpoint types and the relationship type |
+| `/register_relationship_type`, `register_relationship_type` | `register_relationship_type` |
+| `/delete_entity`, `delete_entity` | `delete` on the stored type |
+| `/restore_entity`, `restore_entity` | `restore` on the stored type |
+| `/entities/merge`, `merge_entities` | `merge` on both stored types |
+| `/entities/split`, `split_entity` | `split` on the source type, the new entity's type, and an existing target's type |
+| `/register_schema`, `register_schema`, `/update_schema_incremental`, `update_schema_incremental` | `register_schema` on the entity type |
+| `manage_bundles` install / enable / disable | `register_schema` with `["*"]` |
+| `/subscribe`, `subscribe` | `store` on `subscription` |
+| `/unsubscribe`, `unsubscribe` | `correct` on `subscription` |
+| `POST /peers`, `add_peer` | `store` on `peer_config` |
+| `DELETE /peers/{peer_id}`, `remove_peer`, `/peers/{peer_id}/sync`, `sync_peer` | `correct` on `peer_config` (pulled rows are also checked per type). The same entry lets the agent change the peer's configuration. |
+| `/peers/resolve_sync_conflict`, `resolve_sync_conflict` | `correct` on the entity's type |
+| `/issues/submit`, `submit_issue`, `/issues/add_message`, `add_issue_message` (owner path) | `store` on `issue`, `conversation`, `conversation_message`; with `entity_ids_to_link` or `conversation_turn_id`, also `create_relationship` for `REFERS_TO` from `issue` to each linked entity's type |
+| `/issues/sync`, `sync_issues`, `sync_entity_submissions` (issues) | `store` and `correct` on `issue`, `conversation`, `conversation_message` |
+| `/issues/bulk_close` | `correct` on `issue` |
+| `/issues/bulk_remove` | `delete` on `issue` |
+| `/submit/{entity_type}`, `submit_entity`, `/submit/{entity_type}/{entity_id}/message`, `add_entity_message` | none: a signed agent submits as a guest and is judged by access policy for the type |
+| `publish_rendered_page` | `store` on `guest_access_token`, which lets the agent create share links for the owner's pages; a new page also needs `store` on `rendered_page` |
+| `/agents/grants` routes | the protected-type guard on `agent_grant` |
+
+An admitted agent, and a signature whose grant is revoked, suspended, unbound,
+invalid or in a pin conflict, is checked on every entry point above. A signer
+that no grant recognises follows `NEOTOMA_AGENT_DEFAULT_DENY`; on the
+subscription, upload and issue routes it is treated as a guest and judged by
+access policy, as on `/store`. The REST issue routes have two paths: the owner
+path (a request that authenticates as the owner with a Bearer or OAuth token)
+writes under the owner and can reach GitHub, and needs the grant; a request
+without one takes the guest path, which needs a guest token or an open access
+policy for `issue` and does not use the grant.
+
+A client that identifies itself only by its MCP client name counts as an agent
+for the protected-type guard, so it cannot delete, restore, merge or split
+`agent_grant` entities; manage grants in Inspector → Agents → Grants or through
+the `/agents/grants` routes instead.
+
+Not capability-gated, because they write nothing the caller supplies: snapshot
+repair (`health_check_snapshots` with `auto_fix`, `/recompute_snapshots_by_type`),
+which recomputes derived state from the observations already stored, and the
+GitHub refresh inside `get_issue_status`, which updates an existing issue's
+mirrored records from the configured repository. Peer
+ingest (`/sync/webhook`, `/sync/entities`) is authenticated as a peer and
+governed by [peer sync admission](peer_sync.md).
+
+A write that sets the `_deleted` field (true or any other value) is a delete or
+a restore: `_deleted: true` needs `delete` and any other value needs `restore`,
+in addition to `store` or `correct`, on every store, observation and correction
+path.
+
+**Upgrading to v0.26.1.** No existing grant carries `delete`, `restore`,
+`merge`, `split` or `register_schema`, so an admitted agent loses those
+operations, bundle management, and the newly checked flows above whose types
+its grant does not list, until the operator adds them. Owner sessions are
+unaffected. A grant that names one of the new ops fails validation on an older
+release and then grants nothing, so add them only after upgrading.
 
 For `create_relationship`, one capability entry must cover both endpoint
 entity types and the requested type in `relationship_types`. The two bounds

@@ -9,6 +9,7 @@ import { assertGuestWriteAllowed, type GuestIdentity } from "./access_policy.js"
 import { contextFromAgentIdentity, enforceAgentCapability } from "./agent_capabilities.js";
 import { enforceRelationshipWriteCapabilities } from "./relationship_write_capability.js";
 import { assertCanWriteProtectedBatch } from "./protected_entity_types.js";
+import { assertCurrentAgentMayStoreEntities } from "./mutation_capability.js";
 import type { StoreInterpretationInput } from "../shared/action_schemas.js";
 export type StoreRelationshipRef = {
   relationship_type: string;
@@ -40,6 +41,46 @@ export interface StructuredStoreApiParams {
    * when the request carried no origin.
    */
   dataOrigins?: Array<import("../shared/action_schemas.js").DataOrigin | undefined>;
+}
+
+/**
+ * Per-type `store` capability scope for write entry points that are not a
+ * `/store` call (`POST /observations/create`, `POST /interpretations/create`,
+ * MCP `create_interpretation`), so each applies the scope `/store` and MCP
+ * `store` apply. The grant is read from the request context and applies to
+ * AAuth-admitted agents only: a request with no agent identity (operator /
+ * user-authenticated callers) is not capability-gated. Also applies the
+ * protected-type guard up front so a governance-type refusal reaches the caller
+ * as the same `capability_denied` envelope. Throws `AgentCapabilityError`
+ * before the caller writes anything.
+ */
+export function assertCurrentAgentMayStoreEntityTypes(entityTypes: unknown[]): void {
+  const identity = getCurrentAgentIdentity();
+  const capabilityCtx = contextFromAgentIdentity(identity);
+  if (capabilityCtx) {
+    enforceAgentCapability("store", judgedStoreTypes(entityTypes), capabilityCtx);
+  }
+  assertCanWriteProtectedBatch({
+    entity_types: entityTypes.filter(isNamedType),
+    op: "store",
+    identity,
+    admission: getCurrentAAuthAdmission(),
+  });
+}
+
+function isNamedType(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
+ * The types a `store` grant check judges: a missing, blank or non-string type
+ * is judged as `"*"` (only a grant covering every type allows it), and an
+ * empty list is judged as `["*"]`, so a request can never pass the check by
+ * naming no type.
+ */
+function judgedStoreTypes(entityTypes: readonly unknown[]): string[] {
+  const judged = entityTypes.map((t) => (isNamedType(t) ? t : "*"));
+  return judged.length > 0 ? judged : ["*"];
 }
 
 /** Pure pre-persistence admission, reusable before either combined leg starts. */
@@ -127,10 +168,14 @@ export async function preflightStructuredStoreAdmission(
   // fall through (attribution_policy still gates their writes downstream).
   const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
   if (capabilityCtx && !isGuest) {
-    const entityTypes = entities
-      .map((entity) => entity?.entity_type)
-      .filter((t): t is string => typeof t === "string" && t.length > 0);
-    enforceAgentCapability("store", entityTypes, capabilityCtx);
+    enforceAgentCapability(
+      "store",
+      judgedStoreTypes(entities.map((entity) => entity?.entity_type)),
+      capabilityCtx
+    );
+    // Extending an existing entity needs `store` on its stored type, and the
+    // reserved lifecycle marker turns a store into a delete or restore.
+    await assertCurrentAgentMayStoreEntities(userId, entities);
     if (Array.isArray(relationships) && relationships.length > 0) {
       // Same shared check the MCP store and every standalone relationship
       // entrance run (services/relationship_write_capability.ts).

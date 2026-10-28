@@ -107,7 +107,7 @@ There is no as-of query across the whole record: point-in-time reads work one en
 
 ## Corrections and deletions
 
-A correction adds a new observation with source priority 1000 and no source. The earlier value is not edited and stays listed among the entity's observations. A correction does not always stay in effect: under the default `last_write` policy a later write to the same field can replace it (tracked in [issue #2033](https://github.com/markmhendrickson/neotoma/issues/2033)).
+A correction adds a new observation with source priority 1000 and no source. The earlier value is not edited and stays listed among the entity's observations. A correction stays in effect until a later correction for the same field replaces it, whatever merge policy the field declares; an ordinary write at any priority does not displace it. On a `merge_array` field a later correction replaces the whole array ([issue #2341](https://github.com/markmhendrickson/neotoma/issues/2341)); on a `merge_array_by_key` field corrections combine by key.
 
 Who made a correction is recorded only for writes over MCP, and only as the client name that the MCP client reports about itself.
 

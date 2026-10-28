@@ -3,7 +3,9 @@
 // Implements idempotence pattern: canonicalization, hash-based IDs, deduplication
 
 import { db } from "../db.js";
+import { assertCurrentAgentMayWriteLifecycleMarker } from "./mutation_capability.js";
 import {
+  normalizeEntityTypeForSchema,
   schemaRegistry,
   type SchemaDefinition,
   type SchemaRegistryEntry,
@@ -12,6 +14,7 @@ import { resolveEntity } from "./entity_resolution.js";
 import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { assertCurrentAgentMayStoreEntityTypes } from "./store_admission.js";
 import {
   getSchemaDefinition,
   getRegisteredEntityTypes,
@@ -330,6 +333,95 @@ async function flushPendingFragments(opts: {
 }
 
 /**
+ * Refinement candidates for type resolution: DB schemas (user + global) plus
+ * code-only types, so dynamic schemas participate.
+ */
+async function loadTypeRefinementCandidates(userId: string): Promise<{
+  dbTypes: Set<string>;
+  refinementCandidates: Array<{ entity_type: string; schema_definition: SchemaDefinition }>;
+}> {
+  const dbSchemas = await schemaRegistry.listActiveSchemas(userId).catch(() => []);
+  const dbTypes = new Set(dbSchemas.map((e) => e.entity_type));
+  const refinementCandidates = [
+    ...dbSchemas.map((e) => ({
+      entity_type: e.entity_type,
+      schema_definition: e.schema_definition,
+    })),
+    ...getRegisteredEntityTypes()
+      .filter((t) => !dbTypes.has(t))
+      .map((t) => getSchemaDefinition(t))
+      .filter(Boolean)
+      .map((s) => ({ entity_type: s!.entity_type, schema_definition: s!.schema_definition })),
+  ];
+  return { dbTypes, refinementCandidates };
+}
+
+/**
+ * The entity type an extracted entity is written under: alias resolution
+ * followed by refinement by field fit. Shared by the interpretation run and by
+ * the capability pre-check so both judge the same type.
+ */
+function resolveExtractedEntityType(
+  entityData: Record<string, unknown>,
+  dbTypes: Set<string>,
+  refinementCandidates: Array<{ entity_type: string; schema_definition: SchemaDefinition }>
+): { entityType: string; extractedFieldKeys: string[]; typeBeforeRefinement: string } {
+  // Support both 'entity_type' and 'type' fields for entity type identification
+  let entityType = (entityData.entity_type as string) || (entityData.type as string) || "generic";
+  // DB-registered schemas take priority over code-defined aliases so a
+  // user-registered type like `organization` is not silently remapped to
+  // the built-in `company` alias.
+  if (!dbTypes.has(entityType) && !getSchemaDefinition(entityType)) {
+    const resolvedType = resolveEntityTypeFromAlias(entityType);
+    if (resolvedType) entityType = resolvedType;
+  }
+  // Refine type by field fit (considers dynamic + code schemas when another schema fits better)
+  const extractedFieldKeys = Object.keys(entityData).filter(
+    (k) => k !== "entity_type" && k !== "type"
+  );
+  const typeBeforeRefinement = entityType;
+  entityType = refineEntityTypeFromExtractedFields(
+    entityType,
+    extractedFieldKeys,
+    refinementCandidates
+  );
+  return { entityType, extractedFieldKeys, typeBeforeRefinement };
+}
+
+/**
+ * Apply the per-type `store` capability scope to an interpretation request
+ * before anything is written, the same scope `/store` and MCP `store` apply to
+ * the entity types they write. Judged on every type the run could write an
+ * entity under: the type the caller declared, the type it resolves to after
+ * alias resolution and refinement, and that type's schema-normalized spelling
+ * (the form an auto-created schema is registered under). A no-op for requests
+ * that carry no agent identity (operator / user-authenticated callers). Throws
+ * `AgentCapabilityError` (surfaced as 403 `capability_denied`) before the run
+ * row, entities, observations or schemas are created.
+ */
+export async function assertInterpretationStoreCapability(
+  userId: string,
+  extractedData: Record<string, unknown>[]
+): Promise<void> {
+  if (!getCurrentAgentIdentity()) return;
+  const { dbTypes, refinementCandidates } = await loadTypeRefinementCandidates(userId);
+  const entityTypes = new Set<string>();
+  for (const entityData of extractedData) {
+    const declared = (entityData.entity_type as string) || (entityData.type as string) || "generic";
+    const { entityType } = resolveExtractedEntityType(entityData, dbTypes, refinementCandidates);
+    entityTypes.add(declared);
+    entityTypes.add(entityType);
+    entityTypes.add(normalizeEntityTypeForSchema(entityType));
+    // The reserved lifecycle marker makes an extracted entity a delete or
+    // restore (only reachable when a schema declares it; checked regardless).
+    for (const t of [declared, entityType, normalizeEntityTypeForSchema(entityType)]) {
+      assertCurrentAgentMayWriteLifecycleMarker(t, entityData);
+    }
+  }
+  assertCurrentAgentMayStoreEntityTypes([...entityTypes]);
+}
+
+/**
  * Run interpretation on extracted data
  * Creates interpretation run, validates fields, resolves entities, creates observations
  */
@@ -388,44 +480,18 @@ export async function runInterpretation(
   const noSchemaEntityTypes: string[] = [];
 
   try {
-    // Build refinement candidates: DB schemas (user + global) + code-only types so dynamic schemas participate
-    const dbSchemas = await schemaRegistry.listActiveSchemas(userId).catch(() => []);
-    const dbTypes = new Set(dbSchemas.map((e) => e.entity_type));
-    const refinementCandidates = [
-      ...dbSchemas.map((e) => ({
-        entity_type: e.entity_type,
-        schema_definition: e.schema_definition,
-      })),
-      ...getRegisteredEntityTypes()
-        .filter((t) => !dbTypes.has(t))
-        .map((t) => getSchemaDefinition(t))
-        .filter(Boolean)
-        .map((s) => ({ entity_type: s!.entity_type, schema_definition: s!.schema_definition })),
-    ];
+    const { dbTypes, refinementCandidates } = await loadTypeRefinementCandidates(userId);
 
     // Process each extracted entity
     for (const [entityIndex, entityData] of extractedData.entries()) {
       const entityDataOrigin = options.dataOrigins?.[entityIndex];
-      // Support both 'entity_type' and 'type' fields for entity type identification
-      let entityType =
-        (entityData.entity_type as string) || (entityData.type as string) || "generic";
-      // DB-registered schemas take priority over code-defined aliases so a
-      // user-registered type like `organization` is not silently remapped to
-      // the built-in `company` alias.
-      if (!dbTypes.has(entityType) && !getSchemaDefinition(entityType)) {
-        const resolvedType = resolveEntityTypeFromAlias(entityType);
-        if (resolvedType) entityType = resolvedType;
-      }
-      // Refine type by field fit (considers dynamic + code schemas when another schema fits better)
-      const extractedFieldKeys = Object.keys(entityData).filter(
-        (k) => k !== "entity_type" && k !== "type"
-      );
-      const typeBeforeRefinement = entityType;
-      entityType = refineEntityTypeFromExtractedFields(
-        entityType,
-        extractedFieldKeys,
+      const resolvedEntityType = resolveExtractedEntityType(
+        entityData,
+        dbTypes,
         refinementCandidates
       );
+      let entityType = resolvedEntityType.entityType;
+      const { extractedFieldKeys, typeBeforeRefinement } = resolvedEntityType;
       refinementDebug.push({
         extracted_keys: extractedFieldKeys,
         type_before: typeBeforeRefinement,
