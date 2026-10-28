@@ -401,13 +401,9 @@ export async function acquireEntityLifecycleContext(
     if (hasEntityLifecycleAuthority(row)) targetIds.add(row.entity_lifecycle_target_id!);
   const attachedMemberships = (await tx
     .prepare(
-      // Drive from the entity's own observations (idx_observations_entity_id) and
-      // probe the membership primary key (cutover_id, owner_id, observation_id) once
-      // per row. CROSS JOIN pins that order; the previous form let the planner scan
-      // every membership row on each visibility check. There is exactly one cutover.
-      "SELECT m.target_id FROM observations o CROSS JOIN entity_lifecycle_legacy_membership m ON m.cutover_id=? AND m.owner_id=? AND m.observation_id=o.id WHERE o.entity_id=? GROUP BY m.target_id"
+      "SELECT m.target_id FROM entity_lifecycle_legacy_membership m JOIN observations o ON o.id=m.observation_id WHERE o.entity_id=? AND m.owner_id=? GROUP BY m.target_id"
     )
-    .all(ENTITY_LIFECYCLE_CUTOVER_ID, target.user_id, target.id)) as { target_id: string }[];
+    .all(target.id, target.user_id)) as { target_id: string }[];
   for (const row of attachedMemberships) targetIds.add(row.target_id);
   const targets: LifecycleTarget[] = [];
   const certificates: LegacyMembershipCertificate[] = [];
@@ -417,19 +413,13 @@ export async function acquireEntityLifecycleContext(
     targets.push(ownerTarget);
     const baselines = (await tx
       .prepare(
-        // `kind IS NOT NULL` (implied by sequence 0 through the insert trigger) is what
-        // lets the planner use the partial unique index idx_entity_lifecycle_sequence
-        // instead of scanning every observation.
-        "SELECT * FROM observations WHERE user_id=? AND entity_lifecycle_target_id=? AND entity_lifecycle_sequence=0 AND entity_lifecycle_kind IS NOT NULL"
+        "SELECT * FROM observations WHERE user_id=? AND entity_lifecycle_target_id=? AND entity_lifecycle_sequence=0"
       )
       .all(target.user_id, id)) as Record<string, unknown>[];
     if (baselines.length > 1) refuse();
     const members = (await tx
       .prepare(
-        // INDEXED BY: with only the primary key to choose from for the ORDER BY, the
-        // planner walks every membership row of the owner and discards all but the
-        // target's; idx_entity_lifecycle_membership_target seeks straight to them.
-        "SELECT observation_id FROM entity_lifecycle_legacy_membership INDEXED BY idx_entity_lifecycle_membership_target WHERE cutover_id=? AND owner_id=? AND target_id=? ORDER BY observation_id"
+        "SELECT observation_id FROM entity_lifecycle_legacy_membership WHERE cutover_id=? AND owner_id=? AND target_id=? ORDER BY observation_id"
       )
       .all(ENTITY_LIFECYCLE_CUTOVER_ID, target.user_id, id)) as { observation_id: string }[];
     if (!baselines.length) {
