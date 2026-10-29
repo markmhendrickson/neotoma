@@ -222,7 +222,9 @@ export function docsViewerDevPlugin(repoRoot: string): Plugin {
             const url = new URL(request.url());
             const staticPath =
               url.pathname === "/en/" ||
-              /^\/(?:@|src\/|node_modules\/|brand\/|favicon|assets\/)/.test(url.pathname);
+              /^\/(?:@|src\/|node_modules\/|(?:public\/)?brand\/|favicon|assets\/)/.test(
+                url.pathname
+              );
             return url.origin === origin && staticPath && ["GET", "HEAD"].includes(request.method())
               ? route.continue()
               : route.abort();
