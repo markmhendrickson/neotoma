@@ -186,8 +186,10 @@ describe("one-pager route set", () => {
     expect(resolveDestination("/quick-start").url).toBe("https://neotoma.io/install");
   });
 
-  it("keeps exactly the 56 Spanish page pairs and retires unknown Spanish routes", () => {
-    expect(SPANISH_RETAINED_BASE_ROUTES).toHaveLength(56);
+  it("keeps all Spanish page pairs and connection guides while retiring unknown Spanish routes", () => {
+    expect(SPANISH_RETAINED_BASE_ROUTES).toEqual(
+      expect.arrayContaining(CONNECTIONS.map((connection) => connection.guideRoute.replace(/\/$/, "")))
+    );
     for (const base of SPANISH_RETAINED_BASE_ROUTES) {
       const route = base === "/" ? "/es/" : `/es${base}`;
       expect(isRetiredRoute(route), route).toBe(false);

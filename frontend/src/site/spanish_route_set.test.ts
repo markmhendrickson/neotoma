@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_INDEX } from "./docs_viewer_manifest";
+import { CONNECTIONS } from "../../../src/shared/harness_connections";
+import { DOCS_VIEWER_INDEX, DOCS_VIEWER_MANIFEST, SPANISH_DOCS_VIEWER_INDEX } from "./docs_viewer_manifest";
 import { isSpanishRetainedBaseRoute, SPANISH_RETAINED_BASE_ROUTES } from "./spanish_route_set";
 
 describe("exact public Spanish route inventory", () => {
-  it("binds one home, 36 source readers and 19 shells", () => {
-    expect(SPANISH_RETAINED_BASE_ROUTES).toHaveLength(56);
-    expect(new Set(SPANISH_RETAINED_BASE_ROUTES).size).toBe(56);
+  it("binds one home, every included source reader and 19 shells", () => {
+    const includedReaders = DOCS_VIEWER_MANIFEST.filter((entry) => entry.status === "included");
+    const hostReaders = includedReaders.filter((entry) => entry.source.startsWith("docs/guides/connections/"));
+    expect(hostReaders.map((entry) => entry.source)).toEqual(CONNECTIONS.map((connection) => connection.guide));
+    expect(SPANISH_RETAINED_BASE_ROUTES).toHaveLength(1 + includedReaders.length + 19);
+    expect(new Set(SPANISH_RETAINED_BASE_ROUTES).size).toBe(SPANISH_RETAINED_BASE_ROUTES.length);
     expect(SPANISH_RETAINED_BASE_ROUTES[0]).toBe("/");
-    expect(DOCS_VIEWER_INDEX.entries).toHaveLength(36);
-    expect(SPANISH_DOCS_VIEWER_INDEX.entries).toHaveLength(36);
+    expect(DOCS_VIEWER_INDEX.entries).toHaveLength(includedReaders.length);
+    expect(SPANISH_DOCS_VIEWER_INDEX.entries).toHaveLength(includedReaders.length);
     for (const entry of SPANISH_DOCS_VIEWER_INDEX.entries) {
       expect(isSpanishRetainedBaseRoute(`/${entry.slug.replace(/^es\//, "")}`)).toBe(true);
       expect(entry.originalSource).toBeTruthy();

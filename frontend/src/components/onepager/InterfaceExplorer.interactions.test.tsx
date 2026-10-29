@@ -15,7 +15,6 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { cloneElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import sharp from "sharp";
 import { observeViewportMotion, playPaperScene, springFrames } from "./viewport_motion";
@@ -83,20 +82,8 @@ afterEach(() => {
 
 function renderedStorePayload(tab: string): Record<string, unknown> {
   fireEvent.click(screen.getByRole("tab", { name: tab }));
-  const code =
-    screen.getByRole("tabpanel", { name: tab }).querySelector(".site-snippet-code code")
-      ?.textContent ?? "";
-  // Execute natural shell shapes against local functions, never the real CLI or network.
-  execFileSync("/bin/bash", ["-n"], { input: code });
-  const args = execFileSync("/bin/bash", [], {
-    input: `neotoma() { printf '%s\\0' "$@"; printf '\\1'; }; curl() { neotoma "$@"; }; INVOICE_ID=ent_example; NEOTOMA_URL=http://example.invalid; NEOTOMA_TOKEN=placeholder;\n${code}`,
-    encoding: "utf8",
-  })
-    .split("\x01")[0]
-    .split("\0");
-  const flag = tab === "CLI" ? "--entities" : "--data-binary";
-  const payload = JSON.parse(args[args.indexOf(flag) + 1]);
-  return tab === "CLI" ? payload[0] : payload.entities[0];
+  const code = screen.getByRole("tabpanel", { name: tab }).querySelector(".site-snippet-code code")?.textContent ?? "";
+  return JSON.parse(code)[0];
 }
 
 describe("one-page interface examples", () => {
@@ -371,12 +358,9 @@ describe("one-page interface examples", () => {
     expect(within(sources).getByText("INV-2041.pdf")).toBeInTheDocument();
     expect(within(sources).getByText("Due date update")).toBeInTheDocument();
     const links = within(app).getByRole("region", { name: "Relationships" });
-    const rows = [...links.querySelectorAll(".plan-related-entity")].map((row) => row.textContent);
-    expect(rows).toEqual([
-      "INV-2041 · invoiceREFERS_TOAcme · company",
-      "Due date update · emailREFERS_TOINV-2041 · invoice",
-      "Follow up on INV-2041 · task (pending)REFERS_TOINV-2041 · invoice",
-    ]);
+    const graph = within(links).getByRole("img", { name: /Record graph: invoice INV-2041/ });
+    expect(graph.querySelectorAll(".plan-relationship-edges path")).toHaveLength(3);
+    expect(within(links).getByText(/Three REFERS_TO relationships/)).toBeInTheDocument();
     expect(
       within(links).getByText(/not automatically created from those sources/)
     ).toBeInTheDocument();
@@ -598,7 +582,7 @@ describe("connection selector", () => {
     trigger.focus();
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("listbox")).toHaveClass("plan-tool-menu");
-    expect(screen.getAllByRole("option")).toHaveLength(14);
+    expect(screen.getAllByRole("option")).toHaveLength(CONNECTIONS.length);
     await user.keyboard("{End}{Enter}");
     expect(trigger).toHaveTextContent("Smithery");
     expect(trigger).toHaveFocus();
@@ -646,7 +630,7 @@ describe("connection selector", () => {
       expect(steps).toHaveLength(2);
       const first = steps[0]!.textContent ?? "";
       const second = steps[1]!.textContent ?? "";
-      expect(container.querySelector(".plan-tool-prerequisite")?.textContent).toContain(host.prerequisites);
+      expect(container.querySelector(".plan-tool-prerequisite")).toBeNull();
       if (host.kind === "setup") {
         expect(first).toContain("npm install -g neotoma@0.26.0");
         expect(first).toContain("neotoma init");
@@ -687,10 +671,8 @@ describe("connection selector", () => {
       expect(steps[1].compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
         0
       );
-      expect(screen.getByRole("link", { name: /what changes on your system/i })).toHaveAttribute(
-        "href", "/install/system-changes/"
-      );
-      expect(second).toContain("only after we agree on sources and a time range");
+      expect(screen.queryByRole("link", { name: /what changes on your system/i })).toBeNull();
+      expect(second).toContain("only after agreeing the sources and time range");
       expect(second).toContain("ask before importing data");
     }
   });
@@ -710,14 +692,14 @@ describe("connection selector", () => {
     );
     expect(links.has(CONNECTIONS[0]!.guideRoute)).toBe(true);
     expect(links.has("/install/system-changes/")).toBe(true);
-    expect(CONNECTIONS).toHaveLength(14);
+    expect(CONNECTIONS).toHaveLength(16);
     expect(container.querySelector('[data-paper-scene="topicInstall"]')).not.toBeNull();
     expect(container.querySelector(".topic-visual figcaption")?.textContent).toBe(
       TOPIC_VISUALS.install.caption
     );
   });
 
-  it("puts the fourteen-host choice first and scopes optional permissions to the selected host", async () => {
+  it("puts the host choice first and scopes optional permissions to the selected host", async () => {
     const { container } = render(
       <MemoryRouter initialEntries={["/install"]}><LocaleProvider><InstallPageBody /></LocaleProvider></MemoryRouter>
     );
@@ -970,7 +952,7 @@ describe("shared site snippet content", () => {
     expect(screen.getByRole("code").textContent).toBe(source);
   });
 
-  it("shows selectable, highlighted CLI and REST code without duplicate headings or copy chrome", () => {
+  it("shows selectable source-bearing CLI and REST examples", () => {
     render(<InterfaceExplorer />);
     for (const name of ["CLI", "REST API"]) {
       fireEvent.click(screen.getByRole("tab", { name }));
@@ -979,8 +961,8 @@ describe("shared site snippet content", () => {
         '"invoice_date": "2026-10-01"'
       );
       expect(panel.querySelectorAll(".token").length).toBeGreaterThan(3);
-      expect(within(panel).queryByRole("button", { name: "Copy" })).toBeNull();
-      expect(panel.querySelector(".site-snippet-header")).toBeNull();
+      expect(panel.textContent).toContain("invoice.pdf");
+      expect(panel.textContent).toContain("email.extracted.json");
       expect(panel.textContent).not.toContain("writer attribution");
       expect(panel.textContent).not.toContain("The snippets are illustrative calls");
     }

@@ -1415,12 +1415,10 @@
 .plan-section-cut .plan-step-copy a {
   font: 600 0.85rem/1.5 var(--sans);
 }
-.plan-inspect-section,
-.plan-interface-section {
+.plan-inspect-section {
   margin: 3rem 0 0;
 }
-.plan-inspect-section > h3,
-.plan-interface-section > h3 {
+.plan-inspect-section > h3 {
   margin-bottom: 0.65rem;
 }
 .plan-inspector {
@@ -1479,11 +1477,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+  align-items: start;
 }
 .plan-inspector-card {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
-  padding: 1rem;
+  padding: clamp(1rem, 2vw, 1.25rem);
   min-width: 0;
 }
 .plan-inspector-card h4 {
@@ -1519,7 +1518,21 @@
   padding-left: 1.2rem;
 }
 .plan-inspector-history li {
-  padding: 0.1rem 0 0.75rem;
+  padding: 0.25rem 0 0.9rem;
+}
+.plan-relationship-graph { margin: 0 0 1rem; }
+.plan-relationship-scroll { overflow-x: auto; max-width: 100%; scrollbar-color: var(--rust) var(--band); }
+.plan-relationship-scroll:focus-visible { outline: 3px solid var(--rust); outline-offset: -3px; }
+.plan-relationship-graph svg { display: block; width: 100%; height: auto; color: var(--ink); }
+.plan-relationship-node rect { fill: var(--band); stroke: var(--line); stroke-width: 2; }
+.plan-relationship-invoice rect { fill: var(--paper); stroke: var(--rust); }
+.plan-relationship-node text { fill: var(--ink); font: 600 13px var(--sans); }
+.plan-relationship-node text:last-child { font-size: 11px; font-weight: 400; }
+.plan-relationship-graph figcaption { color: var(--muted); font: 0.75rem/1.4 var(--sans); }
+.plan-relationship-scroll-hint { display: none; }
+@media (max-width: 600px) {
+  .plan-relationship-graph svg { min-width: 540px; }
+  .plan-relationship-scroll-hint { display: inline; }
 }
 .plan-inspector-history span,
 .plan-inspector-history small {
@@ -1923,7 +1936,7 @@
   flex: 0 0 auto;
   width: 1.65rem;
   height: 1.65rem;
-  margin-top: 0.2rem;
+  margin-top: 0;
   border-radius: 50%;
   background: var(--ink);
   color: var(--sheet);
@@ -2718,6 +2731,9 @@
 .plan-home > .plan-ground-band {
   background: var(--band);
 }
+.plan-home > .plan-interface-sheet {
+  border-bottom: 1px solid var(--line);
+}
 .plan-home > .plan-hero {
   padding-top: 0;
 }
@@ -3047,6 +3063,28 @@
 }
 .plan-tool-install > .plan-install-guide {
   margin: 4px 0 0;
+}
+.plan-tool-install > .plan-install-guide a {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--rust);
+  text-underline-offset: 0.25em;
+}
+.plan-tool-install .plan-install-snippet .site-snippet-title {
+  font: 600 clamp(1rem, 1.7vw, 1.2rem)/1.35 var(--sans);
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 0.8rem;
+}
+.plan-tool-install .plan-install-snippet .site-snippet-body {
+  background: var(--band);
+}
+.plan-tool-install .plan-install-snippet .site-snippet-body-prose > .site-snippet-prose {
+  padding: 1rem;
+  max-width: none;
+  font: 0.9rem/1.6 var(--sans);
 }
 
 .plan-tool-menu[data-state] [data-radix-select-viewport] {

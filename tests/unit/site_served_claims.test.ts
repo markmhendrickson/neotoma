@@ -37,17 +37,17 @@ describe("one-pager sheets 02 to 04", () => {
     createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
   );
   const text = pageText(markup).replace(/\s+/g, " ");
-  const examples = read("frontend", "src", "components", "onepager", "InterfaceExplorer.tsx");
-  it("renders illustrative calls with dev-profile CLI commands and variable IDs", () => {
+  const examples = read("frontend", "src", "components", "onepager", "source_examples.ts");
+  it("renders source-bearing illustrative calls with variable IDs", () => {
     for (const cmd of [
-      "neotoma dev store",
-      "neotoma dev corrections create",
-      "neotoma dev entities get",
-      "neotoma dev observations list",
+      'neotoma --api-only --base-url "$NEOTOMA_URL" --json store',
+      "--file-path invoice.pdf",
+      "--file-path due-date-email.txt",
+      "--operation getEntitySnapshot",
     ]) {
       expect(text, cmd).toContain(cmd);
     }
-    expect(text).toContain("Read the returned entity_id as INVOICE_ID.");
+    expect(text).toContain("Set INVOICE_ID to that returned ID, not the invoice number.");
     expect(text).toContain("$INVOICE_ID");
     expect(text).not.toMatch(
       /ids are from one run|\$ neotoma (store|corrections|entities|observations)\b/i
@@ -57,7 +57,7 @@ describe("one-pager sheets 02 to 04", () => {
     expect(text).toContain("Observation history retains the original October 22 date");
     expect(text).not.toContain("Read the store response for the actual entity ID");
     expect(text).toContain('"$NEOTOMA_URL/store"');
-    expect(text).toContain('"$NEOTOMA_URL/correct"');
+    expect(text).not.toContain('"$NEOTOMA_URL/correct"');
     expect(examples).toContain("Authorization: Bearer $NEOTOMA_TOKEN");
   });
   it("limits shared reads to a configured instance and matching entry or profile", () => {
@@ -262,7 +262,7 @@ describe("advanced capability boundaries", () => {
   );
   const text = pageText(markup).replace(/\s+/g, " ");
   const advanced = text.slice(
-    text.indexOf("Build a shared foundation for agent work"),
+    text.indexOf("Grow your use as advanced capabilities arrive"),
     text.indexOf("Evaluate the fit")
   );
   const cards = [
@@ -271,6 +271,7 @@ describe("advanced capability boundaries", () => {
     ),
   ].map(([, status, title, detail]) => ({ status, title, detail }));
   it("shows three supported and three planned visual capabilities", () => {
+    expect(advanced).toContain("Grow your use as advanced capabilities arrive");
     expect(cards.map(({ status, title }) => ({ status, title }))).toEqual([
       { status: "Supported", title: "A shared system of record" },
       { status: "Supported", title: "Verified identity and scoped access" },
