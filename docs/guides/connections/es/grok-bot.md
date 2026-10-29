@@ -6,7 +6,9 @@ Conecta una instancia de Neotoma mediante los ajustes documentados de servidor M
 
 ## Antes de conectar
 
-Lee [qué cambia en tu sistema](../../../topics/es/install/system-changes.md) antes de elegir una conexión local o remota. Sigue el [selector de conexión para personas](https://neotoma.io/es/install/) para instalar e inicializar Neotoma en el ordenador del Bot si se conecta mediante un comando. La instalación de tu portátil es independiente. Una conexión por URL necesita un endpoint HTTPS autenticado accesible desde el Bot. No guardes credenciales en archivos compartidos ni las pegues en chats con agentes.
+Lee [qué cambia en tu sistema](../../../topics/es/install/system-changes.md) antes de elegir una conexión local o remota. Sigue el [selector de conexión para personas](https://neotoma.io/es/install/) para instalar e inicializar Neotoma en el ordenador del Bot si se conecta mediante un comando. La instalación de tu portátil es independiente. Una conexión por URL necesita un endpoint HTTPS autenticado accesible desde el Bot. No pegues credenciales en chats con agentes.
+
+Todos los Bots de tu cuenta comparten el ordenador de Grok Bot: pueden acceder a sus archivos, sesiones del navegador y credenciales de línea de comandos. Un servidor MCP iniciado mediante un comando también está disponible para tus otros Bots. Las conexiones de aplicaciones pertenecen a la cuenta, así que no supongas que una conexión por URL es privada de un solo Bot. Conecta únicamente una instancia y un perfil de Neotoma adecuados para todos los Bots que puedan usar esta conexión. Si necesitas restringir el acceso a los datos, usa una instancia o credencial de Neotoma con permisos separados y comprueba a qué Bots da acceso el host.
 
 ## Configurar
 

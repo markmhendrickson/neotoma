@@ -341,6 +341,17 @@ describe("connection guide contract", () => {
       }
     }
   });
+
+  it("states Grok Bot's account-wide connection boundary in both guides", () => {
+    const en = readFileSync(join(root, "docs/guides/connections/grok-bot.md"), "utf-8");
+    const es = readFileSync(join(root, "docs/guides/connections/es/grok-bot.md"), "utf-8");
+    expect(en).toContain("command-line credentials");
+    expect(en).toContain("available to your other Bots too");
+    expect(en).toContain("do not assume a URL-based connection is private to one Bot");
+    expect(es).toContain("credenciales de línea de comandos");
+    expect(es).toContain("disponible para tus otros Bots");
+    expect(es).toContain("no supongas que una conexión por URL es privada de un solo Bot");
+  });
 });
 
 describe("accepted Neotoma logo", () => {
@@ -752,6 +763,11 @@ describe("/install polish", () => {
       expect(SOURCE_EXAMPLES.builder.en).toContain('"file_idempotency_key": hashlib.sha256(raw)');
       expect(SOURCE_EXAMPLES.rest.en).toContain("invoice.pdf invoice.extracted.json");
       expect(SOURCE_EXAMPLES.rest.en).toContain("later-email.eml email.extracted.json");
+      for (const mode of ["cli", "rest"] as const) {
+        for (const locale of ["en", "es"] as const) {
+          expect(SOURCE_EXAMPLES[mode][locale]).toContain("umask 077");
+        }
+      }
       expect(SOURCE_EXAMPLES.note.en).toContain("source-checked for Neotoma 0.26.0, not an installed-host test");
       const conversation = readSrc("frontend/src/components/onepager/McpConversation.tsx");
       expect(conversation).toContain("save the supplied invoice as a source with its fields");

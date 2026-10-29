@@ -6,7 +6,9 @@ Connect a Neotoma instance through Grok Bot's documented MCP server settings.
 
 ## Before connecting
 
-Read [what changes on your system](../../topics/install/system-changes.md) before choosing a local or remote connection. Follow the [human connection index](https://neotoma.io/install/) to install and initialize Neotoma on the Bot's own computer for a command-based connection. An installation on your laptop is separate. A URL-based connection requires an authenticated HTTPS endpoint reachable from the Bot. Keep credentials out of shared files and agent chats.
+Read [what changes on your system](../../topics/install/system-changes.md) before choosing a local or remote connection. Follow the [human connection index](https://neotoma.io/install/) to install and initialize Neotoma on the Bot's own computer for a command-based connection. An installation on your laptop is separate. A URL-based connection requires an authenticated HTTPS endpoint reachable from the Bot. Keep credentials out of agent chats.
+
+Grok Bot's computer is shared by every Bot on your account: files, browser sessions, and command-line credentials on it are available to those Bots. A command-based MCP server is available to your other Bots too. App connections belong to the account, so do not assume a URL-based connection is private to one Bot. Connect only a Neotoma instance and profile suitable for every Bot that can use this connection. For narrower data access, use a separately scoped Neotoma instance or credential and verify which Bots the host exposes the connection to.
 
 ## Configure
 
