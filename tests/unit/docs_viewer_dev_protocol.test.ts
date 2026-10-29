@@ -45,6 +45,7 @@ function send(
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = { Authorization: syntheticAuthorization };
     if (accept !== undefined) headers.Accept = accept;
+    if (body) headers["Content-Length"] = String(Buffer.byteLength(body));
     const req = request(`${origin}${route}`, { method, headers }, (res) => {
       let response = "";
       res.setEncoding("utf8");
@@ -55,7 +56,10 @@ function send(
         resolve({
           status: res.statusCode!,
           type: String(res.headers["content-type"]),
-          handler: String(res.headers["x-synthetic-handler"] ?? "reader"),
+          handler: String(
+            res.headers["x-synthetic-handler"] ??
+              (response.includes('id="dv-main"') ? "reader" : "vite")
+          ),
           body: response,
         })
       );
@@ -121,6 +125,13 @@ describe("actual Vite reader plugin preserves the normal proxy/protocol boundary
       const cacheDir = mkdtempSync(path.join(tmpdir(), "neotoma-reader-protocol-"));
       cacheDirs.push(cacheDir);
       const plugins = (loaded.config.plugins ?? []).flat(Infinity).filter(Boolean) as Plugin[];
+      const portProbe = createHttpServer();
+      await new Promise<void>((resolve) => portProbe.listen(0, "127.0.0.1", resolve));
+      const probeAddress = portProbe.address();
+      if (!probeAddress || typeof probeAddress === "string")
+        throw new Error("Missing free-port probe");
+      const port = probeAddress.port;
+      await new Promise<void>((resolve) => portProbe.close(() => resolve()));
       const server = await createServer({
         ...loaded.config,
         configFile: false,
@@ -129,6 +140,7 @@ describe("actual Vite reader plugin preserves the normal proxy/protocol boundary
         root: path.join(repoRoot, "frontend"),
         cacheDir,
         appType: "custom",
+        optimizeDeps: { noDiscovery: true, include: [], entries: [] },
         plugins: [
           ...plugins.filter((plugin) => useReader || plugin.name !== "docs-viewer-dev"),
           {
@@ -143,7 +155,7 @@ describe("actual Vite reader plugin preserves the normal proxy/protocol boundary
         server: {
           ...loaded.config.server,
           host: "127.0.0.1",
-          port: 0,
+          port,
           strictPort: true,
           hmr: false,
           watch: null,
@@ -157,8 +169,8 @@ describe("actual Vite reader plugin preserves the normal proxy/protocol boundary
           (proxy) => typeof proxy === "object" && proxy.target === target
         )
       ).toBe(true);
-      await server.listen();
       servers.push(server);
+      await server.listen();
       const socket = server.httpServer?.address();
       if (!socket || typeof socket === "string") throw new Error("Missing Vite listener");
       origins.push(`http://127.0.0.1:${socket.port}`);
@@ -249,9 +261,22 @@ describe("actual Vite reader plugin preserves the normal proxy/protocol boundary
         method,
         "synthetic-body"
       );
-      expect(actual.status).toBe(207);
-      expect(actual.handler).toBe("proxy");
-      expect(received.at(-1)).toMatchObject({ method, body: "synthetic-body" });
+      const baseline = await send(
+        origins[0],
+        "/schemas?keyword=invoice",
+        "text/html",
+        method,
+        "synthetic-body"
+      );
+      expect(actual, `${method}: ${JSON.stringify(actual)}`).toEqual(baseline);
+      if (method === "OPTIONS") {
+        expect(actual.status).toBe(204);
+        expect(actual.handler).toBe("vite");
+      } else {
+        expect(actual.status, `${method}: ${JSON.stringify(actual)}`).toBe(207);
+        expect(actual.handler).toBe("proxy");
+        expect(received.at(-1)).toMatchObject({ method, body: "synthetic-body" });
+      }
     }
     expect((await send(origins[1], "/health", "application/json")).handler).toBe("proxy");
   });

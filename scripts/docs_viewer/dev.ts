@@ -5,6 +5,7 @@ import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { tsImport } from "tsx/esm/api";
+import { wantsHtml } from "../../src/shared/http_content_negotiation";
 import {
   buildDocsViewerIndex,
   DOCS_VIEWER_MANIFEST,
@@ -92,6 +93,15 @@ export function createDocsViewerDevMiddleware(
     } catch {
       return next();
     }
+    // This is the shared development server, not a standalone static host.
+    // Preserve the established API/MCP default when callers do not ask for HTML;
+    // static reader resources retain their own MIME and are not API documents.
+    const readerResource =
+      url.pathname.startsWith("/source/") ||
+      url.pathname.startsWith("/docs/_media/") ||
+      url.pathname === "/assets/reader-language.js" ||
+      (knownGeneratedPaths.has(url.pathname) && path.extname(url.pathname) !== ".html");
+    if (!readerResource && !wantsHtml(req.headers.accept)) return next();
     const route = url.pathname.replace(/\/index\.html$/, "").replace(/\/+$/, "") || "/";
     const conflict =
       /^\/(?:en|es)\/(?:en|es)(?:\/|$)/.test(route) ||

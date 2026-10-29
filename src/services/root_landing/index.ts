@@ -42,6 +42,8 @@ import {
 } from "../docs/bundled_nav.js";
 import { getBundledDocsIndex } from "../docs/index.js";
 import { isProductionEnvironment } from "../../shared/environment.js";
+import { wantsHtml } from "../../shared/http_content_negotiation.js";
+export { wantsHtml } from "../../shared/http_content_negotiation.js";
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -385,20 +387,6 @@ export function buildRobotsTxt(mode: LandingMode, publicDocsUrl: string): string
     lines.push(`Sitemap: ${publicDocsUrl.replace(/\/+$/, "")}/sitemap.xml`);
   }
   return lines.join("\n") + "\n";
-}
-
-/**
- * True when the `Accept` header indicates the caller wants HTML. Defaults to
- * false (JSON) so tools like `curl` without an explicit `Accept` get the
- * structured payload.
- */
-export function wantsHtml(acceptHeader: string | undefined): boolean {
-  if (!acceptHeader) return false;
-  const value = acceptHeader.toLowerCase();
-  // `text/html` anywhere takes priority; `*/*` without html stays JSON.
-  if (value.includes("text/html")) return true;
-  if (value.includes("application/xhtml+xml")) return true;
-  return false;
 }
 
 /**

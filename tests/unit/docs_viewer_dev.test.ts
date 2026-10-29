@@ -5,6 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDocsViewerDevMiddleware } from "../../scripts/docs_viewer/dev";
 import { runDocsViewer } from "../../scripts/docs_viewer/build";
 
+const fetchReader = (url: string, init?: RequestInit) =>
+  fetch(url, { ...init, headers: { Accept: "text/html", ...init?.headers } });
+
 describe("development docs reader using actual manifest sources", () => {
   let reader: ReturnType<typeof createDocsViewerDevMiddleware>;
   let server: Server;
@@ -33,7 +36,7 @@ describe("development docs reader using actual manifest sources", () => {
   it.each(["/vocabulary/", "/cli/", "/readme/", "/es/vocabulary/"])(
     "serves %s as a complete reader without a client redirect",
     async (route) => {
-      const response = await fetch(`${origin}${route}?preview=1`);
+      const response = await fetchReader(`${origin}${route}?preview=1`);
       const html = await response.text();
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toContain("text/html");
@@ -53,18 +56,18 @@ describe("development docs reader using actual manifest sources", () => {
   ])(
     "redirects alias %s without an interstitial and retains the query",
     async (alias, destination) => {
-      const response = await fetch(`${origin}${alias}?preview=1`, { redirect: "manual" });
+      const response = await fetchReader(`${origin}${alias}?preview=1`, { redirect: "manual" });
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toBe(`${destination}?preview=1`);
       expect(await response.text()).toBe("");
     }
   );
   it("supports HEAD and the reader language asset", async () => {
-    const head = await fetch(`${origin}/es/vocabulary/`, { method: "HEAD" });
+    const head = await fetchReader(`${origin}/es/vocabulary/`, { method: "HEAD" });
     expect(head.status).toBe(200);
     expect(head.headers.get("content-type")).toContain("text/html");
     expect(await head.text()).toBe("");
-    const asset = await fetch(`${origin}/assets/reader-language.js`);
+    const asset = await fetchReader(`${origin}/assets/reader-language.js`);
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toContain("javascript");
     expect(await asset.text()).toContain("preferred_locale");
@@ -75,12 +78,12 @@ describe("development docs reader using actual manifest sources", () => {
     "/source/../../.env.development",
     "/not-a-real-page/",
   ])("does not claim unrelated or unsafe path %s", async (route) => {
-    expect((await fetch(`${origin}${route}`)).status).toBe(404);
+    expect((await fetchReader(`${origin}${route}`)).status).toBe(404);
   });
   it.each(["/en/es/vocabulary/", "/es/en/vocabulary/", "/en/docs/es/vocabulary/"])(
     "rejects conflicting locale prefixes %s",
     async (route) => {
-      const response = await fetch(`${origin}${route}`);
+      const response = await fetchReader(`${origin}${route}`);
       expect(response.status).toBe(404);
       expect(await response.text()).toContain("Conflicting language");
     }
@@ -100,18 +103,23 @@ describe("development docs reader using actual manifest sources", () => {
     expect(existsSync(reader.privateDir)).toBe(true);
   });
   it("does not intercept mutations", async () => {
-    expect((await fetch(`${origin}/vocabulary/`, { method: "POST" })).status).toBe(404);
+    expect((await fetchReader(`${origin}/vocabulary/`, { method: "POST" })).status).toBe(404);
   });
   it("fails visibly instead of falling back into the SPA redirect when rebuilding fails", async () => {
     failRefresh = true;
     try {
       expect(() => reader.rebuild()).toThrow("Synthetic source validation failure");
-      const response = await fetch(`${origin}/vocabulary/`);
+      const response = await fetchReader(`${origin}/vocabulary/`);
       expect(response.status).toBe(503);
       expect(await response.text()).toContain("could not be built");
-      expect((await fetch(`${origin}/vocabulary/index.html`)).status).toBe(503);
-      expect((await fetch(`${origin}/source/vocabulary.md`)).status).toBe(503);
-      expect((await fetch(`${origin}/source/not-real.md`)).status).toBe(404);
+      expect((await fetchReader(`${origin}/vocabulary/index.html`)).status).toBe(503);
+      expect((await fetchReader(`${origin}/source/vocabulary.md`)).status).toBe(503);
+      expect((await fetchReader(`${origin}/source/not-real.md`)).status).toBe(404);
+      for (const Accept of ["application/json", "*/*", "text/event-stream"]) {
+        const api = await fetch(`${origin}/schemas`, { headers: { Accept } });
+        expect(api.status).toBe(404);
+        expect(await api.text()).toBe("Not found");
+      }
     } finally {
       failRefresh = false;
       reader.rebuild();
