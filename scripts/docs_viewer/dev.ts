@@ -37,6 +37,7 @@ export function createDocsViewerDevMiddleware(
   const privateDir = mkdtempSync(path.join(tmpdir(), "neotoma-docs-dev-"));
   const outDir = path.join(privateDir, "readers");
   let files = new Map<string, Buffer>();
+  const knownGeneratedPaths = new Set<string>();
   let buildError: unknown;
   const sourcePaths = new Set(entries.map((entry) => `/source/${entry.slug}.md`));
   const close = () => rmSync(privateDir, { recursive: true, force: true });
@@ -75,6 +76,7 @@ export function createDocsViewerDevMiddleware(
       readFileSync(path.join(repoRoot, "public/assets/reader-language.js"))
     );
     files = next;
+    for (const file of files.keys()) knownGeneratedPaths.add(file);
     buildError = undefined;
   }
   try {
@@ -127,7 +129,10 @@ export function createDocsViewerDevMiddleware(
     const file = entry ? `${viewerHref(entry.slug)}index.html` : url.pathname;
     const body = files.get(file);
     const knownReader =
-      entry || sourcePaths.has(url.pathname) || url.pathname === "/assets/reader-language.js";
+      entry ||
+      sourcePaths.has(url.pathname) ||
+      knownGeneratedPaths.has(url.pathname) ||
+      url.pathname === "/assets/reader-language.js";
     if (!body && knownReader && buildError) {
       res.writeHead(503, {
         "Content-Type": "text/plain; charset=utf-8",
@@ -235,9 +240,22 @@ export function docsViewerDevPlugin(repoRoot: string): Plugin {
         }
       }
       server.middlewares.use((req, res, next) => {
-        const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
-        if (!["GET", "HEAD"].includes(req.method ?? "") || !visualPaths.has(pathname))
+        let pathname: string;
+        try {
+          pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+        } catch {
           return next();
+        }
+        if (!["GET", "HEAD"].includes(req.method ?? "")) return next();
+        if (!visualPaths.has(pathname)) {
+          if (!pathname.startsWith("/brand/october/topic/")) return next();
+          res.writeHead(404, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(req.method === "HEAD" ? undefined : "Documentation visual not found.");
+          return;
+        }
         visualPromise ??= captureVisuals();
         void visualPromise
           .then(() => {

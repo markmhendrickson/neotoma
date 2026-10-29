@@ -23,12 +23,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { captureTopicVisuals } from "./docs_viewer/capture_visuals";
 import { build as buildBrowserAsset } from "esbuild";
-import {
-  DEFAULT_LOCALE,
-  NON_DEFAULT_LOCALES,
-  SUPPORTED_LOCALES,
-  type SupportedLocale,
-} from "../frontend/src/i18n/config";
+import { NON_DEFAULT_LOCALES, SUPPORTED_LOCALES } from "../frontend/src/i18n/config";
 import { localizePath } from "../frontend/src/i18n/routing";
 import {
   RETIRED_DESTINATIONS,
