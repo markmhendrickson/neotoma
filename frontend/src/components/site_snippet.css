@@ -10,6 +10,7 @@
   --snippet-string: #3f6259;
   --snippet-variable: #22587a;
   position: relative;
+  container-type: inline-size;
   width: 100%;
   min-width: 0;
   margin: 0 0 1.5rem;
@@ -81,6 +82,20 @@
     min-width: 44px;
     min-height: 44px;
     padding: 0.4rem 0.55rem;
+  }
+}
+/* A nested install snippet can be narrow even when the viewport is not. Reserve
+   the button's first row before a long title, instead of relying on word wrap. */
+@container (max-width: 12rem) {
+  .site-snippet-header {
+    padding-block-start: 3.5rem;
+    padding-inline-end: 0;
+  }
+  .site-snippet-prose-flow {
+    padding-block-start: 3.5rem;
+  }
+  .site-snippet-prose-flow .site-snippet-title {
+    padding-inline-end: 0;
   }
 }
 .site-snippet-copy:hover {

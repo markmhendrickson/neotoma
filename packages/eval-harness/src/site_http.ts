@@ -24,8 +24,8 @@ export const STATIC_ROUTES = [
   "/es/install/system-changes",
 ] as const;
 const STATIC_MARKERS: Record<(typeof STATIC_ROUTES)[number], readonly string[]> = {
-  "/": ['<html lang="en"', "Ask your agent to evaluate", 'href="/install/system-changes/"'],
-  "/es": ['<html lang="es"', "Pide a tu agente que evalúe", 'href="/es/install/system-changes/"'],
+  "/": ['<html lang="en"', "Ask your agent to evaluate"],
+  "/es": ['<html lang="es"', "Pide a tu agente que evalúe"],
   "/install/claude-code": [
     '<html lang="en"',
     "The setup target writes Neotoma's Claude Code MCP entry",

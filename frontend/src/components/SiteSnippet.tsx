@@ -65,7 +65,10 @@ export function SiteSnippet({
   const spanish = useOptionalLocale()?.locale === "es";
   const idleLabel = copyLabel ?? (spanish ? "Copiar" : "Copy");
   const doneLabel = copiedLabel ?? (spanish ? "Copiado" : "Copied");
-  const doneMessage = successMessage ?? (spanish ? "Copiado al portapapeles" : "Copied to clipboard");
+  const doneMessage =
+    successMessage ?? (spanish ? "Copiado al portapapeles" : "Copied to clipboard");
+  const accessibleTitle =
+    typeof title === "string" ? title : (label ?? (spanish ? "fragmento" : "snippet"));
   const [copied, markCopied] = useCopyFeedback(`${copyFeedbackId}:${text}`);
   const [copyFailed, setCopyFailed] = useState(false);
   useEffect(() => setCopyFailed(false), [text, copyFeedbackId]);
@@ -73,6 +76,7 @@ export function SiteSnippet({
     <button
       type="button"
       className="site-snippet-copy"
+      aria-label={`${copied && !copyFailed ? doneLabel : idleLabel} ${accessibleTitle}`}
       onClick={async () => {
         const ok = await copyTextToClipboard(text);
         setCopyFailed(!ok);
@@ -97,7 +101,9 @@ export function SiteSnippet({
       aria-live="polite"
     >
       {copyFailed
-        ? spanish ? "No se pudo copiar. Inténtalo de nuevo o selecciona el texto y cópialo manualmente." : "Copy failed. Try again, or select the text below and copy manually."
+        ? spanish
+          ? "No se pudo copiar. Inténtalo de nuevo o selecciona el texto y cópialo manualmente."
+          : "Copy failed. Try again, or select the text below and copy manually."
         : copied
           ? doneMessage
           : ""}
@@ -110,7 +116,10 @@ export function SiteSnippet({
       role="region"
       aria-label={label ?? (typeof title === "string" ? title : spanish ? "Comandos" : "Commands")}
     >
-      <code>{children ?? (highlight ? highlightedNodes(refractor.highlight(text, "bash").children) : text)}</code>
+      <code>
+        {children ??
+          (highlight ? highlightedNodes(refractor.highlight(text, "bash").children) : text)}
+      </code>
     </pre>
   );
   return (
@@ -121,7 +130,11 @@ export function SiteSnippet({
           <p className="site-snippet-title">{title}</p>
           {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
           {status}
-          <div className={copyInBody ? "site-snippet-body site-snippet-body-prose" : "site-snippet-body-prose"}>
+          <div
+            className={
+              copyInBody ? "site-snippet-body site-snippet-body-prose" : "site-snippet-body-prose"
+            }
+          >
             <p className="site-snippet-prose">{text}</p>
           </div>
         </div>
