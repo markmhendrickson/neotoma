@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { tsImport } from "tsx/esm/api";
 import {
   buildDocsViewerIndex,
   DOCS_VIEWER_MANIFEST,
   SPANISH_DOCS_VIEWER_MANIFEST,
   viewerHref,
 } from "../../frontend/src/site/docs_viewer_manifest";
-import { runDocsViewer } from "./build";
+import type { runDocsViewer as buildDocsViewer } from "./build";
 
 const manifests = [DOCS_VIEWER_MANIFEST, SPANISH_DOCS_VIEWER_MANIFEST];
 const entries = manifests.flatMap((manifest) =>
@@ -28,7 +29,10 @@ const types: Record<string, string> = {
   ".jpeg": "image/jpeg",
 };
 
-export function createDocsViewerDevMiddleware(repoRoot: string) {
+export function createDocsViewerDevMiddleware(
+  repoRoot: string,
+  runDocsViewer: typeof buildDocsViewer
+) {
   const outDir = mkdtempSync(path.join(tmpdir(), "neotoma-docs-dev-"));
   let files = new Map<string, Buffer>();
   const close = () => rmSync(outDir, { recursive: true, force: true });
@@ -123,13 +127,23 @@ export function docsViewerDevPlugin(repoRoot: string): Plugin {
   return {
     name: "docs-viewer-dev",
     apply: "serve",
-    configureServer(server) {
-      const reader = createDocsViewerDevMiddleware(repoRoot);
+    async configureServer(server) {
+      // Run the existing TSX builder with its frontend aliases. Keep its React graph
+      // out of Vite's config bundle, which does not use the frontend tsconfig paths.
+      const { runDocsViewer } = await tsImport(
+        path.join(repoRoot, "scripts/docs_viewer/build.ts"),
+        {
+          parentURL: import.meta.url,
+          tsconfig: path.join(repoRoot, "frontend/tsconfig.json"),
+        }
+      );
+      const reader = createDocsViewerDevMiddleware(repoRoot, runDocsViewer);
       server.middlewares.use(reader.middleware);
       const sources = entries.map((entry) => path.resolve(repoRoot, entry.source));
       server.watcher.add(sources);
-      const refresh = (file: string) => {
-        if (!sources.includes(path.resolve(file))) return;
+      const refresh = (event: string, file: string) => {
+        if (!["add", "change", "unlink"].includes(event) || !sources.includes(path.resolve(file)))
+          return;
         try {
           reader.rebuild();
           server.ws.send({ type: "full-reload" });
@@ -137,9 +151,9 @@ export function docsViewerDevPlugin(repoRoot: string): Plugin {
           server.config.logger.error(`Docs reader refresh failed: ${String(error)}`);
         }
       };
-      server.watcher.on("change", refresh);
+      server.watcher.on("all", refresh);
       server.httpServer?.once("close", () => {
-        server.watcher.off("change", refresh);
+        server.watcher.off("all", refresh);
         reader.close();
       });
     },

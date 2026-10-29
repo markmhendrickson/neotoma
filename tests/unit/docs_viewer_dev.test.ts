@@ -2,13 +2,18 @@ import { createServer, type Server } from "node:http";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDocsViewerDevMiddleware } from "../../scripts/docs_viewer/dev";
+import { runDocsViewer } from "../../scripts/docs_viewer/build";
 
 describe("development docs reader using actual manifest sources", () => {
   let reader: ReturnType<typeof createDocsViewerDevMiddleware>;
   let server: Server;
   let origin: string;
+  let failRefresh = false;
   beforeAll(async () => {
-    reader = createDocsViewerDevMiddleware(path.resolve(__dirname, "../.."));
+    reader = createDocsViewerDevMiddleware(path.resolve(__dirname, "../.."), (options) => {
+      if (failRefresh) throw new Error("Synthetic source validation failure");
+      return runDocsViewer(options);
+    });
     server = createServer((req, res) =>
       reader.middleware(req, res, () => {
         res.writeHead(404).end("Not found");
@@ -73,5 +78,17 @@ describe("development docs reader using actual manifest sources", () => {
   });
   it("does not intercept mutations", async () => {
     expect((await fetch(`${origin}/vocabulary/`, { method: "POST" })).status).toBe(404);
+  });
+  it("fails visibly instead of falling back into the SPA redirect when rebuilding fails", async () => {
+    failRefresh = true;
+    try {
+      expect(() => reader.rebuild()).toThrow("Synthetic source validation failure");
+      const response = await fetch(`${origin}/vocabulary/`);
+      expect(response.status).toBe(503);
+      expect(await response.text()).toContain("could not be built");
+    } finally {
+      failRefresh = false;
+      reader.rebuild();
+    }
   });
 });
