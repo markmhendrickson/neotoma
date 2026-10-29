@@ -217,19 +217,16 @@ export function NeotomaOnePager() {
               </ol>
             </div>
           </aside>
-          <section
-            id="interfaces"
-            className="plan-interface-section"
-            aria-labelledby="interface-title"
-          >
-            <span id="inspect" className="plan-anchor" aria-hidden="true" />
-            <h3 id="interface-title">Four ways to work with a record.</h3>
-            <InterfaceExplorer />
-          </section>
         </section>
 
-        <section className="plan-sheet plan-ground-paper" aria-labelledby="s4" id="connect">
-          <SheetHead id="s4" mark="03 · Connect" title="Start in your favorite AI tool" />
+        <section className="plan-sheet plan-ground-paper plan-interface-sheet" aria-labelledby="interface-title" id="interfaces">
+          <span id="inspect" className="plan-anchor" aria-hidden="true" />
+          <SheetHead id="interface-title" mark="03 · Interfaces" title="Four ways to work with a record" />
+          <InterfaceExplorer />
+        </section>
+
+        <section className="plan-sheet plan-ground-paper" aria-labelledby="s5" id="connect">
+          <SheetHead id="s5" mark="04 · Connect" title="Start in your favorite AI tool" />
           <div className="plan-split">
             <figure className="plan-scene plan-local-scene">
               <PaperScene scene="localService" />
@@ -248,16 +245,16 @@ export function NeotomaOnePager() {
           <ToolInstall />
         </section>
 
-        <section className="plan-sheet plan-ground-band" aria-labelledby="s5" id="vision">
+        <section className="plan-sheet plan-ground-band" aria-labelledby="s6" id="vision">
           <SheetHead
-            id="s5"
-            mark="04 · Advanced"
+            id="s6"
+            mark="05 · Advanced"
             title="Grow your use as advanced capabilities arrive"
           />
           <VisionGallery />
         </section>
 
-        <EvaluationCard id="evaluate" headingId="s7" mark="05 · EVALUATE" title="Evaluate the fit" body="Ask your agent to consider Neotoma against your existing workflows and tools. It can identify where a system of record would help, and where what you already use is enough." />
+        <EvaluationCard id="evaluate" headingId="s7" mark="06 · EVALUATE" title="Evaluate the fit" body="Ask your agent to consider Neotoma against your existing workflows and tools. It can identify where a system of record would help, and where what you already use is enough." />
         <SiteFooter />
       </main>
     </div>

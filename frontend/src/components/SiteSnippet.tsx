@@ -114,14 +114,14 @@ export function SiteSnippet({
     </pre>
   );
   return (
-    <div className={`site-snippet ${className}`}>
+    <div className={`site-snippet ${chrome ? "" : "site-snippet-no-chrome"} ${className}`}>
+      {copyButton}
       {prose ? (
         <div className="site-snippet-prose-flow">
           <p className="site-snippet-title">{title}</p>
           {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
           {status}
           <div className={copyInBody ? "site-snippet-body site-snippet-body-prose" : "site-snippet-body-prose"}>
-            {copyButton}
             <p className="site-snippet-prose">{text}</p>
           </div>
         </div>
@@ -132,12 +132,11 @@ export function SiteSnippet({
               <div className="site-snippet-heading">
                 <p className="site-snippet-title">{title}</p>
               </div>
-              {!copyInBody && copyButton}
               {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
             </div>
           )}
-          {chrome && status}
-          {copyInBody ? <div className="site-snippet-body">{copyButton}{codeBlock}</div> : codeBlock}
+          {status}
+          {copyInBody ? <div className="site-snippet-body">{codeBlock}</div> : codeBlock}
         </>
       )}
     </div>

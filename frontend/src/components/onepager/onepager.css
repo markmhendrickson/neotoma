@@ -1415,12 +1415,10 @@
 .plan-section-cut .plan-step-copy a {
   font: 600 0.85rem/1.5 var(--sans);
 }
-.plan-inspect-section,
-.plan-interface-section {
+.plan-inspect-section {
   margin: 3rem 0 0;
 }
-.plan-inspect-section > h3,
-.plan-interface-section > h3 {
+.plan-inspect-section > h3 {
   margin-bottom: 0.65rem;
 }
 .plan-inspector {
@@ -2733,6 +2731,9 @@
 .plan-home > .plan-ground-band {
   background: var(--band);
 }
+.plan-home > .plan-interface-sheet {
+  border-bottom: 1px solid var(--line);
+}
 .plan-home > .plan-hero {
   padding-top: 0;
 }
@@ -3078,20 +3079,10 @@
   margin-bottom: 0.8rem;
 }
 .plan-tool-install .plan-install-snippet .site-snippet-body {
-  position: relative;
-  padding-top: 3.4rem;
   background: var(--band);
 }
-.plan-tool-install .plan-install-snippet .site-snippet-body > .site-snippet-copy {
-  position: absolute;
-  inset: 0.55rem 0.65rem auto auto;
-  float: none;
-  margin: 0;
-  min-height: 36px;
-  background: var(--sheet);
-}
 .plan-tool-install .plan-install-snippet .site-snippet-body-prose > .site-snippet-prose {
-  padding: 0 1rem 1rem;
+  padding: 1rem;
   max-width: none;
   font: 0.9rem/1.6 var(--sans);
 }

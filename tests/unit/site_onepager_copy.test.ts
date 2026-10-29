@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { LocaleProvider } from "../../frontend/src/i18n/LocaleContext";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { JSDOM } from "jsdom";
 import sharp from "sharp";
 import { load as loadYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
@@ -86,6 +87,39 @@ describe("neotoma.io one-pager copy", () => {
     expect(html).toContain('role="tabpanel"');
     expect(html).toContain("neotoma setup --tool claude-code");
     expect(html).toContain('href="/current-snapshot/"');
+  });
+  it("gives interfaces its own numbered home section in both languages", () => {
+    for (const [route, marks] of [
+      ["/", ["03 · Interfaces", "04 · Connect", "05 · Advanced", "06 · EVALUATE"]],
+      ["/es/", ["03 · Interfaces", "04 · Conectar", "05 · Avanzado", "06 · Evaluar"]],
+    ] as const) {
+      const html = renderToStaticMarkup(
+        createElement(MemoryRouter, { initialEntries: [route] }, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
+      );
+      const page = new JSDOM(html).window.document;
+      const sections = ["how-it-works", "interfaces", "connect", "vision", "evaluate"];
+      const homeSections = [...page.querySelectorAll("main.plan-home > section.plan-sheet[id]")]
+        .map((section) => section.id)
+        .filter((id) => sections.includes(id));
+      expect(homeSections).toEqual(sections);
+      expect(page.querySelector("#interfaces > header > h2#interface-title")).not.toBeNull();
+      expect(page.querySelector("#interfaces > #inspect")).not.toBeNull();
+      for (const [index, id] of sections.slice(1).entries()) {
+        expect(page.querySelector(`#${id} > header > .plan-label`)?.textContent).toBe(marks[index]);
+      }
+    }
+  });
+  it("keeps a copy control on the parent snippet for code and prose variants", () => {
+    for (const props of [{}, { chrome: false }, { prose: true }, { prose: true, copyInBody: true }]) {
+      const html = renderToStaticMarkup(createElement(SiteSnippet, {
+        text: "Example",
+        title: "Example snippet",
+        copyFeedbackId: "snippet-position-test",
+        ...props,
+      }));
+      const snippet = new JSDOM(html).window.document.querySelector(".site-snippet");
+      expect(snippet?.querySelectorAll(":scope > .site-snippet-copy")).toHaveLength(1);
+    }
   });
 
   it("describes the two repaired concept scenes exactly", () => {
