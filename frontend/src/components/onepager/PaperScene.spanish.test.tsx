@@ -18,6 +18,26 @@ describe("Spanish visual alternatives", () => {
     }
   });
 
+  it("reuses published post compositions with localized accessible names in both languages", () => {
+    for (const [scene, spanish, english] of [
+      ["observation", "factura original", "original invoice"],
+      ["invoiceExample", "registro actual", "current record"],
+      ["sharedInstance", "tres fichas", "Three distinct"],
+      ["visionPositions", "dos afirmaciones", "two conflicting claims"],
+      ["visionExplanation", "fuente y autoridad", "source and authority"],
+    ] as const) {
+      const es = renderToStaticMarkup(<PaperScene scene={scene} locale="es" />);
+      const en = renderToStaticMarkup(<PaperScene scene={scene} locale="en" />);
+      expect(es).toContain('type="image/svg+xml"');
+      expect(es).toContain('role="img"');
+      expect(es).toContain(spanish);
+      expect(es).not.toContain(english);
+      expect(en).toContain(english);
+      expect(en).not.toContain(spanish);
+      expect(es).toContain("/brand/october/essay/");
+    }
+  });
+
   it("keeps informative sandbox mock UI and its accessible label in Spanish", () => {
     const html = renderToStaticMarkup(<InspectorPreviewIllustration variant="sandbox" locale="es" />);
     expect(html).toContain("Vista previa de Inspector");

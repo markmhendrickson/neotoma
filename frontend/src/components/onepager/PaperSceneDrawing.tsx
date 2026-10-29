@@ -3,6 +3,7 @@ import { OCTOBER_RENDERS } from "./october_renders";
 import { staticAssetPath } from "@/site/spa_path";
 import { useOptionalLocale } from "@/i18n/LocaleContext";
 import { PAPER_SCENE_ALTS_ES } from "./paper_scene_alts_es";
+import { isPublishedScene, PublishedPaperScene } from "./PublishedPaperScene";
 import {
   TOPIC_DRAWINGS,
   type TopicDrawingId,
@@ -30,6 +31,11 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
   hero: "Five paper records connected by solid navy lines",
+  observation: "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
+  invoiceExample: "An invoice and later email feed separate retained observations; the current record keeps the amount from the invoice and due date from the email",
+  sharedInstance: "Three distinct connected tool slips lead to one shared Neotoma filing box",
+  visionPositions: "Planned position tracking keeps two conflicting claims visible alongside a selected position",
+  visionExplanation: "Planned explanation traces a current value to its source and authority, then shows the connected records a change could affect",
 } as Record<PaperSceneKind, string>;
 const Materials = createContext("");
 type Tone = "cream" | "sage" | "blue" | "navy" | "rust";
@@ -1380,6 +1386,10 @@ export function PaperScene({
   const generatedId = useId();
   const id = `paper-${idNamespace ?? generatedId.replace(/:/g, "")}`;
   const Scene = scenes[scene as MainSceneKind];
+  const alt = (locale ?? contextLocale) === "es"
+    ? PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene]
+    : PAPER_SCENE_ALTS[scene];
+  if (isPublishedScene(scene)) return <PublishedPaperScene scene={scene} alt={alt} />;
   return (
     <Materials.Provider value={id}>
       <svg
@@ -1390,7 +1400,7 @@ export function PaperScene({
         role="img"
         aria-labelledby={`${id}-title`}
       >
-        <title id={`${id}-title`}>{(locale ?? contextLocale) === "es" ? PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene] : PAPER_SCENE_ALTS[scene]}</title>
+        <title id={`${id}-title`}>{alt}</title>
 
         <defs>
           {(
