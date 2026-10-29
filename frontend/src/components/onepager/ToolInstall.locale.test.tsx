@@ -47,7 +47,9 @@ describe("copied connection guide locale", () => {
       Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
       const snippets = container.querySelectorAll<HTMLElement>(".plan-tool-install > .site-snippet");
       for (const snippet of snippets) {
-        fireEvent.click(within(snippet).getByRole("button", { name: locale === "es" ? "Copiar" : "Copy" }));
+        const title = snippet.querySelector(".site-snippet-title")?.textContent?.trim();
+        expect(title).toBeTruthy();
+        fireEvent.click(within(snippet).getByRole("button", { name: `${locale === "es" ? "Copiar" : "Copy"} ${title}` }));
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`https://neotoma.io${locale === "es" ? "/es" : ""}/install/windsurf/`)));
         writeText.mockClear();
       }
