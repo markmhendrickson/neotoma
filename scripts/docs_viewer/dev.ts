@@ -230,6 +230,21 @@ export function docsViewerDevPlugin(repoRoot: string): Plugin {
           const page = await context.newPage();
           await page.setViewportSize({ width: 1280, height: 900 });
           await page.goto(`${origin}/en/`, { waitUntil: "networkidle", timeout: 30000 });
+          // Match the existing static capture's settled-homepage precondition. Network
+          // idle alone can precede Vite's dependency reload and leave SVG strokes unstyled.
+          await page.locator("#root > *").first().waitFor({ timeout: 30000 });
+          await page
+            .locator('svg[data-paper-scene="localService"]')
+            .first()
+            .waitFor({ timeout: 30000 });
+          await page.waitForFunction(() => {
+            const writing = document.querySelector(".paper-writing");
+            return (
+              writing &&
+              getComputedStyle(writing).fill === "none" &&
+              getComputedStyle(writing).stroke !== "none"
+            );
+          });
           const outDir = path.join(reader.privateDir, "visuals");
           await captureTopicVisuals(page, outDir);
           visualFiles = new Map(
