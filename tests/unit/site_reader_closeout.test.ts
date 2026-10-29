@@ -45,12 +45,14 @@ const INTENDED_READERS: Record<string, string> = {
   "/install/letta": "docs/guides/connections/letta.md",
   "/install/opencode": "docs/guides/connections/opencode.md",
   "/install/claude-agent-sdk": "docs/guides/connections/claude-agent-sdk.md",
+  "/install/antigravity": "docs/guides/connections/antigravity.md",
+  "/install/grok-bot": "docs/guides/connections/grok-bot.md",
   "/install/smithery": "docs/guides/connections/smithery.md",
 };
 
 describe("site reader closeout", () => {
   it("publishes the complete intended route and canonical source set", () => {
-    expect(Object.keys(INTENDED_READERS)).toHaveLength(36);
+    expect(Object.keys(INTENDED_READERS)).toHaveLength(38);
     expect(manifestProblems(DOCS_VIEWER_MANIFEST)).toEqual([]);
     const included = DOCS_VIEWER_MANIFEST.filter((entry) => entry.status === "included");
     expect(Object.fromEntries(included.map((entry) => [`/${entry.slug}`, entry.source]))).toEqual(
@@ -91,7 +93,11 @@ describe("architecture overview and distinct topic identities", () => {
   it("gives the 35 illustrated readers and virtual Install topic distinct compositions", () => {
     const included = DOCS_VIEWER_MANIFEST.filter((entry) => entry.status === "included");
     const illustrated = included.filter((entry) => entry.visualId);
-    expect(included.filter((entry) => !entry.visualId).map((entry) => entry.id)).toEqual(["install-system-changes"]);
+    expect(included.filter((entry) => !entry.visualId).map((entry) => entry.id)).toEqual([
+      "install-system-changes",
+      "install-antigravity",
+      "install-grok-bot",
+    ]);
     const ids = [...illustrated.map((entry) => entry.visualId), "install"];
     expect(ids).toHaveLength(36);
     expect(ids.every(Boolean)).toBe(true);

@@ -14,7 +14,7 @@ import { EvaluationCard } from "./EvaluationCard";
 
 const steps = [
   ["Fuente", "Conserva el material original", "Facilita el PDF o el correo de la factura como fuente para poder inspeccionar su contenido.", "/es/provenance/"],
-  ["Observación", "Extrae y registra hechos", "Un agente extrae los campos de la factura y registra una observación vinculada a la fuente facilitada.", "/es/observations/"],
+  ["Observación", "Extrae y registra hechos", "Un agente extrae los campos de la factura del PDF y la nueva fecha de vencimiento del correo posterior. Registra cada hecho como una observación vinculada a su fuente.", "/es/observations/"],
   ["Entidad", "Identifica la entidad de forma determinista", "El número, el proveedor y la fecha identifican esta factura; las observaciones posteriores pueden referirse a ella.", "/es/record-model/"],
   ["Valores actuales", "Calcula los valores actuales", "Neotoma aplica automáticamente la regla del campo. Aquí cambia el vencimiento y el PDF sigue aportando el importe.", "/es/schemas/"],
   ["Instantánea", "Lee el valor actual", "La instantánea muestra los valores seleccionados por las reglas y las observaciones que los respaldan.", "/es/current-snapshot/"],
@@ -60,17 +60,17 @@ export function SpanishOnePager({ pageRef }: { pageRef: RefObject<HTMLElement> }
         <div className="plan-invoice-story" id="example"><p className="plan-label">Ejemplo</p><p>La factura INV-2041 llega en PDF con vencimiento el 22 de octubre. Un correo facilitado después cambia el vencimiento al 29 de octubre de 2026. Un agente conectado ve el valor seleccionado del 29 de octubre y puede inspeccionar qué observación lo proporcionó. El importe sigue viniendo del PDF.</p></div>
         <ol className="plan-section-cut">{steps.map(([name,label,body,href], i) => <li key={name}><div className="plan-step-copy"><span className="plan-label">Paso {String(i+1).padStart(2,"0")} · {name}</span><h3>{label}</h3><p>{body}</p><a href={href}>Lee la guía</a></div><figure className="plan-step-art"><PaperScene scene={(["source","observation","entity","reducer","snapshot"] as const)[i]} /></figure></li>)}</ol>
         <aside className="plan-example" aria-label="Ejemplo de factura ficticia"><p className="plan-label">Una factura, cinco partes</p><div className="plan-example-content"><figure><PaperScene scene="invoiceExample" /></figure><ol className="plan-legend">{legend.map((item,i)=><li key={item}><span className="plan-key" aria-hidden="true">{i+1}</span><span>{item}</span></li>)}</ol></div></aside>
-        <section id="interfaces" className="plan-interface-section" aria-labelledby="interface-title"><span id="inspect" className="plan-anchor" aria-hidden="true" /><h3 id="interface-title">Cuatro maneras de trabajar con un registro.</h3>
-          <InterfaceExplorer /></section>
       </section>
-      <section className="plan-sheet plan-ground-paper" aria-labelledby="s4" id="connect"><header className="plan-sheet-head"><p className="plan-label">03 · Conectar</p><h2 id="s4">Empieza en tu herramienta de IA preferida</h2></header>
+      <section id="interfaces" className="plan-sheet plan-ground-paper plan-interface-sheet" aria-labelledby="interface-title"><span id="inspect" className="plan-anchor" aria-hidden="true" /><header className="plan-sheet-head"><p className="plan-label">03 · Interfaces</p><h2 id="interface-title">Cuatro maneras de trabajar con un registro</h2></header>
+        <InterfaceExplorer /></section>
+      <section className="plan-sheet plan-ground-paper" aria-labelledby="s5" id="connect"><header className="plan-sheet-head"><p className="plan-label">04 · Conectar</p><h2 id="s5">Empieza en tu herramienta de IA preferida</h2></header>
         <div className="plan-split"><figure className="plan-scene plan-local-scene"><PaperScene scene="localService" /></figure><div><p className="plan-body">Neotoma puede ejecutarse localmente o detrás de un punto de acceso autenticado. Los agentes conectados usan MCP, la API REST o la CLI para leer y escribir registros en una instancia configurada.</p><p className="plan-body">Configura cada herramienta con la misma instancia y el mismo perfil de datos para trabajar con los mismos registros; distintas entradas pueden utilizar bases de datos separadas. La aplicación incluida permite inspeccionarlos.</p></div></div>
-        <ToolInstall showPermissionsPreflight includeVerificationNote />
+        <ToolInstall />
       </section>
-      <section className="plan-sheet plan-ground-band" aria-labelledby="s5" id="vision"><header className="plan-sheet-head"><p className="plan-label">04 · Avanzado</p><h2 id="s5">Construye una base compartida para el trabajo de agentes</h2></header>
+      <section className="plan-sheet plan-ground-band" aria-labelledby="s6" id="vision"><header className="plan-sheet-head"><p className="plan-label">05 · Avanzado</p><h2 id="s6">Amplía tu uso a medida que llegan funciones avanzadas</h2></header>
         <VisionGallery />
       </section>
-      <EvaluationCard id="evaluate" headingId="s7" mark="05 · Evaluar" title="Evalúa el encaje" body="Pide a tu agente que compare Neotoma con tus flujos y herramientas. Puede identificar dónde ayudaría un sistema de registro y dónde basta lo que ya utilizas." />
+      <EvaluationCard id="evaluate" headingId="s7" mark="06 · Evaluar" title="Evalúa el encaje" body="Pide a tu agente que compare Neotoma con tus flujos y herramientas. Puede identificar dónde ayudaría un sistema de registro y dónde basta lo que ya utilizas." />
       <SiteFooter pageLocale="es" />
     </main>
   </div>;

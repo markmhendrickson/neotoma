@@ -300,9 +300,12 @@ if (englishHomeSentinelHits === 0) {
 const HOME_REQUIRED = [
   "A record, not recall.",
   "the system of record for AI agents",
-  "04 · Advanced",
-  "Build a shared foundation for agent work",
-  "05 · EVALUATE",
+  "03 · Interfaces",
+  "Four ways to work with a record",
+  "04 · Connect",
+  "05 · Advanced",
+  "Grow your use as advanced capabilities arrive",
+  "06 · EVALUATE",
   "Evaluate the fit",
 ] as const;
 const HOME_FORBIDDEN = [

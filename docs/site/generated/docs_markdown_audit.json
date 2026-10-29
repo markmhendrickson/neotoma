@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-27T15:33:50.190Z",
-  "total_files": 807,
+  "generated_at": "2026-10-29T16:29:39.775Z",
+  "total_files": 812,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 20,
@@ -12,7 +12,7 @@
     "feature_units": 20,
     "foundation": 25,
     "getting_started": 4,
-    "guides": 29,
+    "guides": 33,
     "icp": 11,
     "implementation": 2,
     "infrastructure": 3,
@@ -25,7 +25,7 @@
     "onboarding_elicitation_flow.md": 1,
     "onboarding_elicitation_script.md": 1,
     "operations": 9,
-    "performance": 1,
+    "performance": 2,
     "plans": 69,
     "proposals": 10,
     "prototypes": 2,
@@ -904,6 +904,10 @@
       "top": "getting_started"
     },
     {
+      "rel": "docs/guides/connections/antigravity.md",
+      "top": "guides"
+    },
+    {
       "rel": "docs/guides/connections/chatgpt.md",
       "top": "guides"
     },
@@ -929,6 +933,10 @@
     },
     {
       "rel": "docs/guides/connections/cursor.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/es/antigravity.md",
       "top": "guides"
     },
     {
@@ -960,6 +968,10 @@
       "top": "guides"
     },
     {
+      "rel": "docs/guides/connections/es/grok-bot.md",
+      "top": "guides"
+    },
+    {
       "rel": "docs/guides/connections/es/ironclaw.md",
       "top": "guides"
     },
@@ -985,6 +997,10 @@
     },
     {
       "rel": "docs/guides/connections/es/windsurf.md",
+      "top": "guides"
+    },
+    {
+      "rel": "docs/guides/connections/grok-bot.md",
       "top": "guides"
     },
     {
@@ -1238,6 +1254,10 @@
     {
       "rel": "docs/operations/running_the_server.md",
       "top": "operations"
+    },
+    {
+      "rel": "docs/performance/entity_list_source_lookups.md",
+      "top": "performance"
     },
     {
       "rel": "docs/performance/graph_traversal.md",

@@ -36,6 +36,7 @@ type SiteSnippetProps = {
   label?: string;
   className?: string;
   prose?: boolean;
+  copyInBody?: boolean;
   children?: ReactNode;
   onAfterCopy?: () => void;
   copyLabel?: string;
@@ -54,6 +55,7 @@ export function SiteSnippet({
   label,
   className = "",
   prose = false,
+  copyInBody = false,
   children,
   onAfterCopy,
   copyLabel,
@@ -63,7 +65,10 @@ export function SiteSnippet({
   const spanish = useOptionalLocale()?.locale === "es";
   const idleLabel = copyLabel ?? (spanish ? "Copiar" : "Copy");
   const doneLabel = copiedLabel ?? (spanish ? "Copiado" : "Copied");
-  const doneMessage = successMessage ?? (spanish ? "Copiado al portapapeles" : "Copied to clipboard");
+  const doneMessage =
+    successMessage ?? (spanish ? "Copiado al portapapeles" : "Copied to clipboard");
+  const accessibleTitle =
+    typeof title === "string" ? title : (label ?? (spanish ? "fragmento" : "snippet"));
   const [copied, markCopied] = useCopyFeedback(`${copyFeedbackId}:${text}`);
   const [copyFailed, setCopyFailed] = useState(false);
   useEffect(() => setCopyFailed(false), [text, copyFeedbackId]);
@@ -71,6 +76,7 @@ export function SiteSnippet({
     <button
       type="button"
       className="site-snippet-copy"
+      aria-label={`${copied && !copyFailed ? doneLabel : idleLabel} ${accessibleTitle}`}
       onClick={async () => {
         const ok = await copyTextToClipboard(text);
         setCopyFailed(!ok);
@@ -95,21 +101,42 @@ export function SiteSnippet({
       aria-live="polite"
     >
       {copyFailed
-        ? spanish ? "No se pudo copiar. Inténtalo de nuevo o selecciona el texto y cópialo manualmente." : "Copy failed. Try again, or select the text below and copy manually."
+        ? spanish
+          ? "No se pudo copiar. Inténtalo de nuevo o selecciona el texto y cópialo manualmente."
+          : "Copy failed. Try again, or select the text below and copy manually."
         : copied
           ? doneMessage
           : ""}
     </p>
   );
+  const codeBlock = (
+    <pre
+      className="site-snippet-code plan-pre"
+      tabIndex={0}
+      role="region"
+      aria-label={label ?? (typeof title === "string" ? title : spanish ? "Comandos" : "Commands")}
+    >
+      <code>
+        {children ??
+          (highlight ? highlightedNodes(refractor.highlight(text, "bash").children) : text)}
+      </code>
+    </pre>
+  );
   return (
-    <div className={`site-snippet ${className}`}>
+    <div className={`site-snippet ${chrome ? "" : "site-snippet-no-chrome"} ${className}`}>
+      {copyButton}
       {prose ? (
         <div className="site-snippet-prose-flow">
           <p className="site-snippet-title">{title}</p>
-          {copyButton}
           {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
           {status}
-          <p className="site-snippet-prose">{text}</p>
+          <div
+            className={
+              copyInBody ? "site-snippet-body site-snippet-body-prose" : "site-snippet-body-prose"
+            }
+          >
+            <p className="site-snippet-prose">{text}</p>
+          </div>
         </div>
       ) : (
         <>
@@ -118,22 +145,11 @@ export function SiteSnippet({
               <div className="site-snippet-heading">
                 <p className="site-snippet-title">{title}</p>
               </div>
-              {copyButton}
               {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
             </div>
           )}
-          {chrome && status}
-          <pre
-            className="site-snippet-code plan-pre"
-            tabIndex={0}
-            role="region"
-            aria-label={label ?? (typeof title === "string" ? title : spanish ? "Comandos" : "Commands")}
-          >
-            <code>
-              {children ??
-                (highlight ? highlightedNodes(refractor.highlight(text, "bash").children) : text)}
-            </code>
-          </pre>
+          {status}
+          {copyInBody ? <div className="site-snippet-body">{codeBlock}</div> : codeBlock}
         </>
       )}
     </div>

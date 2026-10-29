@@ -1,4 +1,5 @@
 import { useLocale } from "@/i18n/LocaleContext";
+import { RelationshipGraph } from "./RelationshipGraph";
 
 /** Static example using documented invoice fields and the app's detail vocabulary. */
 export function InspectorPreview() {
@@ -25,7 +26,7 @@ export function InspectorPreview() {
             <dl>
               <div>
                 <dt>invoice_number</dt>
-                <dd>INV-2041</dd>
+                <dd>INV-2041 <small>{es ? "del PDF de la factura" : "from invoice PDF"}</small></dd>
               </div>
               <div>
                 <dt>vendor_name</dt>
@@ -58,7 +59,6 @@ export function InspectorPreview() {
                 </dd>
               </div>
             </dl>
-            <p className="plan-inspector-trace">date_due → {es ? "observación del correo posterior" : "later email observation"}</p>
           </section>
           <section className="plan-inspector-card" aria-label={es ? "Historial de observaciones" : "Observation history"}>
             <h4>{es ? "Historial de observaciones" : "Observation history"}</h4>
@@ -100,21 +100,7 @@ export function InspectorPreview() {
           </section>
           <section className="plan-inspector-card" aria-label={es ? "Relaciones" : "Relationships"}>
             <h4>{es ? "Relaciones" : "Relationships"}</h4>
-            <p className="plan-related-entity">
-              <span>INV-2041 · invoice</span>
-              <span>REFERS_TO</span>
-              <strong>Acme · company</strong>
-            </p>
-            <p className="plan-related-entity">
-              <span>{es ? "Cambio de vencimiento" : "Due date update"} · email</span>
-              <span>REFERS_TO</span>
-              <strong>INV-2041 · invoice</strong>
-            </p>
-            <p className="plan-related-entity">
-              <span>{es ? "Seguimiento de INV-2041 · task (pendiente)" : "Follow up on INV-2041 · task (pending)"}</span>
-              <span>REFERS_TO</span>
-              <strong>INV-2041 · invoice</strong>
-            </p>
+            <RelationshipGraph es={es} />
             <p className="plan-small">
               {es ? "Un agente vinculó explícitamente estos registros de ejemplo. El PDF y el correo facilitados siguen siendo fuentes de observaciones; el registro de correo tipado y la tarea de seguimiento son registros separados y no se crean automáticamente a partir de esas fuentes." : "An agent explicitly linked these example records. The supplied PDF and email above remain sources for observations; the typed email record and follow-up task are separate records, not automatically created from those sources."}
             </p>

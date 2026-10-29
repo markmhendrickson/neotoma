@@ -4,7 +4,15 @@ import mdx from "@mdx-js/rollup";
 import remarkGfm from "remark-gfm";
 import path from "path";
 import { fileURLToPath } from "url";
-import { currentUiMode, currentUiSourceBinding, uncoveredUiModules, UI_HEAD_META, UI_MODE_META, UI_SOURCE_META } from "./scripts/site_ui_source_binding";
+import { docsViewerDevPlugin } from "./scripts/docs_viewer/dev";
+import {
+  currentUiMode,
+  currentUiSourceBinding,
+  uncoveredUiModules,
+  UI_HEAD_META,
+  UI_MODE_META,
+  UI_SOURCE_META,
+} from "./scripts/site_ui_source_binding";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,25 +21,45 @@ export default defineConfig({
   // pick-port --print-resources and earlier terminal output are not cleared on HMR/restart.
   clearScreen: false,
   plugins: [
+    docsViewerDevPlugin(__dirname),
     {
       name: "site-ui-source-binding",
       apply: "build",
       transformIndexHtml() {
         const binding = currentUiSourceBinding(__dirname);
         return [
-          { tag: "meta", attrs: { name: UI_HEAD_META, content: binding.head }, injectTo: "head-prepend" },
-          { tag: "meta", attrs: { name: UI_SOURCE_META, content: binding.source }, injectTo: "head-prepend" },
-          { tag: "meta", attrs: { name: UI_MODE_META, content: currentUiMode() }, injectTo: "head-prepend" },
+          {
+            tag: "meta",
+            attrs: { name: UI_HEAD_META, content: binding.head },
+            injectTo: "head-prepend",
+          },
+          {
+            tag: "meta",
+            attrs: { name: UI_SOURCE_META, content: binding.source },
+            injectTo: "head-prepend",
+          },
+          {
+            tag: "meta",
+            attrs: { name: UI_MODE_META, content: currentUiMode() },
+            injectTo: "head-prepend",
+          },
         ];
       },
       generateBundle(_options, bundle) {
-        const modules = Object.values(bundle).flatMap((output) => output.type === "chunk" ? Object.keys(output.modules) : []);
+        const modules = Object.values(bundle).flatMap((output) =>
+          output.type === "chunk" ? Object.keys(output.modules) : []
+        );
         const uncovered = uncoveredUiModules(__dirname, modules);
-        if (uncovered.length) this.error(`UI source binding omits compiled local modules: ${uncovered.join(", ")}`);
+        if (uncovered.length)
+          this.error(`UI source binding omits compiled local modules: ${uncovered.join(", ")}`);
       },
     },
     {
-      ...mdx({ include: "**/*.mdx", providerImportSource: "@mdx-js/react", remarkPlugins: [remarkGfm] }),
+      ...mdx({
+        include: "**/*.mdx",
+        providerImportSource: "@mdx-js/react",
+        remarkPlugins: [remarkGfm],
+      }),
       enforce: "pre",
     },
     react(),

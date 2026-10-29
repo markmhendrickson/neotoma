@@ -5,83 +5,16 @@ import { McpConversation } from "./McpConversation";
 import { neotomaDocUrl } from "@/site/neotoma_repo";
 import { staticAssetPath } from "@/site/spa_path";
 import { useLocale } from "@/i18n/LocaleContext";
+import { SOURCE_EXAMPLES } from "./source_examples";
 
 type Interface = "App" | "CLI" | "MCP" | "REST API";
 const interfaces: Interface[] = ["MCP", "App", "CLI", "REST API"];
 const cliDocHref = neotomaDocUrl("docs/developer/cli_reference.md");
 
-const invoice = {
-  entity_type: "invoice",
-  schema_version: "1.0",
-  invoice_number: "INV-2041",
-  vendor_name: "Acme",
-  invoice_date: "2026-10-01",
-  amount_due: 3200,
-  currency: "USD",
-  date_due: "2026-10-22",
-};
-const pretty = (value: unknown) => JSON.stringify(value, null, 2);
-const invoicePayload = pretty([invoice]);
-const amended = {
-  entity_id: "$INVOICE_ID",
-  entity_type: "invoice",
-  field: "date_due",
-  value: "2026-10-29",
-  idempotency_key: "unique-amendment-key",
-};
-// Newlines inside shell quotes are part of the same JSON argument; backslashes continue flags.
-const continuation = " " + String.fromCharCode(92) + "\n  ";
-const cli = (...parts: string[]) => parts.join(continuation);
-const curl = (operation: string, payload: unknown, expandId = false) => {
-  const json = pretty(payload);
-  const body = expandId ? `"${json.replace(/"/g, String.fromCharCode(92) + '"')}"` : `'${json}'`;
-  return cli(
-    `curl -sS -X POST "$NEOTOMA_URL/${operation}"`,
-    '-H "Authorization: Bearer $NEOTOMA_TOKEN"',
-    "-H 'Content-Type: application/json'",
-    `--data-binary ${body}`
-  );
-};
-
-/** One illustrative invoice, with variable IDs and explicit transport-specific auth. No requests run. */
+/** Read-only illustrative commands. Each write includes the caller's real source artifact. */
 const examples = (es: boolean): Partial<Record<Interface, string>> => ({
-  App: "",
-  CLI: [
-    es ? "# Perfil local. Sustituye cada clave de ejemplo; reutilízala solo para reintentar la misma operación." : "# Local profile. Replace each example key once; reuse it only for a retry of that same operation.",
-    es ? "# Toma el entity_id devuelto como INVOICE_ID." : "# Read the returned entity_id as INVOICE_ID.",
-    cli(
-      "neotoma dev store",
-      "--observation-source import",
-      "--idempotency-key unique-invoice-store-key",
-      `--entities '${invoicePayload}'`
-    ),
-    es ? "# El correo facilitado cambia el vencimiento. Usa el ID de entidad devuelto arriba." : "# The supplied email changes the date. Use the entity ID returned above.",
-    cli(
-      'neotoma dev corrections create "$INVOICE_ID"',
-      "--entity-type invoice",
-      "--field-name date_due",
-      "--corrected-value 2026-10-29",
-      "--idempotency-key unique-amendment-key"
-    ),
-    'neotoma dev entities get "$INVOICE_ID"',
-    'neotoma dev observations list --entity-id "$INVOICE_ID"',
-    cli(
-      "neotoma dev request --operation getFieldProvenance",
-      `--body "${pretty({ entity_id: "$INVOICE_ID", field: "date_due" }).replace(/"/g, String.fromCharCode(92) + '"')}"`
-    ),
-  ].join("\n\n"),
-  "REST API": [
-    es ? "# Configura NEOTOMA_URL y tu token de propietario. Sustituye INVOICE_ID después de store." : "# Set NEOTOMA_URL and your owner token. Replace INVOICE_ID after store.",
-    curl("store", {
-      entities: [invoice],
-      observation_source: "import",
-      idempotency_key: "unique-invoice-store-key",
-    }),
-    curl("correct", amended, true),
-    curl("get_entity_snapshot", { entity_id: "$INVOICE_ID" }, true),
-    curl("list_observations", { entity_id: "$INVOICE_ID" }, true),
-    curl("get_field_provenance", { entity_id: "$INVOICE_ID", field: "date_due" }, true),
-  ].join("\n\n"),
+  CLI: SOURCE_EXAMPLES.cli[es ? "es" : "en"],
+  "REST API": SOURCE_EXAMPLES.rest[es ? "es" : "en"],
 });
 
 export function InterfaceExplorer() {
@@ -168,6 +101,20 @@ export function InterfaceExplorer() {
             <McpConversation active={selected === "MCP"} />
           ) : (
             <>
+              <p className="plan-small">{SOURCE_EXAMPLES.note[es ? "es" : "en"]}</p>
+              <SiteSnippet
+                text={SOURCE_EXAMPLES.data[es ? "es" : "en"]}
+                title={es ? "invoice.extracted.json · datos sintéticos del PDF" : "invoice.extracted.json · synthetic PDF facts"}
+                highlight
+                copyFeedbackId={`invoice-source-data-${name}`}
+              />
+              {name === "REST API" && (
+                <SiteSnippet
+                  text={SOURCE_EXAMPLES.builder[es ? "es" : "en"]}
+                  title={es ? "make-source-store.py · carga los bytes de la fuente" : "make-source-store.py · upload actual source bytes"}
+                  copyFeedbackId="invoice-source-builder"
+                />
+              )}
               {currentExamples[name] ? (
                 <SiteSnippet
                   text={currentExamples[name]}
@@ -190,9 +137,6 @@ export function InterfaceExplorer() {
           )}
         </div>
       ))}
-      <p className="plan-small">
-        {es ? "Cada store y cada corrección por MCP o REST necesita su propia clave de idempotencia. En una instalación local predeterminada, MCP stdio y CLI o REST escriben como usuarios locales distintos y mantienen registros separados salvo que compartan instancia y usuario. Los comandos de corrección conservan la observación anterior, pero no guardan un documento fuente." : "Over MCP and REST, each store and each correction needs its own idempotency key. In a default local install, stdio MCP and CLI or REST write as different local users and keep separate records unless they share an instance and user. Correction commands preserve the earlier observation but store no source document."}
-      </p>
     </div>
   );
 }
