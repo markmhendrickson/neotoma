@@ -301,7 +301,7 @@ const HOME_REQUIRED = [
   "A record, not recall.",
   "the system of record for AI agents",
   "04 · Advanced",
-  "Build a shared foundation for agent work",
+  "Grow your use as advanced capabilities arrive",
   "05 · EVALUATE",
   "Evaluate the fit",
 ] as const;

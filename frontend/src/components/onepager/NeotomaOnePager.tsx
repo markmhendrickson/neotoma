@@ -245,14 +245,14 @@ export function NeotomaOnePager() {
               </p>
             </div>
           </div>
-          <ToolInstall showPermissionsPreflight />
+          <ToolInstall />
         </section>
 
         <section className="plan-sheet plan-ground-band" aria-labelledby="s5" id="vision">
           <SheetHead
             id="s5"
             mark="04 · Advanced"
-            title="Build a shared foundation for agent work"
+            title="Grow your use as advanced capabilities arrive"
           />
           <VisionGallery />
         </section>

@@ -234,7 +234,7 @@ describe("docs viewer whitelist", () => {
 
   it("publishes every connection guide from the shared host contract", () => {
     const guides = DOCS_VIEWER_MANIFEST.filter((entry) => entry.source.startsWith("docs/guides/connections/"));
-    expect(guides).toHaveLength(14);
+    expect(guides).toHaveLength(CONNECTIONS.length);
     expect(CONNECTIONS_SETUP.map((connection) => connection.id)).toEqual([
       "claude-code",
       "cursor",

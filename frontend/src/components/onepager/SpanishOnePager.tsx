@@ -14,7 +14,7 @@ import { EvaluationCard } from "./EvaluationCard";
 
 const steps = [
   ["Fuente", "Conserva el material original", "Facilita el PDF o el correo de la factura como fuente para poder inspeccionar su contenido.", "/es/provenance/"],
-  ["Observación", "Extrae y registra hechos", "Un agente extrae los campos de la factura y registra una observación vinculada a la fuente facilitada.", "/es/observations/"],
+  ["Observación", "Extrae y registra hechos", "Un agente extrae los campos de la factura del PDF y la nueva fecha de vencimiento del correo posterior. Registra cada hecho como una observación vinculada a su fuente.", "/es/observations/"],
   ["Entidad", "Identifica la entidad de forma determinista", "El número, el proveedor y la fecha identifican esta factura; las observaciones posteriores pueden referirse a ella.", "/es/record-model/"],
   ["Valores actuales", "Calcula los valores actuales", "Neotoma aplica automáticamente la regla del campo. Aquí cambia el vencimiento y el PDF sigue aportando el importe.", "/es/schemas/"],
   ["Instantánea", "Lee el valor actual", "La instantánea muestra los valores seleccionados por las reglas y las observaciones que los respaldan.", "/es/current-snapshot/"],
@@ -65,9 +65,9 @@ export function SpanishOnePager({ pageRef }: { pageRef: RefObject<HTMLElement> }
       </section>
       <section className="plan-sheet plan-ground-paper" aria-labelledby="s4" id="connect"><header className="plan-sheet-head"><p className="plan-label">03 · Conectar</p><h2 id="s4">Empieza en tu herramienta de IA preferida</h2></header>
         <div className="plan-split"><figure className="plan-scene plan-local-scene"><PaperScene scene="localService" /></figure><div><p className="plan-body">Neotoma puede ejecutarse localmente o detrás de un punto de acceso autenticado. Los agentes conectados usan MCP, la API REST o la CLI para leer y escribir registros en una instancia configurada.</p><p className="plan-body">Configura cada herramienta con la misma instancia y el mismo perfil de datos para trabajar con los mismos registros; distintas entradas pueden utilizar bases de datos separadas. La aplicación incluida permite inspeccionarlos.</p></div></div>
-        <ToolInstall showPermissionsPreflight includeVerificationNote />
+        <ToolInstall />
       </section>
-      <section className="plan-sheet plan-ground-band" aria-labelledby="s5" id="vision"><header className="plan-sheet-head"><p className="plan-label">04 · Avanzado</p><h2 id="s5">Construye una base compartida para el trabajo de agentes</h2></header>
+      <section className="plan-sheet plan-ground-band" aria-labelledby="s5" id="vision"><header className="plan-sheet-head"><p className="plan-label">04 · Avanzado</p><h2 id="s5">Amplía tu uso a medida que llegan funciones avanzadas</h2></header>
         <VisionGallery />
       </section>
       <EvaluationCard id="evaluate" headingId="s7" mark="05 · Evaluar" title="Evalúa el encaje" body="Pide a tu agente que compare Neotoma con tus flujos y herramientas. Puede identificar dónde ayudaría un sistema de registro y dónde basta lo que ya utilizas." />

@@ -61,9 +61,9 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **779**
+- Total automated test files: **780**
 - Backend and repo Vitest files: **728**
-- Frontend Vitest files: **24**
+- Frontend Vitest files: **25**
 - Playwright spec files: **27**
 
 ### Suite counts
@@ -81,7 +81,7 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 24 |
+| Frontend Vitest tests | 25 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 2 |
@@ -916,7 +916,7 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (24):**
+**Files (25):**
 - `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/Layout.site_chrome.test.tsx`
 - `frontend/src/components/MainApp.docs-viewer.test.tsx`
@@ -925,6 +925,7 @@ flowchart TD
 - `frontend/src/components/onepager/PaperScene.spanish.test.tsx`
 - `frontend/src/components/onepager/ProductBenefitPills.interactions.test.tsx`
 - `frontend/src/components/onepager/SpanishOnePager.chrome.test.tsx`
+- `frontend/src/components/onepager/ToolInstall.locale.test.tsx`
 - `frontend/src/components/RetiredRouteStub.ssr.test.tsx`
 - `frontend/src/components/RetiredRouteStub.test.tsx`
 - `frontend/src/components/SeoHead.test.tsx`

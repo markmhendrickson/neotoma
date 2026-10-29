@@ -14,6 +14,8 @@ import {
   connectionVerification,
   connectionStepOneTitle,
   connectionStepTwoTitle,
+  connectionGuidePath,
+  connectionGuideUrl,
 } from "./onepager_copy";
 import { useLocale } from "@/i18n/LocaleContext";
 import { spanishToolCopy } from "./spanish_tool_install_copy";
@@ -68,10 +70,10 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
           </SelectContent>
         </Select>
       </div>
-      <p className="plan-tool-prerequisite">{spanish ? `${spanish.mode} Consulta la guía de ${host.host} para comprobar los requisitos y límites de esta vía.` : `${host.prerequisites} ${host.caveat}`}</p>
-      <p className="plan-install-guide">
+      {showPermissionsPreflight && <p className="plan-tool-prerequisite">{spanish ? `${spanish.mode} Consulta la guía de ${host.host} para comprobar los requisitos y límites de esta vía.` : `${host.prerequisites} ${host.caveat}`}</p>}
+      {showPermissionsPreflight && <p className="plan-install-guide">
         <a href={staticAssetPath(es ? "/es/install/system-changes/" : "/install/system-changes/")}>{es ? "Revisa los cambios en el sistema antes de copiar un paso" : "Review what changes on your system before copying a step"}</a>
-      </p>
+      </p>}
       {showPermissionsPreflight && preflightHost ? (
         <details className="plan-tool-preflight">
           <summary>{es ? "Permisos opcionales de comandos para" : "Optional command permissions for"} {host.host}</summary>
@@ -81,8 +83,10 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
       ) : null}
       <SiteSnippet
         title={spanish?.stepOne ?? connectionStepOneTitle(host)}
-        text={spanish && proseStep ? `${spanish.mode} Lee https://neotoma.io${host.guideRoute} para los pasos exactos de configuración de ${host.host}.` : connectionCommands(host)}
+        text={spanish && proseStep ? `${spanish.mode} Lee ${connectionGuideUrl(host, "es")} para los pasos exactos de configuración de ${host.host}.` : connectionCommands(host, es ? "es" : "en")}
         prose={proseStep}
+        copyInBody
+        className="plan-install-snippet"
         copyFeedbackId={`onepager-install-${host.id}`}
         label={`${es ? "Instrucciones de conexión para" : "Connection instructions for"} ${host.host}`}
         successMessage={es ? (proseStep ? "Instrucciones copiadas" : "Comandos copiados") : (proseStep ? "Instructions copied" : "Commands copied")}
@@ -92,6 +96,8 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
         title={spanish?.stepTwo ?? connectionStepTwoTitle(host)}
         text={spanish?.activation ?? activationPrompt(host)}
         prose
+        copyInBody
+        className="plan-install-snippet plan-install-prompt"
         copyFeedbackId={`onepager-activate-${host.id}`}
         successMessage={es ? "Prompt copiado" : "Prompt copied"}
       />
@@ -99,7 +105,7 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
         <p className="plan-selected-verification">{spanish?.verification ?? connectionVerification(host)}</p>
       ) : null}
       <p className="plan-install-guide">
-        <a href={staticAssetPath(es ? `/es${host.guideRoute}` : host.guideRoute)}>{es ? `Lee más sobre Neotoma con ${host.host}` : `Learn more about using Neotoma with ${host.host}`}</a>
+        <a href={staticAssetPath(connectionGuidePath(host, es ? "es" : "en"))}>{es ? `Lee más sobre Neotoma con ${host.host}` : `Learn more about using Neotoma with ${host.host}`}</a>
       </p>
     </div>
   );

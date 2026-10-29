@@ -21,6 +21,7 @@ import { neotomaServerEntries } from "../../src/cli/mcp_config_scan";
 import { OLD_LEDE, UNMEASURED_INSTALL_TIME } from "../../scripts/docs_viewer/claim_patterns";
 import { RecordPlate } from "../../frontend/src/components/onepager/onepager_plate";
 import { NeotomaOnePager } from "../../frontend/src/components/onepager/NeotomaOnePager";
+import { SOURCE_EXAMPLES } from "../../frontend/src/components/onepager/source_examples";
 import {
   DEEPER_MATERIAL,
   PIPELINE,
@@ -225,7 +226,7 @@ describe("connection guide contract", () => {
   it("gives every chooser entry one canonical install topic and a readable guide", () => {
     const topics = DOCS_VIEWER_MANIFEST.filter((entry) => entry.parentId === "install");
     expect(topics).toHaveLength(CONNECTIONS.length + 1);
-    expect(new Set(topics.map((topic) => topic.slug)).size).toBe(15);
+    expect(new Set(topics.map((topic) => topic.slug)).size).toBe(CONNECTIONS.length + 1);
     expect(topics.find((topic) => topic.slug === "install/system-changes")?.status).toBe("included");
     for (const connection of CONNECTIONS) {
       const topic = topics.find((entry) => entry.source === connection.guide);
@@ -310,8 +311,16 @@ describe("connection guide contract", () => {
     }
   });
 
-  it("keeps all fourteen routes and connection modes anchored to the shared contract", () => {
-    expect(CONNECTIONS).toHaveLength(14);
+  it("keeps all sixteen routes and connection modes anchored to the shared contract", () => {
+    expect(CONNECTIONS).toHaveLength(16);
+    for (const id of ["antigravity", "grok-bot"]) {
+      expect(CONNECTIONS.find((connection) => connection.id === id)?.kind).toBe("manual");
+      const guide = readFileSync(join(root, `docs/guides/connections/es/${id}.md`), "utf-8");
+      for (const heading of ["## Antes de conectar", "## Configurar", "## Verificar y recuperar", "## Fuentes"])
+        expect(guide, id).toContain(heading);
+      expect(guide).toContain("../../../topics/es/install/system-changes.md");
+      expect(guide).toContain("https://neotoma.io/es/install/");
+    }
     for (const connection of CONNECTIONS) {
       expect(connection.guideRoute).toBe(`/install/${connection.id}/`);
       expect(connection.transport.length).toBeGreaterThan(12);
@@ -321,7 +330,9 @@ describe("connection guide contract", () => {
       expect(connection.evidence.releasePin).toMatch(/^[a-f0-9]{40}$/);
       expect(connection.evidence.mainPin).toMatch(/^[a-f0-9]{40}$/);
       expect(connection.evidence.vendorUrl).toMatch(/^https:\/\//);
-      expect(connection.evidence.checkedOn).toBe("2026-10-24");
+      expect(connection.evidence.checkedOn).toBe(
+        ["antigravity", "grok-bot"].includes(connection.id) ? "2026-10-29" : "2026-10-24"
+      );
       if (connection.kind === "setup") {
         expect(connection.command).toBe(setupCommandFor(connection.id));
         expect(connection.command).not.toContain("--yes");
@@ -719,18 +730,29 @@ describe("/install polish", () => {
       );
     });
 
-    it("shows an amendment without a reusable fixed ID", () => {
-      const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
-      expect(explorer).toContain('corrections create "$INVOICE_ID"');
-      expect(explorer).not.toMatch(/corrections create ent_[a-f0-9]+/);
+    it("shows the later email as a source-bearing update without a reusable fixed ID", () => {
+      for (const example of [SOURCE_EXAMPLES.cli.en, SOURCE_EXAMPLES.rest.en]) {
+        expect(example).toContain("INVOICE_ID='REPLACE_WITH_RETURNED_ENTITY_ID'");
+        expect(example).toContain('"target_id": sys.argv[1]');
+        expect(example).not.toMatch(/ent_[a-f0-9]{24}/);
+      }
+      expect(SOURCE_EXAMPLES.cli.en).toContain("--file-path due-date-email.txt");
+      expect(SOURCE_EXAMPLES.rest.en).toContain("later-email.eml email.extracted.json");
     });
 
-    it("keeps the v0.26.0 store, user-profile and correction-source caveats", () => {
+    it("keeps source bytes and distinct write keys in the v0.26.0 examples", () => {
       const explorer = readSrc("frontend/src/components/onepager/InterfaceExplorer.tsx");
-      expect(explorer).toMatch(/curl\("store", \{[^}]*idempotency_key:/);
-      expect(explorer).toContain("each store and each correction needs its own idempotency key");
-      expect(explorer).toContain("keep separate records unless they share an instance and user");
-      expect(explorer).toContain("Correction commands preserve the earlier observation but store no source document");
+      expect(explorer).toContain("SOURCE_EXAMPLES.cli");
+      expect(explorer).toContain("SOURCE_EXAMPLES.rest");
+      expect(SOURCE_EXAMPLES.cli.en).toContain("--file-path invoice.pdf");
+      expect(SOURCE_EXAMPLES.cli.en).toContain("--file-path due-date-email.txt");
+      expect(SOURCE_EXAMPLES.cli.en).toContain("demo-inv2041-pdf-write-v1");
+      expect(SOURCE_EXAMPLES.cli.en).toContain("demo-inv2041-email-write-v1");
+      expect(SOURCE_EXAMPLES.builder.en).toContain('"file_content": base64.b64encode(raw)');
+      expect(SOURCE_EXAMPLES.builder.en).toContain('"file_idempotency_key": hashlib.sha256(raw)');
+      expect(SOURCE_EXAMPLES.rest.en).toContain("invoice.pdf invoice.extracted.json");
+      expect(SOURCE_EXAMPLES.rest.en).toContain("later-email.eml email.extracted.json");
+      expect(SOURCE_EXAMPLES.note.en).toContain("source-checked for Neotoma 0.26.0, not an installed-host test");
       const conversation = readSrc("frontend/src/components/onepager/McpConversation.tsx");
       expect(conversation).toContain("save the supplied invoice as a source with its fields");
       expect(conversation).toContain("save the retrieved email as a source");
@@ -752,7 +774,7 @@ describe("/install polish", () => {
         createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
       );
       expect(html).toContain("Example conversation; no commands or requests run.");
-      expect(html).toContain("Read the returned entity_id as INVOICE_ID.");
+      expect(html).toContain("Set INVOICE_ID to that returned ID, not the invoice number.");
       for (const name of ["CLI", "REST API"])
         expect(html).toContain(`aria-label="${name} illustrative invoice calls"`);
       expect(explorer).not.toContain("The snippets are illustrative calls, never run by this page");
