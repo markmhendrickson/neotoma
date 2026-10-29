@@ -24,8 +24,8 @@ export const TOPIC_VISUALS = {
   "store-correct": drawing("topicStore"),
   recordModel: {
     scene: "entity",
-    alt: "Four observations associated with one identity-bearing entity",
-    caption: "The entity identity associates separate observations with the same thing.",
+    alt: "Two observations with matching type and identifying marks connect to one stable entity",
+    caption: "The same type and identifying fields resolve two observations to one entity.",
   },
   observations: {
     scene: "observation",
@@ -39,9 +39,9 @@ export const TOPIC_VISUALS = {
     caption: "Explicit field rules select or combine the contributions to current values.",
   },
   provenance: {
-    scene: "snapshot",
-    alt: "One highlighted current field traces to a selected passage of evidence",
-    caption: "Trace a selected field to the observation and supplied evidence behind it.",
+    scene: "invoiceExample",
+    alt: "An invoice and later email each link through a retained observation to a current record field",
+    caption: "In this invoice example, follow each current field through its retained observation to the supplied PDF or email.",
   },
   history: drawing("topicHistory"),
   trust: drawing("topicTrust"),

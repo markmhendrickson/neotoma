@@ -18,6 +18,32 @@ describe("Spanish visual alternatives", () => {
     }
   });
 
+  it("uses published and companion overhead scenes with localized accessible names", () => {
+    for (const [scene, spanish, english] of [
+      ["source", "bolsillo de archivo", "shallow archive pocket"],
+      ["observation", "factura original", "original invoice"],
+      ["entity", "marcas identificadoras", "identifying marks"],
+      ["snapshot", "elegidos por reglas", "rule-selected fields"],
+      ["invoiceExample", "registro actual", "current record"],
+      ["sharedInstance", "tres fichas", "Three distinct"],
+      ["scopedAccess", "solicitud firmada admitida", "admitted signed request"],
+      ["peering", "instancias distintas", "distinct instances"],
+      ["visionDomain", "llave de autoridad", "authority key"],
+      ["visionPositions", "dos afirmaciones", "two conflicting claims"],
+      ["visionExplanation", "fuente y autoridad", "source and authority"],
+    ] as const) {
+      const es = renderToStaticMarkup(<PaperScene scene={scene} locale="es" />);
+      const en = renderToStaticMarkup(<PaperScene scene={scene} locale="en" />);
+      expect(es).toContain('type="image/svg+xml"');
+      expect(es).toContain('role="img"');
+      expect(es).toContain(spanish);
+      expect(es).not.toContain(english);
+      expect(en).toContain(english);
+      expect(en).not.toContain(spanish);
+      expect(es).toContain("/brand/october/essay/");
+    }
+  });
+
   it("keeps informative sandbox mock UI and its accessible label in Spanish", () => {
     const html = renderToStaticMarkup(<InspectorPreviewIllustration variant="sandbox" locale="es" />);
     expect(html).toContain("Vista previa de Inspector");

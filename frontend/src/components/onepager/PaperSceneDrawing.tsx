@@ -3,6 +3,7 @@ import { OCTOBER_RENDERS } from "./october_renders";
 import { staticAssetPath } from "@/site/spa_path";
 import { useOptionalLocale } from "@/i18n/LocaleContext";
 import { PAPER_SCENE_ALTS_ES } from "./paper_scene_alts_es";
+import { isOverheadScene, OverheadPaperScene } from "./OverheadPaperScene";
 import {
   TOPIC_DRAWINGS,
   type TopicDrawingId,
@@ -12,7 +13,7 @@ import {
 
 export const VISION_SCENE_ALTS = {
   visionDomain:
-    "Planned domain authority: a matching holder reaches one of two bounded compartments",
+    "Planned domain ownership: an authority key reaches one bounded archive while a second domain stays separate",
   visionPositions:
     "Planned position tracking: two retained claims connect to a dossier where one position is marked as selected",
   visionExplanation:
@@ -20,8 +21,8 @@ export const VISION_SCENE_ALTS = {
   sharedInstance:
     "Supported sharing: three collaborator identity badges reach visible records in one configured archive",
   scopedAccess:
-    "Supported access: verified identity and a separate scope grant reach one compartment",
-  peering: "Supported peering: two separate instances exchange a selected subset of records",
+    "Supported access: an admitted signed request establishes identity, and a separate active grant permits one bounded record action",
+  peering: "Supported peering: two distinct instances exchange only selected record slips in both directions",
 } as const;
 type MainSceneKind = keyof typeof OCTOBER_RENDERS | keyof typeof VISION_SCENE_ALTS;
 export type PaperSceneKind = MainSceneKind | TopicDrawingId;
@@ -30,6 +31,16 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
   hero: "Five paper records connected by solid navy lines",
+  source: "An original document and email remain whole in one shallow archive pocket, before any interpretation",
+  observation: "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
+  entity: "Two observations carry the same type and identifying marks into one stable entity dossier",
+  snapshot: "A current record presents two rule-selected fields while earlier observations remain behind it",
+  invoiceExample: "An invoice and later email feed separate retained observations; the current record keeps the amount from the invoice and due date from the email",
+  sharedInstance: "Three distinct connected tool slips lead to one shared Neotoma filing box",
+  scopedAccess: "An admitted signed request and a separate active scoped grant both precede a bounded record action",
+  peering: "Two distinct instances exchange only selected record slips in both directions",
+  visionPositions: "Planned position tracking keeps two conflicting claims visible alongside a selected position",
+  visionExplanation: "Planned explanation traces a current value to its source and authority, then shows the connected records a change could affect",
 } as Record<PaperSceneKind, string>;
 const Materials = createContext("");
 type Tone = "cream" | "sage" | "blue" | "navy" | "rust";
@@ -1380,6 +1391,10 @@ export function PaperScene({
   const generatedId = useId();
   const id = `paper-${idNamespace ?? generatedId.replace(/:/g, "")}`;
   const Scene = scenes[scene as MainSceneKind];
+  const alt = (locale ?? contextLocale) === "es"
+    ? PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene]
+    : PAPER_SCENE_ALTS[scene];
+  if (isOverheadScene(scene)) return <OverheadPaperScene scene={scene} alt={alt} />;
   return (
     <Materials.Provider value={id}>
       <svg
@@ -1390,7 +1405,7 @@ export function PaperScene({
         role="img"
         aria-labelledby={`${id}-title`}
       >
-        <title id={`${id}-title`}>{(locale ?? contextLocale) === "es" ? PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene] : PAPER_SCENE_ALTS[scene]}</title>
+        <title id={`${id}-title`}>{alt}</title>
 
         <defs>
           {(

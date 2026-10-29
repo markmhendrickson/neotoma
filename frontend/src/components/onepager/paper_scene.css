@@ -11,6 +11,10 @@
   border-radius: inherit;
   isolation: isolate;
 }
+.overhead-paper-scene {
+  aspect-ratio: 3 / 2;
+  min-height: 0;
+}
 .paper-edge {
   stroke: #fff9ec;
   stroke-width: 0.9;

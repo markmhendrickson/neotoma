@@ -16,8 +16,11 @@ import { MemoryRouter } from "react-router-dom";
 import { cloneElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { observeViewportMotion, playPaperScene, springFrames } from "./viewport_motion";
+import { isOverheadScene, overheadSceneFilename } from "./OverheadPaperScene";
+import { playOverheadScene } from "./overhead_scene_motion";
 import {
   CLIENT_UNDERLAY_OUTLINES,
   PaperScene,
@@ -37,6 +40,27 @@ import { NeotomaOnePager } from "./NeotomaOnePager";
 import { SolidLockup } from "./NeotomaLogos";
 
 vi.mock("./selected-site-identity.js", () => ({}));
+
+function overheadSvg(scene: PaperSceneKind): SVGSVGElement {
+  if (!isOverheadScene(scene)) throw new Error(`${scene} is an inline scene`);
+  const file = path.resolve(
+    process.cwd(),
+    "frontend/public/brand/october/essay",
+    overheadSceneFilename(scene)
+  );
+  const document = new DOMParser().parseFromString(readFileSync(file, "utf8"), "image/svg+xml");
+  const svg = document.documentElement as unknown as SVGSVGElement;
+  expect(svg.tagName.toLowerCase()).toBe("svg");
+  const publishedNames: Partial<Record<PaperSceneKind, string>> = {
+    observation: "syntheticSourcesProof",
+    invoiceExample: "invoiceOverheadProof",
+    sharedInstance: "governedCollaborationProof",
+    visionPositions: "competingClaimsProof",
+    visionExplanation: "explanationsImpactProof",
+  };
+  expect(svg.getAttribute("data-paper-scene")).toBe(publishedNames[scene] ?? scene);
+  return svg;
+}
 
 // These components are also rendered standalone in this suite. Keep the real
 // route-derived locale provider in every test without nesting MemoryRouter.
@@ -430,51 +454,17 @@ describe("one-page interface examples", () => {
 });
 
 describe("connection selector", () => {
-  it("ties the snapshot evidence thread to the selected cell and highlighted passage", () => {
-    const { container } = render(<PaperScene scene="snapshot" />);
-    const selected = container.querySelector("[data-selected-cell]")!;
-    const trace = container.querySelector("[data-selected-cell-trace]")!;
-    const passage = container.querySelector("[data-evidence-passage]")!;
-    const thread = container.querySelector("[data-paper-connection]")!;
-    const selectedOffset = selected
-      .closest("[data-paper-object]")
-      ?.parentElement?.getAttribute("transform")
-      ?.match(/^translate\((\d+) (\d+)\)/);
-    const passageOffset = passage
-      .closest("[data-paper-object]")
-      ?.parentElement?.getAttribute("transform")
-      ?.match(/^translate\((\d+) (\d+)\)/);
-    const traceGeometry = trace.getAttribute("d")?.match(/^M(\d+) (\d+) H(\d+)$/);
-    const threadGeometry = thread
-      .getAttribute("d")
-      ?.match(/^M(\d+) (\d+) C\d+ \d+ \d+ \d+ (\d+) (\d+)$/);
-    expect(selectedOffset && passageOffset && traceGeometry && threadGeometry).toBeTruthy();
-    const [selectedX, selectedY] = selectedOffset!.slice(1).map(Number);
-    const [passageX, passageY] = passageOffset!.slice(1).map(Number);
-    const [traceX, traceY, traceEndX] = traceGeometry!.slice(1).map(Number);
-    const [threadStartX, threadStartY, threadEndX, threadEndY] = threadGeometry!
-      .slice(1)
-      .map(Number);
-    const cellRight =
-      selectedX + Number(selected.getAttribute("x")) + Number(selected.getAttribute("width"));
-    const cellTop = selectedY + Number(selected.getAttribute("y"));
-    const cellBottom = cellTop + Number(selected.getAttribute("height"));
-    const passageLeft = passageX + Number(passage.getAttribute("x"));
-    const passageRight = passageLeft + Number(passage.getAttribute("width"));
-    const passageTop = passageY + Number(passage.getAttribute("y"));
-    const passageBottom = passageTop + Number(passage.getAttribute("height"));
-    expect(selectedX + traceX).toBe(cellRight);
-    expect(selectedY + traceY).toBeGreaterThan(cellTop);
-    expect(selectedY + traceY).toBeLessThan(cellBottom);
-    expect(selectedX + traceEndX).toBe(threadStartX);
-    expect(selectedY + traceY).toBe(threadStartY);
-    expect(threadEndX).toBeGreaterThan(passageLeft);
-    expect(threadEndX).toBeLessThan(passageRight);
-    expect(threadEndY).toBeGreaterThan(passageTop);
-    expect(threadEndY).toBeLessThan(passageBottom);
-    const selectedTack = trace.parentElement?.querySelector(".paper-tack circle");
-    expect(Number(selectedTack?.getAttribute("cx")) - 2).toBe(traceX);
-    expect(Number(selectedTack?.getAttribute("cy")) - 3).toBe(traceY);
+  it("shows rule-selected current fields while retaining both earlier observations", () => {
+    const svg = overheadSvg("snapshot");
+    expect(svg.querySelectorAll("[data-retained-observation]")).toHaveLength(2);
+    expect(svg.querySelectorAll("[data-rule-selected-snapshot]")).toHaveLength(1);
+    expect(
+      [...svg.querySelectorAll("[data-current-field]")].map((field) =>
+        field.getAttribute("data-current-field")
+      )
+    ).toEqual(["amount", "due-date"]);
+    expect(svg.querySelector("[data-paper-connection]")).toBeNull();
+    expect(svg.querySelector("text, foreignObject, script")).toBeNull();
   });
 
   it("shows one chosen tool reaching one configured archive", () => {
@@ -500,37 +490,21 @@ describe("connection selector", () => {
     expect(svg.querySelector("text, foreignObject")).toBeNull();
   });
 
-  it("keeps record identity distinct from its current snapshot and reuses one archive motif", () => {
-    const { container } = render(
-      <>
-        <PaperScene scene="entity" />
-        <PaperScene scene="snapshot" />
-        <PaperScene scene="sharedInstance" />
-      </>
+  it("resolves matching identity keys into one dossier, distinct from the current snapshot", () => {
+    const entity = overheadSvg("entity");
+    const snapshot = overheadSvg("snapshot");
+    const shared = overheadSvg("sharedInstance");
+    const keys = [...entity.querySelectorAll("[data-identity-key]")];
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys.map((key) => key.getAttribute("data-identity-key")))).toEqual(
+      new Set(["type-and-identifying-fields"])
     );
-    const entity = container.querySelector('[data-paper-scene="entity"]')!;
-    const snapshot = container.querySelector('[data-paper-scene="snapshot"]')!;
-    const shared = container.querySelector('[data-paper-scene="sharedInstance"]')!;
-    expect(entity.querySelector("[data-identity-mark]")?.innerHTML).toBe(
-      snapshot.querySelector("[data-identity-mark]")?.innerHTML
-    );
-    expect(snapshot.querySelector(".paper-table")).not.toBeNull();
-    expect(entity.querySelector(".paper-table")).toBeNull();
-    expect(shared.querySelector("[data-instance-archive]")).not.toBeNull();
-    expect(shared.querySelector("[data-instance-cutout]")?.getAttribute("href")).toBe(
-      "/brand/october/hybrid/instance-archive-v2.webp"
-    );
-    expect(shared.querySelectorAll("[data-client-cutout]")).toHaveLength(0);
-    expect(shared.querySelectorAll("[data-instance-archive]")).toHaveLength(1);
-    expect(shared.querySelectorAll("[data-collaborator-badge]")).toHaveLength(3);
-    expect(shared.querySelectorAll("[data-instance-archive] .paper-tack")).toHaveLength(3);
-    expect(shared.querySelectorAll("[data-paper-connection]")).toHaveLength(3);
-    expect(
-      [...shared.querySelectorAll("[data-badge-mark]")].map((mark) =>
-        mark.getAttribute("data-badge-mark")
-      )
-    ).toEqual(["diamond", "three-dots", "triangle"]);
-    expect(shared.querySelector("text, foreignObject, marker")).toBeNull();
+    expect(entity.querySelectorAll('[data-paper-role^="identity-slip-"]')).toHaveLength(2);
+    expect(entity.querySelectorAll('[data-paper-role="stable-entity-dossier"]')).toHaveLength(1);
+    expect(snapshot.querySelector("[data-rule-selected-snapshot]")).not.toBeNull();
+    expect(entity.querySelector("[data-rule-selected-snapshot]")).toBeNull();
+    expect(shared.querySelector('[data-paper-raster="instance-archive-overhead"]')).not.toBeNull();
+    expect(shared.querySelector("text, foreignObject, script, marker")).toBeNull();
   });
 
   it("reveals one physical vector card when a client cutout cannot load", () => {
@@ -546,19 +520,16 @@ describe("connection selector", () => {
     expect(container.querySelectorAll('[data-client-fallback="conversation"]')).toHaveLength(1);
   });
 
-  it("keeps the archive fallback and its attachment pins inside one moving object", () => {
+  it("keeps the shared archive material and its three client connections in one standalone document", () => {
     const { container } = render(<PaperScene scene="sharedInstance" />);
-    const image = container.querySelector("[data-instance-cutout]")!;
-    fireEvent.error(image);
-    const archive = container.querySelector("[data-instance-archive]")!;
-    expect(image.getAttribute("opacity")).toBe("0");
-    expect(archive.querySelector("[data-instance-fallback]")).not.toBeNull();
-    expect(archive.querySelectorAll("[data-instance-fallback] path").length).toBeGreaterThan(3);
-    expect(archive.querySelectorAll(".paper-tack")).toHaveLength(3);
-    expect(archive.querySelector("text, foreignObject")).toBeNull();
-    fireEvent.load(image);
-    expect(image.getAttribute("opacity")).toBe("1");
-    expect(archive.querySelectorAll("[data-instance-fallback]")).toHaveLength(1);
+    const object = container.querySelector("object.overhead-paper-scene")!;
+    expect(object.getAttribute("data")).toContain("/brand/october/essay/shared-instance.svg");
+    expect(object.querySelector("span")?.textContent).toBe(PAPER_SCENE_ALTS.sharedInstance);
+    const archive = overheadSvg("sharedInstance");
+    expect(archive.querySelectorAll('[data-paper-raster="instance-archive-overhead"]')).toHaveLength(1);
+    expect(archive.querySelectorAll("[data-paper-connection]")).toHaveLength(3);
+    expect(archive.querySelectorAll("[data-paper-port]")).toHaveLength(6);
+    expect(archive.querySelector("text, foreignObject, script")).toBeNull();
   });
 
   it("renders topic captions outside static text-free scenes", () => {
@@ -1120,6 +1091,20 @@ describe("layered paper illustration motion", () => {
   it("keeps every physical graphic inside exactly one animated owner in every scene", () => {
     for (const scene of Object.keys(PAPER_SCENE_ALTS) as PaperSceneKind[]) {
       const { container, unmount } = render(<PaperScene scene={scene} />);
+      if (isOverheadScene(scene)) {
+        const svg = overheadSvg(scene);
+        expect(svg.querySelectorAll("[data-paper-raster]").length, scene).toBeGreaterThan(0);
+        expect(svg.querySelector("text, foreignObject, script, marker"), scene).toBeNull();
+        expect(svg.querySelector('rect[width="900"][height="600"]'), scene).not.toBeNull();
+        const imageHrefs = [...svg.querySelectorAll("image")].map((image) =>
+          image.getAttribute("href")
+        );
+        expect(imageHrefs.every((href) => href?.startsWith("./materials/")), scene).toBe(true);
+        const ids = [...svg.querySelectorAll("[id]")].map((element) => element.id);
+        expect(new Set(ids).size, scene).toBe(ids.length);
+        unmount();
+        continue;
+      }
       const svg = container.querySelector("svg")!;
       expect(
         unownedGraphicLeaves(svg).map((leaf) => leaf.outerHTML.slice(0, 100)),
@@ -1144,13 +1129,7 @@ describe("layered paper illustration motion", () => {
   });
 
   it("holds thread tacks at their connection endpoints after authored placement and rotation", () => {
-    for (const scene of [
-      "entity",
-      "invoiceExample",
-      "visionPositions",
-      "localService",
-      "sharedInstance",
-    ] as const) {
+    for (const scene of ["localService"] as const) {
       const { container, unmount } = render(<PaperScene scene={scene} />);
       const svg = container.querySelector("svg")!;
       const endpoints = [...svg.querySelectorAll("[data-paper-connection]")].flatMap((path) =>
@@ -1196,6 +1175,80 @@ describe("layered paper illustration motion", () => {
     }
   });
 
+  it("places every external connection endpoint dot precisely on its path end", () => {
+    for (const scene of Object.keys(PAPER_SCENE_ALTS) as PaperSceneKind[]) {
+      if (!isOverheadScene(scene)) continue;
+      const svg = overheadSvg(scene);
+      const paths = [...svg.querySelectorAll("[data-paper-connection]")];
+      const ports = [...svg.querySelectorAll("[data-paper-port]")];
+      expect(ports).toHaveLength(paths.length * 2);
+      for (const path of paths) {
+        const geometry = path.getAttribute("d")?.match(
+          /^M([\d.]+) ([\d.]+) C[\d.]+ [\d.]+ [\d.]+ [\d.]+ ([\d.]+) ([\d.]+)$/
+        );
+        expect(geometry, scene).not.toBeNull();
+        for (const [id, x, y] of [
+          [path.getAttribute("data-connection-from"), geometry?.[1], geometry?.[2]],
+          [path.getAttribute("data-connection-to"), geometry?.[3], geometry?.[4]],
+        ]) {
+          const port = ports.find((item) => item.getAttribute("data-paper-port") === id);
+          expect(port, `${scene}: ${id}`).toBeDefined();
+          expect(Number(port?.getAttribute("cx"))).toBe(Number(x));
+          expect(Number(port?.getAttribute("cy"))).toBe(Number(y));
+          expect(port?.getAttribute("fill")).toBe("#ad5635");
+        }
+      }
+    }
+  });
+
+  it("bounds planned domain authority to one compartment", () => {
+    const svg = overheadSvg("visionDomain");
+    expect(svg.querySelectorAll("[data-domain-boundary]")).toHaveLength(2);
+    expect(svg.querySelectorAll("[data-authority-token]")).toHaveLength(1);
+    const links = [...svg.querySelectorAll("[data-paper-connection]")];
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute("data-connection-to")).toBe("domain-one");
+    expect(svg.querySelector('[data-paper-port="domain-two"]')).toBeNull();
+  });
+
+  it("requires both admitted identity and an active grant for the supported bounded action", () => {
+    const svg = overheadSvg("scopedAccess");
+    expect(svg.querySelectorAll("[data-admitted-request]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-identity-verification]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-active-grant]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-bounded-action]")).toHaveLength(1);
+    const connections = [...svg.querySelectorAll("[data-paper-connection]")];
+    expect(connections).toHaveLength(2);
+    expect(connections.map((path) => path.getAttribute("data-connection-from"))).toEqual([
+      "request",
+      "grant",
+    ]);
+    expect(connections.map((path) => path.getAttribute("data-connection-to"))).toEqual([
+      "action-identity",
+      "action-grant",
+    ]);
+  });
+
+  it("shows selected records exchanged between two separate supported instances", () => {
+    const svg = overheadSvg("peering");
+    expect(svg.querySelectorAll("[data-peer-instance]")).toHaveLength(2);
+    expect(svg.querySelectorAll("[data-selected-record]")).toHaveLength(2);
+    expect(
+      [...svg.querySelectorAll("[data-exchange-direction]")].map((item) =>
+        item.getAttribute("data-exchange-direction")
+      )
+    ).toEqual(["right", "left"]);
+    const links = [...svg.querySelectorAll("[data-selected-exchange]")];
+    expect(links).toHaveLength(4);
+    expect(links.map((item) => item.getAttribute("data-connection-from"))).toEqual([
+      "one-out",
+      "outbound-out",
+      "two-out",
+      "return-out",
+    ]);
+    expect(svg.querySelector("[data-file], [data-history], [data-deletion]")).toBeNull();
+  });
+
   it("serves sixteen distinct object scenes instead of translating images or the Inspector", () => {
     const { container } = render(
       <MemoryRouter>
@@ -1210,9 +1263,11 @@ describe("layered paper illustration motion", () => {
       16
     );
     const compositions = scenes.map((scene) =>
-      [...scene.querySelectorAll("[data-paper-object] path")]
-        .map((path) => path.getAttribute("d"))
-        .join("|")
+      scene.tagName.toLowerCase() === "object"
+        ? scene.getAttribute("data")
+        : [...scene.querySelectorAll("[data-paper-object] path")]
+            .map((path) => path.getAttribute("d"))
+            .join("|")
     );
     expect(new Set(compositions).size).toBe(16);
     expect(container.querySelector(".plan-inspector")?.hasAttribute("data-paper-scene")).toBe(
@@ -1230,6 +1285,7 @@ describe("layered paper illustration motion", () => {
       },
     });
     for (const scene of Object.keys(PAPER_SCENE_ALTS) as PaperSceneKind[]) {
+      if (isOverheadScene(scene)) continue;
       calls.length = 0;
       const { container, unmount } = render(<PaperScene scene={scene} />);
       const svg = container.querySelector("svg")!;
@@ -1280,6 +1336,42 @@ describe("layered paper illustration motion", () => {
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
 
+  it("draws each external connection before fading in its endpoint dots", () => {
+    const calls: { target: Element; options: KeyframeAnimationOptions }[] = [];
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: function (this: Element, _frames: Keyframe[], options: KeyframeAnimationOptions) {
+        calls.push({ target: this, options });
+        return { cancel: vi.fn(), finished: new Promise(() => {}), playState: "running" };
+      },
+    });
+    for (const scene of Object.keys(PAPER_SCENE_ALTS) as PaperSceneKind[]) {
+      if (!isOverheadScene(scene)) continue;
+      calls.length = 0;
+      const svg = overheadSvg(scene);
+      playOverheadScene(svg);
+      const connections = [...svg.querySelectorAll("[data-paper-connection]")];
+      for (const connection of connections) {
+        const link = calls.find((call) => call.target === connection);
+        expect(link, scene).toBeDefined();
+        for (const id of [
+          connection.getAttribute("data-connection-from"),
+          connection.getAttribute("data-connection-to"),
+        ]) {
+          const port = svg.querySelector(`[data-paper-port="${id}"]`);
+          const dot = calls.find((call) => call.target === port);
+          expect(dot, `${scene}: ${id}`).toBeDefined();
+          expect(Number(dot?.options.delay)).toBeGreaterThanOrEqual(
+            Number(link?.options.delay) + 650
+          );
+        }
+      }
+      if (svg.querySelector("[data-paper-object]"))
+        expect(calls.some((call) => call.target.hasAttribute("data-paper-object")), scene).toBe(true);
+    }
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
   it("loads the paper texture from the preview mount", () => {
     window.history.replaceState({}, "", "/pr-950/");
     const { container } = render(<PaperScene scene="hero" />);
@@ -1291,52 +1383,28 @@ describe("layered paper illustration motion", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("shows a clean cutout without hydration, then reveals a fallback on load failure", () => {
-    const { container } = render(<PaperScene scene="source" />);
-    const cutout = container.querySelector<SVGImageElement>('[data-paper-cutout="paper-ivory"]')!;
-    const fallback = cutout.parentElement!.querySelector(".paper-raster-fallback")!;
-    expect(cutout.getAttribute("href")).toBe("/brand/october/hybrid/paper-ivory.webp");
-    expect(fallback.getAttribute("opacity")).toBe("0");
-    fireEvent.load(cutout);
-    expect(fallback.getAttribute("opacity")).toBe("0");
-    fireEvent.error(cutout);
-    expect(fallback.getAttribute("opacity")).toBe("1");
+  it("retains two original source objects in a shallow archive pocket", () => {
+    const svg = overheadSvg("source");
+    expect(
+      [...svg.querySelectorAll("[data-retained-source]")].map((item) =>
+        item.getAttribute("data-retained-source")
+      )
+    ).toEqual(["document", "email"]);
+    expect(svg.querySelectorAll("[data-source-pocket]")).toHaveLength(1);
+    expect(svg.querySelector("[data-paper-observation], [data-rule-selected-snapshot]")).toBeNull();
+    expect(svg.querySelector('[data-paper-raster="packet"]')).not.toBeNull();
+    expect(svg.querySelector('[data-paper-raster="envelope"]')).not.toBeNull();
   });
 
-  it("shows filled envelope flaps on image failure and hides the whole fallback on load", () => {
+  it("shows the revised date letter in both complete SVGs and keeps a fallback name", () => {
     for (const scene of ["observation", "invoiceExample"] as const) {
+      const svg = overheadSvg(scene);
+      expect(svg.querySelectorAll('[data-paper-envelope-state="open"]')).toHaveLength(2);
+      expect(svg.querySelectorAll('[data-paper-envelope-state="closed"]')).toHaveLength(1);
+      expect(svg.querySelector('[data-paper-letter="email"]')?.getAttribute("data-due-date")).toBe("29");
+      expect(svg.querySelector("text, foreignObject, script")).toBeNull();
       const { container, unmount } = render(<PaperScene scene={scene} />);
-      const cutouts = container.querySelectorAll('[data-paper-cutout="envelope-blue"]');
-      expect(cutouts).toHaveLength(1);
-      const fallback = cutouts[0].parentElement!.querySelector(".paper-raster-fallback")!;
-      const flaps = [...fallback.querySelectorAll("path[data-envelope-flap]")];
-      fireEvent.error(cutouts[0]);
-      expect(fallback.getAttribute("opacity")).toBe("1");
-      expect(flaps).toHaveLength(2);
-      expect(flaps.map((flap) => flap.getAttribute("data-envelope-flap"))).toEqual([
-        "lower",
-        "closing",
-      ]);
-      for (const flap of flaps) {
-        expect(flap.getAttribute("d")).toMatch(/Z$/);
-        expect(flap.getAttribute("fill")).toMatch(/^#[0-9a-f]{6}$/i);
-      }
-      const flapVertices = flaps.map((flap) =>
-        [...flap.getAttribute("d")!.matchAll(/[ML][\d.]+ ([\d.]+)/g)].map((match) =>
-          Number(match[1])
-        )
-      );
-      expect(flapVertices.map((vertices) => vertices.length)).toEqual([3, 3]);
-      expect(flapVertices[0][0]).toBeGreaterThan(flapVertices[1][0]);
-      expect(flapVertices[1][1]).toBeGreaterThan(flapVertices[0][1]);
-      expect(flaps[0].getAttribute("fill")).not.toBe(flaps[1].getAttribute("fill"));
-      expect(flaps.every((flap) => flap.getAttribute("stroke") !== null)).toBe(true);
-      expect([...fallback.querySelectorAll("path")].at(-1)).toBe(flaps[1]);
-      expect(fallback.querySelectorAll(".paper-fold")).toHaveLength(0);
-      expect(cutouts[0].parentElement!.querySelectorAll("[data-envelope-flap]")).toHaveLength(2);
-      fireEvent.load(cutouts[0]);
-      expect(fallback.getAttribute("opacity")).toBe("0");
-      expect(cutouts[0].getAttribute("opacity")).not.toBe("0");
+      expect(container.querySelector("object span")?.textContent).toBe(PAPER_SCENE_ALTS[scene]);
       unmount();
     }
   });
@@ -1423,11 +1491,11 @@ describe("layered paper illustration motion", () => {
     }
   });
 
-  it("clips each archive fallback to its own raster silhouette", () => {
+  it("clips each inline archive fallback to its own raster silhouette", () => {
     const { container } = render(
       <>
-        <PaperScene scene="sharedInstance" />
-        <PaperScene scene="sharedInstance" />
+        <PaperScene scene="localService" />
+        <PaperScene scene="localService" />
       </>
     );
     const archives = container.querySelectorAll("[data-instance-archive]");
@@ -1449,13 +1517,12 @@ describe("layered paper illustration motion", () => {
     const { container } = render(
       <>
         <PaperScene scene="localService" />
-        <PaperScene scene="sharedInstance" />
       </>
     );
     const cutouts = container.querySelectorAll<SVGImageElement>(
       "[data-client-cutout], [data-instance-cutout]"
     );
-    expect(cutouts).toHaveLength(3);
+    expect(cutouts).toHaveLength(2);
     const underlays = [...cutouts].map((cutout) => {
       const fallback = cutout.parentElement!.querySelector(
         cutout.hasAttribute("data-instance-cutout")
