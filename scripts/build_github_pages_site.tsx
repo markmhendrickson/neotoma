@@ -21,6 +21,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { captureTopicVisuals } from "./docs_viewer/capture_visuals";
 import { build as buildBrowserAsset } from "esbuild";
 import {
   DEFAULT_LOCALE,
@@ -34,11 +35,10 @@ import {
   buildRedirectStub,
   isRetiredRoute,
 } from "../frontend/src/site/route_retirement";
-import { isDocsViewerRoute, SPANISH_DOCS_VIEWER_MANIFEST } from "../frontend/src/site/docs_viewer_manifest";
-import { TOPIC_VISUALS } from "../frontend/src/site/topic_visuals";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { PaperScene } from "../frontend/src/components/onepager/PaperSceneDrawing";
+import {
+  isDocsViewerRoute,
+  SPANISH_DOCS_VIEWER_MANIFEST,
+} from "../frontend/src/site/docs_viewer_manifest";
 import {
   appendSitemapUrls,
   docsViewerAliasRoutes,
@@ -116,7 +116,9 @@ function readPublicHtml(): string {
   }
   const html = fs.readFileSync(publicIndex, "utf-8");
   const ui = assertUiSourceBinding(html, repoRoot, isSitePreview() ? "preview" : "public");
-  console.log(`Source-bound UI entry: ${ui.entry} (${ui.entrySha256.slice(0, 12)}), ${ui.mode}, ${ui.head.slice(0, 12)}`);
+  console.log(
+    `Source-bound UI entry: ${ui.entry} (${ui.entrySha256.slice(0, 12)}), ${ui.mode}, ${ui.head.slice(0, 12)}`
+  );
   let out = html;
   const buildComment = `\n    <!-- build: ${buildId} -->`;
   if (out.includes("</head>")) {
@@ -249,46 +251,7 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
     await page.goto(`${server.origin}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.locator("#root > *").first().waitFor({ timeout: 30000 });
     await page.locator('svg[data-paper-scene="localService"]').first().waitFor();
-    const sharp = (await import("sharp")).default;
-    const visualDir = path.join(outputDir, "brand", "october", "topic");
-    fs.mkdirSync(visualDir, { recursive: true });
-    for (const [id, visual] of Object.entries(TOPIC_VISUALS)) {
-      const markup = renderToStaticMarkup(
-        createElement(PaperScene, { scene: visual.scene, idNamespace: `capture-${id}` })
-      );
-      const found = await page.evaluate(async (markup) => {
-        document.querySelector("#topic-capture")?.remove();
-        const wrap = document.createElement("div");
-        wrap.id = "topic-capture";
-        wrap.style.cssText =
-          "width:900px;height:600px;background:#faf8f3;overflow:hidden;position:fixed;left:0;top:0;z-index:99999";
-        // This markup comes only from our own React SVG renderer, never source documents.
-        const parsed = new DOMParser().parseFromString(markup, "image/svg+xml");
-        const clone = document.importNode(parsed.documentElement, true) as unknown as SVGSVGElement;
-        clone.style.cssText =
-          "display:block;width:900px;height:600px;max-width:none;opacity:1;transform:none;animation:none";
-        wrap.append(clone);
-        document.body.append(wrap);
-        await document.fonts.ready;
-        await Promise.all(
-          Array.from(clone.querySelectorAll("image")).map(async (image) => {
-            const href = image.getAttribute("href") ?? image.getAttribute("xlink:href");
-            if (!href) return;
-            const asset = new Image();
-            asset.src = href;
-            await asset.decode();
-          })
-        );
-        return true;
-      }, markup);
-      if (!found) throw new Error(`Missing homepage paper scene for topic visual ${id}`);
-      const png = await page.locator("#topic-capture").screenshot({ animations: "disabled" });
-      const webp = await sharp(png).webp({ quality: 76, effort: 5 }).toBuffer();
-      if (webp.byteLength > 1_000_000)
-        throw new Error(`Topic visual ${id} exceeds the reader image cap`);
-      fs.writeFileSync(path.join(visualDir, `${id}.webp`), webp);
-    }
-    await page.locator("#topic-capture").evaluate((element) => element.remove());
+    await captureTopicVisuals(page, outputDir);
 
     await page.goto(`${server.origin}/404`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(250);
@@ -316,12 +279,16 @@ async function main() {
     manifest: SPANISH_DOCS_VIEWER_MANIFEST,
     sourceContext: docsSourceContext,
   });
-  const missingSpanish = spanishViewer.reports.filter((report) => report.entry.status === "included" && !report.exists);
+  const missingSpanish = spanishViewer.reports.filter(
+    (report) => report.entry.status === "included" && !report.exists
+  );
   if (spanishViewer.failures.length || missingSpanish.length) {
-    throw new Error(`Spanish docs viewer is incomplete:\n${[
-      ...spanishViewer.failures,
-      ...missingSpanish.map((report) => report.entry.source),
-    ].join("\n")}`);
+    throw new Error(
+      `Spanish docs viewer is incomplete:\n${[
+        ...spanishViewer.failures,
+        ...missingSpanish.map((report) => report.entry.source),
+      ].join("\n")}`
+    );
   }
   fs.mkdirSync(outputDir, { recursive: true });
   const legacyCssFile = path.join(outputDir, "site.css");
@@ -446,7 +413,12 @@ async function main() {
     sitemapFile,
     appendSitemapUrls(
       buildSitemapXml(SITEMAP_PATHS.filter((p) => !isRetiredRoute(p) && !isDocsViewerRoute(p))),
-      isSitePreview() ? [] : [...docsViewerSitemapUrls(docsViewer.published), ...docsViewerSitemapUrls(spanishViewer.published)]
+      isSitePreview()
+        ? []
+        : [
+            ...docsViewerSitemapUrls(docsViewer.published),
+            ...docsViewerSitemapUrls(spanishViewer.published),
+          ]
     ),
     "utf-8"
   );
@@ -471,10 +443,15 @@ async function main() {
     manifest: SPANISH_DOCS_VIEWER_MANIFEST,
     sourceContext: docsSourceContext,
   });
-  if (spanishViewerWrite.failures.length || spanishViewerWrite.published.length !== SPANISH_DOCS_VIEWER_MANIFEST.length) {
+  if (
+    spanishViewerWrite.failures.length ||
+    spanishViewerWrite.published.length !== SPANISH_DOCS_VIEWER_MANIFEST.length
+  ) {
     throw new Error(`Spanish docs viewer build failed: ${spanishViewerWrite.failures.join("; ")}`);
   }
-  console.log(`Built ${docsViewerWrite.published.length} English and ${spanishViewerWrite.published.length} Spanish docs viewer pages`);
+  console.log(
+    `Built ${docsViewerWrite.published.length} English and ${spanishViewerWrite.published.length} Spanish docs viewer pages`
+  );
   finalizeBundledAssetPathsInAllHtml();
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);

@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import path from "node:path";
+import { existsSync, statSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDocsViewerDevMiddleware } from "../../scripts/docs_viewer/dev";
 import { runDocsViewer } from "../../scripts/docs_viewer/build";
@@ -76,6 +77,28 @@ describe("development docs reader using actual manifest sources", () => {
   ])("does not claim unrelated or unsafe path %s", async (route) => {
     expect((await fetch(`${origin}${route}`)).status).toBe(404);
   });
+  it.each(["/en/es/vocabulary/", "/es/en/vocabulary/", "/en/docs/es/vocabulary/"])(
+    "rejects conflicting locale prefixes %s",
+    async (route) => {
+      const response = await fetch(`${origin}${route}`);
+      expect(response.status).toBe(404);
+      expect(await response.text()).toContain("Conflicting language");
+    }
+  );
+  it("retains a private parent throughout rebuilding and cleans up only its own output", () => {
+    const mode = () => statSync(reader.privateDir).mode & 0o777;
+    expect(mode()).toBe(0o700);
+    reader.rebuild();
+    expect(mode()).toBe(0o700);
+    const failed = createDocsViewerDevMiddleware(path.resolve(__dirname, "../.."), () => {
+      throw new Error("Invalid initial source");
+    });
+    expect(failed.buildError).toBeTruthy();
+    expect(statSync(failed.privateDir).mode & 0o777).toBe(0o700);
+    failed.close();
+    expect(existsSync(failed.privateDir)).toBe(false);
+    expect(existsSync(reader.privateDir)).toBe(true);
+  });
   it("does not intercept mutations", async () => {
     expect((await fetch(`${origin}/vocabulary/`, { method: "POST" })).status).toBe(404);
   });
@@ -86,6 +109,9 @@ describe("development docs reader using actual manifest sources", () => {
       const response = await fetch(`${origin}/vocabulary/`);
       expect(response.status).toBe(503);
       expect(await response.text()).toContain("could not be built");
+      expect((await fetch(`${origin}/vocabulary/index.html`)).status).toBe(503);
+      expect((await fetch(`${origin}/source/vocabulary.md`)).status).toBe(503);
+      expect((await fetch(`${origin}/source/not-real.md`)).status).toBe(404);
     } finally {
       failRefresh = false;
       reader.rebuild();
