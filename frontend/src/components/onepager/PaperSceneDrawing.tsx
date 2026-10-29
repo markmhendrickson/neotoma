@@ -3,7 +3,7 @@ import { OCTOBER_RENDERS } from "./october_renders";
 import { staticAssetPath } from "@/site/spa_path";
 import { useOptionalLocale } from "@/i18n/LocaleContext";
 import { PAPER_SCENE_ALTS_ES } from "./paper_scene_alts_es";
-import { isPublishedScene, PublishedPaperScene } from "./PublishedPaperScene";
+import { isOverheadScene, OverheadPaperScene } from "./OverheadPaperScene";
 import {
   TOPIC_DRAWINGS,
   type TopicDrawingId,
@@ -13,7 +13,7 @@ import {
 
 export const VISION_SCENE_ALTS = {
   visionDomain:
-    "Planned domain authority: a matching holder reaches one of two bounded compartments",
+    "Planned domain ownership: an authority key reaches one bounded archive while a second domain stays separate",
   visionPositions:
     "Planned position tracking: two retained claims connect to a dossier where one position is marked as selected",
   visionExplanation:
@@ -31,7 +31,10 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
   hero: "Five paper records connected by solid navy lines",
+  source: "An original document and email remain whole in one shallow archive pocket, before any interpretation",
   observation: "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
+  entity: "Two observations carry the same type and identifying marks into one stable entity dossier",
+  snapshot: "A current record presents two rule-selected fields while earlier observations remain behind it",
   invoiceExample: "An invoice and later email feed separate retained observations; the current record keeps the amount from the invoice and due date from the email",
   sharedInstance: "Three distinct connected tool slips lead to one shared Neotoma filing box",
   visionPositions: "Planned position tracking keeps two conflicting claims visible alongside a selected position",
@@ -1389,7 +1392,7 @@ export function PaperScene({
   const alt = (locale ?? contextLocale) === "es"
     ? PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene]
     : PAPER_SCENE_ALTS[scene];
-  if (isPublishedScene(scene)) return <PublishedPaperScene scene={scene} alt={alt} />;
+  if (isOverheadScene(scene)) return <OverheadPaperScene scene={scene} alt={alt} />;
   return (
     <Materials.Provider value={id}>
       <svg

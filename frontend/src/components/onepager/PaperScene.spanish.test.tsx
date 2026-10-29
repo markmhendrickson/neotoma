@@ -18,11 +18,15 @@ describe("Spanish visual alternatives", () => {
     }
   });
 
-  it("reuses published post compositions with localized accessible names in both languages", () => {
+  it("uses published and companion overhead scenes with localized accessible names", () => {
     for (const [scene, spanish, english] of [
+      ["source", "bolsillo de archivo", "shallow archive pocket"],
       ["observation", "factura original", "original invoice"],
+      ["entity", "marcas identificadoras", "identifying marks"],
+      ["snapshot", "elegidos por reglas", "rule-selected fields"],
       ["invoiceExample", "registro actual", "current record"],
       ["sharedInstance", "tres fichas", "Three distinct"],
+      ["visionDomain", "llave de autoridad", "authority key"],
       ["visionPositions", "dos afirmaciones", "two conflicting claims"],
       ["visionExplanation", "fuente y autoridad", "source and authority"],
     ] as const) {

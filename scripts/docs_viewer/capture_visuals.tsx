@@ -5,7 +5,7 @@ import type { Page } from "playwright";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PaperScene } from "../../frontend/src/components/onepager/PaperSceneDrawing";
-import { isPublishedScene, publishedSceneFilename } from "../../frontend/src/components/onepager/PublishedPaperScene";
+import { isOverheadScene, overheadSceneFilename } from "../../frontend/src/components/onepager/OverheadPaperScene";
 import { TOPIC_VISUALS } from "../../frontend/src/site/topic_visuals";
 
 export async function captureTopicVisuals(page: Page, outputDir: string): Promise<void> {
@@ -13,12 +13,12 @@ export async function captureTopicVisuals(page: Page, outputDir: string): Promis
   const visualDir = path.join(outputDir, "brand", "october", "topic");
   fs.mkdirSync(visualDir, { recursive: true });
   for (const [id, visual] of Object.entries(TOPIC_VISUALS)) {
-    // Capture the same published composition the homepage serves. PaperScene
+    // Capture the same overhead composition the homepage serves. PaperScene
     // renders it as an external SVG object, so its HTML wrapper cannot be
     // parsed as SVG by the topic-card capture below.
-    const markup = isPublishedScene(visual.scene)
+    const markup = isOverheadScene(visual.scene)
       ? fs.readFileSync(
-          path.resolve("frontend/public/brand/october/essay", publishedSceneFilename(visual.scene)),
+          path.resolve("frontend/public/brand/october/essay", overheadSceneFilename(visual.scene)),
           "utf8"
         ).replaceAll('href="./materials/', 'href="/brand/october/essay/materials/')
       : renderToStaticMarkup(

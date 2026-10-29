@@ -11,7 +11,7 @@ function settle(svg: SVGSVGElement) {
     letter.style.opacity = "1";
 }
 
-function playPublishedScene(svg: SVGSVGElement): Animation[] {
+export function playOverheadScene(svg: SVGSVGElement): Animation[] {
   for (const port of svg.querySelectorAll<SVGElement>("[data-paper-port]"))
     port.style.opacity = "0";
   for (const envelope of svg.querySelectorAll<SVGElement>("[data-paper-envelope-state]"))
@@ -106,8 +106,8 @@ function playPublishedScene(svg: SVGSVGElement): Animation[] {
 }
 
 /** The published SVG is a same-origin document, so it stays out of the JS bundle. */
-export function observePublishedPaperScene(object: HTMLObjectElement): () => void {
+export function observeOverheadPaperScene(object: HTMLObjectElement): () => void {
   const svg = object.contentDocument?.querySelector<SVGSVGElement>("svg");
   if (!svg || svg.namespaceURI !== "http://www.w3.org/2000/svg") return () => {};
-  return observeViewportMotion([object], () => playPublishedScene(svg));
+  return observeViewportMotion([object], () => playOverheadScene(svg));
 }
