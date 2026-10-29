@@ -21,8 +21,8 @@ export const VISION_SCENE_ALTS = {
   sharedInstance:
     "Supported sharing: three collaborator identity badges reach visible records in one configured archive",
   scopedAccess:
-    "Supported access: verified identity and a separate scope grant reach one compartment",
-  peering: "Supported peering: two separate instances exchange a selected subset of records",
+    "Supported access: an admitted signed request establishes identity, and a separate active grant permits one bounded record action",
+  peering: "Supported peering: two distinct instances exchange only selected record slips in both directions",
 } as const;
 type MainSceneKind = keyof typeof OCTOBER_RENDERS | keyof typeof VISION_SCENE_ALTS;
 export type PaperSceneKind = MainSceneKind | TopicDrawingId;
@@ -37,6 +37,8 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   snapshot: "A current record presents two rule-selected fields while earlier observations remain behind it",
   invoiceExample: "An invoice and later email feed separate retained observations; the current record keeps the amount from the invoice and due date from the email",
   sharedInstance: "Three distinct connected tool slips lead to one shared Neotoma filing box",
+  scopedAccess: "An admitted signed request and a separate active scoped grant both precede a bounded record action",
+  peering: "Two distinct instances exchange only selected record slips in both directions",
   visionPositions: "Planned position tracking keeps two conflicting claims visible alongside a selected position",
   visionExplanation: "Planned explanation traces a current value to its source and authority, then shows the connected records a change could affect",
 } as Record<PaperSceneKind, string>;

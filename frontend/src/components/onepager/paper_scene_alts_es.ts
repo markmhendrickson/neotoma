@@ -22,6 +22,6 @@ export const PAPER_SCENE_ALTS_ES: Partial<Record<PaperSceneKind, string>> = {
   visionPositions: "Seguimiento previsto de posiciones: dos afirmaciones contradictorias siguen visibles junto a una posición seleccionada.",
   visionExplanation: "Explicación prevista: el valor actual remite a su fuente y autoridad, y muestra qué registros conectados podría afectar un cambio.",
   sharedInstance: "Uso compartido disponible: tres fichas de herramientas distintas llegan a un mismo archivador de Neotoma.",
-  scopedAccess: "Acceso disponible: una identidad verificada y una concesión de alcance separada permiten llegar a un compartimento.",
-  peering: "Intercambio disponible: dos instancias separadas intercambian un subconjunto seleccionado de registros.",
+  scopedAccess: "Acceso disponible: una solicitud firmada admitida establece la identidad y una concesión activa aparte permite una acción delimitada sobre un registro.",
+  peering: "Intercambio disponible: dos instancias distintas intercambian solo fichas de registros seleccionados en ambos sentidos.",
 };

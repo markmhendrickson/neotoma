@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { staticAssetPath } from "@/site/spa_path";
 import { observeOverheadPaperScene } from "./overhead_scene_motion";
 
-// Five compositions match the published post exactly. Four companion scenes use
+// Five compositions match the published post exactly. Six companion scenes use
 // the same physical cutouts and screenprint treatment for concepts absent there.
 // WebP material bytes are stored once per unique image alongside the SVGs.
 const overheadSceneFiles = {
@@ -12,6 +12,8 @@ const overheadSceneFiles = {
   snapshot: "current-snapshot.svg",
   invoiceExample: "invoice-example.svg",
   sharedInstance: "shared-instance.svg",
+  scopedAccess: "scoped-access.svg",
+  peering: "selected-record-exchange.svg",
   visionDomain: "bounded-domain.svg",
   visionPositions: "retained-positions.svg",
   visionExplanation: "inspectable-explanations.svg",

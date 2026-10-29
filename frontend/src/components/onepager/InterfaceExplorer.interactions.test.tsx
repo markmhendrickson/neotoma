@@ -1211,6 +1211,44 @@ describe("layered paper illustration motion", () => {
     expect(svg.querySelector('[data-paper-port="domain-two"]')).toBeNull();
   });
 
+  it("requires both admitted identity and an active grant for the supported bounded action", () => {
+    const svg = overheadSvg("scopedAccess");
+    expect(svg.querySelectorAll("[data-admitted-request]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-identity-verification]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-active-grant]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-bounded-action]")).toHaveLength(1);
+    const connections = [...svg.querySelectorAll("[data-paper-connection]")];
+    expect(connections).toHaveLength(2);
+    expect(connections.map((path) => path.getAttribute("data-connection-from"))).toEqual([
+      "request",
+      "grant",
+    ]);
+    expect(connections.map((path) => path.getAttribute("data-connection-to"))).toEqual([
+      "action-identity",
+      "action-grant",
+    ]);
+  });
+
+  it("shows selected records exchanged between two separate supported instances", () => {
+    const svg = overheadSvg("peering");
+    expect(svg.querySelectorAll("[data-peer-instance]")).toHaveLength(2);
+    expect(svg.querySelectorAll("[data-selected-record]")).toHaveLength(2);
+    expect(
+      [...svg.querySelectorAll("[data-exchange-direction]")].map((item) =>
+        item.getAttribute("data-exchange-direction")
+      )
+    ).toEqual(["right", "left"]);
+    const links = [...svg.querySelectorAll("[data-selected-exchange]")];
+    expect(links).toHaveLength(4);
+    expect(links.map((item) => item.getAttribute("data-connection-from"))).toEqual([
+      "one-out",
+      "outbound-out",
+      "two-out",
+      "return-out",
+    ]);
+    expect(svg.querySelector("[data-file], [data-history], [data-deletion]")).toBeNull();
+  });
+
   it("serves sixteen distinct object scenes instead of translating images or the Inspector", () => {
     const { container } = render(
       <MemoryRouter>

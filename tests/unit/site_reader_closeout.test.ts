@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TOPIC_VISUALS } from "../../frontend/src/site/topic_visuals";
-import { DOCS_VIEWER_MANIFEST } from "../../frontend/src/site/docs_viewer_manifest";
+import {
+  DOCS_VIEWER_MANIFEST,
+  DOCS_VIEWER_VISUALS,
+  SPANISH_DOCS_VIEWER_MANIFEST,
+} from "../../frontend/src/site/docs_viewer_manifest";
 import { manifestProblems, runDocsViewer } from "../../scripts/docs_viewer/build";
 
 const root = join(__dirname, "..", "..");
@@ -109,5 +113,39 @@ describe("architecture overview and distinct topic identities", () => {
     expect(
       manifestProblems(duplicate).some((problem) => problem.includes("duplicate topic visual"))
     ).toBe(true);
+  });
+
+  it("keeps record-model and provenance artwork, captions, and static manifest in agreement", () => {
+    const entity = readFileSync(
+      join(root, "frontend/public/brand/october/essay/entity-identity.svg"),
+      "utf8"
+    );
+    expect(TOPIC_VISUALS.recordModel.scene).toBe("entity");
+    expect(entity.match(/data-paper-role="identity-slip-(?:one|two)"/g)).toHaveLength(2);
+    expect(TOPIC_VISUALS.recordModel.alt).toMatch(/^Two observations/);
+    const recordModelEs = SPANISH_DOCS_VIEWER_MANIFEST.find(
+      (entry) => entry.id === "record-model"
+    )!;
+    expect(recordModelEs.visual?.alt).toMatch(/^Dos observaciones/);
+
+    const invoice = readFileSync(
+      join(root, "frontend/public/brand/october/essay/invoice-example.svg"),
+      "utf8"
+    );
+    expect(TOPIC_VISUALS.provenance.scene).toBe("invoiceExample");
+    for (const [from, to] of [
+      ["invoice-source", "invoice-observation-source"],
+      ["email-source", "email-observation-source"],
+      ["invoice-observation-amount", "current-amount"],
+      ["email-observation-due", "current-due"],
+    ])
+      expect(invoice).toContain(`data-connection-from="${from}" data-connection-to="${to}"`);
+    expect(DOCS_VIEWER_VISUALS.provenance.caption).toBe(TOPIC_VISUALS.provenance.caption);
+    expect(TOPIC_VISUALS.provenance.caption).toMatch(/invoice example.*PDF or email/i);
+    const provenanceEs = SPANISH_DOCS_VIEWER_MANIFEST.find(
+      (entry) => entry.id === "provenance"
+    )!;
+    expect(provenanceEs.visual?.caption).toMatch(/ejemplo de factura.*PDF o el correo/i);
+    expect(provenanceEs.visual?.src).toBe(DOCS_VIEWER_VISUALS.provenance.src);
   });
 });

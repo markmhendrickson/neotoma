@@ -26,6 +26,8 @@ describe("Spanish visual alternatives", () => {
       ["snapshot", "elegidos por reglas", "rule-selected fields"],
       ["invoiceExample", "registro actual", "current record"],
       ["sharedInstance", "tres fichas", "Three distinct"],
+      ["scopedAccess", "solicitud firmada admitida", "admitted signed request"],
+      ["peering", "instancias distintas", "distinct instances"],
       ["visionDomain", "llave de autoridad", "authority key"],
       ["visionPositions", "dos afirmaciones", "two conflicting claims"],
       ["visionExplanation", "fuente y autoridad", "source and authority"],
