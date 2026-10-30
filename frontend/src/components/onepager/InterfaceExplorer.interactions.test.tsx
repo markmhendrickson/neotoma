@@ -275,6 +275,21 @@ describe("one-page interface examples", () => {
     expect(within(chat).getByText(/I'll save the supplied invoice/)).toBeVisible();
   });
 
+  it("starts on first visible entry after ordinary page scrolling over a short transcript", () => {
+    const { panel, chat, inView } = animated();
+    Object.defineProperties(chat, {
+      clientHeight: { value: 400, configurable: true },
+      scrollHeight: { value: 200, configurable: true },
+    });
+    fireEvent.wheel(chat, { deltaY: 160 });
+    const touch = createEvent.pointerDown(chat);
+    Object.defineProperty(touch, "pointerType", { value: "touch" });
+    fireEvent(chat, touch);
+    fireEvent.touchMove(chat);
+    inView(true);
+    expect(within(panel).getByRole("button", { name: "Pause" })).toBeVisible();
+  });
+
   it("keeps an explicit pause through tab, viewport and visibility interruptions", () => {
     const { panel, chat, inView, visible } = animated();
     inView(true);
@@ -313,11 +328,16 @@ describe("one-page interface examples", () => {
     expect(chat.textContent).not.toBe(held);
   });
 
-  it.each(["wheel", "pointerDown", "touchMove", "keyDown"] as const)(
+  it.each(["wheel", "pointerDown", "scroll", "keyDown"] as const)(
     "respects manual reading via %s before and after viewport activation",
     (interaction) => {
       const { panel, chat, inView } = animated();
-      fireEvent[interaction](chat, { key: "ArrowUp" });
+      Object.defineProperties(chat, {
+        clientHeight: { value: 400, configurable: true },
+        scrollHeight: { value: 900, configurable: true },
+        scrollTop: { value: 300, writable: true, configurable: true },
+      });
+      fireEvent[interaction](chat, { key: "ArrowUp", deltaY: -40 });
       inView(true);
       const held = chat.textContent;
       act(() => vi.advanceTimersByTime(20000));

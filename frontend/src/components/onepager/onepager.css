@@ -1948,7 +1948,7 @@
 .plan-mcp-chat-window {
   height: clamp(19rem, 48vh, 26rem);
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   border: 1px solid var(--line);
   border-radius: 0.35rem;
   background: var(--paper);

@@ -245,9 +245,19 @@ export function McpConversation({ active }: { active: boolean }) {
             role="region"
             aria-label={es ? "Conversación ilustrativa sobre una factura" : "Illustrative invoice conversation"}
             tabIndex={0}
-            onWheel={pauseForReading}
-            onTouchMove={pauseForReading}
-            onPointerDown={pauseForReading}
+            onWheel={(event) => {
+              const node = event.currentTarget;
+              const maximum = node.scrollHeight - node.clientHeight;
+              if (maximum > 1 && (
+                (event.deltaY < 0 && node.scrollTop > 0) ||
+                (event.deltaY > 0 && node.scrollTop < maximum)
+              )) pauseForReading();
+            }}
+            onPointerDown={(event) => {
+              // A touch pointer starts both page gestures and deliberate chat scrolling.
+              // Only the latter's actual scroll away from the tail pauses the transcript.
+              if (event.pointerType !== "touch") pauseForReading();
+            }}
             onScroll={(event) => {
               if (
                 event.currentTarget.scrollTop <
