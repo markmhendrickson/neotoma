@@ -260,6 +260,21 @@ describe("one-page interface examples", () => {
     expect(within(panel).getByRole("button", { name: "Play" })).toBeVisible();
   });
 
+  it("resumes the remaining turn duration after viewport re-entry", () => {
+    const { chat, inView } = animated();
+    const first = within(chat).getByText(/Here's INV-2041.pdf/).textContent!;
+    const duration = Math.min(6500, Math.max(2100, first.trim().split(/\s+/).length * 160));
+    inView(true);
+    act(() => vi.advanceTimersByTime(1700));
+    inView(false);
+    act(() => vi.advanceTimersByTime(30000));
+    inView(true);
+    act(() => vi.advanceTimersByTime(duration - 1700 - 1));
+    expect(within(chat).queryByText(/I'll save the supplied invoice/)).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(within(chat).getByText(/I'll save the supplied invoice/)).toBeVisible();
+  });
+
   it("keeps an explicit pause through tab, viewport and visibility interruptions", () => {
     const { panel, chat, inView, visible } = animated();
     inView(true);

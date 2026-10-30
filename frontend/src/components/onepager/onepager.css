@@ -1941,6 +1941,9 @@
   background: var(--ink);
   color: var(--sheet);
   font: 700 0.8rem var(--serif);
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
 }
 .plan-mcp-chat-window {
   height: clamp(19rem, 48vh, 26rem);
@@ -2047,9 +2050,9 @@
   align-items: center;
   gap: 0.5rem;
   color: var(--muted);
-  letter-spacing: 0.25em;
 }
-.plan-mcp-typing > span:last-child {
+.plan-mcp-typing-dots {
+  letter-spacing: 0.25em;
   animation: plan-mcp-breathe 1s ease-in-out infinite alternate;
 }
 @keyframes plan-mcp-breathe {
@@ -2068,7 +2071,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .plan-mcp-progress,
-  .plan-mcp-typing > span:last-child {
+  .plan-mcp-typing-dots {
     animation: none;
   }
 }
@@ -2572,7 +2575,10 @@
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
     gap: 0 1.5rem;
-    align-items: start;
+    align-items: center;
+  }
+  .plan-vision-content {
+    align-self: center;
   }
   .plan-vision-art {
     grid-row: auto;
@@ -2631,6 +2637,9 @@
   }
   .plan-vision-art {
     margin-bottom: 1.1rem;
+  }
+  .plan-vision-content {
+    align-self: auto;
   }
 }
 
@@ -2730,7 +2739,7 @@
 }
 .plan-home > .plan-ground-band {
   /* Preserve a visible paper-art plate against the darker reading band. */
-  background: #e3dfd6;
+  background: #ece8e0;
 }
 .dark .plan-home > .plan-ground-band {
   background: var(--band);
