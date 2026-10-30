@@ -1444,16 +1444,24 @@ describe("layered paper illustration motion", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("retains two whole original sources under separate folio retaining bands", () => {
+  it("stores the same itemized invoice and intact email behind the physical archive lip", () => {
     const svg = overheadSvg("source");
     expect(
       [...svg.querySelectorAll("[data-retained-raw-source]")].map((item) =>
         item.getAttribute("data-retained-raw-source")
       )
     ).toEqual(["invoice", "email"]);
-    expect(svg.querySelectorAll('[data-archive-retaining-bands="separate"]')).toHaveLength(1);
+    expect(svg.querySelectorAll('[data-archive-retaining-front="physical-lip"]')).toHaveLength(1);
     expect(svg.querySelector("[data-paper-observation], [data-rule-selected-snapshot]")).toBeNull();
-    expect(svg.querySelector('[data-source-invoice-print="itemized"]')).not.toBeNull();
+    expect(svg.querySelector('[data-invoice-itemization="shared"]')).not.toBeNull();
+  });
+
+  it("inspects one dossier through a separate physical magnifier with source and authority retained inside", () => {
+    const svg = overheadSvg("visionExplanation");
+    expect(svg.querySelectorAll('[data-explanation-scope="single-record-inspection"]')).toHaveLength(1);
+    expect(svg.querySelectorAll('[data-inspection-object="physical-magnifier"]')).toHaveLength(1);
+    expect([...svg.querySelectorAll('[data-basis-part]')].map((part) => part.getAttribute('data-basis-part'))).toEqual(['source','authority']);
+    expect(svg.querySelector('[data-affected-record], [data-unaffected-record]')).toBeNull();
   });
 
   it("uses the same amount and revised-date vocabulary in the current record and its observations", () => {

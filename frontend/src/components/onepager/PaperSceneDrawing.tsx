@@ -17,7 +17,7 @@ export const VISION_SCENE_ALTS = {
   visionPositions:
     "Planned position tracking: two retained claims connect to a dossier where one position is marked as selected",
   visionExplanation:
-    "Planned explanation: lifted current field reveals its basis and a bounded set of effects",
+    "Planned explanation: a separate physical magnifying glass inspects a current field, its source and authority within one dossier",
   sharedInstance:
     "Supported sharing: three collaborator identity badges reach visible records in one configured archive",
   scopedAccess:
@@ -33,7 +33,7 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
   hero: "An itemized invoice, person dossier, task clipboard, email and revised date connect in one record graph",
   source:
-    "An original invoice and email remain whole inside a folio, held separately by two retaining bands before any interpretation",
+    "An itemized invoice and intact email are stored behind the front lip of the same Neotoma archive box",
   observation:
     "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
   entity:
@@ -51,7 +51,7 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   visionPositions:
     "Planned position tracking preserves both date claims while an explicit decision locks the initial date",
   visionExplanation:
-    "Planned explanation traces a current value to its source and authority, then shows the connected records a change could affect",
+    "Planned explanation: a separate physical magnifying glass inspects a current field, its source and authority within one dossier",
 } as Record<PaperSceneKind, string>;
 const Materials = createContext("");
 const EditorialComparison = createContext(false);

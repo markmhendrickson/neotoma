@@ -29,7 +29,7 @@ describe("Spanish visual alternatives", () => {
   it("uses published and companion overhead scenes with localized accessible names", () => {
     for (const [scene, spanish, english] of [
       ["hero", "Una factura desglosada", "An itemized invoice"],
-      ["source", "dos bandas separadas", "two retaining bands"],
+      ["source", "archivador de Neotoma", "Neotoma archive box"],
       ["observation", "factura original", "original invoice"],
       ["entity", "Tres marcas idénticas", "Three identical identifying marks"],
       ["reducer", "Las reglas seleccionan", "Field rules select"],

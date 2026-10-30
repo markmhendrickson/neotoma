@@ -991,7 +991,7 @@ if (!fs.existsSync(notFoundPath)) {
       const problems = await page.locator(`object[data-paper-scene="${scene}"]`).evaluate((object) => {
         const doc = (object as HTMLObjectElement).contentDocument;
         if (!doc?.defaultView) return ["SVG document did not load"];
-        const elements = doc.querySelectorAll<SVGElement>("[data-paper-port], [data-paper-letter], [data-paper-envelope-state], [data-paper-field-state], [data-retained-raw-source], [data-paper-source]");
+        const elements = doc.querySelectorAll<SVGElement>("[data-paper-port], [data-paper-letter], [data-paper-envelope-state], [data-paper-field-state], [data-retained-raw-source], [data-paper-source], [data-explained-current-field], [data-explanation-basis], [data-inspection-object]");
         if (elements.length === 0) return ["no critical scene elements found"];
         const failures: string[] = [];
         for (const element of elements) {

@@ -56,7 +56,7 @@ const capabilities: Capability[] = [
     scene: "visionExplanation",
     status: "Planned",
     detail:
-      "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
+      "Planned explanations would let you inspect a current field together with the source evidence and authority supporting it.",
     guide: "docs/foundation/core_identity.md",
   },
 ];
@@ -70,7 +70,7 @@ export function VisionGallery() {
     ["Intercambio seleccionado de registros", "Los pares configurados intercambian registros seleccionados entre instancias distintas, sin prometer historial completo, archivos ni eliminaciones."],
     ["Titularidad delimitada por dominio", "La titularidad por dominio prevista aclararía quién puede corregir cada parte delimitada del registro."],
     ["Posiciones conservadas", "El seguimiento previsto permitiría inspeccionar una posición seleccionada mientras conserva la afirmación rival."],
-    ["Explicaciones inspeccionables", "Las explicaciones previstas mostrarían por qué rige un valor, qué autoridad sigue y qué valores conectados podría afectar un cambio."],
+    ["Explicaciones inspeccionables", "Las explicaciones previstas permitirían inspeccionar un campo actual junto con las pruebas y la autoridad que lo respaldan."],
   ] as const;
   return (
     <div className="plan-vision-gallery">
