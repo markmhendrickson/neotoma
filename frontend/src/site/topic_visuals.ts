@@ -24,8 +24,8 @@ export const TOPIC_VISUALS = {
   "store-correct": drawing("topicStore"),
   recordModel: {
     scene: "entity",
-    alt: "Two observations with matching type and identifying marks connect to one stable entity",
-    caption: "The same type and identifying fields resolve two observations to one entity.",
+    alt: "Two observations with the same invoice number, vendor and invoice date match one stable entity fingerprint",
+    caption: "Matching invoice number, vendor and invoice date resolve both observations to the same entity.",
   },
   observations: {
     scene: "observation",

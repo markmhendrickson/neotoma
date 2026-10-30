@@ -504,6 +504,29 @@ describe("connection selector", () => {
     expect(svg.querySelector("text, foreignObject, script")).toBeNull();
   });
 
+  it("matches the same ordered identifying facts and physical key to one stable entity", () => {
+    const entity = overheadSvg("entity");
+    const facts = [...entity.querySelectorAll('[data-identifying-facts]')];
+    expect(facts).toHaveLength(3);
+    for (const group of facts)
+      expect([...group.querySelectorAll('[data-identifying-fact]')].map((mark) => mark.getAttribute('data-identifying-fact')))
+        .toEqual(['invoice_number', 'vendor_name', 'invoice_date']);
+    const keys = [...entity.querySelectorAll('[data-identity-fingerprint] path')].map((key) => key.getAttribute('d'));
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(1);
+    expect(entity.querySelectorAll('[data-resolved-identity-badge="true"]')).toHaveLength(1);
+  });
+
+  it("selects separate fields from retained observations without replacing identity or deleting the prior date", () => {
+    const reducer = overheadSvg("reducer");
+    expect(reducer.querySelectorAll('[data-retained-observation]')).toHaveLength(2);
+    expect(reducer.querySelector('[data-retained-observation="invoice"] [data-field-value="prior"]')).not.toBeNull();
+    expect(reducer.querySelector('[data-retained-observation="email"] [data-field-value="current"]')).not.toBeNull();
+    expect([...reducer.querySelectorAll('[data-paper-connection]')].map((path) => [path.getAttribute('data-connection-from'), path.getAttribute('data-connection-to')]))
+      .toEqual([['invoice-amount', 'selected-amount'], ['email-date', 'selected-date']]);
+    expect(reducer.querySelector('[data-identity-key]')).toBeNull();
+  });
+
   it("shows one chosen tool reaching one configured archive", () => {
     const { container } = render(<PaperScene scene="localService" />);
     const svg = container.querySelector('svg[data-paper-scene="localService"]')!;

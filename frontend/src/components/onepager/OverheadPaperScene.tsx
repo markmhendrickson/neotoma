@@ -10,6 +10,7 @@ const overheadSceneFiles = {
   source: "source-material.svg",
   observation: "observation.svg",
   entity: "entity-identity.svg",
+  reducer: "current-values.svg",
   snapshot: "current-snapshot.svg",
   invoiceExample: "invoice-example.svg",
   sharedInstance: "shared-instance.svg",

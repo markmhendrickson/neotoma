@@ -96,7 +96,7 @@ export const PIPELINE: readonly {
   {
     name: "Entity",
     label: "Identify entities deterministically",
-    text: "The invoice number, vendor and invoice date identify this invoice; later observations can refer to it.",
+    text: "The same invoice number, vendor and invoice date resolve to the same invoice entity, even when later observations change other fields.",
     doc: "docs/topics/architecture/record-model.md",
     link: "Read about entities",
   },

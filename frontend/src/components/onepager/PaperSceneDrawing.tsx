@@ -37,7 +37,9 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   observation:
     "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
   entity:
-    "Two observations carry the same type and identifying marks into one stable entity dossier",
+    "Three identical identifying marks for invoice number, vendor and invoice date match the same stable entity fingerprint on both observations and the dossier",
+  reducer:
+    "Field rules select the amount from the retained invoice observation and the revised due date from the retained email observation; the earlier date remains visible",
   snapshot:
     "A current record presents two rule-selected fields while earlier observations remain behind it",
   invoiceExample:

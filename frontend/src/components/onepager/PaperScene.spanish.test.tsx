@@ -5,7 +5,7 @@ import { InspectorPreviewIllustration } from "../illustrations/InspectorPreviewI
 
 describe("Spanish visual alternatives", () => {
   it("keeps the editorial backdrop on coded homepage and topic illustrations", () => {
-    for (const scene of ["localService", "reducer", "topicStart"] as const) {
+    for (const scene of ["localService", "before", "topicStart"] as const) {
       const html = renderToStaticMarkup(<PaperScene scene={scene} />);
       expect(html).toContain('fill="#f2eee5" data-paper-ground=""');
       expect(html).toContain("/brand/october/essay/materials/9e9dfed440f8ff18.webp");
@@ -31,7 +31,8 @@ describe("Spanish visual alternatives", () => {
       ["hero", "Una factura desglosada", "An itemized invoice"],
       ["source", "dos bandas separadas", "two retaining bands"],
       ["observation", "factura original", "original invoice"],
-      ["entity", "marcas identificadoras", "identifying marks"],
+      ["entity", "Tres marcas idénticas", "Three identical identifying marks"],
+      ["reducer", "Las reglas seleccionan", "Field rules select"],
       ["snapshot", "elegidos por reglas", "rule-selected fields"],
       ["invoiceExample", "registro actual", "current record"],
       ["sharedInstance", "tres fichas", "Three distinct"],

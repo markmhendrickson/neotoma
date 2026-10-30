@@ -15,7 +15,7 @@ import { EvaluationCard } from "./EvaluationCard";
 const steps = [
   ["Fuente", "Conserva el material original", "Facilita el PDF o el correo de la factura como fuente para poder inspeccionar su contenido.", "/es/provenance/"],
   ["Observación", "Extrae y registra hechos", "Un agente extrae los campos de la factura del PDF y la nueva fecha de vencimiento del correo posterior. Registra cada hecho como una observación vinculada a su fuente.", "/es/observations/"],
-  ["Entidad", "Identifica la entidad de forma determinista", "El número, el proveedor y la fecha identifican esta factura; las observaciones posteriores pueden referirse a ella.", "/es/record-model/"],
+  ["Entidad", "Identifica la entidad de forma determinista", "El mismo número de factura, proveedor y fecha corresponden a la misma entidad, aunque observaciones posteriores cambien otros campos.", "/es/record-model/"],
   ["Valores actuales", "Calcula los valores actuales", "Neotoma aplica automáticamente la regla del campo. Aquí cambia el vencimiento y el PDF sigue aportando el importe.", "/es/schemas/"],
   ["Instantánea", "Lee el valor actual", "La instantánea muestra los valores seleccionados por las reglas y las observaciones que los respaldan.", "/es/current-snapshot/"],
 ] as const;
