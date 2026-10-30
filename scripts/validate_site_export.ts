@@ -855,7 +855,7 @@ if (fs.existsSync(homeForLimits)) {
       status: "Planned",
       title: "Inspectable explanations",
       detail:
-        "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
+        "Planned explanations would let you inspect a current field together with the source evidence and authority supporting it.",
     },
   ] as const;
   if (cards.length !== expectedCards.length) {
