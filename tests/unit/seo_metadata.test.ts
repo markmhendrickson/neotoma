@@ -426,6 +426,7 @@ describe("crawlable archive social cards", () => {
       expect((await socialImageProblems(html("https://elsewhere.test/card.png"), dir)).join()).toMatch(/absolute HTTPS public-site/);
       await sharp({ create: { width: 1200, height: 630, channels: 3, background: "white" } }).png().toFile(path.join(dir, "card.png"));
       expect(await socialImageProblems(html(url), dir)).toEqual([]);
+      expect((await socialImageProblems(html(url) + '<meta property="og:image:type" content="image/jpeg">', dir)).join()).toMatch(/og:image:type: expected image\/png/);
       await sharp({ create: { width: 12, height: 6, channels: 3, background: "white" } }).png().toFile(path.join(dir, "card.png"));
       expect((await socialImageProblems(html(url), dir)).join()).toMatch(/1200×630.*12×6/);
       await sharp({ create: { width: 1200, height: 630, channels: 3, background: "white" } }).jpeg().toFile(path.join(dir, "card.png"));

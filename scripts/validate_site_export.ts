@@ -300,7 +300,7 @@ if (englishHomeSentinelHits === 0) {
 // 3d. The home page is the one-pager: current category, no old app chrome
 // ---------------------------------------------------------------------------
 const HOME_REQUIRED = [
-  "A record, not recall.",
+  "A record, not recall",
   "the system of record for AI agents",
   "03 · Interfaces",
   "Four ways to work with a record",

@@ -40,6 +40,17 @@ export async function socialImageProblems(html: string, siteDir: string): Promis
   let refs: string[];
   try { refs = socialImageReferences(html); }
   catch { return ["invalid social image JSON-LD"]; }
+  for (const tag of scanHtml(html).tags) {
+    if (tag.name !== "meta" || tag.closing) continue;
+    const attrs = Object.fromEntries(tag.attrs.map((attr) => [attr.name, attr.value]));
+    const key = attrs.property ?? attrs.name;
+    const expected: Record<string, string> = {
+      "og:image:type": SOCIAL_CARD.mime,
+      "og:image:width": String(SOCIAL_CARD.width), "twitter:image:width": String(SOCIAL_CARD.width),
+      "og:image:height": String(SOCIAL_CARD.height), "twitter:image:height": String(SOCIAL_CARD.height),
+    };
+    if (key in expected && attrs.content !== expected[key]) problems.push(`${key}: expected ${expected[key]}, got ${attrs.content}`);
+  }
   for (const reference of new Set(refs)) {
     try {
       const url = new URL(reference);
