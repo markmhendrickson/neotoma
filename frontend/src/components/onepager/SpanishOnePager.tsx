@@ -15,7 +15,7 @@ import { EvaluationCard } from "./EvaluationCard";
 const steps = [
   ["Fuente", "Conserva el material original", "Facilita el PDF o el correo de la factura como fuente para poder inspeccionar su contenido.", "/es/provenance/"],
   ["Observación", "Extrae y registra hechos", "Un agente extrae los campos de la factura del PDF y la nueva fecha de vencimiento del correo posterior. Registra cada hecho como una observación vinculada a su fuente.", "/es/observations/"],
-  ["Entidad", "Identifica la entidad de forma determinista", "El mismo número de factura, proveedor y fecha corresponden a la misma entidad, aunque observaciones posteriores cambien otros campos.", "/es/record-model/"],
+  ["Entidad", "Identifica la entidad de forma determinista", "Ambas observaciones comparten número de factura, proveedor y fecha de emisión, por lo que corresponden a la misma entidad. Sus fechas de vencimiento pueden ser distintas.", "/es/record-model/"],
   ["Valores actuales", "Calcula los valores actuales", "Neotoma aplica automáticamente la regla del campo. Aquí cambia el vencimiento y el PDF sigue aportando el importe.", "/es/schemas/"],
   ["Instantánea", "Lee el valor actual", "La instantánea muestra los valores seleccionados por las reglas y las observaciones que los respaldan.", "/es/current-snapshot/"],
 ] as const;
@@ -42,7 +42,7 @@ export function SpanishOnePager({ pageRef }: { pageRef: RefObject<HTMLElement> }
             <div className="plan-actions"><Link to="/es/install" className="plan-btn plan-btn-primary">Instalar</Link><span className="plan-install-time"><Clock size={14} aria-hidden="true" /> Lleva unos minutos</span></div>
           </div>
         </div>
-        <figure className="plan-scene plan-hero-scene"><PaperScene scene="hero" /><figcaption>Los registros se conectan en un grafo. Cada campo actual remite a las observaciones y fuentes que lo respaldan.</figcaption></figure>
+        <figure className="plan-scene plan-hero-scene"><PaperScene scene="hero" /><figcaption>Las personas pueden inspeccionar los registros conservados mientras los agentes autorizados leen y escriben en la misma instancia configurada de Neotoma. Tú eliges qué herramientas y fuentes conectar.</figcaption></figure>
       </section>
       <EvaluationCard id="evaluate-intro" headingId="evaluate-intro-title" compact />
       <section className="plan-sheet plan-ground-paper" aria-labelledby="s2" id="fit">

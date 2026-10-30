@@ -6,6 +6,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { LocaleProvider } from "@/i18n/LocaleContext";
 import { CONNECTIONS } from "../../../../src/shared/harness_connections";
+import { activationPrompt } from "./onepager_copy";
+import { spanishToolCopy } from "./spanish_tool_install_copy";
 import { ToolInstall } from "./ToolInstall";
 
 beforeEach(() => {
@@ -35,7 +37,10 @@ describe("copied connection guide locale", () => {
         const guideUrl = `https://neotoma.io${guidePath}`;
         const snippets = container.querySelectorAll<HTMLElement>(".plan-tool-install > .site-snippet");
         expect(snippets).toHaveLength(2);
-        expect(snippets[1]).toHaveTextContent(guideUrl);
+        const prompt = snippets[1].querySelector('.site-snippet-prose')?.textContent;
+        expect(prompt).toBe(locale === "es" ? spanishToolCopy(host).activation : activationPrompt(host));
+        expect(prompt).toMatch(locale === "es" ? /^Empieza por esta conversación/ : /^Start with this conversation/);
+        expect(prompt).not.toMatch(/step 1|paso 1|known entity|entidad conocida|hooks|Inspecciona/);
         if (snippets[0].textContent?.includes("https://neotoma.io/"))
           expect(snippets[0]).toHaveTextContent(guideUrl);
         expect(screen.getByRole("link", { name: new RegExp(host.host) })).toHaveAttribute("href", guidePath);
@@ -50,7 +55,7 @@ describe("copied connection guide locale", () => {
         const title = snippet.querySelector(".site-snippet-title")?.textContent?.trim();
         expect(title).toBeTruthy();
         fireEvent.click(within(snippet).getByRole("button", { name: `${locale === "es" ? "Copiar" : "Copy"} ${title}` }));
-        await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`https://neotoma.io${locale === "es" ? "/es" : ""}/install/windsurf/`)));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(snippet.querySelector(".site-snippet-prose")?.textContent ?? snippet.querySelector("code")?.textContent));
         writeText.mockClear();
       }
     });

@@ -14,7 +14,7 @@ describe("Spanish visual alternatives", () => {
   });
   it("labels unchanged home, topic and vision art in Spanish without requiring an app provider", () => {
     for (const [scene, phrase] of [
-      ["hero", "Una factura desglosada"],
+      ["hero", "Un archivo de registros conservados"],
       ["topicStart", "Material aportado"],
       ["visionDomain", "prevista"],
       ["sharedInstance", "disponible"],
@@ -28,10 +28,10 @@ describe("Spanish visual alternatives", () => {
 
   it("uses published and companion overhead scenes with localized accessible names", () => {
     for (const [scene, spanish, english] of [
-      ["hero", "Una factura desglosada", "An itemized invoice"],
+      ["hero", "Un archivo de registros conservados", "An overhead archive"],
       ["source", "archivador de Neotoma", "Neotoma archive box"],
       ["observation", "factura original", "original invoice"],
-      ["entity", "Tres marcas idénticas", "Three identical identifying marks"],
+      ["entity", "El mismo número", "The same invoice number"],
       ["reducer", "Las reglas seleccionan", "Field rules select"],
       ["snapshot", "elegidos por reglas", "rule-selected fields"],
       ["invoiceExample", "registro actual", "current record"],

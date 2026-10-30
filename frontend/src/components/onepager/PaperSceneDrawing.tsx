@@ -31,13 +31,13 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...Object.fromEntries(Object.entries(OCTOBER_RENDERS).map(([key, render]) => [key, render.alt])),
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
-  hero: "An itemized invoice, person dossier, task clipboard, email and revised date connect in one record graph",
+  hero: "An overhead archive of retained records connects with a person dossier, task clipboard, conversation, agent and date record",
   source:
     "An itemized invoice and intact email are stored behind the front lip of the same Neotoma archive box",
   observation:
     "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
   entity:
-    "Three identical identifying marks for invoice number, vendor and invoice date match the same stable entity fingerprint on both observations and the dossier",
+    "The same invoice number, vendor and invoice date match one stable entity key; two separate non-key due-date rows show the initial and revised values",
   reducer:
     "Field rules select the amount from the retained invoice observation and the revised due date from the retained email observation; the earlier date remains visible",
   snapshot:

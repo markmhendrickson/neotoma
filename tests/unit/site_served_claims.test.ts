@@ -74,7 +74,7 @@ describe("/install", () => {
   const body = read("frontend", "src", "components", "install", "install_page_body.tsx");
 
   it("discloses complete local effects in the linked source reader before actions", () => {
-    expect(body.indexOf("/install/system-changes/")).toBeLessThan(body.indexOf("<ToolInstall showPermissionsPreflight includeVerificationNote />"));
+    expect(body.indexOf("/install/system-changes/")).toBeLessThan(body.indexOf("<ToolInstall showPermissionsPreflight />"));
     for (const detail of [
       "two local SQLite databases",
       "~/.cursor/mcp.json",
@@ -100,7 +100,7 @@ describe("/install", () => {
     expect(effects).not.toContain("writes two MCP entries, CLI instruction files for Claude Code, Cursor, and Codex in the project, and the host permission rules above");
   });
   it("points at blocks that exist", () => {
-    expect(body).toContain("<ToolInstall showPermissionsPreflight includeVerificationNote />");
+    expect(body).toContain("<ToolInstall showPermissionsPreflight />");
     expect(read("frontend", "src", "components", "onepager", "ToolInstall.tsx"))
       .toContain("<PermissionsPreflight harness={preflightHost} />");
   });

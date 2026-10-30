@@ -1594,7 +1594,7 @@
   padding: 1.2rem;
   margin: 0 0 2rem;
 }
-.plan-evaluate p:not(.plan-label) {
+.plan-evaluate p:not(.plan-label):not(.site-snippet-prose) {
   max-width: 80ch;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1655,7 +1655,7 @@
 }
 .plan .site-snippet-prose {
   margin: 0;
-  max-width: 75ch;
+  max-width: none;
 }
 .plan .plan-evaluate {
   background: var(--sheet);
@@ -2730,7 +2730,7 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: clamp(3rem, 6vw, 6rem)
+  padding: clamp(3.5rem, 8vw, 7rem)
     max(var(--page-gutter), calc((100% - 1400px) / 2 + var(--page-gutter)));
   border-bottom: 0;
 }
@@ -2739,7 +2739,7 @@
 }
 .plan-home > .plan-ground-band {
   /* Preserve a visible paper-art plate against the darker reading band. */
-  background: #ece8e0;
+  background: #f1eee7;
 }
 .dark .plan-home > .plan-ground-band {
   background: var(--band);
@@ -3091,11 +3091,10 @@
   letter-spacing: 0;
   margin-bottom: 0.8rem;
 }
-.plan-tool-install .plan-install-snippet .site-snippet-body {
+.plan-tool-install .plan-install-snippet .site-snippet-body:not(.site-snippet-body-prose) {
   background: var(--band);
 }
 .plan-tool-install .plan-install-snippet .site-snippet-body-prose > .site-snippet-prose {
-  padding: 1rem;
   max-width: none;
   font: 0.9rem/1.6 var(--sans);
 }

@@ -987,9 +987,9 @@ if (!fs.existsSync(notFoundPath)) {
     });
     await page.goto("https://site-export.test/en/", { waitUntil: "networkidle" });
     let visibilityFailures = 0;
-    for (const scene of ["hero", "source", "observation", "invoiceExample", "sharedInstance", "visionPositions", "visionExplanation"]) {
-      const problems = await page.locator(`object[data-paper-scene="${scene}"]`).evaluate((object) => {
-        const doc = (object as HTMLObjectElement).contentDocument;
+    const inspectScene = (object: Element) => {
+        const doc = object.tagName.toLowerCase() === "object"
+          ? (object as HTMLObjectElement).contentDocument : object.ownerDocument;
         if (!doc?.defaultView) return ["SVG document did not load"];
         const elements = doc.querySelectorAll<SVGElement>("[data-paper-port], [data-paper-letter], [data-paper-envelope-state], [data-paper-field-state], [data-retained-raw-source], [data-paper-source], [data-explained-current-field], [data-explanation-basis], [data-inspection-object]");
         if (elements.length === 0) return ["no critical scene elements found"];
@@ -1007,18 +1007,44 @@ if (!fs.existsSync(notFoundPath)) {
             failures.push(`${element.outerHTML.slice(0, 180)} has effective opacity ${opacity}`);
         }
         return failures;
-      });
-      for (const problem of problems) {
-        fail(`Normal-motion/no-JavaScript paper scene ${scene}: ${problem}`);
+    };
+    const check = async (label: string, locator: ReturnType<typeof page.locator>) => {
+      for (const problem of await locator.evaluate(inspectScene)) {
+        fail(`Normal-motion/no-JavaScript paper scene ${label}: ${problem}`);
         visibilityFailures++;
       }
+    };
+    // CSS must select exactly one authored composition before any hydration.
+    for (const width of [639, 640]) {
+      await page.setViewportSize({ width, height: 1056 });
+      await page.waitForLoadState("networkidle");
+      const frames = await page.locator('object[data-paper-scene="hero"]').evaluateAll((objects) =>
+        objects.map((object) => ({
+          variant: object.getAttribute("data-paper-responsive-variant"),
+          display: getComputedStyle(object).display,
+        }))
+      );
+      const variant = width < 640 ? "mobile" : "desktop";
+      if (frames.length !== 2 || frames.filter((frame) => frame.display !== "none").length !== 1 ||
+          frames.find((frame) => frame.variant === variant)?.display === "none") {
+        fail(`Archive hero ${width}px must expose exactly the ${variant} profile before hydration`);
+        visibilityFailures++;
+      }
+      await page.waitForFunction((selected) =>
+        !!document.querySelector<HTMLObjectElement>(`object[data-paper-responsive-variant="${selected}"]`)?.contentDocument?.querySelector("svg"), variant);
+      await check(`archive-${variant}`, page.locator(`object[data-paper-responsive-variant="${variant}"]`));
     }
+    for (const scene of ["source", "observation", "invoiceExample", "sharedInstance", "visionPositions", "visionExplanation"])
+      await check(scene, page.locator(`object[data-paper-scene="${scene}"]`));
+    // The prior detailed graph remains a standalone body/docs asset with its original still.
+    await page.goto("https://site-export.test/brand/october/essay/connected-records.svg", { waitUntil: "networkidle" });
+    await check("retained-record-graph", page.locator("svg").first());
     for (const resource of resourceFailures) {
       fail(`Paper scene browser resource did not load: ${resource}`);
       visibilityFailures++;
     }
     if (visibilityFailures === 0)
-      pass("All seven shared paper scenes retain visible sources, ports, letters and selected fields without JavaScript under normal motion");
+      pass("All seven retained shared scenes and both authored archive profiles retain visible sources, ports, letters and selected fields without JavaScript under normal motion");
   } catch (error) {
     fail(`Paper scene browser visibility validation failed: ${(error as Error).message}`);
   } finally {

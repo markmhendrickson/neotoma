@@ -15,6 +15,16 @@
   aspect-ratio: 3 / 2;
   min-height: 0;
 }
+/* Two authored archive profiles: the inactive SVG is neither announced nor animated. */
+.overhead-paper-scene[data-paper-responsive-variant="mobile"] {
+  display: block;
+  aspect-ratio: 3 / 4;
+}
+.overhead-paper-scene[data-paper-responsive-variant="desktop"] { display: none; }
+@media (min-width: 640px) {
+  .overhead-paper-scene[data-paper-responsive-variant="mobile"] { display: none; }
+  .overhead-paper-scene[data-paper-responsive-variant="desktop"] { display: block; }
+}
 .paper-edge {
   stroke: #fff9ec;
   stroke-width: 0.9;

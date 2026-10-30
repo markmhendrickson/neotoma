@@ -1,0 +1,104 @@
+{
+  "source_repository": "markmhendrickson/markmhendrickson",
+  "output_pin": "beb86a623a6dccafd43117c48e5ca3c0beb9e955",
+  "producer_pin": "7480e3ad2411429cbcc61431857d016b407d48c4",
+  "source": "react-app/public/images/posts/neotoma-paper/vision-explanation.svg",
+  "raw_sha256": "5eed8f0d21a7722d5adab9b5a5694d238491955be656ee9a1a998c5600e764a1",
+  "normalized_sha256": "4fc8b87e9d2e5a7ba962db0375581b99d5ce2fbc1182d1c81577d81387dfc836",
+  "materials": [
+    {
+      "file": "9e9dfed440f8ff18.webp",
+      "sha256": "9e9dfed440f8ff1800180963edc0dfab6c8333607dc000e079018d9f0c6cf1b8"
+    },
+    {
+      "file": "59e2ce139e5606fb.webp",
+      "sha256": "59e2ce139e5606fbc64ecb27abf5b41ac615e8cf86866af21e08158f47fc4773"
+    },
+    {
+      "file": "83ef47976c1a1f66.webp",
+      "sha256": "83ef47976c1a1f661a02e90139c294240f532d84a2ba33c5a67e4c2418aacaa6"
+    },
+    {
+      "file": "b13701ca89a9a7b3.webp",
+      "sha256": "b13701ca89a9a7b39c542ad55d3a53057944e3df31574019558e8389281c8a05"
+    },
+    {
+      "file": "d1133eb4e26412fd.webp",
+      "sha256": "d1133eb4e26412fd0be76929ad257756f370e8f2e8760dd599e47bd41b4b9ece"
+    },
+    {
+      "file": "3870f2b21ac0235d.webp",
+      "sha256": "3870f2b21ac0235d22dcb356bd4a7b94e0944fb62cc52a5f1aa94b4a60b1087a"
+    },
+    {
+      "file": "b4c4f8f961140600.webp",
+      "sha256": "b4c4f8f9611406000b26de70e44cd28caa667412cf82dde5713dc48be3fa1c11"
+    }
+  ],
+  "paperboard_contract_sha256": "83ce63f637a06e3bf254f8d0ed12fa0a30d426bcba4558708932f0b747063b9e",
+  "output_sources": {
+    "vision-explanation.svg": {
+      "sourceRepository": "https://github.com/markmhendrickson/markmhendrickson",
+      "sourceCommit": "7480e3ad2411429cbcc61431857d016b407d48c4",
+      "sourcePath": "react-app/src/dev/overhead-record/explanationsImpactProof.svg",
+      "sourceSha256": "5eed8f0d21a7722d5adab9b5a5694d238491955be656ee9a1a998c5600e764a1",
+      "scene": "explanationsImpactProof",
+      "sha256": "5eed8f0d21a7722d5adab9b5a5694d238491955be656ee9a1a998c5600e764a1"
+    },
+    "vision-explanation.png": {
+      "sourceRepository": "https://github.com/markmhendrickson/markmhendrickson",
+      "sourceCommit": "7480e3ad2411429cbcc61431857d016b407d48c4",
+      "sourcePath": "react-app/src/dev/overhead-record/explanationsImpactProof.svg",
+      "sourceSha256": "5eed8f0d21a7722d5adab9b5a5694d238491955be656ee9a1a998c5600e764a1",
+      "scene": "explanationsImpactProof",
+      "sha256": "078354ce8b7d67e1eb2e81d2e01f30281d4d337698f936b98f574b16727deea2"
+    }
+  },
+  "source_inputs": {
+    "sourceRepository": "https://github.com/markmhendrickson/markmhendrickson",
+    "sourceFiles": [
+      "react-app/src/dev/overhead-record/source-material.svg",
+      "react-app/scripts/overhead-marks.mjs",
+      "react-app/src/dev/overhead-record/physical-materials.json",
+      "react-app/scripts/generate-overhead-proof.mjs",
+      "react-app/scripts/generate-overhead-scenes.mjs",
+      "react-app/scripts/generate-source-storage-proof.mjs",
+      "react-app/scripts/export-paper-artwork.mjs",
+      "react-app/src/dev/overhead-record/paperboard-magnifier.json",
+      "react-app/src/dev/overhead-record/PAPERBOARD-MAGNIFIER-HANDOFF.md",
+      "react-app/src/dev/overhead-record/materials/letter-paper-physical-v3.webp",
+      "react-app/src/dev/overhead-record/materials/explanation-dossier.webp",
+      "react-app/src/dev/overhead-record/remaining-materials.json",
+      "react-app/src/dev/overhead-record/materials.json",
+      "react-app/src/dev/overhead-record/geometry.json",
+      "react-app/src/dev/overhead-record/connectedRecordsProof.svg",
+      "react-app/src/dev/overhead-record/syntheticSourcesProof.svg",
+      "react-app/src/dev/overhead-record/invoice.svg",
+      "react-app/src/dev/overhead-record/governedCollaborationProof.svg",
+      "react-app/src/dev/overhead-record/competingClaimsProof.svg",
+      "react-app/src/dev/overhead-record/explanationsImpactProof.svg"
+    ],
+    "sourceHashes": {
+      "react-app/src/dev/overhead-record/source-material.svg": "c09589a1d261eb1e3b1ab23135bad84f916ce989bf5da147eaeacfb201368e3c",
+      "react-app/scripts/overhead-marks.mjs": "d409ae8b339e3727ea51630b0e932f8344f1131d36e0b7d9eda77aa1c44e4082",
+      "react-app/src/dev/overhead-record/physical-materials.json": "6c7c0b78d0e218b23e86536031a45b2bfacd037996a431aed3f92556fc681062",
+      "react-app/scripts/generate-overhead-proof.mjs": "a20075c8916530782f8450df830b05a2ca6c009d9ca3086f80c887cf4303e6ae",
+      "react-app/scripts/generate-overhead-scenes.mjs": "bcbb8a2fc41d604c625c078980094b731647fc7ebd04d0072d3d93f199cc45b3",
+      "react-app/scripts/generate-source-storage-proof.mjs": "5baf8797a738b29b6457e3cf10e1e813b0bcabd6d0f14fff4324c38f4a3ebdd5",
+      "react-app/scripts/export-paper-artwork.mjs": "03cadb8c5e38c3ad1720ba9794044f30fa0335086d2e0f064ef937a1828c8368",
+      "react-app/src/dev/overhead-record/paperboard-magnifier.json": "83ce63f637a06e3bf254f8d0ed12fa0a30d426bcba4558708932f0b747063b9e",
+      "react-app/src/dev/overhead-record/PAPERBOARD-MAGNIFIER-HANDOFF.md": "9fae490b1ffb3c29fda987280e0a352dbdecacf81bf713cc6a846b9d420b135b",
+      "react-app/src/dev/overhead-record/materials/letter-paper-physical-v3.webp": "3870f2b21ac0235d22dcb356bd4a7b94e0944fb62cc52a5f1aa94b4a60b1087a",
+      "react-app/src/dev/overhead-record/materials/explanation-dossier.webp": "b4c4f8f9611406000b26de70e44cd28caa667412cf82dde5713dc48be3fa1c11",
+      "react-app/src/dev/overhead-record/remaining-materials.json": "daea02e8586f695798cf9916f99a7a30e4ac0470a1a71c7ca515dd5e215c83d7",
+      "react-app/src/dev/overhead-record/materials.json": "284462e2aa8cf024ed7a8a1820f160de671ea36a123f0f65d79602f5d30c0f95",
+      "react-app/src/dev/overhead-record/geometry.json": "0b7c715392e196a7a541cf9ef555d477e048d105a02f605b0c830af52bb08bc6",
+      "react-app/src/dev/overhead-record/connectedRecordsProof.svg": "4b3ec5b1a50aef4fb8fd89a5dbf24c3955a2cc5befa26f34b3f7d9f4623ff713",
+      "react-app/src/dev/overhead-record/syntheticSourcesProof.svg": "6dfeba4e46b2f67dc8a380bc6c7c85ea2217c85a37596d258d07ac881a1ea93f",
+      "react-app/src/dev/overhead-record/invoice.svg": "05e66b81b7ffd3f5fe9dec89b686f86a3a2f4371f205818741fa03e9f8cd57c6",
+      "react-app/src/dev/overhead-record/governedCollaborationProof.svg": "0aa94e451653faf6c79be45144f109224b397436195a61409112dbc3b7d98fc5",
+      "react-app/src/dev/overhead-record/competingClaimsProof.svg": "e76b0aaff773b24fd7fb89f5e248ba54d7a37bec6bc4e8b556550b038d9f6e81",
+      "react-app/src/dev/overhead-record/explanationsImpactProof.svg": "5eed8f0d21a7722d5adab9b5a5694d238491955be656ee9a1a998c5600e764a1"
+    }
+  }
+}
