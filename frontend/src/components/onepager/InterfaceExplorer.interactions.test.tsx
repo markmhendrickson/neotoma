@@ -1475,6 +1475,25 @@ describe("layered paper illustration motion", () => {
     expect(hero.querySelector('[data-paper-print="related-note"] [data-field-value="current"]')).not.toBeNull();
   });
 
+  it("keeps filled calendar markers and plain current rows consistent with the shared photographic artwork", () => {
+    for (const [scene, count] of [["entity", 3], ["reducer", 3], ["snapshot", 2]] as const) {
+      const svg = overheadSvg(scene);
+      expect(svg.querySelectorAll('[data-calendar-surface="cool-blue"]')).toHaveLength(count);
+      for (const calendar of svg.querySelectorAll('[data-calendar-surface]')) {
+        const dot = calendar.querySelector("circle")!;
+        const current = calendar.getAttribute("data-field-value") === "current";
+        const x = Number(calendar.querySelector("path")!.getAttribute("d")!.match(/^M([\d.]+)/)![1]);
+        expect(Number(dot.getAttribute("cx")) - x).toBe(current ? 20 : 8);
+      }
+      const current = svg.querySelector('[data-rule-selected-snapshot]');
+      expect(current?.querySelector('rect[fill]') ?? null).toBeNull();
+    }
+    const hero = overheadSvg("hero");
+    expect(hero.querySelector('[data-paper-raster="clipboard-clip"] use')?.getAttribute("href")).toBe("#proof-clipboard-clip");
+    const explanation = overheadSvg("visionExplanation");
+    expect(explanation.querySelector('[data-paper-raster="inspection-glass"] use')?.getAttribute("href")).toBe("#proof-inspection-glass");
+  });
+
   it("shows the revised date letter in both complete SVGs and keeps a fallback name", () => {
     for (const scene of ["observation", "invoiceExample"] as const) {
       const svg = overheadSvg(scene);

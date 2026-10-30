@@ -1,0 +1,62 @@
+{
+  "clipboard-clip": {
+    "file": "clipboard-clip-physical-v3.webp",
+    "sha256": "c79db67612add69e963c4309b0e646b30014de4bd6d781f4cbf481b60e146188",
+    "pngSha256": "ba55df3c8acc6121f03595847168b2c61965babf86810124f15f59418dd26ab1",
+    "width": 1254,
+    "height": 1254,
+    "opaqueBounds": [
+      26,
+      382,
+      1202,
+      483
+    ],
+    "prompt": "Brushed silver physical clipboard clamp; top-down, diffuse upper-left light, isolated alpha.",
+    "method": "Built-in imagegen referenced edit/generation; alpha-preserving WebP optimization only."
+  },
+  "inspection-glass": {
+    "file": "inspection-glass-physical-v3.webp",
+    "sha256": "5e66916c08993e9b375c96b6b89a342a04de27e01e28c00cf60d671033171649",
+    "pngSha256": "3b4cc88672c6eaf94619eb6e1163461c7b0e080101a9f88ee4da364929d16383",
+    "width": 1254,
+    "height": 1254,
+    "opaqueBounds": [
+      113,
+      97,
+      1044,
+      1040
+    ],
+    "prompt": "Aged brass and wooden-handled physical magnifier; clear alpha lens, top-down, diffuse upper-left light.",
+    "method": "Built-in imagegen referenced edit/generation; alpha-preserving WebP optimization only."
+  },
+  "letter-paper": {
+    "file": "letter-paper-physical-v3.webp",
+    "sha256": "3870f2b21ac0235d22dcb356bd4a7b94e0944fb62cc52a5f1aa94b4a60b1087a",
+    "pngSha256": "bac151ce5a6ffc5e41a79fa5e7b818aca3f63c3408faacfa55dae1cc1ee6b5f8",
+    "width": 1254,
+    "height": 1254,
+    "opaqueBounds": [
+      204,
+      89,
+      846,
+      1074
+    ],
+    "prompt": "Single ivory fibrous paper sheet, blank, top-down, isolated alpha.",
+    "method": "Built-in imagegen referenced edit/generation; alpha-preserving WebP optimization only."
+  },
+  "email-envelope-open": {
+    "file": "email-envelope-open-physical-v4.webp",
+    "sha256": "6a1badbad8680c0af94cd33133054b2378afb24c2b11c418cc3bc86f8b807d51",
+    "pngSha256": "3b45c4e3c4d6e1d04d9df0daec7865b1cf8c9c47880854fbb017f7616217a222",
+    "width": 1254,
+    "height": 1254,
+    "opaqueBounds": [
+      60,
+      92,
+      1138,
+      1083
+    ],
+    "prompt": "Opened same broad blue envelope as hero, upright lower pocket fold, empty, top-down, isolated alpha. Targeted body-proportion correction to hero envelope: open body width:height about 1.7:1.",
+    "method": "Built-in imagegen referenced edit/generation; alpha-preserving WebP optimization only."
+  }
+}
