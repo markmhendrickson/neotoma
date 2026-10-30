@@ -37,6 +37,7 @@ import { InterfaceExplorer } from "./InterfaceExplorer";
 import { CodeBlock } from "../InstallCodeBlock";
 import * as siteAnalytics from "@/utils/analytics";
 import { NeotomaOnePager } from "./NeotomaOnePager";
+import { SiteSnippet } from "../SiteSnippet";
 import { SolidLockup } from "./NeotomaLogos";
 
 vi.mock("./selected-site-identity.js", () => ({}));
@@ -515,7 +516,10 @@ describe("connection selector", () => {
     expect(keys).toHaveLength(3);
     expect(new Set(keys).size).toBe(1);
     expect(entity.querySelectorAll('[data-resolved-identity-badge="true"]')).toHaveLength(1);
-    expect(entity.querySelector('[data-field-icon="due"]')).toBeNull();
+    expect(ENTITY_SCHEMAS.invoice.schema_definition.canonical_name_fields).toEqual(['invoice_number', 'vendor_name', 'invoice_date']);
+    const due = [...entity.querySelectorAll('[data-non-identifying-fact="date_due"]')];
+    expect(due.map((row) => row.querySelector('[data-field-icon="due"]')?.getAttribute('data-field-value'))).toEqual(['prior', 'current']);
+    expect(entity.querySelector('[data-identity-key] [data-field-icon="due"]')).toBeNull();
   });
 
   it("selects separate fields from retained observations without replacing identity or deleting the prior date", () => {
@@ -672,27 +676,14 @@ describe("connection selector", () => {
         expect(first).not.toContain("neotoma init");
       }
       if (!host.tool) expect(first).not.toContain(`setup --tool ${host.id}`);
-      expect(second).toContain(host.verification);
-      if (host.id === "claude-agent-sdk") {
-        if (host.id === "claude-agent-sdk")
-          expect(first).not.toContain("Install and initialize Neotoma");
-        expect(second).toContain("captured event");
-        expect(second).not.toContain("Verify the actual connection with a read-only retrieval");
-        expect(second).toContain("MCP");
-        if (host.id === "claude-agent-sdk") {
-          expect(first).not.toContain("SDK SDK");
-          expect(second).not.toContain("SDK SDK");
-        }
-      } else if (host.kind === "registry") {
-        expect(second).toContain("registered endpoint");
-        expect(second).toContain("actual MCP client");
-        expect(second).not.toContain("Verify the actual connection with a read-only retrieval");
-      } else if (host.id === "openclaw") {
-        expect(second).toContain("plugin");
-        expect(second).not.toContain("Verify the actual connection with a read-only retrieval");
-      } else {
-        expect(second).toContain("read-only retrieval of a known entity");
-      }
+      const prompt = steps[1].querySelector('.site-snippet-prose')?.textContent ?? '';
+      expect(prompt).toMatch(/^Start with this conversation\. Use /);
+      expect(prompt).not.toMatch(/step 1|known entity|hooks|Inspect|verify|I selected/i);
+      if (host.mode === "adapter") expect(second).toContain("adapter and its available instructions");
+      else if (host.kind === "plugin") expect(second).toContain("plugin available in");
+      else if (host.kind === "registry") expect(second).toContain("via an available MCP client");
+      else if (host.kind === "sdk") expect(second).toContain("integration and its available instructions");
+      else expect(second).toContain("installed Neotoma MCP and its available instructions");
       const guide = screen.getByRole("link", {
         name: `Learn more about using Neotoma with ${host.host}`,
       });
@@ -744,11 +735,10 @@ describe("connection selector", () => {
     expect(screen.queryByRole("tablist", { name: "Agent harness" })).toBeNull();
     await chooseHost("ChatGPT");
     expect(container.querySelector("#permissions-preflight")).toBeNull();
-    expect(container.querySelector(".plan-selected-verification")?.textContent).toContain("known entity");
+    expect(container.querySelector(".plan-selected-verification")).toBeNull();
     await chooseHost("Claude Agent SDK");
     expect(container.querySelector("#permissions-preflight")).toBeNull();
-    expect(container.querySelector(".plan-selected-verification")?.textContent).toContain("captured event");
-    expect(container.querySelector(".plan-selected-verification")?.textContent).not.toContain("tool list");
+    expect(container.querySelector(".plan-selected-verification")).toBeNull();
   });
 
   it("labels the three different objects in the Install figure", () => {
@@ -1001,6 +991,17 @@ describe("shared site snippet content", () => {
   });
 });
 
+describe("shared prose flow", () => {
+  it("puts Copy first inside the prose flow so title and text can wrap beside it", () => {
+    const {container} = render(<SiteSnippet title="Ask your agent" subtitle="A short guide" text="Start with this conversation." prose copyInBody copyFeedbackId="flow-regression" />);
+    const flow = container.querySelector('.site-snippet-prose-flow')!;
+    expect(flow.firstElementChild).toHaveClass('site-snippet-copy');
+    expect(flow.children[1]).toHaveClass('site-snippet-title');
+    expect(flow.querySelector('.site-snippet-prose')).toHaveTextContent('Start with this conversation.');
+    expect(container.querySelector('.site-snippet > .site-snippet-copy')).toBeNull();
+  });
+});
+
 describe("viewport entrance lifecycle", () => {
   it("replays only after exit and re-entry and cancels on reduced motion, hidden documents and cleanup", () => {
     let notify: IntersectionObserverCallback = () => {};
@@ -1072,7 +1073,7 @@ describe("viewport entrance lifecycle", () => {
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
 
-  it("caps simultaneous scenes while skipped scenes stay drawn and can animate on re-entry", () => {
+  it("caps simultaneous scenes while queued scenes stay drawn and start when a slot opens", () => {
     let notify: IntersectionObserverCallback = () => {};
     const media = new EventTarget() as MediaQueryList;
     Object.defineProperty(media, "matches", { value: false });
@@ -1117,11 +1118,52 @@ describe("viewport entrance lifecycle", () => {
     expect(targets[2].textContent).toBe("Complete record");
     expect(targets[2].getAttribute("style")).toBeNull();
     entry(targets[0], false);
-    expect(play).toHaveBeenCalledTimes(2);
+    expect(play).toHaveBeenCalledTimes(3);
     entry(targets[2], false);
     entry(targets[2], true);
-    expect(play).toHaveBeenCalledTimes(3);
+    expect(play).toHaveBeenCalledTimes(4);
     stop();
+    vi.unstubAllGlobals();
+    delete (Element.prototype as unknown as { animate?: unknown }).animate;
+  });
+
+  it("shares two FIFO animation slots across independent inline and external registrations", async () => {
+    let notify: IntersectionObserverCallback = () => {};
+    const media = new EventTarget() as MediaQueryList;
+    Object.defineProperty(media, "matches", { value: false });
+    vi.stubGlobal("matchMedia", () => media);
+    const callbacks: IntersectionObserverCallback[] = [];
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: IntersectionObserverCallback) { notify = callback; callbacks.push(callback); }
+      observe() {} unobserve() {} disconnect() {}
+    });
+    Object.defineProperty(Element.prototype, "animate", { configurable: true, value: vi.fn() });
+    const targets = [document.createElement("svg"), document.createElement("object"), document.createElement("object"), document.createElement("svg")];
+    document.body.append(...targets);
+    const completions: (() => void)[] = [];
+    const started: Element[] = [];
+    const play = vi.fn((target: Element) => {
+      started.push(target);
+      return [{ cancel: vi.fn(), finished: new Promise<void>((resolve) => completions.push(resolve)), playState: "running" } as unknown as Animation];
+    });
+    const stops = targets.map((target) => observeViewportMotion([target], play));
+    const entry = (target: Element, isIntersecting: boolean) => {
+      // Deliver each target only to the observer that owns it in the old per-call implementation.
+      const callback = callbacks.length === 1 ? notify : callbacks[targets.indexOf(target)];
+      callback([{ target, isIntersecting, intersectionRatio: isIntersecting ? 1 : 0 } as IntersectionObserverEntry], {} as IntersectionObserver);
+    };
+    targets.forEach((target) => entry(target, true));
+    expect(started).toEqual(targets.slice(0, 2));
+    completions[0](); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(started).toEqual(targets.slice(0, 3));
+    // A hidden responsive twin leaves its slot immediately, admitting the next queued scene.
+    targets[1].style.display = "none";
+    window.dispatchEvent(new Event("resize"));
+    expect(started).toEqual(targets);
+    entry(targets[1], true);
+    expect(started).toEqual(targets);
+    stops.forEach((stop) => stop());
+    targets.forEach((target) => target.remove());
     vi.unstubAllGlobals();
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
@@ -1476,7 +1518,7 @@ describe("layered paper illustration motion", () => {
   });
 
   it("keeps filled calendar markers and plain current rows consistent with the shared photographic artwork", () => {
-    for (const [scene, count] of [["entity", 3], ["reducer", 3], ["snapshot", 2]] as const) {
+    for (const [scene, count] of [["entity", 5], ["reducer", 3], ["snapshot", 2]] as const) {
       const svg = overheadSvg(scene);
       expect(svg.querySelectorAll('[data-calendar-surface="cool-blue"]')).toHaveLength(count);
       for (const calendar of svg.querySelectorAll('[data-calendar-surface]')) {

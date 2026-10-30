@@ -109,7 +109,7 @@ describe("neotoma.io one-pager copy", () => {
       }
     }
   });
-  it("keeps a copy control on the parent snippet for code and prose variants", () => {
+  it("keeps a floating prose copy control and an unobscured code copy control", () => {
     for (const props of [{}, { chrome: false }, { prose: true }, { prose: true, copyInBody: true }]) {
       const html = renderToStaticMarkup(createElement(SiteSnippet, {
         text: "Example",
@@ -118,7 +118,7 @@ describe("neotoma.io one-pager copy", () => {
         ...props,
       }));
       const snippet = new JSDOM(html).window.document.querySelector(".site-snippet");
-      expect(snippet?.querySelectorAll(":scope > .site-snippet-copy")).toHaveLength(1);
+      expect(snippet?.querySelectorAll("prose" in props ? ".site-snippet-prose-flow > .site-snippet-copy" : ":scope > .site-snippet-copy")).toHaveLength(1);
     }
   });
 
@@ -554,18 +554,18 @@ describe("review fixes (install path, accessibility, wording)", () => {
     expect(html).toContain('role="combobox"');
     expect(html).toContain("npm install -g neotoma@0.26.0");
     expect(html).toContain("Step 1 · Install Neotoma for Claude Code");
-    expect(html).toContain("Step 2 · Verify Claude Code and get started");
+    expect(html).toContain("Step 2 · Start your first workflow");
     expect(html.indexOf("Step 1 · Install Neotoma for Claude Code")).toBeLessThan(
-      html.indexOf("Step 2 · Verify Claude Code and get started")
+      html.indexOf("Step 2 · Start your first workflow")
     );
-    expect(html.indexOf("Step 2 · Verify Claude Code and get started")).toBeLessThan(
+    expect(html.indexOf("Step 2 · Start your first workflow")).toBeLessThan(
       html.indexOf("Learn more about using Neotoma with Claude Code")
     );
   });
 
   it("/install discloses effects before the shared selected-host flow", () => {
     expect(install).toContain("/install/system-changes/");
-    expect(install.indexOf("/install/system-changes/")).toBeLessThan(install.indexOf("<ToolInstall showPermissionsPreflight includeVerificationNote />"));
+    expect(install.indexOf("/install/system-changes/")).toBeLessThan(install.indexOf("<ToolInstall showPermissionsPreflight />"));
     expect(install).not.toContain("INSTALL_COMMANDS");
     expect(install).not.toContain("agentInstallPrompt");
     expect(install).not.toContain("startWithEvaluation");
@@ -576,7 +576,7 @@ describe("review fixes (install path, accessibility, wording)", () => {
     const strings = read("frontend/src/i18n/locales/install_page_strings.ts");
     expect(strings).not.toContain("INTEGRATION_CARDS_EN");
     expect(install).not.toContain("integrationCards");
-    expect(install).toContain("<ToolInstall showPermissionsPreflight includeVerificationNote />");
+    expect(install).toContain("<ToolInstall showPermissionsPreflight />");
   });
 
   it("leads with the category, lets the document scroll, and names the logo for assistive tech", () => {
@@ -735,7 +735,7 @@ describe("/install polish", () => {
   const install = read("frontend/src/components/install/install_page_body.tsx");
 
   it("uses one shared selected-host command snippet", () => {
-    expect(install).toContain("<ToolInstall showPermissionsPreflight includeVerificationNote />");
+    expect(install).toContain("<ToolInstall showPermissionsPreflight />");
     expect(install).not.toContain("<CodeBlock");
     expect(css).toContain(".plan-tool-install");
   });
@@ -1322,7 +1322,7 @@ describe("/install code blocks (round 3)", () => {
   });
 
   it("keeps the wrapped install source labelled, focusable and selectable", () => {
-    expect(body).toContain("<ToolInstall showPermissionsPreflight includeVerificationNote />");
+    expect(body).toContain("<ToolInstall showPermissionsPreflight />");
     expect(read("frontend/src/components/onepager/ToolInstall.tsx")).toContain('"Connection instructions for"');
     const block = read("frontend/src/components/InstallCodeBlock.tsx");
     const shared = read("frontend/src/components/SiteSnippet.tsx");

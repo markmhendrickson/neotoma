@@ -2739,7 +2739,7 @@
 }
 .plan-home > .plan-ground-band {
   /* Preserve a visible paper-art plate against the darker reading band. */
-  background: #ece8e0;
+  background: #f1eee7;
 }
 .dark .plan-home > .plan-ground-band {
   background: var(--band);
@@ -3091,11 +3091,10 @@
   letter-spacing: 0;
   margin-bottom: 0.8rem;
 }
-.plan-tool-install .plan-install-snippet .site-snippet-body {
+.plan-tool-install .plan-install-snippet .site-snippet-body:not(.site-snippet-body-prose) {
   background: var(--band);
 }
 .plan-tool-install .plan-install-snippet .site-snippet-body-prose > .site-snippet-prose {
-  padding: 1rem;
   max-width: none;
   font: 0.9rem/1.6 var(--sans);
 }

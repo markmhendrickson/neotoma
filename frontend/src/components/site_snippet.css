@@ -91,12 +91,6 @@
     padding-block-start: 3.5rem;
     padding-inline-end: 0;
   }
-  .site-snippet-prose-flow {
-    padding-block-start: 3.5rem;
-  }
-  .site-snippet-prose-flow .site-snippet-title {
-    padding-inline-end: 0;
-  }
 }
 .site-snippet-copy:hover {
   background: var(--snippet-ink);
@@ -137,9 +131,11 @@
   display: flow-root;
 }
 .site-snippet-prose-flow .site-snippet-title {
-  min-height: 3rem;
   margin-bottom: 0.35rem;
-  padding-inline-end: 8rem;
+}
+.site-snippet-prose-flow > .site-snippet-copy {
+  float: inline-end;
+  margin: 0 0 0.5rem 1rem;
 }
 .site-snippet-prose-flow .site-snippet-status.site-snippet-error {
   clear: both;

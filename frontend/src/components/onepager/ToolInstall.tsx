@@ -11,7 +11,6 @@ import {
   CONNECTIONS_SETUP,
   activationPrompt,
   connectionCommands,
-  connectionVerification,
   connectionStepOneTitle,
   connectionStepTwoTitle,
   connectionGuidePath,
@@ -21,9 +20,8 @@ import { useLocale } from "@/i18n/LocaleContext";
 import { spanishToolCopy } from "./spanish_tool_install_copy";
 
 /** One selected host governs both steps; each copy action keeps its own feedback. */
-export function ToolInstall({ showPermissionsPreflight = false, includeVerificationNote = false }: {
+export function ToolInstall({ showPermissionsPreflight = false }: {
   showPermissionsPreflight?: boolean;
-  includeVerificationNote?: boolean;
 } = {}) {
   const { locale } = useLocale();
   const es = locale === "es";
@@ -101,9 +99,6 @@ export function ToolInstall({ showPermissionsPreflight = false, includeVerificat
         copyFeedbackId={`onepager-activate-${host.id}`}
         successMessage={es ? "Prompt copiado" : "Prompt copied"}
       />
-      {includeVerificationNote && !(spanish && spanish.activation.includes(spanish.verification)) ? (
-        <p className="plan-selected-verification">{spanish?.verification ?? connectionVerification(host)}</p>
-      ) : null}
       <p className="plan-install-guide">
         <a href={staticAssetPath(connectionGuidePath(host, es ? "es" : "en"))}>{es ? `Lee más sobre Neotoma con ${host.host}` : `Learn more about using Neotoma with ${host.host}`}</a>
       </p>

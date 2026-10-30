@@ -13,7 +13,7 @@ export const PAPER_SCENE_ALTS_ES: Partial<Record<PaperSceneKind, string>> = {
   after: "Fragmentos de papel organizados en un mismo registro.",
   source: "Una factura desglosada y un correo íntegro se guardan detrás del borde frontal del mismo archivador de Neotoma.",
   observation: "La factura original y un correo posterior aportan cada uno una observación conservada; el correo revela la nueva fecha.",
-  entity: "Tres marcas idénticas de número de factura, proveedor y fecha corresponden a la misma huella estable en ambas observaciones y en el expediente.",
+  entity: "El mismo número de factura, proveedor y fecha de emisión corresponden a una clave de entidad estable; dos filas ajenas a la clave muestran el vencimiento inicial y el revisado.",
   reducer: "Las reglas seleccionan el importe de la observación de la factura y el vencimiento revisado de la observación del correo; la fecha anterior permanece visible.",
   snapshot: "Un registro actual muestra dos campos elegidos por reglas mientras las observaciones anteriores permanecen detrás.",
   invoiceExample: "La factura y el correo posterior aportan observaciones distintas; el registro actual conserva el importe de la factura y el vencimiento del correo.",

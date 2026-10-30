@@ -3,74 +3,116 @@ import { useEffect, type RefObject } from "react";
 type Play = (target: Element) => Animation[];
 const MAX_ACTIVE_SCENES = 2;
 
-/** Animate only actual entry transitions. The authored final state is always visible without JS. */
-export function observeViewportMotion(targets: Element[], play: Play): () => void {
-  if (!window.matchMedia || !window.IntersectionObserver || !Element.prototype.animate)
-    return () => {};
+type Registration = { target: Element; play: Play; inside: boolean; animations?: Animation[] };
+const coordinators = new WeakMap<Document, ReturnType<typeof createCoordinator>>();
+
+/** One parent-document observer owns the FIFO budget for inline and external scenes alike. */
+function createCoordinator(page: Document) {
+  const registrations = new Map<Element, Registration>();
+  const queue: Registration[] = [];
+  const running = new Set<Registration>();
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const inside = new Set<Element>();
-  const running = new Map<Element, Animation[]>();
-  const cancel = (target: Element) => {
-    running.get(target)?.forEach((animation) => animation.cancel());
-    running.delete(target);
+  const visible = (target: Element) => {
+    for (let node: Element | null = target; node; node = node.parentElement) {
+      const style = window.getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+    }
+    return true;
   };
-  const enter = (target: Element) => {
-    cancel(target);
-    // Additional visible scenes keep their complete authored pose. A later viewport re-entry
-    // may animate them, without queuing a jump from a settled pose to an offscreen pose.
-    if (reduced.matches || document.hidden || running.size >= MAX_ACTIVE_SCENES) return;
-    const animations = play(target);
-    if (animations.length === 0) return;
-    running.set(target, animations);
-    for (const animation of animations) {
-      void animation.finished
-        .then(() => {
-          animation.cancel();
-          if (
-            running.get(target) === animations &&
-            animations.every((item) => item.playState !== "running")
-          )
-            running.delete(target);
-        })
-        .catch(() => {});
+  const dequeue = (item: Registration) => {
+    const index = queue.indexOf(item);
+    if (index !== -1) queue.splice(index, 1);
+  };
+  const cancel = (item: Registration) => {
+    dequeue(item);
+    const animations = item.animations;
+    item.animations = undefined;
+    running.delete(item);
+    animations?.forEach((animation) => {
+      try { animation.cancel(); } catch { /* Release other effects even if one API fails. */ }
+    });
+  };
+  const pump = () => {
+    if (reduced.matches || page.hidden) return;
+    while (running.size < MAX_ACTIVE_SCENES && queue.length) {
+      const item = queue.shift()!;
+      if (!item.inside || !registrations.has(item.target) || !visible(item.target)) continue;
+      let animations: Animation[];
+      try { animations = item.play(item.target); } catch { continue; }
+      if (!animations.length) continue;
+      item.animations = animations;
+      running.add(item);
+      void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+        if (item.animations !== animations) return;
+        cancel(item);
+        pump();
+      });
     }
   };
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const target = entry.target;
-        // Wait until the composition is substantially visible. Keep an entered scene entered
-        // while it leaves the viewport so minor ratio changes do not restart its animation.
-        if (entry.isIntersecting) {
-          if (entry.intersectionRatio < 0.35) continue;
-          if (!inside.has(target)) {
-            inside.add(target);
-            enter(target);
-          }
-        } else {
-          inside.delete(target);
-          cancel(target);
-        }
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const item = registrations.get(entry.target);
+      if (!item) continue;
+      if (!entry.isIntersecting || !visible(item.target)) {
+        item.inside = false;
+        cancel(item);
+      } else if (entry.intersectionRatio >= 0.35 && !item.inside) {
+        item.inside = true;
+        // Queued scenes retain their complete authored still until a slot is available.
+        if (!reduced.matches && !page.hidden) queue.push(item);
       }
-    },
-    { threshold: [0, 0.35] }
-  );
-  targets.forEach((target) => observer.observe(target));
+    }
+    pump();
+  }, { threshold: [0, 0.35] });
   const motionChange = () => {
-    if (reduced.matches) targets.forEach(cancel);
+    if (reduced.matches) registrations.forEach(cancel);
   };
   const visibilityChange = () => {
-    if (document.hidden) targets.forEach(cancel);
-    // A tab resume keeps settled scenes settled. Only a new viewport entry replays a scene.
+    if (page.hidden) registrations.forEach(cancel);
+    // Resuming a tab or motion preference keeps stills settled until a fresh viewport entry.
+  };
+  const layoutChange = () => {
+    registrations.forEach((item) => {
+      if (!visible(item.target)) { item.inside = false; cancel(item); }
+    });
+    pump();
   };
   reduced.addEventListener("change", motionChange);
-  document.addEventListener("visibilitychange", visibilityChange);
-  return () => {
-    observer.disconnect();
-    targets.forEach(cancel);
-    reduced.removeEventListener("change", motionChange);
-    document.removeEventListener("visibilitychange", visibilityChange);
+  page.addEventListener("visibilitychange", visibilityChange);
+  window.addEventListener("resize", layoutChange);
+  return {
+    register(targets: Element[], play: Play) {
+      const owned: Registration[] = [];
+      for (const target of targets) {
+        if (registrations.has(target)) continue;
+        const item = { target, play, inside: false };
+        owned.push(item); registrations.set(target, item); observer.observe(target);
+      }
+      return () => {
+        for (const item of owned) {
+          cancel(item); registrations.delete(item.target); observer.unobserve?.(item.target);
+        }
+        if (registrations.size) pump();
+        else {
+          observer.disconnect();
+          reduced.removeEventListener("change", motionChange);
+          page.removeEventListener("visibilitychange", visibilityChange);
+          window.removeEventListener("resize", layoutChange);
+          coordinators.delete(page);
+        }
+      };
+    },
   };
+}
+
+/** Animate actual entries only; complete authored artwork needs no animation support. */
+export function observeViewportMotion(targets: Element[], play: Play): () => void {
+  if (!targets.length || !window.matchMedia || !window.IntersectionObserver || !Element.prototype.animate)
+    return () => {};
+  const page = targets[0].ownerDocument;
+  let coordinator = coordinators.get(page);
+  if (!coordinator) { coordinator = createCoordinator(page); coordinators.set(page, coordinator); }
+  return coordinator.register(targets, play);
 }
 
 const timing = { duration: 650, easing: "cubic-bezier(.22,.7,.2,1)", fill: "both" } as const;
@@ -117,39 +159,38 @@ export function springFrames(x: number, y: number, rotation: number): Keyframe[]
 
 export function playPaperScene(target: Element): Animation[] {
   const objects = [...target.querySelectorAll<SVGElement>("[data-paper-object]")];
+  const paths = [...target.querySelectorAll<SVGGeometryElement>("[data-paper-connection]")];
+  if ([...objects, ...paths].some((part) => typeof part.animate !== "function")) return [];
+  const animations: Animation[] = [];
   const duration = PAPER_SPRING_MS;
   let settledAt = duration;
-  const arrivals = objects.map((object) => {
-    const delay = Number(object.dataset.enterDelay || 0);
-    settledAt = Math.max(settledAt, delay + duration);
-    return object.animate(
-      springFrames(
-        Number(object.dataset.enterX),
-        Number(object.dataset.enterY),
-        Number(object.dataset.enterRotation)
-      ),
-      { duration, delay, easing: "linear", fill: "both" }
-    );
-  });
-  const connections = [
-    ...target.querySelectorAll<SVGGeometryElement>("[data-paper-connection]"),
-  ].map((path, index) =>
-    path.animate(
-      [
-        { strokeDasharray: "1", strokeDashoffset: "1" },
-        { strokeDasharray: "1", strokeDashoffset: "0" },
-      ],
+  try {
+    for (const object of objects) {
+      const delay = Number(object.dataset.enterDelay || 0);
+      settledAt = Math.max(settledAt, delay + duration);
+      animations.push(object.animate(
+        springFrames(Number(object.dataset.enterX), Number(object.dataset.enterY), Number(object.dataset.enterRotation)),
+        { duration, delay, easing: "linear", fill: "both" }
+      ));
+    }
+    paths.forEach((path, index) => animations.push(path.animate(
+      [{ strokeDasharray: "1", strokeDashoffset: "1" }, { strokeDasharray: "1", strokeDashoffset: "0" }],
       { duration: 600, delay: settledAt + 40 + index * 70, easing: "ease-out", fill: "both" }
-    )
-  );
-  return [...arrivals, ...connections];
+    )));
+  } catch {
+    animations.forEach((animation) => {
+      try { animation.cancel(); } catch { /* Continue releasing partial setup. */ }
+    });
+    return [];
+  }
+  return animations;
 }
 
 export function usePageVisualMotion(ref: RefObject<HTMLElement>) {
   useEffect(() => {
     if (!ref.current) return;
     return observeViewportMotion(
-      [...ref.current.querySelectorAll<SVGSVGElement>("[data-paper-scene]")],
+      [...ref.current.querySelectorAll<SVGSVGElement>("svg[data-paper-scene]")],
       playPaperScene
     );
   }, [ref]);

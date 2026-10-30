@@ -124,9 +124,10 @@ export function SiteSnippet({
   );
   return (
     <div className={`site-snippet ${chrome ? "" : "site-snippet-no-chrome"} ${className}`}>
-      {copyButton}
+      {!prose && copyButton}
       {prose ? (
         <div className="site-snippet-prose-flow">
+          {copyButton}
           <p className="site-snippet-title">{title}</p>
           {subtitle && <p className="site-snippet-subtitle">{subtitle}</p>}
           {status}
