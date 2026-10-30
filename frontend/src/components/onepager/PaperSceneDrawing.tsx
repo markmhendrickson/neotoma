@@ -1422,10 +1422,6 @@ export function PaperScene({
               <stop offset="1" stopColor={dark} />
             </linearGradient>
           ))}
-          <radialGradient id={`${id}-ground`}>
-            <stop stopColor="#f5efe3" />
-            <stop offset="1" stopColor="#dfd5c2" />
-          </radialGradient>
           <pattern id={`${id}-fiber`} width="512" height="512" patternUnits="userSpaceOnUse">
             <image
               href={staticAssetPath("/brand/october/paper-fiber.webp")}
@@ -1435,13 +1431,13 @@ export function PaperScene({
             />
           </pattern>
         </defs>
-        <rect width="900" height="600" fill={`url(#${id}-ground)`} data-paper-ground="" />
-        <rect
+        <rect width="900" height="600" fill="#f2eee5" data-paper-ground="" />
+        <image
+          href={staticAssetPath("/brand/october/essay/materials/9e9dfed440f8ff18.webp")}
           width="900"
           height="600"
-          fill={`url(#${id}-fiber)`}
-          opacity=".22"
-          style={{ mixBlendMode: "multiply" }}
+          preserveAspectRatio="xMidYMid slice"
+          opacity=".17"
           data-paper-ground=""
         />
         {Scene ? <Scene /> : <TopicDrawing spec={TOPIC_DRAWINGS[scene as TopicDrawingId]} />}

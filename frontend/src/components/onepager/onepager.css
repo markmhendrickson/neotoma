@@ -2729,6 +2729,10 @@
   background: var(--paper);
 }
 .plan-home > .plan-ground-band {
+  /* Preserve a visible paper-art plate against the darker reading band. */
+  background: #e3dfd6;
+}
+.dark .plan-home > .plan-ground-band {
   background: var(--band);
 }
 .plan-home > .plan-interface-sheet {
