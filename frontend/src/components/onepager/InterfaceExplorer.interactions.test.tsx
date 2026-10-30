@@ -992,6 +992,24 @@ describe("shared site snippet content", () => {
 });
 
 describe("shared prose flow", () => {
+  it("restores keyboard focus and selected source text after both clipboard paths fail", async () => {
+    clipboard(async () => { throw new Error('Synthetic clipboard denial'); }, () => false);
+    vi.spyOn(HTMLTextAreaElement.prototype, 'select').mockImplementation(function(this: HTMLTextAreaElement) {
+      this.focus(); window.getSelection()?.removeAllRanges();
+    });
+    const {container} = render(<SiteSnippet title="Ask your agent" text="Start with this conversation." prose copyFeedbackId="copy-focus-failure" />);
+    const text = container.querySelector('.site-snippet-prose')!;
+    const range = document.createRange(); range.setStart(text.firstChild!, 0); range.setEnd(text.firstChild!, 10);
+    const button = within(container).getByRole('button', {name: 'Copy Ask your agent'}); button.focus();
+    const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    expect(selection.toString()).toBe('Start with');
+    fireEvent.click(button);
+    await waitFor(() => expect(within(container).getByRole('status')).toHaveTextContent('Copy failed'));
+    expect(button).toHaveFocus();
+    expect(window.getSelection()?.toString()).toBe('Start with');
+    expect(text.textContent).toBe('Start with this conversation.');
+  });
+
   it("puts Copy first inside the prose flow so title and text can wrap beside it", () => {
     const {container} = render(<SiteSnippet title="Ask your agent" subtitle="A short guide" text="Start with this conversation." prose copyInBody copyFeedbackId="flow-regression" />);
     const flow = container.querySelector('.site-snippet-prose-flow')!;
@@ -1586,7 +1604,7 @@ describe("layered paper illustration motion", () => {
     const hero = new DOMParser().parseFromString(readFileSync(path.resolve(process.cwd(), "frontend/public/brand/october/essay/connected-records.svg"), "utf8"), "image/svg+xml").documentElement;
     expect(hero.querySelector('[data-paper-raster="clipboard-clip"] use')?.getAttribute("href")).toBe("#proof-clipboard-clip");
     const explanation = overheadSvg("visionExplanation");
-    expect(explanation.querySelector('[data-paper-raster="inspection-glass"] use')?.getAttribute("href")).toBe("#proof-inspection-glass");
+    expect(explanation.querySelector('[data-inspection-material="layered-ivory-sage-paperboard"]')).not.toBeNull();
   });
 
   it("uses both authored archive profiles and retains the detailed graph as a separate unchanged asset", () => {

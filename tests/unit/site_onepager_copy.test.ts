@@ -1615,3 +1615,30 @@ describe("code example readability in the selected theme", () => {
       }
   });
 });
+
+
+describe("observation paper print fit", () => {
+  it("keeps the identity key and differing due-date ink inside each opaque observation paper face", async () => {
+    const svg = new JSDOM(readFileSync(join(root, "frontend/public/brand/october/essay/entity-identity.svg"), "utf8"), {contentType: "image/svg+xml"}).window.document.documentElement;
+    for (const image of svg.querySelectorAll('defs image[href]')) {
+      const bytes = readFileSync(join(root, 'frontend/public/brand/october/essay', image.getAttribute('href')!));
+      // librsvg's image decoder is not required to support WebP; PNG keeps decoded alpha exact in this probe.
+      const decoded = await sharp(bytes).png().toBuffer();
+      image.setAttribute('href', `data:image/png;base64,${decoded.toString('base64')}`);
+    }
+    const defs = svg.querySelector('defs')!.outerHTML;
+    const renderAlpha = async (body: string) => (await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">${defs}${body}</svg>`)).ensureAlpha().raw().toBuffer()).filter((_, index) => index % 4 === 3);
+    for (const carrier of svg.querySelectorAll('[data-paper-role^="identity-slip-"]')) {
+      const paper = await renderAlpha(carrier.querySelector('svg[data-paper-raster="slip"]')!.outerHTML);
+      const ink = await renderAlpha(carrier.querySelector('g[mask]')!.outerHTML);
+      expect(paper.some((alpha) => alpha >= 200)).toBe(true);
+      let printed = 0, outside = 0;
+      for (let index = 0; index < ink.length; index++) if (ink[index] > 32) {
+        printed++; if (paper[index] < 200) outside++;
+      }
+      expect(printed).toBeGreaterThan(0);
+      expect(outside, `${carrier.getAttribute('data-paper-role')}: ink outside the opaque physical face`).toBe(0);
+    }
+  });
+
+});

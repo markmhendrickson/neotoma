@@ -183,10 +183,10 @@
       ]
     },
     {
-      "source": "explanationsImpactProof.svg",
+      "source": "react-app/public/images/posts/neotoma-paper/vision-explanation.svg",
       "target": "inspectable-explanations.svg",
-      "source_sha256": "019c4fd3c6e62572e1059e08b6e9a3edd66c234fd847e81e1fac827d4f27311a",
-      "normalized_sha256": "59752fa843245b6868b36d75cdaa8a986d7b8170f34720e7f5d6241fa1a2cbd4",
+      "source_sha256": "5eed8f0d21a7722d5adab9b5a5694d238491955be656ee9a1a998c5600e764a1",
+      "normalized_sha256": "4fc8b87e9d2e5a7ba962db0375581b99d5ce2fbc1182d1c81577d81387dfc836",
       "assets": [
         {
           "file": "9e9dfed440f8ff18.webp",
@@ -215,12 +215,13 @@
         {
           "file": "b4c4f8f961140600.webp",
           "sha256": "b4c4f8f9611406000b26de70e44cd28caa667412cf82dde5713dc48be3fa1c11"
-        },
-        {
-          "file": "5e66916c08993e9b.webp",
-          "sha256": "5e66916c08993e9b375c96b6b89a342a04de27e01e28c00cf60d671033171649"
         }
-      ]
+      ],
+      "source_repository": "markmhendrickson/markmhendrickson",
+      "source_pin": "beb86a623a6dccafd43117c48e5ca3c0beb9e955",
+      "output_pin": "beb86a623a6dccafd43117c48e5ca3c0beb9e955",
+      "receipt": "paperboard-magnifier-receipt.json",
+      "producer_pin": "7480e3ad2411429cbcc61431857d016b407d48c4"
     },
     {
       "source": "source-material.svg",
