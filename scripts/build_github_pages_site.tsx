@@ -390,9 +390,10 @@ async function main() {
     fs.copyFileSync(heroImageSrc, heroImageDest);
     console.log(`Copied hero image: ${path.relative(repoRoot, heroImageDest)}`);
   }
+  // Preserve the legacy public URL for older and cached shares; new heads use archive cards.
   if (fs.existsSync(ogImageSrc)) {
     fs.copyFileSync(ogImageSrc, ogImageDest);
-    console.log(`Copied OG image: ${path.relative(repoRoot, ogImageDest)}`);
+    console.log(`Copied legacy OG image: ${path.relative(repoRoot, ogImageDest)}`);
   }
   if (fs.existsSync(wordmarkSrc)) {
     fs.copyFileSync(wordmarkSrc, wordmarkDest);

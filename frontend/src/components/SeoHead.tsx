@@ -32,7 +32,7 @@ export function SeoHead({ routePath }: SeoHeadProps) {
       <meta name="author" content={SEO_DEFAULTS.author} />
       <meta name="application-name" content={SEO_DEFAULTS.siteName} />
       <meta name="robots" content={metadata.robots} />
-      <meta name="theme-color" content="#130918" />
+      <meta name="theme-color" content="#172b39" />
       <link rel="canonical" href={metadata.canonicalUrl} />
       <meta property="og:type" content={metadata.ogType} />
       <meta property="og:site_name" content={SEO_DEFAULTS.siteName} />
@@ -41,6 +41,7 @@ export function SeoHead({ routePath }: SeoHeadProps) {
       <meta property="og:description" content={metadata.description} />
       <meta property="og:url" content={metadata.canonicalUrl} />
       <meta property="og:image" content={metadata.ogImageUrl} />
+      <meta property="og:image:type" content="image/png" />
       <meta property="og:image:width" content={String(SEO_DEFAULTS.ogImageWidth)} />
       <meta property="og:image:height" content={String(SEO_DEFAULTS.ogImageHeight)} />
       <meta property="og:image:alt" content={metadata.ogImageAlt} />

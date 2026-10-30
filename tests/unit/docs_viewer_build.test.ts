@@ -1,3 +1,4 @@
+import { JSDOM } from "jsdom";
 import {
   existsSync,
   mkdirSync,
@@ -113,6 +114,30 @@ function run(
 }
 
 describe("docs viewer whitelist", () => {
+  it("emits localized archive cards and route-specific document copy before JavaScript", () => {
+    const manifest = [entry("readme", "README.md", "included", 10), { ...entry("es-readme", "docs/es/readme.md", "included", 20), slug: "es/readme" }];
+    const { outDir, result } = run(manifest, { write: true, sources: { ...SOURCES, "docs/es/readme.md": "# Inicio\n\nUna guía para instalar Neotoma.\n\nApplies to main.\n\n## Uso\n\nConecta una herramienta.\n" } });
+    expect(result.failures).toEqual([]);
+    for (const slug of ["readme", "es/readme"]) {
+      const doc = new JSDOM(readFileSync(join(outDir, slug, "index.html"), "utf8")).window.document;
+      const content = (selector: string) => doc.querySelector(selector)?.getAttribute("content");
+      expect(content('meta[property="og:title"]')).toBe(doc.title);
+      expect(content('meta[name="twitter:title"]')).toBe(doc.title);
+      expect(content('meta[property="og:description"]')).toBe(content('meta[name="description"]'));
+      expect(content('meta[name="twitter:description"]')).toBe(content('meta[name="description"]'));
+      const image = content('meta[property="og:image"]')!;
+      expect(image).toMatch(slug.startsWith("es/") ? /archive-es-/ : /archive-en-/);
+      expect(content('meta[name="twitter:image"]')).toBe(image);
+      expect(content('meta[name="twitter:image:alt"]')).toBe(content('meta[property="og:image:alt"]'));
+      expect(content('meta[property="og:image:alt"]')).toMatch(/archive|archivo/);
+      expect(content('meta[property="og:image:type"]')).toBe("image/png");
+      expect(content('meta[property="og:image:width"]')).toBe("1200");
+      expect(content('meta[property="og:image:height"]')).toBe("630");
+      expect(doc.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(`https://neotoma.io/${slug}/`);
+      expect(content('meta[name="robots"]')).toBe("index,follow");
+    }
+  });
+
   it("publishes included entries and only reports pending ones, even when a pending one fails the lint", () => {
     const { result, outDir } = run(MANIFEST, { write: true });
     expect(result.failures).toEqual([]);
