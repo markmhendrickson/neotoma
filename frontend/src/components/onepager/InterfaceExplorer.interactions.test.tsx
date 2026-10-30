@@ -1404,7 +1404,8 @@ describe("layered paper illustration motion", () => {
     const hero = overheadSvg("hero");
     expect(hero.querySelector('[data-invoice-itemization]')).not.toBeNull();
     expect(hero.querySelector('[data-task-clipboard="physical-clip"]')).not.toBeNull();
-    expect(hero.querySelector('[data-date-update="later"] [data-field-value="current"]')).not.toBeNull();
+    expect(hero.querySelector('[data-date-update="later"]')).not.toBeNull();
+    expect(hero.querySelector('[data-paper-print="related-note"] [data-field-value="current"]')).not.toBeNull();
   });
 
   it("shows the revised date letter in both complete SVGs and keeps a fallback name", () => {
