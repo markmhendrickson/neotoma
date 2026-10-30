@@ -42,7 +42,7 @@ export function SpanishOnePager({ pageRef }: { pageRef: RefObject<HTMLElement> }
             <div className="plan-actions"><Link to="/es/install" className="plan-btn plan-btn-primary">Instalar</Link><span className="plan-install-time"><Clock size={14} aria-hidden="true" /> Lleva unos minutos</span></div>
           </div>
         </div>
-        <figure className="plan-scene plan-hero-scene"><PaperScene scene="hero" /><figcaption>Los registros se conectan en un grafo. Cada campo actual remite a las observaciones y fuentes que lo respaldan.</figcaption></figure>
+        <figure className="plan-scene plan-hero-scene"><PaperScene scene="hero" /><figcaption>Las personas pueden inspeccionar los registros conservados mientras los agentes autorizados leen y escriben en la misma instancia configurada de Neotoma. Tú eliges qué herramientas y fuentes conectar.</figcaption></figure>
       </section>
       <EvaluationCard id="evaluate-intro" headingId="evaluate-intro-title" compact />
       <section className="plan-sheet plan-ground-paper" aria-labelledby="s2" id="fit">

@@ -3,7 +3,7 @@ import { useEffect, type RefObject } from "react";
 type Play = (target: Element) => Animation[];
 const MAX_ACTIVE_SCENES = 2;
 
-type Registration = { target: Element; play: Play; inside: boolean; animations?: Animation[] };
+type Registration = { target: Element; play: Play; inside: boolean; eligible: boolean; waiting: boolean; animations?: Animation[] };
 const coordinators = new WeakMap<Document, ReturnType<typeof createCoordinator>>();
 
 /** One parent-document observer owns the FIFO budget for inline and external scenes alike. */
@@ -36,7 +36,8 @@ function createCoordinator(page: Document) {
     if (reduced.matches || page.hidden) return;
     while (running.size < MAX_ACTIVE_SCENES && queue.length) {
       const item = queue.shift()!;
-      if (!item.inside || !registrations.has(item.target) || !visible(item.target)) continue;
+      if (!item.inside || !item.eligible || !item.waiting || !registrations.has(item.target) || !visible(item.target)) continue;
+      item.waiting = false;
       let animations: Animation[];
       try { animations = item.play(item.target); } catch { continue; }
       if (!animations.length) continue;
@@ -54,26 +55,30 @@ function createCoordinator(page: Document) {
       const item = registrations.get(entry.target);
       if (!item) continue;
       if (!entry.isIntersecting || !visible(item.target)) {
-        item.inside = false;
+        item.inside = false; item.eligible = false; item.waiting = false;
         cancel(item);
-      } else if (entry.intersectionRatio >= 0.35 && !item.inside) {
-        item.inside = true;
-        // Queued scenes retain their complete authored still until a slot is available.
-        if (!reduced.matches && !page.hidden) queue.push(item);
+      } else {
+        item.eligible = entry.intersectionRatio >= 0.35;
+        if (item.eligible && !item.inside) {
+          item.inside = true;
+          item.waiting = !reduced.matches && !page.hidden;
+        }
+        if (!item.eligible) dequeue(item);
+        else if (item.waiting && !queue.includes(item)) queue.push(item);
       }
     }
     pump();
   }, { threshold: [0, 0.35] });
   const motionChange = () => {
-    if (reduced.matches) registrations.forEach(cancel);
+    if (reduced.matches) registrations.forEach((item) => { item.waiting = false; cancel(item); });
   };
   const visibilityChange = () => {
-    if (page.hidden) registrations.forEach(cancel);
+    if (page.hidden) registrations.forEach((item) => { item.waiting = false; cancel(item); });
     // Resuming a tab or motion preference keeps stills settled until a fresh viewport entry.
   };
   const layoutChange = () => {
     registrations.forEach((item) => {
-      if (!visible(item.target)) { item.inside = false; cancel(item); }
+      if (!visible(item.target)) { item.inside = false; item.eligible = false; item.waiting = false; cancel(item); }
     });
     pump();
   };
@@ -85,10 +90,13 @@ function createCoordinator(page: Document) {
       const owned: Registration[] = [];
       for (const target of targets) {
         if (registrations.has(target)) continue;
-        const item = { target, play, inside: false };
+        const item = { target, play, inside: false, eligible: false, waiting: false };
         owned.push(item); registrations.set(target, item); observer.observe(target);
       }
+      let registered = true;
       return () => {
+        if (!registered) return;
+        registered = false;
         for (const item of owned) {
           cancel(item); registrations.delete(item.target); observer.unobserve?.(item.target);
         }
@@ -117,15 +125,21 @@ export function observeViewportMotion(targets: Element[], play: Play): () => voi
 
 const timing = { duration: 650, easing: "cubic-bezier(.22,.7,.2,1)", fill: "both" } as const;
 export function playLogo(target: Element): Animation[] {
-  return [...target.querySelectorAll<SVGElement>("[data-brand-part]")].map((part) =>
-    part.animate(
-      [
-        { transform: "translateY(-3px)", opacity: 0.15 },
-        { transform: "translateY(0px)", opacity: 1 },
-      ],
+  const parts = [...target.querySelectorAll<SVGElement>("[data-brand-part]")];
+  if (parts.some((part) => typeof part.animate !== "function")) return [];
+  const animations: Animation[] = [];
+  try {
+    for (const part of parts) animations.push(part.animate(
+      [{ transform: "translateY(-3px)", opacity: 0.15 }, { transform: "translateY(0px)", opacity: 1 }],
       { ...timing, duration: 550, delay: (2 - Number(part.dataset.brandPart)) * 90 }
-    )
-  );
+    ));
+  } catch {
+    animations.forEach((animation) => {
+      try { animation.cancel(); } catch { /* Continue releasing partial setup. */ }
+    });
+    return [];
+  }
+  return animations;
 }
 
 const PAPER_SPRING_MS = 820;

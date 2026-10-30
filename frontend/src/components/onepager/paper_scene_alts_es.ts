@@ -8,7 +8,7 @@ export const PAPER_SCENE_ALTS_ES: Partial<Record<PaperSceneKind, string>> = {
     const scene = TOPIC_VISUALS[id as keyof typeof TOPIC_VISUALS]?.scene;
     return scene ? [[scene, text.alt]] : [];
   })),
-  hero: "Una factura desglosada, un expediente personal, una lista de tareas, un correo y una fecha revisada se conectan en un grafo de registros.",
+  hero: "Un archivo de registros conservados se conecta con un expediente personal, una lista de tareas, una conversación, un agente y un registro de fecha.",
   before: "Fragmentos de papel dispersos sin un registro común.",
   after: "Fragmentos de papel organizados en un mismo registro.",
   source: "Una factura desglosada y un correo íntegro se guardan detrás del borde frontal del mismo archivador de Neotoma.",

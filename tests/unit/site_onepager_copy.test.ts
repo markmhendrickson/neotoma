@@ -512,7 +512,7 @@ describe("October visual variant", () => {
     const home = renderToStaticMarkup(
       createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
-    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(16);
+    expect((home.match(/data-paper-scene=/g) ?? []).length).toBe(17);
     expect(home).not.toMatch(/<img[^>]+brand\/october/);
     const cards = page.slice(
       page.indexOf('className="plan-contrast"'),

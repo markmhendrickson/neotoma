@@ -6,7 +6,7 @@ import { observeOverheadPaperScene } from "./overhead_scene_motion";
 // Companion scenes use the same physical cutouts and screenprint treatment.
 // WebP material bytes are stored once per unique image alongside the SVGs.
 const overheadSceneFiles = {
-  hero: "connected-records.svg",
+  hero: "archive-hero-desktop.svg",
   source: "source-material.svg",
   observation: "observation.svg",
   entity: "entity-identity.svg",
@@ -31,7 +31,9 @@ export function overheadSceneFilename(scene: OverheadSceneKind): string {
   return overheadSceneFiles[scene];
 }
 
-export function OverheadPaperScene({ scene, alt }: { scene: OverheadSceneKind; alt: string }) {
+function PaperObject({ scene, alt, file, variant }: {
+  scene: OverheadSceneKind; alt: string; file: string; variant?: "desktop" | "mobile";
+}) {
   const ref = useRef<HTMLObjectElement>(null);
   useEffect(() => {
     const object = ref.current;
@@ -47,13 +49,14 @@ export function OverheadPaperScene({ scene, alt }: { scene: OverheadSceneKind; a
       object.removeEventListener("load", onLoad);
       stop();
     };
-  }, [scene]);
+  }, [scene, file]);
   return (
     <object
       ref={ref}
       className="paper-scene overhead-paper-scene"
       data-paper-scene={scene}
-      data={staticAssetPath(`/brand/october/essay/${overheadSceneFilename(scene)}`)}
+      data={staticAssetPath(`/brand/october/essay/${file}`)}
+      data-paper-responsive-variant={variant}
       type="image/svg+xml"
       role="img"
       aria-label={alt}
@@ -61,4 +64,13 @@ export function OverheadPaperScene({ scene, alt }: { scene: OverheadSceneKind; a
       <span>{alt}</span>
     </object>
   );
+}
+
+/** External SVG documents isolate their authored IDs; CSS chooses one authored profile before hydration. */
+export function OverheadPaperScene({ scene, alt }: { scene: OverheadSceneKind; alt: string }) {
+  if (scene === "hero") return <>
+    <PaperObject scene={scene} alt={alt} file="archive-hero-mobile.svg" variant="mobile" />
+    <PaperObject scene={scene} alt={alt} file="archive-hero-desktop.svg" variant="desktop" />
+  </>;
+  return <PaperObject scene={scene} alt={alt} file={overheadSceneFilename(scene)} />;
 }

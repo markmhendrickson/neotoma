@@ -75,7 +75,7 @@ export function NeotomaOnePager() {
           <figure className="plan-scene plan-hero-scene">
             <PaperScene scene="hero" />
             <figcaption>
-              Records connect in a graph. Each current field traces to the observations and sources behind it.
+              People can inspect retained records while authorized agents read and write against the same configured Neotoma instance. You choose which tools and sources to connect.
             </figcaption>
           </figure>
         </section>

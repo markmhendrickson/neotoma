@@ -1594,7 +1594,7 @@
   padding: 1.2rem;
   margin: 0 0 2rem;
 }
-.plan-evaluate p:not(.plan-label) {
+.plan-evaluate p:not(.plan-label):not(.site-snippet-prose) {
   max-width: 80ch;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1655,7 +1655,7 @@
 }
 .plan .site-snippet-prose {
   margin: 0;
-  max-width: 75ch;
+  max-width: none;
 }
 .plan .plan-evaluate {
   background: var(--sheet);

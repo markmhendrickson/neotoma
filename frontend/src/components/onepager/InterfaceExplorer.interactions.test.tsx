@@ -18,7 +18,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
-import { observeViewportMotion, playPaperScene, springFrames } from "./viewport_motion";
+import { observeViewportMotion, playLogo, playPaperScene, springFrames } from "./viewport_motion";
 import { isOverheadScene, overheadSceneFilename } from "./OverheadPaperScene";
 import { playOverheadScene } from "./overhead_scene_motion";
 import {
@@ -53,7 +53,7 @@ function overheadSvg(scene: PaperSceneKind): SVGSVGElement {
   const svg = document.documentElement as unknown as SVGSVGElement;
   expect(svg.tagName.toLowerCase()).toBe("svg");
   const publishedNames: Partial<Record<PaperSceneKind, string>> = {
-    hero: "connectedRecordsProof",
+    hero: "archiveHeroDesktop",
     source: "sourceMaterialProof",
     observation: "syntheticSourcesProof",
     invoiceExample: "invoiceOverheadProof",
@@ -1168,6 +1168,60 @@ describe("viewport entrance lifecycle", () => {
     delete (Element.prototype as unknown as { animate?: unknown }).animate;
   });
 
+  function queuedSceneFixture() {
+    let notify: IntersectionObserverCallback = () => {};
+    vi.stubGlobal("matchMedia", () => ({matches: false, addEventListener() {}, removeEventListener() {}}));
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: IntersectionObserverCallback) { notify = callback; }
+      observe() {} unobserve() {} disconnect() {}
+    });
+    Object.defineProperty(Element.prototype, "animate", {configurable: true, value: vi.fn()});
+    const active = new Set<Animation>();
+    const effects: {finish: () => void; cancel: ReturnType<typeof vi.fn>}[] = [];
+    const effect = () => {
+      let finish = () => {};
+      const animation = {finished: new Promise<void>((resolve) => { finish = resolve; }), cancel: vi.fn(() => active.delete(animation as Animation))} as unknown as Animation;
+      active.add(animation); effects.push({finish, cancel: animation.cancel as ReturnType<typeof vi.fn>}); return animation;
+    };
+    const targets = Array.from({length: 3}, () => {const target = document.createElement('div'); document.body.append(target); return target;});
+    const stops: (() => void)[] = [];
+    return {targets, active, effects, effect, stops,
+      enter: (index: number, ratio: number) => notify([{target: targets[index], isIntersecting: true, intersectionRatio: ratio} as IntersectionObserverEntry], {} as IntersectionObserver),
+      stop: () => {stops.forEach((stop) => stop()); targets.forEach((target) => target.remove()); vi.unstubAllGlobals(); delete (Element.prototype as unknown as {animate?: unknown}).animate;},
+    };
+  }
+
+  it("keeps a queued scene settled when its current visibility drops below the admission threshold", async () => {
+    const fixture = queuedSceneFixture();
+    try {
+      const play = vi.fn(() => [fixture.effect()]);
+      fixture.targets.forEach((target) => fixture.stops.push(observeViewportMotion([target], play)));
+      fixture.targets.forEach((_, index) => fixture.enter(index, .8));
+      expect(play).toHaveBeenCalledTimes(2);
+      fixture.enter(2, .1);
+      fixture.effects[0].finish(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      expect(play).toHaveBeenCalledTimes(2);
+      fixture.enter(2, .8);
+      expect(play).toHaveBeenCalledTimes(3);
+    } finally { fixture.stop(); }
+  });
+
+  it.each(["logo", "paper"])("releases partial effects from the real %s player before admitting two other scenes", (kind) => {
+    const fixture = queuedSceneFixture();
+    try {
+      const marker = kind === 'logo' ? 'data-brand-part' : 'data-paper-object';
+      fixture.targets[0].innerHTML = `<svg><g ${marker}="0"/><g ${marker}="1"/></svg>`;
+      let calls = 0;
+      for (const part of fixture.targets[0].querySelectorAll('g'))
+        Object.defineProperty(part, 'animate', {value: () => {if (++calls === 2) throw Error('Synthetic effect failure'); return fixture.effect();}});
+      fixture.stops.push(observeViewportMotion([fixture.targets[0]], kind === 'logo' ? playLogo : playPaperScene));
+      fixture.stops.push(observeViewportMotion(fixture.targets.slice(1), () => [fixture.effect()]));
+      fixture.targets.forEach((_, index) => fixture.enter(index, .8));
+      expect(fixture.effects[0].cancel).toHaveBeenCalledOnce();
+      expect(fixture.active.size).toBe(2);
+    } finally { fixture.stop(); }
+  });
+
   it("keeps the authored final state when observer or animation support is unavailable", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     const target = document.createElement("div");
@@ -1286,10 +1340,9 @@ describe("layered paper illustration motion", () => {
       const ports = [...svg.querySelectorAll("[data-paper-port]")];
       expect(ports).toHaveLength(paths.length * 2);
       for (const path of paths) {
-        const geometry = path.getAttribute("d")?.match(
-          /^M([\d.]+) ([\d.]+) C[\d.]+ [\d.]+ [\d.]+ [\d.]+ ([\d.]+) ([\d.]+)$/
-        );
-        expect(geometry, scene).not.toBeNull();
+        const coordinates = path.getAttribute("d")?.match(/-?\d+(?:\.\d+)?/g) ?? [];
+        expect(coordinates.length, scene).toBeGreaterThanOrEqual(4);
+        const geometry = ["", ...coordinates.slice(0, 2), ...coordinates.slice(-2)];
         for (const [id, x, y] of [
           [path.getAttribute("data-connection-from"), geometry?.[1], geometry?.[2]],
           [path.getAttribute("data-connection-to"), geometry?.[3], geometry?.[4]],
@@ -1352,14 +1405,14 @@ describe("layered paper illustration motion", () => {
     expect(svg.querySelector("[data-file], [data-history], [data-deletion]")).toBeNull();
   });
 
-  it("serves sixteen distinct object scenes instead of translating images or the Inspector", () => {
+  it("serves sixteen scene concepts with two authored hero profiles instead of cropping the artwork", () => {
     const { container } = render(
       <MemoryRouter>
         <NeotomaOnePager />
       </MemoryRouter>
     );
     const scenes = [...container.querySelectorAll("[data-paper-scene]")];
-    expect(scenes).toHaveLength(16);
+    expect(scenes).toHaveLength(17);
     expect(container.querySelectorAll('img[src*="/brand/october/"]')).toHaveLength(0);
     expect(new Set(scenes.map((scene) => scene.getAttribute("data-paper-scene")))).toHaveProperty(
       "size",
@@ -1372,7 +1425,7 @@ describe("layered paper illustration motion", () => {
             .map((path) => path.getAttribute("d"))
             .join("|")
     );
-    expect(new Set(compositions).size).toBe(16);
+    expect(new Set(compositions).size).toBe(17);
     expect(container.querySelector(".plan-inspector")?.hasAttribute("data-paper-scene")).toBe(
       false
     );
@@ -1510,7 +1563,7 @@ describe("layered paper illustration motion", () => {
     const snapshot = overheadSvg("snapshot");
     expect(snapshot.querySelectorAll('[data-amount-mark="cash-banknotes"]')).toHaveLength(2);
     expect(snapshot.querySelectorAll('[data-field-icon="due"][data-field-value="current"]')).toHaveLength(2);
-    const hero = overheadSvg("hero");
+    const hero = new DOMParser().parseFromString(readFileSync(path.resolve(process.cwd(), "frontend/public/brand/october/essay/connected-records.svg"), "utf8"), "image/svg+xml").documentElement;
     expect(hero.querySelector('[data-invoice-itemization]')).not.toBeNull();
     expect(hero.querySelector('[data-task-clipboard="physical-clip"]')).not.toBeNull();
     expect(hero.querySelector('[data-date-update="later"]')).not.toBeNull();
@@ -1530,10 +1583,25 @@ describe("layered paper illustration motion", () => {
       const current = svg.querySelector('[data-rule-selected-snapshot]');
       expect(current?.querySelector('rect[fill]') ?? null).toBeNull();
     }
-    const hero = overheadSvg("hero");
+    const hero = new DOMParser().parseFromString(readFileSync(path.resolve(process.cwd(), "frontend/public/brand/october/essay/connected-records.svg"), "utf8"), "image/svg+xml").documentElement;
     expect(hero.querySelector('[data-paper-raster="clipboard-clip"] use')?.getAttribute("href")).toBe("#proof-clipboard-clip");
     const explanation = overheadSvg("visionExplanation");
     expect(explanation.querySelector('[data-paper-raster="inspection-glass"] use')?.getAttribute("href")).toBe("#proof-inspection-glass");
+  });
+
+  it("uses both authored archive profiles and retains the detailed graph as a separate unchanged asset", () => {
+    const {container} = render(<PaperScene scene="hero" />);
+    const profiles = [...container.querySelectorAll('object[data-paper-responsive-variant]')];
+    expect(profiles.map((object) => object.getAttribute('data-paper-responsive-variant'))).toEqual(['mobile', 'desktop']);
+    for (const profile of ['mobile', 'desktop']) {
+      const file = `archive-hero-${profile}.svg`;
+      expect(profiles.find((object) => object.getAttribute('data-paper-responsive-variant') === profile)?.getAttribute('data')).toBe(`/brand/october/essay/${file}`);
+      const svg = new DOMParser().parseFromString(readFileSync(path.resolve(process.cwd(), `frontend/public/brand/october/essay/${file}`), 'utf8'), 'image/svg+xml').documentElement;
+      expect(svg.getAttribute('viewBox')).toBe(profile === 'mobile' ? '0 0 600 800' : '0 0 900 600');
+      expect(svg.getAttribute('data-archive-layout')).toBe(profile);
+      expect(svg.querySelectorAll('[data-paper-port]').length).toBeGreaterThan(0);
+      expect(svg.querySelectorAll('[data-paper-connection]')).toHaveLength(5);
+    }
   });
 
   it("shows the revised date letter in both complete SVGs and keeps a fallback name", () => {

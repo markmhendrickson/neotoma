@@ -31,7 +31,7 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...Object.fromEntries(Object.entries(OCTOBER_RENDERS).map(([key, render]) => [key, render.alt])),
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
-  hero: "An itemized invoice, person dossier, task clipboard, email and revised date connect in one record graph",
+  hero: "An overhead archive of retained records connects with a person dossier, task clipboard, conversation, agent and date record",
   source:
     "An itemized invoice and intact email are stored behind the front lip of the same Neotoma archive box",
   observation:
