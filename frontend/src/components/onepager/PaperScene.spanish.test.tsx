@@ -8,7 +8,7 @@ describe("Spanish visual alternatives", () => {
     for (const scene of ["localService", "reducer", "topicStart"] as const) {
       const html = renderToStaticMarkup(<PaperScene scene={scene} />);
       expect(html).toContain('fill="#f2eee5" data-paper-ground=""');
-      expect(html).toContain('/brand/october/essay/materials/9e9dfed440f8ff18.webp');
+      expect(html).toContain("/brand/october/essay/materials/9e9dfed440f8ff18.webp");
       expect(html).not.toContain('fill="url(#paper-:R0:-ground)"');
     }
   });
@@ -53,7 +53,9 @@ describe("Spanish visual alternatives", () => {
   });
 
   it("keeps informative sandbox mock UI and its accessible label in Spanish", () => {
-    const html = renderToStaticMarkup(<InspectorPreviewIllustration variant="sandbox" locale="es" />);
+    const html = renderToStaticMarkup(
+      <InspectorPreviewIllustration variant="sandbox" locale="es" />
+    );
     expect(html).toContain("Vista previa de Inspector");
     expect(html).toContain("Entorno público");
     expect(html).toContain("Datos compartidos");
