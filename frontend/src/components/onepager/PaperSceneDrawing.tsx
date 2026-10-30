@@ -1511,7 +1511,17 @@ export function PaperScene({
             opacity=".17"
             data-paper-ground=""
           />
-          {Scene ? <Scene /> : <TopicDrawing spec={TOPIC_DRAWINGS[scene as TopicDrawingId]} />}
+          <g
+            data-paper-composition="centered"
+            transform={
+              scene === "before" ? "translate(0 -20)" :
+              scene === "localService" ? "translate(0 -24)" :
+              scene === "topicInstall" ? "translate(0 48)" :
+              scene === "topicArchitecture" ? "translate(-7 -9)" : undefined
+            }
+          >
+            {Scene ? <Scene /> : <TopicDrawing spec={TOPIC_DRAWINGS[scene as TopicDrawingId]} />}
+          </g>
         </svg>
       </EditorialComparison.Provider>
     </Materials.Provider>

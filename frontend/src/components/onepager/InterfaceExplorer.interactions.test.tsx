@@ -515,6 +515,7 @@ describe("connection selector", () => {
     expect(keys).toHaveLength(3);
     expect(new Set(keys).size).toBe(1);
     expect(entity.querySelectorAll('[data-resolved-identity-badge="true"]')).toHaveLength(1);
+    expect(entity.querySelector('[data-field-icon="due"]')).toBeNull();
   });
 
   it("selects separate fields from retained observations without replacing identity or deleting the prior date", () => {
@@ -1457,7 +1458,7 @@ describe("layered paper illustration motion", () => {
 
   it("uses the same amount and revised-date vocabulary in the current record and its observations", () => {
     const snapshot = overheadSvg("snapshot");
-    expect(snapshot.querySelectorAll('[data-amount-mark="offset-coin-discs"]')).toHaveLength(2);
+    expect(snapshot.querySelectorAll('[data-amount-mark="cash-banknotes"]')).toHaveLength(2);
     expect(snapshot.querySelectorAll('[data-field-icon="due"][data-field-value="current"]')).toHaveLength(2);
     const hero = overheadSvg("hero");
     expect(hero.querySelector('[data-invoice-itemization]')).not.toBeNull();
