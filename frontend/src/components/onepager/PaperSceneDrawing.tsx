@@ -17,12 +17,13 @@ export const VISION_SCENE_ALTS = {
   visionPositions:
     "Planned position tracking: two retained claims connect to a dossier where one position is marked as selected",
   visionExplanation:
-    "Planned explanation: lifted current field reveals its basis and a bounded set of effects",
+    "Planned explanation: a separate physical magnifying glass inspects a current field, its source and authority within one dossier",
   sharedInstance:
     "Supported sharing: three collaborator identity badges reach visible records in one configured archive",
   scopedAccess:
     "Supported access: an admitted signed request establishes identity, and a separate active grant permits one bounded record action",
-  peering: "Supported peering: two distinct instances exchange only selected record slips in both directions",
+  peering:
+    "Supported peering: two distinct instances exchange only selected record slips in both directions",
 } as const;
 type MainSceneKind = keyof typeof OCTOBER_RENDERS | keyof typeof VISION_SCENE_ALTS;
 export type PaperSceneKind = MainSceneKind | TopicDrawingId;
@@ -30,19 +31,30 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...Object.fromEntries(Object.entries(OCTOBER_RENDERS).map(([key, render]) => [key, render.alt])),
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
-  hero: "Five paper records connected by solid navy lines",
-  source: "An original document and email remain whole in one shallow archive pocket, before any interpretation",
-  observation: "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
-  entity: "Two observations carry the same type and identifying marks into one stable entity dossier",
-  snapshot: "A current record presents two rule-selected fields while earlier observations remain behind it",
-  invoiceExample: "An invoice and later email feed separate retained observations; the current record keeps the amount from the invoice and due date from the email",
+  hero: "An itemized invoice, person dossier, task clipboard, email and revised date connect in one record graph",
+  source:
+    "An itemized invoice and intact email are stored behind the front lip of the same Neotoma archive box",
+  observation:
+    "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
+  entity:
+    "Three identical identifying marks for invoice number, vendor and invoice date match the same stable entity fingerprint on both observations and the dossier",
+  reducer:
+    "Field rules select the amount from the retained invoice observation and the revised due date from the retained email observation; the earlier date remains visible",
+  snapshot:
+    "A current record presents two rule-selected fields while earlier observations remain behind it",
+  invoiceExample:
+    "An invoice and later email feed separate retained observations; the current record keeps the amount from the invoice and due date from the email",
   sharedInstance: "Three distinct connected tool slips lead to one shared Neotoma filing box",
-  scopedAccess: "An admitted signed request and a separate active scoped grant both precede a bounded record action",
+  scopedAccess:
+    "An admitted signed request and a separate active scoped grant both precede a bounded record action",
   peering: "Two distinct instances exchange only selected record slips in both directions",
-  visionPositions: "Planned position tracking keeps two conflicting claims visible alongside a selected position",
-  visionExplanation: "Planned explanation traces a current value to its source and authority, then shows the connected records a change could affect",
+  visionPositions:
+    "Planned position tracking preserves both date claims while an explicit decision locks the initial date",
+  visionExplanation:
+    "Planned explanation: a separate physical magnifying glass inspects a current field, its source and authority within one dossier",
 } as Record<PaperSceneKind, string>;
 const Materials = createContext("");
+const EditorialComparison = createContext(false);
 type Tone = "cream" | "sage" | "blue" | "navy" | "rust";
 type Shape = "sheet" | "folder" | "notch" | "tag" | "torn" | "round";
 type Cutout = "paper-ivory" | "folder-sage" | "envelope-blue";
@@ -97,14 +109,16 @@ function Piece({
   children?: ReactNode;
 }) {
   const id = useContext(Materials);
+  const editorial = useContext(EditorialComparison);
   const clipId = `${id}-cut-${useId().replace(/:/g, "")}`;
-  const directCutout: Cutout | undefined =
-    raster ??
-    (tone === "cream" && shape === "sheet" && h > w * 1.1 && w >= 180
-      ? "paper-ivory"
-      : tone === "sage" && shape === "folder" && w > h * 1.2
-        ? "folder-sage"
-        : undefined);
+  const directCutout: Cutout | undefined = editorial
+    ? undefined
+    : (raster ??
+      (tone === "cream" && shape === "sheet" && h > w * 1.1 && w >= 180
+        ? "paper-ivory"
+        : tone === "sage" && shape === "folder" && w > h * 1.2
+          ? "folder-sage"
+          : undefined));
   // Static reader pages have no hydration; the raster is the initial, settled object.
   const [cutoutReady, setCutoutReady] = useState(true);
   const body = silhouette(w, h, shape);
@@ -162,11 +176,25 @@ function Piece({
           opacity={cutoutReady && directCutout ? 0 : 0.16}
         />
         <g className="paper-raster-fallback" opacity={cutoutReady && directCutout ? 0 : 1}>
-          <path d={body} fill={`url(#${id}-${tone})`} className="paper-edge" />
+          <path
+            d={body}
+            fill={
+              editorial
+                ? {
+                    cream: "#eee6d6",
+                    sage: "#99a58e",
+                    blue: "#a6bbc7",
+                    navy: "#223e50",
+                    rust: "#b15b38",
+                  }[tone]
+                : `url(#${id}-${tone})`
+            }
+            className="paper-edge"
+          />
           <path
             d={body}
             fill={`url(#${id}-fiber)`}
-            opacity=".38"
+            opacity={editorial ? 0 : ".38"}
             style={{ mixBlendMode: "multiply" }}
           />
           <path
@@ -209,19 +237,38 @@ function Piece({
                 <path d={body} />
               </clipPath>
             </defs>
-            <image
-              href={cutoutPath(tone === "sage" ? "folder-sage" : "paper-ivory")}
-              width={w}
-              height={h}
-              preserveAspectRatio="xMidYMid slice"
-              clipPath={`url(#${clipId})`}
-              opacity={tone === "cream" ? ".72" : tone === "sage" ? ".42" : ".25"}
-              style={{ mixBlendMode: "multiply" }}
-              data-paper-material={tone}
-            />
+            {editorial ? (
+              <g clipPath={`url(#${clipId})`} data-paper-editorial-material={tone}>
+                <svg
+                  width={w}
+                  height={h}
+                  viewBox="180 470 700 380"
+                  preserveAspectRatio="none"
+                  opacity={tone === "cream" ? ".9" : ".32"}
+                  style={{ mixBlendMode: "multiply" }}
+                >
+                  <image
+                    href={staticAssetPath("/brand/october/essay/materials/b13701ca89a9a7b3.webp")}
+                    width="1254"
+                    height="1254"
+                  />
+                </svg>
+              </g>
+            ) : (
+              <image
+                href={cutoutPath(tone === "sage" ? "folder-sage" : "paper-ivory")}
+                width={w}
+                height={h}
+                preserveAspectRatio="xMidYMid slice"
+                clipPath={`url(#${clipId})`}
+                opacity={tone === "cream" ? ".72" : tone === "sage" ? ".42" : ".25"}
+                style={{ mixBlendMode: "multiply" }}
+                data-paper-material={tone}
+              />
+            )}
           </>
         )}
-        {children}
+        {editorial ? <g mask={`url(#${id}-screenprint)`}>{children}</g> : children}
       </g>
     </g>
   );
@@ -1391,61 +1438,92 @@ export function PaperScene({
   const generatedId = useId();
   const id = `paper-${idNamespace ?? generatedId.replace(/:/g, "")}`;
   const Scene = scenes[scene as MainSceneKind];
-  const alt = (locale ?? contextLocale) === "es"
-    ? PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene]
-    : PAPER_SCENE_ALTS[scene];
+  const alt =
+    (locale ?? contextLocale) === "es"
+      ? (PAPER_SCENE_ALTS_ES[scene] ?? PAPER_SCENE_ALTS[scene])
+      : PAPER_SCENE_ALTS[scene];
   if (isOverheadScene(scene)) return <OverheadPaperScene scene={scene} alt={alt} />;
   return (
     <Materials.Provider value={id}>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="paper-scene"
-        data-paper-scene={scene}
-        viewBox="0 0 900 600"
-        role="img"
-        aria-labelledby={`${id}-title`}
-      >
-        <title id={`${id}-title`}>{alt}</title>
+      <EditorialComparison.Provider value={scene === "before" || scene === "after"}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="paper-scene"
+          data-paper-scene={scene}
+          viewBox="0 0 900 600"
+          role="img"
+          aria-labelledby={`${id}-title`}
+        >
+          <title id={`${id}-title`}>{alt}</title>
 
-        <defs>
-          {(
-            [
-              ["cream", "#f5efe3", "#ded3be"],
-              ["sage", "#b2b79f", "#8c987f"],
-              ["blue", "#c3d2db", "#91abb9"],
-              ["navy", "#304b5b", "#172b39"],
-              ["rust", "#c4734c", "#a14624"],
-            ] as const
-          ).map(([name, light, dark]) => (
-            <linearGradient id={`${id}-${name}`} key={name} x2=".75" y2="1">
-              <stop stopColor={light} />
-              <stop offset="1" stopColor={dark} />
-            </linearGradient>
-          ))}
-          <radialGradient id={`${id}-ground`}>
-            <stop stopColor="#f5efe3" />
-            <stop offset="1" stopColor="#dfd5c2" />
-          </radialGradient>
-          <pattern id={`${id}-fiber`} width="512" height="512" patternUnits="userSpaceOnUse">
-            <image
-              href={staticAssetPath("/brand/october/paper-fiber.webp")}
-              width="512"
-              height="512"
-              preserveAspectRatio="xMidYMid slice"
-            />
-          </pattern>
-        </defs>
-        <rect width="900" height="600" fill={`url(#${id}-ground)`} data-paper-ground="" />
-        <rect
-          width="900"
-          height="600"
-          fill={`url(#${id}-fiber)`}
-          opacity=".22"
-          style={{ mixBlendMode: "multiply" }}
-          data-paper-ground=""
-        />
-        {Scene ? <Scene /> : <TopicDrawing spec={TOPIC_DRAWINGS[scene as TopicDrawingId]} />}
-      </svg>
+          <defs>
+            <pattern id={`${id}-print-grain`} width="17" height="13" patternUnits="userSpaceOnUse">
+              <rect width="17" height="13" fill="white" />
+              <g fill="black">
+                <circle cx="2.1" cy="3.5" r=".8" opacity=".65" />
+                <circle cx="7.7" cy="1.9" r=".6" opacity=".9" />
+                <circle cx="13.6" cy="5.2" r=".85" opacity=".55" />
+                <circle cx="5.1" cy="10.6" r=".7" opacity=".8" />
+                <circle cx="11.2" cy="10.4" r=".6" opacity=".7" />
+                <path d="M1 8h1.2v.5H1zM9 6h.6v1.1H9z" opacity=".6" />
+              </g>
+            </pattern>
+            <mask
+              id={`${id}-screenprint`}
+              maskUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width="900"
+              height="600"
+              style={{ maskType: "luminance" }}
+            >
+              <rect width="900" height="600" fill={`url(#${id}-print-grain)`} />
+            </mask>
+            {(
+              [
+                ["cream", "#f5efe3", "#ded3be"],
+                ["sage", "#b2b79f", "#8c987f"],
+                ["blue", "#c3d2db", "#91abb9"],
+                ["navy", "#304b5b", "#172b39"],
+                ["rust", "#c4734c", "#a14624"],
+              ] as const
+            ).map(([name, light, dark]) => (
+              <linearGradient id={`${id}-${name}`} key={name} x2=".75" y2="1">
+                <stop stopColor={light} />
+                <stop offset="1" stopColor={dark} />
+              </linearGradient>
+            ))}
+            <pattern id={`${id}-fiber`} width="512" height="512" patternUnits="userSpaceOnUse">
+              <image
+                href={staticAssetPath("/brand/october/paper-fiber.webp")}
+                width="512"
+                height="512"
+                preserveAspectRatio="xMidYMid slice"
+              />
+            </pattern>
+          </defs>
+          <rect width="900" height="600" fill="#f2eee5" data-paper-ground="" />
+          <image
+            href={staticAssetPath("/brand/october/essay/materials/9e9dfed440f8ff18.webp")}
+            width="900"
+            height="600"
+            preserveAspectRatio="xMidYMid slice"
+            opacity=".17"
+            data-paper-ground=""
+          />
+          <g
+            data-paper-composition="centered"
+            transform={
+              scene === "before" ? "translate(0 -20)" :
+              scene === "localService" ? "translate(0 -24)" :
+              scene === "topicInstall" ? "translate(0 48)" :
+              scene === "topicArchitecture" ? "translate(-7 -9)" : undefined
+            }
+          >
+            {Scene ? <Scene /> : <TopicDrawing spec={TOPIC_DRAWINGS[scene as TopicDrawingId]} />}
+          </g>
+        </svg>
+      </EditorialComparison.Provider>
     </Materials.Provider>
   );
 }

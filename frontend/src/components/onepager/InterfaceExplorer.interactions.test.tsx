@@ -52,6 +52,8 @@ function overheadSvg(scene: PaperSceneKind): SVGSVGElement {
   const svg = document.documentElement as unknown as SVGSVGElement;
   expect(svg.tagName.toLowerCase()).toBe("svg");
   const publishedNames: Partial<Record<PaperSceneKind, string>> = {
+    hero: "connectedRecordsProof",
+    source: "sourceMaterialProof",
     observation: "syntheticSourcesProof",
     invoiceExample: "invoiceOverheadProof",
     sharedInstance: "governedCollaborationProof",
@@ -258,6 +260,36 @@ describe("one-page interface examples", () => {
     expect(within(panel).getByRole("button", { name: "Play" })).toBeVisible();
   });
 
+  it("resumes the remaining turn duration after viewport re-entry", () => {
+    const { chat, inView } = animated();
+    const first = within(chat).getByText(/Here's INV-2041.pdf/).textContent!;
+    const duration = Math.min(6500, Math.max(2100, first.trim().split(/\s+/).length * 160));
+    inView(true);
+    act(() => vi.advanceTimersByTime(1700));
+    inView(false);
+    act(() => vi.advanceTimersByTime(30000));
+    inView(true);
+    act(() => vi.advanceTimersByTime(duration - 1700 - 1));
+    expect(within(chat).queryByText(/I'll save the supplied invoice/)).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(within(chat).getByText(/I'll save the supplied invoice/)).toBeVisible();
+  });
+
+  it("starts on first visible entry after ordinary page scrolling over a short transcript", () => {
+    const { panel, chat, inView } = animated();
+    Object.defineProperties(chat, {
+      clientHeight: { value: 400, configurable: true },
+      scrollHeight: { value: 200, configurable: true },
+    });
+    fireEvent.wheel(chat, { deltaY: 160 });
+    const touch = createEvent.pointerDown(chat);
+    Object.defineProperty(touch, "pointerType", { value: "touch" });
+    fireEvent(chat, touch);
+    fireEvent.touchMove(chat);
+    inView(true);
+    expect(within(panel).getByRole("button", { name: "Pause" })).toBeVisible();
+  });
+
   it("keeps an explicit pause through tab, viewport and visibility interruptions", () => {
     const { panel, chat, inView, visible } = animated();
     inView(true);
@@ -296,11 +328,16 @@ describe("one-page interface examples", () => {
     expect(chat.textContent).not.toBe(held);
   });
 
-  it.each(["wheel", "pointerDown", "touchMove", "keyDown"] as const)(
+  it.each(["wheel", "pointerDown", "scroll", "keyDown"] as const)(
     "respects manual reading via %s before and after viewport activation",
     (interaction) => {
       const { panel, chat, inView } = animated();
-      fireEvent[interaction](chat, { key: "ArrowUp" });
+      Object.defineProperties(chat, {
+        clientHeight: { value: 400, configurable: true },
+        scrollHeight: { value: 900, configurable: true },
+        scrollTop: { value: 300, writable: true, configurable: true },
+      });
+      fireEvent[interaction](chat, { key: "ArrowUp", deltaY: -40 });
       inView(true);
       const held = chat.textContent;
       act(() => vi.advanceTimersByTime(20000));
@@ -465,6 +502,30 @@ describe("connection selector", () => {
     ).toEqual(["amount", "due-date"]);
     expect(svg.querySelector("[data-paper-connection]")).toBeNull();
     expect(svg.querySelector("text, foreignObject, script")).toBeNull();
+  });
+
+  it("matches the same ordered identifying facts and physical key to one stable entity", () => {
+    const entity = overheadSvg("entity");
+    const facts = [...entity.querySelectorAll('[data-identifying-facts]')];
+    expect(facts).toHaveLength(3);
+    for (const group of facts)
+      expect([...group.querySelectorAll('[data-identifying-fact]')].map((mark) => mark.getAttribute('data-identifying-fact')))
+        .toEqual(['invoice_number', 'vendor_name', 'invoice_date']);
+    const keys = [...entity.querySelectorAll('[data-identity-fingerprint] path')].map((key) => key.getAttribute('d'));
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(1);
+    expect(entity.querySelectorAll('[data-resolved-identity-badge="true"]')).toHaveLength(1);
+    expect(entity.querySelector('[data-field-icon="due"]')).toBeNull();
+  });
+
+  it("selects separate fields from retained observations without replacing identity or deleting the prior date", () => {
+    const reducer = overheadSvg("reducer");
+    expect(reducer.querySelectorAll('[data-retained-observation]')).toHaveLength(2);
+    expect(reducer.querySelector('[data-retained-observation="invoice"] [data-field-value="prior"]')).not.toBeNull();
+    expect(reducer.querySelector('[data-retained-observation="email"] [data-field-value="current"]')).not.toBeNull();
+    expect([...reducer.querySelectorAll('[data-paper-connection]')].map((path) => [path.getAttribute('data-connection-from'), path.getAttribute('data-connection-to')]))
+      .toEqual([['invoice-amount', 'selected-amount'], ['email-date', 'selected-date']]);
+    expect(reducer.querySelector('[data-identity-key]')).toBeNull();
   });
 
   it("shows one chosen tool reaching one configured archive", () => {
@@ -1093,7 +1154,7 @@ describe("layered paper illustration motion", () => {
       const { container, unmount } = render(<PaperScene scene={scene} />);
       if (isOverheadScene(scene)) {
         const svg = overheadSvg(scene);
-        expect(svg.querySelectorAll("[data-paper-raster]").length, scene).toBeGreaterThan(0);
+        expect(svg.querySelectorAll("image").length, scene).toBeGreaterThan(0);
         expect(svg.querySelector("text, foreignObject, script, marker"), scene).toBeNull();
         expect(svg.querySelector('rect[width="900"][height="600"]'), scene).not.toBeNull();
         const imageHrefs = [...svg.querySelectorAll("image")].map((image) =>
@@ -1374,7 +1435,7 @@ describe("layered paper illustration motion", () => {
 
   it("loads the paper texture from the preview mount", () => {
     window.history.replaceState({}, "", "/pr-950/");
-    const { container } = render(<PaperScene scene="hero" />);
+    const { container } = render(<PaperScene scene="localService" />);
     expect(container.querySelector("svg image")?.getAttribute("href")).toBe(
       "/pr-950/brand/october/paper-fiber.webp"
     );
@@ -1383,17 +1444,54 @@ describe("layered paper illustration motion", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("retains two original source objects in a shallow archive pocket", () => {
+  it("stores the same itemized invoice and intact email behind the physical archive lip", () => {
     const svg = overheadSvg("source");
     expect(
-      [...svg.querySelectorAll("[data-retained-source]")].map((item) =>
-        item.getAttribute("data-retained-source")
+      [...svg.querySelectorAll("[data-retained-raw-source]")].map((item) =>
+        item.getAttribute("data-retained-raw-source")
       )
-    ).toEqual(["document", "email"]);
-    expect(svg.querySelectorAll("[data-source-pocket]")).toHaveLength(1);
+    ).toEqual(["invoice", "email"]);
+    expect(svg.querySelectorAll('[data-archive-retaining-front="physical-lip"]')).toHaveLength(1);
     expect(svg.querySelector("[data-paper-observation], [data-rule-selected-snapshot]")).toBeNull();
-    expect(svg.querySelector('[data-paper-raster="packet"]')).not.toBeNull();
-    expect(svg.querySelector('[data-paper-raster="envelope"]')).not.toBeNull();
+    expect(svg.querySelector('[data-invoice-itemization="shared"]')).not.toBeNull();
+  });
+
+  it("inspects one dossier through a separate physical magnifier with source and authority retained inside", () => {
+    const svg = overheadSvg("visionExplanation");
+    expect(svg.querySelectorAll('[data-explanation-scope="single-record-inspection"]')).toHaveLength(1);
+    expect(svg.querySelectorAll('[data-inspection-object="physical-magnifier"]')).toHaveLength(1);
+    expect([...svg.querySelectorAll('[data-basis-part]')].map((part) => part.getAttribute('data-basis-part'))).toEqual(['source','authority']);
+    expect(svg.querySelector('[data-affected-record], [data-unaffected-record]')).toBeNull();
+  });
+
+  it("uses the same amount and revised-date vocabulary in the current record and its observations", () => {
+    const snapshot = overheadSvg("snapshot");
+    expect(snapshot.querySelectorAll('[data-amount-mark="cash-banknotes"]')).toHaveLength(2);
+    expect(snapshot.querySelectorAll('[data-field-icon="due"][data-field-value="current"]')).toHaveLength(2);
+    const hero = overheadSvg("hero");
+    expect(hero.querySelector('[data-invoice-itemization]')).not.toBeNull();
+    expect(hero.querySelector('[data-task-clipboard="physical-clip"]')).not.toBeNull();
+    expect(hero.querySelector('[data-date-update="later"]')).not.toBeNull();
+    expect(hero.querySelector('[data-paper-print="related-note"] [data-field-value="current"]')).not.toBeNull();
+  });
+
+  it("keeps filled calendar markers and plain current rows consistent with the shared photographic artwork", () => {
+    for (const [scene, count] of [["entity", 3], ["reducer", 3], ["snapshot", 2]] as const) {
+      const svg = overheadSvg(scene);
+      expect(svg.querySelectorAll('[data-calendar-surface="cool-blue"]')).toHaveLength(count);
+      for (const calendar of svg.querySelectorAll('[data-calendar-surface]')) {
+        const dot = calendar.querySelector("circle")!;
+        const current = calendar.getAttribute("data-field-value") === "current";
+        const x = Number(calendar.querySelector("path")!.getAttribute("d")!.match(/^M([\d.]+)/)![1]);
+        expect(Number(dot.getAttribute("cx")) - x).toBe(current ? 20 : 8);
+      }
+      const current = svg.querySelector('[data-rule-selected-snapshot]');
+      expect(current?.querySelector('rect[fill]') ?? null).toBeNull();
+    }
+    const hero = overheadSvg("hero");
+    expect(hero.querySelector('[data-paper-raster="clipboard-clip"] use')?.getAttribute("href")).toBe("#proof-clipboard-clip");
+    const explanation = overheadSvg("visionExplanation");
+    expect(explanation.querySelector('[data-paper-raster="inspection-glass"] use')?.getAttribute("href")).toBe("#proof-inspection-glass");
   });
 
   it("shows the revised date letter in both complete SVGs and keeps a fallback name", () => {
@@ -1401,7 +1499,8 @@ describe("layered paper illustration motion", () => {
       const svg = overheadSvg(scene);
       expect(svg.querySelectorAll('[data-paper-envelope-state="open"]')).toHaveLength(2);
       expect(svg.querySelectorAll('[data-paper-envelope-state="closed"]')).toHaveLength(1);
-      expect(svg.querySelector('[data-paper-letter="email"]')?.getAttribute("data-due-date")).toBe("29");
+      expect(svg.querySelector('[data-paper-letter="email"]')?.getAttribute("data-due-date")).toBe("later");
+      expect(svg.querySelector('[data-paper-letter="email"] [data-field-value="current"]')).not.toBeNull();
       expect(svg.querySelector("text, foreignObject, script")).toBeNull();
       const { container, unmount } = render(<PaperScene scene={scene} />);
       expect(container.querySelector("object span")?.textContent).toBe(PAPER_SCENE_ALTS[scene]);

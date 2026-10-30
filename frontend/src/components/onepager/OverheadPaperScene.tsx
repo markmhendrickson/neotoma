@@ -2,13 +2,15 @@ import { useEffect, useRef } from "react";
 import { staticAssetPath } from "@/site/spa_path";
 import { observeOverheadPaperScene } from "./overhead_scene_motion";
 
-// Five compositions match the published post exactly. Six companion scenes use
-// the same physical cutouts and screenprint treatment for concepts absent there.
+// Matching editorial compositions retain their exact geometry and material bytes.
+// Companion scenes use the same physical cutouts and screenprint treatment.
 // WebP material bytes are stored once per unique image alongside the SVGs.
 const overheadSceneFiles = {
+  hero: "connected-records.svg",
   source: "source-material.svg",
   observation: "observation.svg",
   entity: "entity-identity.svg",
+  reducer: "current-values.svg",
   snapshot: "current-snapshot.svg",
   invoiceExample: "invoice-example.svg",
   sharedInstance: "shared-instance.svg",

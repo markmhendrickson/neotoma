@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { chromium } from "playwright";
 import { NON_DEFAULT_LOCALES } from "../frontend/src/i18n/config";
 import { localizePath } from "../frontend/src/i18n/routing";
 import { DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_MANIFEST, isDocsViewerRoute } from "../frontend/src/site/docs_viewer_manifest";
@@ -854,7 +855,7 @@ if (fs.existsSync(homeForLimits)) {
       status: "Planned",
       title: "Inspectable explanations",
       detail:
-        "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
+        "Planned explanations would let you inspect a current field together with the source evidence and authority supporting it.",
     },
   ] as const;
   if (cards.length !== expectedCards.length) {
@@ -941,6 +942,90 @@ if (!fs.existsSync(notFoundPath)) {
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
+// SVG media rules execute inside their own documents, beyond the HTML/markup
+// checks above. Exercise the actual exported page with normal motion and no JS:
+// the complete still must not depend on hydration or animation support.
+{
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({
+      javaScriptEnabled: false,
+      reducedMotion: "no-preference",
+    });
+    const resourceFailures: string[] = [];
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      // External typography is unrelated to SVG visibility; keep the probe offline.
+      if (url.hostname === "fonts.googleapis.com" && url.pathname === "/css2") {
+        await route.fulfill({ body: "", contentType: "text/css" });
+        return;
+      }
+      const file = path.resolve(
+        siteDir,
+        `.${decodeURIComponent(url.pathname)}`,
+        url.pathname.endsWith("/") ? "index.html" : ""
+      );
+      if (
+        url.hostname !== "site-export.test" ||
+        !file.startsWith(`${siteDir}${path.sep}`) ||
+        !fs.existsSync(file) ||
+        !fs.statSync(file).isFile()
+      ) {
+        resourceFailures.push(url.pathname);
+        await route.abort();
+        return;
+      }
+      const types: Record<string, string> = {
+        ".html": "text/html", ".css": "text/css", ".svg": "image/svg+xml",
+        ".webp": "image/webp", ".png": "image/png", ".ttf": "font/ttf",
+        ".woff2": "font/woff2", ".js": "application/javascript",
+      };
+      await route.fulfill({
+        body: fs.readFileSync(file),
+        contentType: types[path.extname(file)] ?? "application/octet-stream",
+      });
+    });
+    await page.goto("https://site-export.test/en/", { waitUntil: "networkidle" });
+    let visibilityFailures = 0;
+    for (const scene of ["hero", "source", "observation", "invoiceExample", "sharedInstance", "visionPositions", "visionExplanation"]) {
+      const problems = await page.locator(`object[data-paper-scene="${scene}"]`).evaluate((object) => {
+        const doc = (object as HTMLObjectElement).contentDocument;
+        if (!doc?.defaultView) return ["SVG document did not load"];
+        const elements = doc.querySelectorAll<SVGElement>("[data-paper-port], [data-paper-letter], [data-paper-envelope-state], [data-paper-field-state], [data-retained-raw-source], [data-paper-source], [data-explained-current-field], [data-explanation-basis], [data-inspection-object]");
+        if (elements.length === 0) return ["no critical scene elements found"];
+        const failures: string[] = [];
+        for (const element of elements) {
+          let opacity = 1;
+          for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
+            const style = doc.defaultView.getComputedStyle(ancestor);
+            opacity *= Number(style.opacity);
+            if (style.display === "none" || style.visibility === "hidden") opacity = 0;
+          }
+          const visible = element.dataset.paperEnvelopeState !== "closed" &&
+            element.dataset.paperFieldState !== "prior";
+          if (visible ? opacity < .99 : opacity > .01)
+            failures.push(`${element.outerHTML.slice(0, 180)} has effective opacity ${opacity}`);
+        }
+        return failures;
+      });
+      for (const problem of problems) {
+        fail(`Normal-motion/no-JavaScript paper scene ${scene}: ${problem}`);
+        visibilityFailures++;
+      }
+    }
+    for (const resource of resourceFailures) {
+      fail(`Paper scene browser resource did not load: ${resource}`);
+      visibilityFailures++;
+    }
+    if (visibilityFailures === 0)
+      pass("All seven shared paper scenes retain visible sources, ports, letters and selected fields without JavaScript under normal motion");
+  } catch (error) {
+    fail(`Paper scene browser visibility validation failed: ${(error as Error).message}`);
+  } finally {
+    await browser.close();
+  }
+}
+
 try {
   const appBases = SPANISH_RETAINED_BASE_ROUTES.filter((route) => !isDocsViewerRoute(route));
   const appRoutes = ["/en/", ...appBases.flatMap((route) => [route, `/es${route === "/" ? "/" : route}`])];
