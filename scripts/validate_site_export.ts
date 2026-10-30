@@ -39,6 +39,7 @@ import {
 } from "./docs_viewer/claim_patterns";
 import { pageText, scanHtml, validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { headMetaText, jsonLdBlocks } from "./site_html";
+import { socialCardSourceProblems, socialImageProblems } from "./social_image_validation";
 import { llmsLinkProblems } from "./llms_links";
 import { REPO_VERSION } from "../frontend/src/site/site_data";
 
@@ -530,17 +531,6 @@ for (const route of LIVE_ROUTES) {
     );
     liveClaimFailures++;
   }
-  for (const m of html.matchAll(
-    /<meta (?:property|name)="(?:og|twitter):image" content="([^"]*)"/g
-  )) {
-    const imgPath = new URL(m[1], "https://neotoma.io").pathname;
-    if (!fs.existsSync(path.join(siteDir, imgPath))) {
-      fail(
-        `site_pages${route === "/" ? "/" : route + "/"}index.html names a social image that is not in the build: ${imgPath}`
-      );
-      liveClaimFailures++;
-    }
-  }
   const text = pageText(html);
   // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
   const wholeText = text + " " + jsonLd;
@@ -686,13 +676,13 @@ if (fs.existsSync(evaluatePath)) {
 // 3h. Every served page (not a redirect stub): statements the claims check found wrong on the published
 // package, mirror pages whose source page is retired, and duplicated JSON-LD
 // ---------------------------------------------------------------------------
-function collectServedPages(dir: string, out: string[] = []): string[] {
+function collectServedPages(dir: string, out: string[] = [], allHtml = false): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "assets") continue;
-      collectServedPages(full, out);
-    } else if (entry.name === "index.html" || entry.name === "404.html") {
+      if (entry.name === "assets" && !allHtml) continue;
+      collectServedPages(full, out, allHtml);
+    } else if (allHtml ? entry.name.endsWith(".html") : entry.name === "index.html" || entry.name === "404.html") {
       out.push(full);
     }
   }
@@ -703,6 +693,18 @@ const isStubPage = (html: string): boolean => html.includes('http-equiv="refresh
 const servedText = (html: string): string => pageText(html) + "\n" + headMetaText(html);
 let servedPageFailures = 0;
 const servedPages = collectServedPages(siteDir);
+// This inventory includes every emitted HTML file, including held/evaluation and docs reader pages.
+for (const problem of socialCardSourceProblems(repoRoot)) fail(problem);
+let socialImagePages = 0;
+for (const file of collectServedPages(siteDir, [], true)) {
+  const html = fs.readFileSync(file, "utf8");
+  if (!/<meta[^>]+(?:og|twitter):image|application\/ld\+json/.test(html)) continue;
+  socialImagePages++;
+  for (const problem of await socialImageProblems(html, siteDir)) {
+    fail(`site_pages/${path.relative(siteDir, file)} social image: ${problem}`);
+  }
+}
+pass(`Checked social image rasters in ${socialImagePages} emitted HTML pages`);
 const isRealPageAt = (route: string): boolean => {
   const file =
     route === "/"

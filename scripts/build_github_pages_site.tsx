@@ -61,8 +61,6 @@ const noJekyllFile = path.join(outputDir, ".nojekyll");
 const publicRootDir = path.join(repoRoot, "frontend", "public");
 const heroImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-hero.png");
 const heroImageDest = path.join(outputDir, "neotoma-hero.png");
-const ogImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-og-1200x630.png");
-const ogImageDest = path.join(outputDir, "neotoma-og-1200x630.png");
 const wordmarkSrc = path.join(repoRoot, "frontend", "public", "neotoma-wordmark.svg");
 const wordmarkDest = path.join(outputDir, "neotoma-wordmark.svg");
 const robotsFile = path.join(outputDir, "robots.txt");
@@ -389,10 +387,6 @@ async function main() {
   if (fs.existsSync(heroImageSrc)) {
     fs.copyFileSync(heroImageSrc, heroImageDest);
     console.log(`Copied hero image: ${path.relative(repoRoot, heroImageDest)}`);
-  }
-  if (fs.existsSync(ogImageSrc)) {
-    fs.copyFileSync(ogImageSrc, ogImageDest);
-    console.log(`Copied OG image: ${path.relative(repoRoot, ogImageDest)}`);
   }
   if (fs.existsSync(wordmarkSrc)) {
     fs.copyFileSync(wordmarkSrc, wordmarkDest);

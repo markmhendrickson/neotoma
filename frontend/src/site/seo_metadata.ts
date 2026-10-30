@@ -2939,8 +2939,7 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   const routeMetadata = getSeoMetadataForPath(pathname);
   const pack = getStaticLocalePack(locale);
   const localizedOverride: Partial<SeoRouteMetadata> =
-    // The home route renders the English one-pager in every locale, so it takes no localized
-    // title or description (those still carried the retired category line).
+    // Spanish public shells apply their source-owned copy below; other home shells retain English.
     normalizedPath === "/"
       ? {}
       : normalizedPath === "/docs"
@@ -3088,6 +3087,11 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
       "</head>",
       `    <meta property="og:image" content="${escapeHtml(meta.ogImageUrl)}" />\n  </head>`
     );
+  }
+  if (/<meta property="og:image:type" content="[^"]*"/.test(out)) {
+    out = out.replace(/<meta property="og:image:type" content="[^"]*"/, '<meta property="og:image:type" content="image/png"');
+  } else {
+    out = out.replace("</head>", '    <meta property="og:image:type" content="image/png" />\n  </head>');
   }
   if (/<meta property="og:image:width" content="[^"]*"/.test(out)) {
     out = out.replace(

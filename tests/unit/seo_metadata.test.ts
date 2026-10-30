@@ -1,3 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import sharp from "sharp";
+import { JSDOM } from "jsdom";
+import { socialCardSourceProblems, socialImageProblems, socialImageReferences } from "../../scripts/social_image_validation";
 import { describe, expect, it } from "vitest";
 import {
   buildCanonicalUrl,
@@ -62,7 +68,8 @@ describe("seo_metadata", () => {
     expect(metadata.robots).toBe("index,follow");
     expect(metadata.title).toBe("Neotoma: the system of record for AI agents");
     expect(metadata.ogImageAlt).toContain("system of record for AI agents");
-    expect(metadata.ogImageAlt).toContain("A record, not recall");
+    expect(metadata.ogImageAlt).toMatch(/paper archive.*retained records/i);
+    expect(metadata.ogImageAlt).not.toMatch(/drafting|blueprint/i);
     expect(metadata.keywords).toContain("Neotoma");
     expect(metadata.twitterCard).toBe("summary_large_image");
     const primary = metadata.jsonLd[0] as Record<string, unknown>;
@@ -364,6 +371,67 @@ describe("live page metadata carries no retired claim", () => {
 
   it("points the install page at an image that exists in the build", () => {
     const meta = resolveSeoMetadata("/install");
-    expect(meta.ogImageUrl).toBe("https://neotoma.io/neotoma-og-1200x630.png");
+    expect(fs.existsSync(path.join(process.cwd(), "frontend/public", new URL(meta.ogImageUrl).pathname))).toBe(true);
+  });
+});
+
+
+describe("crawlable archive social cards", () => {
+  const template = fs.readFileSync("frontend/index.html", "utf8");
+  const publicDir = path.resolve("frontend/public");
+  for (const route of ["/", "/en/", "/es/", "/install", "/es/install", "/evaluate", "/es/evaluate", "/neotoma-with-cursor", "/vs-platform-memory", "/memory-guarantees"]) {
+    it(`serves consistent route copy and a real card before JavaScript: ${route}`, async () => {
+      const html = injectRouteMetaIntoHtml(template, route);
+      const doc = new JSDOM(html).window.document;
+      const meta = resolveSeoMetadata(route);
+      const content = (selector: string) => doc.querySelector(selector)?.getAttribute("content");
+      expect(doc.title).toBe(meta.title);
+      expect(content('meta[property="og:title"]')).toBe(meta.title);
+      expect(content('meta[name="twitter:title"]')).toBe(meta.title);
+      expect(content('meta[name="description"]')).toBe(meta.description);
+      expect(content('meta[property="og:description"]')).toBe(meta.description);
+      expect(content('meta[name="twitter:description"]')).toBe(meta.description);
+      expect(content('meta[property="og:image"]')).toBe(meta.ogImageUrl);
+      expect(content('meta[name="twitter:image"]')).toBe(meta.ogImageUrl);
+      expect(new Set(socialImageReferences(html))).toEqual(new Set([meta.ogImageUrl]));
+      expect(content('meta[property="og:image:type"]')).toBe("image/png");
+      expect(content('meta[property="og:image:width"]')).toBe("1200");
+      expect(content('meta[property="og:image:height"]')).toBe("630");
+      expect(content('meta[property="og:image:alt"]')).toBe(meta.ogImageAlt);
+      expect(content('meta[name="twitter:image:alt"]')).toBe(meta.ogImageAlt);
+      expect(await socialImageProblems(html, publicDir)).toEqual([]);
+      expect(content('meta[name="theme-color"]')).toBe("#172b39");
+      if (route.startsWith("/es")) {
+        expect(meta.ogImageUrl).toMatch(/archive-es-/);
+        expect(meta.ogImageAlt).toMatch(/archivo de registros conservados/);
+        expect(meta.ogImageAlt.match(/Neotoma/g)).toHaveLength(1);
+      }
+    });
+  }
+  it("preserves route-specific evaluation and installation descriptions", () => {
+    expect(resolveSeoMetadata("/evaluate").description).toMatch(/judge whether it fits your workflow.*assessment prompt/i);
+    expect(resolveSeoMetadata("/install").description).toMatch(/Agent-assisted and manual install.*MCP configuration/i);
+    expect(resolveSeoMetadata("/es/install").description).toMatch(/ruta de conexión.*perfil de datos/i);
+  });
+  it("binds generated cards to the exact current archive, material, font and composition inputs", () => {
+    expect(socialCardSourceProblems(process.cwd())).toEqual([]);
+  });
+  it("rejects missing evaluation images, nested JSON-LD images, unsafe URLs and wrong raster bytes/dimensions", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "social-image-"));
+    const html = (url: string) => `<meta property="og:image" content="${url}"><script type="application/ld+json">{"@graph":[{"image":[{"url":"${url}"}]}]}</script>`;
+    try {
+      const url = "https://neotoma.io/card.png";
+      expect((await socialImageProblems(html("https://neotoma.io/og/neotoma-evaluate-1200x630.png"), dir)).join()).toMatch(/missing/);
+      expect((await socialImageProblems(html("/card.png"), dir)).join()).toMatch(/Invalid URL/);
+      expect((await socialImageProblems(html("https://elsewhere.test/card.png"), dir)).join()).toMatch(/absolute HTTPS public-site/);
+      await sharp({ create: { width: 1200, height: 630, channels: 3, background: "white" } }).png().toFile(path.join(dir, "card.png"));
+      expect(await socialImageProblems(html(url), dir)).toEqual([]);
+      await sharp({ create: { width: 12, height: 6, channels: 3, background: "white" } }).png().toFile(path.join(dir, "card.png"));
+      expect((await socialImageProblems(html(url), dir)).join()).toMatch(/1200×630.*12×6/);
+      await sharp({ create: { width: 1200, height: 630, channels: 3, background: "white" } }).jpeg().toFile(path.join(dir, "card.png"));
+      expect((await socialImageProblems(html(url), dir)).join()).toMatch(/actual image\/png bytes/);
+      fs.writeFileSync(path.join(dir, "card.png"), "not an image");
+      expect(await socialImageProblems(html(url), dir)).not.toEqual([]);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 });
