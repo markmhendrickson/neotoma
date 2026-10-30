@@ -1,3 +1,4 @@
+import { SOCIAL_CARD, socialCardForLocale } from "./social_card";
 import repoInfo from "./repo_info.json";
 
 /** Public package version checked against npm and the published v0.26.0 tag on 2026-10-27. Update after a product release. */
@@ -1657,10 +1658,9 @@ export const ICP_PROFILES: IcpProfile[] = [
 
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
-  ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
+  ogImageUrl: socialCardForLocale("en").url,
   pageTitle: "Neotoma: the system of record for AI agents",
-  pageDescription:
-    "A record, not recall. An open-source, local-first system of record for AI agents, with observations linked to sources and field-level provenance.",
+  pageDescription: SOCIAL_CARD.en.description,
   heroImageUrl: "neotoma-hero.png",
 };
 
