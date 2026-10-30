@@ -14,7 +14,7 @@ describe("Spanish visual alternatives", () => {
   });
   it("labels unchanged home, topic and vision art in Spanish without requiring an app provider", () => {
     for (const [scene, phrase] of [
-      ["hero", "Cinco fichas"],
+      ["hero", "Una factura desglosada"],
       ["topicStart", "Material aportado"],
       ["visionDomain", "prevista"],
       ["sharedInstance", "disponible"],
@@ -28,7 +28,8 @@ describe("Spanish visual alternatives", () => {
 
   it("uses published and companion overhead scenes with localized accessible names", () => {
     for (const [scene, spanish, english] of [
-      ["source", "bolsillo de archivo", "shallow archive pocket"],
+      ["hero", "Una factura desglosada", "An itemized invoice"],
+      ["source", "dos bandas separadas", "two retaining bands"],
       ["observation", "factura original", "original invoice"],
       ["entity", "marcas identificadoras", "identifying marks"],
       ["snapshot", "elegidos por reglas", "rule-selected fields"],
@@ -37,7 +38,7 @@ describe("Spanish visual alternatives", () => {
       ["scopedAccess", "solicitud firmada admitida", "admitted signed request"],
       ["peering", "instancias distintas", "distinct instances"],
       ["visionDomain", "llave de autoridad", "authority key"],
-      ["visionPositions", "dos afirmaciones", "two conflicting claims"],
+      ["visionPositions", "ambas fechas", "both date claims"],
       ["visionExplanation", "fuente y autoridad", "source and authority"],
     ] as const) {
       const es = renderToStaticMarkup(<PaperScene scene={scene} locale="es" />);

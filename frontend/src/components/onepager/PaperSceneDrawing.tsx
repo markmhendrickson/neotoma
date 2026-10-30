@@ -31,9 +31,9 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
   ...Object.fromEntries(Object.entries(OCTOBER_RENDERS).map(([key, render]) => [key, render.alt])),
   ...VISION_SCENE_ALTS,
   ...Object.fromEntries(Object.entries(TOPIC_DRAWINGS).map(([id, spec]) => [id, spec.caption])),
-  hero: "Five paper records connected by solid navy lines",
+  hero: "An itemized invoice, person dossier, task clipboard, email and revised date connect in one record graph",
   source:
-    "An original document and email remain whole in one shallow archive pocket, before any interpretation",
+    "An original invoice and email remain whole inside a folio, held separately by two retaining bands before any interpretation",
   observation:
     "An original invoice and a later email each produce a retained observation, with the later email revealing its revised date",
   entity:
@@ -47,7 +47,7 @@ export const PAPER_SCENE_ALTS: Record<PaperSceneKind, string> = {
     "An admitted signed request and a separate active scoped grant both precede a bounded record action",
   peering: "Two distinct instances exchange only selected record slips in both directions",
   visionPositions:
-    "Planned position tracking keeps two conflicting claims visible alongside a selected position",
+    "Planned position tracking preserves both date claims while an explicit decision locks the initial date",
   visionExplanation:
     "Planned explanation traces a current value to its source and authority, then shows the connected records a change could affect",
 } as Record<PaperSceneKind, string>;

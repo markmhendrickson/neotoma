@@ -8,10 +8,10 @@ export const PAPER_SCENE_ALTS_ES: Partial<Record<PaperSceneKind, string>> = {
     const scene = TOPIC_VISUALS[id as keyof typeof TOPIC_VISUALS]?.scene;
     return scene ? [[scene, text.alt]] : [];
   })),
-  hero: "Cinco fichas de papel enlazadas mediante líneas continuas de color azul oscuro.",
+  hero: "Una factura desglosada, un expediente personal, una lista de tareas, un correo y una fecha revisada se conectan en un grafo de registros.",
   before: "Fragmentos de papel dispersos sin un registro común.",
   after: "Fragmentos de papel organizados en un mismo registro.",
-  source: "Un documento original y un correo permanecen íntegros en un bolsillo de archivo, antes de cualquier interpretación.",
+  source: "Una factura original y un correo permanecen íntegros en una carpeta, sujetos por dos bandas separadas antes de cualquier interpretación.",
   observation: "La factura original y un correo posterior aportan cada uno una observación conservada; el correo revela la nueva fecha.",
   entity: "Dos observaciones con el mismo tipo y las mismas marcas identificadoras se unen en un expediente de entidad estable.",
   reducer: "Se elige una ficha de cada pila visible y se enlaza con una fila de la tarjeta de registro.",
@@ -19,7 +19,7 @@ export const PAPER_SCENE_ALTS_ES: Partial<Record<PaperSceneKind, string>> = {
   invoiceExample: "La factura y el correo posterior aportan observaciones distintas; el registro actual conserva el importe de la factura y el vencimiento del correo.",
   localService: "Una tarjeta de herramienta de IA llega a una instancia local configurada que contiene varios registros.",
   visionDomain: "Titularidad por dominio prevista: una llave de autoridad llega a un archivo delimitado mientras otro dominio permanece separado.",
-  visionPositions: "Seguimiento previsto de posiciones: dos afirmaciones contradictorias siguen visibles junto a una posición seleccionada.",
+  visionPositions: "Seguimiento previsto de posiciones: se conservan ambas fechas mientras una decisión explícita fija la fecha inicial.",
   visionExplanation: "Explicación prevista: el valor actual remite a su fuente y autoridad, y muestra qué registros conectados podría afectar un cambio.",
   sharedInstance: "Uso compartido disponible: tres fichas de herramientas distintas llegan a un mismo archivador de Neotoma.",
   scopedAccess: "Acceso disponible: una solicitud firmada admitida establece la identidad y una concesión activa aparte permite una acción delimitada sobre un registro.",

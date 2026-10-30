@@ -52,6 +52,8 @@ function overheadSvg(scene: PaperSceneKind): SVGSVGElement {
   const svg = document.documentElement as unknown as SVGSVGElement;
   expect(svg.tagName.toLowerCase()).toBe("svg");
   const publishedNames: Partial<Record<PaperSceneKind, string>> = {
+    hero: "connectedRecordsProof",
+    source: "sourceMaterialProof",
     observation: "syntheticSourcesProof",
     invoiceExample: "invoiceOverheadProof",
     sharedInstance: "governedCollaborationProof",
@@ -1093,7 +1095,7 @@ describe("layered paper illustration motion", () => {
       const { container, unmount } = render(<PaperScene scene={scene} />);
       if (isOverheadScene(scene)) {
         const svg = overheadSvg(scene);
-        expect(svg.querySelectorAll("[data-paper-raster]").length, scene).toBeGreaterThan(0);
+        expect(svg.querySelectorAll("image").length, scene).toBeGreaterThan(0);
         expect(svg.querySelector("text, foreignObject, script, marker"), scene).toBeNull();
         expect(svg.querySelector('rect[width="900"][height="600"]'), scene).not.toBeNull();
         const imageHrefs = [...svg.querySelectorAll("image")].map((image) =>
@@ -1374,7 +1376,7 @@ describe("layered paper illustration motion", () => {
 
   it("loads the paper texture from the preview mount", () => {
     window.history.replaceState({}, "", "/pr-950/");
-    const { container } = render(<PaperScene scene="hero" />);
+    const { container } = render(<PaperScene scene="localService" />);
     expect(container.querySelector("svg image")?.getAttribute("href")).toBe(
       "/pr-950/brand/october/paper-fiber.webp"
     );
@@ -1383,17 +1385,26 @@ describe("layered paper illustration motion", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("retains two original source objects in a shallow archive pocket", () => {
+  it("retains two whole original sources under separate folio retaining bands", () => {
     const svg = overheadSvg("source");
     expect(
-      [...svg.querySelectorAll("[data-retained-source]")].map((item) =>
-        item.getAttribute("data-retained-source")
+      [...svg.querySelectorAll("[data-retained-raw-source]")].map((item) =>
+        item.getAttribute("data-retained-raw-source")
       )
-    ).toEqual(["document", "email"]);
-    expect(svg.querySelectorAll("[data-source-pocket]")).toHaveLength(1);
+    ).toEqual(["invoice", "email"]);
+    expect(svg.querySelectorAll('[data-archive-retaining-bands="separate"]')).toHaveLength(1);
     expect(svg.querySelector("[data-paper-observation], [data-rule-selected-snapshot]")).toBeNull();
-    expect(svg.querySelector('[data-paper-raster="packet"]')).not.toBeNull();
-    expect(svg.querySelector('[data-paper-raster="envelope"]')).not.toBeNull();
+    expect(svg.querySelector('[data-source-invoice-print="itemized"]')).not.toBeNull();
+  });
+
+  it("uses the same amount and revised-date vocabulary in the current record and its observations", () => {
+    const snapshot = overheadSvg("snapshot");
+    expect(snapshot.querySelectorAll('[data-amount-mark="offset-coin-discs"]')).toHaveLength(2);
+    expect(snapshot.querySelectorAll('[data-field-icon="due"][data-field-value="current"]')).toHaveLength(2);
+    const hero = overheadSvg("hero");
+    expect(hero.querySelector('[data-invoice-itemization]')).not.toBeNull();
+    expect(hero.querySelector('[data-task-checklist]')).not.toBeNull();
+    expect(hero.querySelector('[data-date-update="later"] [data-field-value="current"]')).not.toBeNull();
   });
 
   it("shows the revised date letter in both complete SVGs and keeps a fallback name", () => {
@@ -1401,7 +1412,8 @@ describe("layered paper illustration motion", () => {
       const svg = overheadSvg(scene);
       expect(svg.querySelectorAll('[data-paper-envelope-state="open"]')).toHaveLength(2);
       expect(svg.querySelectorAll('[data-paper-envelope-state="closed"]')).toHaveLength(1);
-      expect(svg.querySelector('[data-paper-letter="email"]')?.getAttribute("data-due-date")).toBe("29");
+      expect(svg.querySelector('[data-paper-letter="email"]')?.getAttribute("data-due-date")).toBe("later");
+      expect(svg.querySelector('[data-paper-letter="email"] [data-field-value="current"]')).not.toBeNull();
       expect(svg.querySelector("text, foreignObject, script")).toBeNull();
       const { container, unmount } = render(<PaperScene scene={scene} />);
       expect(container.querySelector("object span")?.textContent).toBe(PAPER_SCENE_ALTS[scene]);
