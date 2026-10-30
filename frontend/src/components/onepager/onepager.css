@@ -2730,7 +2730,7 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: clamp(3rem, 6vw, 6rem)
+  padding: clamp(3.5rem, 8vw, 7rem)
     max(var(--page-gutter), calc((100% - 1400px) / 2 + var(--page-gutter)));
   border-bottom: 0;
 }
