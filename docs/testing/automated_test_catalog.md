@@ -61,17 +61,17 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **785**
-- Backend and repo Vitest files: **733**
-- Frontend Vitest files: **25**
+- Total automated test files: **788**
+- Backend and repo Vitest files: **735**
+- Frontend Vitest files: **26**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
 | Vitest unit tests | 224 |
-| Vitest service tests | 59 |
-| Source-adjacent tests | 69 |
+| Vitest service tests | 60 |
+| Source-adjacent tests | 70 |
 | Vitest integration tests | 228 |
 | Vitest CLI tests | 90 |
 | Vitest contract tests | 27 |
@@ -81,7 +81,7 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 25 |
+| Frontend Vitest tests | 26 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 3 |
@@ -341,7 +341,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (59):**
+**Files (60):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -355,6 +355,7 @@ flowchart TD
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
 - `tests/services/entity_lifecycle_inventory.test.ts`
 - `tests/services/entity_lifecycle_selector.test.ts`
+- `tests/services/entity_population_certificate.test.ts`
 - `tests/services/entity_resolution_cross_owner_conflict.test.ts`
 - `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
@@ -407,7 +408,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (69):**
+**Files (70):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -463,6 +464,7 @@ flowchart TD
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
 - `src/services/rendered_page/conformance.test.ts`
+- `src/services/rendered_page/copy_controls.test.ts`
 - `src/services/rendered_page/publish.test.ts`
 - `src/services/route_shadowing.test.ts`
 - `src/services/sync/peer_health.test.ts`
@@ -920,12 +922,13 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (25):**
+**Files (26):**
 - `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/Layout.site_chrome.test.tsx`
 - `frontend/src/components/MainApp.docs-viewer.test.tsx`
 - `frontend/src/components/onepager/EvaluationCard.test.tsx`
 - `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx`
+- `frontend/src/components/onepager/overhead_scene_motion.test.ts`
 - `frontend/src/components/onepager/PaperScene.spanish.test.tsx`
 - `frontend/src/components/onepager/ProductBenefitPills.interactions.test.tsx`
 - `frontend/src/components/onepager/SpanishOnePager.chrome.test.tsx`
