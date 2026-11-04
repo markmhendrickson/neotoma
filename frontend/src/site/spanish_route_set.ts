@@ -35,6 +35,8 @@ export const SPANISH_RETAINED_BASE_ROUTES = [
   "/install/letta",
   "/install/opencode",
   "/install/claude-agent-sdk",
+  "/install/antigravity",
+  "/install/grok-bot",
   "/install/smithery",
   "/install/system-changes",
   "/install",

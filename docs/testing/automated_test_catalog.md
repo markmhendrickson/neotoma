@@ -61,17 +61,17 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **799**
-- Backend and repo Vitest files: **748**
-- Frontend Vitest files: **24**
+- Total automated test files: **806**
+- Backend and repo Vitest files: **753**
+- Frontend Vitest files: **26**
 - Playwright spec files: **27**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 224 |
-| Vitest service tests | 63 |
-| Source-adjacent tests | 69 |
+| Vitest unit tests | 227 |
+| Vitest service tests | 64 |
+| Source-adjacent tests | 70 |
 | Vitest integration tests | 238 |
 | Vitest CLI tests | 90 |
 | Vitest contract tests | 27 |
@@ -81,7 +81,7 @@ flowchart TD
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
 | Vitest shared-environment tests | 1 |
-| Frontend Vitest tests | 24 |
+| Frontend Vitest tests | 26 |
 | Playwright E2E tests | 23 |
 | Playwright Inspector E2E tests | 4 |
 | Tests Performance | 3 |
@@ -110,7 +110,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (224):**
+**Files (227):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -180,6 +180,9 @@ flowchart TD
 - `tests/unit/docs_hygiene.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs_viewer_build.test.ts`
+- `tests/unit/docs_viewer_dev_capture.test.ts`
+- `tests/unit/docs_viewer_dev_protocol.test.ts`
+- `tests/unit/docs_viewer_dev.test.ts`
 - `tests/unit/docs_viewer_lint.test.ts`
 - `tests/unit/docs_viewer_render.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
@@ -341,7 +344,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/services`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (63):**
+**Files (64):**
 - `tests/services/agent_grant_cross_owner_conflict.test.ts`
 - `tests/services/auto_enhancement_converter_detection.test.ts`
 - `tests/services/auto_enhancement_processor.test.ts`
@@ -355,6 +358,7 @@ flowchart TD
 - `tests/services/entity_id_tenant_scope_resolution.test.ts`
 - `tests/services/entity_lifecycle_inventory.test.ts`
 - `tests/services/entity_lifecycle_selector.test.ts`
+- `tests/services/entity_population_certificate.test.ts`
 - `tests/services/entity_resolution_cross_owner_conflict.test.ts`
 - `tests/services/entity_resolution_owner_conflict_tenant_scoped_unaffected.test.ts`
 - `tests/services/entity_resolution_prefix_match.test.ts`
@@ -411,7 +415,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (69):**
+**Files (70):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/proxy/mcp_stdio_proxy.test.ts`
@@ -467,6 +471,7 @@ flowchart TD
 - `src/services/plans/capture_harness_plan.test.ts`
 - `src/services/plans/seed_schema.test.ts`
 - `src/services/rendered_page/conformance.test.ts`
+- `src/services/rendered_page/copy_controls.test.ts`
 - `src/services/rendered_page/publish.test.ts`
 - `src/services/route_shadowing.test.ts`
 - `src/services/sync/peer_health.test.ts`
@@ -935,15 +940,17 @@ flowchart TD
 **Runner:** `vitest` with `jsdom`
 **Command:** `npm run test:frontend`
 **Requirements:** Run with `RUN_FRONTEND_TESTS=1` or the dedicated script.
-**Files (24):**
+**Files (26):**
 - `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/Layout.site_chrome.test.tsx`
 - `frontend/src/components/MainApp.docs-viewer.test.tsx`
 - `frontend/src/components/onepager/EvaluationCard.test.tsx`
 - `frontend/src/components/onepager/InterfaceExplorer.interactions.test.tsx`
+- `frontend/src/components/onepager/overhead_scene_motion.test.ts`
 - `frontend/src/components/onepager/PaperScene.spanish.test.tsx`
 - `frontend/src/components/onepager/ProductBenefitPills.interactions.test.tsx`
 - `frontend/src/components/onepager/SpanishOnePager.chrome.test.tsx`
+- `frontend/src/components/onepager/ToolInstall.locale.test.tsx`
 - `frontend/src/components/RetiredRouteStub.ssr.test.tsx`
 - `frontend/src/components/RetiredRouteStub.test.tsx`
 - `frontend/src/components/SeoHead.test.tsx`

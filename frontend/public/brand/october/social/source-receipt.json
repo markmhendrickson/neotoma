@@ -1,0 +1,34 @@
+{
+  "sourceInputs": {
+    "scripts/generate_social_cards.ts": "0e9659caff6e1d7b49bed22975636589a4eb14645e2b22ab2d7e579c1636d644",
+    "frontend/src/site/social_card.ts": "16420d5affee976e27b618b05e5050173541640587208c5983a6476facfceb58",
+    "frontend/public/brand/october/essay/archive-hero-desktop.svg": "0f7f64776da3a27cc82b94060b0d397962ada4bf4f8b5b51d39f4ac147b0176e",
+    "frontend/public/brand/n2-nav-light.svg": "49109046da1e12f583208e16ad0d2d67c6e95c12fa74682925a80c6d15e48624",
+    "frontend/public/brand/october/instrument-serif.ttf": "a99e3db50076202713812ed541feeb23ffeebb61db1fa6b1cf48fe590d37ef18",
+    "frontend/public/brand/october/instrument-sans-semibold.ttf": "5e39a358a65a72b6b74b56b384bbe17a61d8899d33cc255d49112e6522e3df0d",
+    "frontend/public/brand/october/essay/materials/9e9dfed440f8ff18.webp": "9e9dfed440f8ff1800180963edc0dfab6c8333607dc000e079018d9f0c6cf1b8",
+    "frontend/public/brand/october/essay/materials/6e204b4da85a9a1f.webp": "6e204b4da85a9a1f3a96181bf35257a66ae36ce01c261cd21b7a3f71ed9c3505",
+    "frontend/public/brand/october/essay/materials/59e2ce139e5606fb.webp": "59e2ce139e5606fbc64ecb27abf5b41ac615e8cf86866af21e08158f47fc4773",
+    "frontend/public/brand/october/essay/materials/d1133eb4e26412fd.webp": "d1133eb4e26412fd0be76929ad257756f370e8f2e8760dd599e47bd41b4b9ece",
+    "frontend/public/brand/october/essay/materials/b13701ca89a9a7b3.webp": "b13701ca89a9a7b39c542ad55d3a53057944e3df31574019558e8389281c8a05",
+    "frontend/public/brand/october/essay/materials/c79db67612add69e.webp": "c79db67612add69e963c4309b0e646b30014de4bd6d781f4cbf481b60e146188"
+  },
+  "cards": [
+    {
+      "locale": "en",
+      "path": "/brand/october/social/neotoma-archive-en-20261030.png",
+      "mime": "image/png",
+      "width": 1200,
+      "height": 630,
+      "sha256": "d0963932af9b6ed5646144bcba708308d7cb265a6218d306498db0c59433589a"
+    },
+    {
+      "locale": "es",
+      "path": "/brand/october/social/neotoma-archive-es-20261030.png",
+      "mime": "image/png",
+      "width": 1200,
+      "height": 630,
+      "sha256": "9b48544e3a42d6ca540dc4b2049d7903ca98bca91175dc5af20f9a28fa3915c0"
+    }
+  ]
+}

@@ -47,10 +47,7 @@ describe("closed website eval HTTP reader", () => {
         ...scenario,
         expected: scenario.expected.filter(
           (assertion) =>
-            !(
-              assertion.which === 1 &&
-              assertion.result_contains === 'href="/install/system-changes/"'
-            )
+            !(assertion.which === 1 && assertion.result_contains === "Ask your agent to evaluate")
         ),
       })
     ).toThrow(/static route assertion/);

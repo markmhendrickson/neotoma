@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
+import { chromium } from "playwright";
 import { NON_DEFAULT_LOCALES } from "../frontend/src/i18n/config";
 import { localizePath } from "../frontend/src/i18n/routing";
 import { DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_INDEX, SPANISH_DOCS_VIEWER_MANIFEST, isDocsViewerRoute } from "../frontend/src/site/docs_viewer_manifest";
@@ -38,6 +39,7 @@ import {
 } from "./docs_viewer/claim_patterns";
 import { pageText, scanHtml, validateDocsViewerExport } from "./docs_viewer/validate_export";
 import { headMetaText, jsonLdBlocks } from "./site_html";
+import { socialCardSourceProblems, socialImageProblems } from "./social_image_validation";
 import { llmsLinkProblems } from "./llms_links";
 import { REPO_VERSION } from "../frontend/src/site/site_data";
 
@@ -298,11 +300,14 @@ if (englishHomeSentinelHits === 0) {
 // 3d. The home page is the one-pager: current category, no old app chrome
 // ---------------------------------------------------------------------------
 const HOME_REQUIRED = [
-  "A record, not recall.",
+  "A record, not recall",
   "the system of record for AI agents",
-  "04 · Advanced",
-  "Build a shared foundation for agent work",
-  "05 · EVALUATE",
+  "03 · Interfaces",
+  "Four ways to work with a record",
+  "04 · Connect",
+  "05 · Advanced",
+  "Grow your use as advanced capabilities arrive",
+  "06 · EVALUATE",
   "Evaluate the fit",
 ] as const;
 const HOME_FORBIDDEN = [
@@ -526,17 +531,6 @@ for (const route of LIVE_ROUTES) {
     );
     liveClaimFailures++;
   }
-  for (const m of html.matchAll(
-    /<meta (?:property|name)="(?:og|twitter):image" content="([^"]*)"/g
-  )) {
-    const imgPath = new URL(m[1], "https://neotoma.io").pathname;
-    if (!fs.existsSync(path.join(siteDir, imgPath))) {
-      fail(
-        `site_pages${route === "/" ? "/" : route + "/"}index.html names a social image that is not in the build: ${imgPath}`
-      );
-      liveClaimFailures++;
-    }
-  }
   const text = pageText(html);
   // An unqualified "no telemetry" is wrong: the CLI and the stdio MCP server query the npm registry.
   const wholeText = text + " " + jsonLd;
@@ -682,13 +676,13 @@ if (fs.existsSync(evaluatePath)) {
 // 3h. Every served page (not a redirect stub): statements the claims check found wrong on the published
 // package, mirror pages whose source page is retired, and duplicated JSON-LD
 // ---------------------------------------------------------------------------
-function collectServedPages(dir: string, out: string[] = []): string[] {
+function collectServedPages(dir: string, out: string[] = [], allHtml = false): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "assets") continue;
-      collectServedPages(full, out);
-    } else if (entry.name === "index.html" || entry.name === "404.html") {
+      if (entry.name === "assets" && !allHtml) continue;
+      collectServedPages(full, out, allHtml);
+    } else if (allHtml ? entry.name.endsWith(".html") : entry.name === "index.html" || entry.name === "404.html") {
       out.push(full);
     }
   }
@@ -699,6 +693,18 @@ const isStubPage = (html: string): boolean => html.includes('http-equiv="refresh
 const servedText = (html: string): string => pageText(html) + "\n" + headMetaText(html);
 let servedPageFailures = 0;
 const servedPages = collectServedPages(siteDir);
+// This inventory includes every emitted HTML file, including held/evaluation and docs reader pages.
+for (const problem of socialCardSourceProblems(repoRoot)) fail(problem);
+let socialImagePages = 0;
+for (const file of collectServedPages(siteDir, [], true)) {
+  const html = fs.readFileSync(file, "utf8");
+  if (!/<meta[^>]+(?:og|twitter):image|application\/ld\+json/.test(html)) continue;
+  socialImagePages++;
+  for (const problem of await socialImageProblems(html, siteDir)) {
+    fail(`site_pages/${path.relative(siteDir, file)} social image: ${problem}`);
+  }
+}
+pass(`Checked social image rasters in ${socialImagePages} emitted HTML pages`);
 const isRealPageAt = (route: string): boolean => {
   const file =
     route === "/"
@@ -851,7 +857,7 @@ if (fs.existsSync(homeForLimits)) {
       status: "Planned",
       title: "Inspectable explanations",
       detail:
-        "Planned explanations would show why a value holds, whose authority it follows and which connected values a change could affect.",
+        "Planned explanations would let you inspect a current field together with the source evidence and authority supporting it.",
     },
   ] as const;
   if (cards.length !== expectedCards.length) {
@@ -938,6 +944,116 @@ if (!fs.existsSync(notFoundPath)) {
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
+// SVG media rules execute inside their own documents, beyond the HTML/markup
+// checks above. Exercise the actual exported page with normal motion and no JS:
+// the complete still must not depend on hydration or animation support.
+{
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({
+      javaScriptEnabled: false,
+      reducedMotion: "no-preference",
+    });
+    const resourceFailures: string[] = [];
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      // External typography is unrelated to SVG visibility; keep the probe offline.
+      if (url.hostname === "fonts.googleapis.com" && url.pathname === "/css2") {
+        await route.fulfill({ body: "", contentType: "text/css" });
+        return;
+      }
+      const file = path.resolve(
+        siteDir,
+        `.${decodeURIComponent(url.pathname)}`,
+        url.pathname.endsWith("/") ? "index.html" : ""
+      );
+      if (
+        url.hostname !== "site-export.test" ||
+        !file.startsWith(`${siteDir}${path.sep}`) ||
+        !fs.existsSync(file) ||
+        !fs.statSync(file).isFile()
+      ) {
+        resourceFailures.push(url.pathname);
+        await route.abort();
+        return;
+      }
+      const types: Record<string, string> = {
+        ".html": "text/html", ".css": "text/css", ".svg": "image/svg+xml",
+        ".webp": "image/webp", ".png": "image/png", ".ttf": "font/ttf",
+        ".woff2": "font/woff2", ".js": "application/javascript",
+      };
+      await route.fulfill({
+        body: fs.readFileSync(file),
+        contentType: types[path.extname(file)] ?? "application/octet-stream",
+      });
+    });
+    await page.goto("https://site-export.test/en/", { waitUntil: "networkidle" });
+    let visibilityFailures = 0;
+    const inspectScene = (object: Element) => {
+        const doc = object.tagName.toLowerCase() === "object"
+          ? (object as HTMLObjectElement).contentDocument : object.ownerDocument;
+        if (!doc?.defaultView) return ["SVG document did not load"];
+        const elements = doc.querySelectorAll<SVGElement>("[data-paper-port], [data-paper-letter], [data-paper-envelope-state], [data-paper-field-state], [data-retained-raw-source], [data-paper-source], [data-explained-current-field], [data-explanation-basis], [data-inspection-object]");
+        if (elements.length === 0) return ["no critical scene elements found"];
+        const failures: string[] = [];
+        for (const element of elements) {
+          let opacity = 1;
+          for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
+            const style = doc.defaultView.getComputedStyle(ancestor);
+            opacity *= Number(style.opacity);
+            if (style.display === "none" || style.visibility === "hidden") opacity = 0;
+          }
+          const visible = element.dataset.paperEnvelopeState !== "closed" &&
+            element.dataset.paperFieldState !== "prior";
+          if (visible ? opacity < .99 : opacity > .01)
+            failures.push(`${element.outerHTML.slice(0, 180)} has effective opacity ${opacity}`);
+        }
+        return failures;
+    };
+    const check = async (label: string, locator: ReturnType<typeof page.locator>) => {
+      for (const problem of await locator.evaluate(inspectScene)) {
+        fail(`Normal-motion/no-JavaScript paper scene ${label}: ${problem}`);
+        visibilityFailures++;
+      }
+    };
+    // CSS must select exactly one authored composition before any hydration.
+    for (const width of [639, 640]) {
+      await page.setViewportSize({ width, height: 1056 });
+      await page.waitForLoadState("networkidle");
+      const frames = await page.locator('object[data-paper-scene="hero"]').evaluateAll((objects) =>
+        objects.map((object) => ({
+          variant: object.getAttribute("data-paper-responsive-variant"),
+          display: getComputedStyle(object).display,
+        }))
+      );
+      const variant = width < 640 ? "mobile" : "desktop";
+      if (frames.length !== 2 || frames.filter((frame) => frame.display !== "none").length !== 1 ||
+          frames.find((frame) => frame.variant === variant)?.display === "none") {
+        fail(`Archive hero ${width}px must expose exactly the ${variant} profile before hydration`);
+        visibilityFailures++;
+      }
+      await page.waitForFunction((selected) =>
+        !!document.querySelector<HTMLObjectElement>(`object[data-paper-responsive-variant="${selected}"]`)?.contentDocument?.querySelector("svg"), variant);
+      await check(`archive-${variant}`, page.locator(`object[data-paper-responsive-variant="${variant}"]`));
+    }
+    for (const scene of ["source", "observation", "invoiceExample", "sharedInstance", "visionPositions", "visionExplanation"])
+      await check(scene, page.locator(`object[data-paper-scene="${scene}"]`));
+    // The prior detailed graph remains a standalone body/docs asset with its original still.
+    await page.goto("https://site-export.test/brand/october/essay/connected-records.svg", { waitUntil: "networkidle" });
+    await check("retained-record-graph", page.locator("svg").first());
+    for (const resource of resourceFailures) {
+      fail(`Paper scene browser resource did not load: ${resource}`);
+      visibilityFailures++;
+    }
+    if (visibilityFailures === 0)
+      pass("All seven retained shared scenes and both authored archive profiles retain visible sources, ports, letters and selected fields without JavaScript under normal motion");
+  } catch (error) {
+    fail(`Paper scene browser visibility validation failed: ${(error as Error).message}`);
+  } finally {
+    await browser.close();
+  }
+}
+
 try {
   const appBases = SPANISH_RETAINED_BASE_ROUTES.filter((route) => !isDocsViewerRoute(route));
   const appRoutes = ["/en/", ...appBases.flatMap((route) => [route, `/es${route === "/" ? "/" : route}`])];

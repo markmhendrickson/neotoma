@@ -1,3 +1,4 @@
+import { SOCIAL_CARD, socialCardForLocale } from "./social_card";
 import { GLOSSARY_ROWS, REPO_VERSION, SITE_METADATA } from "./site_data";
 import { getFaqItems } from "@/site/faq_items";
 import {
@@ -22,7 +23,7 @@ export interface SeoRouteMetadata {
   breadcrumb?: { name: string; path: string }[];
   /** Override default OG/Twitter image URL (defaults to site-wide asset). */
   ogImageUrl?: string;
-  /** Social preview image description; defaults from title + description. */
+  /** Description of a dedicated image; shared cards use their localized artwork description. */
   ogImageAlt?: string;
   /** Extra keywords merged with product defaults for meta keywords. */
   keywords?: string[];
@@ -80,11 +81,7 @@ export function isSitePreview(): boolean {
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Neotoma: the system of record for AI agents",
-    description:
-      "A record, not recall. Neotoma is an open-source, local-first system of record for AI agents: observations linked to sources, corrections that add instead of overwrite, and field-level provenance, shared by the tools you connect.",
-    /** Matches the on-image copy of neotoma-og-1200x630.png. */
-    ogImageAlt:
-      "Neotoma: the system of record for AI agents. A record, not recall. A plan-style drawing of two sources becoming two observations and one current invoice record.",
+    description: SOCIAL_CARD.en.description,
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
@@ -132,9 +129,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     description:
       "Choose a supported Neotoma connection path for your AI tool, review system effects, and verify the resulting connection.",
     robots: "index,follow",
-    // Uses the default card (neotoma-og-1200x630.png); a dedicated install image never existed in the build.
-    ogImageAlt:
-      "Neotoma: the system of record for AI agents. A record, not recall. A plan-style drawing of two sources becoming two observations and one current invoice record.",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -933,9 +927,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "Use Neotoma as persistent structured memory alongside Cursor context for cross-session AI development.",
     robots: "index,follow",
     jsonLdType: "WebPage",
-    ogImageUrl: "https://neotoma.io/og/neotoma-og-cursor-1200x630.png",
-    ogImageAlt:
-      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in a few minutes via MCP.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
@@ -1902,9 +1893,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "A record, not recall. Neotoma is an open-source, local-first system of record for AI agents. The facts an agent needs to judge whether it fits your workflow, plus an assessment prompt.",
     robots: "index,follow",
     jsonLdType: "WebPage",
-    ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",
-    ogImageAlt:
-      "Let your agent decide if Neotoma fits. Copy the evaluation prompt into Claude, Cursor, or ChatGPT and let your agent assess the fit.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Evaluate", path: "/evaluate" },
@@ -1972,9 +1960,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "How does Neotoma compare to platform memory? Built-in AI product memory is convenient but opaque and vendor-bound. Neotoma provides deterministic state, versioned history, and auditable provenance across tools.",
     robots: "index,follow",
     jsonLdType: "WebPage",
-    ogImageUrl: "https://neotoma.io/og/neotoma-og-vs-platform-1200x630.png",
-    ogImageAlt:
-      "Neotoma vs platform memory: side-by-side comparison of Claude Memory, ChatGPT Memory, and Neotoma across versioning, auditability, and portability.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Memory Models", path: "/memory-models" },
@@ -2573,9 +2558,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "Memory properties that determine reliability under production load: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, and more.",
     robots: "index,follow",
     jsonLdType: "WebPage",
-    ogImageUrl: "https://neotoma.io/og/neotoma-og-guarantees-1200x630.png",
-    ogImageAlt:
-      "Neotoma memory guarantees compared: versioned history, append-only audit log, schema-bound validation, cross-tool sync, and privacy-first local storage.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Memory Guarantees", path: "/memory-guarantees" },
@@ -2957,8 +2939,7 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   const routeMetadata = getSeoMetadataForPath(pathname);
   const pack = getStaticLocalePack(locale);
   const localizedOverride: Partial<SeoRouteMetadata> =
-    // The home route renders the English one-pager in every locale, so it takes no localized
-    // title or description (those still carried the retired category line).
+    // Spanish public shells apply their source-owned copy below; other home shells retain English.
     normalizedPath === "/"
       ? {}
       : normalizedPath === "/docs"
@@ -2986,10 +2967,11 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
     }));
   }
   const robots = isSitePreview() || normalizePath(pathname) === "/en" ? "noindex,follow" : resolvedRouteMetadata.robots;
-  const ogImageUrl = resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
-  const ogImageAlt =
-    resolvedRouteMetadata.ogImageAlt ??
-    buildDefaultOgImageAlt(resolvedRouteMetadata.title, resolvedRouteMetadata.description);
+  const card = socialCardForLocale(locale);
+  const ogImageUrl = resolvedRouteMetadata.ogImageUrl ?? card.url;
+  const ogImageAlt = resolvedRouteMetadata.ogImageUrl
+    ? (resolvedRouteMetadata.ogImageAlt ?? buildDefaultOgImageAlt(resolvedRouteMetadata.title, resolvedRouteMetadata.description))
+    : card.alt;
   const keywords = buildKeywords(resolvedRouteMetadata);
   const twitterCard = resolvedRouteMetadata.twitterCard ?? SEO_DEFAULTS.twitterCard;
   return {
@@ -3105,6 +3087,11 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
       "</head>",
       `    <meta property="og:image" content="${escapeHtml(meta.ogImageUrl)}" />\n  </head>`
     );
+  }
+  if (/<meta property="og:image:type" content="[^"]*"/.test(out)) {
+    out = out.replace(/<meta property="og:image:type" content="[^"]*"/, '<meta property="og:image:type" content="image/png"');
+  } else {
+    out = out.replace("</head>", '    <meta property="og:image:type" content="image/png" />\n  </head>');
   }
   if (/<meta property="og:image:width" content="[^"]*"/.test(out)) {
     out = out.replace(

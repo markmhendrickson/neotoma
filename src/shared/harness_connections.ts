@@ -314,6 +314,52 @@ export const CONNECTIONS: readonly Connection[] = [
     },
   },
   {
+    id: "antigravity",
+    host: "Antigravity",
+    kind: "manual",
+    guide: "docs/guides/connections/antigravity.md",
+    guideRoute: "/install/antigravity/",
+    mode: "hybrid",
+    transport: "manual local stdio or authenticated remote MCP",
+    prerequisites:
+      "Operate a local Neotoma instance or a reachable authenticated HTTPS MCP endpoint.",
+    instruction: "Add a custom Neotoma MCP server in Antigravity's MCP settings.",
+    verification:
+      "Inspect the connected tools and retrieve a known entity from the intended instance.",
+    caveat:
+      "No released neotoma setup --tool antigravity target; this manual path has not had an installed-host smoke test.",
+    evidence: {
+      releasePin: RELEASE_PIN,
+      mainPin: MAIN_PIN,
+      repoPaths: "src/cli/permissions.ts; docs/guides/connections/antigravity.md",
+      vendorUrl: "https://www.antigravity.google/docs/mcp?tab=cli",
+      checkedOn: "2026-10-29",
+    },
+  },
+  {
+    id: "grok-bot",
+    host: "Grok Bot",
+    kind: "manual",
+    guide: "docs/guides/connections/grok-bot.md",
+    guideRoute: "/install/grok-bot/",
+    mode: "remote",
+    transport: "manual URL or command on the Bot's computer",
+    prerequisites:
+      "Operate an authenticated Neotoma endpoint reachable from the Bot, or install Neotoma on its computer.",
+    instruction: "Add a custom MCP server to Grok Bot by URL or a command running on its computer.",
+    verification:
+      "Inspect the Bot's MCP tools and retrieve a known entity from the intended instance.",
+    caveat:
+      "No released neotoma setup --tool grok-bot target; this is distinct from laptop-local setup and Grok chat connectors.",
+    evidence: {
+      releasePin: RELEASE_PIN,
+      mainPin: MAIN_PIN,
+      repoPaths: "src/cli/permissions.ts; docs/guides/connections/grok-bot.md",
+      vendorUrl: "https://docs.x.ai/grok-bot/computer-and-apps",
+      checkedOn: "2026-10-29",
+    },
+  },
+  {
     id: "smithery",
     host: "Smithery",
     kind: "registry",

@@ -5,30 +5,52 @@
       "source": "page/images/tension-trace-r2/N-hero.jpg",
       "source_sha256": "8eee3947a65ac16fd41b359e558a6f4839c5c679cd6c8c1dcc0d4b115572476f",
       "bundled_sha256": "37a71664afce2d1a2671d20c71f45962d5a507b4da5d609124ed875762398baa",
+      "generator": "ChatGPT image generation (gpt-image)",
+      "generated_on": "2026-10",
+      "maker": "repository owner",
+      "rights": "The repository owner made this image and holds the rights to publish it (attested 2026-10-28).",
       "used_in": "hero"
     },
     "N-before.webp": {
       "source": "page/images/feedback-2026-10-07/N-before.png",
       "source_sha256": "a5b39ad0bdd3b25856e09ba677b5d9421e56110706e9b5576ec62a1caf5a9d38",
       "bundled_sha256": "fca380fb7bf96b518c0ef369445e9b0621cb78678d8d9ac44c41a976c572e673",
+      "generator": "ChatGPT image generation (gpt-image)",
+      "generated_on": "2026-10-07",
+      "c2pa": "ChatGPT, gpt-image, 2026-10-07",
+      "maker": "repository owner",
+      "rights": "The repository owner made this image and holds the rights to publish it (attested 2026-10-28).",
       "used_in": "recall contrast"
     },
     "N-after.webp": {
       "source": "page/images/feedback-2026-10-07/N-after.png",
       "source_sha256": "d05eabe66ed6e6527930245dfd959ab7cb325970dadafa01f52464383eba65ea",
       "bundled_sha256": "163ffb60aaaec59fd255f0f84342117668784d5116187b650a7fb5885bdea206",
+      "generator": "ChatGPT image generation (gpt-image)",
+      "generated_on": "2026-10-07",
+      "c2pa": "ChatGPT, gpt-image, 2026-10-07",
+      "maker": "repository owner",
+      "rights": "The repository owner made this image and holds the rights to publish it (attested 2026-10-28).",
       "used_in": "record contrast"
     },
     "N-capture.webp": {
       "source": "page/images/tension-trace-r2/N-capture.jpg",
       "source_sha256": "68e222c80789e028f26a34dde5c6f2516bb10a7254dc39b1bebe307e735ee780",
       "bundled_sha256": "31680cca59e2a01e0f94614814072518bee372efe92c524f9cc227805c62f3cd",
+      "generator": "ChatGPT image generation (gpt-image)",
+      "generated_on": "2026-10",
+      "maker": "repository owner",
+      "rights": "The repository owner made this image and holds the rights to publish it (attested 2026-10-28).",
       "used_in": "source step"
     },
     "N-basis.webp": {
       "source": "page/images/tension-trace-r2/N-basis.jpg",
       "source_sha256": "c15eab5ca13db42f5ea398687463f0038a12ca57a75998e3be714920dde925bd",
       "bundled_sha256": "c2b89b762dfbf22afac866bab8e4b61543179de36b4480d3b64199f58e70d84a",
+      "generator": "ChatGPT image generation (gpt-image)",
+      "generated_on": "2026-10",
+      "maker": "repository owner",
+      "rights": "The repository owner made this image and holds the rights to publish it (attested 2026-10-28).",
       "used_in": "snapshot step"
     },
     "instrument-sans-regular.ttf": {

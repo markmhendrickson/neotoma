@@ -2,7 +2,7 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **807**
+Total files: **812**
 
 ## By top-level folder under docs/
 
@@ -13,7 +13,7 @@ Total files: **807**
 - **reports**: 48
 - **topics**: 42
 - **ui**: 42
-- **guides**: 29
+- **guides**: 33
 - **foundation**: 25
 - **architecture**: 20
 - **feature_units**: 20
@@ -34,6 +34,7 @@ Total files: **807**
 - **bundles**: 2
 - **implementation**: 2
 - **migration**: 2
+- **performance**: 2
 - **prototypes**: 2
 - **templates**: 2
 - **vocabulary**: 2
@@ -44,7 +45,6 @@ Total files: **807**
 - **NEOTOMA_MANIFEST.md**: 1
 - **onboarding_elicitation_flow.md**: 1
 - **onboarding_elicitation_script.md**: 1
-- **performance**: 1
 - **README.md**: 1
 - **reference**: 1
 - **rendered_page.md**: 1

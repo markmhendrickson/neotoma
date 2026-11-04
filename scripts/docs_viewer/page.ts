@@ -8,6 +8,7 @@
  * charcoal variant, not the retired green drafting theme. Every value interpolated here is escaped; the
  * body HTML comes from the allow-list serializer.
  */
+import { SOCIAL_CARD, socialCardForLocale } from "../../frontend/src/site/social_card";
 import type { DocsViewerEntry } from "../../frontend/src/site/docs_viewer_manifest";
 import {
   DOCS_VIEWER_VISUALS,
@@ -317,6 +318,7 @@ export function renderPage(input: PageInput): string {
     : undefined;
   const canonical = canonicalUrl(entry);
   const title = `${entry.title} | Neotoma`;
+  const socialCard = socialCardForLocale(locale);
   const siteHeader = renderToStaticMarkup(
     createElement(SiteHeader, { currentHref: collection.href, pageLocale: locale })
   );
@@ -340,8 +342,19 @@ ${rawUrl ? `<link rel="alternate" type="text/markdown" href="${escapeAttr(rawUrl
 <meta property="og:title" content="${escapeAttr(title)}">
 <meta property="og:description" content="${escapeAttr(description)}">
 <meta property="og:url" content="${escapeAttr(canonical)}">
-<meta property="og:image" content="${SITE_ORIGIN}/neotoma-og-1200x630.png">
+<meta property="og:locale" content="${locale === "es" ? "es_ES" : "en_US"}">
+<meta property="og:image" content="${escapeAttr(socialCard.url)}">
+<meta property="og:image:type" content="${SOCIAL_CARD.mime}">
+<meta property="og:image:width" content="${SOCIAL_CARD.width}">
+<meta property="og:image:height" content="${SOCIAL_CARD.height}">
+<meta property="og:image:alt" content="${escapeAttr(socialCard.alt)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeAttr(title)}">
+<meta name="twitter:description" content="${escapeAttr(description)}">
+<meta name="twitter:image" content="${escapeAttr(socialCard.url)}">
+<meta name="twitter:image:width" content="${SOCIAL_CARD.width}">
+<meta name="twitter:image:height" content="${SOCIAL_CARD.height}">
+<meta name="twitter:image:alt" content="${escapeAttr(socialCard.alt)}">
 <meta name="docs-viewer-source" content="${escapeAttr(entry.source)}">
 ${entry.originalSource ? `<meta name="docs-viewer-original-source" content="${escapeAttr(entry.originalSource)}">` : ""}
 <meta name="docs-viewer-commit" content="${escapeAttr(commit)}">

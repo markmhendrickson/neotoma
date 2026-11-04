@@ -4,9 +4,17 @@ import { PaperScene } from "./PaperScene";
 import { InspectorPreviewIllustration } from "../illustrations/InspectorPreviewIllustration";
 
 describe("Spanish visual alternatives", () => {
+  it("keeps the editorial backdrop on coded homepage and topic illustrations", () => {
+    for (const scene of ["localService", "before", "topicStart"] as const) {
+      const html = renderToStaticMarkup(<PaperScene scene={scene} />);
+      expect(html).toContain('fill="#f2eee5" data-paper-ground=""');
+      expect(html).toContain("/brand/october/essay/materials/9e9dfed440f8ff18.webp");
+      expect(html).not.toContain('fill="url(#paper-:R0:-ground)"');
+    }
+  });
   it("labels unchanged home, topic and vision art in Spanish without requiring an app provider", () => {
     for (const [scene, phrase] of [
-      ["hero", "Cinco fichas"],
+      ["hero", "Un archivo de registros conservados"],
       ["topicStart", "Material aportado"],
       ["visionDomain", "prevista"],
       ["sharedInstance", "disponible"],
@@ -18,8 +26,38 @@ describe("Spanish visual alternatives", () => {
     }
   });
 
+  it("uses published and companion overhead scenes with localized accessible names", () => {
+    for (const [scene, spanish, english] of [
+      ["hero", "Un archivo de registros conservados", "An overhead archive"],
+      ["source", "archivador de Neotoma", "Neotoma archive box"],
+      ["observation", "factura original", "original invoice"],
+      ["entity", "El mismo número", "The same invoice number"],
+      ["reducer", "Las reglas seleccionan", "Field rules select"],
+      ["snapshot", "elegidos por reglas", "rule-selected fields"],
+      ["invoiceExample", "registro actual", "current record"],
+      ["sharedInstance", "tres fichas", "Three distinct"],
+      ["scopedAccess", "solicitud firmada admitida", "admitted signed request"],
+      ["peering", "instancias distintas", "distinct instances"],
+      ["visionDomain", "llave de autoridad", "authority key"],
+      ["visionPositions", "ambas fechas", "both date claims"],
+      ["visionExplanation", "fuente y autoridad", "source and authority"],
+    ] as const) {
+      const es = renderToStaticMarkup(<PaperScene scene={scene} locale="es" />);
+      const en = renderToStaticMarkup(<PaperScene scene={scene} locale="en" />);
+      expect(es).toContain('type="image/svg+xml"');
+      expect(es).toContain('role="img"');
+      expect(es).toContain(spanish);
+      expect(es).not.toContain(english);
+      expect(en).toContain(english);
+      expect(en).not.toContain(spanish);
+      expect(es).toContain("/brand/october/essay/");
+    }
+  });
+
   it("keeps informative sandbox mock UI and its accessible label in Spanish", () => {
-    const html = renderToStaticMarkup(<InspectorPreviewIllustration variant="sandbox" locale="es" />);
+    const html = renderToStaticMarkup(
+      <InspectorPreviewIllustration variant="sandbox" locale="es" />
+    );
     expect(html).toContain("Vista previa de Inspector");
     expect(html).toContain("Entorno público");
     expect(html).toContain("Datos compartidos");

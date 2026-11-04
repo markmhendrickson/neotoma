@@ -34,7 +34,7 @@ export function InstallPageBody() {
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-6 mb-3">
         {es ? "Conecta tu herramienta" : "Connect the tool you use"}
       </h2>
-      <ToolInstall showPermissionsPreflight includeVerificationNote />
+      <ToolInstall showPermissionsPreflight />
       <TopicVisual visualId="install" className="mt-8" />
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
