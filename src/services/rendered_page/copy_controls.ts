@@ -88,14 +88,26 @@ export const RENDERED_PAGE_COPY_SCRIPT_HASH = createHash("sha256")
   .update(RENDERED_PAGE_COPY_SCRIPT, "utf8")
   .digest("base64");
 
+// Enforced alongside the hash policy: this policy permits inline execution but
+// has no external-script source. The intersection permits only the fixed helper.
+export const RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY =
+  "script-src 'unsafe-inline'; script-src-attr 'none'";
+
 /** A false positive only enables the fixed helper, never author-supplied code. */
 export function hasRenderedPageCopyBlocks(htmlBody: string): boolean {
-  return /<pre\b[^>]*\bdata-copyable(?=[\s=>])/i.test(htmlBody);
+  const startTags = htmlBody.matchAll(/<pre(?=[\s/>])((?:"[^"]*"|'[^']*'|[^"'<>])*)>/gi);
+  for (const match of startTags) {
+    // Attribute values may contain > or the marker's name. Neither terminates
+    // the tag or opts in a different attribute.
+    const attributes = match[1].replace(/"[^"]*"|'[^']*'/g, '""');
+    if (/(?:^|\s)data-copyable(?=[\s=/>]|$)/i.test(attributes)) return true;
+  }
+  return false;
 }
 
 export function renderedPageContentSecurityPolicy(htmlBody: string): string {
   const copyable = hasRenderedPageCopyBlocks(htmlBody);
-  return [
+  const policy = [
     "default-src 'none'",
     copyable ? `script-src 'sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}'` : "script-src 'none'",
     "script-src-attr 'none'",
@@ -109,4 +121,6 @@ export function renderedPageContentSecurityPolicy(htmlBody: string): string {
     // Never combine allow-scripts with allow-same-origin on author HTML.
     copyable ? "sandbox allow-scripts" : "sandbox allow-same-origin",
   ].join("; ");
+  // A comma serializes multiple ENFORCED policies, not alternative sources.
+  return copyable ? `${policy}, ${RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY}` : policy;
 }

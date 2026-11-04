@@ -6,6 +6,7 @@ import {
   renderedPageContentSecurityPolicy,
   RENDERED_PAGE_COPY_SCRIPT,
   RENDERED_PAGE_COPY_SCRIPT_HASH,
+  RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY,
 } from "./copy_controls.js";
 import { renderRenderedPageHtml } from "./html_template.js";
 
@@ -130,9 +131,36 @@ describe("copy helper CSP boundary", () => {
     );
   });
 
+  it.each([
+    '<pre title="x > y" data-copyable>copy me</pre>',
+    "<pre title='x > y' data-copyable>copy me</pre>",
+    '<pre title="x > y" data-copyable="yes > no">copy me</pre>',
+    "<PRE DATA-COPYABLE>copy me</PRE>",
+    "<pre data-copyable/>copy me</pre>",
+  ])("recognizes opted-in start tags with quoted or boolean attributes: %s", (body) => {
+    expect(hasRenderedPageCopyBlocks(body)).toBe(true);
+    expect(renderRenderedPageHtml({ title: "Copy fixture", htmlBody: body })).toContain(
+      RENDERED_PAGE_COPY_SCRIPT
+    );
+    expect(renderedPageContentSecurityPolicy(body)).toContain(RENDERED_PAGE_COPY_SCRIPT_HASH);
+  });
+
+  it.each([
+    '<pre title=" data-copyable > ">not opted in</pre>',
+    "<pre title=' data-copyable > '>not opted in</pre>",
+    "<pre data-copyable-other>not opted in</pre>",
+    '<pre data-other="data-copyable">not opted in</pre>',
+  ])("does not opt in quoted attribute values or prefixed attribute names: %s", (body) => {
+    expect(hasRenderedPageCopyBlocks(body)).toBe(false);
+    expect(renderedPageContentSecurityPolicy(body)).toContain("script-src 'none'");
+  });
+
   it("allows only the exact immutable helper hash in an opaque sandbox", () => {
     const body = "<pre data-copyable>copy me</pre>";
     const csp = renderedPageContentSecurityPolicy(body);
+    const policies = csp.split(", ");
+    expect(policies).toHaveLength(2);
+    expect(policies[1]).toBe(RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY);
     expect(RENDERED_PAGE_COPY_SCRIPT_HASH).toBe(
       createHash("sha256").update(RENDERED_PAGE_COPY_SCRIPT).digest("base64")
     );
@@ -148,5 +176,22 @@ describe("copy helper CSP boundary", () => {
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("base-uri 'none'");
     expect(csp).toContain("form-action 'none'");
+  });
+
+  it("intersects the helper hash with a separate enforced inline-only policy", () => {
+    const [hashPolicy, inlineOnlyPolicy] = renderedPageContentSecurityPolicy(
+      "<pre data-copyable>copy</pre>"
+    ).split(", ");
+    const sources = (policy: string) =>
+      policy
+        .split(";")
+        .map((directive) => directive.trim())
+        .find((directive) => directive.startsWith("script-src "))!;
+    expect(sources(hashPolicy)).toBe(`script-src 'sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}'`);
+    expect(sources(inlineOnlyPolicy)).toBe("script-src 'unsafe-inline'");
+    // Neither guard can be dropped: one rejects arbitrary inline code, the
+    // other rejects every external-script request regardless of author markup.
+    expect(sources(hashPolicy)).not.toContain("unsafe-inline");
+    expect(sources(inlineOnlyPolicy)).not.toMatch(/sha256-|nonce-|https?:|self|\*/);
   });
 });

@@ -39,9 +39,11 @@ Optional attributes on that `pre` customize plain-text labels:
 `data-copy-failure`. For example, `data-copy-label="Copiar petición"` changes the
 button label. Authors provide no JavaScript or inline event handlers.
 
-The template creates controls only for opted-in blocks. An immutable helper is
-allowed by its exact SHA-256 CSP hash; arbitrary author scripts, event handlers,
-external scripts and dynamic code remain blocked. Copy-enabled documents use an
+The template creates controls only for opted-in blocks. Two enforced CSP policies
+intersect: one allows only the immutable helper's exact SHA-256 hash, and the other
+permits inline scripts but has no external-script sources. Together they permit
+only the fixed inline helper; arbitrary author scripts, event handlers, external
+script requests and dynamic code remain blocked. Copy-enabled documents use an
 opaque-origin sandbox (`allow-scripts` without `allow-same-origin`) so the helper
 cannot access the app's origin, storage or cookies. Pages without copyable blocks
 retain the script-free policy.

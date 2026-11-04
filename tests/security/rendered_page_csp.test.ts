@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   RENDERED_PAGE_COPY_SCRIPT,
   RENDERED_PAGE_COPY_SCRIPT_HASH,
+  RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY,
 } from "../../src/services/rendered_page/copy_controls.js";
 
 describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () => {
@@ -52,14 +53,16 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        idempotency_key: "csp-copy-test-seed",
+        idempotency_key: "csp-copy-test-seed-v2",
         entities: [
           {
             entity_type: "rendered_page",
             canonical_name: "rendered_page:csp-copy-test",
             title: "Copy CSP Test",
             html_body:
-              '<pre data-copyable><code>Full prompt\nLast instruction.</code></pre><script>document.title="PWNED"</script><button onclick="alert(1)">untrusted</button><script src="/untrusted.js"></script><a href="javascript:alert(1)">untrusted</a>',
+              '<pre title="x > y" data-copyable><code>Full prompt\nLast instruction.</code></pre><script>document.title="PWNED"</script><button onclick="alert(1)">untrusted</button><script src="/untrusted.js"></script><a href="javascript:alert(1)">untrusted</a>' +
+              `<script src="https://untrusted.invalid/script.js" integrity="sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}"></script>` +
+              `<script src="/untrusted-integrity.js" integrity="sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}"></script>`,
           },
         ],
       }),
@@ -100,11 +103,15 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
     const res = await fetch(`${baseUrl}/entities/${copyEntityId}/html`);
     expect(res.status).toBe(200);
     const csp = res.headers.get("content-security-policy") ?? "";
+    const policies = csp.split(", ");
+    expect(policies).toHaveLength(2);
+    expect(policies[1]).toBe(RENDERED_PAGE_INLINE_ONLY_SCRIPT_POLICY);
+    expect(res.headers.get("content-security-policy-report-only")).toBeNull();
     expect(csp).toContain(`script-src 'sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}'`);
     expect(csp).toContain("script-src-attr 'none'");
     expect(csp).toContain("sandbox allow-scripts");
     expect(csp).not.toContain("allow-same-origin");
-    expect(csp).not.toMatch(
+    expect(policies[0]).not.toMatch(
       /script-src[^;]*(?:unsafe-inline|self|https:|unsafe-eval|unsafe-hashes)/
     );
     expect(csp).toContain("default-src 'none'");
@@ -113,6 +120,7 @@ describe("rendered_page /html strict CSP (Phase 2 stored-XSS mitigation)", () =>
     const html = await res.text();
     expect(html).toContain(RENDERED_PAGE_COPY_SCRIPT);
     expect(html).toContain('document.title="PWNED"');
+    expect(html).toContain(`integrity="sha256-${RENDERED_PAGE_COPY_SCRIPT_HASH}"`);
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });
