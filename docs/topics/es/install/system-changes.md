@@ -2,7 +2,7 @@
 
 La instalación, la inicialización y la conexión de un entorno pueden afectar a máquinas y archivos de configuración distintos.
 
-Se aplica a la versión publicada v0.27.0. Las afirmaciones se comprobaron en v0.26.0 (`b6ae615`) el 27 de octubre de 2026; la configuración no cambió en v0.27.0. Comprueba la versión y la vía de entorno que vas a usar. Un cliente remoto que se conecta a una instancia ya operada no necesita que la CLI de Neotoma esté instalada en la máquina cliente.
+Se aplica a la versión publicada v0.27.0. Las afirmaciones se comprobaron en v0.26.0 (`b6ae615`) el 27 de octubre de 2026; la instalación y la configuración no cambiaron en v0.27.0. Comprueba la versión y la vía de entorno que vas a usar. Un cliente remoto que se conecta a una instancia ya operada no necesita que la CLI de Neotoma esté instalada en la máquina cliente.
 
 ## Elige el efecto que buscas
 
