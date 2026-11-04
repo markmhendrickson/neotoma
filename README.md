@@ -61,7 +61,7 @@ graph LR
 
 ## What you can do with it
 
-Neotoma v0.26.0 exposes 67 MCP tools and 112 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
+Neotoma v0.27.0 exposes 67 MCP tools and 112 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
 
 **Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. A committed, keyed structured store started on v0.26.0 that stops partway finishes its missing observations on a same-key retry; a store carrying an interpretation returns `ERR_STORE_WRITE_INCOMPLETE`, and keys left over from earlier versions behave differently over MCP and HTTP (see Known limitations). See Known limitations.
 
@@ -111,7 +111,7 @@ neotoma init
 neotoma setup --tool claude-code
 ```
 
-In v0.26.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
+In v0.27.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
 
 - Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
 - CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.

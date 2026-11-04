@@ -545,14 +545,14 @@ describe("review fixes (install path, accessibility, wording)", () => {
     expect(copy).not.toContain("neotoma setup --tool ${tool} --yes");
     expect(read("frontend/src/components/onepager/ToolInstall.tsx")).toContain("value={host.id}");
     expect(connectionCommands(CONNECTIONS_SETUP[0])).toBe(
-      "npm install -g neotoma@0.26.0\nneotoma init\nneotoma setup --tool claude-code"
+      "npm install -g neotoma@0.27.0\nneotoma init\nneotoma setup --tool claude-code"
     );
     const html = renderToStaticMarkup(
       createElement(MemoryRouter, null, createElement(LocaleProvider, null, createElement(NeotomaOnePager)))
     );
     expect(html).toContain('class="plan-tool-install"');
     expect(html).toContain('role="combobox"');
-    expect(html).toContain("npm install -g neotoma@0.26.0");
+    expect(html).toContain("npm install -g neotoma@0.27.0");
     expect(html).toContain("Step 1 · Install Neotoma for Claude Code");
     expect(html).toContain("Step 2 · Start your first workflow");
     expect(html.indexOf("Step 1 · Install Neotoma for Claude Code")).toBeLessThan(

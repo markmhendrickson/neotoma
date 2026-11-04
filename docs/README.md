@@ -2,7 +2,7 @@
 
 Neotoma is the system of record for AI agents: a record, not recall. These docs describe what the current build does. Pages under `foundation/` state the design, so read them with the build in mind; where the two differ, the code and the README are the reference.
 
-Applies to v0.26.0.
+Applies to v0.27.0.
 
 A running Neotoma server also serves these files at its own `/docs` route. To install and try Neotoma, start with the [README](../README.md).
 

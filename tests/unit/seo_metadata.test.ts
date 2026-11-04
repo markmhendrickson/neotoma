@@ -134,7 +134,7 @@ describe("seo_metadata", () => {
     const app = resolveSeoMetadata("/").jsonLd.find(
       (entry) => entry["@type"] === "SoftwareApplication"
     );
-    expect(app?.softwareVersion).toBe("0.26.0");
+    expect(app?.softwareVersion).toBe("0.27.0");
   });
 
   it("builds sitemap with expected canonical URLs", () => {
