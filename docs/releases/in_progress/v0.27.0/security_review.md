@@ -45,7 +45,7 @@ Treat the diff as if you were an attacker. For every concern below, propose at l
 
 Range `v0.26.0..HEAD`. The five-lens panel, security lens included, reviewed the peer sync, agent grant and correction package on its final head with the same requests on REST and MCP under every caller kind (owner, broadly and narrowly granted agents, denied signers, unrecognised signers). Full working detail is kept privately until the advisory publishes.
 
-- **Alternate-path auth / AAuth downgrade.** Agent grants now apply on every entry point that changes data, on REST and MCP, before the first write. The configured-bearer change (`src/actions.ts`, `src/services/bearer_slots.ts`) takes the same branch on either slot: no new principal, no scope widening. Covered by `tests/integration/entity_mutation_capability_coverage.test.ts`, `tests/integration/flow_mutation_capability_coverage.test.ts`, `tests/integration/bearer_handover_slot.test.ts`.
+- **Alternate-path auth / AAuth downgrade.** Agent grants now apply on every entry point that changes data, on REST and MCP. A request naming a type the grant does not cover is refused, and nothing of that type is written. The configured-bearer change (`src/actions.ts`, `src/services/bearer_slots.ts`) takes the same branch on either slot: no new principal, no scope widening. Covered by `tests/integration/entity_mutation_capability_coverage.test.ts`, `tests/integration/flow_mutation_capability_coverage.test.ts`, `tests/integration/bearer_handover_slot.test.ts`.
 - **Handover slot misuse.** Bounded to 7 days, fails closed on any malformed configuration, constant-time comparison. Covered by `tests/unit/bearer_slots.test.ts`.
 - **Durable credential minting.** `src/services/oauth_key_gate.ts` accepts the primary bearer only.
 - **Logging.** No log line or error carries a bearer value or digest. Refusal messages returned to a peer or caller are fixed server text.
@@ -73,7 +73,7 @@ Range `v0.26.0..HEAD`. The five-lens panel, security lens included, reviewed the
 
 | Reviewer | Verdict | Date |
 |----------|---------|------|
-| Falco (security lens) | yes | 2026-11-04 |
+| Falco (security lens) | with-caveats | 2026-11-04 |
 
 Verdict `yes` or `with-caveats` is required to advance past `/release` Step 3.5; `block` keeps the release on the security review lane until findings are addressed.
 

@@ -1,6 +1,6 @@
 # Test coverage review: v0.27.0
 
-Range: `v0.26.0..HEAD`, 17 commits plus the release commit.
+Range: `v0.26.0..HEAD`: 17 change PRs, plus the release commits.
 
 ## Code review
 
@@ -17,18 +17,20 @@ The peer sync, agent grant and correction package (#2749) was reviewed by the fu
 
 | Surface | Classification | Test |
 |---|---|---|
-| Peer admission on the webhook, pull leg and `prefer_remote`; refusal reporting on both sides | Covers user-observable behavior end-to-end | `tests/integration/sync_remote_*`, `tests/services/sync_peer_*` |
+| Peer admission on the webhook, pull leg and `prefer_remote`; refusal reporting on both sides | Covers user-observable behavior end-to-end | `tests/integration/sync_remote_*`, `tests/integration/sync_prefer_remote_corrections.test.ts`, `tests/services/sync_peer_*` |
 | Agent grants on every entry point that changes data, new grant operations | Covers user-observable behavior end-to-end | `tests/integration/entity_mutation_capability_coverage.test.ts`, `tests/integration/flow_mutation_capability_coverage.test.ts`, `tests/unit/agent_grant_mutation_ops.test.ts` |
 | Grant parity on `batch_correct`, observation and interpretation creation | Covers user-observable behavior end-to-end | `tests/integration/batch_correct_capability_parity.test.ts`, `tests/integration/store_capability_parity_observations_interpretations.test.ts` |
 | Structured `store` entity type rule on REST and MCP | Covers user-observable behavior end-to-end | `tests/integration/entity_mutation_capability_coverage.test.ts` |
 | Corrections win on their field | Covers user-observable behavior end-to-end | `tests/unit/observation_reducer_corrections_win.test.ts`, `tests/integration/correct_array_replaces.test.ts` |
 | Hosted outbound host check | Covers user-observable behavior end-to-end | `tests/security/ssrf_host_guard_alternate_loopback_forms.test.ts` |
-| Bearer handover slot (REST, `/mcp`, OAuth preflight) | Covers user-observable behavior end-to-end | `tests/integration/bearer_handover_slot.test.ts`, `tests/unit/bearer_slots.test.ts` |
-| `merge_array` correction replacement, including `[]` clear and CLI `corrections create` | Covers user-observable behavior end-to-end | `tests/integration/correct_array_replaces.test.ts`, `tests/unit/observation_reducer_merge_array_correction.test.ts` |
+| Bearer handover slot (REST, `/mcp`, OAuth preflight) | Covers user-observable behavior end-to-end on REST and `/mcp`; OAuth preflight at unit level | `tests/integration/bearer_handover_slot.test.ts`, `tests/unit/bearer_slots.test.ts` |
+| `merge_array` correction replacement, including `[]` clear and CLI `corrections create` | Covers user-observable behavior end-to-end | `tests/integration/correct_array_replaces.test.ts`, `tests/cli/cli_correction_array_replace.test.ts`, `tests/unit/observation_reducer_merge_array_correction.test.ts` |
 | `store` compact `related_entities` and `include_related_snapshots` | Covers user-observable behavior end-to-end | `tests/integration/store_related_entities_compact.test.ts` |
 | Entity list source-id lookups and page-bounded fragment fetch | Covers user-observable behavior end-to-end | `tests/integration/entity_list_source_lookups.test.ts`, `tests/performance/entity_list_page.bench.test.ts` |
 | Recorded-cutover visibility plans | Covers user-observable behavior end-to-end | `tests/integration/entity_lifecycle_visibility_plans.test.ts` |
-| Snapshot population certificate | Covers user-observable behavior end-to-end | `tests/unit/services/entity_population_certificate.test.ts`, `tests/integration/entity_read_contract.test.ts` |
+| Snapshot population certificate | Covers user-observable behavior end-to-end | `tests/services/entity_population_certificate.test.ts`, `tests/integration/entity_read_contract.test.ts` |
+| Fragment source acquisition (PR #2759) | Covered indirectly, through the read contract tests | `tests/integration/entity_read_contract.test.ts` |
+| CI repair (PR #2734) | CI only, no user-facing behavior | None needed |
 | Rendered-page copy controls | Covers user-observable behavior end-to-end | `src/services/rendered_page/copy_controls.test.ts`, `tests/security/rendered_page_csp.test.ts` |
 | Site, docs viewer and illustrations | Covered by site contract and unit tests | `tests/unit/site_*.test.ts`, `tests/unit/docs_viewer_*.test.ts`, `tests/unit/seo_metadata.test.ts` |
 
