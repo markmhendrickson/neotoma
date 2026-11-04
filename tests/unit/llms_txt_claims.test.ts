@@ -560,13 +560,8 @@ describe("claims true for this package", () => {
     expect(readme).toContain("fail quietly when nothing is listening there");
   });
 
-  it("marks atomic corrections as part of this released version in docs/README.md", () => {
-    const version = (
-      JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
-        version: string;
-      }
-    ).version;
-    expect(docsReadme).toContain(`one transaction (added in v${version})`);
+  it("names the release that added atomic corrections in docs/README.md", () => {
+    expect(docsReadme).toContain("one transaction (added in v0.26.0)");
   });
 });
 

@@ -668,7 +668,7 @@ describe("connection selector", () => {
       const second = steps[1]!.textContent ?? "";
       expect(container.querySelector(".plan-tool-prerequisite")).toBeNull();
       if (host.kind === "setup") {
-        expect(first).toContain("npm install -g neotoma@0.26.0");
+        expect(first).toContain("npm install -g neotoma@0.27.0");
         expect(first).toContain("neotoma init");
         expect(first).toContain(host.command);
       } else if (host.mode === "remote" || host.kind === "registry" || host.kind === "sdk") {
