@@ -236,6 +236,45 @@ describe("Inbound sync webhook", { timeout: 120_000 }, () => {
     expect(body.entity_id).toBe(entityId);
   });
 
+  it("answers 403 SYNC_ENTITY_TYPE_REFUSED for a type not synced with the peer, and stores nothing", async () => {
+    // The sender matches this exact status and code to count a refusal as
+    // refused rather than as a failed delivery; any other answer (a 500)
+    // would push the sender towards deactivating its subscription.
+    const kind = `webhook_refused_kind_${randomUUID().slice(0, 8)}`;
+    const storeRes = await fixture.httpFetch(fixture.serverA, "/store", {
+      method: "POST",
+      body: JSON.stringify({
+        entities: [{ entity_type: kind, title: "refused on B" }],
+        idempotency_key: `webhook-refused-${kind}`,
+      }),
+    });
+    expect(storeRes.status).toBe(200);
+    const entityId = ((await storeRes.json()) as { entities: Array<{ entity_id: string }> })
+      .entities?.[0]?.entity_id;
+    expect(entityId).toBeDefined();
+
+    const payload = stableStringify({
+      sender_peer_id: fixture.peerIdA,
+      sender_peer_url: fixture.serverA.baseUrl,
+      target_user_id: LOCAL_DEV,
+      entity_id: entityId!,
+      source_observation_id: `obs_refused_${randomUUID().slice(0, 8)}`,
+    });
+    const res = await postSyncWebhook(fixture.serverB, payload, {
+      "X-Neotoma-Sync-Signature-256": signBody(fixture.sharedSecret, payload),
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error_code?: string; message?: string };
+    expect(body.error_code).toBe("SYNC_ENTITY_TYPE_REFUSED");
+    expect(body.message).toBe("REMOTE_ENTITY_TYPE_REFUSED:entity_type_not_synced");
+
+    // Nothing reached B: the entity id does not resolve there.
+    const onB = await fixture.httpFetch(fixture.serverB, `/entities/${entityId}`, {
+      method: "GET",
+    });
+    expect(onB.status).toBe(404);
+  });
+
   /* ------------------------------------------------------------------ */
   /*  /sync/entities — happy path + negatives                           */
   /* ------------------------------------------------------------------ */

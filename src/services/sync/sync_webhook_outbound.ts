@@ -7,11 +7,69 @@ import { db } from "../../db.js";
 import { SUBSCRIPTION_ENTITY_TYPE } from "../subscriptions/seed_schema.js";
 import type { SubscriptionRecord } from "../subscriptions/subscription_types.js";
 import { listPeersWithSecrets, type PeerConfigRecord } from "./peer_ops.js";
+import { SYNC_ENTITY_TYPE_REFUSED_ERROR_CODE } from "./remote_snapshot_admission.js";
 import type { SyncWebhookPayload } from "./sync_webhook_inbound.js";
 import type { SyncEntitiesPayload } from "./sync_webhook_inbound.js";
 
 const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 300_000];
 const DELIVERY_TIMESTAMPS = new Map<string, number[]>();
+
+/**
+ * `postOutboundSyncWebhook` error when the receiving peer answered
+ * `403 SYNC_ENTITY_TYPE_REFUSED`: it does not admit this entity type from this
+ * instance. That is the receiver's configuration, not a delivery failure, so a
+ * retry cannot succeed until the receiving operator changes it. Callers neither
+ * retry it nor count it toward failure thresholds.
+ */
+export const PEER_REFUSED_ENTITY_TYPE = "peer_refused_entity_type";
+
+/** Largest 403 body read when looking for the refusal code; a refusal envelope is far smaller. */
+const REFUSAL_BODY_MAX_BYTES = 4096;
+
+/**
+ * The body as text when it is at most `maxBytes`, else null. The peer chooses
+ * the body, so a declared length over the cap is not read at all and an
+ * undeclared one is read only up to the cap, then the stream is cancelled.
+ */
+async function readCappedBody(res: Response, maxBytes: number): Promise<string | null> {
+  const declared = Number(res.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!res.body) return null;
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** True when `res` is the receiver's entity type refusal. Reads only `error_code`, from a capped body. */
+async function isEntityTypeRefusal(res: Response): Promise<boolean> {
+  if (res.status !== 403) return false;
+  const text = await readCappedBody(res, REFUSAL_BODY_MAX_BYTES);
+  if (text === null) return false;
+  try {
+    const body = JSON.parse(text) as { error_code?: unknown } | null;
+    return body?.error_code === SYNC_ENTITY_TYPE_REFUSED_ERROR_CODE;
+  } catch {
+    return false;
+  }
+}
 
 export function getNeotomaPublicBaseUrl(): string | null {
   const u = process.env.NEOTOMA_PUBLIC_BASE_URL?.trim();
@@ -63,6 +121,9 @@ export async function postOutboundSyncWebhook(params: {
         ? await postWithCliAAuth(url, request)
         : await guardedFetch(url, request);
     if (!res.ok) {
+      if (await isEntityTypeRefusal(res)) {
+        return { ok: false, status: res.status, error: PEER_REFUSED_ENTITY_TYPE };
+      }
       return { ok: false, status: res.status, error: `http_${res.status}` };
     }
     return { ok: true, status: res.status };
@@ -301,6 +362,20 @@ async function deliverPeerSyncWithRetries(
     if (result.ok) {
       await markSuccess(sub);
       await refreshSubscriptionInIndex(sub.entity_id);
+      return;
+    }
+    if (result.error === PEER_REFUSED_ENTITY_TYPE) {
+      // The receiver does not admit this type from us. Retrying cannot help and
+      // it is not a delivery failure, so it must not count toward deactivating
+      // the subscription (which would stop every other type to this peer).
+      logger.warn(
+        "[sync] peer refused this entity type; its operator must list it on their peer_config for this instance",
+        {
+          subscription_id: sub.subscription_id,
+          peer_id: peer.peer_id,
+          entity_type: event.entity_type,
+        }
+      );
       return;
     }
     failures += 1;
