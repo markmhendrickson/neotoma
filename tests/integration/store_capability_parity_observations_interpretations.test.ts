@@ -350,6 +350,24 @@ describe("store capability scope applies to observations/create and interpretati
 
   // ---------------------------------------------- POST /interpretations/create
   describe("POST /interpretations/create", () => {
+    it("refuses a non-string entity_type from an unrecognised signer, and writes nothing", async () => {
+      const sourceId = await seedSource();
+      const before = await entityCount("agent_grant");
+
+      const res = await createInterpretation(
+        sourceId,
+        [{ entity_type: ["agent_grant"], name: marker("interp-array-type") }],
+        "unadmitted"
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.error_code ?? (res.body.error as { code?: string })?.code).toBe(
+        "ERR_INVALID_ENTITY_TYPE"
+      );
+      expect(await interpretationCount(sourceId)).toBe(0);
+      expect(await entityCount("agent_grant")).toBe(before);
+    });
+
     it("refuses an admitted agent whose grant scopes store to a different type, and writes nothing", async () => {
       const sourceId = await seedSource();
       const name = marker("interp-other");

@@ -235,7 +235,9 @@ write, on REST and MCP alike. A request with no agent identity (an owner
 session: Bearer, OAuth or local without an agent signature, Inspector) is not
 capability-gated. For every id a call names, the grant must cover the entity's
 stored type, as well as any type the request names. A blank or missing type is
-judged as `"*"`.
+judged as `"*"`. REST `/store` goes further and refuses, for every caller kind,
+an entity whose `entity_type` is not a non-empty string (400
+`ERR_INVALID_ENTITY_TYPE`) before anything is written.
 
 | Entry point (REST / MCP) | Grant needed |
 | --- | --- |
@@ -293,7 +295,7 @@ a restore: `_deleted: true` needs `delete` and any other value needs `restore`,
 in addition to `store` or `correct`, on every store, observation and correction
 path.
 
-**Upgrading to v0.26.1.** No existing grant carries `delete`, `restore`,
+**Upgrading to v0.27.0.** No existing grant carries `delete`, `restore`,
 `merge`, `split` or `register_schema`, so an admitted agent loses those
 operations, bundle management, and the newly checked flows above whose types
 its grant does not list, until the operator adds them. Owner sessions are

@@ -14,7 +14,10 @@ import { resolveEntity } from "./entity_resolution.js";
 import { resolveOwnedObservations } from "./attachment_resolution.js";
 import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
-import { assertCurrentAgentMayStoreEntityTypes } from "./store_admission.js";
+import {
+  assertCurrentAgentMayStoreEntityTypes,
+  InvalidEntityTypeError,
+} from "./store_admission.js";
 import {
   getSchemaDefinition,
   getRegisteredEntityTypes,
@@ -403,6 +406,15 @@ export async function assertInterpretationStoreCapability(
   userId: string,
   extractedData: Record<string, unknown>[]
 ): Promise<void> {
+  // A declared type that is present but not a string would be coerced by the
+  // write; admission must judge the value the write uses, so refuse it.
+  extractedData.forEach((entityData, index) => {
+    for (const declared of [entityData.entity_type, entityData.type]) {
+      if (declared !== undefined && declared !== null && typeof declared !== "string") {
+        throw new InvalidEntityTypeError(index);
+      }
+    }
+  });
   if (!getCurrentAgentIdentity()) return;
   const { dbTypes, refinementCandidates } = await loadTypeRefinementCandidates(userId);
   const entityTypes = new Set<string>();

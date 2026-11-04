@@ -986,7 +986,7 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
       expect(await rowCount("observations", "entity_type", "")).toBe(observationsBefore);
     });
 
-    it("REST /store judges a blank entity_type as * and writes no source row", async () => {
+    it("REST /store refuses a blank entity_type from a grant scoped to task and writes no source row", async () => {
       const sourcesBefore = await rowCount("sources");
       const res = await post(
         "/store",
@@ -996,9 +996,134 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
         },
         "task-only-all"
       );
-      expect(res.status).toBe(403);
-      expect(res.body.error_code).toBe("capability_denied");
+      expect(res.status).toBe(400);
+      expect(res.body.error_code).toBe("ERR_INVALID_ENTITY_TYPE");
       expect(await rowCount("sources")).toBe(sourcesBefore);
+    });
+
+    describe("REST /store entity_type must be a non-empty string", () => {
+      async function writtenRows() {
+        return {
+          sources: await rowCount("sources"),
+          entities: await rowCount("entities"),
+          observations: await rowCount("observations"),
+        };
+      }
+
+      function storeBody(label: string, entityType: unknown): Record<string, unknown> {
+        return {
+          idempotency_key: `capcov-store-type-${label}-${randomUUID()}`,
+          entities: [{ entity_type: entityType, title: marker(label) }],
+        };
+      }
+
+      const malformed: Array<[string, unknown]> = [
+        ["number", 123],
+        ["array", ["task"]],
+        ["array of protected type", ["agent_grant"]],
+        ["object", { name: "task" }],
+        ["boolean", true],
+        ["null", null],
+        ["blank", "  "],
+      ];
+      const callers: Array<[string, string | undefined]> = [
+        ["a signature whose grant was revoked", "revoked"],
+        ["an unrecognised signer under the closed access policy", "nobody-knows-this-key"],
+        ["an admitted agent granted store on every type", "store-star-only"],
+        ["the owner", undefined],
+      ];
+
+      for (const [callerLabel, grant] of callers) {
+        for (const [typeLabel, value] of malformed) {
+          it(`refuses a ${typeLabel} entity_type from ${callerLabel} and writes no rows`, async () => {
+            const before = await writtenRows();
+            const res = await post("/store", storeBody("type", value), grant);
+            expect(res.status).toBe(400);
+            expect((res.body.error as { code?: string })?.code ?? res.body.error_code).toBe(
+              "ERR_INVALID_ENTITY_TYPE"
+            );
+            expect(await writtenRows()).toEqual(before);
+          });
+        }
+      }
+
+      it("refuses an entity that names its type only under `type`", async () => {
+        const before = await writtenRows();
+        const res = await post(
+          "/store",
+          {
+            idempotency_key: `capcov-store-type-key-${randomUUID()}`,
+            entities: [{ type: "task", title: marker("type-key") }],
+          },
+          "nobody-knows-this-key"
+        );
+        expect(res.status).toBe(400);
+        expect(await writtenRows()).toEqual(before);
+      });
+
+      it("refuses a batch whose second entity has no usable type before writing the first", async () => {
+        const before = await writtenRows();
+        const res = await post(
+          "/store",
+          {
+            idempotency_key: `capcov-store-type-batch-${randomUUID()}`,
+            entities: [
+              { entity_type: "task", title: marker("batch-ok") },
+              { entity_type: 7, title: marker("batch-bad") },
+            ],
+          },
+          "store-star-only"
+        );
+        expect(res.status).toBe(400);
+        expect(await writtenRows()).toEqual(before);
+      });
+    });
+
+    describe("REST /store refuses a denied signer", () => {
+      it("refuses a named type from a revoked grant with capability_denied and writes no rows", async () => {
+        const sourcesBefore = await rowCount("sources");
+        const entitiesBefore = await rowCount("entities");
+        const observationsBefore = await rowCount("observations");
+        const res = await post(
+          "/store",
+          {
+            idempotency_key: `capcov-store-revoked-${randomUUID()}`,
+            entities: [{ entity_type: "task", title: marker("store-revoked") }],
+          },
+          "revoked"
+        );
+        expect(res.status).toBe(403);
+        expect(res.body.error_code).toBe("capability_denied");
+        expect(await rowCount("sources")).toBe(sourcesBefore);
+        expect(await rowCount("entities")).toBe(entitiesBefore);
+        expect(await rowCount("observations")).toBe(observationsBefore);
+      });
+
+      it("refuses a revoked grant even for a type an open guest policy would allow", async () => {
+        const prior = process.env.NEOTOMA_ACCESS_POLICY_TASK;
+        process.env.NEOTOMA_ACCESS_POLICY_TASK = "open";
+        try {
+          const sourcesBefore = await rowCount("sources");
+          const entitiesBefore = await rowCount("entities");
+          const observationsBefore = await rowCount("observations");
+          const res = await post(
+            "/store",
+            {
+              idempotency_key: `capcov-store-revoked-open-${randomUUID()}`,
+              entities: [{ entity_type: "task", title: marker("store-revoked-open") }],
+            },
+            "revoked"
+          );
+          expect(res.status).toBe(403);
+          expect(res.body.error_code).toBe("capability_denied");
+          expect(await rowCount("sources")).toBe(sourcesBefore);
+          expect(await rowCount("entities")).toBe(entitiesBefore);
+          expect(await rowCount("observations")).toBe(observationsBefore);
+        } finally {
+          if (prior === undefined) delete process.env.NEOTOMA_ACCESS_POLICY_TASK;
+          else process.env.NEOTOMA_ACCESS_POLICY_TASK = prior;
+        }
+      });
     });
 
     it("MCP store refuses a type the grant does not cover before any source or schema row", async () => {

@@ -72,6 +72,28 @@ function isNamedType(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+/** Raised when a structured store entity does not carry a usable `entity_type`. */
+export class InvalidEntityTypeError extends Error {
+  readonly code = "ERR_INVALID_ENTITY_TYPE" as const;
+  readonly hint = 'Give every entity an "entity_type" that is a non-empty string.';
+  constructor(readonly index: number) {
+    super(`entities[${index}].entity_type must be a non-empty string.`);
+  }
+}
+
+/**
+ * A structured store writes each entity under its own `entity_type` value, so
+ * that value must be a non-empty string for every caller kind. Admission
+ * (access policy, protected types, grants) then judges the same value the
+ * write uses. Throws {@link InvalidEntityTypeError} before anything is written.
+ */
+export function assertStoreEntityTypesNamed(entities: readonly unknown[]): void {
+  entities.forEach((entity, index) => {
+    const entityType = (entity as Record<string, unknown> | null | undefined)?.entity_type;
+    if (!isNamedType(entityType)) throw new InvalidEntityTypeError(index);
+  });
+}
+
 /**
  * The types a `store` grant check judges: a missing, blank or non-string type
  * is judged as `"*"` (only a grant covering every type allows it), and an
@@ -97,6 +119,7 @@ export async function preflightStructuredStoreAdmission(
     idempotencyKey,
   } = params;
   const commit = params.commit !== false;
+  assertStoreEntityTypesNamed(entities);
   const { assertConditionalStoreRequest } = await import("./store_condition_request.js");
   assertConditionalStoreRequest({
     entities,
@@ -116,7 +139,15 @@ export async function preflightStructuredStoreAdmission(
   const agentIdentity = getCurrentAgentIdentity();
   const admission = getCurrentAAuthAdmission();
   const isAAuthVerified = agentIdentity?.thumbprint != null;
-  const isGuest = isAAuthVerified && (!admission || !admission.admitted);
+  // A signature whose grant is revoked, suspended, unbound, invalid or in a pin
+  // conflict carries the `deny` ceiling and is not a guest: it is refused by
+  // the capability check below. Only an unrecognised signer is left to access
+  // policy (same split as relationship_write_capability.ts).
+  const capabilityCtx = contextFromAgentIdentity(agentIdentity);
+  const isGuest =
+    isAAuthVerified &&
+    (!admission || !admission.admitted) &&
+    capabilityCtx?.ceiling?.kind !== "deny";
 
   if (isGuest && !requestContext?.bypassGuestStoreAccessPolicy) {
     const entityTypes = entities
@@ -166,7 +197,6 @@ export async function preflightStructuredStoreAdmission(
   // before any writes touch the DB. Guests who passed access policy above
   // skip grant-based capability enforcement. Unknown / anonymous callers
   // fall through (attribution_policy still gates their writes downstream).
-  const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
   if (capabilityCtx && !isGuest) {
     enforceAgentCapability(
       "store",

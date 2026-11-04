@@ -1,5 +1,7 @@
 import {
   assertCurrentAgentMayStoreEntityTypes,
+  assertStoreEntityTypesNamed,
+  InvalidEntityTypeError,
   preflightStructuredStoreAdmission,
   type StructuredStoreApiParams,
   type StoreRelationshipRef,
@@ -7538,6 +7540,10 @@ app.post("/interpretations/create", async (req, res) => {
         "AgentCapabilityRejection:interpretations_create"
       );
     }
+    if (error instanceof InvalidEntityTypeError) {
+      logWarn("InvalidEntityTypeError:interpretations_create", req, { code: error.code });
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
+    }
     logError("APIError:interpretations_create", req, error);
     const message = error instanceof Error ? error.message : "Failed to create interpretation";
     return sendError(res, 500, "INTERPRETATION_CREATE_FAILED", message);
@@ -9474,6 +9480,9 @@ async function handleStorePost(
     const { assertConditionalStoreRequest } = await import("./services/store_condition_request.js");
     assertConditionalStoreRequest(parsed.data);
     const hasEntities = Boolean(parsed.data.entities?.length);
+    // Every entity must name its type as a non-empty string, for every caller
+    // kind, before either leg of the request writes anything.
+    if (hasEntities) assertStoreEntityTypesNamed(parsed.data.entities!);
     const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
     const hasFilePath = Boolean(parsed.data.file_path);
     const hasUnstructured = hasFileContent || hasFilePath;
@@ -9690,6 +9699,10 @@ async function handleStorePost(
     if (isGrantPinConflict(error)) {
       logWarn("AgentGrantPinConflict:store", req, { code: error.code });
       return sendError(res, 409, error.code, error.message, { field: error.field });
+    }
+    if (error instanceof InvalidEntityTypeError) {
+      logWarn("InvalidEntityTypeError:store", req, { code: error.code });
+      return sendError(res, 400, error.code, error.message, { hint: error.hint });
     }
     if (errCode === "ERR_FORBIDDEN_ENTITY_TYPE" || errCode === "ERR_PLURAL_ENTITY_TYPE") {
       const message = error instanceof Error ? error.message : String(error);
