@@ -1,0 +1,82 @@
+meta:
+  id: correction_wins_every_field
+  description: "Replay real store and correct calls on the built-in task type
+    and read the winner back through retrieve_entity_snapshot. status is a
+    last_write field and notes is a highest_priority field. A task is stored at
+    source_priority 100, a correction is applied to each field, and the task is
+    then stored again at source_priority 5000 with observation_source human and
+    a newer observed_at. The correction must still win on both fields, because a
+    correction stays authoritative until a later correction replaces it,
+    whatever the merge rule and whatever the other write's priority or source
+    kind. A second correction after the high-priority store must replace the
+    first. Design basis: #2033; src/services/correction_identity.ts;
+    docs/subsystems/reducer.md section 3.6."
+  tags:
+    - tier2
+    - correct
+    - store
+    - eval-coverage
+    - writ:correction
+    - issue-2033
+seed_strategy: generated
+source_pattern: "Before #2033 a correction was authoritative only until the
+  next ordinary write on a last_write field (the default for every
+  auto-discovered field), and a write above priority 1000 could outrank a
+  correction under highest_priority. The correct call reported success and the
+  snapshot looked right until the next re-ingest silently reverted it."
+# The re-ingest store passes source_priority 5000 and observation_source human
+# on purpose: that is the strongest write a caller can make through the public
+# store path, and it must still lose to a correction.
+privacy_transform: Synthetic tasks only. Scripted replay cassette, no recorded
+  user data or model output.
+system_prompt: Store each supplied synthetic task update with the
+  source_priority and observation_source given, apply each requested
+  correction, then read the task's snapshot back.
+user_prompt: Store a task, correct its status and notes, store the same task
+  again at a much higher source priority, read the snapshot back, correct the
+  status once more, and read the snapshot back again.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  # The agent actually issued all three corrections.
+  - type: mcp_tool.invocations
+    tool_name: correct
+    op: gte
+    value: 3
+  # After the high-priority re-ingest the corrections still hold on both
+  # strategies: status (last_write) reads the corrected value and notes
+  # (highest_priority) reads the corrected note, not the 5000-priority values.
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 0
+    result_subset:
+      snapshot:
+        title: Correction wins eval target
+        status: done
+        notes: corrected note
+      observation_count: 4
+  # A second correction after the high-priority store replaces the first one,
+  # and the note correction is unaffected.
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 1
+    result_subset:
+      snapshot:
+        title: Correction wins eval target
+        status: blocked
+        notes: corrected note
+      observation_count: 5
+  # Everything resolved to one task.
+  - type: entity.count
+    entity_type: task
+    op: eq
+    value: 1
+  # Nothing still reads a re-ingested value.
+  - type: entity.count
+    entity_type: task
+    where:
+      status: open
+    op: eq
+    value: 0
