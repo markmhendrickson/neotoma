@@ -23,6 +23,35 @@ GET /entities/:id/html
 
 This route 404s for any entity type other than `rendered_page`, keeping the publish surface explicit.
 
+### Copyable prompts and code
+
+Mark a complete preformatted block with `data-copyable` to get a renderer-owned
+Copy button. Copying preserves the block's full `textContent`, including literal
+characters, nested code spans, line breaks and a trailing newline. It never copies
+the button or its status message.
+
+```html
+<pre data-copyable><code>Paste this entire prompt into your agent.</code></pre>
+```
+
+Optional attributes on that `pre` customize plain-text labels:
+`data-copy-label`, `data-copied-label`, `data-copy-success` and
+`data-copy-failure`. For example, `data-copy-label="Copiar petición"` changes the
+button label. Authors provide no JavaScript or inline event handlers.
+
+The template creates controls only for opted-in blocks. An immutable helper is
+allowed by its exact SHA-256 CSP hash; arbitrary author scripts, event handlers,
+external scripts and dynamic code remain blocked. Copy-enabled documents use an
+opaque-origin sandbox (`allow-scripts` without `allow-same-origin`) so the helper
+cannot access the app's origin, storage or cookies. Pages without copyable blocks
+retain the script-free policy.
+
+Copying runs only after a button click. The helper tries synchronous clipboard
+copying while user activation is held, then the write-only Clipboard API. If both
+fail, it selects the full block and displays a manual-copy instruction; it does
+not report a successful copy. Verify the clipboard through the intended reader's
+browser before reporting a copy affordance as working.
+
 ## Guest access (sharing with a non-user)
 
 The schema ships `guest_access_policy: submitter_scoped`. A **bare** `…/entities/:id/html` URL therefore **401s for an unauthenticated viewer**. To share the page with someone outside the operator's account, the URL must carry a guest token:
