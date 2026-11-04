@@ -7332,6 +7332,16 @@ export interface operations {
         };
       };
       /**
+       * @description `ERR_INVALID_ENTITY_TYPE` — an entity declares a type in `entity_type`
+       *     or `type` that is not a string. Nothing was written; the `hint` names the fix.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
        * @description `capability_denied` — the admitted agent's grant does not cover `store`
        *     on every entity type the interpretation would write (judged after alias
        *     resolution and refinement), or a signed agent that was not admitted
@@ -7456,7 +7466,10 @@ export interface operations {
         };
       };
       /**
-       * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
+       * @description Request rejected. `ERR_INVALID_ENTITY_TYPE` — an entity does not carry
+       *     an `entity_type` that is a non-empty string (the `type` shortcut is not
+       *     accepted); nothing was written and the `hint` names the fix.
+       *     `ERR_STORE_RESOLUTION_FAILED` uses the richer
        *     `StoreResolutionErrorEnvelope` shape; one of its per-observation
        *     `issues[].code` values is `entity_owner_conflict` — resolution
        *     landed on an existing entity owned by a different, non-null

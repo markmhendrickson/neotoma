@@ -6233,6 +6233,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CreateInterpretationResponse" }
+        "400":
+          description: |
+            `ERR_INVALID_ENTITY_TYPE` — an entity declares a type in `entity_type`
+            or `type` that is not a string. Nothing was written; the `hint` names the fix.
         "403":
           description: |
             `capability_denied` — the admitted agent's grant does not cover `store`
@@ -6336,7 +6340,10 @@ paths:
                   - { $ref: "#/components/schemas/StoreResponse" }
         "400":
           description: |
-            Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
+            Request rejected. `ERR_INVALID_ENTITY_TYPE` — an entity does not carry
+            an `entity_type` that is a non-empty string (the `type` shortcut is not
+            accepted); nothing was written and the `hint` names the fix.
+            `ERR_STORE_RESOLUTION_FAILED` uses the richer
             `StoreResolutionErrorEnvelope` shape; one of its per-observation
             `issues[].code` values is `entity_owner_conflict` — resolution
             landed on an existing entity owned by a different, non-null

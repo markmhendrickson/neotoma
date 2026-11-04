@@ -235,9 +235,11 @@ write, on REST and MCP alike. A request with no agent identity (an owner
 session: Bearer, OAuth or local without an agent signature, Inspector) is not
 capability-gated. For every id a call names, the grant must cover the entity's
 stored type, as well as any type the request names. A blank or missing type is
-judged as `"*"`. REST `/store` goes further and refuses, for every caller kind,
-an entity whose `entity_type` is not a non-empty string (400
-`ERR_INVALID_ENTITY_TYPE`) before anything is written.
+judged as `"*"` on the paths that accept one. A structured `store` entity must
+name its type in `entity_type` as a non-empty string, on REST and MCP alike and
+for every caller kind; the `type` shortcut is not accepted. Anything else is
+refused with 400 (REST) or invalid params (MCP) carrying `ERR_INVALID_ENTITY_TYPE`
+before anything is written.
 
 | Entry point (REST / MCP) | Grant needed |
 | --- | --- |

@@ -227,10 +227,10 @@ export function assertCurrentAgentMayWriteLifecycleMarker(
 
 /**
  * The entity type a structured store writes an entity under. The MCP store's
- * plan and write loops call this too, so the check and the write cannot
- * resolve the type differently (a blank `entity_type` falls through to `type`).
- * A non-string value is passed through unchanged, and the check judges it as
- * `"*"`.
+ * plan and write loops call this too, so the check and the write resolve the
+ * type the same way. A structured store has already refused any entity whose
+ * `entity_type` is not a non-empty string (`assertStoreEntityTypesNamed`), so
+ * the `type` and `"generic"` fallbacks only serve callers outside that path.
  */
 export function storeEntityTypeOf(entity: Record<string, unknown> | null | undefined): string {
   return ((entity?.entity_type as string) || (entity?.type as string) || "generic") as string;

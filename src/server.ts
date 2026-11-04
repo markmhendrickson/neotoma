@@ -85,6 +85,7 @@ import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import { UnregisteredRelationshipTypeError } from "./services/relationships.js";
 import { AgentCapabilityError } from "./services/agent_capabilities.js";
+import { InvalidEntityTypeError } from "./services/store_admission.js";
 import {
   ISSUE_THREAD_ENTITY_TYPES,
   assertCurrentAgentMay,
@@ -2620,6 +2621,14 @@ export class NeotomaServer {
             error.message,
             error.toErrorEnvelope()
           );
+        }
+        if (error instanceof InvalidEntityTypeError) {
+          // Same code and hint as the REST 400 envelope.
+          throw new McpError(ErrorCode.InvalidParams, error.message, {
+            code: error.code,
+            message: error.message,
+            hint: error.hint,
+          });
         }
         if (error instanceof AttributionPolicyError) {
           // Surface policy rejections as structured MCP errors so clients can
@@ -5878,6 +5887,14 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
+    // Every structured entity names its type before any other step, so the
+    // rule holds on every branch below (normal, overflow intake, commit:false,
+    // conditional) and nothing is written for a refused request.
+    if (parsed.entities?.length) {
+      const { assertStoreEntityTypesNamed } = await import("./services/store_admission.js");
+      assertStoreEntityTypesNamed(parsed.entities);
+    }
+
     // #2242: peel the reserved per-entity `data_origin` key off every entity and
     // resolve each entity's effective origin (entity → request → none) before
     // anything else reads the entities. Mirrors the REST boundary in actions.ts.
@@ -6488,6 +6505,9 @@ export class NeotomaServer {
     relationships?: StoreRelationshipRef[],
     options: StoreStructuredInternalOptions = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // Same rule for every internal caller, before any write or key claim.
+    const { assertStoreEntityTypesNamed } = await import("./services/store_admission.js");
+    assertStoreEntityTypesNamed(entities);
     const run = () =>
       this.storeStructuredInternalUnguarded(
         userId,

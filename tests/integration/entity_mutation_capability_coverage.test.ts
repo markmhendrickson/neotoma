@@ -615,7 +615,7 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
       expect(await observationCount(contact)).toBe(before);
     });
 
-    it("MCP store judges an entity with no type as the type the write uses", async () => {
+    it("MCP store refuses a reserved-marker entity with no entity_type and deletes nothing", async () => {
       const contact = await seedContact("rsv-notype");
       const error = await capture(() =>
         tool(
@@ -628,7 +628,7 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
           "store-star-only"
         )
       );
-      expectDenied(error, "delete");
+      expect((error as { code?: string } | undefined)?.code).toBe("ERR_INVALID_ENTITY_TYPE");
       expect(await isEntityDeleted(contact, USER_ID)).toBe(false);
     });
 
@@ -688,7 +688,7 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
       expect(await isEntityDeleted(contact, USER_ID)).toBe(true);
     });
 
-    it("MCP store judges a blank entity_type by the type the write falls back to", async () => {
+    it("MCP store refuses a blank entity_type that names its type only under `type`", async () => {
       const kind = `capcov_cust_${randomBytes(3).toString("hex")}`;
       const name = marker("blank-type");
       const seeded = await post("/store", {
@@ -711,7 +711,7 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
           "store-star-delete-generic"
         )
       );
-      expectDenied(error, "delete");
+      expect((error as { code?: string } | undefined)?.code).toBe("ERR_INVALID_ENTITY_TYPE");
       expect(await isEntityDeleted(id, USER_ID)).toBe(false);
     });
 
@@ -1076,6 +1076,177 @@ describe("agent grants on entity lifecycle and schema governance entry points", 
         );
         expect(res.status).toBe(400);
         expect(await writtenRows()).toEqual(before);
+      });
+    });
+
+    describe("MCP store entity_type must be a non-empty string", () => {
+      type Handler = (req: unknown, extra: unknown) => Promise<unknown>;
+
+      /** Runs the real tools/call dispatch, so the error envelope is the one a client sees. */
+      async function callStore(
+        args: Record<string, unknown>,
+        grant: string | undefined
+      ): Promise<unknown> {
+        const handlers = (
+          mcp as unknown as { mcpServer: { server: { _requestHandlers: Map<string, Handler> } } }
+        ).mcpServer.server._requestHandlers;
+        const handler = handlers.get("tools/call");
+        if (!handler) throw new Error("tools/call handler not registered");
+        const request = { method: "tools/call", params: { name: "store", arguments: args } };
+        const run = () => handler(request, { requestId: `capcov-${randomUUID()}` });
+        if (grant === undefined) return run();
+        const identity: AgentIdentity = {
+          sub: "mutator@swarm.test",
+          iss: "https://swarm.test",
+          thumbprint: `${THUMBPRINT_PREFIX}${grant}`,
+          algorithm: "ES256",
+          publicKey: '{"kty":"EC"}',
+          tier: "software",
+        };
+        const aauthAdmission =
+          grant === "revoked"
+            ? { admitted: false as const, reason: "grant_revoked" as const }
+            : grant in GRANTS
+              ? {
+                  admitted: true as const,
+                  reason: "admitted" as const,
+                  user_id: USER_ID,
+                  grant_id: `ent_test_mutation_cap_${grant}`,
+                  agent_label: `mutation capability ${grant}`,
+                  capabilities: GRANTS[grant] as AgentCapabilityEntry[],
+                }
+              : { admitted: false as const, reason: "no_match" as const };
+        return runWithRequestContext(
+          { agentIdentity: identity, attributionDecision: null, aauthAdmission },
+          run
+        );
+      }
+
+      async function writtenRows() {
+        return {
+          sources: await rowCount("sources"),
+          entities: await rowCount("entities"),
+          observations: await rowCount("observations"),
+        };
+      }
+
+      type Mode = [string, Record<string, unknown>];
+      const modes: Mode[] = [
+        ["a normal store", {}],
+        ["a commit:false store", { commit: false }],
+        ["a conditional store", { expected_entity_absent: true }],
+        ["an overflow intake store", { intake: { mode: "overflow", reason: "capcov" } }],
+      ];
+      const malformed: Array<[string, unknown]> = [
+        ["number", 123],
+        ["array", ["task"]],
+        ["array of protected type", ["agent_grant"]],
+        ["object", { name: "task" }],
+        ["boolean", true],
+        ["null", null],
+        ["blank", "  "],
+        ["empty", ""],
+        ["missing", undefined],
+      ];
+      const callers: Array<[string, string | undefined]> = [
+        ["a signature whose grant was revoked", "revoked"],
+        ["an unrecognised signer", "nobody-knows-this-key"],
+        ["an admitted agent granted store on every type", "store-star-only"],
+        ["the owner", undefined],
+      ];
+      let sinkDir: string;
+      let priorSink: string | undefined;
+
+      beforeAll(() => {
+        sinkDir = fs.mkdtempSync(path.join(os.tmpdir(), "capcov-sink-"));
+        priorSink = process.env.NEOTOMA_OVERFLOW_SINK;
+        process.env.NEOTOMA_OVERFLOW_SINK = sinkDir;
+      });
+      afterAll(() => {
+        if (priorSink === undefined) delete process.env.NEOTOMA_OVERFLOW_SINK;
+        else process.env.NEOTOMA_OVERFLOW_SINK = priorSink;
+        fs.rmSync(sinkDir, { recursive: true, force: true });
+      });
+
+      for (const [callerLabel, grant] of callers) {
+        for (const [modeLabel, extra] of modes) {
+          for (const [typeLabel, value] of malformed) {
+            it(`refuses a ${typeLabel} entity_type in ${modeLabel} from ${callerLabel} and writes nothing`, async () => {
+              const before = await writtenRows();
+              const entity: Record<string, unknown> = { title: marker("mcp-type") };
+              if (value !== undefined) entity.entity_type = value;
+              const error = (await capture(() =>
+                callStore(
+                  {
+                    idempotency_key: `capcov-mcp-type-${randomUUID()}`,
+                    entities: [entity],
+                    ...extra,
+                  },
+                  grant
+                )
+              )) as { code?: number; data?: { code?: string; hint?: string } } | undefined;
+              expect(error).toBeDefined();
+              expect(error?.code).toBe(-32602);
+              expect(error?.data?.code).toBe("ERR_INVALID_ENTITY_TYPE");
+              expect(error?.data?.hint).toBe(
+                'Give every entity an "entity_type" that is a non-empty string.'
+              );
+              expect(await writtenRows()).toEqual(before);
+              expect(fs.readdirSync(sinkDir)).toHaveLength(0);
+            });
+          }
+        }
+      }
+
+      it("refuses an entity that names its type only under `type`", async () => {
+        const before = await writtenRows();
+        const error = (await capture(() =>
+          callStore(
+            {
+              idempotency_key: `capcov-mcp-type-key-${randomUUID()}`,
+              entities: [{ type: "task", title: marker("mcp-type-key") }],
+            },
+            undefined
+          )
+        )) as { data?: { code?: string } } | undefined;
+        expect(error?.data?.code).toBe("ERR_INVALID_ENTITY_TYPE");
+        expect(await writtenRows()).toEqual(before);
+      });
+
+      it("refuses a batch whose second entity has no usable type before writing the first", async () => {
+        const before = await writtenRows();
+        const error = (await capture(() =>
+          callStore(
+            {
+              idempotency_key: `capcov-mcp-type-batch-${randomUUID()}`,
+              entities: [
+                { entity_type: "task", title: marker("mcp-batch-ok") },
+                { entity_type: 7, title: marker("mcp-batch-bad") },
+              ],
+            },
+            "store-star-only"
+          )
+        )) as { data?: { code?: string } } | undefined;
+        expect(error?.data?.code).toBe("ERR_INVALID_ENTITY_TYPE");
+        expect(await writtenRows()).toEqual(before);
+      });
+
+      it("still stores an entity with a named type for the owner and an admitted agent", async () => {
+        for (const grant of [undefined, "store-star-only"]) {
+          const result = (await callStore(
+            {
+              idempotency_key: `capcov-mcp-type-ok-${randomUUID()}`,
+              entities: [{ entity_type: "task", title: marker("mcp-type-ok") }],
+            },
+            grant
+          )) as ToolResult;
+          const parsed = JSON.parse(result.content[0].text) as {
+            entities?: Array<{ entity_id: string }>;
+          };
+          const id = parsed.entities?.[0]?.entity_id;
+          expect(typeof id).toBe("string");
+          createdEntityIds.push(id as string);
+        }
       });
     });
 
