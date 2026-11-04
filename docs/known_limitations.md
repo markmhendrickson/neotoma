@@ -13,7 +13,6 @@ Applies to `neotoma@0.27.0`. Every entry has a tracking issue.
 
 **Writes and corrections**
 
-- [A later ordinary write can replace a correction](#a-later-ordinary-write-can-replace-a-correction)
 - [A correction, or a stored date, is not checked against the declared type](#a-correction-or-a-stored-date-is-not-checked-against-the-declared-type)
 - [A stored value of the wrong type is left out of the snapshot and reported as undeclared](#a-stored-value-of-the-wrong-type-is-left-out-of-the-snapshot-and-reported-as-undeclared)
 - [A store that fails partway does not always say what was stored](#a-store-that-fails-partway-does-not-always-say-what-was-stored)
@@ -71,14 +70,6 @@ Applies to `neotoma@0.27.0`. Every entry has a tracking issue.
 **Tracking.** [#2691](https://github.com/markmhendrickson/neotoma/issues/2691)
 
 ## Writes and corrections
-
-### A later ordinary write can replace a correction
-
-**What you will observe.** `correct()` records the new value as an observation with priority 1000, and the snapshot shows it. For a field that uses the `last_write` merge policy, which is the default, the snapshot keeps the value from the observation with the latest observed time and does not compare priorities. A later ordinary write to the same field (a re-ingest, a sync, or an agent storing the record again) therefore replaces the corrected value in the snapshot, with no warning. The correction is still readable as an observation of that entity.
-
-**Workaround.** After a write that may touch a corrected field, read the field's provenance (`retrieve_field_provenance`) and correct the field again if a later observation set it.
-
-**Tracking.** [#2033](https://github.com/markmhendrickson/neotoma/issues/2033)
 
 ### A correction, or a stored date, is not checked against the declared type
 
