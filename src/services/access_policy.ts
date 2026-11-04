@@ -210,7 +210,32 @@ export async function resolveAccessPolicy(entityType: string): Promise<AccessPol
 }
 
 /**
+ * Set guest_access_policy in the active schema row's metadata for an entity type.
+ *
+ * This is the canonical, live path: the policy is read per-request from the active
+ * schema row (precedence #2: env > schema_metadata > config_file > default), so
+ * this change takes effect on the running server immediately — no restart needed.
+ *
+ * Throws if the schema registry is unavailable or no active schema exists for the type.
+ * Preserves all other metadata fields on the active schema row.
+ */
+export async function setAccessPolicyInSchemaMetadata(
+  entityType: string,
+  mode: AccessPolicyMode
+): Promise<void> {
+  if (!VALID_MODES.has(mode)) {
+    throw new Error(
+      `Invalid access policy mode "${mode}". Valid modes: ${Array.from(VALID_MODES).join(", ")}`
+    );
+  }
+  const { SchemaRegistryService } = await import("./schema_registry.js");
+  const registry = new SchemaRegistryService();
+  await registry.updateMetadata(entityType, { guest_access_policy: mode });
+}
+
+/**
  * Set the access policy for an entity type in persisted config.
+ * @deprecated Use setAccessPolicyInSchemaMetadata for live, canonical writes.
  */
 export async function setAccessPolicy(entityType: string, mode: AccessPolicyMode): Promise<void> {
   if (!VALID_MODES.has(mode)) {
