@@ -32,12 +32,11 @@ test.describe("Unknown route handling", () => {
 type Rgba = [number, number, number, number];
 
 test.describe("404 primary action contrast", () => {
-  for (const theme of ["light", "dark"] as const) {
-    test(`Go home label retains contrast in both themes (${theme})`, async ({ page }) => {
-      await page.addInitScript((value) => {
-        window.localStorage.setItem("theme", value);
-      }, theme);
+  test("Go home label retains contrast in both themes", async ({ page }) => {
+    for (const theme of ["light", "dark"] as const) {
       await page.goto("/missing-page");
+      await page.evaluate((value) => window.localStorage.setItem("theme", value), theme);
+      await page.reload();
       await page.waitForLoadState("networkidle");
       await expect(page.locator("html")).toHaveClass(theme === "dark" ? /dark/ : /^(?!.*dark).*$/);
 
@@ -119,18 +118,18 @@ test.describe("404 primary action contrast", () => {
               const fill = composite(c.fill as Rgba, c.backdrop as Rgba);
               return {
                 textEqualsToken: c.text.join(",") === c.token.join(","),
-                ratio: contrast(c.text as Rgba, fill),
+                ratioAtLeast4_5: contrast(c.text as Rgba, fill) >= 4.5,
               };
             },
             { message: `${theme} ${state}`, timeout: 5_000 }
           )
-          .toEqual({ textEqualsToken: true, ratio: expect.toBeGreaterThanOrEqual(4.5) });
+          .toEqual({ textEqualsToken: true, ratioAtLeast4_5: true });
       };
 
       await page.mouse.move(0, 0);
       await assertState("at rest");
       await link.hover();
       await assertState("on hover");
-    });
-  }
+    }
+  });
 });
