@@ -67,7 +67,7 @@ test.describe("404 primary action contrast", () => {
           const a = links[0] ?? el!;
           const probe = document.createElement("div");
           probe.style.backgroundColor = "hsl(var(--background))";
-          document.body.appendChild(probe);
+          a.parentElement!.appendChild(probe);
           const token = getComputedStyle(probe).backgroundColor;
           probe.remove();
           const cs = getComputedStyle(a);
