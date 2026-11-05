@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "pages": [
+    {
+      "route": "/docs/getting-started",
+      "source": "docs/developer/getting_started.md",
+      "coverage": "reference_only"
+    },
+    {
+      "route": "/docs/cli-reference",
+      "source": "docs/developer/cli_reference.md",
+      "coverage": "reference_only"
+    },
+    {
+      "route": "/docs/mcp-reference",
+      "source": "docs/specs/MCP_SPEC.md",
+      "coverage": "reference_only"
+    }
+  ]
+}
