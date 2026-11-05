@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appPathFromBrowserPathname, getSpaBasename } from "../../frontend/src/site/spa_path";
+import {
+  appPathFromBrowserPathname,
+  getSpaBasename,
+  staticAssetPath,
+} from "../../frontend/src/site/spa_path";
 
 function mockWindowPathname(pathname: string) {
   vi.stubGlobal("window", { location: { pathname } });
@@ -20,6 +24,15 @@ describe("spa_path", () => {
     expect(getSpaBasename()).toBe("/neotoma");
   });
 
+  it("keeps preview assets and home navigation within the PR mount", () => {
+    mockWindowPathname("/pr-950/install");
+    expect(getSpaBasename()).toBe("/pr-950");
+    expect(staticAssetPath("/brand/october/paper-fiber.webp")).toBe(
+      "/pr-950/brand/october/paper-fiber.webp"
+    );
+    expect(staticAssetPath("/")).toBe("/pr-950/");
+  });
+
   it("appPathFromBrowserPathname strips SPA basename and locale", () => {
     mockWindowPathname("/neotoma/es/install");
     expect(appPathFromBrowserPathname("/neotoma/es/install")).toBe("/install");
@@ -27,7 +40,9 @@ describe("spa_path", () => {
 
   it("appPathFromBrowserPathname maps product-at-root URL to product path", () => {
     mockWindowPathname("/neotoma-with-claude-code");
-    expect(appPathFromBrowserPathname("/neotoma-with-claude-code")).toBe("/neotoma-with-claude-code");
+    expect(appPathFromBrowserPathname("/neotoma-with-claude-code")).toBe(
+      "/neotoma-with-claude-code"
+    );
   });
 
   it("appPathFromBrowserPathname leaves plain paths unchanged", () => {

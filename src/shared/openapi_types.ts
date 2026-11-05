@@ -2087,6 +2087,12 @@ export interface paths {
      *     of rejecting them. The response sets `unknown_field: true` and includes a
      *     `hint` so the caller knows the value will not surface in the entity
      *     snapshot until the field is added to the schema.
+     *
+     *     On an array field with the `merge_array` strategy, a later correction
+     *     replaces the whole array with exactly the `value` sent (`[]` clears
+     *     it), so send the complete list you want, not just the change. Two
+     *     corrections made in the same millisecond are ordered by `created_at`,
+     *     then `id`.
      */
     post: operations["correct"];
     delete?: never;
@@ -2427,7 +2433,13 @@ export interface paths {
     /** List configured Neotoma peers for the authenticated user */
     get: operations["listPeers"];
     put?: never;
-    /** Add a Neotoma peer configuration */
+    /**
+     * Add a Neotoma peer configuration
+     * @description Registers a peer_config. The request does not set `accept_governance_entity_types`,
+     *     so a new peer is accepted for no governance entity types. To accept governance types
+     *     (for example `issue`) from this peer, correct that field on the created peer_config
+     *     entity afterwards. See docs/subsystems/peer_sync.md, Remote Snapshot Admission.
+     */
     post: operations["addPeer"];
     delete?: never;
     options?: never;
@@ -3559,14 +3571,25 @@ export interface components {
         | "create_relationship"
         | "correct"
         | "retrieve"
+        | "register_relationship_type"
+        | "delete"
+        | "restore"
+        | "merge"
+        | "split"
+        | "register_schema"
         | "github_harness:read"
         | "github_harness:write"
         | "github_harness:*";
       /**
        * @description Allowed entity types for this op. The single string `*` widens
-       *     to any entity_type that is not protected (see
-       *     `protected_entity_types`). Empty array is valid for
-       *     `github_harness:*` ops, which use `repos` instead.
+       *     to any entity_type. A protected type (see
+       *     `protected_entity_types`) additionally requires the caller to be
+       *     admitted; `*` on the same op covers it. Empty array is valid for
+       *     `github_harness:*` ops, which use `repos` instead. `delete`,
+       *     `restore`, `merge`, `split` and `register_schema` are granted
+       *     only by an entry that names them: `store` and `correct` do not
+       *     imply them. Bundle install, enable and disable need
+       *     `register_schema` with `["*"]`.
        */
       entity_types: string[];
       /**
@@ -4267,6 +4290,20 @@ export interface components {
      *     remain intentionally open so schema-driven fields flow through.
      */
     StoreRequest: {
+      /**
+       * @description Shapes the `related_entities` array in the MCP `store` response for
+       *     structured stores. By default each entry is compact:
+       *     `{id, entity_type, canonical_name}`. When true, each entry is the
+       *     full entity row plus its current `snapshot` (the pre-compaction
+       *     response shape), which can be very large when a related entity has a
+       *     large snapshot. Retrieve an entity by id for its snapshot instead
+       *     where possible. Does not change what is written or which entities
+       *     are related, and is not part of the idempotency fingerprint. The
+       *     REST `/store` response carries no `related_entities`, so the flag is
+       *     accepted there and has no effect.
+       * @default false
+       */
+      include_related_snapshots?: boolean;
       /**
        * @description When true, atomically create exactly one structured entity only if
        *     its complete schema-declared physical identity is absent. Requires
@@ -6324,6 +6361,18 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `merge` capability
+       *     covering both entities' stored types, or a type is protected. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   splitEntity: {
@@ -6353,6 +6402,19 @@ export interface operations {
        *     zero / all observations.
        */
       400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `split` capability
+       *     covering the source's stored type, the new entity's type and any existing
+       *     target's stored type, or a type is protected. Checked before any write; nothing was written.
+       */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -7001,6 +7063,19 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover `store`
+       *     on the entity type, or a signed agent that was not admitted writes a
+       *     protected type. Nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   listRelationships: {
@@ -7256,6 +7331,30 @@ export interface operations {
           "application/json": components["schemas"]["CreateInterpretationResponse"];
         };
       };
+      /**
+       * @description `ERR_INVALID_ENTITY_TYPE` — an entity declares a type in `entity_type`
+       *     or `type` that is not a string. Nothing was written; the `hint` names the fix.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover `store`
+       *     on every entity type the interpretation would write (judged after alias
+       *     resolution and refinement), or a signed agent that was not admitted
+       *     writes a protected type. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   getStats: {
@@ -7367,7 +7466,10 @@ export interface operations {
         };
       };
       /**
-       * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
+       * @description Request rejected. `ERR_INVALID_ENTITY_TYPE` — an entity does not carry
+       *     an `entity_type` that is a non-empty string (the `type` shortcut is not
+       *     accepted); nothing was written and the `hint` names the fix.
+       *     `ERR_STORE_RESOLUTION_FAILED` uses the richer
        *     `StoreResolutionErrorEnvelope` shape; one of its per-observation
        *     `issues[].code` values is `entity_owner_conflict` — resolution
        *     landed on an existing entity owned by a different, non-null
@@ -7405,6 +7507,13 @@ export interface operations {
        *     when an `agent_definition` entity's `override_policy` denies the
        *     calling agent role a field being written; the envelope details
        *     carry `field_name`, `agent_role`, and `entity_id`.
+       *     `capability_denied` also covers a file upload (unstructured leg) when the
+       *     admitted agent's grant has no `store` capability for the upload's asset
+       *     type (`image_asset`, `audio_asset`, `video_asset` or `file_asset`, by MIME
+       *     type), checked before either leg writes; an entity that extends an
+       *     existing one (`target_id`) without `store` on that entity's stored type;
+       *     and an entity that sets `_deleted` without `delete` (for `true`) or
+       *     `restore` (any other value) on its type.
        */
       403: {
         headers: {
@@ -8234,6 +8343,18 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `correct` capability
+       *     for `issue` (and each listed entity's stored type). Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   bulkRemoveIssues: {
@@ -8263,6 +8384,18 @@ export interface operations {
               [key: string]: unknown;
             }[];
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `delete` capability
+       *     for `issue` (and each listed entity's stored type). Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8319,6 +8452,20 @@ export interface operations {
             /** @description Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded. */
             remote_submission_error: string | null;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — on the owner path, the admitted agent's grant has no
+       *     `store` capability for `issue`, `conversation` and `conversation_message`,
+       *     or no `create_relationship` capability for `REFERS_TO` from `issue` to a
+       *     linked entity's type. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8404,6 +8551,20 @@ export interface operations {
        *     lists the alternatives the caller can supply.
        */
       400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description `capability_denied` — on the owner path, the admitted agent's grant has no
+       *     `store` capability for `issue`, `conversation` and `conversation_message`,
+       *     or no `create_relationship` capability for `REFERS_TO` from `issue` to a
+       *     linked entity's type. Checked before any write; nothing was written.
+       */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -8515,7 +8676,12 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist) */
+      /**
+       * @description The requested `repo` is not permitted on this instance (not the configured repo and not on the allowlist)
+       *     Also `capability_denied` when the admitted agent's grant lacks `store` or
+       *     `correct` for `issue`, `conversation` and `conversation_message`; nothing
+       *     was written or pushed.
+       */
       403: {
         headers: {
           [name: string]: unknown;
@@ -8555,6 +8721,19 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `delete` capability
+       *     covering the entity's stored type (and the type the request names), or the
+       *     type is protected. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   restoreEntity: {
@@ -8584,6 +8763,19 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `restore` capability
+       *     covering the entity's stored type (and the type the request names), or the
+       *     type is protected. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -8915,6 +9107,18 @@ export interface operations {
             | components["schemas"]["SchemaRegistryToolErrorResponse"];
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `register_schema`
+       *     capability for the entity type, or the type is protected. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   registerRelationshipType: {
@@ -9076,6 +9280,18 @@ export interface operations {
             /** @description Non-blocking warnings about entity type naming anti-patterns (redundant suffixes, non-snake_case, overly generic names, etc.). Registration succeeds even when warnings are present. */
             name_lint_warnings: string[];
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `register_schema`
+       *     capability for the entity type, or the type is protected. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -9597,6 +9813,19 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant does not cover `correct`
+       *     on the entity's stored type, or the entity type is protected and the
+       *     caller may not correct it. Nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
       /** @description Entity not found (or not owned by the authenticated user). */
       404: {
         headers: {
@@ -9880,7 +10109,11 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer */
+      /**
+       * @description Guest entity filter is empty or extends outside the token grant, or the guest requested webhook delivery or a sync peer
+       *     Also `capability_denied` when the admitted agent's grant has no `store`
+       *     capability for `subscription`; nothing was written.
+       */
       403: {
         headers: {
           [name: string]: unknown;
@@ -9926,7 +10159,11 @@ export interface operations {
           "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
-      /** @description Subscription is not wholly inside the guest entity grant */
+      /**
+       * @description Subscription is not wholly inside the guest entity grant
+       *     Also `capability_denied` when the admitted agent's grant has no `correct`
+       *     capability for `subscription`; nothing was written.
+       */
       403: {
         headers: {
           [name: string]: unknown;
@@ -10117,6 +10354,18 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `store` capability
+       *     for `peer_config`. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   getPeerStatus: {
@@ -10139,6 +10388,7 @@ export interface operations {
           "application/json": {
             /** @description This Neotoma instance package version (same source as GET /health) */
             local_api_version: string;
+            /** @description The peer_config snapshot with the shared secret redacted, including `entity_types` and `accept_governance_entity_types`. */
             peer: {
               [key: string]: unknown;
             };
@@ -10180,6 +10430,18 @@ export interface operations {
           };
         };
       };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `correct` capability
+       *     for `peer_config`. Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
   };
   syncPeer: {
@@ -10207,8 +10469,34 @@ export interface operations {
         };
         content: {
           "application/json": {
+            ok?: boolean;
+            /** @description Summary of the run. When pulled rows were refused, ends with a sentence giving that count. */
+            message?: string;
+            batches?: number;
+            succeeded?: number;
+            failed?: number;
+            /** @description Rows pulled from the peer and ingested. */
+            pulled?: number;
+            /** @description Rows pulled from the peer and not ingested because their entity_type was not admitted (a protected type, a governance type not in this peer's accept_governance_entity_types, or a type not in the peer's entity_types). Refused rows still advance the watermark. */
+            refused?: number;
+            /** @description Rows pushed to the peer that it refused by entity type (403 SYNC_ENTITY_TYPE_REFUSED). Not counted in failed and not retried as a failure; the peer's operator must admit the type on their peer_config for this instance. The watermark moves past refused rows as on the pull leg; after the peer's operator admits the type, set last_sync_at back to resend them. A run whose only problem is refused rows still returns ok true. */
+            refused_by_peer?: number;
+          } & {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — the admitted agent's grant has no `correct` capability
+       *     for `peer_config` (a sync run sends local data to the peer and advances its
+       *     watermark). Checked before any write; nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -10246,8 +10534,36 @@ export interface operations {
         };
         content: {
           "application/json": {
+            /** @description False when nothing was written, including when the remote snapshot's entity_type is not admitted. */
+            ok?: boolean;
+            /** @description Never repeats the remote entity_type or a withheld field name (those are only in fields_withheld). A failed fetch, a redirect to a non-public host, or a body that is not JSON is reported as fixed text. */
+            message?: string;
+            /** @description prefer_remote only. Fields whose remote value was written as a correction and now stands. */
+            fields_applied?: string[];
+            /** @description prefer_remote only. Differing remote fields that were not applied, with the reason. Field names come from the remote snapshot, so they are reported here and never in `message`; the list holds at most 50 entries and each name at most 128 characters. */
+            fields_withheld?: {
+              field: string;
+              /** @enum {string} */
+              reason: "undeclared_field" | "array_corrections_combine";
+            }[];
+            /** @description prefer_remote only. How many differing remote fields were withheld, before the fields_withheld cap. */
+            fields_withheld_count?: number;
+          } & {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `capability_denied` — `prefer_remote` or `manual` against an entity that
+       *     exists locally, from an admitted agent whose grant does not cover
+       *     `correct` on its type. Nothing was written.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
@@ -10282,6 +10598,20 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /**
+       * @description `SYNC_ENTITY_TYPE_REFUSED`: the fetched snapshot's entity_type is not admitted from this peer and nothing was stored.
+       *     `message` is `REMOTE_ENTITY_TYPE_REFUSED:<reason>`, where reason is one of `invalid_entity_type`,
+       *     `protected_entity_type`, `peer_configuration_entity_type`, `governance_entity_type`, or
+       *     `entity_type_not_synced`.
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

@@ -165,8 +165,17 @@ export function selectEntityLifecycleVisibility(
     refuse();
   const target = context.target;
   const ids = new Set<string>();
+  // Before cutover, a cross-type merge (mergeEntities, plural-type repair)
+  // legitimately leaves a survivor holding observations of more than one
+  // entity_type; the legacy reducer accepted that, so only owner and id
+  // integrity are enforced there. Cutover modes keep the strict type check.
+  const enforceType = context.mode !== "pre_migration";
   for (const row of observations) {
-    if (ids.has(row.id) || row.user_id !== target.user_id || row.entity_type !== target.entity_type)
+    if (
+      ids.has(row.id) ||
+      row.user_id !== target.user_id ||
+      (enforceType && row.entity_type !== target.entity_type)
+    )
       refuse();
     ids.add(row.id);
   }

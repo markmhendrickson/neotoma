@@ -21,23 +21,13 @@ neotoma init
 - VS Code with GitHub Copilot Chat extension installed and GitHub Copilot subscription active.
 - VS Code 1.99 or later (MCP support in Copilot Chat is generally available from 1.99).
 
-## Option A: Auto-install via neotoma setup (recommended)
+## Option A: Host configuration
 
-```bash
-neotoma setup --tool vscode --yes
-```
-
-This writes the Neotoma MCP server entry into `.vscode/mcp.json` in the current workspace directory.
-
-Alternatively, run the MCP config command directly:
-
-```bash
-neotoma mcp config --yes
-```
-
-When Neotoma detects a `.vscode/` directory, it writes `.vscode/mcp.json` automatically.
+Configure VS Code manually with the current host format. `neotoma setup --tool vscode` can write Cursor configuration instead of VS Code configuration. Check `.vscode/mcp.json` and the tool picker.
 
 ## Option B: Manual — stdio (local install)
+
+For the installed-package stdio example below, run `node -p "process.execPath"` and `npm root -g`, then replace the two example paths with the absolute Node.js executable and `<npm root -g>/neotoma/dist/index.js`. Confirm that file exists. This is the launch shape used by Neotoma's MCP config writer. A source checkout uses its absolute `scripts/run_neotoma_mcp_stdio_prod.sh` path instead.
 
 Create or edit `.vscode/mcp.json` in your workspace root:
 
@@ -46,18 +36,15 @@ Create or edit `.vscode/mcp.json` in your workspace root:
   "servers": {
     "neotoma": {
       "type": "stdio",
-      "command": "neotoma",
-      "args": ["mcp", "stdio"]
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/npm/root/neotoma/dist/index.js"],
+      "env": { "NEOTOMA_ACTIONS_DISABLE_AUTOSTART": "1", "NEOTOMA_ENV": "production" }
     }
   }
 }
 ```
 
-If `neotoma` is not on `PATH` from VS Code's terminal environment, use the absolute path:
-
-```bash
-which neotoma
-```
+Use the absolute Node.js executable and the installed package entrypoint found with the read-only commands above.
 
 VS Code picks up `.vscode/mcp.json` changes on file save without requiring a restart.
 
@@ -114,7 +101,7 @@ MCP tools registered in `.vscode/mcp.json` appear in Copilot Chat when using **A
 ## Troubleshooting
 
 - If tools do not appear, ensure Copilot Chat is in **Agent Mode**, not the default chat mode
-- If the command is not found, check that `neotoma` is on `PATH` from VS Code's integrated terminal: run `which neotoma` in the terminal
+- If the command is not found, confirm the absolute Node.js path and package entrypoint from the host environment
 - If `.vscode/mcp.json` is not detected, verify the file is in the workspace root (same directory as `.vscode/`)
 - MCP support requires GitHub Copilot Chat and a Copilot subscription; it is not available with Copilot Free
 
@@ -124,4 +111,4 @@ MCP tools registered in `.vscode/mcp.json` appear in Copilot Chat when using **A
 
 ## Note on VS Code server format
 
-VS Code's `.vscode/mcp.json` uses `servers` (not `mcpServers`) as the top-level key, and transport is declared via `"type": "stdio"` or `"type": "sse"` (not via a bare `command` or `url`). This differs from Cursor's format. Neotoma's MCP config writer handles this automatically when `neotoma setup --tool vscode` is used.
+VS Code's `.vscode/mcp.json` uses `servers` (not `mcpServers`) as the top-level key, and transport is declared via `"type": "stdio"` or `"type": "sse"` (not via a bare `command` or `url`). This differs from Cursor's format.

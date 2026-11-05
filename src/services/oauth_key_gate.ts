@@ -166,6 +166,11 @@ export function isOauthKeyCredentialValid(credentials: OAuthKeyCredentials): {
   reason?: string;
 } {
   const bearerToken = credentials.bearerToken?.trim() || "";
+  // Primary bearer ONLY. The retiring bearer in the handover slot
+  // (NEOTOMA_BEARER_TOKEN_PREVIOUS, src/services/bearer_slots.ts) is
+  // deliberately not accepted here: this preflight mints a durable OAuth
+  // connection, and a credential being retired must not mint one that
+  // outlives its own window.
   const configuredBearer = (process.env.NEOTOMA_BEARER_TOKEN || "").trim();
   if (bearerToken) {
     if (!configuredBearer) {

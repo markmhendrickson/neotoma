@@ -82,6 +82,12 @@
     ],
     "specFile": "site-page.spec.ts"
   },
+  "onepagerMobile": {
+    "description": "One-pager paper scenes and controls at mobile and desktop widths.",
+    "components": ["NeotomaOnePager", "PaperScene", "InterfaceExplorer"],
+    "states": ["scenes fit viewport", "REST API tab and MCP tooltip remain usable"],
+    "specFile": "onepager-mobile.spec.ts"
+  },
   "oauthFlow": {
     "description": "OAuth flow coverage.",
     "components": ["OAuthCallback"],

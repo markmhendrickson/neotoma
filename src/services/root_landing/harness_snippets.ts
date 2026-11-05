@@ -12,6 +12,13 @@
  */
 
 import { SANDBOX_SESSION_TTL_CAP_UTC } from "../../shared/sandbox_terms_content.js";
+import { CONNECTIONS } from "../../shared/harness_connections.js";
+
+const OPENCLAW_PLUGIN_COMMAND = (() => {
+  const command = CONNECTIONS.find((connection) => connection.id === "openclaw")?.command;
+  if (!command) throw new Error("Missing OpenClaw plugin command");
+  return command;
+})();
 
 export type LandingMode = "sandbox" | "personal" | "prod" | "local";
 export type HarnessId =
@@ -84,44 +91,21 @@ export interface HarnessSnippetResult {
   proxyTip?: { title: string; format: string; code: string };
 }
 
-const HARNESS_META: Record<HarnessId, Omit<HarnessDescriptor, "preflight">> = {
-  "claude-code": {
-    id: "claude-code",
-    label: "Claude Code",
-    description: "CLI agent from Anthropic. Register via `claude mcp add`.",
-    docsPath: "/neotoma-with-claude-code",
-  },
-  "claude-desktop": {
-    id: "claude-desktop",
-    label: "Claude Desktop",
-    description: "Anthropic desktop app. Edit claude_desktop_config.json.",
-    docsPath: "/neotoma-with-claude-connect-desktop",
-  },
-  chatgpt: {
-    id: "chatgpt",
-    label: "ChatGPT",
-    description: "OpenAI ChatGPT developer mode. Add as remote MCP server.",
-    docsPath: "/neotoma-with-chatgpt-connect-remote-mcp",
-  },
-  codex: {
-    id: "codex",
-    label: "Codex",
-    description: "OpenAI Codex CLI. Add `[mcp_servers.neotoma]` to config.toml.",
-    docsPath: "/neotoma-with-codex",
-  },
-  cursor: {
-    id: "cursor",
-    label: "Cursor",
-    description: "Cursor IDE. Add to .cursor/mcp.json.",
-    docsPath: "/neotoma-with-cursor",
-  },
-  openclaw: {
-    id: "openclaw",
-    label: "OpenClaw",
-    description: "OpenClaw agents. Install via clawhub or manual MCP config.",
-    docsPath: "/neotoma-with-openclaw",
-  },
-};
+const HARNESS_META = Object.fromEntries(
+  CONNECTIONS.filter((connection) =>
+    ["claude-code", "claude-desktop", "chatgpt", "codex", "cursor", "openclaw"].includes(
+      connection.id
+    )
+  ).map((connection) => [
+    connection.id,
+    {
+      id: connection.id,
+      label: connection.host,
+      description: connection.instruction,
+      docsPath: connection.guideRoute,
+    },
+  ])
+) as Record<HarnessId, Omit<HarnessDescriptor, "preflight">>;
 
 export const HARNESS_IDS: readonly HarnessId[] = [
   "claude-code",
@@ -183,7 +167,7 @@ It is a public sandbox with ephemeral per-session workspaces. Anything I store i
     "claude-code":
       mode === "local"
         ? `Register with: \`claude mcp add neotoma -- ${JSON.stringify(stdio)}\`.`
-        : `Register with: \`claude mcp add neotoma --transport http --url ${mcpUrl}\`.`,
+        : `Register with: \`claude mcp add --transport http neotoma ${mcpUrl}\`.`,
     "claude-desktop":
       mode === "local"
         ? `Edit \`claude_desktop_config.json\` and add a \`mcpServers.neotoma\` stdio entry pointing at \`${stdio}\`.`
@@ -202,8 +186,8 @@ It is a public sandbox with ephemeral per-session workspaces. Anything I store i
         : `Edit \`.cursor/mcp.json\` and add \`mcpServers.neotoma\` with \`"url": "${mcpUrl}"\`.`,
     openclaw:
       mode === "local"
-        ? "Run `openclaw plugins install clawhub:neotoma` — the local plugin wires up the stdio transport."
-        : `Run \`openclaw plugins install clawhub:neotoma --url ${mcpUrl}\`, or add a manual remote MCP entry pointed at \`${mcpUrl}\`.`,
+        ? `Run \`${OPENCLAW_PLUGIN_COMMAND}\` and verify that the native plugin loads.`
+        : `Install the native plugin with \`${OPENCLAW_PLUGIN_COMMAND}\`. Configure a remote MCP entry for \`${mcpUrl}\` only if the installed OpenClaw version supports it; the plugin install command does not take this URL.`,
   };
 
   return [preamble, "", harnessHint[id], "", installNote].join("\n");
@@ -259,7 +243,7 @@ command = ${stdioJson}`,
       case "openclaw":
         return {
           format: "shell",
-          code: `openclaw plugins install clawhub:neotoma`,
+          code: OPENCLAW_PLUGIN_COMMAND,
         };
     }
   }
@@ -276,8 +260,8 @@ command = ${stdioJson}`,
       return {
         format: "shell",
         code: bearer
-          ? `claude mcp add neotoma --transport http --url ${mcpUrl} --header "Authorization: Bearer ${bearer}"`
-          : `claude mcp add neotoma --transport http --url ${mcpUrl}`,
+          ? `claude mcp add --transport http neotoma ${mcpUrl} --header "Authorization: Bearer ${bearer}"`
+          : `claude mcp add --transport http neotoma ${mcpUrl}`,
       };
     case "claude-desktop":
       return {
@@ -318,12 +302,8 @@ command = ${stdioJson}`,
       };
     case "openclaw":
       return {
-        format: "shell",
-        code: `# Preferred: install the packaged plugin with this instance's URL
-openclaw plugins install clawhub:neotoma --url ${mcpUrl}
-
-# Or add a manual remote MCP entry
-openclaw mcp add neotoma --url ${mcpUrl}`,
+        format: "text",
+        code: `Install the native plugin with ${OPENCLAW_PLUGIN_COMMAND}. For remote MCP, configure ${mcpUrl} using the installed OpenClaw version's supported transport and authentication flow. The plugin install command does not accept this endpoint URL.`,
       };
   }
 }

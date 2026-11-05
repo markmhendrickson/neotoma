@@ -1,0 +1,3111 @@
+/*
+ * neotoma.io developer one-pager: drafting-plan rendering of the shared paper-and-print world.
+ * Palette family matches the Constara paper world (paper, ink, rust, slate). Scoped under .plan.
+ */
+.plan {
+  --paper: #f2ecdf;
+  --sheet: #fffbf2;
+  --ink: #28372f;
+  --rust: #a84d33;
+  --slate: #5f7883;
+  --muted: #4b5a4c;
+  --line: #bbc2b1;
+  --grid: rgba(40, 55, 47, 0.06);
+  --band: #e9e1cc;
+  --serif: Georgia, "Times New Roman", serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font: 16px/1.65 var(--sans);
+  padding: 40px 20px 40px;
+}
+.dark .plan {
+  --paper: #1a241e;
+  --sheet: #212d26;
+  --ink: #ece5d4;
+  --rust: #e39477;
+  --slate: #9bb3bd;
+  --muted: #c3cbb8;
+  --line: #3d4d42;
+  --grid: rgba(236, 229, 212, 0.05);
+  --band: #2a382f;
+}
+
+.plan *,
+.plan *::before,
+.plan *::after {
+  box-sizing: border-box;
+}
+.plan a {
+  color: inherit;
+  text-underline-offset: 4px;
+}
+.plan a:focus-visible,
+.plan pre:focus-visible {
+  outline: 3px solid var(--rust);
+  outline-offset: 3px;
+}
+.plan-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Sheet: double-ruled drawing border */
+.plan-sheet {
+  position: relative;
+  max-width: 1120px;
+  margin: 0 auto 48px;
+  padding: 44px 44px 72px;
+  background: var(--sheet);
+  border: 2px solid var(--ink);
+  box-shadow: 0 14px 30px -18px rgba(40, 55, 47, 0.35);
+}
+.plan-sheet::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+.plan-sheet > * {
+  position: relative;
+}
+
+.plan-label {
+  font: 600 11px/1.4 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rust);
+  margin: 0 0 14px;
+}
+.plan:not(.plan-reader-page) h1,
+.plan:not(.plan-reader-page) h2,
+.plan:not(.plan-reader-page) h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  margin: 0;
+  color: var(--ink);
+}
+.plan:not(.plan-reader-page) h1 {
+  font-size: clamp(3rem, 8vw, 5.6rem);
+  line-height: 1.02;
+  margin-bottom: 22px;
+}
+.plan:not(.plan-reader-page) h2 {
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  line-height: 1.12;
+  max-width: 24ch;
+}
+.plan:not(.plan-reader-page) h3 {
+  font-size: 1.15rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.plan-sheet-head {
+  margin-bottom: 22px;
+}
+.plan-lede {
+  font: 400 clamp(1.15rem, 2vw, 1.4rem) / 1.5 var(--serif);
+  max-width: 44ch;
+  margin: 0 0 14px;
+}
+.plan-meta {
+  font: 12px/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+.plan-body {
+  max-width: 68ch;
+  margin: 0 0 22px;
+}
+.plan-small {
+  font-size: 14px;
+  color: var(--muted);
+}
+.plan-note {
+  font: 12px/1.5 var(--mono);
+  color: var(--muted);
+  margin: 10px 0 0;
+}
+
+/* Actions */
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 22px;
+  margin: 0 0 34px;
+}
+.plan-install-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font: 500 0.82rem/1.3 var(--sans);
+}
+.plan .plan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 22px;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font: 600 13px/1.2 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.plan .plan-btn:hover {
+  background: var(--band);
+}
+.plan .plan-btn-primary {
+  background: var(--rust);
+  border-color: var(--rust);
+  color: #fffbf2;
+}
+.dark .plan .plan-btn-primary {
+  color: #1a241e;
+}
+.plan .plan-btn-primary:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--sheet);
+}
+.plan .plan-link {
+  font: 13px/1.4 var(--mono);
+  letter-spacing: 0.04em;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Figures */
+.plan-figure {
+  margin: 8px 0 0;
+}
+.plan-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/*
+ * Sheet 01 plate. The generated illustration keeps its own paper ground in both themes: it is never
+ * inverted or tinted, and the drafting callouts over it use fixed colors (see onepager_plate.tsx).
+ * Dark mode adds a subtle light frame so the illustration reads as a mounted plate on the dark sheet.
+ */
+.plan-plate {
+  position: relative;
+  aspect-ratio: 1536 / 1024;
+  line-height: 0;
+  overflow: hidden;
+  background: #e3dccd;
+  border: 1px solid var(--ink);
+}
+.plan-plate picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* .plan-plate sets line-height 0 to remove the inline gap under the image; the image resets it so
+   the alt text stays readable if the image cannot be shown. */
+.plan-plate-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #28372f;
+}
+.plan-plate-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.plan-plate-overlay-narrow {
+  display: none;
+}
+.dark .plan-plate {
+  border-color: rgba(236, 229, 212, 0.55);
+  outline: 1px solid rgba(236, 229, 212, 0.18);
+  outline-offset: 5px;
+}
+.plan-figure-small {
+  margin: 0;
+}
+.plan-svg-service {
+  max-width: 440px;
+}
+.pl-t {
+  font: 13px var(--mono);
+  fill: var(--ink);
+}
+.pl-b {
+  font-weight: 700;
+}
+.pl-m {
+  fill: var(--muted);
+}
+.pl-label {
+  font: 600 11px var(--mono);
+  letter-spacing: 0.12em;
+  fill: var(--rust);
+}
+.pl-serif {
+  font: 400 26px var(--serif);
+  fill: var(--ink);
+}
+.pl-serif-sm {
+  font-size: 20px;
+}
+.pl-box {
+  fill: var(--sheet);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.pl-box-strong {
+  stroke-width: 2.25;
+}
+.pl-band {
+  fill: var(--band);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.pl-hatch-edge {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.pl-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.pl-hair {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.pl-dim {
+  fill: none;
+  stroke: var(--slate);
+  stroke-width: 1;
+}
+.pl-cloud {
+  fill: none;
+  stroke: var(--rust);
+  stroke-width: 1.75;
+}
+.pl-fill-ink {
+  fill: var(--ink);
+}
+.pl-stroke-ink {
+  stroke: var(--ink);
+}
+.pl-stroke-slate {
+  stroke: var(--slate);
+}
+.pl-key-dot {
+  fill: var(--sheet);
+  stroke: var(--rust);
+  stroke-width: 1.5;
+}
+.pl-key-num {
+  font: 700 12px var(--mono);
+  fill: var(--rust);
+}
+.pl-wall {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 4;
+}
+.pl-gap {
+  stroke: var(--sheet);
+  stroke-width: 7;
+}
+.pl-swing {
+  fill: none;
+  stroke: var(--slate);
+  stroke-width: 1.25;
+}
+
+/* Legend and keys */
+.plan-legend {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 32px;
+  font-size: 14px;
+}
+.plan-legend li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.plan-key {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--rust);
+  border-radius: 50%;
+  font: 700 12px/1 var(--mono);
+  color: var(--rust);
+}
+
+/* Tables styled as schedules */
+.plan-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 22px;
+}
+.plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  border: 1.5px solid var(--ink);
+}
+.plan-table caption {
+  caption-side: top;
+  text-align: left;
+  font: 600 11px/1.4 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rust);
+  padding-bottom: 8px;
+}
+.plan-table th,
+.plan-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--ink);
+  border-right: 1px solid var(--line);
+}
+.plan-table thead th {
+  background: var(--band);
+  font: 600 11px/1.4 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.plan-table tbody th {
+  font-weight: 600;
+}
+.plan-table code,
+.plan-pre code {
+  font-family: var(--mono);
+}
+.plan-table-hosts code {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+/* Section cut */
+.plan-section-cut {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 26px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 6px solid transparent;
+  border-image: repeating-linear-gradient(135deg, var(--ink) 0 1.5px, transparent 1.5px 7px) 6;
+}
+.plan-section-cut li {
+  padding: 18px 16px 8px 0;
+  border-right: 1px solid var(--line);
+  padding-left: 14px;
+}
+.plan-section-cut li:first-child {
+  padding-left: 0;
+}
+.plan-section-cut li:last-child {
+  border-right: 0;
+}
+.plan-section-cut .plan-key {
+  margin-bottom: 10px;
+}
+.plan-section-cut p {
+  font-size: 14px;
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+/* Code */
+.plan-pre {
+  margin: 0 0 24px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  font: 13px/1.6 var(--mono);
+  color: var(--ink);
+  tab-size: 2;
+}
+
+/* Split */
+.plan-split {
+  display: grid;
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+  gap: 24px 44px;
+  align-items: center;
+  margin-bottom: 26px;
+}
+
+/* General notes */
+.plan-notes + .plan-label {
+  margin-top: 32px;
+}
+.plan-notes + .plan-small {
+  margin-top: 24px;
+}
+/* One continuous numbering across the groups on sheet 06. */
+.plan-notes ~ .plan-notes {
+  counter-reset: none;
+}
+.plan-notes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: note;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 44px;
+}
+.plan-notes li {
+  counter-increment: note;
+  position: relative;
+  padding-left: 40px;
+}
+.plan-notes li::before {
+  content: counter(note);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid var(--rust);
+  border-radius: 50%;
+  text-align: center;
+  font: 700 12px/23px var(--mono);
+  color: var(--rust);
+}
+.plan-notes p {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
+/* Title block, bottom right of each sheet */
+.plan-titleblock {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  border-top: 1px solid var(--ink);
+  border-left: 1px solid var(--ink);
+  background: var(--sheet);
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+.plan-titleblock > span {
+  padding: 12px 14px;
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+.plan-titleblock > span:first-child {
+  border-left: 0;
+  font-weight: 700;
+}
+
+/* Reference rail */
+.plan-rail {
+  max-width: 1120px;
+  margin: 0 auto 28px;
+  padding: 26px 8px 10px;
+  border-top: 2px solid var(--ink);
+}
+.plan-rail ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  font: 14px var(--mono);
+}
+.plan-rail a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+
+/* Narrow */
+@media (max-width: 860px) {
+  .plan {
+    padding: 24px 16px 28px;
+  }
+  .plan-sheet {
+    padding: 30px 20px 76px;
+    margin-bottom: 32px;
+  }
+  .plan-plate {
+    aspect-ratio: 800 / 1200;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .plan-plate-overlay-wide {
+    display: none;
+  }
+  .plan-plate-overlay-narrow {
+    display: block;
+  }
+  .plan-legend {
+    grid-template-columns: 1fr;
+  }
+  .plan-section-cut {
+    grid-template-columns: 1fr;
+  }
+  .plan-section-cut li,
+  .plan-section-cut li:first-child {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    column-gap: 10px;
+    padding: 12px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .plan-section-cut .plan-key {
+    grid-row: 1 / 3;
+    margin: 2px 0 0;
+  }
+  .plan-split {
+    grid-template-columns: 1fr;
+  }
+  .plan-notes {
+    grid-template-columns: 1fr;
+  }
+  /* Schedules become stacked cards */
+  .plan-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .plan-table,
+  .plan-table tbody,
+  .plan-table tr,
+  .plan-table td,
+  .plan-table th {
+    display: block;
+    width: 100%;
+  }
+  .plan-table {
+    border: 0;
+    border-top: 1.5px solid var(--ink);
+  }
+  .plan-table caption {
+    display: block;
+    width: auto;
+    padding: 0 0 10px;
+  }
+  .plan-table tr {
+    border-bottom: 1.5px solid var(--ink);
+    padding: 8px 0;
+  }
+  .plan-table th,
+  .plan-table td {
+    border: 0;
+    padding: 5px 12px;
+  }
+  .plan-table td[data-label]::before,
+  .plan-table th[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font: 600 10px/1.4 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .plan-titleblock {
+    grid-template-columns: auto auto;
+  }
+  .plan-titleblock > span:nth-child(2),
+  .plan-titleblock > span:nth-child(4) {
+    display: none;
+  }
+}
+
+@media print {
+  .plan-sheet {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+}
+
+/* Accepted logo: solid lockup swaps by theme; drafting variant sits in title blocks */
+.plan-solid-logo {
+  display: inline-block;
+  line-height: 0;
+}
+.plan-solid-logo img {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+.plan-logo-dark {
+  display: none !important;
+}
+.dark .plan-logo-light {
+  display: none !important;
+}
+.dark .plan-logo-dark {
+  display: block !important;
+}
+.plan-drafting-logo {
+  display: block;
+  color: var(--ink);
+}
+.plan-titleblock {
+  align-items: center;
+}
+.plan-titleblock .plan-tb-logo {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+}
+/*
+ * Title-block logo. Default: the accepted solid lockup (1x displays, phones). The drafting
+ * variant is a hairline outline, 160 px wide; Chromium rounds the filter radius to whole device
+ * pixels, so it only renders cleanly where a device pixel is half a CSS pixel (2x and up).
+ * Text cells set the block's height; the logo (about 34 px tall) never exceeds it.
+ */
+.plan-tb-draft {
+  display: none;
+}
+.plan-tb-solid .plan-solid-logo img {
+  height: 22px;
+}
+@media (min-width: 861px) and (min-resolution: 2dppx) {
+  .plan-tb-draft {
+    display: block;
+  }
+  .plan-tb-solid {
+    display: none;
+  }
+}
+.plan-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ink);
+}
+.plan-footer .plan-colophon {
+  margin: 0;
+}
+
+/* Masthead and deeper-material sheet */
+.plan-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 34px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ink);
+}
+.plan-deeper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px 44px;
+  margin: 0 0 24px;
+}
+.plan-deeper ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  font: 14px/1.3 var(--mono);
+}
+.plan-deeper a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+.plan-colophon {
+  margin-top: 6px;
+}
+@media (max-width: 860px) {
+  .plan-deeper {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* /install: the existing page body drawn on a paper sheet. Re-skins the app's theme tokens. */
+.plan-install,
+.plan-reader-page {
+  --background: 43 100% 97%;
+  --foreground: 144 15% 19%;
+  --card: 43 100% 97%;
+  --card-foreground: 144 15% 19%;
+  --popover: 43 100% 97%;
+  --popover-foreground: 144 15% 19%;
+  --primary: 14 53% 43%;
+  --primary-foreground: 43 100% 97%;
+  --secondary: 41 35% 90%;
+  --secondary-foreground: 144 15% 19%;
+  --muted: 41 35% 90%;
+  --muted-foreground: 120 9% 31%;
+  --accent: 41 35% 90%;
+  --accent-foreground: 144 15% 19%;
+  --border: 81 14% 73%;
+  --input: 81 14% 73%;
+  --ring: 14 53% 43%;
+  --radius: 0rem;
+}
+.dark .plan-install,
+.dark .plan-reader-page {
+  --background: 148 14% 15%;
+  --foreground: 42 33% 88%;
+  --card: 148 14% 15%;
+  --card-foreground: 42 33% 88%;
+  --popover: 148 14% 15%;
+  --popover-foreground: 42 33% 88%;
+  --primary: 16 66% 69%;
+  --primary-foreground: 148 22% 10%;
+  --secondary: 148 14% 19%;
+  --secondary-foreground: 42 33% 88%;
+  --muted: 148 14% 19%;
+  --muted-foreground: 82 18% 74%;
+  --accent: 148 14% 19%;
+  --accent-foreground: 42 33% 88%;
+  --border: 140 10% 27%;
+  --input: 140 10% 27%;
+  --ring: 16 66% 69%;
+}
+.plan-install-masthead {
+  max-width: 1120px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ink);
+}
+.plan-install-links {
+  display: flex;
+  gap: 8px 22px;
+  flex-wrap: wrap;
+}
+.plan-install-sheet {
+  padding: 28px 44px 72px;
+}
+.plan-install-sheet .post-prose,
+.plan-install-sheet [data-site-markdown-root] {
+  font-family: var(--sans);
+}
+
+/* Keep reader content and its controls on the editorial paper while preserving each page body. */
+.plan-reader-main {
+  min-height: 50vh;
+  background: var(--paper);
+}
+.plan-reader-page .plan-reader-main h1,
+.plan-reader-page .plan-reader-main h2,
+.plan-reader-page .plan-reader-main h3 {
+  font-family: var(--serif);
+  max-width: none;
+}
+.plan-install-sheet h1,
+.plan-install-sheet h2,
+.plan-install-sheet h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.plan-install-sheet h1 {
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+}
+.plan-install-sheet [class*="rounded"] {
+  border-radius: 0;
+}
+@media (max-width: 860px) {
+  .plan-install-sheet {
+    padding: 22px 14px 76px;
+  }
+}
+
+/* Hard-coded accent colors in the install body (emerald, sky, blue) take the drawing palette */
+.plan-install-sheet [class*="emerald"],
+.plan-install-sheet [class*="sky-"],
+.plan-install-sheet [class*="blue-"] {
+  background-color: var(--band) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  color: var(--ink) !important;
+}
+.plan-install-sheet button[class*="emerald"],
+.plan-install-sheet a[class*="emerald"] {
+  background-color: var(--rust) !important;
+  border-color: var(--rust) !important;
+  color: var(--sheet) !important;
+}
+.dark .plan-install-sheet button[class*="emerald"],
+.dark .plan-install-sheet a[class*="emerald"] {
+  color: #1a241e !important;
+}
+
+@media (max-width: 860px) {
+  .plan-install-masthead {
+    flex-wrap: wrap;
+  }
+  .plan-install-links {
+    flex-direction: row;
+    gap: 0 18px;
+  }
+  .plan-install-links .plan-link {
+    min-height: 40px;
+    font-size: 12px;
+  }
+}
+
+/* Review fixes: Fig. B legibility, 12px content labels, taller inline link targets */
+.plan-svg-service .pl-t {
+  font-size: 15px;
+}
+.plan-svg-service .pl-label {
+  font-size: 14px;
+}
+.plan-svg-service .pl-serif-sm {
+  font-size: 22px;
+}
+.plan-label,
+.plan-table caption,
+.plan-table thead th {
+  font-size: 12px;
+}
+.plan-small a {
+  display: inline-block;
+  padding: 7px 1px;
+}
+/* The closing link sits inside a sentence: no touch-target padding, so no gap before the full stop. */
+.plan-small.plan-scope a {
+  display: inline;
+  padding: 0;
+}
+.plan-install-note {
+  margin: -10px 0 22px;
+}
+.plan-install-note code {
+  font-family: var(--mono);
+}
+
+/* The title block (35 px, text-cell height) sits at the bottom of each sheet; sheets reserve room under their content for it */
+.plan-sheet {
+  padding-bottom: 84px;
+}
+@media (max-width: 860px) {
+  .plan-sheet {
+    padding-bottom: 76px;
+  }
+}
+
+/* /install review fixes: no wrap inside the command block, legible label dot, dark palette for code blocks */
+.plan-install-commands pre {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  overflow-x: auto;
+}
+.plan-install-sheet span.rounded-full[class*="emerald"] {
+  background-color: var(--rust) !important;
+}
+.plan-install-sheet .code-block-palette {
+  background: var(--paper) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+
+/* The install sheet replaces the legacy site code gradient with the paper palette. */
+.plan-install-sheet pre {
+  background: var(--paper) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+
+/* October editorial variant. The older plate rules above remain for the standalone plate component. */
+@font-face {
+  font-family: "Instrument Sans Onepager";
+  src: url("/brand/october/instrument-sans-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Sans Onepager";
+  src: url("/brand/october/instrument-sans-semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif Onepager";
+  src: url("/brand/october/instrument-serif.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+.plan {
+  --paper: #faf8f3;
+  --sheet: #faf8f3;
+  --ink: #172b39;
+  --rust: #a14624;
+  --slate: #52616a;
+  --muted: #52616a;
+  --line: #d6d0c4;
+  --band: #f1ece2;
+  --serif: "Instrument Serif Onepager", Georgia, serif;
+  --sans: "Instrument Sans Onepager", system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.55 var(--sans);
+  padding: 0;
+}
+.dark .plan {
+  --paper: #1d272c;
+  --sheet: #1d272c;
+  --ink: #eeeae0;
+  --rust: #e5a17c;
+  --slate: #b7c4ca;
+  --muted: #b7c4ca;
+  --line: #4b5050;
+  --band: #303333;
+}
+.plan-sheet {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 4vw, 4.5rem) clamp(1.35rem, 5vw, 5rem);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  box-shadow: none;
+}
+.plan-sheet::before {
+  display: none;
+}
+.plan-hero {
+  padding-top: 0;
+}
+.plan-masthead,
+.plan-install-masthead {
+  max-width: none;
+  margin: 0 0 clamp(2.5rem, 5vw, 4.5rem);
+  padding: 1.5rem 0;
+  border: 0;
+}
+.plan-hero-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: start;
+}
+.plan-hero-aside {
+  padding-bottom: 0.3rem;
+}
+.plan:not(.plan-reader-page) h1 {
+  font-size: clamp(3.2rem, 7vw, 7rem);
+  max-width: 13ch;
+  margin: 0.75rem 0 1rem;
+}
+.plan:not(.plan-reader-page) h2 {
+  font-size: clamp(2.75rem, 4.2vw, 4.9rem);
+  max-width: 18ch;
+}
+.plan:not(.plan-reader-page) h3 {
+  font: 400 clamp(1.55rem, 2.5vw, 2.35rem)/1.12 var(--serif);
+}
+.plan-label,
+.plan-table caption,
+.plan-table thead th {
+  font: 600 0.78rem/1.4 var(--sans);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rust);
+}
+.plan-lede {
+  font: 400 clamp(1.1rem, 1.55vw, 1.35rem)/1.48 var(--sans);
+  max-width: 43ch;
+  margin-bottom: 1.5rem;
+}
+.plan-meta {
+  font: 0.875rem/1.5 var(--sans);
+  color: var(--muted);
+}
+.plan-actions {
+  gap: 0.8rem 1.2rem;
+  margin-bottom: 0;
+}
+.plan .plan-btn {
+  min-height: 44px;
+  padding: 0.8rem 1.15rem;
+  border: 1px solid var(--ink);
+  font: 600 0.95rem/1.2 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.plan .plan-btn-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.dark .plan .plan-btn-primary {
+  color: var(--paper);
+}
+.plan .plan-btn-primary:hover {
+  background: var(--rust);
+  border-color: var(--rust);
+  color: var(--paper);
+}
+.plan .plan-link {
+  font: 600 0.95rem/1.3 var(--sans);
+  letter-spacing: 0;
+}
+.plan-scene {
+  overflow: hidden;
+  margin: 0;
+  border-radius: 12px;
+  background: var(--band);
+}
+.plan-scene img,
+.plan-contrast img,
+.plan-section-cut img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+.plan-hero-scene {
+  margin-top: clamp(2rem, 4vw, 3.5rem);
+}
+.plan-scene figcaption {
+  padding: 0.9rem 1rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.plan-sheet-head {
+  margin-bottom: 1.5rem;
+}
+.plan-sheet-head .plan-label {
+  margin-bottom: 0.85rem;
+}
+.plan-body {
+  max-width: 68ch;
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+.plan-contrast {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1rem, 3vw, 3rem);
+  margin: 1.75rem 0 2rem;
+}
+.plan-contrast article {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+.plan-contrast img {
+  aspect-ratio: 3/2;
+  border-radius: 10px;
+  margin: 1.2rem 0 1.5rem;
+}
+.plan-contrast h3 {
+  margin: 0.5rem 0 0.4rem;
+}
+.plan-table {
+  border: 0;
+  font-size: 0.95rem;
+}
+.plan-table th,
+.plan-table td {
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 0.9rem 1rem;
+}
+.plan-table thead th {
+  background: var(--band);
+  color: var(--ink);
+}
+.plan-section-cut {
+  display: block;
+  border: 0;
+  margin: 1rem 0 2rem;
+}
+.plan-section-cut li,
+.plan-section-cut li:first-child {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: clamp(1.5rem, 5vw, 5rem);
+  padding: clamp(1.5rem, 2.5vw, 2.75rem) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.plan-section-cut li:nth-child(even) .plan-step-copy {
+  order: 2;
+}
+.plan-section-cut li:nth-child(even) img {
+  order: 1;
+}
+.plan-step-copy h3 {
+  font-size: clamp(2.4rem, 4vw, 4.5rem);
+  margin: 0.8rem 0 1rem;
+}
+.plan-section-cut .plan-step-copy p {
+  font-size: 1.1rem;
+  max-width: 36ch;
+}
+.plan-section-cut img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3/2;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--band);
+}
+.plan-example {
+  background: var(--band);
+  padding: clamp(1.5rem, 4vw, 3rem);
+  margin-bottom: 1.75rem;
+  border-radius: 12px;
+}
+.plan-example-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+.plan-example-content img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3/2;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.plan-example .plan-legend {
+  grid-template-columns: 1fr;
+  margin-top: 0;
+}
+.plan-key {
+  border-color: var(--rust);
+}
+.plan-pre {
+  background: var(--band);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.plan-split {
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+}
+.plan-split-text-only {
+  display: block;
+}
+.plan-notes li::before {
+  border-color: var(--line);
+}
+.plan-deeper ul {
+  font: 0.95rem/1.5 var(--sans);
+}
+.plan-footer {
+  border-color: var(--line);
+  justify-content: space-between;
+}
+.plan-install,
+.plan-reader-page {
+  --background: 40 33% 97%;
+  --foreground: 204 41% 16%;
+  --card: 40 33% 97%;
+  --card-foreground: 204 41% 16%;
+  --primary: 204 41% 16%;
+  --primary-foreground: 40 33% 97%;
+  --secondary: 39 24% 91%;
+  --secondary-foreground: 204 41% 16%;
+  --muted: 39 24% 91%;
+  --muted-foreground: 203 13% 37%;
+  --accent: 39 24% 91%;
+  --accent-foreground: 204 41% 16%;
+  --border: 39 11% 80%;
+  --input: 39 11% 80%;
+  --ring: 19 64% 39%;
+  --radius: 0.6rem;
+}
+.dark .plan-install,
+.dark .plan-reader-page {
+  --background: 201 21% 14%;
+  --foreground: 44 29% 91%;
+  --card: 201 21% 14%;
+  --card-foreground: 44 29% 91%;
+  --primary: 44 29% 91%;
+  --primary-foreground: 201 21% 14%;
+  --secondary: 45 3% 19%;
+  --secondary-foreground: 44 29% 91%;
+  --muted: 45 3% 19%;
+  --muted-foreground: 198 12% 75%;
+  --accent: 45 3% 19%;
+  --accent-foreground: 44 29% 91%;
+  --border: 180 3% 30%;
+  --input: 180 3% 30%;
+  --ring: 22 66% 69%;
+}
+.plan-install {
+  padding: 0;
+}
+.plan-install-masthead {
+  max-width: 1240px;
+  margin-inline: auto;
+}
+.plan-install-sheet {
+  max-width: 1240px;
+  padding: 0;
+}
+.plan-install-sheet [class*="rounded"] {
+  border-radius: 0.6rem;
+}
+.plan-install-sheet .code-block-palette,
+.plan-install-sheet pre {
+  background-color: var(--band) !important;
+}
+@media (max-width: 760px) {
+  .plan-hero-copy,
+  .plan-contrast,
+  .plan-section-cut li,
+  .plan-section-cut li:first-child,
+  .plan-split {
+    grid-template-columns: 1fr;
+  }
+  .plan-section-cut li:nth-child(even) .plan-step-copy,
+  .plan-section-cut li:nth-child(even) img {
+    order: initial;
+  }
+  .plan h1 {
+    font-size: clamp(3.2rem, 11vw, 5rem);
+  }
+  .plan-legend {
+    grid-template-columns: 1fr;
+  }
+  .plan-example-content {
+    grid-template-columns: 1fr;
+  }
+  .plan-install-sheet {
+    padding: 0;
+  }
+}
+
+/* Guided one-pager additions */
+.plan-skip {
+  position: fixed;
+  top: -5rem;
+  left: 1rem;
+  z-index: 1000;
+  padding: 0.7rem 1rem;
+  background: #fff;
+  color: #172b39;
+}
+.plan-animated-lockup {
+  flex: 0 0 auto;
+  height: 2rem;
+}
+.plan-animated-lockup .logo-on-light {
+  display: block !important;
+}
+.plan-animated-lockup .logo-on-dark {
+  display: none !important;
+}
+.dark .plan-animated-lockup .logo-on-light {
+  display: none !important;
+}
+.dark .plan-animated-lockup .logo-on-dark {
+  display: block !important;
+}
+.plan-skip:focus {
+  top: 1rem;
+}
+.plan-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.1rem 0.8rem;
+  max-width: 48rem;
+}
+.plan-nav a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  font: 600 0.78rem/1.2 var(--sans);
+  text-decoration: none;
+}
+.plan-nav a:hover {
+  text-decoration: underline;
+}
+.plan-brand-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+}
+.plan-meta-pills {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  position: relative;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+.plan-meta-pills li {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.18rem 0.62rem;
+  font: 600 0.7rem/1.5 var(--sans);
+  color: var(--muted);
+}
+.plan-fit-note {
+  padding: 1rem 1.2rem;
+  border-left: 3px solid var(--rust);
+  background: var(--band);
+}
+.plan-invoice-story {
+  padding: 1.25rem 1.5rem;
+  margin: 1.5rem 0;
+  background: var(--band);
+  border-left: 3px solid var(--rust);
+  max-width: 72ch;
+}
+.plan-invoice-story p {
+  margin: 0 0 0.7rem;
+}
+.plan-invoice-story .plan-label {
+  margin-bottom: 0.55rem;
+}
+.plan-step-term {
+  font: 600 0.8rem/1.3 var(--sans);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.plan-section-cut .plan-step-copy a {
+  font: 600 0.85rem/1.5 var(--sans);
+}
+.plan-inspect-section {
+  margin: 3rem 0 0;
+}
+.plan-inspect-section > h3 {
+  margin-bottom: 0.65rem;
+}
+.plan-inspector {
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: var(--sheet);
+  font: 0.88rem/1.5 var(--sans);
+}
+.plan-inspector-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--band);
+}
+.plan-inspector-brand {
+  font-weight: 700;
+}
+.plan-inspector-mode {
+  color: var(--muted);
+}
+.plan-inspector-body {
+  padding: clamp(1rem, 3vw, 2rem);
+}
+.plan-inspector-crumb {
+  color: var(--muted);
+  font-size: 0.76rem;
+  margin: 0 0 1rem;
+}
+.plan-inspector-title {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+.plan-inspector-title h3 {
+  margin: 0.2rem 0;
+}
+.plan-inspector-title p {
+  margin: 0;
+  color: var(--muted);
+}
+.plan-inspector-type,
+.plan-inspector-count {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+}
+.plan-inspector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.plan-inspector-card {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: clamp(1rem, 2vw, 1.25rem);
+  min-width: 0;
+}
+.plan-inspector-card h4 {
+  font-weight: 700;
+  margin: 0 0 0.8rem;
+}
+.plan-inspector-card dl {
+  margin: 0;
+}
+.plan-inspector-card dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-top: 1px solid var(--line);
+  padding: 0.6rem 0;
+}
+.plan-inspector-card dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+.plan-inspector-card dd small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+.plan-inspector-trace {
+  font: 0.75rem/1.4 var(--mono);
+  color: var(--rust);
+}
+.plan-inspector-history {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.plan-inspector-history li {
+  padding: 0.25rem 0 0.9rem;
+}
+.plan-relationship-graph { margin: 0 0 1rem; }
+.plan-relationship-scroll { overflow-x: auto; max-width: 100%; scrollbar-color: var(--rust) var(--band); }
+.plan-relationship-scroll:focus-visible { outline: 3px solid var(--rust); outline-offset: -3px; }
+.plan-relationship-graph svg { display: block; width: 100%; height: auto; color: var(--ink); }
+.plan-relationship-node rect { fill: var(--band); stroke: var(--line); stroke-width: 2; }
+.plan-relationship-invoice rect { fill: var(--paper); stroke: var(--rust); }
+.plan-relationship-node text { fill: var(--ink); font: 600 13px var(--sans); }
+.plan-relationship-node text:last-child { font-size: 11px; font-weight: 400; }
+.plan-relationship-graph figcaption { color: var(--muted); font: 0.75rem/1.4 var(--sans); }
+.plan-relationship-scroll-hint { display: none; }
+@media (max-width: 600px) {
+  .plan-relationship-graph svg { min-width: 540px; }
+  .plan-relationship-scroll-hint { display: inline; }
+}
+.plan-inspector-history span,
+.plan-inspector-history small {
+  display: block;
+}
+.plan-inspector-history small {
+  color: var(--muted);
+}
+.plan-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--line);
+  margin: 1rem 0;
+}
+.plan-tabs button {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 0.35rem 0.35rem 0 0;
+  background: var(--band);
+  color: var(--ink);
+  padding: 0.65rem 1rem;
+  font: 600 0.82rem var(--sans);
+}
+.plan-tabs button[aria-selected="true"] {
+  background: var(--sheet);
+  box-shadow: inset 0 3px var(--rust);
+}
+.plan-tabs button:focus-visible,
+.plan button:focus-visible,
+.plan select:focus-visible {
+  outline: 3px solid var(--rust);
+  outline-offset: 3px;
+}
+.plan-interface pre {
+  white-space: pre;
+  overflow-x: auto;
+  font-size: 0.78rem;
+}
+.plan-host-label {
+  display: block;
+  font-weight: 700;
+  margin: 0.8rem 0 0.35rem;
+}
+.plan-host-select {
+  background: var(--sheet);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 0.25rem;
+  min-height: 2.75rem;
+  min-width: min(100%, 16rem);
+  padding: 0.5rem;
+  margin: 0 0 1rem;
+}
+.plan-evaluate {
+  background: var(--band);
+  border-left: 3px solid var(--rust);
+  padding: 1.2rem;
+  margin: 0 0 2rem;
+}
+.plan-evaluate p:not(.plan-label):not(.site-snippet-prose) {
+  max-width: 80ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.plan-evaluate .plan-copy-error {
+  margin: 0.7rem 0 0;
+  color: var(--rust);
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .plan-masthead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .plan-nav {
+    justify-content: flex-start;
+  }
+  .plan-inspector-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Second editorial pass: one snippet language, short labels and a directional gallery. */
+.plan-hero-aside .plan-actions {
+  margin-top: 1.8rem;
+}
+.plan-meta-pills li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.plan-meta-pills svg {
+  flex-shrink: 0;
+  stroke-width: 1.7;
+}
+.plan-section-cut .plan-step-copy a {
+  display: inline-block;
+  margin-top: 1rem;
+  text-underline-offset: 0.2em;
+}
+.plan .site-snippet {
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+.plan .site-snippet-title {
+  margin: 0;
+  font: 600 0.72rem/1.5 var(--sans);
+  color: var(--rust);
+}
+.plan .site-snippet .site-snippet-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: visible;
+  border-radius: 0;
+  font-size: 0.8rem;
+}
+.plan .site-snippet-copy {
+  border-radius: 0;
+}
+.plan .site-snippet-prose {
+  margin: 0;
+  max-width: none;
+}
+.plan .plan-evaluate {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  margin-bottom: 2rem;
+}
+.plan-companion-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+.plan-companion-link:hover {
+  color: var(--rust);
+}
+.plan-vision-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1.2rem, 2.5vw, 2rem);
+  margin: 2rem 0;
+}
+.plan-vision-card {
+  min-width: 0;
+}
+.plan-vision-art {
+  background: var(--band);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 1.4rem;
+  overflow: hidden;
+}
+.plan-vision-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--ink);
+}
+.plan-vision-card h3 {
+  margin: 0.6rem 0 0.8rem;
+  font-size: clamp(1.9rem, 2.3vw, 2.6rem);
+  max-width: 16ch;
+}
+.plan-vision-card > p:last-child {
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: var(--slate);
+}
+.vision-paper {
+  fill: var(--sheet);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.vision-shadow {
+  fill: var(--ink);
+  opacity: 0.08;
+}
+.vision-fold {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.vision-lines {
+  stroke: var(--ink);
+  fill: none;
+  stroke-width: 2;
+  opacity: 0.65;
+}
+.vision-connector {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+.vision-ink {
+  fill: var(--ink);
+}
+.vision-rust {
+  fill: var(--rust);
+}
+.vision-sage {
+  fill: #879483;
+}
+.vision-highlight {
+  fill: #c9d0bd;
+  opacity: 0.7;
+}
+.vision-node {
+  fill: var(--band);
+  stroke: var(--rust);
+  stroke-width: 1.5;
+}
+.vision-dispute {
+  stroke: var(--rust);
+  stroke-width: 1.5;
+}
+.vision-check {
+  stroke: var(--sheet);
+  fill: none;
+  stroke-width: 2;
+}
+.plan-vision-diagram [data-vision-record] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.plan-vision-boundary {
+  max-width: 78ch;
+}
+.plan-current-boundaries {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: 1.4rem 0 1.8rem;
+  padding: 1rem 0;
+}
+.plan-current-boundaries summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.plan-current-boundaries p {
+  margin: 0.85rem 0 0;
+}
+@media (max-width: 900px) {
+  .plan-vision-gallery {
+    grid-template-columns: 1fr;
+  }
+  .plan-vision-card {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    gap: 0 1.5rem;
+    align-items: start;
+  }
+  .plan-vision-art {
+    grid-row: 1 / 4;
+    margin: 0;
+  }
+  .plan-vision-card .plan-label {
+    margin-top: 0.5rem;
+  }
+}
+@media (max-width: 540px) {
+  .plan-vision-card {
+    display: block;
+  }
+  .plan-vision-art {
+    margin-bottom: 1.2rem;
+  }
+  .plan-vision-card h3 {
+    max-width: 22ch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan img,
+  .plan-inspector,
+  .plan-vision-diagram [data-vision-record],
+  .plan-vision-diagram [data-vision-connection] {
+    animation: none !important;
+  }
+}
+
+.plan-install-sheet .site-snippet .site-snippet-code {
+  background: var(--band) !important;
+  background-image: none !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* Capability disclosures and the consolidated explorer keep the paper rhythm at small widths. */
+.plan-meta-pills li {
+  position: relative;
+  padding: 0;
+  color: var(--ink);
+}
+.plan-meta-pills button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  cursor: pointer;
+}
+.plan-meta-pills button[aria-expanded="true"] {
+  color: var(--rust);
+}
+.plan-benefit-detail:not([hidden]) {
+  display: block;
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  width: min(18rem, calc(100vw - 3rem));
+  padding: 0.75rem 0.85rem;
+  background: var(--sheet);
+  border: 1px solid var(--ink);
+  box-shadow: 0 10px 20px -12px rgba(40, 55, 47, 0.55);
+  color: var(--ink);
+  font: 400 0.85rem/1.45 var(--sans);
+}
+.plan-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+.plan-capability-grid article {
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--rust);
+  background: var(--sheet);
+}
+.plan-capability-grid h3,
+.plan-peer-note h3 {
+  margin-bottom: 0.55rem;
+}
+.plan-capability-grid p,
+.plan-peer-note p {
+  margin: 0 0 0.7rem;
+  max-width: 65ch;
+}
+.plan-peer-note {
+  margin-top: 1.25rem;
+  padding-left: 1.2rem;
+  border-left: 2px solid var(--line);
+}
+.plan-meta-pills li:nth-last-child(-n + 2) .plan-benefit-detail:not([hidden]) {
+  left: auto;
+  right: 0;
+}
+.plan-anchor {
+  display: block;
+  position: relative;
+  top: -1rem;
+}
+.plan-interface,
+.plan-interface [role="tabpanel"] {
+  min-width: 0;
+}
+.plan-interface [role="tabpanel"]:not([hidden]) {
+  display: block;
+}
+.plan-interface .site-snippet-code {
+  max-width: 100%;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+.plan-mcp-conversation {
+  border: 1px solid var(--line);
+  background: var(--sheet);
+  padding: clamp(0.7rem, 2vw, 1rem);
+}
+.plan-mcp-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.65rem;
+}
+.plan-mcp-chat-head strong,
+.plan-mcp-chat-head span {
+  display: block;
+}
+.plan-mcp-chat-head strong {
+  font: 700 0.95rem var(--sans);
+}
+.plan-mcp-chat-head div > span {
+  color: var(--muted);
+  font: 0.75rem var(--sans);
+}
+.plan-mcp-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.65rem;
+  height: 1.65rem;
+  margin-top: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 700 0.8rem var(--serif);
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+}
+.plan-mcp-chat-window {
+  height: clamp(19rem, 48vh, 26rem);
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--paper);
+  scrollbar-color: var(--line) transparent;
+}
+.plan-mcp-chat-window:focus-visible {
+  outline: 3px solid var(--rust);
+  outline-offset: 2px;
+}
+.plan-mcp-messages {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 1rem;
+  list-style: none;
+}
+.plan-mcp-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.plan-mcp-message-user {
+  justify-content: flex-end;
+}
+.plan-mcp-bubble {
+  max-width: min(85%, 39rem);
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem 0.8rem 0.8rem 0.15rem;
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: 0 2px 4px rgba(40, 55, 47, 0.06);
+}
+.plan-mcp-message-user .plan-mcp-bubble {
+  border-color: var(--ink);
+  border-radius: 0.8rem 0.8rem 0.15rem 0.8rem;
+  background: var(--ink);
+  color: var(--sheet);
+}
+.plan-mcp-bubble strong {
+  display: block;
+  margin-bottom: 0.15rem;
+  font: 700 0.7rem var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.plan-mcp-bubble p {
+  margin: 0;
+  font: 0.9rem/1.48 var(--sans);
+  overflow-wrap: anywhere;
+}
+.plan-mcp-message-tool {
+  padding-left: 2.15rem;
+}
+.plan-mcp-action {
+  width: min(100%, 36rem);
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--rust);
+  border-radius: 0.3rem;
+  background: var(--sheet);
+  padding: 0.5rem 0.7rem;
+}
+.plan-mcp-message-tool .plan-mcp-action {
+  border-left-color: var(--slate);
+}
+.plan-mcp-action > strong {
+  display: block;
+  margin-top: 0.2rem;
+  font: 700 0.82rem var(--sans);
+}
+.plan-mcp-result {
+  margin: 0.1rem 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.35rem;
+  color: var(--muted);
+  font: 0.78rem/1.4 var(--sans);
+}
+.plan-mcp-progress {
+  display: block;
+  width: 45%;
+  height: 3px;
+  background: var(--rust);
+  animation: plan-mcp-progress 1.15s ease-in-out infinite alternate;
+}
+@keyframes plan-mcp-progress {
+  from {
+    transform: scaleX(0.3);
+    transform-origin: left;
+  }
+  to {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+}
+.plan-mcp-typing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+}
+.plan-mcp-typing-dots {
+  letter-spacing: 0.25em;
+  animation: plan-mcp-breathe 1s ease-in-out infinite alternate;
+}
+@keyframes plan-mcp-breathe {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.plan-mcp-conversation > .plan-mcp-messages {
+  max-height: 28rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-mcp-progress,
+  .plan-mcp-typing-dots {
+    animation: none;
+  }
+}
+.plan-mcp-playback {
+  margin-left: auto;
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: var(--band);
+  color: var(--ink);
+  padding: 0.45rem 0.8rem;
+  font: 600 0.78rem var(--sans);
+  cursor: pointer;
+}
+.plan-mcp-playback:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.plan-mcp-details {
+  margin-top: 0.8rem;
+}
+.plan-mcp-details summary {
+  min-height: 2.75rem;
+  display: list-item;
+  padding-block: 0.6rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+.plan-hero-aside .plan-btn-primary {
+  min-width: 10rem;
+  min-height: 3.4rem;
+  font-size: 0.9rem;
+}
+.plan-install-sheet h1 > svg {
+  margin-top: clamp(0.4rem, 1vw, 0.85rem);
+}
+.plan-vision-art .paper-scene {
+  aspect-ratio: 3 / 2;
+}
+@media (max-width: 600px) {
+  .plan-capability-grid {
+    grid-template-columns: 1fr;
+  }
+  .plan-meta-pills li {
+    width: auto;
+    flex: 0 0 auto;
+    position: static;
+  }
+  .plan-meta-pills-open {
+    padding-bottom: 4.8rem;
+  }
+  .plan-benefit-detail:not([hidden]) {
+    position: absolute;
+    top: calc(100% - 4.5rem);
+    left: 0;
+    right: 0;
+    width: 100%;
+    box-shadow: none;
+    border: 1px solid var(--line);
+  }
+  .plan-hero-aside .plan-actions,
+  .plan-hero-aside .plan-btn-primary {
+    width: 100%;
+  }
+  .plan-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .plan-tabs button {
+    min-width: 0;
+    min-height: 2.75rem;
+    padding-inline: 0.35rem;
+  }
+  .plan-inspector-card dl > div {
+    flex-wrap: wrap;
+  }
+  .plan-inspector-card dd {
+    overflow-wrap: anywhere;
+  }
+  .plan-vision-art {
+    max-width: 100%;
+  }
+}
+
+/* Material-world revision: captions and responsive structure. */
+.plan-hero-phrase {
+  display: inline-block;
+  white-space: nowrap;
+}
+.plan-hero-copy {
+  align-items: center;
+}
+.plan-hero-aside {
+  padding-top: clamp(2rem, 4.5vw, 5rem);
+}
+.plan-lede {
+  font-size: clamp(1.3rem, 2vw, 1.8rem);
+  line-height: 1.38;
+  max-width: 34ch;
+}
+.plan-meta-pills button {
+  padding-inline: 1.05rem;
+  padding-block: 0.18rem;
+  min-height: 44px;
+}
+.plan-contrast figure,
+.plan-step-art,
+.plan-example-content figure,
+.plan-vision-art {
+  margin: 0;
+  min-width: 0;
+}
+.plan-step-art figcaption,
+.plan-example-content figcaption,
+.plan-vision-art figcaption {
+  padding: 0.6rem 0 1rem;
+  font: 0.88rem/1.45 var(--sans);
+  color: var(--muted);
+}
+.plan-contrast .paper-scene {
+  margin-bottom: 0;
+}
+.plan-contrast .plan-label {
+  max-width: 34ch;
+}
+.plan-section-cut .plan-step-art:nth-child(even) {
+  order: initial;
+}
+.plan-section-cut li:nth-child(even) .plan-step-art {
+  order: 1;
+}
+.plan-inspector-sources {
+  grid-column: auto;
+}
+.plan-source-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+}
+.plan-source-preview strong {
+  display: block;
+}
+.plan-source-preview p {
+  margin: 0.1rem 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.plan-source-symbol {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 3rem;
+  border: 1px solid var(--rust);
+  color: var(--rust);
+  font: 700 0.75rem var(--sans);
+}
+.plan-related-entity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+}
+.plan-related-entity span:nth-child(2) {
+  border-bottom: 1px solid var(--rust);
+  color: var(--rust);
+}
+.plan-manual-instruction {
+  padding: 1rem 1.2rem;
+  border-left: 3px solid var(--rust);
+  background: var(--band);
+  max-width: 60ch;
+}
+.plan-vision-art figcaption {
+  padding: 0.8rem 1rem 1rem;
+}
+.plan-vision-card > a {
+  font: 600 0.85rem/1.5 var(--sans);
+  text-underline-offset: 0.2em;
+}
+.plan-evaluate-sheet {
+  padding-block: clamp(4rem, 7vw, 7rem);
+  border-bottom: 0;
+}
+.plan-evaluate-sheet .plan-body {
+  margin-bottom: 2rem;
+}
+.plan-evaluate-sheet .plan-evaluate {
+  margin-top: 2rem;
+  margin-bottom: 0;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+}
+.plan-site-footer {
+  background: #172b39;
+  color: #f1e8d8;
+}
+.plan-footer-inner {
+  max-width: 1400px;
+  margin: auto;
+  padding: clamp(3rem, 5vw, 5rem) clamp(1.35rem, 5vw, 5rem) 2rem;
+}
+.plan-site-footer .plan-deeper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2rem;
+}
+.plan-site-footer .plan-deeper h3 {
+  font: 600 0.85rem/1.4 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #c7d3d1;
+}
+.plan-site-footer a {
+  color: #f1e8d8;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.plan-site-footer a:hover,
+.plan-site-footer a:focus-visible {
+  color: #f2b58c;
+}
+.plan-site-footer .plan-footer {
+  border-top: 1px solid #51606a;
+  margin-top: 3rem;
+  padding-top: 1.4rem;
+}
+.plan-site-footer .plan-footer svg {
+  max-width: 11rem;
+}
+.plan-language-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.8rem;
+  margin-top: 1rem;
+}
+.plan-language-choice a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.2rem;
+}
+.plan-language-choice a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration-thickness: 2px;
+}
+.plan-language-choice a:focus-visible {
+  outline: 3px solid #f2b58c;
+  outline-offset: 2px;
+}
+.plan-site-footer .plan-logo-light {
+  display: none !important;
+}
+.plan-site-footer .plan-logo-dark {
+  display: block !important;
+}
+@media (max-width: 950px) {
+  .plan-hero-copy {
+    grid-template-columns: 1fr;
+  }
+  .plan-hero-aside {
+    padding-top: 0;
+  }
+  .plan-hero-phrase {
+    white-space: normal;
+  }
+  .plan-site-footer .plan-deeper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .plan-section-cut li:nth-child(even) .plan-step-art {
+    order: initial;
+  }
+  .plan-contrast {
+    grid-template-columns: 1fr;
+  }
+  .plan-table thead {
+    display: none;
+  }
+  .plan-table,
+  .plan-table tbody,
+  .plan-table tr,
+  .plan-table th,
+  .plan-table td {
+    display: block;
+    width: 100%;
+  }
+  .plan-table tr {
+    padding: 0.9rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .plan-table th,
+  .plan-table td {
+    border: 0;
+    padding: 0.22rem 0;
+    text-align: left;
+  }
+  .plan-table th {
+    font-size: 1rem;
+    margin-bottom: 0.45rem;
+  }
+  .plan-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font: 600 0.72rem/1.4 var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rust);
+    margin-bottom: 0.1rem;
+  }
+  .plan-table th[data-label]::before {
+    content: none;
+  }
+  .plan-site-footer .plan-deeper {
+    gap: 1.2rem;
+  }
+}
+@media (max-width: 390px) {
+  .plan h1 {
+    font-size: clamp(2.4rem, 11.2vw, 3.1rem);
+  }
+  .plan-hero-phrase {
+    white-space: nowrap;
+    font-size: 0.83em;
+  }
+  .plan-site-footer .plan-deeper {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.plan-compare-page,
+.plan-install-sheet {
+  max-width: 1400px;
+  margin: auto;
+  padding: clamp(2rem, 5vw, 5rem) clamp(1.35rem, 5vw, 5rem);
+}
+.plan-compare-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: clamp(3rem, 6vw, 6rem);
+}
+.plan.plan-compare-page h1 {
+  max-width: 22ch;
+  font-size: clamp(2.6rem, 7vw, 4.5rem);
+}
+.plan-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin: 3rem 0;
+}
+.plan .plan-compare-link {
+  display: block;
+  max-width: 48ch;
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--rust);
+  border-radius: 0.25rem;
+  background: var(--sheet);
+  color: var(--rust);
+  font-weight: 700;
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+.plan .plan-compare-link:hover,
+.plan .plan-compare-link:focus-visible {
+  background: var(--band);
+  text-decoration: underline;
+}
+.plan .plan-compare-grid article {
+  border-top: 2px solid var(--rust);
+  background: var(--band);
+  padding: clamp(1.2rem, 2.5vw, 2rem);
+}
+.plan .plan-compare-grid article h2 {
+  font-size: clamp(1.8rem, 2.8vw, 2.5rem);
+  margin: 0 0 1.7rem;
+}
+.plan .plan-compare-grid article h3 {
+  font: 600 0.78rem/1.4 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 1.5rem 0 0.5rem;
+}
+.plan .plan-compare-grid article p {
+  max-width: 55ch;
+  line-height: 1.65;
+  margin: 0 0 1.25rem;
+}
+.plan .plan-compare-grid article > a { display: inline-block; margin-top: 0.25rem; }
+.plan .plan-evaluation-card { color: var(--ink); }
+.plan .plan-evaluation-card h2 { color: var(--ink); }
+.plan .plan-evaluation-card .plan-sheet-head { margin-bottom: 0; }
+.plan .plan-evaluation-card .plan-body { color: var(--ink-2); }
+.plan .plan-evaluation-card .plan-evaluation-note { margin-top: 1.5rem; color: var(--ink-2); }
+.plan .plan-compare-close { margin-top: 3rem; }
+@media (max-width: 760px) {
+  .plan-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.plan-hero h1 {
+  max-width: none;
+}
+@media (max-width: 600px) {
+  .plan-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 0.15rem 0.8rem;
+  }
+  .plan-nav a {
+    min-height: 44px;
+  }
+}
+@media (max-width: 390px) {
+  .plan h1 {
+    font-size: 3.3rem;
+  }
+  .plan-hero-phrase {
+    font-size: 0.83em;
+  }
+}
+
+/* Refinements to the responsive paper layout. */
+.plan-contrast figure {
+  margin-top: 0.9rem;
+}
+.plan-contrast figcaption {
+  padding-top: 0.8rem;
+}
+.plan-contrast figcaption .plan-label {
+  margin-bottom: 0.4rem;
+}
+.plan-contrast figcaption h3 {
+  margin: 0 0 0.45rem;
+}
+.plan-contrast figcaption > p:last-child {
+  max-width: 52ch;
+  margin: 0;
+  font: 0.95rem/1.5 var(--sans);
+  color: var(--muted);
+}
+.plan-host-select {
+  appearance: none;
+  padding: 0.65rem 2.8rem 0.65rem 0.85rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.15rem) 50%,
+    calc(100% - 0.85rem) 50%;
+  background-size:
+    0.35rem 0.35rem,
+    0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+.plan-site-footer a {
+  text-decoration: none;
+}
+.plan-site-footer a:hover,
+.plan-site-footer a:focus-visible {
+  text-decoration: underline;
+}
+.plan-vision-card {
+  align-content: start;
+}
+.plan-vision-art {
+  margin-bottom: 1.1rem;
+}
+.plan-vision-content {
+  align-self: start;
+}
+.plan-vision-content .plan-label {
+  margin: 0 0 0.45rem;
+}
+.plan-vision-content h3 {
+  margin: 0 0 0.5rem;
+}
+.plan-vision-content > p:not(.plan-label) {
+  margin: 0 0 0.6rem;
+  line-height: 1.48;
+  color: var(--slate);
+}
+.plan-vision-content a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  font: 600 0.85rem/1.4 var(--sans);
+  text-underline-offset: 0.2em;
+}
+@media (max-width: 1100px) {
+  .plan-vision-gallery {
+    grid-template-columns: 1fr;
+  }
+  .plan-vision-card {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    gap: 0 1.5rem;
+    align-items: center;
+  }
+  .plan-vision-content {
+    align-self: center;
+  }
+  .plan-vision-art {
+    grid-row: auto;
+    margin: 0;
+  }
+}
+@media (max-width: 950px) {
+  .plan-hero-copy {
+    gap: 0.65rem;
+  }
+  .plan-hero-aside .plan-actions {
+    margin-top: 0.8rem;
+  }
+}
+@media (max-width: 600px) {
+  .plan-masthead {
+    gap: 0.3rem;
+    margin-bottom: 1.2rem;
+    padding-block: 0.7rem;
+  }
+  .plan-nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    overflow-x: visible;
+    width: 100%;
+    max-width: 100%;
+    scrollbar-width: thin;
+  }
+  .plan-nav a {
+    flex: 0 0 auto;
+    min-height: 44px;
+    font-size: 0.72rem;
+  }
+  .plan-meta-pills {
+    gap: 0.25rem;
+    margin-bottom: 0.8rem;
+  }
+  .plan-meta-pills li {
+    font-size: 0.64rem;
+  }
+  .plan-meta-pills button {
+    min-height: 44px;
+    padding-inline: 0.55rem;
+    gap: 0.25rem;
+  }
+  .plan-meta-pills svg {
+    width: 11px;
+    height: 11px;
+  }
+}
+@media (max-width: 540px) {
+  .plan-vision-card {
+    display: block;
+  }
+  .plan-vision-art {
+    margin-bottom: 1.1rem;
+  }
+  .plan-vision-content {
+    align-self: auto;
+  }
+}
+
+/* Compact capsules keep a 40px pointer target without inflating the visible pill. */
+.plan-meta-pills li {
+  margin-block: 4px;
+}
+.plan-meta-pills button {
+  position: relative;
+  min-height: 32px;
+  padding: 0.22rem 0.68rem;
+  line-height: 1.3;
+}
+.plan-meta-pills button::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.plan-benefit-detail:not([hidden]) {
+  left: 0;
+  right: auto;
+  width: min(19rem, calc(100vw - 1.5rem));
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  background: var(--sheet);
+  box-shadow: 0 7px 18px -11px rgba(40, 55, 47, 0.4);
+  font: 400 0.83rem/1.48 var(--sans);
+  letter-spacing: normal;
+  white-space: normal;
+  overflow-wrap: break-word;
+  transform: translateX(var(--popover-shift, 0px));
+}
+.plan-benefit-detail:not([hidden])::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 18px;
+  width: 12px;
+  height: 12px;
+  background: var(--sheet);
+  border-top: 1.5px solid var(--ink);
+  border-left: 1.5px solid var(--ink);
+  transform: rotate(45deg);
+}
+.plan-meta-pills li:nth-last-child(-n + 2) .plan-benefit-detail:not([hidden]) {
+  left: 0;
+  right: auto;
+}
+.plan-table-value {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.62rem;
+}
+.plan-table-value svg {
+  flex: 0 0 22px;
+  margin-top: 0.08rem;
+  color: var(--rust);
+}
+.plan-evaluate-intro {
+  padding-block: clamp(1.5rem, 3vw, 2.2rem);
+  background: var(--band);
+}
+.plan-evaluate-intro h2 {
+  font-size: clamp(1.35rem, 2.3vw, 1.8rem);
+}
+.plan-evaluate-intro .plan-body {
+  margin: 0.45rem 0 1rem;
+}
+.plan .plan-evaluate-compact {
+  margin: 0;
+  padding: 0.85rem 1rem;
+}
+@media (max-width: 600px) {
+  .plan-meta-pills button {
+    padding-inline: 0.5rem;
+  }
+  .plan-benefit-detail:not([hidden]) {
+    left: 0;
+    width: 100%;
+    transform: none;
+  }
+}
+
+/* Home reading rhythm: the ground spans the viewport; the text retains the sheet gutter. */
+.plan-home > .plan-sheet {
+  --page-gutter: clamp(1.35rem, 5vw, 5rem);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(3.5rem, 8vw, 7rem)
+    max(var(--page-gutter), calc((100% - 1400px) / 2 + var(--page-gutter)));
+  border-bottom: 0;
+}
+.plan-home > .plan-ground-paper {
+  background: var(--paper);
+}
+.plan-home > .plan-ground-band {
+  /* Preserve a visible paper-art plate against the darker reading band. */
+  background: #f1eee7;
+}
+.dark .plan-home > .plan-ground-band {
+  background: var(--band);
+}
+.plan-home > .plan-interface-sheet {
+  border-bottom: 1px solid var(--line);
+}
+.plan-home > .plan-hero {
+  padding-top: 0;
+}
+.plan-home .plan-evaluate-intro .plan-body {
+  margin: 1rem 0 1.5rem;
+}
+.plan-home .plan-evaluate-sheet .plan-evaluate {
+  margin-top: 1.5rem;
+}
+.plan-home .plan-invoice-story,
+.plan-home .plan-example {
+  background: var(--sheet);
+}
+.plan-home .plan-inspector-title {
+  align-items: flex-start;
+}
+.plan-home .plan-inspector-title > div {
+  min-width: 0;
+}
+.plan-home .plan-inspector-title h3 {
+  margin: 0 0 0.3rem;
+}
+.plan-home .plan-inspector-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.plan-home .plan-inspector-count {
+  margin-left: auto;
+}
+
+.plan-home .plan-comparison-mobile {
+  display: none;
+}
+@media (max-width: 860px) {
+  .plan-home .plan-table-wrap {
+    display: none;
+  }
+  .plan-home .plan-comparison-mobile {
+    display: block;
+    min-width: 0;
+  }
+  .plan-home .plan-comparison-rail {
+    display: flex;
+    gap: 0.875rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline-start: 0;
+    padding: 0 0 0.8rem;
+    margin: 0;
+    list-style: none;
+    scrollbar-width: thin;
+  }
+  .plan-home .plan-comparison-rail::after {
+    content: "";
+    flex: 0 0 8%;
+  }
+  .plan-home .plan-comparison-rail:focus-visible {
+    outline: 3px solid var(--rust);
+    outline-offset: 3px;
+  }
+  .plan-home .plan-comparison-card {
+    flex: 0 0 92%;
+    min-width: 0;
+    scroll-snap-align: start;
+    padding: clamp(1.1rem, 3vw, 1.5rem);
+    border: 1px solid var(--line);
+    background: var(--sheet);
+  }
+  .plan-home .plan-comparison-card h3 {
+    margin: 0 0 1.3rem;
+  }
+  .plan-home .plan-comparison-answer + .plan-comparison-answer {
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--line);
+  }
+  .plan-home .plan-comparison-label {
+    margin: 0 0 0.35rem;
+    color: var(--rust);
+    font: 600 0.78rem/1.4 var(--sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .plan-home .plan-comparison-answer .plan-table-value {
+    margin: 0;
+  }
+}
+@media print {
+  .plan-home .plan-table-wrap {
+    display: none;
+  }
+  .plan-home .plan-comparison-mobile {
+    display: block;
+  }
+  .plan-home .plan-comparison-rail {
+    display: block;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .plan-home .plan-comparison-card {
+    display: block;
+    break-inside: avoid;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .plan-home .plan-comparison-card h3 {
+    margin: 0 0 0.5rem;
+  }
+  .plan-home .plan-comparison-answer p {
+    margin: 0.2rem 0;
+  }
+}
+
+/* Topic pills are ordinary destinations; keep the capsule shape and full keyboard target. */
+.plan-meta-pills a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.35rem 0.7rem;
+  border-radius: inherit;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+.plan-meta-pills a:hover,
+.plan-meta-pills a:focus-visible {
+  color: var(--rust);
+  text-decoration: none;
+}
+.plan-benefit-tooltip {
+  display: block;
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  width: min(19rem, calc(100vw - 1.5rem));
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  background: var(--sheet);
+  box-shadow: 0 7px 18px -11px rgba(40, 55, 47, 0.4);
+  color: var(--ink);
+  font: 400 0.83rem/1.48 var(--sans);
+  letter-spacing: normal;
+  white-space: normal;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  transform: translateX(var(--popover-shift, 0px));
+}
+@media (max-width: 950px) {
+  .plan-home .plan-hero h1 {
+    max-width: none;
+  }
+}
+@media (max-width: 390px) {
+  .plan-home .plan-hero-phrase {
+    white-space: normal;
+  }
+}
+
+/* Reading rhythm and the two-stage install handoff. */
+.plan-contrast figcaption > p:last-child,
+.plan-vision-content > p:not(.plan-label) {
+  margin-top: 1rem;
+}
+.plan-home #connect > .site-snippet:first-of-type {
+  margin-top: 2.5rem;
+}
+.plan-home #connect .site-snippet-heading {
+  align-self: center;
+}
+.plan-home #connect .site-snippet-title {
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.plan-home #connect .plan-host-label {
+  display: block;
+  margin: 0;
+}
+.plan-home #connect .plan-host-select {
+  margin: 0;
+  max-width: 100%;
+  border: 0;
+  padding: 0.3rem 2rem 0.3rem 0;
+  background-color: transparent;
+  font: 600 1.1rem/1.4 var(--sans);
+}
+.plan-install-guide {
+  margin: -1rem 0 2rem;
+}
+
+/* The host controls a single two-step handoff, including a styled open menu. */
+.plan-tool-install {
+  margin-top: 2.5rem;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid var(--line);
+}
+.plan-install .plan-tool-install {
+  margin-top: 0.75rem;
+}
+.plan-tool-choice {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.plan-tool-choice > label {
+  font: 600 0.875rem/1.4 var(--sans);
+}
+.plan-tool-prerequisite {
+  max-width: 65ch;
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font: 0.9rem/1.55 var(--sans);
+}
+.plan-tool-preflight {
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--line);
+  background: var(--band);
+  color: var(--ink);
+  font: 0.875rem/1.5 var(--sans);
+}
+.plan-tool-preflight > summary {
+  cursor: pointer;
+  padding: 0.8rem 1rem;
+  font-weight: 600;
+}
+.plan-tool-preflight > p {
+  margin: 0;
+  padding: 0 1rem 0.75rem;
+  color: var(--muted);
+}
+.plan-tool-preflight #permissions-preflight {
+  margin: 0 1rem 1rem;
+}
+/* Install section headings can use the available rail; permission controls stay compact. */
+.plan .plan-install-sheet > div > h2 {
+  max-width: none;
+  margin: 1.5rem 0 0.75rem;
+}
+.plan-tool-preflight #permissions-preflight-heading {
+  max-width: none;
+  margin: 0;
+  font: 600 0.9375rem/1.6 var(--sans);
+  letter-spacing: -0.01em;
+}
+.plan-selected-verification {
+  margin: 0.5rem 0 1.25rem;
+  color: var(--muted);
+  font: 0.875rem/1.55 var(--sans);
+}
+.plan .plan-tool-trigger {
+  width: min(100%, 28rem);
+  height: auto;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 600 1.1rem/1.4 var(--sans);
+  text-align: left;
+  box-shadow: none;
+}
+.plan .plan-tool-trigger:focus-visible {
+  outline: 3px solid var(--rust);
+  outline-offset: 3px;
+}
+.plan-tool-menu[data-state] {
+  width: var(--radix-select-trigger-width);
+  max-width: calc(100vw - 32px);
+  max-height: min(22rem, var(--radix-select-content-available-height));
+  border: 1px solid #172b39;
+  border-radius: 0;
+  background: #faf8f3;
+  color: #172b39;
+  font:
+    400 1rem/1.4 "Instrument Sans Onepager",
+    system-ui,
+    sans-serif;
+  box-shadow: 0 8px 24px #172b3926;
+}
+.plan-tool-menu [data-radix-select-viewport] {
+  height: auto !important;
+  min-width: 0 !important;
+}
+.plan-tool-menu .plan-tool-option {
+  min-height: 44px;
+  padding: 10px 14px 10px 34px;
+  border-radius: 0;
+  font: inherit;
+}
+.plan-tool-menu .plan-tool-option[data-highlighted] {
+  background: #f1ece2;
+  color: #172b39;
+  outline: 2px solid #a14624;
+  outline-offset: -2px;
+}
+.plan-tool-menu .plan-tool-option[data-state="checked"] {
+  font-weight: 600;
+}
+.dark .plan-tool-menu[data-state] {
+  background: #1d272c;
+  color: #eeeae0;
+  border-color: #b7c4ca;
+}
+.dark .plan-tool-menu .plan-tool-option[data-highlighted] {
+  background: #303333;
+  color: #eeeae0;
+  outline-color: #e5a17c;
+}
+.plan-tool-install > .site-snippet {
+  margin: 0;
+  padding: 24px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+}
+.plan-tool-install .site-snippet-prose-flow {
+  padding: 0;
+}
+.plan-tool-install > .plan-install-guide {
+  margin: 4px 0 0;
+}
+.plan-tool-install > .plan-install-guide a {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--rust);
+  text-underline-offset: 0.25em;
+}
+.plan-tool-install .plan-install-snippet .site-snippet-title {
+  font: 600 clamp(1rem, 1.7vw, 1.2rem)/1.35 var(--sans);
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 0.8rem;
+}
+.plan-tool-install .plan-install-snippet .site-snippet-body:not(.site-snippet-body-prose) {
+  background: var(--band);
+}
+.plan-tool-install .plan-install-snippet .site-snippet-body-prose > .site-snippet-prose {
+  max-width: none;
+  font: 0.9rem/1.6 var(--sans);
+}
+
+.plan-tool-menu[data-state] [data-radix-select-viewport] {
+  max-height: calc(min(22rem, var(--radix-select-content-available-height)) - 52px);
+  overflow-y: auto;
+}
+
+/* Spanish's longer title wraps as a sentence; the English phrase keeps its authored grouping. */
+.plan-home-es .plan-hero-phrase {
+  display: inline;
+  white-space: normal;
+}

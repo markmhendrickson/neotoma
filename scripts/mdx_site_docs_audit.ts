@@ -3,7 +3,7 @@
  * Scans public markdown under `docs/` (excluding `docs/private`) and writes
  * `docs/site/generated/docs_markdown_audit.json` for reconciliation work.
  *
- * Run: tsx scripts/mdx_site_docs_audit.ts
+ * Run: tsx scripts/mdx_site_docs_audit.ts [--check]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -52,20 +52,12 @@ function collectMarkdownFiles(): { rel: string; top: string }[] {
 }
 
 function main() {
+  const check = process.argv.includes("--check");
   const files = collectMarkdownFiles();
   const byTop = files.reduce<Record<string, number>>((acc, f) => {
     acc[f.top] = (acc[f.top] ?? 0) + 1;
     return acc;
   }, {});
-
-  fs.mkdirSync(outDir, { recursive: true });
-  const payload = {
-    generated_at: new Date().toISOString(),
-    total_files: files.length,
-    by_top_level_folder: byTop,
-    files,
-  };
-  fs.writeFileSync(path.join(outDir, "docs_markdown_audit.json"), JSON.stringify(payload, null, 2), "utf-8");
 
   const md = [
     "# Docs markdown audit (generated)",
@@ -82,7 +74,36 @@ function main() {
     "",
   ].join("\n");
 
-  fs.writeFileSync(path.join(outDir, "DOCS_MARKDOWN_AUDIT.md"), md, "utf-8");
+  const jsonPath = path.join(outDir, "docs_markdown_audit.json");
+  const mdPath = path.join(outDir, "DOCS_MARKDOWN_AUDIT.md");
+  if (check) {
+    const saved = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    const missing = saved.files.filter(
+      (file: { rel: string }) => !fs.existsSync(path.join(repoRoot, file.rel))
+    );
+    if (
+      missing.length > 0 ||
+      saved.total_files !== files.length ||
+      JSON.stringify(saved.files) !== JSON.stringify(files) ||
+      JSON.stringify(saved.by_top_level_folder) !== JSON.stringify(byTop) ||
+      fs.readFileSync(mdPath, "utf-8") !== md
+    ) {
+      throw new Error(
+        `Docs markdown audit is stale (${missing.length} missing paths); regenerate it`
+      );
+    }
+    console.log(`Docs markdown audit current (${files.length} existing files)`);
+    return;
+  }
+  fs.mkdirSync(outDir, { recursive: true });
+  const payload = {
+    generated_at: new Date().toISOString(),
+    total_files: files.length,
+    by_top_level_folder: byTop,
+    files,
+  };
+  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), "utf-8");
+  fs.writeFileSync(mdPath, md, "utf-8");
   console.log(`Wrote docs/site/generated/docs_markdown_audit.json (${files.length} files)`);
 }
 

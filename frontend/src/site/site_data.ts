@@ -1,7 +1,10 @@
+import { SOCIAL_CARD, socialCardForLocale } from "./social_card";
 import repoInfo from "./repo_info.json";
 
-/** Version from package.json (updated by scripts/repo_info.ts). */
-export const REPO_VERSION: string = repoInfo.version;
+/** Public package version. Moved in the v0.27.0 release commit so the install command does not lag a security release; read back from npm after publish. */
+export const REPO_VERSION = "0.27.0";
+/** Source candidate version; not a published package claim. */
+export const SOURCE_VERSION: string = repoInfo.version;
 /** Published GitHub releases count (updated by scripts/repo_info.ts). */
 export const REPO_RELEASES_COUNT: number = repoInfo.releasesCount;
 /** GitHub stargazers count (build-time fallback, refreshed client-side). */
@@ -224,7 +227,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Privacy-first local storage",
     slug: "privacy-first-local-storage",
     tooltip:
-      "Whether your data stays on your machine by default with no cloud sync, telemetry, or third-party access. Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
+      "Whether your data stays on your machine by default with no cloud sync or third-party access, and no telemetry beyond npm update checks that send only the package name (the CLI checks about once a day, the stdio MCP server when a session starts and about every 6 hours after; NO_UPDATE_NOTIFIER=1 turns both off, and the registry sees ordinary connection metadata such as the address). Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "guaranteed",
@@ -393,7 +396,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Getting started",
     items: [
-      { label: "Documentation", href: "/docs", icon: "Home" },
+      { label: "README", href: "/readme/", icon: "Home" },
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },
@@ -409,17 +412,12 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     title: "Architecture",
     items: [
       { label: "Foundations", href: "/foundations", icon: "Shield" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
       { label: "Architecture", href: "/architecture", icon: "Layers" },
-      { label: "Memory models", href: "/memory-models", icon: "Boxes" },
     ],
   },
   {
     title: "Hosted",
-    items: [
-      { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
-      { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
-    ],
+    items: [{ label: "Public sandbox", href: "/sandbox", icon: "Globe" }],
   },
   {
     title: "Integrations",
@@ -440,7 +438,11 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "All skills", href: "/skills", icon: "Bot" },
       { label: "Ensure Neotoma", href: "/skills/ensure-neotoma", icon: "Download" },
       { label: "Remember Email", href: "/skills/remember-email", icon: "Mail" },
-      { label: "Remember Conversations", href: "/skills/remember-conversations", icon: "MessageSquare" },
+      {
+        label: "Remember Conversations",
+        href: "/skills/remember-conversations",
+        icon: "MessageSquare",
+      },
       { label: "Remember Meetings", href: "/skills/remember-meetings", icon: "Users" },
       { label: "Remember Finances", href: "/skills/remember-finances", icon: "Receipt" },
       { label: "Remember Contacts", href: "/skills/remember-contacts", icon: "BookUser" },
@@ -538,8 +540,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Subscriptions", href: "/subscriptions", icon: "Radio" },
       { label: "Issue reporting", href: "/issue-reporting", icon: "Bug" },
       { label: "Security hardening", href: "/security-hardening", icon: "Lock" },
-      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
-      { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
       {
         label: "Problem statement",
@@ -596,15 +596,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     ],
   },
   {
-    title: "Where the tax shows up",
-    sidebarTitle: "The tax",
-    items: [
-      { label: "Context janitor", href: "/operating", icon: "SatelliteDish" },
-      { label: "Inference variance", href: "/building-pipelines", icon: "Zap" },
-      { label: "Log archaeology", href: "/debugging-infrastructure", icon: "Cpu" },
-    ],
-  },
-  {
     title: "Compare",
     items: [
       { label: "Build vs buy", href: "/build-vs-buy", icon: "Scale" },
@@ -628,7 +619,8 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
 
 export const SITE_CODE_SNIPPETS = {
   onboardingSequence: "evaluation -> installation -> activation -> tooling config",
-  activationSequence: "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
+  activationSequence:
+    "detect context -> discover -> propose -> preview -> ingest -> query -> correct",
   installCommands: `# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
 npm install -g neotoma
 
@@ -640,9 +632,9 @@ neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --
 neotoma hooks install --tool opencode --yes   # optional OpenCode lifecycle hooks`,
   agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
 
-Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
+Use \`neotoma\` commands for status and supported setup targets. If Neotoma is already installed, start with \`neotoma status --json\`; otherwise install it. Choose the exact connection guide for my host at https://neotoma.io/install/. Only Claude Code, Cursor, Codex and Claude Desktop have direct setup paths; use Claude Desktop user scope. OpenClaw's native plugin is its primary path. For manual hosts, SDKs and registries follow their guide instead of substituting a setup target.
 
-Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.`,
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then store my first records and configure my current tool for ongoing use.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -1666,10 +1658,9 @@ export const ICP_PROFILES: IcpProfile[] = [
 
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
-  ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
-  pageTitle: "Your agents forget. Neotoma makes them remember.",
-  pageDescription:
-    "State integrity for AI agents, not retrieval quality. Versioned contacts, tasks, decisions, finances \u2014 stored once, queryable everywhere. Open-source and local-first.",
+  ogImageUrl: socialCardForLocale("en").url,
+  pageTitle: "Neotoma: the system of record for AI agents",
+  pageDescription: SOCIAL_CARD.en.description,
   heroImageUrl: "neotoma-hero.png",
 };
 

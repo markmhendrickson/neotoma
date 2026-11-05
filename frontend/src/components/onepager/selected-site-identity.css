@@ -1,0 +1,14 @@
+.selected-site-logo{display:inline-block;height:2rem;width:auto;position:relative;vertical-align:middle;line-height:0}
+.selected-site-logo.ateles{width:7.28125rem}.selected-site-logo.neotoma{width:9.46875rem}
+.selected-site-logo.compact{height:1.125rem}.selected-site-logo.compact.ateles{width:4.0957rem}.selected-site-logo.compact.neotoma{width:5.3262rem}
+.selected-site-logo.symbol-only{width:2rem}.selected-site-logo.symbol-only.compact{width:1.125rem}
+.selected-site-logo svg{display:block;width:100%;height:100%;overflow:visible}
+.selected-site-logo [data-brand-part]{transform-box:fill-box;transform-origin:left bottom}
+.selected-site-logo .logo-on-dark{display:none}
+.wordmark:has(.selected-site-logo){display:inline-flex;align-items:center;line-height:1;flex-shrink:0}
+.sibling-logo-link{display:inline-flex;align-items:center;min-height:2.75rem}
+:root[data-theme=dark] .selected-site-logo .logo-on-light{display:none}
+:root[data-theme=dark] .selected-site-logo .logo-on-dark{display:block}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .selected-site-logo .logo-on-light{display:none}:root:not([data-theme=light]) .selected-site-logo .logo-on-dark{display:block}}
+@media(max-width:760px){header .selected-site-logo{height:1.75rem}header .selected-site-logo.ateles{width:6.3711rem}header .selected-site-logo.neotoma{width:8.2852rem}header .selected-site-logo.compact{height:1.125rem}header .selected-site-logo.compact.ateles{width:4.0957rem}header .selected-site-logo.compact.neotoma{width:5.3262rem}header .selected-site-logo.symbol-only{width:1.75rem}header .selected-site-logo.symbol-only.compact{width:1.125rem}}
+@media(prefers-reduced-motion:reduce){.selected-site-logo [data-brand-part]{transform:none!important;clip-path:none!important;opacity:1!important}}

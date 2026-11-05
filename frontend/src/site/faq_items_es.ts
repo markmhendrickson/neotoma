@@ -121,7 +121,7 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
       "Empieza con lo que el agente ya produce: conversaciones, contactos citados en el chat, tareas y compromisos («necesito», «recuérdame») y decisiones. Se almacenan automáticamente sin configuración extra cuando las reglas del agente están activas. En la primera semana añade datos financieros, calendario y contexto de proyecto a medida que crece tu OS personal.",
     detail:
       "Prioridad 1 (día uno): conversaciones, contactos, tareas, decisiones — baja fricción, alto valor compuesto. Prioridad 2 (primera semana): finanzas, calendario, correo, salud. Prioridad 3 (madurez): canal de contenido, contexto de proyecto, estado de sesión del agente. La heurística: si se beneficia de recuerdo, auditoría, reproducción o enlaces a otras entidades, almacénalo.",
-    link: { href: "/docs", label: "Documentación" },
+    link: { href: "/readme/", label: "README" },
   },
   {
     sectionId: "is-neotoma-a-note-taking-app-or-thought-partner-tool",
@@ -136,7 +136,7 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     sectionId: "how-do-i-install-neotoma",
     question: "¿Cómo instalo Neotoma?",
     answer:
-      "Ejecuta `npm install -g neotoma`, luego `neotoma setup --tool cursor --yes` para inicializar Neotoma y configurar la ruta MCP local por defecto. Sustituye `cursor` por tu herramienta si hace falta. Arranca el servidor API solo si necesitas Inspector, OAuth o la API HTTP local. El proceso completo lleva menos de 5 minutos.",
+      "Ejecuta `npm install -g neotoma`, luego `neotoma setup --tool cursor --yes` para inicializar Neotoma y configurar la ruta MCP local por defecto. Sustituye `cursor` por tu herramienta si hace falta. Arranca el servidor API solo si necesitas Inspector, OAuth o la API HTTP local. El proceso completo lleva unos minutos.",
     link: { href: "/install", label: "Guía de instalación" },
   },
   {
@@ -151,7 +151,7 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     question: "¿Con qué herramientas de IA funciona Neotoma?",
     answer:
       "Neotoma funciona con cualquier herramienta compatible con MCP: Cursor, Claude (escritorio y claude.ai), Claude Code, ChatGPT, Codex, OpenCode, OpenClaw e IronClaw. También ofrece API REST y CLI para acceso programático directo.",
-    link: { href: "/docs", label: "Guías de integración" },
+    link: { href: "/integrations/", label: "Integraciones" },
   },
   {
     sectionId: "is-neotoma-free-and-open-source",

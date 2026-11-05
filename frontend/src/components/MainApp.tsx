@@ -1,13 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import {
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-  useNavigationType,
-} from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from "react-router-dom";
 import { Layout } from "@/components/Layout";
+import { RetiredRouteStub } from "@/components/RetiredRouteStub";
+import { LOCALIZED_LEGAL_PATHS, isRetiredRoute } from "@/site/route_retirement";
+import { DOCS_VIEWER_INDEX, isDocsViewerRoute, viewerRoute } from "@/site/docs_viewer_manifest";
 import { NotFound } from "@/components/NotFound";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
@@ -49,7 +45,6 @@ import { ArchitecturePage } from "@/components/subpages/ArchitecturePage";
 import { AiInfrastructureEngineersPage } from "@/components/subpages/AiInfrastructureEngineersPage";
 import { AiNativeOperatorsPage } from "@/components/subpages/AiNativeOperatorsPage";
 import { AgenticSystemsBuildersPage } from "@/components/subpages/AgenticSystemsBuildersPage";
-import { DocsIndexPage } from "@/components/subpages/DocsIndexPage";
 import { NeotomaWithCursorPage } from "@/components/subpages/NeotomaWithCursorPage";
 import { NeotomaWithClaudePage } from "@/components/subpages/NeotomaWithClaudePage";
 import { ClaudeConnectDesktopPage } from "@/components/subpages/ClaudeConnectDesktopPage";
@@ -73,6 +68,7 @@ import { OpenClawConnectLocalStdioPage } from "@/components/subpages/OpenClawCon
 import { OpenClawConnectRemoteHttpPage } from "@/components/subpages/OpenClawConnectRemoteHttpPage";
 import { MemoryGuaranteesPage } from "@/components/subpages/MemoryGuaranteesPage";
 import { MemoryModelsPage } from "@/components/subpages/MemoryModelsPage";
+import { CompareApproaches } from "@/components/onepager/CompareApproaches";
 import { DeterministicStateEvolutionPage } from "@/components/subpages/DeterministicStateEvolutionPage";
 import { VersionedHistoryPage } from "@/components/subpages/VersionedHistoryPage";
 import { ReplayableTimelinePage } from "@/components/subpages/ReplayableTimelinePage";
@@ -141,24 +137,23 @@ import {
   PrimitiveRecordTypeRouter,
   PrimitivesIndexPage,
 } from "@/components/subpages/PrimitiveRecordTypePage";
-import {
-  SchemaConceptRouter,
-  SchemasIndexPage,
-} from "@/components/subpages/SchemaConceptPage";
+import { SchemaConceptRouter, SchemasIndexPage } from "@/components/subpages/SchemaConceptPage";
 import { sendPageView } from "@/utils/analytics";
-import { DEFAULT_LOCALE, isSupportedLocale, NON_DEFAULT_LOCALES } from "@/i18n/config";
-import {
-  getLocaleFromPath,
-  localizePath,
-  normalizeToDefaultRoute,
-  resolvePreferredLocale,
-  stripLocaleFromPath,
-} from "@/i18n/routing";
+import { NON_DEFAULT_LOCALES } from "@/i18n/config";
+import { normalizeToDefaultRoute, resolvePreferredLocale } from "@/i18n/routing";
+import { isSpanishRetainedBaseRoute } from "@/site/spanish_route_set";
 
 type AppRoute = {
   path: string;
   element: JSX.Element;
 };
+
+function SpanishSkillRoute() {
+  const { skillSlug } = useParams();
+  return skillSlug && isSpanishRetainedBaseRoute(`/skills/${skillSlug}`)
+    ? <SkillDetailPage />
+    : <RetiredRouteStub />;
+}
 
 const APP_ROUTES: readonly AppRoute[] = [
   { path: "/", element: <MdxSitePage canonicalPath="/" shell="bare" /> },
@@ -187,7 +182,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/plans-guide", element: <MdxSitePage canonicalPath="/plans-guide" /> },
   { path: "/mirror-guide", element: <MdxSitePage canonicalPath="/mirror-guide" /> },
   { path: "/inspector-skinning", element: <MdxSitePage canonicalPath="/inspector-skinning" /> },
-  { path: "/identify-entity-by-signals", element: <MdxSitePage canonicalPath="/identify-entity-by-signals" /> },
+  {
+    path: "/identify-entity-by-signals",
+    element: <MdxSitePage canonicalPath="/identify-entity-by-signals" />,
+  },
   { path: "/capability-delta", element: <MdxSitePage canonicalPath="/capability-delta" /> },
   { path: "/high-velocity-intake", element: <MdxSitePage canonicalPath="/high-velocity-intake" /> },
   { path: "/embed-graph", element: <MdxSitePage canonicalPath="/embed-graph" /> },
@@ -241,7 +239,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/data-model", element: <Navigate to="/walkthrough" replace /> },
   { path: "/architecture", element: <ArchitecturePage /> },
   { path: "/schema-management", element: <MdxSitePage canonicalPath="/schema-management" /> },
-  { path: "/non-destructive-testing", element: <MdxSitePage canonicalPath="/non-destructive-testing" /> },
+  {
+    path: "/non-destructive-testing",
+    element: <MdxSitePage canonicalPath="/non-destructive-testing" />,
+  },
   { path: "/troubleshooting", element: <MdxSitePage canonicalPath="/troubleshooting" /> },
   { path: "/changelog", element: <MdxSitePage canonicalPath="/changelog" /> },
   {
@@ -253,8 +254,11 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/debugging-infrastructure", element: <AiInfrastructureEngineersPage /> },
   { path: "/ai-native-operators", element: <Navigate to="/operating" replace /> },
   { path: "/agentic-systems-builders", element: <Navigate to="/building-pipelines" replace /> },
-  { path: "/ai-infrastructure-engineers", element: <Navigate to="/debugging-infrastructure" replace /> },
-  { path: "/docs", element: <DocsIndexPage /> },
+  {
+    path: "/ai-infrastructure-engineers",
+    element: <Navigate to="/debugging-infrastructure" replace />,
+  },
+  { path: "/docs", element: <Navigate to="/#references" replace /> },
   { path: "/neotoma-with-cursor", element: <NeotomaWithCursorPage /> },
   { path: "/neotoma-with-claude", element: <NeotomaWithClaudePage /> },
   { path: "/neotoma-with-claude-connect-desktop", element: <ClaudeConnectDesktopPage /> },
@@ -266,7 +270,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/neotoma-with-chatgpt-connect-custom-gpt", element: <ChatGptConnectCustomGptPage /> },
   { path: "/neotoma-with-codex", element: <NeotomaWithCodexPage /> },
   { path: "/neotoma-with-codex-connect-local-stdio", element: <CodexConnectLocalStdioPage /> },
-  { path: "/neotoma-with-codex-connect-remote-http-oauth", element: <CodexConnectRemoteHttpOauthPage /> },
+  {
+    path: "/neotoma-with-codex-connect-remote-http-oauth",
+    element: <CodexConnectRemoteHttpOauthPage />,
+  },
   { path: "/neotoma-with-opencode", element: <NeotomaWithOpenCodePage /> },
   { path: "/neotoma-with-openclaw", element: <NeotomaWithOpenClawPage /> },
   { path: "/neotoma-with-ironclaw", element: <NeotomaWithIronClawPage /> },
@@ -274,8 +281,14 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/neotoma-with-windsurf", element: <NeotomaWithWindsurfPage /> },
   { path: "/neotoma-with-vscode", element: <NeotomaWithVSCodePage /> },
   { path: "/neotoma-with-letta", element: <NeotomaWithLettaPage /> },
-  { path: "/neotoma-with-openclaw-connect-local-stdio", element: <OpenClawConnectLocalStdioPage /> },
-  { path: "/neotoma-with-openclaw-connect-remote-http", element: <OpenClawConnectRemoteHttpPage /> },
+  {
+    path: "/neotoma-with-openclaw-connect-local-stdio",
+    element: <OpenClawConnectLocalStdioPage />,
+  },
+  {
+    path: "/neotoma-with-openclaw-connect-remote-http",
+    element: <OpenClawConnectRemoteHttpPage />,
+  },
   { path: "/memory-guarantees", element: <MemoryGuaranteesPage /> },
   { path: "/deterministic-state-evolution", element: <DeterministicStateEvolutionPage /> },
   { path: "/versioned-history", element: <VersionedHistoryPage /> },
@@ -292,6 +305,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/zero-setup-onboarding", element: <ZeroSetupOnboardingPage /> },
   { path: "/semantic-similarity-search", element: <SemanticSimilaritySearchPage /> },
   { path: "/direct-human-editability", element: <DirectHumanEditabilityPage /> },
+  { path: "/compare", element: <CompareApproaches /> },
   { path: "/memory-models", element: <MemoryModelsPage /> },
   { path: "/platform-memory", element: <PlatformMemoryPage /> },
   { path: "/retrieval-memory", element: <RetrievalMemoryPage /> },
@@ -346,10 +360,6 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/schemas/:slug", element: <SchemaConceptRouter /> },
 ];
 
-const APP_ROUTE_PATHS = new Set([
-  ...APP_ROUTES.map((route) => route.path),
-]);
-
 /** When the app is served at a product path (e.g. /neotoma-with-claude-code), show that product page at "/". */
 const BASENAME_TO_ROOT_PAGE: Record<string, JSX.Element> = {
   "/neotoma-with-cursor": <NeotomaWithCursorPage />,
@@ -373,33 +383,6 @@ function getRootElement(): JSX.Element {
   const segment = window.location.pathname.replace(/^\//, "").split("/")[0] ?? "";
   const basename = segment ? `/${segment}` : "";
   return BASENAME_TO_ROOT_PAGE[basename] ?? <MdxSitePage canonicalPath="/" shell="bare" />;
-}
-
-/**
- * Explicit `/${locale}/…` paths so segments like `markdown` are never captured as a locale.
- * (React Router ranks `/:locale/page` above `/markdown/*` when both match.)
- */
-function getLocalizedRoutePaths(routePath: string): string[] {
-  if (routePath === "/") {
-    return NON_DEFAULT_LOCALES.map((locale) => `/${locale}`);
-  }
-  return NON_DEFAULT_LOCALES.map((locale) => `/${locale}${routePath}`);
-}
-
-function LocaleSiteRedirect() {
-  const { pathname } = useLocation();
-  const locale = getLocaleFromPath(pathname) ?? DEFAULT_LOCALE;
-  const resolvedLocale = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
-  return <Navigate to={localizePath("/", resolvedLocale)} replace />;
-}
-
-function LocalizedRouteGuard({ children }: { children: React.ReactNode }) {
-  const { pathname } = useLocation();
-  const locale = getLocaleFromPath(pathname);
-  if (!locale || !isSupportedLocale(locale)) {
-    return <NotFound />;
-  }
-  return <>{children}</>;
 }
 
 const SCROLL_POSITIONS_STORAGE_KEY = "site-scroll-positions-v1";
@@ -486,37 +469,20 @@ function RouteScrollManager() {
  * Site-only public app shell.
  */
 export function MainApp() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
+    if (location.pathname === "/" && resolvePreferredLocale() === "es") return;
     sendPageView(normalizeToDefaultRoute(location.pathname));
   }, [location.pathname]);
 
   useEffect(() => {
-    if (getLocaleFromPath(location.pathname)) return;
-    const preferredLocale = resolvePreferredLocale();
-    if (preferredLocale === DEFAULT_LOCALE) return;
-
-    const stripped = stripLocaleFromPath(location.pathname);
-    if (stripped === "/markdown" || stripped.startsWith("/markdown/")) {
-      const localized = localizePath(stripped, preferredLocale);
-      const target = `${localized}${location.hash || ""}`;
-      if (target !== `${location.pathname}${location.hash || ""}`) {
-        navigate(target, { replace: true });
-      }
-      return;
+    // Only the neutral homepage consults a saved or browser language. Explicit URLs win.
+    if (location.pathname === "/" && resolvePreferredLocale() === "es") {
+      navigate(`/es/${location.search}${location.hash}`, { replace: true });
     }
-
-    const defaultRoutePath = normalizeToDefaultRoute(location.pathname);
-    const targetBasePath = defaultRoutePath === "/site" ? "/" : defaultRoutePath;
-    if (!APP_ROUTE_PATHS.has(targetBasePath)) return;
-
-    const localizedPath = localizePath(targetBasePath, preferredLocale);
-    const target = `${localizedPath}${location.hash || ""}`;
-    if (target === `${location.pathname}${location.hash || ""}`) return;
-    navigate(target, { replace: true });
-  }, [location.hash, location.pathname, navigate]);
+  }, [location.pathname, location.search, location.hash, navigate]);
 
   return (
     <Layout siteName="Neotoma">
@@ -525,46 +491,55 @@ export function MainApp() {
         <Route path="/site" element={<Navigate to="/" replace />} />
         <Route path="/quick-start" element={<Navigate to="/install" replace />} />
         <Route path="/docker" element={<Navigate to="/install/docker" replace />} />
-        {NON_DEFAULT_LOCALES.map((locale) => (
-          <Route
-            key={`${locale}/site`}
-            path={`/${locale}/site`}
-            element={
-              <LocalizedRouteGuard>
-                <LocaleSiteRedirect />
-              </LocalizedRouteGuard>
-            }
-          />
-        ))}
         <Route path="/" element={getRootElement()} />
-        {APP_ROUTES.filter((r) => r.path !== "/").map((route) => (
-          <Route key={route.path} path={route.path} element={route.element} />
+        <Route path="/en" element={getRootElement()} />
+        <Route path="/es" element={getRootElement()} />
+        {APP_ROUTES.filter((route) => route.path !== "/" && isSpanishRetainedBaseRoute(route.path)).map((route) => (
+          <Route key={`es-${route.path}`} path={`/es${route.path}`} element={route.element} />
         ))}
-        <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />
-        {NON_DEFAULT_LOCALES.map((locale) => (
+        <Route path="/es/skills/:skillSlug" element={<SpanishSkillRoute />} />
+        {APP_ROUTES.filter((r) => r.path !== "/").map((route) => (
           <Route
-            key={`${locale}/markdown/*`}
-            path={`/${locale}/markdown/*`}
+            key={route.path}
+            path={route.path}
             element={
-              <LocalizedRouteGuard>
-                <SiteMarkdownMirrorPage />
-              </LocalizedRouteGuard>
+              isRetiredRoute(route.path) || isDocsViewerRoute(route.path) ? (
+                <RetiredRouteStub />
+              ) : (
+                route.element
+              )
             }
           />
         ))}
-        {APP_ROUTES.flatMap((route) =>
-          getLocalizedRoutePaths(route.path).map((localizedPath) => (
+        {DOCS_VIEWER_INDEX.entries
+          .filter((entry) => !APP_ROUTES.some((route) => route.path === viewerRoute(entry.slug)))
+          .map((entry) => (
             <Route
-              key={`localized:${route.path}:${localizedPath}`}
-              path={localizedPath}
-              element={
-                <LocalizedRouteGuard>
-                  {route.path === "/" ? getRootElement() : route.element}
-                </LocalizedRouteGuard>
-              }
+              key={`docs-viewer-${entry.slug}`}
+              path={viewerRoute(entry.slug)}
+              element={<RetiredRouteStub />}
             />
-          )),
+          ))}
+        <Route path="/markdown/*" element={<SiteMarkdownMirrorPage />} />
+        {/* Localized legal routes stay live like their English counterparts (counsel decides). */}
+        {NON_DEFAULT_LOCALES.flatMap((locale) =>
+          LOCALIZED_LEGAL_PATHS.flatMap((legalPath) => [
+            <Route
+              key={`${locale}-legal-${legalPath}`}
+              path={`/${locale}${legalPath}`}
+              element={APP_ROUTES.find((r) => r.path === legalPath)?.element ?? <NotFound />}
+            />,
+            <Route
+              key={`${locale}-legal-md-${legalPath}`}
+              path={`/${locale}/markdown${legalPath}`}
+              element={<SiteMarkdownMirrorPage />}
+            />,
+          ])
         )}
+        {NON_DEFAULT_LOCALES.filter((locale) => locale !== "es").flatMap((locale) => [
+          <Route key={`${locale}-root`} path={`/${locale}`} element={<RetiredRouteStub />} />,
+          <Route key={`${locale}-any`} path={`/${locale}/*`} element={<RetiredRouteStub />} />,
+        ])}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>

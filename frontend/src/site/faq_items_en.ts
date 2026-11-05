@@ -141,7 +141,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
       'Start with what your agent already produces: conversations, contacts mentioned in chat, tasks and commitments ("I need to", "remind me"), and decisions. These store automatically with zero configuration once the agent rules are active. Within the first week, add financial data, calendar events, and project context as your personal OS grows.',
     detail:
       "Priority 1 (day one): conversations, contacts, tasks, decisions - lowest friction, highest compound value. Priority 2 (first week): financial data, calendar, email, health. Priority 3 (as the OS matures): content pipeline, project context, agent session state. The heuristic: if it benefits from recall, audit, replay, or linking to other entities, store it.",
-    link: { href: "/docs", label: "Documentation" },
+    link: { href: "/readme/", label: "README" },
   },
   {
     sectionId: "is-neotoma-a-note-taking-app-or-thought-partner-tool",
@@ -156,14 +156,14 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     sectionId: "how-do-i-install-neotoma",
     question: "How do I install Neotoma?",
     answer:
-      "Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes under 5 minutes.",
+      "Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes a few minutes.",
     link: { href: "/install", label: "Install guide" },
   },
   {
     sectionId: "does-neotoma-send-my-data-to-the-cloud",
     question: "Does Neotoma send my data to the cloud?",
     answer:
-      "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data. You can optionally expose the API via a tunnel for remote MCP clients.",
+      "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync and no training on your data. No telemetry. The interactive CLI checks the npm registry for a newer version about once a day (off with --no-update-check or NO_UPDATE_NOTIFIER=1). The stdio MCP server checks when a session starts and about every 6 hours after (off with NO_UPDATE_NOTIFIER=1; --no-update-check applies to the CLI only). The request carries only the package name, and the registry sees ordinary connection metadata such as the address. You can optionally expose the API via a tunnel for remote MCP clients.",
     link: { href: "/foundations", label: "Privacy-first architecture" },
   },
   {
@@ -171,7 +171,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     question: "What AI tools does Neotoma work with?",
     answer:
       "Neotoma works with any MCP-compatible AI tool: Cursor, Claude (Desktop and claude.ai), Claude Code, ChatGPT, Codex, OpenCode, OpenClaw, and IronClaw. It also provides a REST API and CLI for direct programmatic access.",
-    link: { href: "/docs", label: "Integration guides" },
+    link: { href: "/integrations/", label: "Integrations" },
   },
   {
     sectionId: "is-neotoma-free-and-open-source",

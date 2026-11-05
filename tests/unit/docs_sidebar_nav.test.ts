@@ -6,8 +6,9 @@ describe("isPathUnderDocsSidebarNav", () => {
     expect(isPathUnderDocsSidebarNav("/")).toBe(false);
   });
 
-  it("matches exact doc-nav paths", () => {
-    expect(isPathUnderDocsSidebarNav("/docs")).toBe(true);
+  it("matches current doc-nav paths while excluding the retired docs index", () => {
+    expect(isPathUnderDocsSidebarNav("/docs")).toBe(false);
+    expect(isPathUnderDocsSidebarNav("/readme/")).toBe(true);
     expect(isPathUnderDocsSidebarNav("/install")).toBe(true);
     expect(isPathUnderDocsSidebarNav("/neotoma-with-cursor")).toBe(true);
     expect(isPathUnderDocsSidebarNav("/api")).toBe(true);

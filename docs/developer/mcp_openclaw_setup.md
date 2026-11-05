@@ -37,15 +37,17 @@ neotoma mcp config --user-level --yes
 
 ## Option B: Manual — stdio (local install)
 
+For the installed-package stdio example below, run `node -p "process.execPath"` and `npm root -g`, then replace the two example paths with the absolute Node.js executable and `<npm root -g>/neotoma/dist/index.js`. Confirm that file exists. This is the launch shape used by Neotoma's MCP config writer. A source checkout uses its absolute `scripts/run_neotoma_mcp_stdio_prod.sh` path instead.
+
 If your OpenClaw environment cannot spawn `neotoma setup`, configure the MCP server entry manually. OpenClaw reads the same `mcpServers` JSON format as Cursor:
 
 ```json
 {
   "mcpServers": {
     "neotoma": {
-      "command": "neotoma",
-      "args": ["mcp", "stdio"],
-      "env": {}
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/npm/root/neotoma/dist/index.js"],
+      "env": { "NEOTOMA_ACTIONS_DISABLE_AUTOSTART": "1", "NEOTOMA_ENV": "production" }
     }
   }
 }

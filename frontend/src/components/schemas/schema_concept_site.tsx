@@ -1,13 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
 import { DOC_NAV_ICONS } from "@/site/doc_icons";
-import {
-  CODE_BLOCK_CARD_INNER_CLASS,
-  CODE_BLOCK_CARD_SHELL_CLASS,
-  CODE_BLOCK_CHROME_STACK_CLASS,
-  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
-  EVALUATE_PROMPT_PILL_CLASS,
-} from "../code_block_copy_button_classes";
+import { SiteSnippet } from "@/components/SiteSnippet";
 
 import type { SchemaConceptGuide } from "./schema_concept_guides";
 import {
@@ -24,31 +18,7 @@ export {
 } from "./schema_concept_guides";
 
 function CodeBlock({ label, children }: { label: string; children: string }) {
-  return (
-    <div className="mb-4">
-      <div className={CODE_BLOCK_CARD_SHELL_CLASS}>
-        <div className="mb-3 flex flex-col gap-3">
-          <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
-            <div className={EVALUATE_PROMPT_PILL_CLASS}>
-              <span
-                className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80"
-                aria-hidden
-              />
-              {label}
-            </div>
-            <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>
-              Schema or pattern reference for this concept.
-            </div>
-          </div>
-        </div>
-        <div
-          className={`${CODE_BLOCK_CARD_INNER_CLASS} p-4 font-mono text-[13px] leading-6 overflow-x-auto whitespace-pre`}
-        >
-          {children}
-        </div>
-      </div>
-    </div>
-  );
+  return <SiteSnippet text={children} title={label} copyFeedbackId={`reference:${children}`} />;
 }
 
 function SectionHeading({ id, children }: { id: string; children: string }) {

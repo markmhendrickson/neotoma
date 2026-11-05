@@ -88,13 +88,16 @@ SSE is interchangeable with streamable HTTP for Neotoma's MCP endpoint.
 
 ## Option C: Stdio (Docker-only)
 
+Inside the Letta container, for the installed-package stdio example below, run `node -p "process.execPath"` and `npm root -g`, then replace the two example paths with the absolute Node.js executable and `<npm root -g>/neotoma/dist/index.js`. Confirm that file exists. This is the launch shape used by Neotoma's MCP config writer. A source checkout uses its absolute `scripts/run_neotoma_mcp_stdio_prod.sh` path instead.
+
 Letta supports stdio MCP servers when the Letta server runs in Docker and the MCP binary is available in the same container. This path is not recommended for most setups.
 
 ```python
 neotoma_mcp = client.mcp_servers.create(config={
     "mcp_server_type": "stdio",
-    "command": "neotoma",
-    "args": ["mcp", "stdio"],
+    "command": "/absolute/path/to/node",
+    "args": ["/absolute/npm/root/neotoma/dist/index.js"],
+    "env": {"NEOTOMA_ACTIONS_DISABLE_AUTOSTART": "1", "NEOTOMA_ENV": "production"},
 })
 ```
 

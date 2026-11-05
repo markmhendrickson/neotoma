@@ -922,6 +922,12 @@ export const ExternalActorInputSchema = z
 export const StoreRequestSchema = z
   .object({
     expected_entity_absent: z.boolean().optional(),
+    /**
+     * MCP `store` response shape: full snapshots in `related_entities` instead
+     * of the compact `{id, entity_type, canonical_name}` default. No effect on
+     * what is written.
+     */
+    include_related_snapshots: z.boolean().optional(),
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).superRefine(refineEntityDataOrigins).optional(),
     relationships: z.array(StoreRelationshipInputSchema).optional(),
@@ -1187,7 +1193,7 @@ export const GetSchemaRecommendationsRequestSchema = z.object({
 
 export const UpdateSchemaIncrementalRequestSchema = z
   .object({
-    entity_type: z.string(),
+    entity_type: z.string().min(1),
     fields_to_add: z
       .array(
         z.object({
@@ -1252,7 +1258,7 @@ export const UpdateSchemaIncrementalRequestSchema = z
   });
 
 export const RegisterSchemaRequestSchema = z.object({
-  entity_type: z.string(),
+  entity_type: z.string().min(1),
   schema_definition: z.record(z.unknown()),
   reducer_config: z.record(z.unknown()),
   schema_version: z.string().default("1.0"),

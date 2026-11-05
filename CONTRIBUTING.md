@@ -4,7 +4,7 @@ Neotoma is in active development. The work is in the open at [github.com/markmhe
 
 ## Current Status
 
-We are working toward a developer preview and v1.0.0 MVP. If you are interested in collaboration or early access:
+Neotoma is used daily in real agent workflows and is working toward v1.0.0. APIs and storage formats can change between versions. If you are interested in collaboration:
 
 - Open an issue or discussion on GitHub.
 - Review [Core identity](docs/foundation/core_identity.md) and [Philosophy](docs/foundation/philosophy.md).

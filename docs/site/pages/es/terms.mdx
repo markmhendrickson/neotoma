@@ -1,0 +1,82 @@
+import { LEGAL_PAGE_LINK_CLASS } from "@/site/legal_page_link";
+import { TERMS_LEGAL_FIELDS as legal, SANDBOX_ABUSE_EMAIL } from "@/site/legal_canonical_fields";
+
+<p className="text-[13px] text-muted-foreground mb-6">Versión {legal.version} · vigente desde {legal.effective}</p>
+
+Estas condiciones se aplican a `neotoma.io`, `agent.neotoma.io` y al entorno público de pruebas `sandbox.neotoma.io`. El **software** Neotoma es de código abierto bajo licencia MIT; estas condiciones rigen el uso de los **servicios alojados** que operamos.
+
+Neotoma lo opera actualmente **<a href={legal.publisherUrl}>{legal.publisherName}</a>** como editor individual; por ahora no existe una entidad jurídica registrada que opere estos servicios. Cuando Neotoma pase a una entidad registrada, se sustituirán estas condiciones.
+
+## 1. Aceptación
+
+Al acceder o utilizar cualquier servicio de `neotoma.io`, aceptas estas condiciones. Si no estás de acuerdo, no utilices los servicios.
+
+## 2. Servicios disponibles actualmente
+
+- **Sitio público:** documentación, información del producto y código abierto en el repositorio `github.com/markmhendrickson/neotoma`.
+- **Servicio de comentarios de agentes** en `agent.neotoma.io/feedback/*`: permite a los agentes que usan Neotoma enviar comentarios estructurados y consultar su resolución.
+- **Entorno público de pruebas** en `sandbox.neotoma.io`: instancia gratuita para evaluar Neotoma, sujeta a <MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>condiciones adicionales</MdxI18nLink> (JSON para herramientas: `GET https://sandbox.neotoma.io/sandbox/terms`).
+
+Actualmente no vendemos suscripciones, no alojamos cuentas de usuario ni ofrecemos un SaaS comercial. Las referencias del repositorio de código abierto a cobros con Stripe, niveles de suscripción o acuerdos empresariales de tratamiento describen trabajo **previsto** que aún no se ofrece.
+
+## 3. Software y servicios
+
+El **software** Neotoma (paquete npm `neotoma`, CLI, servidor MCP y pila de referencia) se distribuye bajo licencia MIT. Puedes utilizarlo, modificarlo y redistribuirlo conforme a esa licencia. La licencia MIT rige siempre el software; estas condiciones del sitio no lo sustituyen.
+
+Estas condiciones solo rigen los **servicios alojados** en `neotoma.io`, `agent.neotoma.io` y `sandbox.neotoma.io`.
+
+## 4. Uso permitido
+
+Te comprometes a no:
+
+- Enviar contenido ilegal, acoso, correo no deseado o material que vulnere derechos de terceros a ningún servicio de `neotoma.io`.
+- Eludir límites de frecuencia, controles de acceso o puntos de acceso destructivos deshabilitados del entorno de pruebas.
+- Utilizar sistemas automatizados para cargar el sitio público a un ritmo que perjudique el servicio a otras personas.
+- Interferir en la integridad o el rendimiento de cualquier servicio.
+- Enviar datos personales, credenciales, información empresarial interna o material confidencial al entorno público de pruebas. Su contenido es público por diseño y efímero por sesión; se elimina definitivamente al caducar, finalizar o reiniciar la sesión.
+
+Los incumplimientos pueden dar lugar a límites de frecuencia, bloqueos de IP o retirada del contenido enviado. Los avisos de abuso se dirigen a <a href={`mailto:${legal.email}`}>{legal.email}</a>; los del entorno de pruebas, a <a href={`mailto:${SANDBOX_ABUSE_EMAIL}`}>{SANDBOX_ABUSE_EMAIL}</a> o al enlace **Report abuse** de la aplicación.
+
+## 5. Propiedad intelectual
+
+- El software Neotoma tiene licencia MIT. Consulta el archivo `LICENSE` del repositorio para leerla completa.
+- «Neotoma» y la mascota de la rata de bosque son marcas no registradas utilizadas por el proyecto. Se permite su uso razonable en conversaciones de la comunidad, derivados e integraciones; evita sugerir un respaldo oficial inexistente.
+- Conservas la titularidad del contenido que envías al servicio de comentarios o al entorno de pruebas. Al enviarlo, nos concedes una licencia mundial y gratuita para almacenarlo, procesarlo y citarlo solo con el fin de operar el servicio y atender los comentarios.
+
+## 6. Datos y privacidad
+
+Consulta el <MdxI18nLink to="/privacy" className={LEGAL_PAGE_LINK_CLASS}>Aviso de privacidad</MdxI18nLink> para conocer qué datos se recogen y cómo se tratan. Las <MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>condiciones del entorno de pruebas</MdxI18nLink> rigen además los datos específicos de ese entorno.
+
+## 7. Ausencia de garantía y limitación de responsabilidad
+
+Todos los servicios alojados se ofrecen **«tal cual» y «según disponibilidad»**, sin garantías de ningún tipo. La disponibilidad, exactitud y durabilidad se proporcionan expresamente en la medida de lo posible. El entorno de pruebas es solo para evaluación, no para producción.
+
+En la máxima medida permitida por la ley, <a href={legal.publisherUrl}>{legal.publisherName}</a> y las personas colaboradoras de Neotoma excluyen su responsabilidad por daños indirectos, incidentales, especiales, derivados o punitivos que resulten del uso de los servicios alojados. Si no estás satisfecho con algún servicio, tu único recurso es dejar de utilizarlo.
+
+Nada de estas condiciones excluye responsabilidades que no puedan excluirse conforme a la normativa aplicable de protección de consumidores.
+
+## 8. Cambios en los servicios
+
+Podemos modificar, suspender o dejar de ofrecer cualquier servicio alojado en cualquier momento. Cuando sea posible, avisaremos de los cambios sustanciales en el sitio público con antelación razonable. Los cambios del servicio no afectan al software de código abierto que ya hayas descargado y ejecutes localmente.
+
+## 9. Ley aplicable
+
+Estas condiciones se rigen por las leyes aplicables a la jurisdicción de residencia de <a href={legal.publisherUrl}>{legal.publisherName}</a>. Los litigios se resolverán ante los tribunales competentes de esa jurisdicción. Tus derechos de consumo conforme a la ley local se aplican cuando no pueden renunciarse por contrato.
+
+## 10. Cambios en estas condiciones
+
+Los cambios sustanciales se señalarán al principio de esta página con una nueva fecha de entrada en vigor. Las correcciones menores de texto o formato podrán incorporarse sin anuncio.
+
+## 11. Contacto
+
+**<a href={legal.publisherUrl}>{legal.publisherName}</a>**, editor de Neotoma<br />
+Correo: <a href={`mailto:${legal.email}`}>{legal.email}</a>
+
+## Historial de revisiones
+
+### 1.0 — {legal.effective}
+
+- Publicación inicial de las condiciones de uso del sitio antes de la constitución de una entidad.
+- Sustituye la plantilla `docs/legal/terms_of_service.md`, conservada como borrador de referencia para una publicación posterior a la constitución.
+
+<p className="text-[13px] text-muted-foreground mt-8">Consulta también el <MdxI18nLink to="/privacy" className={LEGAL_PAGE_LINK_CLASS}>Aviso de privacidad</MdxI18nLink> y las <MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>condiciones específicas del entorno de pruebas</MdxI18nLink>.</p>

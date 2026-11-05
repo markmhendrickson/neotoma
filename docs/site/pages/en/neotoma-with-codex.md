@@ -14,3 +14,4 @@ translation_status: canonical
 
 # Neotoma with Codex
 
+This legacy address is retained for existing links. Follow the [current Codex connection guide](https://neotoma.io/install/codex/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

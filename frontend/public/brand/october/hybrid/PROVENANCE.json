@@ -1,0 +1,77 @@
+{
+  "generated_on": "2026-10-23",
+  "generator": "OpenAI image generation",
+  "optimization": "Sharp crop, resize and WebP quality 82 with alpha quality 90",
+  "assets": {
+    "paper-ivory.webp": {
+      "prompt": "A single blank fibrous ivory paper sheet with a natural edge, paper thickness and soft upper-left light; isolated on transparency, without words or symbols.",
+      "source_sha256": "fbe89698c6c2d54658fa07976bae264c2d6146ca865915276168e22b10ca7589",
+      "webp_sha256": "d171c7337f5cdaa68978e54ec4b9b0302cd776ba51a054e91f27ba4c9e59ac7f"
+    },
+    "folder-sage.webp": {
+      "prompt": "A single blank sage cardstock tab folder with tactile fibers and soft upper-left light; isolated on transparency, without words or symbols.",
+      "source_sha256": "c1ff3b851b94b5ded150165b6b1a8bdd26250f572433854661dd6fd036e8ab9a",
+      "webp_sha256": "280af24f30bdd170f64fdf579b5a69717226d59d3338f2d1a6c1bb2ea7d77ebe"
+    },
+    "envelope-blue.webp": {
+      "prompt": "A single closed blank powder-blue paper envelope with the upper flap overlapping the side and bottom folds, tactile fibers and soft upper-left light; isolated on transparency, without words or symbols.",
+      "source_sha256": "2af91e77d0e9b476df664348e503fac277630213f9615f093028adb5d810ab06",
+      "webp_sha256": "23d773b7e7bfdb79abd06a5b0b1f308c93de1675a0fee0e14def6ecf829941d6"
+    },
+    "instance-archive-v2.png": {
+      "generator": "OpenAI image generation",
+      "reference_asset": "../N-tools.webp",
+      "description": "Open ivory paper archive on a sage plinth containing multiple distinct record cards; transparent background, no words or numbers.",
+      "sha256": "9a41a1fe7c66741c7f7aa86a4fc73fe7ee18a3ce82837e3bcdc7dccb2cedf319",
+      "runtime_derivative": {
+        "asset": "instance-archive-v2.webp",
+        "sha256": "3e08f00668dd290365ee4ce43d75282ff499a3b597ad2ae7cd009cf08d4d54e3",
+        "encoding": "WebP quality 88, alpha quality 100, effort 6; Sharp resize preserving aspect ratio",
+        "width": 900,
+        "source": "instance-archive-v2.png"
+      }
+    },
+    "client-blue-v2.png": {
+      "generator": "Built-in image generation with transparent crop and targeted matte cleanup; no raster edits by code",
+      "reference_asset": "../N-tools.webp",
+      "description": "Blank rounded powder-blue fibrous reader card, physically lit and isolated on transparency.",
+      "alpha_bbox_128": [107, 105, 1475, 934],
+      "sha256": "7cb759aeb4190fc019e46306e48125bc99966f5123bab960331f4ac6a6f11a15",
+      "runtime_derivative": {
+        "asset": "client-blue-v2.webp",
+        "sha256": "c0c2b3cacf92cfcba6ed29ab7a2a466bedbad6185f3e279bc88509b2946e7703",
+        "encoding": "WebP quality 88, alpha quality 100, effort 6; Sharp resize preserving aspect ratio",
+        "width": 1024,
+        "source": "client-blue-v2.png"
+      }
+    },
+    "client-tent-v2.png": {
+      "generator": "Built-in image generation with transparent crop and targeted matte cleanup; no raster edits by code",
+      "reference_asset": "../N-tools.webp",
+      "description": "Blank folded cream fibrous tent card, physically lit and isolated on transparency.",
+      "alpha_bbox_128": [84, 56, 1493, 987],
+      "sha256": "b39df1bbb007697245a26d840702d6eb2bfbe8f1e83a02c6d15dae64ba0a9d0d",
+      "runtime_derivative": {
+        "asset": "client-tent-v2.webp",
+        "sha256": "07aa689f5b2644f2850c7d96b9781f52fc025e5c3a6f56c2e13a5a2a7cc9a4b4",
+        "encoding": "WebP quality 88, alpha quality 100, effort 6; Sharp resize preserving aspect ratio",
+        "width": 1024,
+        "source": "client-tent-v2.png"
+      }
+    },
+    "client-sage-v2.png": {
+      "generator": "Built-in image generation with transparent crop and targeted matte cleanup; no raster edits by code",
+      "reference_asset": "../N-tools.webp",
+      "description": "Blank punched sage fibrous tag, physically lit and isolated on transparency.",
+      "alpha_bbox_128": [28, 42, 1508, 1000],
+      "sha256": "fd8d2c27a1d8528442fc5d6f8a6ad4efe61ce3163714b2c0587e4b34fcf936f0",
+      "runtime_derivative": {
+        "asset": "client-sage-v2.webp",
+        "sha256": "0b618a3b989f5507accda2570dde4b8ea262d711199f7613358005f6db29bdcd",
+        "encoding": "WebP quality 88, alpha quality 100, effort 6; Sharp resize preserving aspect ratio",
+        "width": 1024,
+        "source": "client-sage-v2.png"
+      }
+    }
+  }
+}

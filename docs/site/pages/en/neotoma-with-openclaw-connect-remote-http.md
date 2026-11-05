@@ -12,5 +12,6 @@ shell: detail
 translation_status: canonical
 ---
 
-# Neotoma with Openclaw connect remote HTTP
+# Neotoma with Openclaw Connect Remote Http
 
+This legacy address is retained for existing links. Follow the [current Openclaw Connect Remote Http connection guide](https://neotoma.io/install/openclaw/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

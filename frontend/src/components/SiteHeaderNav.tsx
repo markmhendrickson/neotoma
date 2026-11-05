@@ -19,7 +19,6 @@ import {
   Download,
   FileText,
   Fingerprint,
-  FlaskConical,
   Gavel,
   GitCompare,
   Github,
@@ -63,7 +62,6 @@ import {
   normalizeToDefaultRoute,
 } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
-import { isMarketingFullPageRoute } from "@/site/full_page_paths";
 import { staticAssetPath } from "@/site/spa_path";
 import { getFaqItems } from "@/site/faq_items";
 import {
@@ -78,7 +76,6 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { IronClawIcon } from "@/components/icons/IronClawIcon";
@@ -693,7 +690,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
       <div className="flex items-center gap-0.5">
         {showSidebarTrigger && <SidebarTrigger className="shrink-0" aria-label="Toggle sidebar" />}
         <a
-          href="/"
+          href={staticAssetPath("/")}
           className={`no-underline hover:opacity-80 transition-opacity ${!showSidebarTrigger ? "pl-3" : ""}`}
           aria-label="Neotoma home"
           onClick={(e) => {
@@ -709,28 +706,6 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             className="h-5 w-auto dark:invert"
           />
         </a>
-        {!isMarketingFullPageRoute(routeBase) && (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="hidden md:inline-flex min-w-0 max-w-[140px] cursor-default items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-caption text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
-                  <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
-                  <a
-                    href="https://markmhendrickson.com/posts/neotoma-developer-release"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
-                  >
-                    {dict.developerPreview}
-                  </a>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-sm text-fine leading-snug">
-                {dict.developerPreview}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
       </div>
 
       {/* Mobile: Evaluate + Install + Architecture in header (funnel CTAs hidden on those pages) */}
@@ -934,7 +909,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           <div className="flex h-full flex-col">
             <div className="flex h-12 items-center border-b border-sidebar-border px-4">
               <a
-                href="/"
+                href={staticAssetPath("/")}
                 className="no-underline hover:opacity-80 transition-opacity"
                 onClick={(e) => {
                   setMobileMenuOpen(false);

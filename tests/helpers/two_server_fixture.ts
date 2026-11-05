@@ -445,12 +445,17 @@ export async function startPeerSyncFixture(): Promise<PeerSyncFixture> {
     });
   }
 
+  // Ordinary types only. peer_config is never accepted from a peer
+  // (remote_snapshot_admission), so listing it here would only make every
+  // sync report a refused or failed row.
+  const syncedEntityTypes = ["note", "task", "contact", "person"];
+
   const peerBodyOnA = {
     peer_id: peerIdB,
     peer_name: "server-b",
     peer_url: serverB.baseUrl,
     direction: "bidirectional",
-    entity_types: ["note", "task", "contact", "person", "peer_config"],
+    entity_types: syncedEntityTypes,
     sync_scope: "all",
     auth_method: "shared_secret",
     conflict_strategy: "last_write_wins",
@@ -463,7 +468,7 @@ export async function startPeerSyncFixture(): Promise<PeerSyncFixture> {
     peer_name: "server-a",
     peer_url: serverA.baseUrl,
     direction: "bidirectional",
-    entity_types: ["note", "task", "contact", "person", "peer_config"],
+    entity_types: syncedEntityTypes,
     sync_scope: "all",
     auth_method: "shared_secret",
     conflict_strategy: "last_write_wins",

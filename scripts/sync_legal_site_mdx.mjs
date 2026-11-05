@@ -15,14 +15,17 @@ const LEGAL_IMPORT = `import { LEGAL_PAGE_LINK_CLASS } from "@/site/legal_page_l
 
 `;
 
-const privacyHeader = `<p className="text-[13px] text-muted-foreground mb-6">Version 1.0 · effective 2026-04-24</p>
+const privacyHeader = `import { PRIVACY_LEGAL_FIELDS as legal } from "@/site/legal_canonical_fields";
+
+<p className="text-[13px] text-muted-foreground mb-6">Version {legal.version} · originally published {legal.published} · revised and effective {legal.revised}</p>
 
 `;
 
 function privacyBody(md) {
-  const lines = md.split("\n");
-  const body = lines.slice(6).join("\n");
-  let t = body;
+  const headingEnd = md.indexOf("\n\n");
+  const metadataEnd = md.indexOf("\n\n", headingEnd + 2);
+  if (headingEnd < 0 || metadataEnd < 0) throw new Error("Privacy source is missing its metadata header");
+  let t = md.slice(metadataEnd + 2);
   t = t.replace(
     /\[neotoma\.io\/sandbox\/terms-of-use\]\(https:\/\/neotoma\.io\/sandbox\/terms-of-use\)/g,
     '<MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>neotoma.io/sandbox/terms-of-use</MdxI18nLink>',

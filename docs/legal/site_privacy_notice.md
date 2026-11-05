@@ -1,8 +1,11 @@
 # Neotoma Site Privacy Notice
 
 **Published:** 2026-04-24
-**Version:** 1.0
+**Version:** 1.1
+**Revised:** 2026-10-27
 **Live at:** https://neotoma.io/privacy
+
+> Revision 1.1 corrects the description of public-site hosting and sandbox content retention. It does not announce a change to those services. This notice revision is effective 2026-10-27.
 
 This notice describes what data `neotoma.io` collects when you visit
 the marketing site, interact with the public sandbox, or submit agent
@@ -44,6 +47,12 @@ pseudonymous usage analytics:
 
 We do not run Google Analytics on the marketing site.
 
+- **Language preference.** If you choose English or Español using a site language
+  link, the site attempts to save `preferred_locale` (`en` or `es`) in your
+  browser's local storage. This preference is functional and is not sent to a
+  server as a separate event. Explicit page URLs take precedence over it.
+  Language links still work when browser storage is unavailable.
+
 ### 2.2 Issue reporting (GitHub Issues)
 
 When an agent running on your machine files an issue (via the
@@ -70,8 +79,10 @@ See [neotoma.io/sandbox/terms-of-use](https://neotoma.io/sandbox/terms-of-use)
 for the full sandbox-specific terms (JSON: `GET https://sandbox.neotoma.io/sandbox/terms`). In summary:
 
 - All content submitted to the sandbox is public by design.
-- The sandbox is wiped every Sunday at 00:00 UTC and re-seeded from
-  synthetic fixtures.
+- Sandbox workspaces are ephemeral per session. A workspace is hard-deleted
+  when the session expires (up to 7 days, capped at Sunday 00:00 UTC),
+  when you end or reset the session, or when the background sweep removes
+  expired sessions.
 - Request IPs are hashed before being stored in any abuse report.
 - No cookies or accounts are required to use the sandbox.
 
@@ -111,8 +122,12 @@ address that submitted a request.
 
 We use these third-party processors:
 
-- **Netlify** — hosts the agent feedback pipeline and the marketing
-  site. Receives request metadata necessary to serve HTTP responses.
+- **GitHub Pages** — hosts the public marketing and documentation site.
+  GitHub logs and stores visitors' IP addresses for security purposes,
+  whether or not they are signed in to GitHub. See
+  [GitHub Pages data collection](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages#data-collection).
+- **Netlify** — hosts the agent feedback pipeline. Receives request
+  metadata necessary to serve HTTP responses.
 - **Fly.io** — hosts the public sandbox. Receives request metadata
   necessary to serve HTTP responses.
 - **Umami** — self-hosted; no third-party processor involved when
@@ -128,9 +143,12 @@ We do not share data with advertising networks or data brokers.
   and for a reasonable follow-up window thereafter. Submitters may
   request deletion at any time via their `access_token` or the
   contact email.
-- **Sandbox content** — wiped weekly per the sandbox terms.
-- **Edge request logs** — retained per Netlify/Fly.io default log
-  retention (typically 7–30 days).
+- **Sandbox content** — hard-deleted on session expiry (up to 7 days,
+  capped at Sunday 00:00 UTC), when you end or reset the session, or when
+  the background sweep removes expired sessions, per the sandbox terms.
+- **Hosting request logs** — subject to the applicable hosting provider's
+  privacy and retention policies. This notice does not specify a fixed
+  retention period for those logs.
 
 ## 7. Children's privacy
 
@@ -152,6 +170,10 @@ A postal address for formal correspondence is available on request
 at the contact email above.
 
 ## Revision history
+
+### 1.1 — 2026-10-27
+
+- Corrected the description of public-site hosting and sandbox content retention. This is a factual correction to the notice, not an announcement of a change to those services.
 
 ### 1.0 — 2026-04-24
 

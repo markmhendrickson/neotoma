@@ -1,4 +1,4 @@
-import { normalizeToDefaultRoute, stripLocaleFromPath } from "@/i18n/routing";
+import { normalizeToDefaultRoute, stripLocaleFromPath } from "../i18n/routing";
 
 /**
  * Product doc roots that render at router "/" when the URL is only the basename (e.g. /neotoma-with-claude-code).
@@ -15,7 +15,7 @@ export const PRODUCT_MARKETING_BASENAMES = new Set([
 ]);
 
 const PRODUCT_MARKETING_FIRST_SEGMENTS = new Set(
-  [...PRODUCT_MARKETING_BASENAMES].map((path) => path.slice(1).toLowerCase()),
+  [...PRODUCT_MARKETING_BASENAMES].map((path) => path.slice(1).toLowerCase())
 );
 
 /**

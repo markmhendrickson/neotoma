@@ -1,23 +1,11 @@
-import { Check, Copy } from "lucide-react";
 import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
-import { cn } from "@/lib/utils";
-import { useCopyFeedback } from "@/lib/copy_feedback";
-import { copyTextToClipboard } from "@/lib/copy_to_clipboard";
 import { TrackedProductLink } from "@/components/TrackedProductNav";
-import {
-  CODE_BLOCK_CHROME_STACK_CLASS,
-  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
-  INTEGRATION_SNIPPET_CARD_SHELL_CLASS,
-  INTEGRATION_SNIPPET_COPY_BUTTON_INLINE,
-  INTEGRATION_SNIPPET_INNER_CLASS,
-  INTEGRATION_SNIPPET_PILL_CLASS,
-} from "@/components/code_block_copy_button_classes";
+import { SiteSnippet } from "@/components/SiteSnippet";
 import { GettingStartedEvaluateInstallLinks } from "@/components/GettingStartedEvaluateInstallLinks";
 import { IntegrationLinkCard } from "@/components/IntegrationLinkCard";
 import { IntegrationSection } from "@/components/IntegrationSection";
 import { IntegrationBeforeAfter, IntegrationActivation } from "@/components/IntegrationExtras";
-import { Button } from "@/components/ui/button";
 import { TableScrollWrapper } from "@/components/ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -46,38 +34,14 @@ function CopyableSnippetPre({
   copyFeedbackId: string;
   className?: string;
 }) {
-  const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
   return (
-    <div className={cn("relative w-full text-left", INTEGRATION_SNIPPET_CARD_SHELL_CLASS, className)}>
-      <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
-        <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
-          <div className={INTEGRATION_SNIPPET_PILL_CLASS}>
-            <span className="h-2 w-2 rounded-full bg-stone-500/80 dark:bg-stone-400/75" aria-hidden />
-            {title}
-          </div>
-          <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>{subtitle}</div>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={INTEGRATION_SNIPPET_COPY_BUTTON_INLINE}
-          aria-label={copied ? "Copied" : "Copy"}
-          onClick={async () => {
-            const ok = await copyTextToClipboard(code);
-            if (!ok) return;
-            markCopied();
-          }}
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
-      <pre
-        className={`${INTEGRATION_SNIPPET_INNER_CLASS} m-0 p-4 overflow-x-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words`}
-      >
-        <code>{code}</code>
-      </pre>
-    </div>
+    <SiteSnippet
+      text={code}
+      title={title}
+      subtitle={subtitle}
+      copyFeedbackId={copyFeedbackId}
+      className={className}
+    />
   );
 }
 

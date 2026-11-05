@@ -782,6 +782,7 @@ The server handles all interpretation automatically. Agents should only pass the
     target_index: number;             // 0-based index into entities
   }>;                                 // One-call chat: [conversation, agent_message] + [{ PART_OF, source_index: 1, target_index: 0 }]
   source_priority?: number;           // Optional: Source priority (default: 100)
+  include_related_snapshots?: boolean; // Optional: default false. true returns full rows + snapshots in related_entities (see Response Schema)
   observation_source?:                 // Optional: classifies the KIND of write (v0.12+)
     | "sensor"                         //   deterministic tool / telemetry emission
     | "workflow_state"                 //   state machine transitions
@@ -881,7 +882,11 @@ When the type is one of the common types (contact, person, company, task, invoic
     observation_id: string;
   }>;
   unknown_fields_count?: number;       // Number of fields stored in raw_fragments (structured storage only)
-  related_entities?: Array<Entity>;    // Entities connected to stored entities via relationships (structured storage only)
+  related_entities?: Array<{           // Entities connected to stored entities via relationships (structured storage only; a file-only store returns the entities extracted from the file, in full)
+    id: string;                        // Compact by default: id, entity_type, canonical_name only.
+    entity_type: string;               // With include_related_snapshots: true, each entry is instead the full
+    canonical_name: string | null;     // entity row plus its current `snapshot` (the previous shape). Retrieve by id for a snapshot.
+  }>;
   related_relationships?: Array<{      // Relationships involving stored entities (structured storage only)
     id: string;
     relationship_type: string;
@@ -1413,7 +1418,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.12 `correct`
 
-**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. Higher-priority sources remain authoritative; equal-priority ties follow configured source-kind precedence and deterministic recency in [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation. Read the snapshot and field provenance back before claiming the correction took effect.
+**Purpose:** Create a priority-1000 correction [observation](../vocabulary/canonical_terms.md#observation) to override lower-priority AI-[extracted](../vocabulary/canonical_terms.md#extraction) fields. A correction stays authoritative on its field, whatever the field's merge rule and whatever the priority or source kind of any other write, until a later correction replaces it; among corrections the later one wins by deterministic recency, and on a merge_array field it replaces the whole array (merge_array_by_key fields excepted: corrections combine by key). This is how the [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) is computed. Read the snapshot and field provenance back before claiming the correction took effect.
 
 **Request Schema:**
 

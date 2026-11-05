@@ -1,0 +1,36 @@
+{
+  "method": "Code-authored layered paperboard geometry clipping the existing photographic ivory paper; no newly generated or repainted raster. Shallow offset shadows and sage board edges remain filter-free.",
+  "sourceMaterial": {
+    "file": "materials/letter-paper-physical-v3.webp",
+    "sha256": "3870f2b21ac0235d22dcb356bd4a7b94e0944fb62cc52a5f1aa94b4a60b1087a"
+  },
+  "helper": "react-app/scripts/overhead-marks.mjs#inspectionGlass",
+  "scene": "explanationsImpactProof",
+  "placement": {
+    "x": 309,
+    "y": 49,
+    "width": 349,
+    "height": 349,
+    "viewBox": "309 49 349 349",
+    "orientation": "fixed overhead"
+  },
+  "aperture": {
+    "center": [
+      408,
+      148
+    ],
+    "innerRadius": 85,
+    "outerRadius": 100,
+    "fill": "none; underlying current field remains visible"
+  },
+  "materialLayers": [
+    "shallow contact shadow",
+    "sage paperboard cut edge",
+    "photographic ivory ring and handle"
+  ],
+  "replaces": {
+    "file": "materials/inspection-glass-physical-v3.webp",
+    "sha256": "5e66916c08993e9b375c96b6b89a342a04de27e01e28c00cf60d671033171649",
+    "reason": "Brass and wood were outside the accepted paper material world."
+  }
+}

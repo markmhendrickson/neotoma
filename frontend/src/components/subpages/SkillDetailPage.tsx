@@ -12,18 +12,18 @@ import { skillMarkdownToSnippet } from "@/site/skill_markdown_snippet";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { SeoHead } from "../SeoHead";
 import { sendCtaClick } from "@/utils/analytics";
+import { useLocale } from "@/i18n/LocaleContext";
+import { spanishSkill } from "@/site/skills_catalog_es";
 
 function UseCaseLink({ slug }: { slug: string }) {
-  const label = slug
+  const es = useLocale().locale === "es";
+  const label = (es ? ({ crm: "Gestión de relaciones", "personal-data": "Datos personales", compliance: "Cumplimiento", "financial-ops": "Operaciones financieras", "crypto-engineering": "Ingeniería cripto" } as Record<string,string>)[slug] : undefined) ?? slug
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
   return (
-    <Link
-      to={`/${slug}`}
-      className="text-foreground underline underline-offset-2 hover:no-underline"
-    >
+    <span className="text-foreground">
       {label}
-    </Link>
+    </span>
   );
 }
 
@@ -60,11 +60,13 @@ function ExternalToolRow({ tool }: { tool: ExternalTool }) {
 }
 
 function SkillLink({ slug }: { slug: string }) {
-  const skill = getSkillBySlug(slug);
+  const es = useLocale().locale === "es";
+  const base = getSkillBySlug(slug);
+  const skill = base && es ? spanishSkill(base) : base;
   const label = skill?.name ?? slug;
   return (
     <Link
-      to={`/skills/${slug}`}
+      to={`${es ? "/es" : ""}/skills/${slug}`}
       className="text-foreground underline underline-offset-2 hover:no-underline"
     >
       {label}
@@ -73,12 +75,13 @@ function SkillLink({ slug }: { slug: string }) {
 }
 
 function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
+  const es = useLocale().locale === "es";
   const rawUrl = useMemo(() => getSkillInstructionMarkdownRawUrl(skill), [skill]);
   const blobUrl = useMemo(() => getSkillInstructionMarkdownBlobUrl(skill), [skill]);
   const agentUseSkillPrompt = useMemo(
     () =>
-      `Use the Neotoma skill "${skill.name}". Fetch and follow the instructions at:\n${rawUrl}\nExecute every prerequisite, MCP configuration step, and workflow phase described there for this environment.`,
-    [skill.name, rawUrl],
+      es ? `Usa la skill de Neotoma "${skill.slug}". Recupera y sigue las instrucciones originales en:\n${rawUrl}\nCumple todos los requisitos previos, pasos de configuración MCP y fases de trabajo descritas allí para este entorno.` : `Use the Neotoma skill "${skill.name}". Fetch and follow the instructions at:\n${rawUrl}\nExecute every prerequisite, MCP configuration step, and workflow phase described there for this environment.`,
+    [skill.name, skill.slug, rawUrl, es],
   );
   const [snippet, setSnippet] = useState(() =>
     skillMarkdownToSnippet(`${skill.tagline}\n\n${skill.description}`, 520),
@@ -91,7 +94,8 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
     const fb = skillMarkdownToSnippet(`${skill.tagline}\n\n${skill.description}`, 520);
     setSnippet(fb);
     setPreviewFromRepo(false);
-    setFetchPending(true);
+    setFetchPending(!es);
+    if (es) return;
     const ac = new AbortController();
     fetch(rawUrl, { signal: ac.signal, mode: "cors" })
       .then((res) => {
@@ -117,17 +121,17 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
       cancelled = true;
       ac.abort();
     };
-  }, [rawUrl, skill.tagline, skill.description]);
+  }, [rawUrl, skill.tagline, skill.description, es]);
 
   return (
     <section className="mb-10">
-      <h2 className="text-[20px] font-medium text-foreground mb-4">Skill instructions</h2>
+      <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Instrucciones de la skill" : "Skill instructions"}</h2>
       <div className="rounded-lg border border-border bg-muted/25 p-4 mb-4">
         <p className="text-[14px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
           {snippet}
         </p>
         <p className="text-[12px] text-muted-foreground/90 mt-3">
-          {fetchPending
+          {es ? "Resumen en español de esta página; el archivo original de instrucciones está en los enlaces siguientes." : fetchPending
             ? "Loading preview from repository…"
             : previewFromRepo
               ? "Preview from repository markdown."
@@ -135,12 +139,9 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
         </p>
       </div>
       <p className="text-[14px] text-muted-foreground mb-4">
-        Install and runtime steps for{" "}
-        <span className="text-foreground font-medium">{skill.name}</span> live in the file below.
-        Agents should fetch the <strong>raw URL</strong>; humans can use GitHub browse. Follow
-        prerequisites, MCP setup, and workflow there after{" "}
-        <code className="text-[13px]">neotoma setup</code> when the skill is installed via the
-        package.
+        {es ? "Los pasos de instalación y ejecución de " : "Install and runtime steps for "}{" "}
+        <span className="text-foreground font-medium">{skill.name}</span>{es ? "" : " live in the file below."}
+        {es ? " están en el archivo original enlazado abajo. Los agentes deben recuperar la " : "Agents should fetch the "}<strong>raw URL</strong>{es ? "; las personas pueden consultarlo en GitHub. Sigue allí los requisitos, la configuración MCP y el procedimiento después de " : "; humans can use GitHub browse. Follow prerequisites, MCP setup, and workflow there after "}<code className="text-[13px]">neotoma setup</code>{es ? " cuando la skill se instala con el paquete." : " when the skill is installed via the package."}
       </p>
       <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4 text-[14px]">
         <a
@@ -150,7 +151,7 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
           className="inline-flex items-center gap-1.5 text-foreground underline underline-offset-2 hover:no-underline"
         >
           <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          Full skill on GitHub
+          {es ? "Skill original completa en GitHub (en inglés)" : "Full skill on GitHub"}
         </a>
         <a
           href={rawUrl}
@@ -159,13 +160,13 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
           className="inline-flex items-center gap-1.5 text-foreground underline underline-offset-2 hover:no-underline"
         >
           <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          Raw markdown (full SKILL.md)
+          {es ? "Markdown original (SKILL.md completo, en inglés)" : "Raw markdown (full SKILL.md)"}
         </a>
       </div>
       <dl className="space-y-3 text-[14px]">
         <div>
           <dt className="text-muted-foreground text-[12px] font-medium uppercase tracking-wide mb-1">
-            Repository path
+            {es ? "Ruta en el repositorio" : "Repository path"}
           </dt>
           <dd>
             <code className="text-[13px] break-all">{getSkillInstructionMarkdownRepoPath(skill)}</code>
@@ -173,7 +174,7 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
         </div>
         <div>
           <dt className="text-muted-foreground text-[12px] font-medium uppercase tracking-wide mb-1">
-            GitHub (browse)
+            {es ? "GitHub (navegar)" : "GitHub (browse)"}
           </dt>
           <dd>
             <a
@@ -188,7 +189,7 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
         </div>
         <div>
           <dt className="text-muted-foreground text-[12px] font-medium uppercase tracking-wide mb-1">
-            Raw URL
+            {es ? "URL original" : "Raw URL"}
           </dt>
           <dd>
             <a
@@ -203,15 +204,15 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
         </div>
       </dl>
       <p className="text-[15px] leading-7 mt-6 mb-2 text-muted-foreground">
-        <strong>Suggested prompt</strong>
+        <strong>{es ? "Prompt sugerido" : "Suggested prompt"}</strong>
       </p>
       <div data-skill-copyable-prompt>
         <CopyableCodeBlock
           code={agentUseSkillPrompt}
           className="mb-0"
           variant="emerald"
-          evaluateChromeTitle="Use skill prompt"
-          evaluateChromeSubtitle="Paste into your harness chat so the agent fetches the canonical markdown and follows it."
+          evaluateChromeTitle={es ? "Prompt para usar la skill" : "Use skill prompt"}
+          evaluateChromeSubtitle={es ? "Pégalo en el chat para que el agente recupere el Markdown original y lo siga." : "Paste into your harness chat so the agent fetches the canonical markdown and follows it."}
           onAfterCopy={() => sendCtaClick("skill_detail_copy_use_prompt")}
         />
       </div>
@@ -220,18 +221,19 @@ function SkillInstructionSection({ skill }: { skill: SkillCatalogEntry }) {
 }
 
 function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
-  const tierLabel = skill.tier === 1 ? "Tier 1: Core" : skill.tier === 2 ? "Tier 2: Extended" : "Tier 3: Developer";
+  const es = useLocale().locale === "es";
+  const tierLabel = skill.tier === 1 ? (es ? "Nivel 1: básico" : "Tier 1: Core") : skill.tier === 2 ? (es ? "Nivel 2: ampliado" : "Tier 2: Extended") : (es ? "Nivel 3: desarrollo" : "Tier 3: Developer");
 
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-3xl px-6 py-20 md:px-12 lg:px-16">
         {/* Breadcrumb */}
         <Link
-          to="/skills"
+          to={es ? "/es/skills" : "/skills"}
           className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground no-underline hover:text-foreground transition-colors mb-8"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          All skills
+          {es ? "Todas las skills" : "All skills"}
         </Link>
 
         {/* Header */}
@@ -253,7 +255,7 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* Data sources */}
         {skill.dataSources.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-[20px] font-medium text-foreground mb-4">Supported data sources</h2>
+            <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Fuentes de datos compatibles" : "Supported data sources"}</h2>
             <div className="flex flex-wrap gap-2">
               {skill.dataSources.map((ds) => (
                 <span
@@ -270,7 +272,7 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* Entity types produced */}
         {skill.entityTypes.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-[20px] font-medium text-foreground mb-4">Entity types produced</h2>
+            <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Tipos de entidad producidos" : "Entity types produced"}</h2>
             <div className="flex flex-wrap gap-2">
               {skill.entityTypes.map((et) => (
                 <code
@@ -287,7 +289,7 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* Workflow */}
         {skill.workflowSteps.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-[20px] font-medium text-foreground mb-4">Workflow</h2>
+            <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Procedimiento" : "Workflow"}</h2>
             <ol className="list-none pl-0 space-y-4">
               {skill.workflowSteps.map((step, i) => (
                 <li
@@ -310,7 +312,7 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* External tools */}
         {skill.externalTools.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-[20px] font-medium text-foreground mb-4">External tools</h2>
+            <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Herramientas externas" : "External tools"}</h2>
             <ul className="list-none pl-0 space-y-2">
               {skill.externalTools.map((tool) => (
                 <ExternalToolRow key={tool.name} tool={tool} />
@@ -322,7 +324,7 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* Related skills */}
         {skill.relatedSkills.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-[20px] font-medium text-foreground mb-4">Related skills</h2>
+            <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Skills relacionadas" : "Related skills"}</h2>
             <div className="flex flex-wrap gap-2">
               {skill.relatedSkills.map((slug) => (
                 <SkillLink key={slug} slug={slug} />
@@ -334,7 +336,7 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* Related use cases */}
         {skill.relatedUseCases.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-[20px] font-medium text-foreground mb-4">Related use cases</h2>
+            <h2 className="text-[20px] font-medium text-foreground mb-4">{es ? "Temas de uso relacionados" : "Related use case topics"}</h2>
             <div className="flex flex-wrap gap-2">
               {skill.relatedUseCases.map((slug) => (
                 <UseCaseLink key={slug} slug={slug} />
@@ -346,11 +348,11 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
         {/* Back link */}
         <div className="mt-12 pt-8 border-t border-border">
           <Link
-            to="/skills"
+            to={es ? "/es/skills" : "/skills"}
             className="inline-flex items-center gap-1.5 text-[14px] text-muted-foreground no-underline hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to all skills
+            {es ? "Volver a todas las skills" : "Back to all skills"}
           </Link>
         </div>
       </div>
@@ -359,11 +361,13 @@ function SkillDetailContent({ skill }: { skill: SkillCatalogEntry }) {
 }
 
 export function SkillDetailPage() {
+  const es = useLocale().locale === "es";
   const { skillSlug } = useParams<{ skillSlug: string }>();
-  const skill = skillSlug ? getSkillBySlug(skillSlug) : undefined;
+  const base = skillSlug ? getSkillBySlug(skillSlug) : undefined;
+  const skill = base && es ? spanishSkill(base) : base;
 
   if (!skill) {
-    return <Navigate to="/skills" replace />;
+    return <Navigate to={es ? "/es/skills" : "/skills"} replace />;
   }
 
   return (

@@ -51,6 +51,49 @@ export interface ModelEntry {
   cassette_id?: string;
 }
 
+/** The only agent-facing executable host tool admitted by the restore eval. */
+export type BackupCliInput =
+  | { operation: "create"; source: "source"; output: "created_output" }
+  | { operation: "verify"; backup: "created_backup" }
+  | { operation: "restore"; backup: "legacy_backup"; target: "target" };
+
+export type BackupCausalProbe = {
+  kind: "restore_staged_substitution";
+  member: "neotoma_db" | "wal";
+};
+
+export interface BackupCliResult {
+  operation: BackupCliInput["operation"];
+  argv: readonly string[];
+  exitCode: number;
+  processId: string;
+  stdoutJson: unknown;
+  stderr: string;
+  runtimeHash: string;
+  boundaryId: string;
+}
+
+export interface BackupCausalProbeResult {
+  member: BackupCausalProbe["member"];
+  preflightCliValid: boolean;
+  originalIntegrity: boolean;
+  replacementIntegrity: boolean;
+  replacementDistinct: boolean;
+  mismatchMember: "neotoma_db" | "wal" | null;
+  priorTargetHashesUnchanged: boolean;
+  published: boolean;
+  boundaryId: string;
+}
+
+export interface BackupFixtureState {
+  mainRow: boolean;
+  walOnlyRow: boolean;
+  staleSidecarsAbsentBeforeOpen: boolean;
+  modePreserved: boolean;
+  unrelatedBytesPreserved: boolean;
+  unexpectedWrites: boolean;
+}
+
 export interface ExpectedAssertion {
   /** Predicate type — one of the names below. */
   type:
@@ -64,6 +107,9 @@ export interface ExpectedAssertion {
     | "turn_compliance.backfilled"
     | "instruction_profile.served"
     | "host_tool.invocations"
+    | "cli.result"
+    | "fixture.state"
+    | "causal_probe.result"
     // ── #1703 eval-coverage primitives ──
     /** Count invocations of a named neotoma MCP tool (optional arg-subset match). */
     | "mcp_tool.invocations"
@@ -122,6 +168,8 @@ export interface ExpectedAssertion {
    * (Dotted paths are a `result_key` feature.) Every leaf must deep-equal.
    */
   result_subset?: Record<string, unknown>;
+  /** For tool_result.matches: require this substring in the string at result_key. */
+  result_contains?: string;
   /**
    * For `tool_result.matches`: assert the result contains (or, when false,
    * does NOT contain) a key. Dotted paths allowed (e.g. "webhook_secret",
@@ -136,6 +184,9 @@ export interface ExpectedAssertion {
    * (first match). The `field` (above) is the snapshot key checked.
    */
   entity_id?: string;
+  /** Closed restore-eval operation/probe selector for live-effect predicates. */
+  operation?: BackupCliInput["operation"];
+  member?: BackupCausalProbe["member"];
 }
 
 export type SeedStrategy = "generated" | "real_derived" | "hybrid_amplified";
@@ -158,6 +209,8 @@ export interface ScenarioFile {
     path?: string;
   }>;
   host_tools: HostToolStub[];
+  /** Closed, runner-owned causal probes; never cassette tool calls. */
+  causal_probes?: BackupCausalProbe[];
   models: ModelEntry[];
   /**
    * Whether the harness should enable the small-model compact instruction
@@ -225,6 +278,10 @@ export interface DriverInvocation {
   cassettePath: string;
   /** Hard wall-clock cap to avoid hung runs. */
   timeoutMs?: number;
+  /** The one-scenario, runner-owned executable capability. Never supplied by a cassette. */
+  backupEval?: { runCli(input: unknown): Promise<BackupCliResult> };
+  /** Runner-owned static site server, only present for the closed website eval. */
+  siteBaseUrl?: string;
 }
 
 export interface ToolCall {

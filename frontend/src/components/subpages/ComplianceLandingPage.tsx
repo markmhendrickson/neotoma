@@ -1354,10 +1354,10 @@ export function ComplianceLandingPageBody() {
                   Install Neotoma
                 </Link>
                 <Link
-                  to="/docs"
+                  to="/readme/"
                   className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                 >
-                  Read the docs
+                  Read the overview
                 </Link>
               </div>
 

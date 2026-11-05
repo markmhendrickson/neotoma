@@ -2,6 +2,7 @@ import React from "react";
 import { AlertCircle, Home, LucideIcon } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { BarChart, FileText, Calendar, Upload, Database, Network } from "lucide-react";
+import { staticAssetPath } from "@/site/spa_path";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -85,7 +86,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 <span>Refresh Page</span>
               </button>
               <a
-                href="/"
+                href={staticAssetPath("/")}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-input hover:border-foreground hover:bg-accent transition-all text-[15px] font-medium"
               >
                 <Home className="w-4 h-4" />

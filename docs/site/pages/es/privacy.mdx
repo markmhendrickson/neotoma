@@ -1,0 +1,104 @@
+import { LEGAL_PAGE_LINK_CLASS } from "@/site/legal_page_link";
+import { PRIVACY_LEGAL_FIELDS as legal } from "@/site/legal_canonical_fields";
+
+<p className="text-[13px] text-muted-foreground mb-6">Versión {legal.version} · publicación original {legal.published} · revisada y vigente desde {legal.revised}</p>
+
+> La revisión {legal.version} corrige la descripción del alojamiento del sitio público y de la conservación del contenido del entorno de pruebas. No anuncia ningún cambio en esos servicios. Esta revisión del aviso entra en vigor el {legal.revised}.
+
+Este aviso explica qué datos recoge `neotoma.io` cuando visitas el sitio público, utilizas el entorno público de pruebas o envías comentarios de agentes mediante el servicio alojado en `agent.neotoma.io`.
+
+Neotoma lo opera actualmente **<a href={legal.publisherUrl}>{legal.publisherName}</a>** como editor individual; por ahora no existe una entidad jurídica registrada que opere este sitio. Cuando Neotoma pase a una entidad registrada, este aviso se sustituirá y se notificará a quienes hayan enviado datos identificables mediante la dirección de contacto registrada.
+
+## 1. Alcance de este aviso
+
+- **`neotoma.io`**: sitio público de producto y documentación.
+- **`agent.neotoma.io`**: servicio de comentarios de agentes (consulta `/feedback`).
+- **`sandbox.neotoma.io`**: entorno público de evaluación. Sus <MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>condiciones adicionales</MdxI18nLink> (también disponibles en `GET https://sandbox.neotoma.io/sandbox/terms` como JSON para herramientas) rigen el contenido enviado allí y prevalecen para ese contenido.
+
+Este aviso **no** cubre las instancias de Neotoma instaladas en tu propio equipo ni los sitios de terceros enlazados desde la documentación.
+
+## 2. Datos que recogemos
+
+### 2.1 Analítica agregada y seudónima
+
+El sitio público utiliza una instancia de Umami alojada por el proyecto para medir el uso de forma agregada y seudónima. Umami no usa cookies. Registra la ruta URL, el título de la página, el referente, el tipo de navegador y el país derivado de la IP; la IP se descarta después. No hay seguimiento entre sitios. No utilizamos Google Analytics en este sitio.
+
+- **Preferencia de idioma.** Al elegir English o Español desde un enlace del sitio, este intenta guardar `preferred_locale` (`en` o `es`) en el almacenamiento local del navegador. Es una preferencia funcional y no se envía al servidor como un evento separado. Las URL explícitas prevalecen sobre ella. Los enlaces de idioma siguen funcionando si el almacenamiento no está disponible.
+
+### 2.2 Comunicación de incidencias mediante GitHub Issues
+
+Cuando un agente que se ejecuta en tu equipo presenta una incidencia con la herramienta MCP `submit_issue` o con la CLI `neotoma issues create`, el comportamiento depende de **visibility**:
+
+- **Pública (valor predeterminado):** la herramienta intenta crear una incidencia en el repositorio de GitHub configurado, con tu identidad de GitHub mediante la CLI `gh`. Deben eliminarse los datos personales antes del envío. El mismo informe se guarda localmente como entidad `issue` vinculada a una conversación.
+- **Privada:** el informe solo se guarda en tu base de datos Neotoma. No se envía nada a la API de GitHub Issues.
+
+La política de privacidad de GitHub se aplica únicamente al contenido que realmente llega a GitHub por la vía pública. No se envían datos a `agent.neotoma.io`. Los datos de incidencias públicas circulan entre tu equipo, la API de GitHub y tu instancia local de Neotoma; los de incidencias privadas permanecen en tu equipo y tu base de datos local.
+
+### 2.3 Interacciones en el entorno de pruebas
+
+Consulta las <MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>condiciones completas del entorno</MdxI18nLink> (`GET https://sandbox.neotoma.io/sandbox/terms` devuelve el JSON). En resumen, todo el contenido enviado es público por diseño. Cada espacio de trabajo es efímero y se elimina definitivamente cuando caduca la sesión (hasta 7 días, con el límite del domingo a las 00:00 UTC), cuando finalizas o reinicias la sesión, o cuando el proceso de limpieza elimina las sesiones caducadas. Las IP de las solicitudes se convierten en hashes antes de guardarse en informes de abuso. No se requieren cuentas ni cookies.
+
+### 2.4 Datos que no recogemos
+
+- El sitio público no establece cookies de inicio de sesión; no hay cuentas.
+- No vendemos, alquilamos ni compartimos datos con redes publicitarias.
+- No examinamos tu correo, archivos ni otros servicios. Por defecto, las instalaciones locales de Neotoma funcionan por completo en tu equipo.
+
+## 3. Base jurídica (RGPD y RGPD del Reino Unido)
+
+- **Analítica de Umami:** interés legítimo en medir el uso agregado del sitio sin cookies.
+- **Servicio de comentarios:** consentimiento; enviar comentarios desde tu agente es una acción voluntaria y explícita.
+- **Entorno público de pruebas:** consentimiento y carácter público por diseño, explicado en sus condiciones.
+
+## 4. Tus derechos
+
+Puedes preguntar qué datos tenemos sobre ti, solicitar la rectificación o supresión de comentarios identificables (mediante el `access_token` recibido por tu agente o contactando con nosotros), pedir la limitación o el cese del tratamiento y solicitar la exportación de datos identificables.
+
+Envía las solicitudes a **<a href={`mailto:${legal.email}`}>{legal.email}</a>**. Intentamos responder en 30 días. Como no administramos cuentas de usuario, la identificación suele depender del `access_token` entregado o del correo desde el que se envió la solicitud.
+
+## 5. Comunicación de datos
+
+Utilizamos estos encargados de tratamiento:
+
+- **GitHub Pages** aloja el sitio público de producto y documentación. GitHub registra y almacena las direcciones IP de quienes lo visitan por motivos de seguridad, hayan iniciado sesión en GitHub o no. Consulta la [recogida de datos de GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages#data-collection).
+- **Netlify** aloja el servicio de comentarios. Recibe los metadatos de solicitud necesarios para responder por HTTP.
+- **Fly.io** aloja el entorno público de pruebas y recibe los metadatos de solicitud necesarios para responder por HTTP.
+- **Umami** se aloja por el proyecto; cuando es el sistema activo de analítica, no interviene un encargado externo para Umami.
+
+No compartimos datos con redes publicitarias ni intermediarios de datos.
+
+## 6. Conservación
+
+- **Analítica de Umami:** los eventos agregados se conservan indefinidamente; no se guardan identificadores personales.
+- **Comentarios de agentes:** se conservan hasta resolver la incidencia y durante un período razonable de seguimiento posterior. Puedes solicitar su supresión en cualquier momento con tu `access_token` o el correo de contacto.
+- **Contenido del entorno de pruebas:** se elimina definitivamente al caducar la sesión (hasta 7 días, con el límite del domingo a las 00:00 UTC), cuando finalizas o reinicias la sesión, o cuando el proceso de limpieza elimina las sesiones caducadas, conforme a sus condiciones.
+- **Registros de solicitudes del alojamiento:** se rigen por las políticas de privacidad y conservación del proveedor de alojamiento correspondiente. Este aviso no fija un plazo de conservación para esos registros.
+
+## 7. Menores
+
+Neotoma no está dirigido a menores de 18 años. No recogemos deliberadamente información de menores.
+
+## 8. Cambios en este aviso
+
+Los cambios sustanciales se señalarán al principio de la página con una nueva fecha de entrada en vigor. Las correcciones menores de texto o formato podrán incorporarse sin anuncio.
+
+## 9. Contacto
+
+**<a href={legal.publisherUrl}>{legal.publisherName}</a>**, editor de Neotoma<br />
+Correo: <a href={`mailto:${legal.email}`}>{legal.email}</a>
+
+Puedes solicitar una dirección postal para correspondencia formal a través de ese correo.
+
+## Historial de revisiones
+
+### {legal.version} — {legal.revised}
+
+- Corrección de la descripción del alojamiento del sitio público y de la conservación del contenido del entorno de pruebas. Es una corrección factual del aviso, no el anuncio de un cambio en esos servicios.
+
+### 1.0 — {legal.published}
+
+- Publicación inicial del aviso de privacidad del sitio antes de la constitución de una entidad.
+- Analítica aclarada como exclusiva de Umami; eliminadas las referencias a Google Analytics.
+- Sustituye la plantilla `docs/legal/privacy_policy.md`, conservada como borrador de referencia para una publicación posterior a la constitución.
+
+<p className="text-[13px] text-muted-foreground mt-8">Consulta también las <MdxI18nLink to="/terms" className={LEGAL_PAGE_LINK_CLASS}>Condiciones de uso</MdxI18nLink> y las <MdxI18nLink to="/sandbox/terms-of-use" className={LEGAL_PAGE_LINK_CLASS}>condiciones específicas del entorno de pruebas</MdxI18nLink>.</p>

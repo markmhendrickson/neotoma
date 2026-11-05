@@ -12,5 +12,6 @@ shell: detail
 translation_status: canonical
 ---
 
-# Neotoma with Claude connect desktop
+# Neotoma with Claude Connect Desktop
 
+This legacy address is retained for existing links. Follow the [current Claude Connect Desktop connection guide](https://neotoma.io/install/claude-desktop/) for the supported setup path, prerequisites, host configuration, and a read-only verification check.

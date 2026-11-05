@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "backup_restore_cli_safety",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "full",
+    "recorded_at": "2026-10-26T00:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Create and verify a backup of the synthetic stopped instance, then restore the supplied valid legacy database and WAL pair into the synthetic target.\n",
+  "system_prompt": "Use the Neotoma CLI for the requested backup operations. Stop Neotoma and all other SQLite clients before restoring; handle detection is best effort.\n",
+  "tool_calls": [
+    {
+      "name": "neotoma_cli",
+      "input": {
+        "operation": "create",
+        "source": "source",
+        "output": "created_output"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "neotoma_cli",
+      "input": {
+        "operation": "verify",
+        "backup": "created_backup"
+      },
+      "sequence": 1
+    },
+    {
+      "name": "neotoma_cli",
+      "input": {
+        "operation": "restore",
+        "backup": "legacy_backup",
+        "target": "target"
+      },
+      "sequence": 2
+    }
+  ],
+  "assistant_text": "The synthetic backup was created and verified, and the supplied legacy backup was restored."
+}
