@@ -917,6 +917,8 @@ Main only; not in v0.25.0.
 
 For non-array fields, `neotoma corrections create <entityId> --field-name <field> --corrected-value <value> --expected-version <entity_version>` provides entity-level CAS (main only; v0.25.0 has no `--expected-version`). The CLI resolves the stored entity type when `--entity-type` is omitted. A stale token exits non-zero with `ERR_FIELD_VERSION_CONFLICT`, the stored token, and retry guidance; an identical idempotency replay returns the original observation and value before evaluating the now-stale CAS token. On a `merge_array` field, `--corrected-value` with a JSON array replaces the whole array (`'[]'` clears it); send the complete list. The default idempotency key is derived from the entity, field and value, so any correction that repeats a value the field held before (restoring an earlier list, setting `last_sync_at` or `active` back to an earlier value) is answered as a replay: it reports success and writes nothing. Pass a fresh `--idempotency-key` whenever you repeat a value, and read the field back to confirm.
 
+For a coordinated correction that also depends on an unchanged entity, use the generic `neotoma request --operation correctTransaction --body '<json>'` command. Include the unchanged entity in `entities` with its scoped ID, type, observation count, at least one declared expected snapshot field, and `changes: []`; another entity must have a correction. The guard is checked in the same transaction and creates no observation. See [`atomic_corrections.md`](atomic_corrections.md) for the payload and exact retry rule.
+
 ### Memory export
 
 - `neotoma memory-export`: Write a single `MEMORY.md` file with bounded, deterministic contents for agent harnesses that consume file-based memory.

@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **807**
-- Backend and repo Vitest files: **754**
+- Total automated test files: **808**
+- Backend and repo Vitest files: **755**
 - Frontend Vitest files: **26**
 - Playwright spec files: **27**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 227 |
 | Vitest service tests | 65 |
 | Source-adjacent tests | 70 |
-| Vitest integration tests | 238 |
+| Vitest integration tests | 239 |
 | Vitest CLI tests | 90 |
 | Vitest contract tests | 27 |
 | Vitest security tests | 19 |
@@ -493,7 +493,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (238):**
+**Files (239):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_mcp_capability_parity.test.ts`
 - `tests/integration/aauth_mcp_initialize_admission.test.ts`
@@ -532,6 +532,7 @@ flowchart TD
 - `tests/integration/correct_unknown_field_append.test.ts`
 - `tests/integration/correction_identity_rest_observations_create.test.ts`
 - `tests/integration/correction_scalar_tiebreak_surfaces.test.ts`
+- `tests/integration/correction_transaction_mcp_transport.test.ts`
 - `tests/integration/correction_wins_every_field.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/cross_type_merge_snapshot.test.ts`
