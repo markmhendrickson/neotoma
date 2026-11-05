@@ -30,8 +30,12 @@ describe("entity_semantic_search", () => {
         offset: 0,
       });
 
-      expect(result).toEqual({ entityIds: [], total: 0 });
-      expect(generateEmbedding).toHaveBeenCalledWith("test query");
+      expect(result).toEqual({
+        entityIds: [],
+        total: 0,
+        fallbackReason: "embedding_unavailable",
+      });
+      expect(generateEmbedding).toHaveBeenCalledWith("test query", expect.any(Object));
     });
 
     it("returns empty when generateEmbedding returns empty array", async () => {
