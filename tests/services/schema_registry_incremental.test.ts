@@ -86,23 +86,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     return mock;
   };
 
-  // Helper to mock activate() calls (3 database calls: select, update
-  // deactivate, update activate). #2356/#2389: activate() awaits ALL candidate
-  // rows for (entity_type, schema_version) as an array — not .single() — picks
-  // one by fail-closed scope precedence, then targets the deactivate/activate
-  // updates by that row's id.
-  const mockActivateCalls = (
-    row: { id?: string; scope?: string; user_id?: string | null } = {}
-  ) => {
-    const resolvedRow = {
-      id: row.id ?? "activated-row-id",
-      scope: row.scope ?? "global",
-      user_id: row.user_id ?? null,
-    };
-    const mockSelect = createChainableQuery({
-      then: (resolve: any) => Promise.resolve({ data: [resolvedRow], error: null }).then(resolve),
-    });
-
+  // Incremental updates activate their already-registered row: no version lookup.
+  // Keep the two actual update collaborators for these focused merge tests;
+  // independent SQLite effects and collision behavior are covered by schema_registry_atomic.
+  const mockActivateCalls = () => {
     // For deactivate: create chainable query where update() returns the query itself
     const mockUpdateDeactivate: any = {
       update: vi.fn(),
@@ -132,7 +119,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     mockUpdateActivate.eq.mockReturnValue(mockUpdateActivate);
     mockUpdateActivate.is.mockReturnValue(mockUpdateActivate);
 
-    return { mockSelect, mockUpdateDeactivate, mockUpdateActivate, resolvedRow };
+    return { mockUpdateDeactivate, mockUpdateActivate };
   };
 
   beforeEach(() => {
@@ -366,11 +353,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       });
 
       // Mock activate() calls
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert) // register()
-        .mockReturnValueOnce(mockSelect) // activate() - get schema
         .mockReturnValueOnce(mockUpdateDeactivate) // activate() - deactivate
         .mockReturnValueOnce(mockUpdateActivate); // activate() - activate
 
@@ -402,10 +388,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           data: { ...currentSchema, schema_version: "1.1" },
         }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -444,11 +429,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           },
         }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -485,11 +469,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -538,11 +521,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -585,11 +567,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       });
 
       // Mock activate() calls
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert) // register()
-        .mockReturnValueOnce(mockSelect) // activate() - get schema
         .mockReturnValueOnce(mockUpdateDeactivate) // activate() - deactivate
         .mockReturnValueOnce(mockUpdateActivate); // activate() - activate
 
@@ -627,11 +608,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       });
 
       // Mock activate() calls
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert) // register()
-        .mockReturnValueOnce(mockSelect) // activate() - get schema info
         .mockReturnValueOnce(mockUpdateDeactivate) // activate() - deactivate others
         .mockReturnValueOnce(mockUpdateActivate); // activate() - activate new
 
@@ -702,11 +682,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         eq: vi.fn().mockReturnThis(),
       };
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -770,11 +749,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -817,11 +795,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -864,11 +841,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -908,11 +884,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -986,11 +961,10 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
 
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -1041,10 +1015,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const mockInsert = createChainableQuery({
         single: vi.fn().mockResolvedValue({ data: { ...baseSchema, schema_version: "2.0.0" } }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
       await service.updateSchemaIncremental({ entity_type: "contact", ...options });
@@ -1092,10 +1065,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const mockInsert = createChainableQuery({
         single: vi.fn().mockResolvedValue({ data: { ...optOutSchema, schema_version: "2.0.0" } }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
       await service.updateSchemaIncremental({ entity_type: "contact", canonical_name_fields: [] });
@@ -1120,10 +1092,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const mockInsert = createChainableQuery({
         single: vi.fn().mockResolvedValue({ data: baseSchema }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
@@ -1141,10 +1112,9 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const mockInsert = createChainableQuery({
         single: vi.fn().mockResolvedValue({ data: baseSchema }),
       });
-      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+      const { mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
       mockFrom
         .mockReturnValueOnce(mockInsert)
-        .mockReturnValueOnce(mockSelect)
         .mockReturnValueOnce(mockUpdateDeactivate)
         .mockReturnValueOnce(mockUpdateActivate);
 
