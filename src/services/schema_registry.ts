@@ -5,6 +5,8 @@
  */
 
 import { db } from "../db.js";
+import { getDb } from "../repositories/db/connection.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { DbConnection } from "../repositories/db/driver.js";
 import { normalizeSearchText } from "../shared/search_normalization.js";
 import {
@@ -1054,7 +1056,40 @@ export function isHigherPrecedenceSchemaRow(
   return isOwnOverride(candidate) && !isOwnOverride(incumbent);
 }
 
+interface SchemaMutation {
+  active: boolean;
+  afterCommit: Array<() => void>;
+}
+
+// Context only: the existing database transaction owns serialization/rollback.
+// Shared across service instances so internal registry calls join their owner.
+const schemaMutation = new AsyncLocalStorage<SchemaMutation>();
+
 export class SchemaRegistryService {
+  private async withSchemaMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const current = schemaMutation.getStore();
+    if (current) {
+      if (!current.active) throw new Error("Schema mutation context has expired.");
+      return operation();
+    }
+    const effects: SchemaMutation = { active: true, afterCommit: [] };
+    let result: T;
+    try {
+      result = await (await getDb()).transaction(() => schemaMutation.run(effects, operation));
+    } finally {
+      effects.active = false;
+    }
+    // No icon/provider/export work escapes a refused or rolled-back change.
+    for (const effect of effects.afterCommit) effect();
+    return result;
+  }
+
+  private afterSchemaCommit(effect: () => void): void {
+    const current = schemaMutation.getStore();
+    if (!current?.active) throw new Error("Schema mutation transaction is required.");
+    current.afterCommit.push(effect);
+  }
+
   /**
    * Register a new schema version
    */
@@ -1069,6 +1104,12 @@ export class SchemaRegistryService {
     metadata?: SchemaMetadata;
     force?: boolean;
   }): Promise<SchemaRegistryEntry> {
+    return this.withSchemaMutation(() => this.registerInTransaction(config));
+  }
+
+  private async registerInTransaction(
+    config: Parameters<SchemaRegistryService["register"]>[0]
+  ): Promise<SchemaRegistryEntry> {
     // Entity-type naming guards (forbidden-pattern + plural). Warns in dev,
     // throws in production unless force: true.
     enforceEntityTypeGuards(config.entity_type, {
@@ -1127,18 +1168,19 @@ export class SchemaRegistryService {
 
       const { error: deactivateError } = await deactivateQuery;
       if (deactivateError) {
-        logSchemaRegistryInfo(
-          `[SCHEMA_REGISTRY] Warning: failed to deactivate prior active schemas for ` +
-            `${config.entity_type}: ${deactivateError.message}`
+        throw new Error(
+          `Failed to deactivate prior active schemas for ${config.entity_type}: ${deactivateError.message}`
         );
       }
     }
 
     // Auto-generate icon if not provided (non-blocking)
-    this.generateIconAsync(registeredSchema.entity_type, config.metadata);
+    this.afterSchemaCommit(() =>
+      this.generateIconAsync(registeredSchema.entity_type, config.metadata)
+    );
 
     // Automatically export schema snapshots (non-blocking)
-    this.exportSnapshotsAsync();
+    this.afterSchemaCommit(() => this.exportSnapshotsAsync());
 
     return registeredSchema;
   }
@@ -1620,6 +1662,48 @@ export class SchemaRegistryService {
       migration_result?: { migrated_count: number; skipped: SkippedMigrationGroup[] };
     }
   > {
+    const newSchema = await this.withSchemaMutation(() => this.updateSchemaInTransaction(options));
+
+    // Historical backfill retains its existing separate effect boundary; the
+    // registry metadata and its post-commit hooks have already committed.
+    // 7. Migrate raw_fragments if requested (historical data backfill only).
+    // #2379: capture the ACTUAL result and attach it to the response instead
+    // of firing the call and reporting success unconditionally. A request to
+    // migrate with nothing promoted is a legitimate outcome (e.g. every
+    // candidate fragment was already promoted by a prior call) — the caller
+    // needs to be able to tell that apart from "the tool did nothing."
+    let migrationResult: { migrated_count: number; skipped: SkippedMigrationGroup[] } | undefined;
+    if (options.migrate_existing) {
+      logSchemaRegistryInfo(
+        `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`
+      );
+      const fieldNamesToMigrate = [
+        ...(options.fields_to_add?.map((f) => f.field_name) || []),
+        ...(options.converters_to_add?.map((c) => c.field_name) || []),
+      ];
+
+      if (fieldNamesToMigrate.length > 0) {
+        migrationResult = await this.migrateRawFragmentsToObservations({
+          entity_type: options.entity_type,
+          field_names: fieldNamesToMigrate,
+          // migrate_user_id takes precedence: for global schemas the caller passes
+          // the authenticated user's id here while options.user_id is undefined.
+          user_id: options.migrate_user_id ?? options.user_id,
+        });
+      } else {
+        // migrate_existing: true with no fields named in THIS call — nothing
+        // was asked to migrate, so say so rather than leaving the caller to
+        // infer it from an absent field.
+        migrationResult = { migrated_count: 0, skipped: [] };
+      }
+    }
+
+    return { ...newSchema, migration_result: migrationResult };
+  }
+
+  private async updateSchemaInTransaction(
+    options: Parameters<SchemaRegistryService["updateSchemaIncremental"]>[0]
+  ): Promise<SchemaRegistryEntry> {
     // Entity-type naming guards (forbidden-pattern + plural).
     enforceEntityTypeGuards(options.entity_type, {
       force: options.force,
@@ -1882,7 +1966,7 @@ export class SchemaRegistryService {
       entity_type: options.entity_type,
       schema_version: newVersion,
       schema_definition: { ...preserved, fields: mergedFields },
-      reducer_config: { merge_policies: mergedReducerPolicies },
+      reducer_config: { ...currentSchema.reducer_config, merge_policies: mergedReducerPolicies },
       metadata: mergedMetadata,
       user_id: effectiveUserId,
       user_specific: effectiveUserSpecific,
@@ -1898,54 +1982,17 @@ export class SchemaRegistryService {
       force: options.force,
     });
 
-    // 6. Activate new version if requested (this deactivates other versions).
-    // #2374/#2356: pass the SAME resolved scope used for the write above.
-    // `effectiveUserId` is what register() just wrote to, so activate() selects
-    // exactly that row. Passing `options.user_specific ? userId : undefined`
-    // instead would re-derive scope from the caller's (possibly omitted) flag
-    // and, for a caller who omitted it while the read resolved a user row,
-    // activate the global row rather than the one this call registered.
+    // #2545: activate the row just registered, in its resolved scope. A
+    // version string is not unique and can select an older inactive row.
     if (activateSchema) {
-      await this.activate(options.entity_type, newVersion, effectiveUserId);
+      await this.activateRowInTransaction(options.entity_type, newSchema);
     }
 
     logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Incrementally updated schema for ${options.entity_type} to version ${newVersion}`
     );
 
-    // 7. Migrate raw_fragments if requested (historical data backfill only).
-    // #2379: capture the ACTUAL result and attach it to the response instead
-    // of firing the call and reporting success unconditionally. A request to
-    // migrate with nothing promoted is a legitimate outcome (e.g. every
-    // candidate fragment was already promoted by a prior call) — the caller
-    // needs to be able to tell that apart from "the tool did nothing."
-    let migrationResult: { migrated_count: number; skipped: SkippedMigrationGroup[] } | undefined;
-    if (options.migrate_existing) {
-      logSchemaRegistryInfo(
-        `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`
-      );
-      const fieldNamesToMigrate = [
-        ...(options.fields_to_add?.map((f) => f.field_name) || []),
-        ...(options.converters_to_add?.map((c) => c.field_name) || []),
-      ];
-
-      if (fieldNamesToMigrate.length > 0) {
-        migrationResult = await this.migrateRawFragmentsToObservations({
-          entity_type: options.entity_type,
-          field_names: fieldNamesToMigrate,
-          // migrate_user_id takes precedence: for global schemas the caller passes
-          // the authenticated user's id here while options.user_id is undefined.
-          user_id: options.migrate_user_id ?? options.user_id,
-        });
-      } else {
-        // migrate_existing: true with no fields named in THIS call — nothing
-        // was asked to migrate, so say so rather than leaving the caller to
-        // infer it from an absent field.
-        migrationResult = { migrated_count: 0, skipped: [] };
-      }
-    }
-
-    return { ...newSchema, migration_result: migrationResult };
+    return newSchema;
   }
 
   /**
@@ -2397,6 +2444,16 @@ export class SchemaRegistryService {
    * over-match a sibling row the way `(entity_type, schema_version)` can.
    */
   async activate(entityType: string, version: string, userId?: string): Promise<void> {
+    return this.withSchemaMutation(() =>
+      this.activateVersionInTransaction(entityType, version, userId)
+    );
+  }
+
+  private async activateVersionInTransaction(
+    entityType: string,
+    version: string,
+    userId?: string
+  ): Promise<void> {
     const { data: rows, error: lookupError } = await db
       .from("schema_registry")
       .select("id, scope, user_id")
@@ -2418,6 +2475,13 @@ export class SchemaRegistryService {
       throw new Error(`Schema not found: ${entityType} version ${version}`);
     }
 
+    await this.activateRowInTransaction(entityType, schema);
+  }
+
+  private async activateRowInTransaction(
+    entityType: string,
+    schema: Pick<SchemaRegistryEntry, "id" | "scope" | "user_id">
+  ): Promise<void> {
     const scope = schema.scope || "global";
     const schemaUserId = schema.user_id;
 
@@ -2435,7 +2499,9 @@ export class SchemaRegistryService {
       deactivateQuery = deactivateQuery.eq("scope", "global").is("user_id", null);
     }
 
-    await deactivateQuery;
+    const { error: deactivateError } = await deactivateQuery;
+    if (deactivateError)
+      throw new Error(`Failed to deactivate prior schemas: ${deactivateError.message}`);
 
     // Activate the ONE selected row by id. No extra scope predicate: the id is
     // already unambiguous, and a scope filter here could only turn activation
@@ -2447,7 +2513,7 @@ export class SchemaRegistryService {
     }
 
     // Automatically export schema snapshots (non-blocking)
-    this.exportSnapshotsAsync();
+    this.afterSchemaCommit(() => this.exportSnapshotsAsync());
   }
 
   /**
