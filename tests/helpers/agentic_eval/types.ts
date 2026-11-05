@@ -53,6 +53,16 @@ export type AssertionPredicate =
       path: string;
       value: unknown;
     }
+  | {
+      /** Ordered agent-observed calls, as persisted by the hook. */
+      type: "tool_trace";
+      calls: Array<{
+        tool_name: string;
+        input_subset?: Record<string, unknown>;
+        output_subset?: Record<string, unknown>;
+        has_error?: boolean;
+      }>;
+    }
   | { type: "no_writes" }
   | {
       type: "turn_diagnosis";

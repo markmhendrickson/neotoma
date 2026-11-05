@@ -144,6 +144,23 @@ function dotPath(obj: unknown, path: string): unknown {
   return cur;
 }
 
+function containsSubset(actual: unknown, expected: unknown): boolean {
+  if (expected === null || typeof expected !== "object") return actual === expected;
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && expected.length <= actual.length &&
+      expected.every((item, index) => containsSubset(actual[index], item));
+  }
+  if (!actual || typeof actual !== "object" || Array.isArray(actual)) return false;
+  return Object.entries(expected).every(([key, value]) =>
+    containsSubset((actual as Record<string, unknown>)[key], value)
+  );
+}
+
+function parseSummary(value: unknown): unknown {
+  if (typeof value !== "string") return undefined;
+  try { return JSON.parse(value); } catch { return undefined; }
+}
+
 function evaluatePredicate(
   predicate: AssertionPredicate,
   cell: CellResult
@@ -266,6 +283,31 @@ function evaluatePredicate(
         message: `Expected ${predicate.endpoint} body.${predicate.path}=${JSON.stringify(predicate.value)}, got ${JSON.stringify(actual)}.`,
         expected: predicate.value,
         actual,
+      };
+    }
+    case "tool_trace": {
+      const calls = getStoredEntities(cell)
+        .filter((entity) => entity.entity_type === "tool_invocation")
+        .map((entity) => ({
+          tool_name: entity.tool_name,
+          input: parseSummary(entity.input_summary),
+          output: parseSummary(entity.output_summary),
+          has_error: entity.has_error,
+        }));
+      const matches = calls.length === predicate.calls.length &&
+        predicate.calls.every((expected, index) => {
+          const actual = calls[index];
+          return actual?.tool_name === expected.tool_name &&
+            (expected.has_error === undefined || actual.has_error === expected.has_error) &&
+            (expected.input_subset === undefined || containsSubset(actual.input, expected.input_subset)) &&
+            (expected.output_subset === undefined || containsSubset(actual.output, expected.output_subset));
+        });
+      if (matches) return null;
+      return {
+        predicate,
+        message: "Agent-observed tool sequence or persisted input/output did not match.",
+        expected: predicate.calls,
+        actual: calls,
       };
     }
     case "no_writes": {

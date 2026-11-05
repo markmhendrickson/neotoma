@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "id": "atomic_correction_compare_only_guard",
+    "description": "An agent observes a compare-only guard with zero growth, a stale denial with no writer effect, and exact replay after the guard changes. The Tier 1 hook trace complements the real SQLite transaction effect tests.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2"],
+    "tags": ["correct-transaction", "compare-only", "agent-facing", "effect-parity"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "Approve draft A only if source capacity remains 1. Use source as a compare-only participant; read it back to confirm no observation. Then advance source, try draft B using the stale source precondition, confirm draft B stayed ready, and retry the original request exactly."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_correct_transaction",
+        "tool_input": {
+          "idempotency_key": "approve-a",
+          "entities": [
+            { "entity_id": "draft-a", "entity_type": "synthetic_draft", "expected_observation_count": 1, "expected_snapshot": { "status": "ready" }, "changes": [{ "field": "status", "value": "approved" }] },
+            { "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }
+          ]
+        },
+        "tool_output": { "status": "applied", "entities": [{ "entity_id": "draft-a", "observation_count": 2, "snapshot": { "status": "approved" } }, { "entity_id": "source", "observation_count": 1, "snapshot": { "remaining": 1 } }] }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+        "tool_input": { "entity_id": "source" },
+        "tool_output": { "entity_id": "source", "observation_count": 1, "snapshot": { "remaining": 1 } }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_correct_transaction",
+        "tool_input": {
+          "idempotency_key": "advance-source",
+          "entities": [{ "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [{ "field": "remaining", "value": 0 }] }]
+        },
+        "tool_output": { "status": "applied", "entities": [{ "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }] }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_correct_transaction",
+        "tool_input": {
+          "idempotency_key": "approve-b-stale",
+          "entities": [
+            { "entity_id": "draft-b", "entity_type": "synthetic_draft", "expected_observation_count": 1, "expected_snapshot": { "status": "ready" }, "changes": [{ "field": "status", "value": "approved" }] },
+            { "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }
+          ]
+        },
+        "tool_output": { "error": { "code": "SNAPSHOT_MISMATCH", "message": "Source precondition changed" } }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+        "tool_input": { "entity_id": "draft-b" },
+        "tool_output": { "entity_id": "draft-b", "observation_count": 1, "snapshot": { "status": "ready" } }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_correct_transaction",
+        "tool_input": {
+          "idempotency_key": "approve-a",
+          "entities": [
+            { "entity_id": "draft-a", "entity_type": "synthetic_draft", "expected_observation_count": 1, "expected_snapshot": { "status": "ready" }, "changes": [{ "field": "status", "value": "approved" }] },
+            { "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }
+          ]
+        },
+        "tool_output": { "status": "replayed", "entities": [{ "entity_id": "draft-a", "observation_count": 2, "snapshot": { "status": "approved" } }, { "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }] }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+        "tool_input": { "entity_id": "draft-a" },
+        "tool_output": { "entity_id": "draft-a", "observation_count": 2, "snapshot": { "status": "approved" } }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+        "tool_input": { "entity_id": "source" },
+        "tool_output": { "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": {
+        "text": "Draft A was approved while source still had capacity 1; its compare-only check added no source observation. Source later moved to 0, so draft B's stale request was refused and draft B stayed ready. Replaying draft A's exact key and payload returned replayed without another correction; readback shows draft A approved and source at 0."
+      }
+    }
+  ],
+  "assertions": {
+    "default": [
+      { "type": "entity_stored", "entity_type": "conversation_message", "where": { "role": "user" } },
+      { "type": "entity_stored", "entity_type": "conversation_message", "where": { "role": "assistant" } },
+      { "type": "tool_trace", "calls": [
+        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "approve-a", "entities": [{ "changes": [{ "field": "status", "value": "approved" }] }, { "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }] }, "output_subset": { "status": "applied", "entities": [{ "observation_count": 2 }, { "observation_count": 1 }] }, "has_error": false },
+        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "source" }, "output_subset": { "observation_count": 1, "snapshot": { "remaining": 1 } } },
+        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "advance-source" }, "output_subset": { "status": "applied", "entities": [{ "observation_count": 2, "snapshot": { "remaining": 0 } }] } },
+        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "approve-b-stale", "entities": [{ "entity_id": "draft-b" }, { "changes": [], "expected_observation_count": 1 }] }, "output_subset": { "error": { "code": "SNAPSHOT_MISMATCH" } }, "has_error": true },
+        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "draft-b" }, "output_subset": { "observation_count": 1, "snapshot": { "status": "ready" } } },
+        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "approve-a", "entities": [{ "changes": [{ "field": "status", "value": "approved" }] }, { "changes": [], "expected_observation_count": 1 }] }, "output_subset": { "status": "replayed", "entities": [{ "observation_count": 2 }, { "observation_count": 2 }] }, "has_error": false },
+        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "draft-a" }, "output_subset": { "observation_count": 2, "snapshot": { "status": "approved" } } },
+        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "source" }, "output_subset": { "observation_count": 2, "snapshot": { "remaining": 0 } } }
+      ] }
+    ]
+  }
+}

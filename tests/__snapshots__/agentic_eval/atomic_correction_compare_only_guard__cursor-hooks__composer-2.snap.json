@@ -1,0 +1,707 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_12",
+        "target_entity_id": "ent_mock_9"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_19",
+        "target_entity_id": "ent_mock_16"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_26",
+        "target_entity_id": "ent_mock_23"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_33",
+        "target_entity_id": "ent_mock_30"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_40",
+        "target_entity_id": "ent_mock_37"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_47",
+        "target_entity_id": "ent_mock_44"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_54",
+        "target_entity_id": "ent_mock_51"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_61",
+        "target_entity_id": "ent_mock_58"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "client_name": "Cursor",
+            "conversation_id": "<id:1>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor-hook",
+            "hook_event": "beforeSubmitPrompt",
+            "repository_name": "<env>",
+            "repository_remote": "<env>",
+            "repository_root": "<env>",
+            "scope_summary": "<env>",
+            "thread_kind": "human_agent",
+            "title": "<env>",
+            "workspace_kind": "<env>"
+          },
+          {
+            "content": "Approve draft A only if source capacity remains 1. Use source as a compare-only participant; read it back to confirm no observation. Then advance source, try draft B using the stale source precondition, confirm draft B stayed ready, and retry the original request exactly.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:2>",
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": [
+              "before_submit_prompt"
+            ],
+            "model": "composer-2",
+            "session_id": "<id:1>",
+            "started_at": "<ts>",
+            "stored_entity_ids": [
+              "ent_mock_3"
+            ],
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"idempotency_key\":\"approve-a\",\"entities\":[{\"entity_id\":\"draft-a\",\"entity_type\":\"synthetic_draft\",\"expected_observation_count\":1,\"expected_snapshot\":{\"status\":\"ready\"},\"changes\":[{\"field\":\"status\",\"value\":\"approved\"}]},{\"entity_id\":\"source\",\"entity_type\":\"synthetic_source\",\"expected_observation_count\":1,\"expected_snapshot\":{\"remaining\":1},\"changes\":[]}]}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"status\":\"applied\",\"entities\":[{\"entity_id\":\"draft-a\",\"observation_count\":2,\"snapshot\":{\"status\":\"approved\"}},{\"entity_id\":\"source\",\"observation_count\":1,\"snapshot\":{\"remaining\":1}}]}",
+            "status": "applied",
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": [
+              "ent_mock_9"
+            ],
+            "tool_invocation_count": 1,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"entity_id\":\"source\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"entity_id\":\"source\",\"observation_count\":1,\"snapshot\":{\"remaining\":1}}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": [
+              "ent_mock_16"
+            ],
+            "tool_invocation_count": 2,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"idempotency_key\":\"advance-source\",\"entities\":[{\"entity_id\":\"source\",\"entity_type\":\"synthetic_source\",\"expected_observation_count\":1,\"expected_snapshot\":{\"remaining\":1},\"changes\":[{\"field\":\"remaining\",\"value\":0}]}]}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"status\":\"applied\",\"entities\":[{\"entity_id\":\"source\",\"observation_count\":2,\"snapshot\":{\"remaining\":0}}]}",
+            "status": "applied",
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:8>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 2,
+            "stored_entity_ids": [
+              "ent_mock_23"
+            ],
+            "tool_invocation_count": 3,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": true,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"idempotency_key\":\"approve-b-stale\",\"entities\":[{\"entity_id\":\"draft-b\",\"entity_type\":\"synthetic_draft\",\"expected_observation_count\":1,\"expected_snapshot\":{\"status\":\"ready\"},\"changes\":[{\"field\":\"status\",\"value\":\"approved\"}]},{\"entity_id\":\"source\",\"entity_type\":\"synthetic_source\",\"expected_observation_count\":1,\"expected_snapshot\":{\"remaining\":1},\"changes\":[]}]}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"error\":{\"code\":\"SNAPSHOT_MISMATCH\",\"message\":\"Source precondition changed\"}}",
+            "status": null,
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:9>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 3,
+            "stored_entity_ids": [
+              "ent_mock_30"
+            ],
+            "tool_invocation_count": 4,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"entity_id\":\"draft-b\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"entity_id\":\"draft-b\",\"observation_count\":1,\"snapshot\":{\"status\":\"ready\"}}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:10>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 3,
+            "stored_entity_ids": [
+              "ent_mock_37"
+            ],
+            "tool_invocation_count": 5,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"idempotency_key\":\"approve-a\",\"entities\":[{\"entity_id\":\"draft-a\",\"entity_type\":\"synthetic_draft\",\"expected_observation_count\":1,\"expected_snapshot\":{\"status\":\"ready\"},\"changes\":[{\"field\":\"status\",\"value\":\"approved\"}]},{\"entity_id\":\"source\",\"entity_type\":\"synthetic_source\",\"expected_observation_count\":1,\"expected_snapshot\":{\"remaining\":1},\"changes\":[]}]}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"status\":\"replayed\",\"entities\":[{\"entity_id\":\"draft-a\",\"observation_count\":2,\"snapshot\":{\"status\":\"approved\"}},{\"entity_id\":\"source\",\"observation_count\":2,\"snapshot\":{\"remaining\":0}}]}",
+            "status": "replayed",
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:11>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 4,
+            "stored_entity_ids": [
+              "ent_mock_44"
+            ],
+            "tool_invocation_count": 6,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"entity_id\":\"draft-a\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"entity_id\":\"draft-a\",\"observation_count\":2,\"snapshot\":{\"status\":\"approved\"}}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:12>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 4,
+            "stored_entity_ids": [
+              "ent_mock_51"
+            ],
+            "tool_invocation_count": 7,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"entity_id\":\"source\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"entity_id\":\"source\",\"observation_count\":2,\"snapshot\":{\"remaining\":0}}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:13>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:1>",
+            "store_structured_calls": 4,
+            "stored_entity_ids": [
+              "ent_mock_58"
+            ],
+            "tool_invocation_count": 8,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Draft A was approved while source still had capacity 1; its compare-only check added no source observation. Source later moved to 0, so draft B's stale request was refused and draft B stayed ready. Replaying draft A's exact key and payload returned replayed without another correction; readback shows draft A approved and source at 0.",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:14>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "conversation_id": "<id:3>",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": [
+              "stop"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "reminder_injected": false,
+            "retrieve_calls": 0,
+            "safety_net_used": false,
+            "session_id": "<id:1>",
+            "status": "completed",
+            "store_structured_calls": 4,
+            "tool_invocation_count": 8,
+            "turn_id": "<id:4>",
+            "turn_key": "atomic_correction_compare_only_guard__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}
