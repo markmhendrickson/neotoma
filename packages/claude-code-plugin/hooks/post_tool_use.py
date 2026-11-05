@@ -28,6 +28,8 @@ from _common import (  # noqa: E402
     is_neotoma_relevant_tool,
     log,
     make_idempotency_key,
+    turn_identity_fields,
+    resolve_turn_id,
     read_hook_input,
     record_conversation_turn,
     scrub_error_message,
@@ -43,7 +45,9 @@ def main() -> int:
         return 0
 
     session_id = payload.get("session_id") or "claude-code-unknown"
-    turn_id = payload.get("turn_id") or str(int(time.time() * 1000))
+    # #2440: resolve the turn this hook belongs to; never mint a plausible
+    # unique value, since that fabricates groupable identity.
+    turn_id, turn_source = resolve_turn_id(session_id, payload.get("turn_id"))
     tool_name = payload.get("tool_name") or payload.get("tool") or "unknown"
     tool_input = payload.get("tool_input") or {}
     tool_result = payload.get("tool_response") or payload.get("tool_result") or {}
@@ -101,6 +105,10 @@ def main() -> int:
         "has_error": has_error,
         "input_summary": _summarize(tool_input),
         "output_summary": _summarize(tool_result),
+        # #2440: make turn identity auditable at READ time. Without these a
+        # consumer cannot tell a real turn from a fallback, which is exactly
+        # what let 27,155 per-call timestamps pass as 27,155 turns.
+        **turn_identity_fields(turn_source),
         **harness_provenance({"hook_event": "PostToolUse"}),
     }
 
