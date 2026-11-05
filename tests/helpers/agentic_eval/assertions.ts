@@ -56,7 +56,9 @@ function resolveExpectedOutputs(
 }
 
 export interface AssertionFailure {
-  predicate: AssertionPredicate | { type: "expected_output"; hook: string; predicate: ExpectedOutputPredicate };
+  predicate:
+    | AssertionPredicate
+    | { type: "expected_output"; hook: string; predicate: ExpectedOutputPredicate };
   message: string;
   expected: unknown;
   actual: unknown;
@@ -68,10 +70,7 @@ export interface AssertionReport {
   totalPredicates: number;
 }
 
-function getRequests(
-  cell: CellResult,
-  endpoint: string
-): CapturedRequest[] {
+function getRequests(cell: CellResult, endpoint: string): CapturedRequest[] {
   if (endpoint === "/store") {
     return cell.capturedRequests.filter(
       (r) => r.endpoint === "/store" || r.endpoint === "/store_structured"
@@ -91,9 +90,7 @@ function getStoredEntities(cell: CellResult): Array<Record<string, unknown>> {
   return out;
 }
 
-function getStoredRelationships(
-  cell: CellResult
-): Array<Record<string, unknown>> {
+function getStoredRelationships(cell: CellResult): Array<Record<string, unknown>> {
   return getRequests(cell, "/create_relationship").map(
     (r) => (r.body as Record<string, unknown>) ?? {}
   );
@@ -122,11 +119,7 @@ function whereMatches(
   return true;
 }
 
-function compareNumber(
-  actual: number,
-  op: "eq" | "gte" | "lte",
-  expected: number
-): boolean {
+function compareNumber(actual: number, op: "eq" | "gte" | "lte", expected: number): boolean {
   if (op === "eq") return actual === expected;
   if (op === "gte") return actual >= expected;
   if (op === "lte") return actual <= expected;
@@ -147,8 +140,11 @@ function dotPath(obj: unknown, path: string): unknown {
 function containsSubset(actual: unknown, expected: unknown): boolean {
   if (expected === null || typeof expected !== "object") return actual === expected;
   if (Array.isArray(expected)) {
-    return Array.isArray(actual) && expected.length <= actual.length &&
-      expected.every((item, index) => containsSubset(actual[index], item));
+    return (
+      Array.isArray(actual) &&
+      expected.length <= actual.length &&
+      expected.every((item, index) => containsSubset(actual[index], item))
+    );
   }
   if (!actual || typeof actual !== "object" || Array.isArray(actual)) return false;
   return Object.entries(expected).every(([key, value]) =>
@@ -158,7 +154,11 @@ function containsSubset(actual: unknown, expected: unknown): boolean {
 
 function parseSummary(value: unknown): unknown {
   if (typeof value !== "string") return undefined;
-  try { return JSON.parse(value); } catch { return undefined; }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function evaluatePredicate(
@@ -179,19 +179,19 @@ function evaluatePredicate(
     case "entity_stored": {
       const entities = getStoredEntities(cell);
       const matches = entities.filter(
-        (e) =>
-          e.entity_type === predicate.entity_type &&
-          whereMatches(e, predicate.where)
+        (e) => e.entity_type === predicate.entity_type && whereMatches(e, predicate.where)
       );
       if (matches.length > 0) return null;
       return {
         predicate,
         message: `Expected at least one stored entity of type "${predicate.entity_type}"${
           predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
-        }, found ${entities
-          .map((e) => e.entity_type)
-          .filter((t, i, a) => a.indexOf(t) === i)
-          .join(", ") || "none"}.`,
+        }, found ${
+          entities
+            .map((e) => e.entity_type)
+            .filter((t, i, a) => a.indexOf(t) === i)
+            .join(", ") || "none"
+        }.`,
         expected: predicate,
         actual: entities.map((e) => ({
           entity_type: e.entity_type,
@@ -294,13 +294,18 @@ function evaluatePredicate(
           output: parseSummary(entity.output_summary),
           has_error: entity.has_error,
         }));
-      const matches = calls.length === predicate.calls.length &&
+      const matches =
+        calls.length === predicate.calls.length &&
         predicate.calls.every((expected, index) => {
           const actual = calls[index];
-          return actual?.tool_name === expected.tool_name &&
+          return (
+            actual?.tool_name === expected.tool_name &&
             (expected.has_error === undefined || actual.has_error === expected.has_error) &&
-            (expected.input_subset === undefined || containsSubset(actual.input, expected.input_subset)) &&
-            (expected.output_subset === undefined || containsSubset(actual.output, expected.output_subset));
+            (expected.input_subset === undefined ||
+              containsSubset(actual.input, expected.input_subset)) &&
+            (expected.output_subset === undefined ||
+              containsSubset(actual.output, expected.output_subset))
+          );
         });
       if (matches) return null;
       return {
@@ -324,9 +329,7 @@ function evaluatePredicate(
     case "field_present": {
       const entities = getStoredEntities(cell);
       const candidates = entities.filter(
-        (e) =>
-          e.entity_type === predicate.entity_type &&
-          whereMatches(e, predicate.where)
+        (e) => e.entity_type === predicate.entity_type && whereMatches(e, predicate.where)
       );
       if (candidates.length === 0) {
         return {
@@ -335,9 +338,7 @@ function evaluatePredicate(
             predicate.where ? ` matching ${JSON.stringify(predicate.where)}` : ""
           } but found none.`,
           expected: predicate,
-          actual: entities
-            .map((e) => e.entity_type)
-            .filter((t, i, a) => a.indexOf(t) === i),
+          actual: entities.map((e) => e.entity_type).filter((t, i, a) => a.indexOf(t) === i),
         };
       }
       const hasValue = candidates.some((e) => {
@@ -368,9 +369,7 @@ function evaluatePredicate(
     }
     case "field_not_matches": {
       const candidates = getStoredEntities(cell).filter(
-        (e) =>
-          e.entity_type === predicate.entity_type &&
-          whereMatches(e, predicate.where)
+        (e) => e.entity_type === predicate.entity_type && whereMatches(e, predicate.where)
       );
       if (candidates.length === 0) {
         return {
@@ -509,10 +508,7 @@ function evaluateExpectedOutput(
 export function evaluateCell(
   cell: CellResult,
   assertions: FixtureAssertions,
-  expectedOutputs:
-    | ExpectedOutputsByHook
-    | FixtureExpectedOutputs
-    | undefined,
+  expectedOutputs: ExpectedOutputsByHook | FixtureExpectedOutputs | undefined,
   harness: HarnessId,
   model: string
 ): AssertionReport {

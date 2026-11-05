@@ -20,11 +20,33 @@
         "tool_input": {
           "idempotency_key": "approve-a",
           "entities": [
-            { "entity_id": "draft-a", "entity_type": "synthetic_draft", "expected_observation_count": 1, "expected_snapshot": { "status": "ready" }, "changes": [{ "field": "status", "value": "approved" }] },
-            { "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }
+            {
+              "entity_id": "draft-a",
+              "entity_type": "synthetic_draft",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "status": "ready" },
+              "changes": [{ "field": "status", "value": "approved" }]
+            },
+            {
+              "entity_id": "source",
+              "entity_type": "synthetic_source",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "remaining": 1 },
+              "changes": []
+            }
           ]
         },
-        "tool_output": { "status": "applied", "entities": [{ "entity_id": "draft-a", "observation_count": 2, "snapshot": { "status": "approved" } }, { "entity_id": "source", "observation_count": 1, "snapshot": { "remaining": 1 } }] }
+        "tool_output": {
+          "status": "applied",
+          "entities": [
+            {
+              "entity_id": "draft-a",
+              "observation_count": 2,
+              "snapshot": { "status": "approved" }
+            },
+            { "entity_id": "source", "observation_count": 1, "snapshot": { "remaining": 1 } }
+          ]
+        }
       }
     },
     {
@@ -32,7 +54,11 @@
       "payload": {
         "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
         "tool_input": { "entity_id": "source" },
-        "tool_output": { "entity_id": "source", "observation_count": 1, "snapshot": { "remaining": 1 } }
+        "tool_output": {
+          "entity_id": "source",
+          "observation_count": 1,
+          "snapshot": { "remaining": 1 }
+        }
       }
     },
     {
@@ -41,9 +67,22 @@
         "tool_name": "mcp_neotoma_correct_transaction",
         "tool_input": {
           "idempotency_key": "advance-source",
-          "entities": [{ "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [{ "field": "remaining", "value": 0 }] }]
+          "entities": [
+            {
+              "entity_id": "source",
+              "entity_type": "synthetic_source",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "remaining": 1 },
+              "changes": [{ "field": "remaining", "value": 0 }]
+            }
+          ]
         },
-        "tool_output": { "status": "applied", "entities": [{ "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }] }
+        "tool_output": {
+          "status": "applied",
+          "entities": [
+            { "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }
+          ]
+        }
       }
     },
     {
@@ -53,11 +92,25 @@
         "tool_input": {
           "idempotency_key": "approve-b-stale",
           "entities": [
-            { "entity_id": "draft-b", "entity_type": "synthetic_draft", "expected_observation_count": 1, "expected_snapshot": { "status": "ready" }, "changes": [{ "field": "status", "value": "approved" }] },
-            { "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }
+            {
+              "entity_id": "draft-b",
+              "entity_type": "synthetic_draft",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "status": "ready" },
+              "changes": [{ "field": "status", "value": "approved" }]
+            },
+            {
+              "entity_id": "source",
+              "entity_type": "synthetic_source",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "remaining": 1 },
+              "changes": []
+            }
           ]
         },
-        "tool_output": { "error": { "code": "SNAPSHOT_MISMATCH", "message": "Source precondition changed" } }
+        "tool_output": {
+          "error": { "code": "SNAPSHOT_MISMATCH", "message": "Source precondition changed" }
+        }
       }
     },
     {
@@ -65,7 +118,11 @@
       "payload": {
         "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
         "tool_input": { "entity_id": "draft-b" },
-        "tool_output": { "entity_id": "draft-b", "observation_count": 1, "snapshot": { "status": "ready" } }
+        "tool_output": {
+          "entity_id": "draft-b",
+          "observation_count": 1,
+          "snapshot": { "status": "ready" }
+        }
       }
     },
     {
@@ -75,11 +132,33 @@
         "tool_input": {
           "idempotency_key": "approve-a",
           "entities": [
-            { "entity_id": "draft-a", "entity_type": "synthetic_draft", "expected_observation_count": 1, "expected_snapshot": { "status": "ready" }, "changes": [{ "field": "status", "value": "approved" }] },
-            { "entity_id": "source", "entity_type": "synthetic_source", "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }
+            {
+              "entity_id": "draft-a",
+              "entity_type": "synthetic_draft",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "status": "ready" },
+              "changes": [{ "field": "status", "value": "approved" }]
+            },
+            {
+              "entity_id": "source",
+              "entity_type": "synthetic_source",
+              "expected_observation_count": 1,
+              "expected_snapshot": { "remaining": 1 },
+              "changes": []
+            }
           ]
         },
-        "tool_output": { "status": "replayed", "entities": [{ "entity_id": "draft-a", "observation_count": 2, "snapshot": { "status": "approved" } }, { "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }] }
+        "tool_output": {
+          "status": "replayed",
+          "entities": [
+            {
+              "entity_id": "draft-a",
+              "observation_count": 2,
+              "snapshot": { "status": "approved" }
+            },
+            { "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }
+          ]
+        }
       }
     },
     {
@@ -87,7 +166,11 @@
       "payload": {
         "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
         "tool_input": { "entity_id": "draft-a" },
-        "tool_output": { "entity_id": "draft-a", "observation_count": 2, "snapshot": { "status": "approved" } }
+        "tool_output": {
+          "entity_id": "draft-a",
+          "observation_count": 2,
+          "snapshot": { "status": "approved" }
+        }
       }
     },
     {
@@ -95,7 +178,11 @@
       "payload": {
         "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
         "tool_input": { "entity_id": "source" },
-        "tool_output": { "entity_id": "source", "observation_count": 2, "snapshot": { "remaining": 0 } }
+        "tool_output": {
+          "entity_id": "source",
+          "observation_count": 2,
+          "snapshot": { "remaining": 0 }
+        }
       }
     },
     {
@@ -107,18 +194,95 @@
   ],
   "assertions": {
     "default": [
-      { "type": "entity_stored", "entity_type": "conversation_message", "where": { "role": "user" } },
-      { "type": "entity_stored", "entity_type": "conversation_message", "where": { "role": "assistant" } },
-      { "type": "tool_trace", "calls": [
-        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "approve-a", "entities": [{ "changes": [{ "field": "status", "value": "approved" }] }, { "expected_observation_count": 1, "expected_snapshot": { "remaining": 1 }, "changes": [] }] }, "output_subset": { "status": "applied", "entities": [{ "observation_count": 2 }, { "observation_count": 1 }] }, "has_error": false },
-        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "source" }, "output_subset": { "observation_count": 1, "snapshot": { "remaining": 1 } } },
-        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "advance-source" }, "output_subset": { "status": "applied", "entities": [{ "observation_count": 2, "snapshot": { "remaining": 0 } }] } },
-        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "approve-b-stale", "entities": [{ "entity_id": "draft-b" }, { "changes": [], "expected_observation_count": 1 }] }, "output_subset": { "error": { "code": "SNAPSHOT_MISMATCH" } }, "has_error": true },
-        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "draft-b" }, "output_subset": { "observation_count": 1, "snapshot": { "status": "ready" } } },
-        { "tool_name": "mcp_neotoma_correct_transaction", "input_subset": { "idempotency_key": "approve-a", "entities": [{ "changes": [{ "field": "status", "value": "approved" }] }, { "changes": [], "expected_observation_count": 1 }] }, "output_subset": { "status": "replayed", "entities": [{ "observation_count": 2 }, { "observation_count": 2 }] }, "has_error": false },
-        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "draft-a" }, "output_subset": { "observation_count": 2, "snapshot": { "status": "approved" } } },
-        { "tool_name": "mcp_neotoma_retrieve_entity_snapshot", "input_subset": { "entity_id": "source" }, "output_subset": { "observation_count": 2, "snapshot": { "remaining": 0 } } }
-      ] }
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "tool_trace",
+        "calls": [
+          {
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "input_subset": {
+              "idempotency_key": "approve-a",
+              "entities": [
+                { "changes": [{ "field": "status", "value": "approved" }] },
+                {
+                  "expected_observation_count": 1,
+                  "expected_snapshot": { "remaining": 1 },
+                  "changes": []
+                }
+              ]
+            },
+            "output_subset": {
+              "status": "applied",
+              "entities": [{ "observation_count": 2 }, { "observation_count": 1 }]
+            },
+            "has_error": false
+          },
+          {
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "input_subset": { "entity_id": "source" },
+            "output_subset": { "observation_count": 1, "snapshot": { "remaining": 1 } }
+          },
+          {
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "input_subset": { "idempotency_key": "advance-source" },
+            "output_subset": {
+              "status": "applied",
+              "entities": [{ "observation_count": 2, "snapshot": { "remaining": 0 } }]
+            }
+          },
+          {
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "input_subset": {
+              "idempotency_key": "approve-b-stale",
+              "entities": [
+                { "entity_id": "draft-b" },
+                { "changes": [], "expected_observation_count": 1 }
+              ]
+            },
+            "output_subset": { "error": { "code": "SNAPSHOT_MISMATCH" } },
+            "has_error": true
+          },
+          {
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "input_subset": { "entity_id": "draft-b" },
+            "output_subset": { "observation_count": 1, "snapshot": { "status": "ready" } }
+          },
+          {
+            "tool_name": "mcp_neotoma_correct_transaction",
+            "input_subset": {
+              "idempotency_key": "approve-a",
+              "entities": [
+                { "changes": [{ "field": "status", "value": "approved" }] },
+                { "changes": [], "expected_observation_count": 1 }
+              ]
+            },
+            "output_subset": {
+              "status": "replayed",
+              "entities": [{ "observation_count": 2 }, { "observation_count": 2 }]
+            },
+            "has_error": false
+          },
+          {
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "input_subset": { "entity_id": "draft-a" },
+            "output_subset": { "observation_count": 2, "snapshot": { "status": "approved" } }
+          },
+          {
+            "tool_name": "mcp_neotoma_retrieve_entity_snapshot",
+            "input_subset": { "entity_id": "source" },
+            "output_subset": { "observation_count": 2, "snapshot": { "remaining": 0 } }
+          }
+        ]
+      }
     ]
   }
 }

@@ -212,10 +212,7 @@ export interface HarnessAdapter {
    * MUST return without throwing: failures are reported via the
    * captured request log + stderr.
    */
-  runEvent(
-    event: FixtureEvent,
-    ctx: CellContext
-  ): Promise<CapturedHookOutput | null>;
+  runEvent(event: FixtureEvent, ctx: CellContext): Promise<CapturedHookOutput | null>;
   /** Optional pre-cell setup (build artifacts, etc.). */
   preflight?(): Promise<void> | void;
 }
