@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { load } from "js-yaml";
+import { listInstallableSkillNames } from "../../src/cli/skills_mirror.js";
 
 import {
   extractFirstFencedCodeBlock,
@@ -167,4 +168,106 @@ describe("continuation and digest package entrypoints", () => {
       expect(metadata.entity_id).toMatch(/^ent_[a-f0-9]{24}$/);
     }
   );
+});
+
+describe("packaged skill caller contracts", () => {
+  const root = resolveNeotomaPackageRoot();
+  const skill = (name: string) => readFileSync(join(root, "skills", name, "SKILL.md"), "utf8");
+
+  it.each(["README.md", "docs/topics/install/system-changes.md"])(
+    "keeps %s consistent with the actual installable package",
+    (source) => {
+      const count = listInstallableSkillNames(join(root, "skills")).length;
+      const text = readFileSync(join(root, source), "utf8");
+      if (source === "README.md") {
+        expect(Number(/links (\d+) Neotoma skills/.exec(text)?.[1])).toBe(count);
+        return;
+      }
+      const words = [
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+      ];
+      const declared = /\b(\w+) Claude Code skills\b/i.exec(text)?.[1].toLowerCase();
+      expect(
+        words.indexOf(declared ?? ""),
+        "install effects must disclose the installed count"
+      ).toBe(count);
+    }
+  );
+
+  it("routes every where readout escalation to the explicit zero-write digest mode", () => {
+    const where = skill("where");
+    expect(where).not.toContain("/status");
+    const sections = where.split(/^## /m);
+    for (const title of [
+      "The trio",
+      "The verification boundary",
+      "The one query",
+      "What to report",
+      "What was deliberately dropped",
+      "Constraints",
+    ]) {
+      const section = sections.find((s) => s.startsWith(title));
+      expect(section, title).toBeDefined();
+      expect(section, title).toContain("/digest --report-only");
+    }
+    const tableRow = where
+      .split("\n")
+      .find((line) => line.startsWith("| **`/digest --report-only`**"));
+    expect(tableRow).toMatch(/\| \*\*none\*\* — no domain or bookkeeping writes \|/);
+    expect(where).toContain("`/digest --report-only project`");
+    expect(where).toContain("default `/digest` reports, acts, and writes");
+    expect(where).toContain("MUST NOT act on a next step in the same turn");
+    expect(where).toContain("no `session_digest`");
+    expect(where).not.toMatch(/only exists once `\/digest --report-only` has run/);
+    // Every proposed digest invocation in a readout-only caller must select the
+    // read-only mode. Bare /digest is permitted only when explaining its default.
+    for (const line of where.split("\n")) {
+      for (const match of line.matchAll(/`(\/digest[^`]*)`/g)) {
+        if (!match[1].startsWith("/digest --report-only")) {
+          expect(match[1]).toBe("/digest");
+          expect(line).toMatch(/default `\/digest`/);
+        }
+      }
+    }
+  });
+
+  it("keeps the end comparison read-only without changing the acting digest default", () => {
+    const end = skill("end");
+    expect(end).not.toContain("/status");
+    expect(end).toContain("for `/digest --report-only`");
+    expect(end).toContain("zero writes, including bookkeeping, and takes no next action");
+    expect(end).toContain("default `/digest` reports, acts, and writes");
+    const digest = skill("status");
+    expect(digest).toContain("--report-only");
+    expect(digest).toContain("do not file, dispatch, act, or write/update a `session_digest`");
+  });
+
+  it("retains the whole-document fallback without a fixed harness capability claim", () => {
+    const continuation = skill("continue-session");
+    expect(continuation).not.toMatch(
+      /ChatGPT, Codex, and most other assistants have no\s+equivalent/
+    );
+    expect(continuation).toContain(
+      "Check the current harness's supported skill-discovery capability"
+    );
+    expect(continuation).toContain(
+      "pasted whole into any assistant with a shell as an ordinary document"
+    );
+    expect(continuation).toContain("Nothing below depends on a skill runtime");
+  });
 });

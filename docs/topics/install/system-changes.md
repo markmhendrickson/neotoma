@@ -27,7 +27,7 @@ The following inventory describes the local paths and effects exposed by the doc
 | MCP entries `neotoma-dev` and `neotoma`, with separate databases; init adds one Cursor entry by default | `~/.cursor/mcp.json`, `.mcp.json`, `claude.json`, or selected host configuration | User or project | User-level Neotoma entries are stripped; project .mcp.json entries can remain when reset runs outside a Neotoma repository. |
 | CLI instruction files for Claude Code, Cursor, and Codex | `.cursor/rules/`, `.claude/rules/`, and the Codex equivalent | Project | Can remain when reset runs outside a Neotoma repository; remove manually. |
 | Claude Code plugin with five hooks, when `claude` is on `PATH` | The Claude plugin location | User | Not listed among what reset removes. |
-| Twelve Claude Code skills, when `~/.claude` exists | `~/.claude/skills/` | User | Not listed among what reset removes. |
+| Thirteen Claude Code skills, when `~/.claude` exists | `~/.claude/skills/` | User | Not listed among what reset removes. |
 | Claude Code allow rules `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)` | `.claude/settings.local.json` by default; `~/.claude/settings.json` with `--scope both` | Project or user | Not listed among what reset removes. |
 | Cursor command allowlist `neotoma *` and global npm install | `.cursor/allowlist.json` | Project | Not listed among what reset removes. `neotoma *` permits any Neotoma subcommand, including reset. |
 | Codex command approval `neotoma *` and global npm install | `~/.codex/config.toml` | User | Not listed among what reset removes. `neotoma *` permits any Neotoma subcommand, including reset. |

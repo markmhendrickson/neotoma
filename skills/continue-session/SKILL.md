@@ -38,12 +38,12 @@ point-in-time fact into a durable place, put the derivation there instead.
 
 ## Using this in a harness with no skill mechanism
 
-**A skill is a Claude Code and Cursor mechanism. ChatGPT, Codex, and most other assistants have no
-equivalent — and those are exactly the harnesses this exists to serve, because the usual reason a
-session stops is that a Claude quota ran out.** So this file is written to work two ways: invoked as
-a skill, or pasted whole into any assistant with a shell as an ordinary document. Nothing below
-depends on a skill runtime. If you are reading this pasted into a chat window, you are holding the
-right thing and it is complete — read it top to bottom and start at "First moves".
+Check the current harness's supported skill-discovery capability rather than assuming it from
+the product name. Where a native skill mechanism is available, invoke this skill through it;
+otherwise use this file pasted whole into any assistant with a shell as an ordinary document.
+Nothing below depends on a skill runtime. If you are reading this pasted into a chat window,
+you are holding the right thing and it is complete — read it top to bottom and start at
+"First moves".
 
 Every capability below is named as a capability first and a tool second, because the tool varies:
 

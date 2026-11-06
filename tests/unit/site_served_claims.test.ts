@@ -80,7 +80,7 @@ describe("/install", () => {
       "~/.cursor/mcp.json",
       "neotoma init --interactive",
       "Claude Code plugin with five hooks",
-      "Twelve Claude Code skills",
+      "Thirteen Claude Code skills",
       ".claude/settings.local.json",
       ".cursor/allowlist.json",
       "~/.codex/config.toml",
