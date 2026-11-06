@@ -1350,8 +1350,16 @@ export async function resolveEntityWithTrace(
       // any row owned by a DIFFERENT real user_id, so reaching here means
       // existing.user_id is either unowned or already equal to userId — there
       // is no third case left to log a warning for.
+      //
+      // A resolution whose writer already owns the row (including the case
+      // where the authenticated owner IS the legacy all-zero id, as on a
+      // single-owner instance) must be a no-op: rewriting user_id to the value
+      // it already holds only bumps updated_at and adds a write to the hot path
+      // of every store of an existing entity (#2731).
       const shouldUpdateUserId =
-        userId && (existing.user_id === null || existing.user_id === LEGACY_UNOWNED_USER_ID);
+        userId &&
+        existing.user_id !== userId &&
+        (existing.user_id === null || existing.user_id === LEGACY_UNOWNED_USER_ID);
 
       if (shouldUpdateUserId) {
         const { error: updateError } = await db
