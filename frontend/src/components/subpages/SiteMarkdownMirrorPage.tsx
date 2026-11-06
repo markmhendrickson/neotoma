@@ -40,7 +40,14 @@ function extractMarkdownFromIframeDocument(doc: Document): string | null {
   return htmlElementToMarkdown(root);
 }
 
-export function SiteMarkdownMirrorPage() {
+interface SiteMarkdownMirrorPageProps {
+  /** Exact routes have no splat; their caller supplies the default-locale original. */
+  sourcePath?: string;
+}
+
+export function SiteMarkdownMirrorPage({
+  sourcePath: originalSourcePath,
+}: SiteMarkdownMirrorPageProps = {}) {
   const { "*": splat } = useParams();
   const location = useLocation();
   const { hash } = location;
@@ -49,7 +56,7 @@ export function SiteMarkdownMirrorPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const sourcePath = markdownSplatToSourcePath(splat);
+  const sourcePath = originalSourcePath ?? markdownSplatToSourcePath(splat);
   const valid = isFullPageMarkdownSourcePath(sourcePath);
   const fetchPath = localizePath(`${sourcePath}${hash}`, locale);
 
