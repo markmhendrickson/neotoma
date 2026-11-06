@@ -532,7 +532,7 @@ export function MainApp() {
             <Route
               key={`${locale}-legal-md-${legalPath}`}
               path={`/${locale}/markdown${legalPath}`}
-              element={<SiteMarkdownMirrorPage />}
+              element={<SiteMarkdownMirrorPage sourcePath={legalPath} />}
             />,
           ])
         )}
