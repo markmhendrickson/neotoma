@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { load } from "js-yaml";
 
 import {
   extractFirstFencedCodeBlock,
@@ -46,7 +47,13 @@ describe("MCP initialize — skills discovery", () => {
     const names = readdirSync(skillsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
-    const required = ["ensure-neotoma", "recover-sqlite-database", "remember-codebase"];
+    const required = [
+      "ensure-neotoma",
+      "recover-sqlite-database",
+      "remember-codebase",
+      "continue-session",
+      "status",
+    ];
     for (const skill of required) {
       expect(names, `Expected skill "${skill}" to be present`).toContain(skill);
     }
@@ -128,4 +135,36 @@ describe("MCP instructions — [INITIALIZATION] section", () => {
     expect(initIdx).toBeGreaterThan(errIdx);
     expect(onbIdx).toBeGreaterThan(initIdx);
   });
+});
+
+describe("continuation and digest package entrypoints", () => {
+  const expected = [
+    { directory: "continue-session", name: "continue-session", trigger: "/continue-session" },
+    { directory: "status", name: "digest", trigger: "/digest" },
+  ];
+
+  it.each(expected)(
+    "loads $directory with its actual invocation and restrictive effect metadata",
+    ({ directory, name, trigger }) => {
+      const raw = readFileSync(
+        join(resolveNeotomaPackageRoot(), "skills", directory, "SKILL.md"),
+        "utf8"
+      );
+      // The package's own deprecation reader and the harness format both anchor
+      // frontmatter at the start: a leading generated banner must not hide it.
+      const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+      expect(match, "YAML must be the first document block").not.toBeNull();
+      const metadata = load(match![1]) as Record<string, unknown>;
+      expect(metadata.name).toBe(name);
+      expect(metadata.description).toEqual(expect.any(String));
+      expect((metadata.description as string).length).toBeGreaterThan(10);
+      expect(metadata.user_invocable).toBe(true);
+      expect(metadata.triggers).toContain(trigger);
+      expect(metadata.supported_harnesses).toEqual(
+        expect.arrayContaining(["claude-code", "cursor"])
+      );
+      expect(metadata.side_effect_class).toBe("state_changing");
+      expect(metadata.entity_id).toMatch(/^ent_[a-f0-9]{24}$/);
+    }
+  );
 });
