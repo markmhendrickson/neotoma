@@ -414,53 +414,61 @@ export async function queryEntities(
     return [];
   }
 
-  // Build query for entities
-  let entityQuery = db.from("entities").select(ENTITY_BASE_SELECT);
-
-  // Filter by user if provided
-  if (userId) {
-    entityQuery = entityQuery.eq("user_id", userId);
-  }
-
-  // Filter by entity type(s) if provided (singular + plural union)
-  entityQuery = applyTypeFilter(entityQuery, "entity_type");
-
-  // Exclude merged entities unless explicitly requested
-  if (!includeMerged) {
-    entityQuery = entityQuery.is("merged_to_entity_id", null);
-  }
-
-  // Filter by specific entity IDs (e.g. from semantic search, R3 identity
-  // basis pre-filter).
-  if (effectiveEntityIds && effectiveEntityIds.length > 0) {
-    entityQuery = entityQuery.in("id", effectiveEntityIds);
-  }
-
-  if (updatedSince) {
-    entityQuery = entityQuery.gte("updated_at", updatedSince);
-  }
-  if (createdSince) {
-    entityQuery = entityQuery.gte("created_at", createdSince);
-  }
-
+  // Build query for entities. This is a factory because the query builder is
+  // mutable: the scan loop below needs a fresh query per chunk so it can seek
+  // past the previous chunk by key instead of by OFFSET (see that loop).
   const ascending = sortOrder === "asc";
-  if (sortBy === "canonical_name") {
-    entityQuery = entityQuery.order("canonical_name", { ascending });
-  } else {
-    entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
-  }
+  const buildEntityQuery = () => {
+    let entityQuery = db.from("entities").select(ENTITY_BASE_SELECT);
 
-  // #1943: apply the keyset seek to the base entity query. For ascending order
-  // the next page starts strictly after the cursor's id (`id > :id`); for
-  // descending, strictly before (`id < :id`). This is what makes deep pages
-  // O(page) — the DB seeks past prior rows on the primary key instead of the
-  // scan-and-discard loop below re-reading them. Only reachable for the
-  // entity_id sort (cursor is entity_id-only; see decode above).
-  if (decodedCursor) {
-    entityQuery = ascending
-      ? entityQuery.gt("id", decodedCursor.entity_id)
-      : entityQuery.lt("id", decodedCursor.entity_id);
-  }
+    // Filter by user if provided
+    if (userId) {
+      entityQuery = entityQuery.eq("user_id", userId);
+    }
+
+    // Filter by entity type(s) if provided (singular + plural union)
+    entityQuery = applyTypeFilter(entityQuery, "entity_type");
+
+    // Exclude merged entities unless explicitly requested
+    if (!includeMerged) {
+      entityQuery = entityQuery.is("merged_to_entity_id", null);
+    }
+
+    // Filter by specific entity IDs (e.g. from semantic search, R3 identity
+    // basis pre-filter).
+    if (effectiveEntityIds && effectiveEntityIds.length > 0) {
+      entityQuery = entityQuery.in("id", effectiveEntityIds);
+    }
+
+    if (updatedSince) {
+      entityQuery = entityQuery.gte("updated_at", updatedSince);
+    }
+    if (createdSince) {
+      entityQuery = entityQuery.gte("created_at", createdSince);
+    }
+
+    if (sortBy === "canonical_name") {
+      entityQuery = entityQuery.order("canonical_name", { ascending });
+    } else {
+      entityQuery = entityQuery.order("id", {
+        ascending: sortBy === "entity_id" ? ascending : true,
+      });
+    }
+
+    // #1943: apply the keyset seek to the base entity query. For ascending order
+    // the next page starts strictly after the cursor's id (`id > :id`); for
+    // descending, strictly before (`id < :id`). This is what makes deep pages
+    // O(page) — the DB seeks past prior rows on the primary key instead of the
+    // scan-and-discard loop below re-reading them. Only reachable for the
+    // entity_id sort (cursor is entity_id-only; see decode above).
+    if (decodedCursor) {
+      entityQuery = ascending
+        ? entityQuery.gt("id", decodedCursor.entity_id)
+        : entityQuery.lt("id", decodedCursor.entity_id);
+    }
+    return entityQuery;
+  };
+  const entityQuery = buildEntityQuery();
 
   const isSnapshotFieldSort = typeof sortBy === "string" && sortBy.startsWith("snapshot.");
   const hasSnapshotFilters = snapshotFilters && Object.keys(snapshotFilters).length > 0;
@@ -672,11 +680,26 @@ export async function queryEntities(
     let visibleSkipped = 0;
     let exhausted = false;
 
+    // Rows come back in `id` order unless the caller sorts by canonical_name.
+    // For id order, continue each chunk from the last id seen (a primary-key
+    // seek) rather than `OFFSET scanOffset`: SQLite re-walks every skipped row
+    // for each OFFSET, so paging a deep offset by OFFSET cost O(offset^2) row
+    // visits (908 statements and ~10s for offset 90,000 of 100,000 entities).
+    const keysetById = sortBy !== "canonical_name";
+    const idAscending = sortBy === "entity_id" ? ascending : true;
+    let lastScannedId: string | undefined;
+
     while (entities.length < limit && !exhausted) {
-      const { data: chunk, error: chunkError } = await entityQuery.range(
-        scanOffset,
-        scanOffset + scanChunkSize - 1
-      );
+      let chunkQuery = entityQuery;
+      if (keysetById && lastScannedId !== undefined) {
+        chunkQuery = buildEntityQuery();
+        chunkQuery = idAscending
+          ? chunkQuery.gt("id", lastScannedId)
+          : chunkQuery.lt("id", lastScannedId);
+      }
+      const { data: chunk, error: chunkError } = await (keysetById && lastScannedId !== undefined
+        ? chunkQuery.range(0, scanChunkSize - 1)
+        : chunkQuery.range(scanOffset, scanOffset + scanChunkSize - 1));
       if (chunkError) {
         throw new Error(`Failed to query entities: ${chunkError.message}`);
       }
@@ -688,6 +711,7 @@ export async function queryEntities(
       }
 
       scanOffset += rows.length;
+      lastScannedId = rows[rows.length - 1].id as string;
       const chunkDeletedEntityIds = await getDeletedEntityIds(rows, userId);
 
       for (const row of rows) {
