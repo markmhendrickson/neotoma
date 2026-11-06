@@ -2,7 +2,7 @@
 
 Installation, initialization, and host connection can affect different machines and configuration files.
 
-Applies to published v0.27.0. The claims were checked against v0.26.0 (`b6ae615`) on October 27th, 2026; setup did not change in v0.27.0. Check the version and host path you actually use. A remote client connecting to an already operated instance does not need the Neotoma CLI installed on the client machine.
+This inventory describes the current package source. Base setup effects were checked against v0.26.0 (`b6ae615`) on October 27th, 2026 and did not change in published v0.27.0. The current source skill count includes unreleased additions; published v0.27.0 contains 12 installable skills. Check the version and host path you actually use. A remote client connecting to an already operated instance does not need the Neotoma CLI installed on the client machine.
 
 ## Choose the effect you intend
 

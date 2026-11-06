@@ -111,7 +111,7 @@ neotoma init
 neotoma setup --tool claude-code
 ```
 
-In v0.27.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
+In the current package source, `neotoma setup --tool claude-code` writes the MCP entries and more. The skill count below includes source changes not yet in published v0.27.0, which contains 12 installable skills; check the package version you actually use:
 
 - Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
 - CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.

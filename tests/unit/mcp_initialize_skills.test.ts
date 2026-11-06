@@ -179,6 +179,9 @@ describe("packaged skill caller contracts", () => {
     (source) => {
       const count = listInstallableSkillNames(join(root, "skills")).length;
       const text = readFileSync(join(root, source), "utf8");
+      expect(text).toContain("current package source");
+      expect(text).toContain("published v0.27.0");
+      expect(text).toContain("12 installable skills");
       if (source === "README.md") {
         expect(Number(/links (\d+) Neotoma skills/.exec(text)?.[1])).toBe(count);
         return;
