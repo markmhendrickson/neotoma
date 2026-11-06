@@ -287,7 +287,7 @@ jobs:
         run: npx vitest run --no-file-parallelism tests/integration/store_partial_write_2144.test.ts tests/integration/store_abort_context_2144.test.ts
 
       - name: "Run retrieval acquisition contract (#2597, #2611)"
-        run: npx vitest run --no-file-parallelism tests/integration/entity_read_contract.test.ts tests/integration/entity_read_contract_semantic.test.ts tests/integration/entity_read_contract_backend.test.ts tests/integration/entity_search_mode.test.ts tests/integration/entity_queries_cursor.test.ts
+        run: npx vitest run --no-file-parallelism tests/integration/entity_read_contract.test.ts tests/integration/entity_read_contract_semantic.test.ts tests/integration/entity_read_contract_backend.test.ts tests/integration/entity_search_mode.test.ts tests/integration/entity_queries_cursor.test.ts tests/integration/entity_queries_deep_offset.test.ts
 
       # #2524 relationship-write capability, every entrance. The first fix
       # gated REST /store only; MCP store and the standalone relationship
