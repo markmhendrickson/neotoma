@@ -43,12 +43,40 @@ function mount(path: string, element: ReactNode = <MainApp />) {
   );
 }
 
+/** Deliver only synthetic iframe documents selected by the component's assigned URL. */
+function controlIframeLoads(iframe: HTMLIFrameElement) {
+  const loads: EventListenerOrEventListenerObject[] = [];
+  const nativeAdd = iframe.addEventListener.bind(iframe);
+  vi.spyOn(iframe, "addEventListener").mockImplementation((kind, listener, options) => {
+    if (kind === "load" && listener) loads.push(listener);
+    else nativeAdd(kind, listener, options);
+  });
+  let source = "";
+  vi.spyOn(iframe, "src", "get").mockImplementation(() => source);
+  vi.spyOn(iframe, "src", "set").mockImplementation((value) => {
+    source = value;
+  });
+  return {
+    pendingLoads: () => loads.length,
+    deliver() {
+      const original = new URL(source).pathname;
+      const captured = new DOMParser().parseFromString(fixtureHtml(original), "text/html");
+      vi.spyOn(iframe, "contentDocument", "get").mockReturnValue(captured);
+      for (const listener of loads.splice(0)) {
+        const event = new Event("load");
+        if (typeof listener === "function") listener.call(iframe, event);
+        else listener.handleEvent(event);
+      }
+    },
+  };
+}
+
 async function expectExport(container: HTMLElement, source: string, route: string) {
   await waitFor(() => expect(container.querySelector("pre")).not.toBeNull());
   const markdown = container.querySelector("pre")!.textContent!;
   expect(markdown, markdown).toContain(`Source: ${buildCanonicalUrl(source)}`);
   expect(markdown).toContain(`Generated: ${generatedAt}`);
-  expect(markdown).toContain(`# Fixture ${source}`);
+  expect(markdown, markdown).toContain(`# Fixture ${source}`);
   expect(markdown).toContain(`Unique original ${source}:`);
   expect(markdown).not.toContain("Fixture HOME");
   await waitFor(() =>
@@ -165,29 +193,44 @@ describe("MainApp full-page Markdown source bindings", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("retains iframe fallback for the exact localized legal original", async () => {
-    let finish!: (response: Response) => void;
-    fetchMock.mockImplementation(
-      () =>
-        new Promise<Response>((resolve) => {
-          finish = resolve;
-        })
-    );
-    const { container, unmount } = mount("/es/markdown/privacy");
-    const iframe = screen.getByTitle<HTMLIFrameElement>("Markdown capture");
-    const capturedDocument = new DOMParser().parseFromString(
-      fixtureHtml("/es/privacy"),
-      "text/html"
-    );
-    vi.spyOn(iframe, "contentDocument", "get").mockReturnValue(capturedDocument);
-    await act(async () => {
-      finish(new Response("not prerendered", { status: 404 }));
-    });
-    await waitFor(() => expect(iframe.src).toBe(`${window.location.origin}/es/privacy`));
-    fireEvent.load(iframe);
-    await expectExport(container, "/es/privacy", "/es/markdown/privacy");
-    unmount();
-  });
+  it.each(["non-ok", "reject", "body-reject", "body-throw"] as const)(
+    "retains iframe fallback for the current legal original after %s",
+    async (mode) => {
+      let finish!: (response: Response) => void;
+      let fail!: (error: Error) => void;
+      fetchMock.mockImplementation(
+        () =>
+          new Promise<Response>((resolve, reject) => {
+            finish = resolve;
+            fail = reject;
+          })
+      );
+      const { container, unmount } = mount("/es/markdown/privacy");
+      const iframe = screen.getByTitle<HTMLIFrameElement>("Markdown capture");
+      const controlled = controlIframeLoads(iframe);
+      await act(async () => {
+        if (mode === "reject") fail(new Error("Synthetic active network failure"));
+        else {
+          const response = new Response("not prerendered", {
+            status: mode === "non-ok" ? 404 : 200,
+          });
+          if (mode === "body-reject")
+            vi.spyOn(response, "text").mockRejectedValue(
+              new Error("Synthetic active body failure")
+            );
+          if (mode === "body-throw")
+            vi.spyOn(response, "text").mockImplementation(() => {
+              throw new Error("Synthetic active body throw");
+            });
+          finish(response);
+        }
+      });
+      expect(iframe.src).toBe(`${window.location.origin}/es/privacy`);
+      controlled.deliver();
+      await expectExport(container, "/es/privacy", "/es/markdown/privacy");
+      unmount();
+    }
+  );
 
   it("ignores a fetch completing after unmount", async () => {
     let finish!: (response: Response) => void;
@@ -239,6 +282,108 @@ describe("MainApp full-page Markdown source bindings", () => {
       "Unique original /es/privacy:"
     );
   });
+
+  it.each(["resolve", "non-ok", "empty", "reject", "body-reject", "body-throw"] as const)(
+    "keeps the current fallback original after an older fetch settles as %s",
+    async (mode) => {
+      const pending = new Map<
+        string,
+        { resolve: (response: Response) => void; reject: (error: Error) => void }
+      >();
+      fetchMock.mockImplementation(
+        (input) =>
+          new Promise<Response>((resolve, reject) => {
+            pending.set(new URL(String(input)).pathname, { resolve, reject });
+          })
+      );
+      function SwitchOriginal() {
+        const navigate = useNavigate();
+        return <button onClick={() => navigate("/es/markdown/terms")}>Next original</button>;
+      }
+      const { container } = mount(
+        "/es/markdown/privacy",
+        <>
+          <MainApp />
+          <SwitchOriginal />
+        </>
+      );
+      const iframe = screen.getByTitle<HTMLIFrameElement>("Markdown capture");
+      const controlled = controlIframeLoads(iframe);
+      fireEvent.click(screen.getByRole("button", { name: "Next original" }));
+      expect([...pending.keys()]).toEqual(["/es/privacy", "/es/terms"]);
+      await act(async () => {
+        pending.get("/es/terms")!.resolve(new Response("fallback", { status: 404 }));
+      });
+      expect(iframe.src).toBe(`${window.location.origin}/es/terms`);
+      await act(async () => {
+        const older = pending.get("/es/privacy")!;
+        if (mode === "reject") older.reject(new Error("Synthetic late network failure"));
+        else {
+          const response = new Response(mode === "empty" ? "shell" : fixtureHtml("/es/privacy"), {
+            status: mode === "non-ok" ? 404 : 200,
+          });
+          if (mode === "body-reject")
+            vi.spyOn(response, "text").mockRejectedValue(new Error("Synthetic late body failure"));
+          if (mode === "body-throw")
+            vi.spyOn(response, "text").mockImplementation(() => {
+              throw new Error("Synthetic late body throw");
+            });
+          older.resolve(response);
+        }
+      });
+      controlled.deliver();
+      await expectExport(container, "/es/terms", "/es/markdown/terms");
+      expect(iframe.src).toBe(`${window.location.origin}/es/terms`);
+      expect(controlled.pendingLoads()).toBe(0);
+      expect(container.querySelector("pre")!.textContent).not.toContain(
+        "Unique original /es/privacy:"
+      );
+    }
+  );
+
+  it.each(["navigation", "unmount"] as const)(
+    "does not start polling for a fallback load delivered after %s",
+    async (cancellation) => {
+      let finish!: (response: Response) => void;
+      fetchMock.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          })
+      );
+      fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+      function SwitchOriginal() {
+        const navigate = useNavigate();
+        return <button onClick={() => navigate("/es/markdown/terms")}>Next original</button>;
+      }
+      const { unmount } = mount(
+        "/es/markdown/privacy",
+        <>
+          <MainApp />
+          <SwitchOriginal />
+        </>
+      );
+      const iframe = screen.getByTitle<HTMLIFrameElement>("Markdown capture");
+      const controlled = controlIframeLoads(iframe);
+      await act(async () => {
+        finish(new Response("fallback", { status: 404 }));
+      });
+      expect(controlled.pendingLoads()).toBe(1);
+      if (cancellation === "unmount") unmount();
+      else fireEvent.click(screen.getByRole("button", { name: "Next original" }));
+      const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+      controlled.deliver();
+      const pollCalls = setIntervalSpy.mock.calls.flatMap((call, index) =>
+        call[1] === 120 ? [index] : []
+      );
+      try {
+        expect(pollCalls).toEqual([]);
+      } finally {
+        // Keep a failing cancellation regression from leaking the timer it just exposed.
+        for (const index of pollCalls) clearInterval(setIntervalSpy.mock.results[index].value);
+      }
+    }
+  );
 
   it("clears fallback polling and timeout on unmount", async () => {
     const setIntervalSpy = vi.spyOn(globalThis, "setInterval");

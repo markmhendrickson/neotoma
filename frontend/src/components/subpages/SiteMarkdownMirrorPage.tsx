@@ -113,6 +113,8 @@ export function SiteMarkdownMirrorPage({
         // Dev server shell: use iframe.
       }
 
+      if (!alive) return;
+
       const iframe = iframeRef.current;
       if (!iframe) {
         finishError("Missing iframe target.");
@@ -124,6 +126,7 @@ export function SiteMarkdownMirrorPage({
       }, IFRAME_TIMEOUT_MS);
 
       const onLoad = () => {
+        if (!alive) return;
         const idoc = iframe.contentDocument;
         if (!idoc) {
           finishError("Could not read iframe document.");
