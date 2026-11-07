@@ -56,6 +56,7 @@ export function observeMcpLookupResponse(req: Request, res: Response): McpLookup
     res.writeHead = function (this: Response, ...args: unknown[]) {
       const result = Reflect.apply(originalWriteHead, this, args) as Response;
       try {
+        // Server commit time, distinct from the time a client sees the headers.
         timing.headersAt ??= performance.now();
       } catch {
         // Preserve the response even if a timing sample cannot be taken.
@@ -94,39 +95,43 @@ export function observeMcpLookupResponse(req: Request, res: Response): McpLookup
 type LookupScope = { entity_type?: string; by?: string; identifier: string };
 
 /** Called after lookup arguments and authenticated store identity are validated. */
-export async function timeMcpIdentifierLookup<T>(
+export function timeMcpIdentifierLookup<T>(
   timing: McpLookupTiming | undefined,
   scope: LookupScope,
   lookup: () => Promise<T>
 ): Promise<T> {
-  let active: McpLookupTiming | undefined;
-  try {
-    if (
-      timing &&
-      scope.entity_type === "event" &&
-      scope.by === "title" &&
-      scope.identifier.startsWith(timing.titlePrefix) &&
-      /^[0-9a-f]{64}$/.test(scope.identifier.slice(timing.titlePrefix.length))
-    ) {
-      timing.dispatchedAt = performance.now();
-      active = timing;
-    }
-  } catch {
-    // The lookup still runs if instrumentation fails.
+  if (
+    !timing ||
+    scope.entity_type !== "event" ||
+    scope.by !== "title" ||
+    !scope.identifier.startsWith(timing.titlePrefix) ||
+    !/^[0-9a-f]{64}$/.test(scope.identifier.slice(timing.titlePrefix.length))
+  ) {
+    return lookup();
   }
+  try {
+    timing.dispatchedAt = performance.now();
+  } catch {
+    return lookup();
+  }
+  return completeLookupTiming(timing, lookup);
+}
+
+async function completeLookupTiming<T>(
+  timing: McpLookupTiming,
+  lookup: () => Promise<T>
+): Promise<T> {
   let outcome: McpLookupTiming["outcome"] = "threw";
   try {
     const result = await lookup();
     outcome = "returned";
     return result;
   } finally {
-    if (active) {
-      try {
-        active.completedAt = performance.now();
-        active.outcome = outcome;
-      } catch {
-        // Preserve the lookup result or original rejection.
-      }
+    try {
+      timing.completedAt = performance.now();
+      timing.outcome = outcome;
+    } catch {
+      // Preserve the lookup result or original rejection.
     }
   }
 }

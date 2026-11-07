@@ -6,17 +6,21 @@
  * Boot pattern matches tests/integration/mcp_session_404_reconnect.test.ts.
  */
 
-import { createServer } from "node:http";
+import { createServer, request, type OutgoingHttpHeaders } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { modernPost } from "../helpers/mcp_http_modern.js";
 
 const ENV_KEYS = [
   "NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD",
   "NEOTOMA_BEARER_TOKEN",
   "NEOTOMA_DATA_DIR",
+  "NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_HEADER",
+  "NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_TITLE_PREFIX",
   "NEOTOMA_ENCRYPTION_ENABLED",
   "NEOTOMA_ENV",
   "NEOTOMA_HOST_URL",
@@ -27,7 +31,7 @@ const ENV_KEYS = [
 ] as const;
 
 const originalEnv = new Map<string, string | undefined>(
-  ENV_KEYS.map((key) => [key, process.env[key]]),
+  ENV_KEYS.map((key) => [key, process.env[key]])
 );
 
 function restoreEnv(): void {
@@ -70,13 +74,101 @@ function toolsCallBody(id: number, name: string, args: Record<string, unknown> =
   });
 }
 
+const TRACE_HEADER = "x-fixture-lookup-trace";
+const TRACE_TITLE_PREFIX = "fixture-lookup:";
+const TEST_BEARER = "synthetic-identifier-timing-bearer";
+const IDENTIFIER_TOOL = "retrieve_entity_by_identifier";
+const TRACE_EVENT = "mcp_identifier_lookup_timing";
+
+function lookupArgs(suffix: string) {
+  return { entity_type: "event", by: "title", identifier: TRACE_TITLE_PREFIX + suffix.repeat(64) };
+}
+
+function rpcHeaders(sessionId: string, bearer?: string): OutgoingHttpHeaders {
+  return {
+    "content-type": "application/json",
+    accept: "application/json, text/event-stream",
+    "mcp-session-id": sessionId,
+    ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+  };
+}
+
+function postRpc(
+  baseUrl: string,
+  headers: OutgoingHttpHeaders,
+  body: string,
+  holdBody?: Promise<void>,
+  onHeaders?: () => void
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const outgoing = request(
+      `${baseUrl}/mcp`,
+      { method: "POST", headers: { ...headers, "content-length": Buffer.byteLength(body) } },
+      (incoming) => {
+        onHeaders?.();
+        const chunks: Buffer[] = [];
+        incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+        incoming.once("error", reject);
+        incoming.once("end", () => {
+          const responseHeaders = new Headers();
+          for (const [name, value] of Object.entries(incoming.headers)) {
+            if (value !== undefined) responseHeaders.set(name, String(value));
+          }
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              status: incoming.statusCode,
+              headers: responseHeaders,
+            })
+          );
+        });
+      }
+    );
+    outgoing.once("error", reject);
+    outgoing.setTimeout(5_000, () => outgoing.destroy(new Error("Fixture request timed out")));
+    if (holdBody) {
+      outgoing.write(body.slice(0, 1));
+      void holdBody.then(() => outgoing.end(body.slice(1)), reject);
+    } else {
+      outgoing.end(body);
+    }
+  });
+}
+
+function fixtureGate() {
+  let open!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { wait, open };
+}
+
+type TimingRecord = {
+  event: string;
+  trace_id: string;
+  dispatch_ms: number;
+  completion_ms: number;
+  headers_ms: number;
+  finish_ms: number;
+  outcome: string;
+};
+
+function timingRecords(calls: unknown[][]): TimingRecord[] {
+  return calls
+    .map(([line]) => line)
+    .filter(
+      (line): line is string =>
+        typeof line === "string" && line.startsWith(`{"event":"${TRACE_EVENT}"`)
+    )
+    .map((line) => JSON.parse(line) as TimingRecord);
+}
+
 describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
   afterEach(() => {
     vi.resetModules();
     restoreEnv();
   });
 
-  async function bootApp(opts?: { bearerToken?: string }): Promise<{
+  async function bootApp(opts?: { bearerToken?: string; lookupTiming?: boolean }): Promise<{
     baseUrl: string;
     httpServer: ReturnType<typeof createServer>;
     tmpRoot: string;
@@ -91,6 +183,13 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
     delete process.env.NEOTOMA_KEY_FILE_PATH;
     delete process.env.NEOTOMA_MNEMONIC;
     delete process.env.NEOTOMA_MNEMONIC_PASSPHRASE;
+    if (opts?.lookupTiming) {
+      process.env.NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_HEADER = TRACE_HEADER;
+      process.env.NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_TITLE_PREFIX = TRACE_TITLE_PREFIX;
+    } else {
+      delete process.env.NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_HEADER;
+      delete process.env.NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_TITLE_PREFIX;
+    }
     if (opts?.bearerToken) {
       process.env.NEOTOMA_BEARER_TOKEN = opts.bearerToken;
     } else {
@@ -281,6 +380,256 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       expect(idA).not.toBe(idB);
     } finally {
       await teardownApp(ctx);
+    }
+  });
+
+  it("joins first receipt, real dispatch and SSE response for two concurrent scoped lookups", async () => {
+    const ctx = await bootApp({ bearerToken: TEST_BEARER, lookupTiming: true });
+    const { logger } = await import("../../src/utils/logger.js");
+    const { db } = await import("../../src/db.js");
+    const lookupHandler =
+      await import("../../src/shared/action_handlers/entity_identifier_handler.js");
+    const info = vi.spyOn(logger, "info");
+    const entered = fixtureGate();
+    const release = fixtureGate();
+    const receipt = fixtureGate();
+    const responseHeaders = fixtureGate();
+    const delayedArgs = lookupArgs("a");
+    const otherArgs = lookupArgs("b");
+    const slowId = `ent_${"a".repeat(24)}`;
+    const fastId = `ent_${"b".repeat(24)}`;
+    const slowRef = "1".repeat(32);
+    const fastRef = "2".repeat(32);
+    const originalLookup = lookupHandler.retrieveEntityByIdentifierWithFallback;
+    const lookup = vi
+      .spyOn(lookupHandler, "retrieveEntityByIdentifierWithFallback")
+      .mockImplementation(async (params) => {
+        if (params.identifier === delayedArgs.identifier) {
+          entered.open();
+          await release.wait;
+        }
+        return originalLookup(params);
+      });
+
+    try {
+      const recovered = await postRpc(
+        ctx.baseUrl,
+        rpcHeaders(randomUUID(), TEST_BEARER),
+        toolsCallBody(100, "get_authenticated_user")
+      );
+      expect(recovered.status).toBe(200);
+      const identity = await readJsonRpc(recovered);
+      const { user_id: userId } = JSON.parse(identity.result!.content![0].text);
+      expect(typeof userId).toBe("string");
+      const { error } = await db.from("entities").insert([
+        {
+          id: slowId,
+          user_id: userId,
+          entity_type: "event",
+          canonical_name: delayedArgs.identifier,
+        },
+        {
+          id: fastId,
+          user_id: userId,
+          entity_type: "event",
+          canonical_name: otherArgs.identifier,
+        },
+      ]);
+      expect(error).toBeNull();
+      const { error: snapshotError } = await db.from("entity_snapshots").insert(
+        [
+          [slowId, delayedArgs.identifier],
+          [fastId, otherArgs.identifier],
+        ].map(([id, title]) => ({
+          entity_id: id,
+          user_id: userId,
+          entity_type: "event",
+          schema_version: "1.0",
+          snapshot: { title },
+          observation_count: 1,
+        }))
+      );
+      expect(snapshotError).toBeNull();
+      const session = recovered.headers.get("mcp-session-id")!;
+      expect(session).toBeTruthy();
+      const headers = rpcHeaders(session, TEST_BEARER);
+
+      ctx.httpServer.prependOnceListener("request", receipt.open);
+      const slow = postRpc(
+        ctx.baseUrl,
+        { ...headers, [TRACE_HEADER]: slowRef },
+        toolsCallBody(101, IDENTIFIER_TOOL, delayedArgs),
+        receipt.wait.then(() => delay(65)),
+        responseHeaders.open
+      );
+      await Promise.race([
+        entered.wait,
+        slow.then(() => {
+          throw new Error("The real lookup did not reach the delayed handler");
+        }),
+      ]);
+      const fast = await postRpc(
+        ctx.baseUrl,
+        { ...headers, [TRACE_HEADER]: fastRef },
+        toolsCallBody(102, IDENTIFIER_TOOL, otherArgs)
+      );
+      const fastBody = await readJsonRpc(fast);
+      expect(fast.status).toBe(200);
+      expect(fastBody.id).toBe(102);
+      expect(JSON.parse(fastBody.result!.content![0].text).entities).toEqual([
+        expect.objectContaining({ id: fastId, snapshot: { title: otherArgs.identifier } }),
+      ]);
+      expect(fast.headers.has(TRACE_HEADER)).toBe(false);
+
+      // The real SSE response can send headers before the underlying read ends.
+      await Promise.race([
+        responseHeaders.wait,
+        delay(1_000).then(() => {
+          throw new Error("SSE headers did not arrive while the real lookup was pending");
+        }),
+      ]);
+      await delay(65);
+      release.open();
+      const slowResponse = await slow;
+      expect(slowResponse.status).toBe(200);
+      expect(slowResponse.headers.has(TRACE_HEADER)).toBe(false);
+      const slowBody = await readJsonRpc(slowResponse);
+      expect(slowBody.id).toBe(101);
+      expect(JSON.parse(slowBody.result!.content![0].text).entities).toEqual([
+        expect.objectContaining({ id: slowId, snapshot: { title: delayedArgs.identifier } }),
+      ]);
+      expect(lookup).toHaveBeenCalledTimes(2);
+
+      const records = timingRecords(info.mock.calls);
+      expect(records.map(({ trace_id }) => trace_id)).toEqual([fastRef, slowRef]);
+      const [fastTiming, slowTiming] = records;
+      expect(slowTiming).toEqual({
+        event: TRACE_EVENT,
+        trace_id: slowRef,
+        dispatch_ms: expect.any(Number),
+        completion_ms: expect.any(Number),
+        headers_ms: expect.any(Number),
+        finish_ms: expect.any(Number),
+        outcome: "returned",
+      });
+      expect(slowTiming.dispatch_ms).toBeGreaterThanOrEqual(50);
+      expect(slowTiming.completion_ms - slowTiming.dispatch_ms).toBeGreaterThanOrEqual(50);
+      expect(slowTiming.completion_ms - slowTiming.headers_ms).toBeGreaterThanOrEqual(50);
+      expect(slowTiming.finish_ms).toBeGreaterThanOrEqual(slowTiming.completion_ms);
+      expect(fastTiming.finish_ms - fastTiming.dispatch_ms).toBeLessThan(
+        slowTiming.completion_ms - slowTiming.dispatch_ms
+      );
+
+      const staleSession = randomUUID();
+      const recoveryRef = "4".repeat(32);
+      const recovery = await postRpc(
+        ctx.baseUrl,
+        { ...rpcHeaders(staleSession, TEST_BEARER), [TRACE_HEADER]: recoveryRef },
+        toolsCallBody(103, IDENTIFIER_TOOL, otherArgs)
+      );
+      expect(recovery.status).toBe(200);
+      expect(recovery.headers.get("mcp-session-id")).not.toBe(staleSession);
+      expect((await readJsonRpc(recovery)).result).toEqual(fastBody.result);
+      expect(timingRecords(info.mock.calls).map(({ trace_id }) => trace_id)).toEqual([
+        fastRef,
+        slowRef,
+        recoveryRef,
+      ]);
+    } finally {
+      release.open();
+      lookup.mockRestore();
+      info.mockRestore();
+      await teardownApp(ctx);
+    }
+  });
+
+  it("ignores disabled or untrusted lookup references and preserves successful and denied replies", async () => {
+    const ref = "3".repeat(32);
+    const body = toolsCallBody(110, IDENTIFIER_TOOL, lookupArgs("c"));
+    for (const lookupTiming of [false, true]) {
+      const ctx = await bootApp({ bearerToken: TEST_BEARER, lookupTiming });
+      const { logger } = await import("../../src/utils/logger.js");
+      const info = vi.spyOn(logger, "info");
+      try {
+        const accepted = await postRpc(ctx.baseUrl, rpcHeaders(randomUUID(), TEST_BEARER), body);
+        expect(accepted.status).toBe(200);
+        const baseline = await readJsonRpc(accepted);
+        expect(baseline.result).toBeDefined();
+        const session = accepted.headers.get("mcp-session-id")!;
+        const headers = rpcHeaders(session, TEST_BEARER);
+
+        if (!lookupTiming) {
+          const disabled = await postRpc(ctx.baseUrl, { ...headers, [TRACE_HEADER]: ref }, body);
+          expect(await readJsonRpc(disabled)).toEqual(baseline);
+          expect(timingRecords(info.mock.calls)).toEqual([]);
+          continue;
+        }
+
+        for (const value of ["short", "A".repeat(32), [ref, ref]]) {
+          const invalid = await postRpc(ctx.baseUrl, { ...headers, [TRACE_HEADER]: value }, body);
+          expect(invalid.status).toBe(200);
+          expect(await readJsonRpc(invalid)).toEqual(baseline);
+        }
+        const noBearer = await postRpc(
+          ctx.baseUrl,
+          { ...rpcHeaders(session), [TRACE_HEADER]: ref, "x-connection-id": "dev-local" },
+          body
+        );
+        expect(noBearer.status).toBe(200);
+        expect(await readJsonRpc(noBearer)).toEqual(baseline);
+
+        const denied = await postRpc(
+          ctx.baseUrl,
+          { ...rpcHeaders(session, "synthetic-invalid-token"), [TRACE_HEADER]: ref },
+          body
+        );
+        expect(denied.status).toBe(401);
+        expect((await readJsonRpc(denied)).error?.code).toBe(-32001);
+
+        const tracedHeaders = { ...headers, [TRACE_HEADER]: ref };
+        const modernCall = {
+          id: 110,
+          method: "tools/call",
+          params: { name: IDENTIFIER_TOOL, arguments: lookupArgs("c") },
+        };
+        const modernHeaders = { authorization: `Bearer ${TEST_BEARER}` };
+        const modernBaseline = await modernPost(ctx.baseUrl, modernCall, {
+          headers: modernHeaders,
+        });
+        const modern = await modernPost(ctx.baseUrl, modernCall, {
+          headers: { ...modernHeaders, [TRACE_HEADER]: ref },
+        });
+        expect(modern.status).toBe(200);
+        expect(modern.body).toEqual(modernBaseline.body);
+
+        for (const [name, args] of [
+          ["get_authenticated_user", {}],
+          [IDENTIFIER_TOOL, { ...lookupArgs("c"), identifier: "different-scope" }],
+        ] as const) {
+          const unscoped = toolsCallBody(111, name, args);
+          const normal = await postRpc(ctx.baseUrl, headers, unscoped);
+          const withRef = await postRpc(ctx.baseUrl, tracedHeaders, unscoped);
+          expect(await readJsonRpc(withRef)).toEqual(await readJsonRpc(normal));
+        }
+        const malformed = await postRpc(
+          ctx.baseUrl,
+          tracedHeaders,
+          toolsCallBody(112, IDENTIFIER_TOOL, { ...lookupArgs("c"), identifier: 123 })
+        );
+        expect((await readJsonRpc(malformed)).error).toBeDefined();
+        expect(timingRecords(info.mock.calls)).toEqual([]);
+
+        info.mockImplementation((...args) => {
+          if (timingRecords([args]).length > 0) throw new Error("Synthetic log sink failure");
+        });
+        const logFailure = await postRpc(ctx.baseUrl, tracedHeaders, body);
+        expect(logFailure.status).toBe(200);
+        expect(await readJsonRpc(logFailure)).toEqual(baseline);
+        expect(timingRecords(info.mock.calls)).toHaveLength(1);
+      } finally {
+        info.mockRestore();
+        await teardownApp(ctx);
+      }
     }
   });
 });
