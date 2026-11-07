@@ -625,10 +625,13 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       release: fixtureGate(),
       settled: fixtureGate(),
     }));
+    const failedArgs = lookupArgs("f");
     const originalLookup = handler.retrieveEntityByIdentifierWithFallback;
     const lookup = vi
       .spyOn(handler, "retrieveEntityByIdentifierWithFallback")
       .mockImplementation(async (params) => {
+        if (params.identifier === failedArgs.identifier)
+          throw new Error("Synthetic lookup failure");
         const fixture = held.find(({ args }) => args.identifier === params.identifier);
         if (!fixture) return originalLookup(params);
         fixture.entered.open();
@@ -679,12 +682,17 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       await during.entered.wait;
       await pending.headers;
       const normalRef = "7".repeat(32);
+      const normalClosed = fixtureGate();
+      ctx.httpServer.prependOnceListener("request", (_req, res) => {
+        res.once("close", normalClosed.open);
+      });
       const normal = await postRpc(
         ctx.baseUrl,
         headers(normalRef, sid, TEST_BEARER),
         toolsCallBody(203, IDENTIFIER_TOOL, lookupArgs("e"))
       );
       expect(normal.status).toBe(200);
+      await normalClosed.wait;
       await pending.abort();
       during.release.open();
       await during.settled.wait;
@@ -737,6 +745,31 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       });
       expect(records[2].close_ms).toBeGreaterThanOrEqual(records[2].headers_ms!);
       expect(records[2].close_ms).toBeGreaterThanOrEqual(records[2].dispatch_ms!);
+
+      const failedBody = toolsCallBody(206, IDENTIFIER_TOOL, failedArgs);
+      const failedRef = "a".repeat(32);
+      const ordinaryFailure = await postRpc(ctx.baseUrl, rpcHeaders(sid, TEST_BEARER), failedBody);
+      const tracedFailure = await postRpc(
+        ctx.baseUrl,
+        headers(failedRef, sid, TEST_BEARER),
+        failedBody
+      );
+      expect(tracedFailure.status).toBe(ordinaryFailure.status);
+      const ordinaryFailureBody = await readJsonRpc(ordinaryFailure);
+      expect(ordinaryFailureBody.error).toBeDefined();
+      expect(await readJsonRpc(tracedFailure)).toEqual(ordinaryFailureBody);
+      expect(timingRecords(info.mock.calls).slice(3)).toEqual([
+        {
+          event: TRACE_EVENT,
+          trace_id: failedRef,
+          terminal: "finish",
+          dispatch_ms: expect.any(Number),
+          completion_ms: expect.any(Number),
+          headers_ms: expect.any(Number),
+          finish_ms: expect.any(Number),
+          outcome: "threw",
+        },
+      ]);
     } finally {
       releaseRecovery.open();
       for (const fixture of held) fixture.release.open();
@@ -821,6 +854,11 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
           toolsCallBody(112, IDENTIFIER_TOOL, { ...lookupArgs("c"), identifier: 123 })
         );
         expect((await readJsonRpc(malformed)).error).toBeDefined();
+        const invalidRpc = JSON.stringify({ ...JSON.parse(body), id: null });
+        const invalidUntraced = await postRpc(ctx.baseUrl, headers, invalidRpc);
+        const invalidTraced = await postRpc(ctx.baseUrl, tracedHeaders, invalidRpc);
+        expect(invalidTraced.status).toBe(400);
+        expect(await readJsonRpc(invalidTraced)).toEqual(await readJsonRpc(invalidUntraced));
         expect(timingRecords(info.mock.calls)).toEqual([]);
 
         info.mockImplementation((...args) => {
