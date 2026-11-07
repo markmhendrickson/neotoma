@@ -147,8 +147,10 @@ import {
   getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   getCurrentMcpConnectionId,
+  getRequestContext,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { timeMcpIdentifierLookup } from "./services/mcp_lookup_timing.js";
 import type { AAuthAdmissionContext } from "./services/protected_entity_types.js";
 import {
   emitEntitySnapshotChange,
@@ -2597,6 +2599,7 @@ export class NeotomaServer {
             attributionDecision,
             aauthAdmission: admissionForThisRequest,
             authenticatedPrincipal: this.currentAuthenticatedPrincipal(),
+            mcpLookupTiming: getRequestContext()?.mcpLookupTiming,
           },
           () => this.executeTool(name, args)
         );
@@ -4617,15 +4620,20 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { entities, total, match_mode, hint } = await retrieveEntityByIdentifierWithFallback({
-      identifier: parsed.identifier,
-      entityType: parsed.entity_type,
-      userId,
-      limit: parsed.limit ?? 100,
-      by: parsed.by,
-      includeObservations: parsed.include_observations,
-      observationsLimit: parsed.observations_limit,
-    });
+    const { entities, total, match_mode, hint } = await timeMcpIdentifierLookup(
+      getRequestContext()?.mcpLookupTiming,
+      parsed,
+      () =>
+        retrieveEntityByIdentifierWithFallback({
+          identifier: parsed.identifier,
+          entityType: parsed.entity_type,
+          userId,
+          limit: parsed.limit ?? 100,
+          by: parsed.by,
+          includeObservations: parsed.include_observations,
+          observationsLimit: parsed.observations_limit,
+        })
+    );
 
     const response: Record<string, unknown> = { entities, total, match_mode };
     // Only surface `hint` when the handler populated it (id-shaped identifier

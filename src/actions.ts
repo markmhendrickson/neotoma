@@ -86,6 +86,10 @@ import {
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
+import {
+  createMcpLookupReceiptObserver,
+  observeMcpLookupResponse,
+} from "./services/mcp_lookup_timing.js";
 import { redactMemberAttribution } from "./services/attribution_redaction.js";
 import {
   createAgentIdentity as buildAgentIdentity,
@@ -318,6 +322,8 @@ export function getResolvedServerMode(): NeotomaSandboxModeName | null {
 }
 
 export const app = express();
+const mcpLookupReceiptObserver = createMcpLookupReceiptObserver();
+if (mcpLookupReceiptObserver) app.use(mcpLookupReceiptObserver);
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
 app.set("trust proxy", true);
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -2138,6 +2144,7 @@ app.all("/mcp", async (req, res) => {
       | string
       | undefined;
     let bearerValidated = false;
+    let primaryBearerValidated = false;
 
     // Development connection identities are assigned by this gate, not by the
     // client. A client-sent value is honoured only where the gate would assign
@@ -2187,6 +2194,7 @@ app.all("/mcp", async (req, res) => {
         // same grants. See src/services/bearer_slots.ts.
         const slot = matchConfiguredBearer(token);
         if (slot) {
+          primaryBearerValidated = slot === "primary";
           if (slot === "previous") {
             recordPreviousBearerUse({
               surface: "mcp",
@@ -2376,6 +2384,8 @@ app.all("/mcp", async (req, res) => {
     }
 
     // Legacy session path (2025-11-25 and earlier). Unchanged by #2070.
+    // A qualified lookup can disconnect while stale-session recovery is still pending.
+    const mcpLookupTiming = primaryBearerValidated ? observeMcpLookupResponse(req, res) : undefined;
     // Get or create transport
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
     let serverInstance: NeotomaServer | undefined = sessionId
@@ -2540,6 +2550,7 @@ app.all("/mcp", async (req, res) => {
         // The gate's resolved connection id: the MCP server reads this, never
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
+        mcpLookupTiming,
       },
       () => transport!.handleRequest(req, res, req.body)
     );
