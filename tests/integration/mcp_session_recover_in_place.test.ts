@@ -18,6 +18,8 @@ import { modernPost } from "../helpers/mcp_http_modern.js";
 const ENV_KEYS = [
   "NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD",
   "NEOTOMA_BEARER_TOKEN",
+  "NEOTOMA_BEARER_TOKEN_PREVIOUS",
+  "NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT",
   "NEOTOMA_DATA_DIR",
   "NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_HEADER",
   "NEOTOMA_DEBUG_MCP_LOOKUP_TRACE_TITLE_PREFIX",
@@ -77,6 +79,7 @@ function toolsCallBody(id: number, name: string, args: Record<string, unknown> =
 const TRACE_HEADER = "x-fixture-lookup-trace";
 const TRACE_TITLE_PREFIX = "fixture-lookup:";
 const TEST_BEARER = "synthetic-identifier-timing-bearer";
+const PREVIOUS_TEST_BEARER = "synthetic-retiring-identifier-bearer";
 const IDENTIFIER_TOOL = "retrieve_entity_by_identifier";
 const TRACE_EVENT = "mcp_identifier_lookup_timing";
 
@@ -142,14 +145,53 @@ function fixtureGate() {
   return { wait, open };
 }
 
+function abortableRpc(
+  server: ReturnType<typeof createServer>,
+  baseUrl: string,
+  headers: OutgoingHttpHeaders,
+  body: string,
+  incomplete = false
+) {
+  const receipt = fixtureGate();
+  const responseHeaders = fixtureGate();
+  const closed = fixtureGate();
+  server.prependOnceListener("request", (_req, res) => {
+    res.once("close", closed.open);
+    receipt.open();
+  });
+  const outgoing = request(
+    `${baseUrl}/mcp`,
+    { method: "POST", headers: { ...headers, "content-length": Buffer.byteLength(body) } },
+    (incoming) => {
+      incoming.on("error", () => {});
+      incoming.resume();
+      responseHeaders.open();
+    }
+  );
+  outgoing.on("error", () => {});
+  outgoing.setTimeout(5_000, () => outgoing.destroy());
+  if (incomplete) outgoing.write(body.slice(0, 1));
+  else outgoing.end(body);
+  return {
+    receipt: receipt.wait,
+    headers: responseHeaders.wait,
+    abort: async () => {
+      outgoing.destroy();
+      await closed.wait;
+    },
+  };
+}
+
 type TimingRecord = {
   event: string;
   trace_id: string;
-  dispatch_ms: number;
-  completion_ms: number;
-  headers_ms: number;
-  finish_ms: number;
-  outcome: string;
+  terminal: "finish" | "close";
+  dispatch_ms?: number;
+  completion_ms?: number;
+  headers_ms?: number;
+  finish_ms?: number;
+  close_ms?: number;
+  outcome?: string;
 };
 
 function timingRecords(calls: unknown[][]): TimingRecord[] {
@@ -168,7 +210,11 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
     restoreEnv();
   });
 
-  async function bootApp(opts?: { bearerToken?: string; lookupTiming?: boolean }): Promise<{
+  async function bootApp(opts?: {
+    bearerToken?: string;
+    lookupTiming?: boolean;
+    previousBearer?: string;
+  }): Promise<{
     baseUrl: string;
     httpServer: ReturnType<typeof createServer>;
     tmpRoot: string;
@@ -194,6 +240,15 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       process.env.NEOTOMA_BEARER_TOKEN = opts.bearerToken;
     } else {
       delete process.env.NEOTOMA_BEARER_TOKEN;
+    }
+    if (opts?.previousBearer) {
+      process.env.NEOTOMA_BEARER_TOKEN_PREVIOUS = opts.previousBearer;
+      process.env.NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT = new Date(
+        Date.now() + 60_000
+      ).toISOString();
+    } else {
+      delete process.env.NEOTOMA_BEARER_TOKEN_PREVIOUS;
+      delete process.env.NEOTOMA_BEARER_TOKEN_PREVIOUS_EXPIRES_AT;
     }
 
     vi.resetModules();
@@ -506,6 +561,7 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       expect(slowTiming).toEqual({
         event: TRACE_EVENT,
         trace_id: slowRef,
+        terminal: "finish",
         dispatch_ms: expect.any(Number),
         completion_ms: expect.any(Number),
         headers_ms: expect.any(Number),
@@ -513,11 +569,11 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
         outcome: "returned",
       });
       expect(slowTiming.dispatch_ms).toBeGreaterThanOrEqual(50);
-      expect(slowTiming.completion_ms - slowTiming.dispatch_ms).toBeGreaterThanOrEqual(50);
-      expect(slowTiming.completion_ms - slowTiming.headers_ms).toBeGreaterThanOrEqual(50);
-      expect(slowTiming.finish_ms).toBeGreaterThanOrEqual(slowTiming.completion_ms);
-      expect(fastTiming.finish_ms - fastTiming.dispatch_ms).toBeLessThan(
-        slowTiming.completion_ms - slowTiming.dispatch_ms
+      expect(slowTiming.completion_ms! - slowTiming.dispatch_ms!).toBeGreaterThanOrEqual(50);
+      expect(slowTiming.completion_ms! - slowTiming.headers_ms!).toBeGreaterThanOrEqual(50);
+      expect(slowTiming.finish_ms).toBeGreaterThanOrEqual(slowTiming.completion_ms!);
+      expect(fastTiming.finish_ms! - fastTiming.dispatch_ms!).toBeLessThan(
+        slowTiming.completion_ms! - slowTiming.dispatch_ms!
       );
 
       const staleSession = randomUUID();
@@ -542,6 +598,154 @@ describe("POST /mcp recover-in-place for stale sessions (#2100)", () => {
       await teardownApp(ctx);
     }
   });
+
+  it("records only reached stages when a qualified lookup connection closes", async () => {
+    const ctx = await bootApp({
+      bearerToken: TEST_BEARER,
+      previousBearer: PREVIOUS_TEST_BEARER,
+      lookupTiming: true,
+    });
+    const { logger } = await import("../../src/utils/logger.js");
+    const recovery = await import("../../src/mcp_http_session.js");
+    const handler = await import("../../src/shared/action_handlers/entity_identifier_handler.js");
+    const info = vi.spyOn(logger, "info");
+    const recoveryEntered = fixtureGate();
+    const releaseRecovery = fixtureGate();
+    const originalRecovery = recovery.completeSyntheticMcpHandshake;
+    const handshake = vi
+      .spyOn(recovery, "completeSyntheticMcpHandshake")
+      .mockImplementationOnce(async (transport) => {
+        recoveryEntered.open();
+        await releaseRecovery.wait;
+        return originalRecovery(transport);
+      });
+    const held = ["b", "c", "d"].map((suffix) => ({
+      args: lookupArgs(suffix),
+      entered: fixtureGate(),
+      release: fixtureGate(),
+      settled: fixtureGate(),
+    }));
+    const originalLookup = handler.retrieveEntityByIdentifierWithFallback;
+    const lookup = vi
+      .spyOn(handler, "retrieveEntityByIdentifierWithFallback")
+      .mockImplementation(async (params) => {
+        const fixture = held.find(({ args }) => args.identifier === params.identifier);
+        if (!fixture) return originalLookup(params);
+        fixture.entered.open();
+        await fixture.release.wait;
+        try {
+          return await originalLookup(params);
+        } finally {
+          fixture.settled.open();
+        }
+      });
+    const headers = (ref: string, sid: string, bearer?: string) => ({
+      ...rpcHeaders(sid, bearer),
+      [TRACE_HEADER]: ref,
+    });
+
+    try {
+      const earlyRef = "5".repeat(32);
+      const early = abortableRpc(
+        ctx.httpServer,
+        ctx.baseUrl,
+        headers(earlyRef, randomUUID(), TEST_BEARER),
+        toolsCallBody(200, IDENTIFIER_TOOL, lookupArgs("a"))
+      );
+      await recoveryEntered.wait;
+      await early.abort();
+      expect(timingRecords(info.mock.calls)).toEqual([
+        { event: TRACE_EVENT, trace_id: earlyRef, terminal: "close", close_ms: expect.any(Number) },
+      ]);
+      releaseRecovery.open();
+
+      const initialized = await postRpc(
+        ctx.baseUrl,
+        rpcHeaders(randomUUID(), TEST_BEARER),
+        toolsCallBody(201, "get_authenticated_user")
+      );
+      expect(initialized.status).toBe(200);
+      const sid = initialized.headers.get("mcp-session-id")!;
+      expect(sid).toBeTruthy();
+
+      const duringRef = "6".repeat(32);
+      const [during, previous, noBearer] = held;
+      const pending = abortableRpc(
+        ctx.httpServer,
+        ctx.baseUrl,
+        headers(duringRef, sid, TEST_BEARER),
+        toolsCallBody(202, IDENTIFIER_TOOL, during.args)
+      );
+      await during.entered.wait;
+      await pending.headers;
+      const normalRef = "7".repeat(32);
+      const normal = await postRpc(
+        ctx.baseUrl,
+        headers(normalRef, sid, TEST_BEARER),
+        toolsCallBody(203, IDENTIFIER_TOOL, lookupArgs("e"))
+      );
+      expect(normal.status).toBe(200);
+      await pending.abort();
+      during.release.open();
+      await during.settled.wait;
+
+      for (const [fixture, bearer] of [
+        [previous, PREVIOUS_TEST_BEARER],
+        [noBearer, undefined],
+      ] as const) {
+        const unqualified = abortableRpc(
+          ctx.httpServer,
+          ctx.baseUrl,
+          headers("8".repeat(32), sid, bearer),
+          toolsCallBody(204, IDENTIFIER_TOOL, fixture.args)
+        );
+        await fixture.entered.wait;
+        await unqualified.abort();
+        fixture.release.open();
+        await fixture.settled.wait;
+      }
+      const validBody = toolsCallBody(205, IDENTIFIER_TOOL, lookupArgs("e"));
+      const incomplete = abortableRpc(
+        ctx.httpServer,
+        ctx.baseUrl,
+        headers("9".repeat(32), sid, TEST_BEARER),
+        validBody,
+        true
+      );
+      await incomplete.receipt;
+      await incomplete.abort();
+      const denied = await postRpc(
+        ctx.baseUrl,
+        headers("0".repeat(32), sid, "synthetic-invalid-token"),
+        validBody
+      );
+      expect(denied.status).toBe(401);
+
+      const records = timingRecords(info.mock.calls);
+      expect(records.map(({ trace_id, terminal }) => [trace_id, terminal])).toEqual([
+        [earlyRef, "close"],
+        [normalRef, "finish"],
+        [duringRef, "close"],
+      ]);
+      expect(records[2]).toEqual({
+        event: TRACE_EVENT,
+        trace_id: duringRef,
+        terminal: "close",
+        dispatch_ms: expect.any(Number),
+        headers_ms: expect.any(Number),
+        close_ms: expect.any(Number),
+      });
+      expect(records[2].close_ms).toBeGreaterThanOrEqual(records[2].headers_ms!);
+      expect(records[2].close_ms).toBeGreaterThanOrEqual(records[2].dispatch_ms!);
+    } finally {
+      releaseRecovery.open();
+      for (const fixture of held) fixture.release.open();
+      lookup.mockRestore();
+      handshake.mockRestore();
+      info.mockRestore();
+      await teardownApp(ctx);
+    }
+  }, 10_000);
 
   it("ignores disabled or untrusted lookup references and preserves successful and denied replies", async () => {
     const ref = "3".repeat(32);

@@ -1,6 +1,14 @@
 import type { Request, Response } from "express";
+import {
+  CallToolRequestSchema,
+  JSONRPCRequestSchema,
+  SUPPORTED_PROTOCOL_VERSIONS,
+} from "@modelcontextprotocol/sdk/types.js";
 
+import { RetrieveEntityByIdentifierSchema } from "../shared/action_schemas.js";
 import { logger } from "../utils/logger.js";
+
+type Terminal = "finish" | "close";
 
 export type McpLookupTiming = {
   traceId: string;
@@ -10,6 +18,7 @@ export type McpLookupTiming = {
   dispatchedAt?: number;
   completedAt?: number;
   outcome?: "returned" | "threw";
+  terminal?: Terminal;
 };
 
 const pending = new WeakMap<Request, McpLookupTiming>();
@@ -45,47 +54,57 @@ export function createMcpLookupReceiptObserver(env: NodeJS.ProcessEnv = process.
   };
 }
 
-/** Only called on the legacy transport path after the configured primary bearer passes. */
+/** Only called after legacy HTTP admission with the configured primary bearer. */
 export function observeMcpLookupResponse(req: Request, res: Response): McpLookupTiming | undefined {
   try {
     const timing = pending.get(req);
-    if (!timing || Array.isArray(req.body) || req.body?.method !== "tools/call") return;
-    if (req.body.params?.name !== "retrieve_entity_by_identifier") return;
+    pending.delete(req);
+    if (!timing || !req.complete || res.destroyed || !isEligibleLookup(req, timing)) return;
 
     const originalWriteHead = res.writeHead;
     res.writeHead = function (this: Response, ...args: unknown[]) {
       const result = Reflect.apply(originalWriteHead, this, args) as Response;
       try {
         // Server commit time, distinct from the time a client sees the headers.
-        timing.headersAt ??= performance.now();
+        if (!timing.terminal) timing.headersAt ??= performance.now();
       } catch {
         // Preserve the response even if a timing sample cannot be taken.
       }
       return result;
     };
-    res.once("finish", () => {
+    const emit = (terminal: Terminal) => {
+      if (timing.terminal) return;
+      timing.terminal = terminal;
       try {
+        res.removeListener("finish", onFinish);
+        res.removeListener("close", onClose);
         const { headersAt, dispatchedAt, completedAt, outcome } = timing;
-        if (headersAt === undefined || dispatchedAt === undefined || completedAt === undefined) {
-          return;
-        }
-        const elapsed = (timestamp: number) =>
-          Math.round((timestamp - timing.receivedAt) * 1000) / 1000;
+        const elapsed = (timestamp: number | undefined) =>
+          timestamp === undefined
+            ? undefined
+            : Math.round((timestamp - timing.receivedAt) * 1000) / 1000;
+        const terminalMs = elapsed(performance.now());
         logger.info(
           JSON.stringify({
             event: "mcp_identifier_lookup_timing",
             trace_id: timing.traceId,
+            terminal,
             dispatch_ms: elapsed(dispatchedAt),
             completion_ms: elapsed(completedAt),
             headers_ms: elapsed(headersAt),
-            finish_ms: elapsed(performance.now()),
+            finish_ms: terminal === "finish" ? terminalMs : undefined,
+            close_ms: terminal === "close" ? terminalMs : undefined,
             outcome,
           })
         );
       } catch {
         // Diagnostics must not propagate from a response event.
       }
-    });
+    };
+    const onFinish = () => emit("finish");
+    const onClose = () => emit("close");
+    res.once("finish", onFinish);
+    res.once("close", onClose);
     return timing;
   } catch {
     return undefined;
@@ -94,19 +113,43 @@ export function observeMcpLookupResponse(req: Request, res: Response): McpLookup
 
 type LookupScope = { entity_type?: string; by?: string; identifier: string };
 
+function isScopedLookup(scope: LookupScope, titlePrefix: string): boolean {
+  return (
+    scope.entity_type === "event" &&
+    scope.by === "title" &&
+    scope.identifier.startsWith(titlePrefix) &&
+    /^[0-9a-f]{64}$/.test(scope.identifier.slice(titlePrefix.length))
+  );
+}
+
+function isEligibleLookup(req: Request, timing: McpLookupTiming): boolean {
+  // Mirror the legacy SDK's POST prerequisites without changing the HTTP response.
+  const accept = req.get("accept");
+  const version = req.get("mcp-protocol-version");
+  if (
+    !req.get("mcp-session-id") ||
+    !accept?.includes("application/json") ||
+    !accept.includes("text/event-stream") ||
+    !req.get("content-type")?.includes("application/json") ||
+    (version !== undefined && !SUPPORTED_PROTOCOL_VERSIONS.includes(version))
+  ) {
+    return false;
+  }
+  const rpc = JSONRPCRequestSchema.safeParse(req.body);
+  if (!rpc.success) return false;
+  const tool = CallToolRequestSchema.safeParse(rpc.data);
+  if (!tool.success || tool.data.params.name !== "retrieve_entity_by_identifier") return false;
+  const args = RetrieveEntityByIdentifierSchema.safeParse(tool.data.params.arguments);
+  return args.success && isScopedLookup(args.data, timing.titlePrefix);
+}
+
 /** Called after lookup arguments and authenticated store identity are validated. */
 export function timeMcpIdentifierLookup<T>(
   timing: McpLookupTiming | undefined,
   scope: LookupScope,
   lookup: () => Promise<T>
 ): Promise<T> {
-  if (
-    !timing ||
-    scope.entity_type !== "event" ||
-    scope.by !== "title" ||
-    !scope.identifier.startsWith(timing.titlePrefix) ||
-    !/^[0-9a-f]{64}$/.test(scope.identifier.slice(timing.titlePrefix.length))
-  ) {
+  if (!timing || timing.terminal || !isScopedLookup(scope, timing.titlePrefix)) {
     return lookup();
   }
   try {
@@ -128,8 +171,11 @@ async function completeLookupTiming<T>(
     return result;
   } finally {
     try {
-      timing.completedAt = performance.now();
-      timing.outcome = outcome;
+      // A close receipt is the snapshot of phases reached before disconnection.
+      if (!timing.terminal) {
+        timing.completedAt = performance.now();
+        timing.outcome = outcome;
+      }
     } catch {
       // Preserve the lookup result or original rejection.
     }

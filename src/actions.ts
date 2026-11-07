@@ -2384,6 +2384,8 @@ app.all("/mcp", async (req, res) => {
     }
 
     // Legacy session path (2025-11-25 and earlier). Unchanged by #2070.
+    // A qualified lookup can disconnect while stale-session recovery is still pending.
+    const mcpLookupTiming = primaryBearerValidated ? observeMcpLookupResponse(req, res) : undefined;
     // Get or create transport
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
     let serverInstance: NeotomaServer | undefined = sessionId
@@ -2548,7 +2550,7 @@ app.all("/mcp", async (req, res) => {
         // The gate's resolved connection id: the MCP server reads this, never
         // the request's X-Connection-Id header.
         mcpConnectionId: connectionIdHeader ?? null,
-        mcpLookupTiming: primaryBearerValidated ? observeMcpLookupResponse(req, res) : undefined,
+        mcpLookupTiming,
       },
       () => transport!.handleRequest(req, res, req.body)
     );
