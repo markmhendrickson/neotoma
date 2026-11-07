@@ -98,6 +98,30 @@ describe("CLI relationships create refusal detail (#2781)", () => {
     expect(exitCode).not.toBe(0);
   });
 
+  it("shows the code alone when the response has no message", async () => {
+    responseBody = { error_code: "capability_denied" };
+    const { output, exitCode } = await run(single);
+    expect(output).toContain("Failed to create relationship: capability_denied");
+    expect(output).not.toContain("capability_denied:");
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("shows the message alone when the response has no code", async () => {
+    responseBody = { message: DENIED_MESSAGE };
+    const { output, exitCode } = await run(single);
+    expect(output).toContain(`Failed to create relationship: ${DENIED_MESSAGE}`);
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("reads code and message from a nested error envelope", async () => {
+    responseBody = { error: { error_code: "capability_denied", message: DENIED_MESSAGE } };
+    const { output, exitCode } = await run(["relationships", "create", "--file", batchFile]);
+    expect(output).toContain(
+      `Failed to create relationships: capability_denied: ${DENIED_MESSAGE}`
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
   it("keeps the fixed message when the response has no code or message", async () => {
     responseBody = { unrelated: true };
     const one = await run(single);

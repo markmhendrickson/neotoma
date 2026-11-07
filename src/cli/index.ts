@@ -1556,6 +1556,13 @@ function formatRequestError(error: unknown): string {
  * is present) for a failed write. Reads only the envelope's code and message,
  * never the rest of the response. Returns undefined when neither is present so
  * the caller keeps its fixed message.
+ *
+ * Not built on `formatRequestError` (docs/foundation/principles.md
+ * #extend-the-mechanism-that-already-generalizes): that formatter always
+ * returns a string, falling back to `formatApiError`, which prints `detail`,
+ * a string `error` or `String(error)` and so would replace the fixed-message
+ * fallback with unrelated response content; it also appends `hint` for
+ * `code` envelopes, which a refusal line does not print.
  */
 export function refusalDetail(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
