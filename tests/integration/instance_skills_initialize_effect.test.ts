@@ -25,7 +25,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { InitializeRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "../../src/server.js";
@@ -376,7 +376,13 @@ describe("instance skill hints respect the config gate (#2046)", () => {
     await cleanupTestEntity(skillId);
   });
 
-  it("omits the section entirely when the flag is off, leaving instructions unchanged", async () => {
+  it("omits the section entirely when the flag is off, leaving instructions unchanged", async ({
+    onTestFinished,
+  }) => {
+    // A one-time package update notice is independent of the skill hint flag.
+    vi.stubEnv("NO_UPDATE_NOTIFIER", "1");
+    onTestFinished(() => vi.unstubAllEnvs());
+
     // Capture the instructions with the feature on, so "unchanged" can be
     // asserted against the real before-state rather than a guess at it.
     //
