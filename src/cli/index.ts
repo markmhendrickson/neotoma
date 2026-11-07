@@ -1551,6 +1551,35 @@ function formatRequestError(error: unknown): string {
   return formatApiError(error);
 }
 
+/**
+ * #2781: the server's refusal as `<code>: <message>` (or whichever of the two
+ * is present) for a failed write. Reads only the envelope's code and message,
+ * never the rest of the response. Returns undefined when neither is present so
+ * the caller keeps its fixed message.
+ */
+export function refusalDetail(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const envelope = error as {
+    error_code?: unknown;
+    code?: unknown;
+    message?: unknown;
+    error?: unknown;
+  };
+  if (envelope.error && typeof envelope.error === "object") return refusalDetail(envelope.error);
+  const code =
+    typeof envelope.error_code === "string" && envelope.error_code.length > 0
+      ? envelope.error_code
+      : typeof envelope.code === "string" && envelope.code.length > 0
+        ? envelope.code
+        : undefined;
+  const message =
+    typeof envelope.message === "string" && envelope.message.length > 0
+      ? envelope.message
+      : undefined;
+  if (code && message) return `${code}: ${message}`;
+  return code ?? message;
+}
+
 function parseOptionalJson(value?: string): unknown {
   if (!value) {
     return undefined;
@@ -14417,7 +14446,12 @@ relationshipsCommand
           ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
         } as any,
       });
-      if (error) throw new Error("Failed to create relationships");
+      if (error) {
+        const detail = refusalDetail(error);
+        throw new Error(
+          detail ? `Failed to create relationships: ${detail}` : "Failed to create relationships"
+        );
+      }
       writeOutput(data, outputMode);
       return;
     }
@@ -14435,7 +14469,12 @@ relationshipsCommand
         ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
-    if (error) throw new Error("Failed to create relationship");
+    if (error) {
+      const detail = refusalDetail(error);
+      throw new Error(
+        detail ? `Failed to create relationship: ${detail}` : "Failed to create relationship"
+      );
+    }
     const rel = data as any;
     writeOutput(
       {
