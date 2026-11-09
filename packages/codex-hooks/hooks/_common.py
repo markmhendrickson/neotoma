@@ -18,6 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).parent))
+from capture_policy import redact_secret_text  # type: ignore  # noqa: E402
+
 try:
     from neotoma_client import NeotomaClient  # type: ignore
 except Exception:  # pragma: no cover
@@ -214,7 +217,7 @@ _PHONE_RE = re.compile(r"\b(?:\+?\d[\s-]?){7,}\d\b")
 def scrub_error_message(raw: Any) -> str:
     if raw is None:
         return ""
-    text = raw if isinstance(raw, str) else str(raw)
+    text = redact_secret_text(raw if isinstance(raw, str) else str(raw))
     text = _EMAIL_RE.sub("<EMAIL>", text)
     text = _TOKEN_RE.sub("<TOKEN>", text)
     text = _UUID_RE.sub("<UUID>", text)

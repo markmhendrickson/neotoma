@@ -33,6 +33,14 @@ import {
   type StoreResult,
 } from "@neotoma/client";
 
+import {
+  WITHHELD_SECRET_PATH_SUMMARY,
+  describeToolCapture,
+  redactSecretText,
+  summarizeInvocationShape,
+  toolInputMentionsSecretPath,
+} from "./capture_policy.js";
+
 export interface NeotomaOpenCodeOptions {
   baseUrl?: string;
   token?: string;
@@ -89,17 +97,6 @@ function extractIdentifiers(prompt: string): string[] {
     if (found.size >= 5) break;
   }
   return [...found];
-}
-
-function summarize(value: unknown, maxLen = 400): string {
-  let text: string;
-  try {
-    text = typeof value === "string" ? value : JSON.stringify(value);
-  } catch {
-    return "<unserializable>";
-  }
-  if (!text) return "";
-  return text.length <= maxLen ? text : `${text.slice(0, maxLen - 3)}...`;
 }
 
 function makeIdempotencyKey(
@@ -182,7 +179,7 @@ function homeDirPattern(): RegExp | null {
 
 function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
-  let text = typeof raw === "string" ? raw : String(raw);
+  let text = redactSecretText(typeof raw === "string" ? raw : String(raw));
   text = text.replace(
     /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
     "<EMAIL>"
@@ -232,11 +229,6 @@ function extractErrorMessage(toolError: unknown, toolOutput: unknown): string {
     }
   }
   return "";
-}
-
-function extractInvocationShape(toolInput: unknown): string[] {
-  if (!toolInput || typeof toolInput !== "object") return [];
-  return Object.keys(toolInput as Record<string, unknown>).slice(0, 32);
 }
 
 interface FailureCounterEntry {
@@ -881,8 +873,13 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
               tool_name: toolName,
               turn_key: `${sessionId}:${turnId}`,
               has_error: hasError,
-              input_summary: summarize(event.tool?.input),
-              output_summary: summarize(event.tool?.output),
+              // Metadata-only for read-type tools; redacted bounded summary
+              // otherwise; nothing for secret-bearing paths.
+              ...describeToolCapture({
+                toolName,
+                toolInput: event.tool?.input,
+                toolOutput: event.tool?.output,
+              }),
               ...harnessProvenance(cwd, { hook_event: "tool.called" }),
             },
           ],
@@ -911,7 +908,9 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
           event.tool?.output
         );
         const errorClass = classifyErrorMessage(rawError);
-        const scrubbed = scrubErrorMessage(rawError);
+        const scrubbed = toolInputMentionsSecretPath(event.tool?.input)
+          ? WITHHELD_SECRET_PATH_SUMMARY
+          : scrubErrorMessage(rawError);
         const counter = incrementFailureCounter(
           sessionId,
           toolName,
@@ -922,7 +921,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
           tool_name: toolName,
           error_class: errorClass,
           error_message_redacted: scrubbed,
-          invocation_shape: extractInvocationShape(event.tool?.input),
+          invocation_shape: summarizeInvocationShape(event.tool?.input),
           turn_key: `${sessionId}:${turnId}`,
           hit_count_session: counter.count,
           ...harnessProvenance(cwd, { hook_event: "tool.called.failure" }),

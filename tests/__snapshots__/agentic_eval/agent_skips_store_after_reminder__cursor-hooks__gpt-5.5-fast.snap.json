@@ -48,10 +48,14 @@
             "harness": "cursor",
             "has_error": false,
             "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
             "input_summary": "{\"path\":\"/tmp/example.txt\"}",
             "invoked_at": "<ts>",
-            "output_summary": "{\"content\":\"Hello world\"}",
+            "output_bytes": 25,
+            "output_capture": "metadata_only",
+            "output_summary": "[output not stored]",
             "status": null,
+            "target_path": "/tmp/example.txt",
             "tool_name": "Read",
             "turn_key": "agent_skips_store_after_reminder__cursor-hooks__gpt-5.5-fast:turn-1"
           }

@@ -12,6 +12,11 @@
 import { buildToolDefinitions } from "./tool_definitions.js";
 import { initDatabase } from "./db.js";
 import { NeotomaServer } from "./server.js";
+import {
+  WITHHELD_SECRET_PATH_SUMMARY,
+  redactSecretText,
+  toolInputMentionsSecretPath,
+} from "./services/hook_capture_policy.js";
 
 let serverInstance: NeotomaServer | null = null;
 let initPromise: Promise<NeotomaServer> | null = null;
@@ -225,12 +230,8 @@ function isNeotomaRelevantTool(toolName: string | undefined): boolean {
 
 function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
-  let text = typeof raw === "string" ? raw : String(raw);
+  let text = redactSecretText(typeof raw === "string" ? raw : String(raw));
   text = text.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<EMAIL>");
-  text = text.replace(
-    new RegExp("\\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\\b", "g"),
-    "<TOKEN>"
-  );
   text = text.replace(
     new RegExp("\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b", "gi"),
     "<UUID>"
@@ -641,7 +642,9 @@ const neotomaPlugin = {
                   entity_type: "tool_invocation_failure",
                   tool_name: event.toolName,
                   error_class: classifyErrorMessage(event.error),
-                  error_message_redacted: scrubErrorMessage(event.error),
+                  error_message_redacted: toolInputMentionsSecretPath(event.params)
+                    ? WITHHELD_SECRET_PATH_SUMMARY
+                    : scrubErrorMessage(event.error),
                   turn_key: `${ctx.sessionId ?? "openclaw-unknown"}:${turnId}`,
                   session_id: ctx.sessionId,
                   session_key: ctx.sessionKey,

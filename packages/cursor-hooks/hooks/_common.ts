@@ -22,6 +22,22 @@ import { basename, dirname, join } from "node:path";
 
 import { NeotomaClient, type StoreEntityInput } from "@neotoma/client";
 
+import { redactSecretText } from "./capture_policy.js";
+
+export {
+  WITHHELD_READ_SUMMARY,
+  WITHHELD_SECRET_PATH_SUMMARY,
+  describeToolCapture,
+  isHarmlessNonContentTool,
+  isReadTypeTool,
+  isSecretBearingPath,
+  isWriteTypeTool,
+  redactSecretText,
+  summarizeInvocationShape,
+  toolInputMentionsSecretPath,
+  type ToolCaptureFields,
+} from "./capture_policy.js";
+
 const NEOTOMA_BASE_URL = process.env.NEOTOMA_BASE_URL ?? "http://127.0.0.1:3080";
 const NEOTOMA_TOKEN = process.env.NEOTOMA_TOKEN ?? "dev-local";
 const NEOTOMA_LOG_LEVEL = (process.env.NEOTOMA_LOG_LEVEL ?? "warn").toLowerCase();
@@ -1039,7 +1055,7 @@ function homeDirPattern(): RegExp | null {
 export function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
   const text = typeof raw === "string" ? raw : String(raw);
-  let out = text;
+  let out = redactSecretText(text);
   out = out.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<EMAIL>");
   out = out.replace(/\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b/g, "<TOKEN>");
   out = out.replace(

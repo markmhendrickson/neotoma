@@ -26,6 +26,14 @@ import { join } from "node:path";
 
 import { NeotomaClient, recordConversationTurn, type StoreEntityInput } from "@neotoma/client";
 
+import {
+  WITHHELD_SECRET_PATH_SUMMARY,
+  describeToolCapture,
+  redactSecretText,
+  summarizeInvocationShape,
+  toolInputMentionsSecretPath,
+} from "./capture_policy.js";
+
 export interface NeotomaSdkAdapterOptions {
   baseUrl?: string;
   token?: string;
@@ -53,17 +61,6 @@ function extractIdentifiers(prompt: string): string[] {
     if (found.size >= 5) break;
   }
   return [...found];
-}
-
-function summarize(value: unknown, maxLen = 400): string {
-  let text: string;
-  try {
-    text = typeof value === "string" ? value : JSON.stringify(value);
-  } catch {
-    return "<unserializable>";
-  }
-  if (!text) return "";
-  return text.length <= maxLen ? text : `${text.slice(0, maxLen - 3)}...`;
 }
 
 function formatContext(
@@ -162,7 +159,7 @@ function homeDirPattern(): RegExp | null {
 function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
   const text = typeof raw === "string" ? raw : String(raw);
-  let out = text;
+  let out = redactSecretText(text);
   out = out.replace(
     /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
     "<EMAIL>"
@@ -227,27 +224,7 @@ function extractErrorMessage(toolOutput: unknown): string {
 }
 
 function extractInvocationShape(toolInput: unknown): Record<string, unknown> {
-  if (!toolInput || typeof toolInput !== "object") return {};
-  const record = toolInput as Record<string, unknown>;
-  const shape: Record<string, unknown> = {};
-  for (const key of [
-    "command",
-    "cmd",
-    "url",
-    "method",
-    "endpoint",
-    "path",
-    "operation",
-  ]) {
-    const value = record[key];
-    if (typeof value === "string") {
-      shape[key] = value.length > 120 ? `${value.slice(0, 117)}...` : value;
-    }
-  }
-  if (Array.isArray(record.entities)) {
-    shape.entity_count = record.entities.length;
-  }
-  return shape;
+  return summarizeInvocationShape(toolInput);
 }
 
 function hookStateDir(): string {
@@ -523,7 +500,9 @@ export function createNeotomaAgentHooks(
       if (hasError && isNeotomaRelevantTool(toolName, toolInput)) {
         const errorMessage = extractErrorMessage(toolOutput);
         const errorClass = classifyErrorMessage(errorMessage);
-        const scrubbed = scrubErrorMessage(errorMessage);
+        const scrubbed = toolInputMentionsSecretPath(toolInput)
+          ? WITHHELD_SECRET_PATH_SUMMARY
+          : scrubErrorMessage(errorMessage);
         const counter = incrementFailureCounter(sessionId, toolName, errorClass);
         try {
           const failureEntity: StoreEntityInput = {
@@ -557,8 +536,9 @@ export function createNeotomaAgentHooks(
               tool_name: toolName,
               turn_key: `${sessionId}:${turnId}`,
               has_error: hasError,
-              input_summary: summarize(toolInput),
-              output_summary: summarize(toolOutput),
+              // Metadata-only for read-type tools; redacted bounded summary
+              // otherwise; nothing for secret-bearing paths.
+              ...describeToolCapture({ toolName, toolInput, toolOutput }),
               ...harnessProvenance({ hook_event: "PostToolUse" }),
             },
           ],

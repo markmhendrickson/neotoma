@@ -29,6 +29,19 @@ except Exception:  # pragma: no cover
     NeotomaClientError = Exception  # type: ignore[assignment]
 
 
+from capture_policy import (  # type: ignore  # noqa: E402,F401
+    WITHHELD_READ_SUMMARY,
+    WITHHELD_SECRET_PATH_SUMMARY,
+    describe_tool_capture,
+    is_harmless_non_content_tool,
+    is_read_type_tool,
+    is_secret_bearing_path,
+    is_write_type_tool,
+    redact_secret_text,
+    summarize_invocation_shape,
+    tool_input_mentions_secret_path,
+)
+
 NEOTOMA_BASE_URL = os.environ.get("NEOTOMA_BASE_URL", "http://127.0.0.1:3080")
 NEOTOMA_TOKEN = os.environ.get("NEOTOMA_TOKEN") or None
 NEOTOMA_LOG_LEVEL = os.environ.get("NEOTOMA_LOG_LEVEL", "warn").lower()
@@ -248,7 +261,7 @@ def scrub_error_message(raw: Any) -> str:
     """Light PII scrub for short error messages persisted via hooks."""
     if raw is None:
         return ""
-    text = raw if isinstance(raw, str) else str(raw)
+    text = redact_secret_text(raw if isinstance(raw, str) else str(raw))
     text = _EMAIL_RE.sub("<EMAIL>", text)
     text = _TOKEN_RE.sub("<TOKEN>", text)
     text = _UUID_RE.sub("<UUID>", text)
@@ -310,17 +323,7 @@ def extract_error_message(tool_output: Any) -> str:
 
 
 def extract_invocation_shape(tool_input: Any) -> dict[str, Any]:
-    if not isinstance(tool_input, dict):
-        return {}
-    shape: dict[str, Any] = {}
-    for key in ("command", "cmd", "url", "method", "endpoint", "path", "operation"):
-        value = tool_input.get(key)
-        if isinstance(value, str):
-            shape[key] = value if len(value) <= 120 else value[:117] + "..."
-    entities = tool_input.get("entities")
-    if isinstance(entities, list):
-        shape["entity_count"] = len(entities)
-    return shape
+    return summarize_invocation_shape(tool_input)
 
 
 def _mcp_instructions_cache_path() -> Path:
