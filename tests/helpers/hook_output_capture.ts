@@ -8,7 +8,7 @@
  * drift apart.
  */
 
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,7 +31,6 @@ export interface CaptureExpectation {
   output_summary_excludes?: string[];
   input_summary_contains?: string[];
   input_summary_excludes?: string[];
-  has_output_sha256?: boolean;
   output_bytes?: number;
   output_summary_max_length?: number;
   output_summary_suffix?: string;
@@ -44,12 +43,65 @@ export interface CaptureVector {
   tool_input: unknown;
   tool_output: unknown;
   expect: CaptureExpectation;
+  /** Optional programmatic expansion of the input/output (limits that cannot be written inline). */
+  expand?: {
+    nest_depth?: number;
+    leaf?: string;
+    array_pad?: { key: string; count: number; value: string };
+    long_string?: { key: string; length: number };
+    output_long_string?: number;
+  };
+}
+
+export interface InvocationShapeVector {
+  name: string;
+  tool_input: unknown;
+  expect_shape: Record<string, unknown>;
+  excludes: string[];
 }
 
 export interface CaptureVectors {
   secret_paths: { secret: string[]; not_secret: string[] };
   redaction: RedactionVector[];
   captures: CaptureVector[];
+  invocation_shapes: InvocationShapeVector[];
+}
+
+/** Applies a vector's `expand` directive and returns the concrete input and output. */
+export function expandVector(vector: CaptureVector): { toolInput: unknown; toolOutput: unknown } {
+  let toolInput: unknown = structuredClone(vector.tool_input);
+  let toolOutput: unknown = structuredClone(vector.tool_output);
+  const e = vector.expand;
+  if (!e) return { toolInput, toolOutput };
+  const record = toolInput as Record<string, unknown>;
+  if (e.nest_depth !== undefined) {
+    let nested: unknown = e.leaf ?? "leaf";
+    for (let i = 0; i < e.nest_depth; i += 1) nested = { a: nested };
+    record.nested = nested;
+  }
+  if (e.array_pad) {
+    record[e.array_pad.key] = Array.from({ length: e.array_pad.count }, () => e.array_pad!.value);
+  }
+  if (e.long_string) {
+    record[e.long_string.key] = "x".repeat(e.long_string.length);
+  }
+  if (e.output_long_string !== undefined) {
+    toolOutput = "x".repeat(e.output_long_string);
+  }
+  return { toolInput, toolOutput };
+}
+
+/** Builds the shared symlink fixture: a benign-looking name that resolves to a secret-bearing file. */
+export function makeSymlinkFixture(root: string): { link: string; plain: string } {
+  const real = join(root, "real");
+  mkdirSync(real, { recursive: true });
+  const secretFile = join(real, ".env.fixture");
+  writeFileSync(secretFile, "FIXTURE-SECRET-BODY=1\n");
+  const plainFile = join(root, "notes.txt");
+  writeFileSync(plainFile, "plain\n");
+  const link = join(root, "innocent.txt");
+  symlinkSync(secretFile, link);
+  return { link, plain: plainFile };
 }
 
 export function loadCaptureVectors(): CaptureVectors {
@@ -100,13 +152,8 @@ export function expectCapture(vector: CaptureVector, fields: CapturedFields): vo
       needle
     );
   }
-  if (e.has_output_sha256 !== undefined) {
-    if (e.has_output_sha256) {
-      expect(fields.output_sha256, `${label}: output_sha256`).toMatch(/^[0-9a-f]{64}$/);
-    } else {
-      expect(fields.output_sha256, `${label}: no output_sha256`).toBeUndefined();
-    }
-  }
+  // No content hash is stored for any call: an unsalted hash of output is a lookup oracle.
+  expect(fields.output_sha256, `${label}: no output_sha256`).toBeUndefined();
   if (e.output_bytes !== undefined) {
     expect(fields.output_bytes, `${label}: output_bytes`).toBe(e.output_bytes);
   } else {

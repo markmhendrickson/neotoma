@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "hook_tool_output_not_persisted",
-    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, an ordinary shell command whose output carries a credential-shaped assignment, a file write, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks hook scripts (the other harness packages are covered by the shared-vector unit tests in tests/unit/hook_output_capture.test.ts, because the Python hook scripts need an HTTP client dependency that the CI eval lane does not install). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
+    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, an ordinary shell command whose output carries a credential-shaped assignment, a file write whose result echoes the written content, a file fetch by an MCP tool with no read word in its name, a secret-manager read command, a memory write that names a secret-bearing path under an unlisted argument name, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks hook scripts (the other harness packages are covered by the shared-vector unit tests in tests/unit/hook_output_capture.test.ts, because the Python hook scripts need an HTTP client dependency that the CI eval lane does not install). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
     "harnesses": [
       "cursor-hooks"
     ],
@@ -85,6 +85,70 @@
       }
     },
     {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "/Users/agent/workspace/notes/echo.md",
+          "content": "FIXTURE-FILE-BODY-EPSILON echoed content"
+        },
+        "tool_output": {
+          "type": "create",
+          "filePath": "/Users/agent/workspace/notes/echo.md",
+          "content": "FIXTURE-FILE-BODY-EPSILON echoed content",
+          "structuredPatch": [],
+          "originalFile": null
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_vcs_get_file_contents",
+        "tool_input": {
+          "owner": "fixture",
+          "repo": "app",
+          "path": "docs/notes.md"
+        },
+        "tool_output": {
+          "content": "FIXTURE-FILE-BODY-ZETA fetched file"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "op read op://fixture-vault/fixture-item/field"
+        },
+        "tool_output": {
+          "stdout": "fixture-placeholder-5"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_store",
+        "tool_input": {
+          "entities": [
+            {
+              "entity_type": "note",
+              "remark": "copied from /Users/agent/workspace/billing-service/.env"
+            }
+          ]
+        },
+        "tool_output": {
+          "entities": [
+            {
+              "entity_id": "ent_fixture_unlisted_key_001"
+            }
+          ]
+        }
+      }
+    },
+    {
       "hook": "postToolUseFailure",
       "payload": {
         "tool_name": "mcp_neotoma_store",
@@ -124,14 +188,6 @@
         "entity_type": "tool_invocation",
         "field": "output_capture",
         "matches": "^redacted_summary$",
-        "where": {
-          "tool_name": "Read"
-        }
-      },
-      {
-        "type": "field_present",
-        "entity_type": "tool_invocation",
-        "field": "output_sha256",
         "where": {
           "tool_name": "Read"
         }
@@ -184,6 +240,74 @@
         "entity_type": "tool_invocation_failure",
         "field": "error_message_redacted",
         "matches": "fixture-placeholder|API_KEY",
+        "where": {
+          "tool_name": "mcp_neotoma_store"
+        }
+      },
+      {
+        "type": "field_present",
+        "entity_type": "tool_invocation",
+        "field": "output_bytes",
+        "where": {
+          "tool_name": "Read"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "FIXTURE-FILE-BODY|fixture-placeholder",
+        "where": {
+          "tool_name": "Write"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "Write",
+          "output_capture": "metadata_only"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "FIXTURE-FILE-BODY|fixture-placeholder",
+        "where": {
+          "tool_name": "mcp_vcs_get_file_contents"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "mcp_vcs_get_file_contents",
+          "output_capture": "metadata_only"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "fixture-placeholder",
+        "where": {
+          "output_capture": "withheld_secret_path"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "mcp_neotoma_store",
+          "output_capture": "withheld_secret_path"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "ent_fixture_unlisted_key_001",
         "where": {
           "tool_name": "mcp_neotoma_store"
         }

@@ -109,7 +109,6 @@
             "invoked_at": "<ts>",
             "output_bytes": 62,
             "output_capture": "metadata_only",
-            "output_sha256": "372d175cfdbe67ec37969ef09b5539f25d6ae6164896996f47710d161f6c34dc",
             "output_summary": "[output text not stored: read-type tool]",
             "status": null,
             "target_path": "/Users/agent/workspace/lab_results.pdf",

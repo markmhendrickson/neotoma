@@ -24,6 +24,7 @@ import {
   isSecretBearingPath,
   redactSecretText,
   scrubErrorMessage,
+  summarizeInvocationShape,
   toolInputMentionsSecretPath,
 } from "../../packages/cursor-hooks/hooks/_common.js";
 import {
@@ -35,8 +36,10 @@ import { createNeotomaAgentHooks } from "../../packages/claude-agent-sdk-adapter
 import type { StoreInput, StoreResult } from "../../packages/client/src/types.js";
 import {
   expectCapture,
+  expandVector,
   expectRedaction,
   loadCaptureVectors,
+  makeSymlinkFixture,
   type CapturedFields,
 } from "../helpers/hook_output_capture.js";
 
@@ -68,12 +71,41 @@ describe("cursor-hooks capture policy", () => {
   });
 
   it.each(vectors.captures.map((v) => [v.name, v] as const))("captures: %s", (_name, vector) => {
+    const { toolInput, toolOutput } = expandVector(vector);
     const fields = describeToolCapture({
       toolName: vector.tool_name,
-      toolInput: vector.tool_input,
-      toolOutput: vector.tool_output,
+      toolInput,
+      toolOutput,
     }) as unknown as CapturedFields;
     expectCapture(vector, fields);
+  });
+
+  it.each(vectors.invocation_shapes.map((v) => [v.name, v] as const))(
+    "invocation shape: %s",
+    (_name, vector) => {
+      const shape = summarizeInvocationShape(vector.tool_input);
+      expect(shape).toEqual(vector.expect_shape);
+      for (const needle of vector.excludes) {
+        expect(JSON.stringify(shape)).not.toContain(needle);
+      }
+    }
+  );
+
+  it("withholds a read whose benign-looking path is a symlink to a secret-bearing file", () => {
+    const root = mkdtempSync(join(tmpdir(), "neotoma-hook-symlink-"));
+    try {
+      const { link, plain } = makeSymlinkFixture(root);
+      const viaLink = describeToolCapture({
+        toolName: "Read",
+        toolInput: { path: link },
+        toolOutput: { content: "FIXTURE-SECRET-BODY" },
+      });
+      expect(viaLink.output_capture).toBe("withheld_secret_path");
+      expect(isSecretBearingPath(link)).toBe(true);
+      expect(isSecretBearingPath(plain)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("scrubErrorMessage also redacts credential-shaped text", () => {
@@ -85,30 +117,26 @@ describe("cursor-hooks capture policy", () => {
     expect(toolInputMentionsSecretPath({ command: "cat ./.env.local | head" })).toBe(true);
     expect(toolInputMentionsSecretPath({ command: "ls src" })).toBe(false);
     expect(toolInputMentionsSecretPath({ path: "/work/app/.env" })).toBe(true);
-    // A free-text field that merely mentions a secret file is not a path.
-    expect(toolInputMentionsSecretPath({ data_source: "agent note about .env names" })).toBe(false);
+    // Fail closed: a secret-bearing name under ANY key (even free text) counts.
+    expect(toolInputMentionsSecretPath({ data_source: "agent note about .env names" })).toBe(true);
+    expect(toolInputMentionsSecretPath({ note: "an ordinary sentence" })).toBe(false);
   });
 
-  it("keeps the stored byte length and hash stable for the same output", () => {
-    const args = {
+  it("stores the output byte length and no content hash for a read", () => {
+    const fields = describeToolCapture({
       toolName: "Read",
       toolInput: { path: "/work/app/README.md" },
       toolOutput: "hello",
-    };
-    const a = describeToolCapture(args);
-    const b = describeToolCapture(args);
-    expect(a.output_sha256).toBe(b.output_sha256);
-    expect(a.output_bytes).toBe(5);
-    expect(a.output_sha256).toBe(
-      "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-    );
+    }) as unknown as Record<string, unknown>;
+    expect(fields.output_bytes).toBe(5);
+    expect(fields.output_sha256).toBeUndefined();
   });
 
   it("does not throw on unserializable output", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     const fields = describeToolCapture({
-      toolName: "custom_tool",
+      toolName: "mcp_neotoma_store",
       toolInput: {},
       toolOutput: cyclic,
     });
@@ -140,6 +168,10 @@ elif op == "scrub":
     out = {"result": mod.scrub_error_message(req["text"])}
 elif op == "mentions":
     out = {"result": mod.tool_input_mentions_secret_path(req["tool_input"])}
+elif op == "shape":
+    out = {"result": mod.summarize_invocation_shape(req["tool_input"])}
+elif op == "is_secret":
+    out = {"result": mod.is_secret_bearing_path(req["path"])}
 else:
     out = {"result": mod.describe_tool_capture(req["tool_name"], req["tool_input"], req["tool_output"])}
 sys.stdout.write(json.dumps(out))
@@ -171,27 +203,58 @@ describe("claude-code-plugin capture policy (python)", () => {
   });
 
   it.each(vectors.captures.map((v) => [v.name, v] as const))("captures: %s", (_name, vector) => {
+    const { toolInput, toolOutput } = expandVector(vector);
     const fields = runPython(hooksDir, {
       op: "capture",
       tool_name: vector.tool_name,
-      tool_input: vector.tool_input,
-      tool_output: vector.tool_output,
+      tool_input: toolInput,
+      tool_output: toolOutput,
     }).result as CapturedFields;
     expectCapture(vector, fields);
   });
 
+  it.each(vectors.invocation_shapes.map((v) => [v.name, v] as const))(
+    "invocation shape: %s",
+    (_name, vector) => {
+      const shape = runPython(hooksDir, { op: "shape", tool_input: vector.tool_input }).result;
+      expect(shape).toEqual(vector.expect_shape);
+      for (const needle of vector.excludes) {
+        expect(JSON.stringify(shape)).not.toContain(needle);
+      }
+    }
+  );
+
+  it("withholds a read whose benign-looking path is a symlink to a secret-bearing file", () => {
+    const root = mkdtempSync(join(tmpdir(), "neotoma-hook-symlink-py-"));
+    try {
+      const { link, plain } = makeSymlinkFixture(root);
+      const viaLink = runPython(hooksDir, {
+        op: "capture",
+        tool_name: "Read",
+        tool_input: { path: link },
+        tool_output: { content: "FIXTURE-SECRET-BODY" },
+      }).result as CapturedFields;
+      expect(viaLink.output_capture).toBe("withheld_secret_path");
+      expect(runPython(hooksDir, { op: "is_secret", path: link }).result).toBe(true);
+      expect(runPython(hooksDir, { op: "is_secret", path: plain }).result).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("matches the cursor-hooks implementation field for field", () => {
     for (const vector of vectors.captures) {
+      const { toolInput, toolOutput } = expandVector(vector);
       const py = runPython(hooksDir, {
         op: "capture",
         tool_name: vector.tool_name,
-        tool_input: vector.tool_input,
-        tool_output: vector.tool_output,
+        tool_input: toolInput,
+        tool_output: toolOutput,
       }).result as CapturedFields;
       const ts = describeToolCapture({
         toolName: vector.tool_name,
-        toolInput: vector.tool_input,
-        toolOutput: vector.tool_output,
+        toolInput,
+        toolOutput,
       }) as unknown as CapturedFields;
       expect(py, vector.name).toEqual(ts);
     }
@@ -212,6 +275,9 @@ describe("claude-code-plugin capture policy (python)", () => {
     expect(runPython(hooksDir, { op: "mentions", tool_input: { command: "ls src" } }).result).toBe(
       false
     );
+    expect(
+      runPython(hooksDir, { op: "mentions", tool_input: { remark: "see /w/.env" } }).result
+    ).toBe(true);
   });
 });
 
@@ -257,10 +323,11 @@ describe("opencode-plugin capture policy", () => {
   it.each(vectors.captures.map((v) => [v.name, v] as const))("captures: %s", async (_n, vector) => {
     const { client, stores } = makeOpenCodeClient();
     const hooks = neotomaPlugin({ client, cwd: "/repo", injectContext: false });
+    const { toolInput, toolOutput } = expandVector(vector);
     await hooks["tool.called"]({
       session: { id: "sess_capture" },
       turnId: "turn_1",
-      tool: { name: vector.tool_name, input: vector.tool_input, output: vector.tool_output },
+      tool: { name: vector.tool_name, input: toolInput, output: toolOutput },
     });
     const entity = stores
       .flatMap((s) => s.entities ?? [])
@@ -334,11 +401,12 @@ describe("claude-agent-sdk-adapter capture policy", () => {
       sessionId: "sdk_capture",
       logLevel: "silent",
     });
+    const { toolInput, toolOutput } = expandVector(vector);
     await hooks.PostToolUse({
       turn_id: "turn_1",
       tool_name: vector.tool_name,
-      tool_input: vector.tool_input,
-      tool_response: vector.tool_output,
+      tool_input: toolInput,
+      tool_response: toolOutput,
     });
     const entity = storedEntities().find((e) => e.entity_type === "tool_invocation");
     expect(entity, vector.name).toBeDefined();
@@ -365,5 +433,24 @@ describe("claude-agent-sdk-adapter capture policy", () => {
     const failure = storedEntities().find((e) => e.entity_type === "tool_invocation_failure");
     expect(failure).toBeDefined();
     expect(String(failure?.error_message_redacted)).not.toContain("fixture-placeholder");
+  });
+
+  it("stores only the length of command and url text in a failure's invocation shape", async () => {
+    bodies.length = 0;
+    const vector = vectors.invocation_shapes[0];
+    const hooks = createNeotomaAgentHooks({
+      baseUrl,
+      token: "fixture-token",
+      sessionId: "sdk_shape",
+      logLevel: "silent",
+    });
+    await hooks.PostToolUse({
+      turn_id: "turn_3",
+      tool_name: "mcp_neotoma_store",
+      tool_input: vector.tool_input,
+      tool_response: { error: "ERR_REJECTED boom" },
+    });
+    const failure = storedEntities().find((e) => e.entity_type === "tool_invocation_failure");
+    expect(failure?.invocation_shape).toEqual(vector.expect_shape);
   });
 });

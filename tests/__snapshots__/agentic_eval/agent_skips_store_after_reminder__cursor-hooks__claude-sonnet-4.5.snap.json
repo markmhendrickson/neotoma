@@ -53,7 +53,6 @@
             "invoked_at": "<ts>",
             "output_bytes": 25,
             "output_capture": "metadata_only",
-            "output_sha256": "38a663789de1b4176227b9594a6deacfa1027d2ef78197aa1d59bb57a667a61f",
             "output_summary": "[output text not stored: read-type tool]",
             "status": null,
             "target_path": "/tmp/example.txt",

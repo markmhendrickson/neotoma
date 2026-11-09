@@ -23,7 +23,28 @@
       "/home/user/.config/sops/age/keys.txt",
       "/home/user/.claude.json",
       "/work/app/service-account.json",
-      "**/.env*"
+      "**/.env*",
+      "/home/user/.bash_history",
+      "/home/user/.zsh_history",
+      "/home/user/.zshrc",
+      "/work/app/.git/config",
+      "/home/user/.config/gh/hosts.yml",
+      "/work/app/token.json",
+      "/work/app/auth.json",
+      "/work/wallet/wallet.dat",
+      "/work/app/mnemonic.txt",
+      "/work/app/keys.json",
+      "/work/app/application-prod.yml",
+      "/work/app/seed_phrase.txt",
+      "/home/user/.mcp.json",
+      "/work/app/refresh_token.txt",
+      "file:///work/billing/%2Eenv",
+      "file://localhost/work/billing/%2eenv.local",
+      "FILE:///work/billing/.env",
+      "/WORK/BILLING/.ENV",
+      "/Work/Billing/.Env.Local",
+      "/work/app/%2Essh/config",
+      "/work/app/Credentials.JSON"
     ],
     "not_secret": [
       "README.md",
@@ -38,7 +59,12 @@
       "/work/keys/id_ed25519.pub",
       "/work/app/secretary.md",
       "",
-      "/"
+      "/",
+      "/work/app/seed.ts",
+      "/work/app/shell.ts",
+      "/work/app/sh",
+      "/work/app/git/config.md",
+      "/work/app/profile.ts"
     ]
   },
   "redaction": [
@@ -174,6 +200,88 @@
         "hello world 12345"
       ],
       "excludes": []
+    },
+    {
+      "name": "space-separated password flag",
+      "input": "mysql -h db.example.test -u root --password fixturepass12 appdb",
+      "contains": [
+        "--password <REDACTED>",
+        "appdb"
+      ],
+      "excludes": [
+        "fixturepass12"
+      ]
+    },
+    {
+      "name": "attached short password flag",
+      "input": "mysql -u root -pFIXTUREPASS appdb",
+      "contains": [
+        "-p<REDACTED>",
+        "appdb"
+      ],
+      "excludes": [
+        "FIXTUREPASS"
+      ]
+    },
+    {
+      "name": "basic auth user flag",
+      "input": "curl -u fixtureuser:fixturepass https://example.test/api",
+      "contains": [
+        "https://example.test/api"
+      ],
+      "excludes": [
+        "fixturepass"
+      ]
+    },
+    {
+      "name": "short secret-name variable",
+      "input": "DB_PASS=fixture-placeholder-5 PORT=5432",
+      "contains": [
+        "DB_PASS=<REDACTED>",
+        "PORT=5432"
+      ],
+      "excludes": [
+        "fixture-placeholder-5"
+      ]
+    },
+    {
+      "name": "key-suffixed variable",
+      "input": "ENCRYPTION_KEY=fixture-placeholder-6\nNAME=visible",
+      "contains": [
+        "ENCRYPTION_KEY=<REDACTED>",
+        "NAME=visible"
+      ],
+      "excludes": [
+        "fixture-placeholder-6"
+      ]
+    },
+    {
+      "name": "token flag with equals",
+      "input": "tool --token=fixture-placeholder-7 --verbose",
+      "contains": [
+        "--verbose"
+      ],
+      "excludes": [
+        "fixture-placeholder-7"
+      ]
+    },
+    {
+      "name": "basic credentials",
+      "input": "Authorization: Basic ZmlmdHVyZXVzZXI6Zml4dHVyZXBhc3M=",
+      "contains": [
+        "Authorization: <REDACTED>"
+      ],
+      "excludes": [
+        "ZmlmdHVyZXVzZXI6Zml4dHVyZXBhc3M"
+      ]
+    },
+    {
+      "name": "long input still redacts the returned prefix",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx API_TOKEN=fixture-placeholder-8",
+      "contains": [],
+      "excludes": [
+        "fixture-placeholder-8"
+      ]
     }
   ],
   "captures": [
@@ -192,7 +300,6 @@
         "output_summary_excludes": [
           "FIXTURE-FILE-BODY"
         ],
-        "has_output_sha256": true,
         "target_path": "/work/app/README.md"
       }
     },
@@ -208,7 +315,6 @@
         "output_summary_excludes": [
           "FIXTURE-FILE-BODY"
         ],
-        "has_output_sha256": true,
         "output_bytes": 37
       }
     },
@@ -228,8 +334,7 @@
         "output_capture": "metadata_only",
         "output_summary_excludes": [
           "FIXTURE-FILE-BODY"
-        ],
-        "has_output_sha256": true
+        ]
       }
     },
     {
@@ -247,8 +352,7 @@
         "output_summary_excludes": [
           "FIXTURE-FILE-BODY",
           "Glucose"
-        ],
-        "has_output_sha256": true
+        ]
       }
     },
     {
@@ -270,7 +374,6 @@
         "input_summary_excludes": [
           "fixture-placeholder"
         ],
-        "has_output_sha256": false,
         "target_path": "/work/billing/.env"
       }
     },
@@ -287,8 +390,7 @@
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
           "FIXTURE-SECRET-BODY"
-        ],
-        "has_output_sha256": false
+        ]
       }
     },
     {
@@ -304,8 +406,7 @@
         "output_summary_excludes": [
           "fixture-placeholder",
           "API_KEY"
-        ],
-        "has_output_sha256": false
+        ]
       }
     },
     {
@@ -338,8 +439,7 @@
         "input_capture": "metadata_only",
         "output_summary_excludes": [
           "fixture-placeholder-3"
-        ],
-        "has_output_sha256": false
+        ]
       }
     },
     {
@@ -355,8 +455,7 @@
         "output_capture": "metadata_only",
         "output_summary_excludes": [
           "FIXTURE-FILE-BODY"
-        ],
-        "has_output_sha256": true
+        ]
       }
     },
     {
@@ -410,15 +509,14 @@
         ],
         "output_summary_excludes": [
           "fixture-placeholder-5"
-        ],
-        "has_output_sha256": false
+        ]
       }
     },
     {
       "name": "private key block in a non-read tool output is redacted",
-      "tool_name": "WebFetch",
+      "tool_name": "mcp_neotoma_retrieve_entities",
       "tool_input": {
-        "url": "https://example.test/page"
+        "entity_type": "note"
       },
       "tool_output": "intro -----BEGIN PRIVATE KEY-----\nFIXTURE-SECRET-BODY\n-----END PRIVATE KEY----- outro",
       "expect": {
@@ -449,7 +547,7 @@
       }
     },
     {
-      "name": "write tool stores input as metadata, never content",
+      "name": "write tool stores input and output as metadata, never content",
       "tool_name": "Write",
       "tool_input": {
         "path": "/work/app/src/new.ts",
@@ -460,16 +558,13 @@
       },
       "expect": {
         "input_capture": "metadata_only",
-        "output_capture": "redacted_summary",
+        "output_capture": "metadata_only",
         "input_summary_excludes": [
           "FIXTURE-FILE-BODY"
         ],
         "input_summary_contains": [
           "/work/app/src/new.ts",
           "contents"
-        ],
-        "output_summary_contains": [
-          "ok"
         ]
       }
     },
@@ -520,9 +615,540 @@
         ],
         "output_summary_contains": [
           "ent_fixture_001"
-        ],
-        "has_output_sha256": false
+        ]
       }
+    },
+    {
+      "name": "secret path under an unlisted argument name is withheld",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "entities": [
+          {
+            "entity_type": "note",
+            "remark": "copied from /work/billing/.env"
+          }
+        ]
+      },
+      "tool_output": {
+        "entities": [
+          {
+            "entity_id": "ent_fixture_002"
+          }
+        ]
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "input_capture": "metadata_only",
+        "output_summary_excludes": [
+          "ent_fixture_002"
+        ]
+      }
+    },
+    {
+      "name": "secret path under an unlisted key inside a shell tool is withheld",
+      "tool_name": "Shell",
+      "tool_input": {
+        "command": "npm test",
+        "opts": {
+          "cfg": "/work/app/.env.local"
+        }
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY ran 3 tests"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "secret path used as an object key is withheld",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "/work/billing/.env": "x"
+      },
+      "tool_output": {
+        "ok": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "secret path in a deeply nested input is withheld",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "a": 1
+      },
+      "tool_output": {
+        "ok": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      },
+      "expand": {
+        "nest_depth": 6,
+        "leaf": "/work/billing/.env"
+      }
+    },
+    {
+      "name": "input nested past the scan depth limit is withheld",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "a": 1
+      },
+      "tool_output": {
+        "ok": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      },
+      "expand": {
+        "nest_depth": 20,
+        "leaf": "benign"
+      }
+    },
+    {
+      "name": "input array past the scan limit is withheld even when benign",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "items": []
+      },
+      "tool_output": {
+        "ok": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      },
+      "expand": {
+        "array_pad": {
+          "key": "items",
+          "count": 1200,
+          "value": "benign"
+        }
+      }
+    },
+    {
+      "name": "input string past the scan limit is withheld even when benign",
+      "tool_name": "mcp_neotoma_store",
+      "tool_input": {
+        "note": ""
+      },
+      "tool_output": {
+        "ok": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      },
+      "expand": {
+        "long_string": {
+          "key": "note",
+          "length": 70000
+        }
+      }
+    },
+    {
+      "name": "output past the scan limit is withheld",
+      "tool_name": "Shell",
+      "tool_input": {
+        "command": "npm test"
+      },
+      "tool_output": "",
+      "expect": {
+        "output_capture": "withheld_secret_path"
+      },
+      "expand": {
+        "output_long_string": 300000
+      }
+    },
+    {
+      "name": "secret path spelled as a percent-encoded file URI is withheld",
+      "tool_name": "Read",
+      "tool_input": {
+        "path": "file:///work/billing/%2Eenv"
+      },
+      "tool_output": {
+        "content": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "secret path in a different letter case is withheld",
+      "tool_name": "Read",
+      "tool_input": {
+        "path": "/WORK/BILLING/.ENV"
+      },
+      "tool_output": {
+        "content": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "file-fetching tool without a read word in its name is metadata only",
+      "tool_name": "mcp_vcs_get_file_contents",
+      "tool_input": {
+        "owner": "fixture",
+        "repo": "app",
+        "path": "docs/notes.md"
+      },
+      "tool_output": {
+        "content": "FIXTURE-FILE-BODY notes"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "download tool is metadata only",
+      "tool_name": "mcp_storage_download_file",
+      "tool_input": {
+        "id": "fixture-id"
+      },
+      "tool_output": {
+        "data": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "unknown tool is metadata only by default",
+      "tool_name": "mcp_custom_frobnicate",
+      "tool_input": {
+        "id": "fixture-id"
+      },
+      "tool_output": {
+        "result": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "web fetch is metadata only by default",
+      "tool_name": "WebFetch",
+      "tool_input": {
+        "url": "https://example.test/page"
+      },
+      "tool_output": "FIXTURE-FILE-BODY page text",
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "planning tool keeps a redacted summary",
+      "tool_name": "AskQuestion",
+      "tool_input": {
+        "question": "Proceed with the fixture plan?"
+      },
+      "tool_output": {
+        "answer": "yes"
+      },
+      "expect": {
+        "output_capture": "redacted_summary",
+        "output_summary_contains": [
+          "yes"
+        ]
+      }
+    },
+    {
+      "name": "shell wrapper with bash -c is a read",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "bash -c 'cat docs/notes.md'"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY notes"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "shell loop body is a read",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "for f in docs/*.md; do echo \"$f\"; cat \"$f\"; done"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY notes"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "xargs and find -exec are reads",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "find docs -name '*.md' -exec tail -n 3 {} +"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY notes"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "git log with patches is a read",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "git log -p -n 2"
+      },
+      "tool_output": {
+        "stdout": "+FIXTURE-FILE-BODY added"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "input redirection is a read",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "wc -l < docs/notes.md"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY 3"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "secret manager read command withholds its output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "op read op://vault/item/field"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "keychain lookup command withholds its output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "security find-generic-password -s fixture-service -w"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "environment dump command withholds its output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "printenv"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "echoing a secret-named variable withholds its output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "echo $SERVICE_API_TOKEN"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "write result that echoes the written content stores no output text",
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "/work/app/src/new.ts",
+        "content": "FIXTURE-FILE-BODY export {};"
+      },
+      "tool_output": {
+        "type": "create",
+        "filePath": "/work/app/src/new.ts",
+        "content": "FIXTURE-FILE-BODY export {};",
+        "structuredPatch": [],
+        "originalFile": null
+      },
+      "expect": {
+        "input_capture": "metadata_only",
+        "output_capture": "metadata_only",
+        "input_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ],
+        "target_path": "/work/app/src/new.ts"
+      }
+    },
+    {
+      "name": "edit result that echoes the original file and the patch stores no output text",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "/work/app/src/existing.ts",
+        "old_string": "FIXTURE-OLD-BODY",
+        "new_string": "FIXTURE-NEW-BODY"
+      },
+      "tool_output": {
+        "filePath": "/work/app/src/existing.ts",
+        "oldString": "FIXTURE-OLD-BODY",
+        "newString": "FIXTURE-NEW-BODY",
+        "originalFile": "FIXTURE-FILE-BODY whole file FIXTURE-OLD-BODY",
+        "structuredPatch": [
+          {
+            "oldStart": 1,
+            "oldLines": 1,
+            "newStart": 1,
+            "newLines": 1,
+            "lines": [
+              "-FIXTURE-OLD-BODY",
+              "+FIXTURE-NEW-BODY"
+            ]
+          }
+        ],
+        "userModified": false,
+        "replaceAll": false
+      },
+      "expect": {
+        "input_capture": "metadata_only",
+        "output_capture": "metadata_only",
+        "input_summary_excludes": [
+          "FIXTURE-OLD-BODY",
+          "FIXTURE-NEW-BODY"
+        ],
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY",
+          "FIXTURE-OLD-BODY",
+          "FIXTURE-NEW-BODY"
+        ]
+      }
+    }
+  ],
+  "invocation_shapes": [
+    {
+      "name": "command text is never stored",
+      "tool_input": {
+        "command": "curl -u fixtureuser:fixturepass https://example.test/x?token=fixture-placeholder-9",
+        "url": "https://example.test/x?token=fixture-placeholder-9",
+        "method": "GET",
+        "entities": [
+          1,
+          2
+        ]
+      },
+      "expect_shape": {
+        "command": "<82 chars>",
+        "url": "<50 chars>",
+        "method": "<3 chars>",
+        "entity_count": 2
+      },
+      "excludes": [
+        "fixturepass",
+        "fixture-placeholder-9",
+        "curl"
+      ]
+    },
+    {
+      "name": "path and endpoint text is never stored",
+      "tool_input": {
+        "path": "/work/billing/.env",
+        "endpoint": "/internal/fixture",
+        "operation": "read"
+      },
+      "expect_shape": {
+        "path": "<18 chars>",
+        "endpoint": "<17 chars>",
+        "operation": "<4 chars>"
+      },
+      "excludes": [
+        ".env",
+        "internal"
+      ]
+    },
+    {
+      "name": "non-object input has no shape",
+      "tool_input": "plain",
+      "expect_shape": {},
+      "excludes": []
     }
   ]
 }
