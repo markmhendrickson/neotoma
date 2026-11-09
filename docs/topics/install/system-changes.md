@@ -2,7 +2,7 @@
 
 Installation, initialization, and host connection can affect different machines and configuration files.
 
-Applies to published v0.26.0 (`b6ae615`) and the release claims check on October 27th, 2026. Check the version and host path you actually use. A remote client connecting to an already operated instance does not need the Neotoma CLI installed on the client machine.
+This inventory describes the current package source. Base setup effects were checked against v0.26.0 (`b6ae615`) on October 27th, 2026 and did not change in published v0.27.0. The current source skill count includes unreleased additions; published v0.27.0 contains 12 installable skills. Check the version and host path you actually use. A remote client connecting to an already operated instance does not need the Neotoma CLI installed on the client machine.
 
 ## Choose the effect you intend
 
@@ -12,7 +12,7 @@ Before running a command, choose the [connection guide](https://neotoma.io/insta
 
 ## Files and permissions for a local installation
 
-`npm install -g neotoma@0.26.0` adds the CLI binary. `neotoma init` creates a config directory, two local SQLite databases (development and production profiles), and an environment file. By default, init also adds a Neotoma entry to Cursor's MCP configuration. Run `neotoma init --interactive` to choose each step.
+`npm install -g neotoma@0.27.0` adds the CLI binary. `neotoma init` creates a config directory, two local SQLite databases (development and production profiles), and an environment file. By default, init also adds a Neotoma entry to Cursor's MCP configuration. Run `neotoma init --interactive` to choose each step.
 
 The following inventory describes the local paths and effects exposed by the documented install and Claude Code setup flow. Other hosts use their own guide and can affect different host files. The paths and reset behavior are not a promise that a remote client writes to its own machine.
 
@@ -27,7 +27,7 @@ The following inventory describes the local paths and effects exposed by the doc
 | MCP entries `neotoma-dev` and `neotoma`, with separate databases; init adds one Cursor entry by default | `~/.cursor/mcp.json`, `.mcp.json`, `claude.json`, or selected host configuration | User or project | User-level Neotoma entries are stripped; project .mcp.json entries can remain when reset runs outside a Neotoma repository. |
 | CLI instruction files for Claude Code, Cursor, and Codex | `.cursor/rules/`, `.claude/rules/`, and the Codex equivalent | Project | Can remain when reset runs outside a Neotoma repository; remove manually. |
 | Claude Code plugin with five hooks, when `claude` is on `PATH` | The Claude plugin location | User | Not listed among what reset removes. |
-| Twelve Claude Code skills, when `~/.claude` exists | `~/.claude/skills/` | User | Not listed among what reset removes. |
+| Thirteen Claude Code skills, when `~/.claude` exists | `~/.claude/skills/` | User | Not listed among what reset removes. |
 | Claude Code allow rules `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)` | `.claude/settings.local.json` by default; `~/.claude/settings.json` with `--scope both` | Project or user | Not listed among what reset removes. |
 | Cursor command allowlist `neotoma *` and global npm install | `.cursor/allowlist.json` | Project | Not listed among what reset removes. `neotoma *` permits any Neotoma subcommand, including reset. |
 | Codex command approval `neotoma *` and global npm install | `~/.codex/config.toml` | User | Not listed among what reset removes. `neotoma *` permits any Neotoma subcommand, including reset. |

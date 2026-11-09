@@ -84,7 +84,7 @@ export function NotFound() {
           <div className="mb-10 flex flex-wrap gap-2">
             <Link
               to={localizePath("/", locale)}
-              className="inline-flex items-center rounded-md border border-border bg-foreground px-4 py-2 text-[14px] font-medium text-background no-underline transition-colors hover:bg-foreground/90 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="inline-flex items-center rounded-md border border-border bg-foreground px-4 py-2 text-[14px] font-medium !text-background no-underline transition-colors hover:bg-foreground/90 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <Home className="mr-2 h-4 w-4" aria-hidden />
               {dict.goHome}

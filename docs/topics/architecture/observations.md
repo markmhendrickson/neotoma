@@ -2,7 +2,7 @@
 
 An observation records a claim about an entity at a point in the record's history; a later claim does not edit the earlier one.
 
-Applies to v0.26.0 (`b6ae615`, published October 27th, 2026). The description was originally checked against source `4779784` on October 24th, 2026; that source is included in this release. Use the running instance contract for exact behavior.
+Applies to v0.27.0. The description was originally checked against source `4779784` on October 24th, 2026, and the correction rule below was checked against v0.27.0. Use the running instance contract for exact behavior.
 
 ## What an observation carries
 
@@ -14,9 +14,9 @@ An omitted field says less than an explicit value. For example, omitting a statu
 
 ## Corrections add evidence
 
-A correction creates another observation. The earlier observation remains inspectable, which lets a reader understand why the current value differs from the first recorded value. Corrections receive a distinct priority in the configured reduction path, but the effective result depends on the field's merge policy. Do not assume the same winner rule for every field.
+A correction creates another observation. The earlier observation remains inspectable, which lets a reader understand why the current value differs from the first recorded value. A correction stays authoritative on its field until a later correction replaces it, whatever the field's merge policy. An ordinary write does not displace it. Among several corrections, the field's merge policy still applies, so `merge_array_by_key` combines them by key.
 
-For a field whose policy is `last_write`, the later observed timestamp decides. For a field configured as `highest_priority`, the source priority and then defined tie breakers decide. Array merge policies have their own contribution rules. Read the policy for the entity type before predicting the winner.
+Where a field holds no correction, its merge policy decides among ordinary writes. For a field whose policy is `last_write`, the later observed timestamp decides. For a field configured as `highest_priority`, the source priority and then defined tie breakers decide. Array merge policies have their own contribution rules. Read the policy for the entity type before predicting the winner.
 
 ## Reinterpretation and history
 

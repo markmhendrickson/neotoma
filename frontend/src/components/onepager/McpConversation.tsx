@@ -119,6 +119,7 @@ export function McpConversation({ active }: { active: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const followTailRef = useRef(true);
+  const turnClockRef = useRef<{ phase: string; remaining: number } | null>(null);
   const [activeTurn, setActiveTurn] = useState(0);
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -169,21 +170,32 @@ export function McpConversation({ active }: { active: boolean }) {
   useEffect(() => {
     if (!active || !playing || !inView || !pageVisible || reduceMotion) return;
     const turn = currentTurns[activeTurn];
+    const phase = `${es ? "es" : "en"}:${activeTurn}:${running}`;
     const delay = running
       ? 1150
       : turn.kind === "tool"
         ? 2100
         : Math.min(6500, Math.max(2100, turn.text.trim().split(/\s+/).length * 160));
+    if (turnClockRef.current?.phase !== phase)
+      turnClockRef.current = { phase, remaining: delay };
+    const clock = turnClockRef.current;
+    const startedAt = Date.now();
+    let completed = false;
     const timer = window.setTimeout(() => {
+      completed = true;
+      clock.remaining = 0;
       if (running) setRunning(false);
       else {
         const next = Math.min(activeTurn + 1, currentTurns.length - 1);
         setActiveTurn(next);
         setRunning(currentTurns[next].kind === "tool");
       }
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [active, activeTurn, playing, running, inView, pageVisible, reduceMotion]);
+    }, clock.remaining);
+    return () => {
+      window.clearTimeout(timer);
+      if (!completed) clock.remaining = Math.max(0, clock.remaining - (Date.now() - startedAt));
+    };
+  }, [active, activeTurn, playing, running, inView, pageVisible, reduceMotion, es, currentTurns]);
   useEffect(() => {
     if (followTailRef.current && chatRef.current)
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -233,9 +245,19 @@ export function McpConversation({ active }: { active: boolean }) {
             role="region"
             aria-label={es ? "Conversación ilustrativa sobre una factura" : "Illustrative invoice conversation"}
             tabIndex={0}
-            onWheel={pauseForReading}
-            onTouchMove={pauseForReading}
-            onPointerDown={pauseForReading}
+            onWheel={(event) => {
+              const node = event.currentTarget;
+              const maximum = node.scrollHeight - node.clientHeight;
+              if (maximum > 1 && (
+                (event.deltaY < 0 && node.scrollTop > 0) ||
+                (event.deltaY > 0 && node.scrollTop < maximum)
+              )) pauseForReading();
+            }}
+            onPointerDown={(event) => {
+              // A touch pointer starts both page gestures and deliberate chat scrolling.
+              // Only the latter's actual scroll away from the tail pauses the transcript.
+              if (event.pointerType !== "touch") pauseForReading();
+            }}
             onScroll={(event) => {
               if (
                 event.currentTarget.scrollTop <
@@ -267,6 +289,7 @@ export function McpConversation({ active }: { active: boolean }) {
                     N
                   </span>
                   <span
+                    className="plan-mcp-typing-dots"
                     aria-hidden="true"
                     style={{ animationPlayState: canPlay && playing ? "running" : "paused" }}
                   >

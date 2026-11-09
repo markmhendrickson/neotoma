@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { BUNDLED_DOCS_FOOTER_COLUMNS as INSPECTOR_FOOTER_COLUMNS } from "../../inspector/src/lib/bundled_docs_links.js";
 import { getBundledDocsIndex } from "../../src/services/docs/index.js";
 import {
   BUNDLED_DOCS_FOOTER_COLUMNS,
@@ -23,6 +24,27 @@ describe("bundled docs nav", () => {
   const extraKnown = resolveExtraKnownFooterSlugs({
     docsRoot,
     env: { NODE_ENV: "production" },
+  });
+
+  it("keeps Inspector footer columns in sync with server footer columns", () => {
+    const serverColumns = BUNDLED_DOCS_FOOTER_COLUMNS.map((column) => ({
+      title: column.title,
+      links: column.links.map((link) => ({
+        label: link.label,
+        ...(link.slug.startsWith("http://") || link.slug.startsWith("https://")
+          ? { href: link.slug }
+          : { to: link.slug === "" ? "/docs" : `/docs/${link.slug}` }),
+      })),
+    }));
+    const inspectorColumns = INSPECTOR_FOOTER_COLUMNS.map((column) => ({
+      title: column.title,
+      links: column.links.map((link) => ({
+        label: link.label,
+        ...("href" in link ? { href: link.href } : { to: link.to }),
+      })),
+    }));
+
+    expect(inspectorColumns).toEqual(serverColumns);
   });
 
   it("quick-link slugs exist in the bundled docs index", () => {

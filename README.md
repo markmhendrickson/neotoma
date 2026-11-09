@@ -61,13 +61,13 @@ graph LR
 
 ## What you can do with it
 
-Neotoma v0.26.0 exposes 67 MCP tools and 112 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
+Neotoma v0.27.0 exposes 67 MCP tools and 112 REST paths in its OpenAPI spec. They cover largely the same capabilities, but the MCP server, the REST API, and the CLI are separate implementations, and some checks and attribution differ between them (see Known limitations). The capability surface includes:
 
 **Ingest and store.** Store structured records or raw files in one call. File ingestion extracts text from PDF (with a first-page image fallback), CSV (with adaptive chunking for large files), Parquet, JSON, and plain text; images and audio are stored as raw sources. A committed, keyed structured store started on v0.26.0 that stops partway finishes its missing observations on a same-key retry; a store carrying an interpretation returns `ERR_STORE_WRITE_INCOMPLETE`, and keys left over from earlier versions behave differently over MCP and HTTP (see Known limitations). See Known limitations.
 
 **Resolve, retrieve, and search.** Look up entities by identifier (name, email, and similar), resolve identity from multiple signals with confidence scoring, list observations, retrieve a field's provenance chain, traverse the relationship graph N hops, and pull a full graph neighborhood. When an embedding key is configured, semantic vector search runs over entity snapshots (stored locally in sqlite-vec); keyword filtering works without it.
 
-**Correct and evolve.** Submit corrections as high-priority observations, never edits; the earlier observation stays readable. Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
+**Correct and evolve.** Submit corrections as observations marked as corrections, never edits: a correction wins in the snapshot until a later correction for the same field replaces it, on array fields too, and the earlier observation stays readable. Schemas are inferred from your data, recommended from recurring unknown fields, and can be auto-enhanced or updated incrementally with versioning. New entity types work without any code change.
 
 **Relate and sequence.** Create typed relationships (for example `PART_OF`, `DEPENDS_ON`, `REFERS_TO`, `DUPLICATE_OF`), query timeline events across types and date ranges, and read an entity's observation history in a deterministic order.
 
@@ -111,12 +111,12 @@ neotoma init
 neotoma setup --tool claude-code
 ```
 
-In v0.26.0, `neotoma setup --tool claude-code` writes the MCP entries and more:
+In the current package source, `neotoma setup --tool claude-code` writes the MCP entries and more. The skill count below includes source changes not yet in published v0.27.0, which contains 12 installable skills; check the package version you actually use:
 
 - Two MCP entries in the project's `.mcp.json`: `neotoma-dev` (development profile, `neotoma.db`) and `neotoma` (production profile, `neotoma.prod.db`). They use separate databases, so an agent on one entry does not see what an agent on the other stored.
 - CLI instruction files for Claude Code, Cursor, and Codex in the project: `.claude/rules/neotoma_cli.mdc`, `.cursor/rules/neotoma_cli.mdc`, and `.codex/neotoma_cli.md`.
 - When `claude` is on your PATH, it runs `claude plugin marketplace add` and `claude plugin install` to install the Neotoma Claude Code plugin (five hooks). Without `claude` on PATH, setup writes everything else and then exits with status 1.
-- When `~/.claude` exists, it links 12 Neotoma skills into `~/.claude/skills`.
+- When `~/.claude` exists, it links 13 Neotoma skills into `~/.claude/skills`.
 
 It also adds two allow rules, `Bash(neotoma:*)` and `Bash(npm install -g neotoma:*)`, to `.claude/settings.local.json` (project scope, the default). The first is a wildcard: Claude Code then runs any `neotoma` command without asking, including destructive ones such as `neotoma reset`, `neotoma storage merge-db`, `neotoma backup restore`, and `neotoma processes kill`. `--scope both` also writes the rules to `~/.claude/settings.json`, and `--skip-permissions` writes none. For Cursor the same two rules go to `.cursor/allowlist.json`; for Codex they go to the user-level `~/.codex/config.toml` whatever the scope.
 
@@ -165,7 +165,7 @@ As agent use expands, reality fragments across chat histories, agent memories, f
 
 | Vision phase | What it means | Status |
 | --- | --- | --- |
-| **P0: Deterministic single-writer state** | Observations the write path does not edit, hash-derived entity IDs, deterministic reduction, field-level provenance, corrections as new observations, per-entity observation history | ✅ **Shipped**: in daily use; a later ordinary write can still replace a correction (see Known limitations) |
+| **P0: Deterministic single-writer state** | Observations the write path does not edit, hash-derived entity IDs, deterministic reduction, field-level provenance, corrections as new observations, per-entity observation history | ✅ **Shipped**: in daily use; a correction stays authoritative on its field until a later correction replaces it |
 | **P1: Multi-user state foundations** | Human and agent identities, attributed writes, tenant isolation, access controls, shared instances | 🟡 **Partially shipped**: hosted multi-user mode with `user_id` tenancy, per-agent identity (AAuth, optional hardware attestation), capability grants, guest tokens, peer federation. Not yet: organizations/workspaces, membership lifecycle, invitations, offboarding |
 | **P2: Authority over state** | Domain ownership, correction rights, supersession, policy ownership, temporary grants, disclosure logs | 🟡 **Mechanisms exist** (corrections, `SUPERSEDES` relationships, per-operation access controls); authority *semantics* (who may correct what, scoped by domain) are future work |
 | **P3: Multi-principal semantics** | Competing interpretations, disputed claims, official positions, consensus vs unresolved disagreement, field-level policies, historical validity | 🔜 Planned: interpretations are first-class today; dispute/official-position semantics are not |

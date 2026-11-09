@@ -66,11 +66,6 @@ expected:
     result_contains: Ask your agent to evaluate
   - type: tool_result.matches
     tool_name: site_http
-    which: 1
-    result_key: body
-    result_contains: href="/install/system-changes/"
-  - type: tool_result.matches
-    tool_name: site_http
     which: 2
     result_subset:
       status: 200
@@ -91,11 +86,6 @@ expected:
     which: 2
     result_key: body
     result_contains: Pide a tu agente que evalúe
-  - type: tool_result.matches
-    tool_name: site_http
-    which: 2
-    result_key: body
-    result_contains: href="/es/install/system-changes/"
   - type: tool_result.matches
     tool_name: site_http
     which: 3

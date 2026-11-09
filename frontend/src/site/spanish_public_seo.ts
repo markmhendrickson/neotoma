@@ -1,6 +1,7 @@
+import { SOCIAL_CARD } from "./social_card";
 /** Source-owned descriptions for the exact retained Spanish public shells. */
 export const SPANISH_PUBLIC_SEO: Record<string, { title: string; description: string }> = {
-  "/": { title: "Neotoma: sistema de registro para agentes de IA", description: "Neotoma conserva observaciones vinculadas a sus fuentes, valores actuales calculados y la procedencia de cada campo para los agentes conectados a la misma instancia." },
+  "/": { title: "Neotoma: sistema de registro para agentes de IA", description: SOCIAL_CARD.es.description },
   "/install": { title: "Instalar y conectar Neotoma", description: "Elige la ruta de conexión de tu herramienta, revisa los cambios en el sistema y comprueba la instancia y el perfil de datos configurados." },
   "/compare": { title: "Comparar memoria, recuperación y sistema de registro", description: "Compara el contexto de sesión, la búsqueda de documentos, los servicios de memoria y los registros con valores actuales verificables." },
   "/evaluate": { title: "Evaluar si Neotoma encaja", description: "Evalúa tu flujo de trabajo, tus herramientas y tus datos antes de instalar o importar información." },

@@ -168,7 +168,7 @@ describe("CLI peers commands (smoke)", () => {
         "--url",
         fixture.serverB.baseUrl,
         "--types",
-        "note,task,contact,person,peer_config",
+        "note,task,contact,person",
         "--direction",
         "bidirectional",
         "--sync-scope",

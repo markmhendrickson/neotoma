@@ -28,8 +28,8 @@ describe("published package guidance", () => {
       expect(connection.evidence.releasePin).toBe("b6ae615964bdc4ac2eed4bbd7b0429c4107afc0d");
   });
   it("pins the public install command to the verified npm release", () => {
-    expect(PUBLISHED_PACKAGE_VERSION).toBe("0.26.0");
-    expect(installCommands("claude-code")).toContain("npm install -g neotoma@0.26.0");
+    expect(PUBLISHED_PACKAGE_VERSION).toBe("0.27.0");
+    expect(installCommands("claude-code")).toContain("npm install -g neotoma@0.27.0");
     expect(installCommands("claude-code")).toContain("neotoma init");
   });
 });

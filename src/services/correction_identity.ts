@@ -1,14 +1,16 @@
 /**
- * What makes an observation a correction (issue #2341).
+ * What makes an observation a correction (issues #2033 and #2341).
  *
- * The reducer has to tell a correction from an ordinary write using the stored
- * observation alone, so that a later correction can replace an earlier one on
- * an array field instead of unioning with it.
+ * A correction is authoritative on its field until a later correction for the
+ * same field replaces it, whatever merge rule the field declares (#2033), and
+ * on a merge_array field a later correction replaces the whole array (#2341).
+ * To honour that, the reducer has to tell a correction from an ordinary write,
+ * and it has to do so from the stored observation alone.
  *
- * This module is the single definition. It is dependency-free so that the write
- * side (`createCorrection`, which imports the two constants below) and the read
- * side (the reducer) cannot drift apart, and so modules that mock the schema
- * registry in tests still get the real predicate.
+ * This module is the single definition. It is dependency-free so that the
+ * write side (`createCorrection`, which imports the two constants below) and
+ * the read side (the reducer) cannot drift apart, and so modules that mock the
+ * schema registry in tests still get the real predicate.
  *
  * Why a derived predicate and not a stored flag: it needs no schema change and
  * no backfill, and it recognises every correction already in the log, because
@@ -30,7 +32,16 @@
  * that combination reserved for `createCorrection`.
  */
 
-/** `source_priority` of every correction. */
+/**
+ * The rule as agents read it, in the `correct` tool description (MCP), the YAML
+ * mirror and the MCP spec. One definition so the prose cannot drift from the
+ * reducer: a test fails if any of those surfaces stops carrying it, including
+ * the merge_array_by_key exception.
+ */
+export const CORRECTION_RULE_TEXT =
+  "A correction stays authoritative on its field, whatever the field's merge rule and whatever the priority or source kind of any other write, until a later correction replaces it; among corrections the later one wins by deterministic recency, and on a merge_array field it replaces the whole array (merge_array_by_key fields excepted: corrections combine by key).";
+
+/** `source_priority` of every correction. The highest tier any in-tree writer uses for field data. */
 export const CORRECTION_SOURCE_PRIORITY = 1000;
 
 /** `specificity_score` of every correction. */

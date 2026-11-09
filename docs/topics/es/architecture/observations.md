@@ -2,7 +2,7 @@
 
 Una observación registra una afirmación sobre una entidad en un momento del historial; una afirmación posterior no edita la anterior.
 
-Se aplica a v0.26.0 (`b6ae615`, publicada el 27 de octubre de 2026). La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026; ese código está incluido en esta versión. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
+Se aplica a v0.27.0. La descripción se examinó originalmente en el código `4779784` el 24 de octubre de 2026, y la regla de las correcciones se comprobó en v0.27.0. Consulta el contrato de la instancia en ejecución para conocer su comportamiento exacto.
 
 ## Qué contiene una observación
 
@@ -14,9 +14,9 @@ Omitir un campo dice menos que aportar un valor explícito. Por ejemplo, omitir 
 
 ## Las correcciones añaden evidencia
 
-Una corrección crea otra observación. La anterior sigue disponible para examen, lo que permite entender por qué el valor actual difiere del primero registrado. Las correcciones reciben una prioridad propia en la vía de reducción configurada, pero el resultado efectivo depende de la política de combinación del campo. No presupongas que todos los campos siguen la misma regla para elegir el valor ganador.
+Una corrección crea otra observación. La anterior sigue disponible para examen, lo que permite entender por qué el valor actual difiere del primero registrado. Una corrección sigue siendo la referencia de su campo hasta que otra corrección posterior la sustituye, sea cual sea la política de combinación del campo. Una escritura ordinaria no la desplaza. Entre varias correcciones sigue aplicándose la política del campo, de modo que `merge_array_by_key` las combina por clave.
 
-En un campo con política `last_write`, decide la marca temporal observada más reciente. Con `highest_priority`, deciden la prioridad de fuente y luego los desempates definidos. Las políticas de combinación de arrays tienen reglas propias de contribución. Lee la política del tipo de entidad antes de predecir qué valor ganará.
+Si un campo no tiene ninguna corrección, su política de combinación decide entre las escrituras ordinarias. En un campo con política `last_write`, decide la marca temporal observada más reciente. Con `highest_priority`, deciden la prioridad de fuente y luego los desempates definidos. Las políticas de combinación de arrays tienen reglas propias de contribución. Lee la política del tipo de entidad antes de predecir qué valor ganará.
 
 ## Reinterpretación e historial
 

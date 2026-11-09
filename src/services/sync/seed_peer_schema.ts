@@ -85,6 +85,15 @@ const PEER_FIELDS: FieldSpec = [
   { name: "active", type: "boolean", required: true, description: "When false, peer is ignored" },
   { name: "last_sync_at", type: "date", description: "ISO last successful sync_peer run" },
   { name: "consecutive_failures", type: "number", description: "Failure counter for operators" },
+  {
+    name: "accept_governance_entity_types",
+    type: "array",
+    description:
+      "Operator opt-in: governance entity types (see PEER_GOVERNANCE_ENTITY_TYPES in " +
+      "remote_snapshot_admission.ts) this peer may supply. Empty or absent refuses all of " +
+      "them. Protected types and peer_config are never accepted from a peer, even if listed. " +
+      "Replaced as a whole on each write so an operator can narrow it.",
+  },
 ];
 
 function buildSchemaDefinition(): SchemaDefinition {

@@ -1,0 +1,97 @@
+meta:
+  id: atomic_correction_compare_only_guard
+  description: Runs compare-only correct_transaction participants against an isolated real server; unchanged guard has no observation, a later guard revision refuses a new writer, and exact replay remains idempotent.
+  tags:
+    - tier2
+    - correct-transaction
+    - compare-only
+    - idempotency
+seed_strategy: generated
+source_pattern: A consumer updates one agent-held record only while another scoped record remains at its reviewed revision.
+privacy_transform: Synthetic schema, titles, values and keys only; no PII.
+system_prompt: Use correct_transaction to change one scoped entity only while atomically comparing an unchanged second entity. Retry the exact committed request after the guard advances; reject a stale new write without partial effects.
+user_prompt: Seed two ready synthetic drafts and one unchanged source. Apply the first draft transition with the source as a compare-only guard, verify the source has no new observation, advance the source independently, refuse a stale transition of the second draft, replay the original transition exactly, and read all three snapshots.
+host_tools: []
+models:
+  - provider: stub
+    model: replay-only
+expected:
+  - type: mcp_tool.invocations
+    tool_name: correct_transaction
+    op: eq
+    value: 4
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 0
+    result_subset:
+      status: applied
+      entities:
+        - entity_id: ent_721001bcfee64e561dd21c6a
+          observation_count: 2
+          snapshot:
+            status: approved
+        - entity_id: ent_e80de22a92c0a3db09747543
+          observation_count: 1
+          snapshot:
+            remaining: 1
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 0
+    result_subset:
+      entity_id: ent_e80de22a92c0a3db09747543
+      observation_count: 1
+      snapshot:
+        remaining: 1
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 1
+    result_subset:
+      status: applied
+      entities:
+        - entity_id: ent_e80de22a92c0a3db09747543
+          observation_count: 2
+          snapshot:
+            remaining: 0
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 2
+    result_key: error.message
+    present: true
+  - type: tool_result.matches
+    tool_name: correct_transaction
+    which: 3
+    result_subset:
+      status: replayed
+      entities:
+        - entity_id: ent_721001bcfee64e561dd21c6a
+          observation_count: 2
+          snapshot:
+            status: approved
+        - entity_id: ent_e80de22a92c0a3db09747543
+          observation_count: 2
+          snapshot:
+            remaining: 0
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 1
+    result_subset:
+      entity_id: ent_721001bcfee64e561dd21c6a
+      observation_count: 2
+      snapshot:
+        status: approved
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 2
+    result_subset:
+      entity_id: ent_e80de22a92c0a3db09747543
+      observation_count: 2
+      snapshot:
+        remaining: 0
+  - type: tool_result.matches
+    tool_name: retrieve_entity_snapshot
+    which: 3
+    result_subset:
+      entity_id: ent_7c99c4347b6961e0e5bdde0f
+      observation_count: 1
+      snapshot:
+        status: ready

@@ -101,6 +101,7 @@ const correctionObservation = {
   schema_version: "1.0",
   source_id: null,                   // No source for corrections
   interpretation_id: null,       // No interpretation
+  observation_source: null,      // Never declared: public writes always stamp one, corrections never do
   observed_at: new Date(),
   specificity_score: 1.0,            // Maximum specificity
   source_priority: 1000,             // Overrides lower-priority observations
@@ -110,7 +111,7 @@ const correctionObservation = {
   user_id: "user_123",
 };
 ```
-**Key property:** Corrections persist across reinterpretation. Even if a source is reinterpreted with a new model, the correction observation remains and continues to override lower-priority AI-extracted values. Higher-priority sources remain authoritative; equal-priority ties follow the schema's source-kind precedence before deterministic recency.
+**Key property:** Corrections persist across reinterpretation. Even if a source is reinterpreted with a new model, the correction observation remains and continues to override lower-priority AI-extracted values. A correction also outlasts every other write to the same field, whatever the field's merge rule and whatever the other write's `source_priority` or `observation_source`, until a later correction replaces it; on a `merge_array` field the later correction replaces the whole array (merge_array_by_key fields excepted: corrections combine by key) ([reducer §3.6](reducer.md)).
 ### 2.2 Observation Storage
 Observations are stored in `observations` table:
 - Immutable once created

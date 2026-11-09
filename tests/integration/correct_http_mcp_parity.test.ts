@@ -139,6 +139,8 @@ describe("HTTP /correct ↔ MCP correct response parity (#1540)", () => {
       "unknown_field",
       "hint",
       "details",
+      "entity_version",
+      "replayed",
     ].sort();
     const mcpKeys = Object.keys(mcpBody).sort();
     const httpKeys = Object.keys(httpBody)
@@ -181,7 +183,15 @@ describe("HTTP /correct ↔ MCP correct response parity (#1540)", () => {
     expect(mcpBody.unknown_field).toBeUndefined();
     expect(httpBody.unknown_field).toBeUndefined();
 
-    const sharedKeys = ["observation_id", "entity_id", "field", "value", "message"].sort();
+    const sharedKeys = [
+      "observation_id",
+      "entity_id",
+      "field",
+      "value",
+      "message",
+      "entity_version",
+      "replayed",
+    ].sort();
     expect(Object.keys(mcpBody).sort()).toEqual(sharedKeys);
     expect(
       Object.keys(httpBody)

@@ -4,7 +4,7 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import * as ReactHelmetAsync from "react-helmet-async";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SeoHead } from "./SeoHead";
-import { injectRouteMetaIntoHtml } from "../site/seo_metadata";
+import { injectRouteMetaIntoHtml, resolveSeoMetadata } from "../site/seo_metadata";
 import App from "../App";
 
 vi.mock("@/components/MainApp", () => ({ MainApp: () => <main>Page</main> }));
@@ -22,6 +22,21 @@ afterEach(() => {
 });
 
 describe("route metadata after hydration", () => {
+  it.each(["/en/", "/es/", "/install", "/es/evaluate"])("keeps current localized social metadata after hydration: %s", async (routePath) => {
+    document.head.innerHTML = fallbackHead;
+    render(<HelmetProvider><SeoHead routePath={routePath} /></HelmetProvider>);
+    const expected = resolveSeoMetadata(routePath);
+    await waitFor(() => {
+      const tags = (selector: string) => document.head.querySelectorAll<HTMLMetaElement>(selector);
+      expect(tags('meta[property="og:image"]')).toHaveLength(1);
+      expect(tags('meta[property="og:image"]')[0].content).toBe(expected.ogImageUrl);
+      expect(tags('meta[name="twitter:image"]')[0].content).toBe(expected.ogImageUrl);
+      expect(tags('meta[property="og:image:alt"]')[0].content).toBe(expected.ogImageAlt);
+      expect(tags('meta[property="og:image:type"]')[0].content).toBe("image/png");
+      expect(tags('meta[name="theme-color"]')[0].content).toBe("#172b39");
+    });
+  });
+
   it("marks the static preview export noindex", () => {
     vi.stubEnv("SITE_PREVIEW", "1");
     const exported = new DOMParser().parseFromString(
