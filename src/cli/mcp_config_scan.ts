@@ -182,7 +182,7 @@ async function syncCodexUserConfig(
  * User-level MCP config paths by environment and OS.
  * Returns undefined if the path doesn't apply to current OS.
  */
-function getUserLevelConfigPaths(): { env: string; path: string }[] {
+export function getUserLevelConfigPaths(): { env: string; path: string }[] {
   const platform = os.platform();
   const homedir = os.homedir();
   const paths: { env: string; path: string }[] = [];
@@ -190,10 +190,10 @@ function getUserLevelConfigPaths(): { env: string; path: string }[] {
   // Cursor
   paths.push({ env: "Cursor", path: path.join(homedir, ".cursor", "mcp.json") });
 
-  // Claude Code
+  // Claude Desktop (claude_desktop_config.json belongs to the Claude Desktop app)
   if (platform === "darwin") {
     paths.push({
-      env: "Claude Code",
+      env: "Claude Desktop",
       path: path.join(
         homedir,
         "Library",
@@ -204,14 +204,14 @@ function getUserLevelConfigPaths(): { env: string; path: string }[] {
     });
   } else if (platform === "linux") {
     paths.push({
-      env: "Claude Code",
+      env: "Claude Desktop",
       path: path.join(homedir, ".config", "Claude", "claude_desktop_config.json"),
     });
   } else if (platform === "win32") {
     const appdata = process.env.APPDATA;
     if (appdata) {
       paths.push({
-        env: "Claude Code",
+        env: "Claude Desktop",
         path: path.join(appdata, "Claude", "claude_desktop_config.json"),
       });
     }
