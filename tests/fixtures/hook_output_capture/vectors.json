@@ -974,12 +974,12 @@
         "command": "op read op://vault/item/field"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -990,12 +990,12 @@
         "command": "security find-generic-password -s fixture-service -w"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1006,12 +1006,12 @@
         "command": "printenv"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1022,12 +1022,12 @@
         "command": "echo $SERVICE_API_TOKEN"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1143,12 +1143,12 @@
         "command": "/usr/bin/env"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1159,12 +1159,12 @@
         "command": "env -0"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1175,12 +1175,12 @@
         "command": "set"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1191,12 +1191,12 @@
         "command": "export -p"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1207,12 +1207,12 @@
         "command": "declare -p"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1223,12 +1223,12 @@
         "command": "compgen -e"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1303,12 +1303,12 @@
         "command": "fly ssh console -C \"env\""
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
@@ -1319,12 +1319,12 @@
         "command": "docker inspect fixture-container"
       },
       "tool_output": {
-        "stdout": "FIXTURE-SECRET-BODY"
+        "stdout": "FIXTURE-FILE-BODY"
       },
       "expect": {
         "output_capture": "withheld_secret_path",
         "output_summary_excludes": [
-          "FIXTURE-SECRET-BODY"
+          "FIXTURE-FILE-BODY"
         ]
       }
     },
