@@ -43,3 +43,11 @@ neotoma-codex-hooks --uninstall
 ## License
 
 MIT
+
+## Capture policy
+
+Codex hooks do not persist tool output. `hooks/capture_policy.py` is a byte-identical copy of the
+policy module in `packages/claude-code-plugin/hooks`; only its credential redaction is used (for
+persisted error messages). A repository test fails if the copy drifts, and the shared behaviour
+vectors exercise the redaction. If these hooks ever start recording tool calls, call
+`describe_tool_capture` and add a test for that path.

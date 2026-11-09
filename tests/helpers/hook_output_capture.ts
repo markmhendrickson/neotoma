@@ -35,6 +35,7 @@ export interface CaptureExpectation {
   output_summary_max_length?: number;
   output_summary_suffix?: string;
   target_path?: string;
+  target_path_absent?: boolean;
 }
 
 export interface CaptureVector {
@@ -169,5 +170,8 @@ export function expectCapture(vector: CaptureVector, fields: CapturedFields): vo
   }
   if (e.target_path !== undefined) {
     expect(fields.target_path, `${label}: target_path`).toBe(e.target_path);
+  }
+  if (e.target_path_absent) {
+    expect(fields.target_path, `${label}: no target_path`).toBeUndefined();
   }
 }

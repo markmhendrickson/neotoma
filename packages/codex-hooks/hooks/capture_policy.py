@@ -36,8 +36,8 @@ INPUT_ARRAY_CAP = 1000
 OUTPUT_SCAN_CAP = 262144
 RESOLVE_CAP = 256
 
-WITHHELD_SECRET_PATH_SUMMARY = "[withheld: secret-bearing path; output text not stored]"
-WITHHELD_READ_SUMMARY = "[output text not stored: read-type tool]"
+WITHHELD_SECRET_PATH_SUMMARY = "[output withheld]"
+WITHHELD_READ_SUMMARY = "[output not stored]"
 
 # ---------------------------------------------------------------------------
 # Secret-bearing paths
@@ -238,13 +238,8 @@ _CAPTURE_PATH_KEYS = frozenset(
         "targetfile",
         "target_directory",
         "notebook_path",
-        "uri",
         "directory",
         "dir",
-        "glob",
-        "glob_pattern",
-        "include",
-        "pattern",
     }
 )
 
@@ -266,7 +261,13 @@ _SECRET_SOURCE_COMMAND_RES = [
             re.I,
         ),
         (r"(?<![A-Za-z0-9_-])printenv(?![A-Za-z0-9_-])", re.I),
-        (r"(?:^|[;&|(\s])env\s*(?:$|[;&|)>])", 0),
+        (r"(?:^|[;&|(\s/])env(?:\s|$)", 0),
+        (r"(?:^|[;&|(\s])set\s*(?:$|[;&|)>])", 0),
+        (r"(?<![A-Za-z0-9_-])(?:export|declare|typeset)\s+-[A-Za-z]*p(?![A-Za-z0-9_-])", 0),
+        (r"(?<![A-Za-z0-9_-])compgen\s+-[A-Za-z]*e", 0),
+        (r"(?<![A-Za-z0-9_-])(?:fly|flyctl)\s+ssh", re.I),
+        (r"(?<![A-Za-z0-9_-])(?:docker|podman)\s+(?:exec|inspect|logs)(?![A-Za-z0-9_-])", re.I),
+        (r"(?<![A-Za-z0-9_-])kubectl\s+(?:exec|logs|describe)(?![A-Za-z0-9_-])", re.I),
         (r"/proc/[^\s/]+/environ", re.I),
         (r"\$\{?[A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASS|PASSWORD|PWD)[A-Za-z0-9_]*\}?", 0),
     )
@@ -301,6 +302,17 @@ def _string_mentions_secret_path(text: str, cap: int, ctx: _ScanContext) -> bool
     return False
 
 
+def _path_shaped_for_metadata(value: str) -> bool:
+    """A value is stored as path metadata only when it is path-shaped: no whitespace, no URL
+    scheme other than file:, and nothing for the redaction to change. Anything else (a search
+    pattern, a URL carrying credentials, credential-shaped text) is omitted."""
+    if not value or len(value) > 512 or re.search(r"\s", value):
+        return False
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value) and not re.match(r"^file:", value, re.I):
+        return False
+    return redact_secret_text(value) == value
+
+
 def _collect_input(tool_input: Any) -> tuple[list[str], bool, bool]:
     """Returns (path-key values, secret found, scan truncated)."""
     ctx = _ScanContext()
@@ -317,8 +329,12 @@ def _collect_input(tool_input: Any) -> tuple[list[str], bool, bool]:
             ctx.truncated = True
             return
         if isinstance(value, str):
-            if key.lower() in _CAPTURE_PATH_KEYS and len(paths) < 8:
-                paths.append(value[:512])
+            if (
+                key.lower() in _CAPTURE_PATH_KEYS
+                and len(paths) < 8
+                and _path_shaped_for_metadata(value)
+            ):
+                paths.append(value)
             if _string_mentions_secret_path(value, INPUT_STRING_CAP, ctx):
                 secret = True
             head = value[:INPUT_STRING_CAP] if len(value) > INPUT_STRING_CAP else value
@@ -472,14 +488,12 @@ def is_write_type_tool(tool_name: Any) -> bool:
 
 def is_harmless_non_content_tool(tool_name: Any, tool_input: Any) -> bool:
     """Positive classification of a tool as returning no file or fetched content: Neotoma's own
-    tools, a few planning/UI tools, and shell commands whose text contains no read-like program
-    or file-fetch verb. Anything else is treated as a content-returning tool and stored as
-    metadata only."""
+    tools and a few planning/UI tools. Shell commands are NOT harmless: a program name says
+    nothing about what it prints, so shell output is stored as metadata only like every other
+    unclassified tool."""
     name = tool_name if isinstance(tool_name, str) else ""
     if is_read_type_tool(name, tool_input) or is_write_type_tool(name):
         return False
-    if _shell_command_of(tool_input) is not None:
-        return True
     if _is_neotoma_family(name, tool_input):
         return True
     return any(t in _HARMLESS_TOOL_TOKENS for t in _tool_name_tokens(name))

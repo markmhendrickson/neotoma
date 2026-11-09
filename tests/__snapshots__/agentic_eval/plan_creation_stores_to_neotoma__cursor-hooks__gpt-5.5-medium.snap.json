@@ -127,7 +127,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 16,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "target_path": "/repo/.cursor/plans/add-rate-limiting_2a3f9c1b.plan.md",
             "tool_name": "Write",

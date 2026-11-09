@@ -37,6 +37,7 @@ import {
   WITHHELD_SECRET_PATH_SUMMARY,
   describeToolCapture,
   redactSecretText,
+  summarizeInvocationShape,
   toolInputMentionsSecretPath,
 } from "./capture_policy.js";
 
@@ -228,11 +229,6 @@ function extractErrorMessage(toolError: unknown, toolOutput: unknown): string {
     }
   }
   return "";
-}
-
-function extractInvocationShape(toolInput: unknown): string[] {
-  if (!toolInput || typeof toolInput !== "object") return [];
-  return Object.keys(toolInput as Record<string, unknown>).slice(0, 32);
 }
 
 interface FailureCounterEntry {
@@ -925,7 +921,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
           tool_name: toolName,
           error_class: errorClass,
           error_message_redacted: scrubbed,
-          invocation_shape: extractInvocationShape(event.tool?.input),
+          invocation_shape: summarizeInvocationShape(event.tool?.input),
           turn_key: `${sessionId}:${turnId}`,
           hit_count_session: counter.count,
           ...harnessProvenance(cwd, { hook_event: "tool.called.failure" }),

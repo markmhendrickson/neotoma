@@ -356,6 +356,21 @@ describe("opencode-plugin capture policy", () => {
     expect(String(failure?.error_message_redacted)).not.toContain("fixture-placeholder");
   });
 
+  it("stores only the length of command and url text in a failure's invocation shape", async () => {
+    const { client, stores } = makeOpenCodeClient();
+    const hooks = neotomaPlugin({ client, cwd: "/repo", injectContext: false });
+    const vector = vectors.invocation_shapes[0];
+    await hooks["tool.called"]({
+      session: { id: "sess_shape" },
+      turnId: "turn_3",
+      tool: { name: "mcp_neotoma_store", input: vector.tool_input, error: "ERR_REJECTED boom" },
+    });
+    const failure = stores
+      .flatMap((s) => s.entities ?? [])
+      .find((e) => e.entity_type === "tool_invocation_failure");
+    expect(failure?.invocation_shape).toEqual(vector.expect_shape);
+  });
+
   it("exposes the named plugin entry unchanged", async () => {
     const hooks = await NeotomaPlugin({ directory: "/workspace" });
     expect(typeof hooks.event).toBe("function");

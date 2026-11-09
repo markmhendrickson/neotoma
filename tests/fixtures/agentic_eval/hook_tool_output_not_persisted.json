@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "hook_tool_output_not_persisted",
-    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, an ordinary shell command whose output carries a credential-shaped assignment, a file write whose result echoes the written content, a file fetch by an MCP tool with no read word in its name, a secret-manager read command, a memory write that names a secret-bearing path under an unlisted argument name, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks hook scripts (the other harness packages are covered by the shared-vector unit tests in tests/unit/hook_output_capture.test.ts, because the Python hook scripts need an HTTP client dependency that the CI eval lane does not install). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
+    "description": "Hook capture regression: the passive tool_invocation record must not persist tool output text. Scripts a turn with an ordinary file read, a read of a secret-bearing config file, a shell command that dumps a file, shell commands (whose output is metadata only), a harmless tool whose output carries a credential-shaped assignment, a search whose pattern is credential-shaped, a file write whose result echoes the written content, a file fetch by an MCP tool with no read word in its name, a secret-manager read command, a memory write that names a secret-bearing path under an unlisted argument name, and a failed memory write that names a secret-bearing path. Asserts the stored records carry metadata only for reads (output_capture=metadata_only), nothing for the secret-bearing path (output_capture=withheld_secret_path), a redacted bounded summary for the ordinary command, and that no stored summary or error message contains any of the synthetic output text. Runs the real cursor-hooks hook scripts (the other harness packages are covered by the shared-vector unit tests in tests/unit/hook_output_capture.test.ts, because the Python hook scripts need an HTTP client dependency that the CI eval lane does not install). LIMIT, shared with every fixture in this lane: events are replayed hook payloads, so this exercises the hooks' capture policy, not what a live model chooses to read. All paths and values are synthetic placeholders.",
     "harnesses": [
       "cursor-hooks"
     ],
@@ -149,6 +149,43 @@
       }
     },
     {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "mcp_neotoma_retrieve_entities",
+        "tool_input": {
+          "entity_type": "note"
+        },
+        "tool_output": {
+          "note": "ran 12 tests\nAPI_TOKEN=fixture-placeholder-3\nall passed"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Shell",
+        "tool_input": {
+          "command": "fixture-cli auth print"
+        },
+        "tool_output": {
+          "stdout": "fixture-placeholder-6"
+        }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Grep",
+        "tool_input": {
+          "pattern": "API_TOKEN=fixture-placeholder-7",
+          "path": "/Users/agent/workspace/notes"
+        },
+        "tool_output": {
+          "matches": []
+        }
+      }
+    },
+    {
       "hook": "postToolUseFailure",
       "payload": {
         "tool_name": "mcp_neotoma_store",
@@ -216,23 +253,6 @@
         "matches": "FIXTURE-FILE-BODY|fixture-placeholder",
         "where": {
           "tool_name": "Shell"
-        }
-      },
-      {
-        "type": "entity_stored",
-        "entity_type": "tool_invocation",
-        "where": {
-          "tool_name": "Shell",
-          "output_capture": "redacted_summary"
-        }
-      },
-      {
-        "type": "field_present",
-        "entity_type": "tool_invocation",
-        "field": "output_summary",
-        "where": {
-          "tool_name": "Shell",
-          "output_capture": "redacted_summary"
         }
       },
       {
@@ -310,6 +330,58 @@
         "matches": "ent_fixture_unlisted_key_001",
         "where": {
           "tool_name": "mcp_neotoma_store"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "Shell",
+          "output_capture": "metadata_only"
+        }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "tool_invocation",
+        "where": {
+          "tool_name": "mcp_neotoma_retrieve_entities",
+          "output_capture": "redacted_summary"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "fixture-placeholder",
+        "where": {
+          "tool_name": "mcp_neotoma_retrieve_entities"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "output_summary",
+        "matches": "fixture-placeholder",
+        "where": {
+          "tool_name": "Shell"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "input_summary",
+        "matches": "fixture-placeholder",
+        "where": {
+          "tool_name": "Grep"
+        }
+      },
+      {
+        "type": "field_not_matches",
+        "entity_type": "tool_invocation",
+        "field": "target_path",
+        "matches": "fixture-placeholder|API_TOKEN",
+        "where": {
+          "tool_name": "Grep"
         }
       }
     ]

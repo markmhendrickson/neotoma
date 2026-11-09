@@ -127,7 +127,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 62,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "target_path": "/Users/agent/workspace/lab_results.pdf",
             "tool_name": "mcp_neotoma_parse_file",

@@ -30,15 +30,11 @@ import {
   runHook,
   turnContextFields,
   scrubErrorMessage,
+  summarizeInvocationShape,
   toolInputMentionsSecretPath,
   WITHHELD_SECRET_PATH_SUMMARY,
   updateTurnState,
 } from "./_common.js";
-
-function extractInvocationShape(toolInput: unknown): string[] {
-  if (!toolInput || typeof toolInput !== "object") return [];
-  return Object.keys(toolInput as Record<string, unknown>).slice(0, 32);
-}
 
 function extractErrorMessage(toolResult: Record<string, unknown>): string {
   const error = toolResult.error;
@@ -133,7 +129,7 @@ async function handle(
     tool_name: toolName,
     error_class: errorClass,
     error_message_redacted: scrubbed,
-    invocation_shape: extractInvocationShape(toolInput),
+    invocation_shape: summarizeInvocationShape(toolInput),
     turn_key: `${sessionId}:${turnId}`,
     observed_at: observedAt,
     hit_count_session: counter.count,

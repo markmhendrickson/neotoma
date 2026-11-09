@@ -491,7 +491,7 @@
       }
     },
     {
-      "name": "non-read shell command keeps a redacted bounded summary",
+      "name": "shell commands store metadata only even when they read no files",
       "tool_name": "Bash",
       "tool_input": {
         "command": "npm test"
@@ -500,15 +500,12 @@
         "stdout": "ran 12 tests\nAPI_TOKEN=fixture-placeholder-5\nall passed"
       },
       "expect": {
-        "output_capture": "redacted_summary",
+        "output_capture": "metadata_only",
         "input_capture": "redacted_summary",
-        "output_summary_contains": [
-          "ran 12 tests",
-          "API_TOKEN=<REDACTED>",
-          "all passed"
-        ],
         "output_summary_excludes": [
-          "fixture-placeholder-5"
+          "fixture-placeholder-5",
+          "ran 12 tests",
+          "all passed"
         ]
       }
     },
@@ -532,13 +529,13 @@
       }
     },
     {
-      "name": "long non-read output is bounded",
-      "tool_name": "Bash",
+      "name": "long output from a harmless tool is bounded",
+      "tool_name": "mcp_neotoma_retrieve_entities",
       "tool_input": {
-        "command": "ls -la"
+        "entity_type": "note"
       },
       "tool_output": {
-        "stdout": "entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789"
+        "entities": "entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789 entry-0123456789"
       },
       "expect": {
         "output_capture": "redacted_summary",
@@ -1100,6 +1097,369 @@
           "FIXTURE-OLD-BODY",
           "FIXTURE-NEW-BODY"
         ]
+      }
+    },
+    {
+      "name": "harmless tool keeps a redacted summary",
+      "tool_name": "mcp_neotoma_retrieve_entities",
+      "tool_input": {
+        "entity_type": "note"
+      },
+      "tool_output": {
+        "note": "ran 12 tests\nAPI_TOKEN=fixture-placeholder-5\nall passed"
+      },
+      "expect": {
+        "output_capture": "redacted_summary",
+        "output_summary_contains": [
+          "ran 12 tests",
+          "API_TOKEN=<REDACTED>",
+          "all passed"
+        ],
+        "output_summary_excludes": [
+          "fixture-placeholder-5"
+        ]
+      }
+    },
+    {
+      "name": "unrecognised program that prints a bare token stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "fixture-cli auth print"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "absolute-path env dump withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "/usr/bin/env"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "env with a flag withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "env -0"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "set builtin dump withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "set"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "export listing withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "export -p"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "declare listing withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "declare -p"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "compgen listing withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "compgen -e"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "archive reader stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "zcat fixtures/archive.gz"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "pager-style viewer stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "view docs/notes.md"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "quote-obfuscated reader stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "c'a't docs/notes.md"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "variable-concatenated reader stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "p=ca; q=t; $p$q docs/notes.md"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "remote shell env dump withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "fly ssh console -C \"env\""
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "container inspect withholds output",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "docker inspect fixture-container"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-SECRET-BODY"
+      },
+      "expect": {
+        "output_capture": "withheld_secret_path",
+        "output_summary_excludes": [
+          "FIXTURE-SECRET-BODY"
+        ]
+      }
+    },
+    {
+      "name": "plain build command stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "npm test"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "directory listing stores no output text",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "ls -la"
+      },
+      "tool_output": {
+        "stdout": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "output_summary_excludes": [
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "credential-shaped search pattern is not stored as target_path",
+      "tool_name": "Grep",
+      "tool_input": {
+        "pattern": "API_TOKEN=fixture-placeholder-1",
+        "path": "/work/app/src"
+      },
+      "tool_output": {
+        "matches": []
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "target_path": "/work/app/src",
+        "input_summary_excludes": [
+          "fixture-placeholder-1"
+        ]
+      }
+    },
+    {
+      "name": "search pattern alone yields no target_path",
+      "tool_name": "Grep",
+      "tool_input": {
+        "pattern": "--password fixturepass12"
+      },
+      "tool_output": {
+        "matches": []
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "target_path_absent": true,
+        "input_summary_excludes": [
+          "fixturepass12"
+        ]
+      }
+    },
+    {
+      "name": "credential-bearing URL is not stored as target_path",
+      "tool_name": "Read",
+      "tool_input": {
+        "path": "https://fixtureuser:fixturepass@example.test/x"
+      },
+      "tool_output": {
+        "content": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "target_path_absent": true,
+        "input_summary_excludes": [
+          "fixturepass"
+        ]
+      }
+    },
+    {
+      "name": "credential-shaped text under a path key is not stored as target_path",
+      "tool_name": "Read",
+      "tool_input": {
+        "file": "token=fixture-placeholder-2"
+      },
+      "tool_output": {
+        "content": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "target_path_absent": true,
+        "input_summary_excludes": [
+          "fixture-placeholder-2"
+        ]
+      }
+    },
+    {
+      "name": "write with a credential-bearing URL stores no path metadata for it",
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "https://fixtureuser:fixturepass@example.test/x",
+        "content": "FIXTURE-FILE-BODY"
+      },
+      "tool_output": {
+        "ok": true
+      },
+      "expect": {
+        "input_capture": "metadata_only",
+        "target_path_absent": true,
+        "input_summary_excludes": [
+          "fixturepass",
+          "FIXTURE-FILE-BODY"
+        ]
+      }
+    },
+    {
+      "name": "path-shaped value is kept as target_path",
+      "tool_name": "Read",
+      "tool_input": {
+        "path": "/work/app/docs/notes.md"
+      },
+      "tool_output": {
+        "content": "FIXTURE-FILE-BODY"
+      },
+      "expect": {
+        "output_capture": "metadata_only",
+        "target_path": "/work/app/docs/notes.md"
       }
     }
   ],

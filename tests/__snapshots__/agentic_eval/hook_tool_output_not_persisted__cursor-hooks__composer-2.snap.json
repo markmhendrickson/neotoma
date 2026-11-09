@@ -92,6 +92,33 @@
     },
     {
       "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_82",
+        "target_entity_id": "ent_mock_79"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_89",
+        "target_entity_id": "ent_mock_86"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/create_relationship",
+      "body": {
+        "relationship_type": "REFERS_TO",
+        "source_entity_id": "ent_mock_96",
+        "target_entity_id": "ent_mock_93"
+      }
+    },
+    {
+      "method": "POST",
       "endpoint": "/store",
       "body": {
         "entities": [
@@ -181,7 +208,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 107,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "target_path": "/Users/agent/workspace/notes/README.md",
             "tool_name": "Read",
@@ -241,7 +268,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 88,
             "output_capture": "withheld_secret_path",
-            "output_summary": "[withheld: secret-bearing path; output text not stored]",
+            "output_summary": "[output withheld]",
             "status": null,
             "target_path": "/Users/agent/workspace/billing-service/.env",
             "tool_name": "Read",
@@ -301,7 +328,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 46,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "tool_name": "Shell",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
@@ -359,8 +386,8 @@
             "input_summary": "{\"command\":\"npm test\"}",
             "invoked_at": "<ts>",
             "output_bytes": 70,
-            "output_capture": "redacted_summary",
-            "output_summary": "{\"stdout\":\"ran 12 tests\\nAPI_TOKEN=<REDACTED>\\nall passed\"}",
+            "output_capture": "metadata_only",
+            "output_summary": "[output not stored]",
             "status": null,
             "tool_name": "Shell",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
@@ -419,7 +446,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 11,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "target_path": "/Users/agent/workspace/notes/summary.md",
             "tool_name": "Write",
@@ -479,7 +506,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 161,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "target_path": "/Users/agent/workspace/notes/echo.md",
             "tool_name": "Write",
@@ -539,7 +566,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 49,
             "output_capture": "metadata_only",
-            "output_summary": "[output text not stored: read-type tool]",
+            "output_summary": "[output not stored]",
             "status": null,
             "target_path": "docs/notes.md",
             "tool_name": "mcp_vcs_get_file_contents",
@@ -599,7 +626,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 34,
             "output_capture": "withheld_secret_path",
-            "output_summary": "[withheld: secret-bearing path; output text not stored]",
+            "output_summary": "[output withheld]",
             "status": null,
             "tool_name": "Shell",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
@@ -658,7 +685,7 @@
             "invoked_at": "<ts>",
             "output_bytes": 59,
             "output_capture": "withheld_secret_path",
-            "output_summary": "[withheld: secret-bearing path; output text not stored]",
+            "output_summary": "[output withheld]",
             "status": null,
             "tool_name": "mcp_neotoma_store",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
@@ -708,21 +735,197 @@
           {
             "cwd": "<env>",
             "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
+            "input_summary": "{\"entity_type\":\"note\"}",
+            "invoked_at": "<ts>",
+            "output_bytes": 68,
+            "output_capture": "redacted_summary",
+            "output_summary": "{\"note\":\"ran 12 tests\\nAPI_TOKEN=<REDACTED>\\nall passed\"}",
+            "status": null,
+            "tool_name": "mcp_neotoma_retrieve_entities",
+            "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:15>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 1,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": [
+              "ent_mock_72"
+            ],
+            "tool_invocation_count": 10,
+            "turn_id": "<id:4>",
+            "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
+            "input_summary": "{\"command\":\"fixture-cli auth print\"}",
+            "invoked_at": "<ts>",
+            "output_bytes": 34,
+            "output_capture": "metadata_only",
+            "output_summary": "[output not stored]",
+            "status": null,
+            "tool_name": "Shell",
+            "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:16>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 1,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": [
+              "ent_mock_79"
+            ],
+            "tool_invocation_count": 11,
+            "turn_id": "<id:4>",
+            "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_capture": "redacted_summary",
+            "input_summary": "{\"pattern\":\"API_TOKEN=<REDACTED>\",\"path\":\"/Users/agent/workspace/notes\"}",
+            "invoked_at": "<ts>",
+            "output_bytes": 14,
+            "output_capture": "metadata_only",
+            "output_summary": "[output not stored]",
+            "status": null,
+            "target_path": "/Users/agent/workspace/notes",
+            "tool_name": "Grep",
+            "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:17>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "context_source": "cursor-hook",
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "git_branch": "<env>",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "composer-2",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 1,
+            "session_id": "<id:1>",
+            "store_structured_calls": 1,
+            "stored_entity_ids": [
+              "ent_mock_86"
+            ],
+            "tool_invocation_count": 12,
+            "turn_id": "<id:4>",
+            "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1",
+            "working_directory": "<env>"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "<env>",
+            "data_source": "cursor-hook",
             "entity_type": "tool_invocation_failure",
             "error_class": "ERR_FILE_REJECTED",
-            "error_message_redacted": "[withheld: secret-bearing path; output text not stored]",
+            "error_message_redacted": "[output withheld]",
             "harness": "cursor",
             "hit_count_session": 1,
             "hook_event": "postToolUseFailure",
-            "invocation_shape": [
-              "file_path"
-            ],
+            "invocation_shape": {},
             "observed_at": "<ts>",
             "tool_name": "mcp_neotoma_store",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1"
           }
         ],
-        "idempotency_key": "<id:15>"
+        "idempotency_key": "<id:18>"
       }
     },
     {
@@ -744,7 +947,7 @@
             "neotoma_tool_failures": 1,
             "session_id": "<id:1>",
             "stored_entity_ids": [
-              "ent_mock_72"
+              "ent_mock_93"
             ],
             "turn_id": "<id:4>",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1",
@@ -772,7 +975,7 @@
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1:assistant"
           }
         ],
-        "idempotency_key": "<id:16>"
+        "idempotency_key": "<id:19>"
       }
     },
     {
@@ -797,12 +1000,12 @@
             "model": "composer-2",
             "neotoma_tool_failures": 1,
             "reminder_injected": true,
-            "retrieve_calls": 0,
+            "retrieve_calls": 1,
             "safety_net_used": false,
             "session_id": "<id:1>",
             "status": "completed",
             "store_structured_calls": 1,
-            "tool_invocation_count": 9,
+            "tool_invocation_count": 12,
             "turn_id": "<id:4>",
             "turn_key": "hook_tool_output_not_persisted__cursor-hooks__composer-2:turn-1",
             "working_directory": "<env>"
@@ -873,6 +1076,21 @@
       "output": {
         "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
       }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
     },
     {
       "hook": "postToolUse",

@@ -34,9 +34,8 @@ const INPUT_ARRAY_CAP = 1000;
 const OUTPUT_SCAN_CAP = 262144;
 const RESOLVE_CAP = 256;
 
-export const WITHHELD_SECRET_PATH_SUMMARY =
-  "[withheld: secret-bearing path; output text not stored]";
-export const WITHHELD_READ_SUMMARY = "[output text not stored: read-type tool]";
+export const WITHHELD_SECRET_PATH_SUMMARY = "[output withheld]";
+export const WITHHELD_READ_SUMMARY = "[output not stored]";
 
 // ---------------------------------------------------------------------------
 // Secret-bearing paths
@@ -225,13 +224,8 @@ const CAPTURE_PATH_KEYS = new Set([
   "targetfile",
   "target_directory",
   "notebook_path",
-  "uri",
   "directory",
   "dir",
-  "glob",
-  "glob_pattern",
-  "include",
-  "pattern",
 ]);
 
 /** Commands whose output is, or can be, a credential. */
@@ -244,7 +238,13 @@ const SECRET_SOURCE_COMMAND_RES: RegExp[] = [
   /(?<![A-Za-z0-9_-])gh\s+auth\s+(?:token|status)/i,
   /(?<![A-Za-z0-9_-])(?:aws\s+(?:secretsmanager|ssm)|vault\s+(?:read|kv)|kubectl\s+get\s+secrets?|fly\s+secrets|doppler\s+secrets)(?![A-Za-z0-9_-])/i,
   /(?<![A-Za-z0-9_-])printenv(?![A-Za-z0-9_-])/i,
-  /(?:^|[;&|(\s])env\s*(?:$|[;&|)>])/,
+  /(?:^|[;&|(\s/])env(?:\s|$)/,
+  /(?:^|[;&|(\s])set\s*(?:$|[;&|)>])/,
+  /(?<![A-Za-z0-9_-])(?:export|declare|typeset)\s+-[A-Za-z]*p(?![A-Za-z0-9_-])/,
+  /(?<![A-Za-z0-9_-])compgen\s+-[A-Za-z]*e/,
+  /(?<![A-Za-z0-9_-])(?:fly|flyctl)\s+ssh/i,
+  /(?<![A-Za-z0-9_-])(?:docker|podman)\s+(?:exec|inspect|logs)(?![A-Za-z0-9_-])/i,
+  /(?<![A-Za-z0-9_-])kubectl\s+(?:exec|logs|describe)(?![A-Za-z0-9_-])/i,
   /\/proc\/[^\s/]+\/environ/i,
   /\$\{?[A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASS|PASSWORD|PWD)[A-Za-z0-9_]*\}?/,
 ];
@@ -277,6 +277,17 @@ function stringMentionsSecretPath(text: string, cap: number, ctx: ScanContext): 
   return false;
 }
 
+/**
+ * A value is stored as path metadata only when it is path-shaped: no whitespace,
+ * no URL scheme other than file:, and nothing for the redaction to change. Anything
+ * else (a search pattern, a URL carrying credentials, credential-shaped text) is omitted.
+ */
+function pathShapedForMetadata(value: string): boolean {
+  if (!value || value.length > 512 || /\s/.test(value)) return false;
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value) && !/^file:/i.test(value)) return false;
+  return redactSecretText(value) === value;
+}
+
 interface CollectedInput {
   /** Values under well-known path keys (metadata only; first few). */
   paths: string[];
@@ -298,8 +309,12 @@ function collectInput(toolInput: unknown): CollectedInput {
       return;
     }
     if (typeof value === "string") {
-      if (CAPTURE_PATH_KEYS.has(key.toLowerCase()) && paths.length < 8) {
-        paths.push(value.slice(0, 512));
+      if (
+        CAPTURE_PATH_KEYS.has(key.toLowerCase()) &&
+        paths.length < 8 &&
+        pathShapedForMetadata(value)
+      ) {
+        paths.push(value);
       }
       if (stringMentionsSecretPath(value, INPUT_STRING_CAP, ctx)) secret = true;
       const head = value.length > INPUT_STRING_CAP ? value.slice(0, INPUT_STRING_CAP) : value;
@@ -517,14 +532,13 @@ export function isWriteTypeTool(toolName: unknown): boolean {
 
 /**
  * Positive classification of a tool as returning no file or fetched content:
- * Neotoma's own tools, a few planning/UI tools, and shell commands whose text
- * contains no read-like program or file-fetch verb. Anything else is treated as
- * a content-returning tool and stored as metadata only.
+ * Neotoma's own tools and a few planning/UI tools. Shell commands are NOT
+ * harmless: a program name says nothing about what it prints, so shell output is
+ * stored as metadata only like every other unclassified tool.
  */
 export function isHarmlessNonContentTool(toolName: unknown, toolInput: unknown): boolean {
   const name = typeof toolName === "string" ? toolName : "";
   if (isReadTypeTool(name, toolInput) || isWriteTypeTool(name)) return false;
-  if (shellCommandOf(toolInput) !== null) return true;
   if (isNeotomaFamily(name, toolInput)) return true;
   return toolNameTokens(name).some((t) => HARMLESS_TOOL_TOKENS.has(t));
 }
