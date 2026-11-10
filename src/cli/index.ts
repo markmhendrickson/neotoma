@@ -2703,7 +2703,7 @@ function normalizeInitMcpEnv(input?: string): InitMcpEnv | null {
   return null;
 }
 
-function normalizeInitMcpTransport(input?: string): InitMcpTransport | null {
+export function normalizeInitMcpTransport(input?: string): InitMcpTransport | null {
   const normalized = (input || "").trim().toLowerCase();
   if (!normalized) return null;
   if (
@@ -10424,6 +10424,7 @@ program
       skillsScope: opts.skillsScope === "project" ? "project" : "user",
       scope: opts.scope ?? "project",
       cwd,
+      mcpTransport: mcpTransport ?? null,
       runners: createDefaultSetupRunners({
         cwd,
         dryRun: Boolean(opts.dryRun),

@@ -18,7 +18,13 @@ import {
   writePermissionsForTool,
   toolFromString,
 } from "../../src/cli/permissions.ts";
-import { runSetup, buildVerifyLine, PRIVACY_TRANSPORT_SUMMARY } from "../../src/cli/setup.ts";
+import {
+  runSetup,
+  buildVerifyLine,
+  buildPrivacyTransportSummary,
+  SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE,
+  SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE,
+} from "../../src/cli/setup.ts";
 import { runPreflight } from "../../src/cli/preflight.ts";
 import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
@@ -596,9 +602,113 @@ describe("buildVerifyLine", () => {
     expect(line).toContain("path_fix_hint");
   });
 
-  it("PRIVACY_TRANSPORT_SUMMARY mentions local stdio and no network egress", () => {
-    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("local stdio MCP");
-    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("no network egress");
+  it.each(["b", "c"] as const)(
+    "privacy_transport_summary for stdio preset %s says local stdio with no network egress",
+    (preset) => {
+      const line = buildPrivacyTransportSummary(preset);
+      expect(line).toContain("local stdio MCP");
+      expect(line).toContain("no network egress");
+      expect(line).toContain(`preset ${preset}`);
+    }
+  );
+
+  it.each(["a", "d", "e"] as const)(
+    "privacy_transport_summary for network preset %s names signed HTTP /mcp and never claims no egress",
+    (preset) => {
+      const line = buildPrivacyTransportSummary(preset);
+      expect(line).toContain("signed HTTP /mcp");
+      expect(line).toContain("network requests");
+      expect(line).not.toContain("no network egress");
+      expect(line).not.toContain("local stdio");
+      expect(line).toContain(`preset ${preset}`);
+    }
+  );
+
+  it("privacy_transport_summary says plainly when the transport is undetermined", () => {
+    for (const t of [null, undefined]) {
+      const line = buildPrivacyTransportSummary(t);
+      expect(line).toContain("could not be determined");
+      expect(line).not.toMatch(/^Transport: local stdio MCP/);
+    }
+  });
+
+  it("every --mcp-transport value suggested in the summary is accepted by the CLI", async () => {
+    const { normalizeInitMcpTransport } = await import("../../src/cli/index.ts");
+    const lines = [
+      ...(["a", "b", "c", "d", "e"] as const).map((p) => buildPrivacyTransportSummary(p)),
+      buildPrivacyTransportSummary(null),
+    ];
+    const suggested = new Set<string>();
+    for (const line of lines) {
+      for (const m of line.matchAll(/--mcp-transport=([a-z0-9-]+)/g)) {
+        suggested.add(m[1]);
+      }
+    }
+    expect(suggested).toEqual(
+      new Set([SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE, SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE])
+    );
+    for (const value of suggested) {
+      expect(normalizeInitMcpTransport(value)).not.toBeNull();
+    }
+    expect(normalizeInitMcpTransport(SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE)).toBe("c");
+    expect(normalizeInitMcpTransport(SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE)).toBe("a");
+  });
+
+  async function runSetupWithTransport(
+    cwd: string,
+    mcpTransport: "a" | "b" | "c" | "d" | "e" | null,
+    mcpStep: { changed: boolean; skipped: boolean; reason?: string }
+  ) {
+    return runSetup({
+      tool: "cursor",
+      dryRun: false,
+      cwd,
+      mcpTransport,
+      skipHooks: true,
+      skipSkills: true,
+      skipPermissions: true,
+      runners: {
+        init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "already-initialized" }),
+        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, ...mcpStep }),
+        cliInstructionsConfigure: async () => ({ id: "cli-instructions", ok: true, changed: false, skipped: true }),
+      },
+    });
+  }
+
+  it("runSetup report describes the signed preset it configured, not stdio", async () => {
+    const cwd = await mkTmp("ntm-transport-signed");
+    try {
+      const report = await runSetupWithTransport(cwd, "a", { changed: true, skipped: false });
+      expect(report.privacy_transport_summary).toContain("signed HTTP /mcp");
+      expect(report.privacy_transport_summary).not.toContain("no network egress");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("runSetup report describes the stdio preset it configured", async () => {
+    const cwd = await mkTmp("ntm-transport-stdio");
+    try {
+      const report = await runSetupWithTransport(cwd, "c", { changed: true, skipped: false });
+      expect(report.privacy_transport_summary).toContain("local stdio MCP");
+      expect(report.privacy_transport_summary).toContain("no network egress");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("runSetup report says undetermined when the mcp step wrote nothing", async () => {
+    const cwd = await mkTmp("ntm-transport-skipped");
+    try {
+      const report = await runSetupWithTransport(cwd, "a", {
+        changed: false,
+        skipped: true,
+        reason: "already-configured",
+      });
+      expect(report.privacy_transport_summary).toContain("could not be determined");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
   });
 
   it("runSetup report includes verify_line and privacy_transport_summary", async () => {
@@ -615,8 +725,9 @@ describe("buildVerifyLine", () => {
         },
       });
       expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
-      expect(report.privacy_transport_summary).toContain("local stdio MCP");
-      expect(report.privacy_transport_summary).toContain("no network egress");
+      // No --mcp-transport was given, so the transport is not guessed.
+      expect(report.privacy_transport_summary).toContain("could not be determined");
+      expect(report.privacy_transport_summary).not.toContain("--mcp-transport=http");
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }

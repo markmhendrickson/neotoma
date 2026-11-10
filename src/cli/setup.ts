@@ -16,6 +16,7 @@ import { runHooksInstall } from "./hooks.js";
 import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
 import { writePermissionsForTool, toolFromString } from "./permissions.js";
+import type { McpTransportChoice } from "./mcp_config_scan.js";
 
 export interface SetupStepResult {
   id: string;
@@ -63,9 +64,66 @@ export function buildVerifyLine(doctor: Awaited<ReturnType<typeof runDoctor>>): 
   return `Neotoma installed at ${bin} (resolved via ${via}; ${ver}; data_dir=${dataDir}; mcp=${mcpLabel})`;
 }
 
-/** One-line privacy summary appended to setup output so privacy-conscious evaluators see it immediately. */
-export const PRIVACY_TRANSPORT_SUMMARY =
-  "Transport: local stdio MCP (no network egress). Override with --mcp-transport=http for signed HTTP /mcp proxy.";
+/**
+ * Privacy class of each `--mcp-transport` preset (see `neotomaServerEntriesForTransport`
+ * and `ensureAAuthKeysForSignedTransport` in mcp_config_scan.ts). Keyed by the preset
+ * type so adding a preset without classifying it is a type error.
+ */
+const MCP_TRANSPORT_PRIVACY: Record<
+  McpTransportChoice,
+  { kind: "stdio"; label: string } | { kind: "network"; label: string; endpoint: string }
+> = {
+  a: { kind: "network", label: "signed stdio shim + AAuth", endpoint: "signed HTTP /mcp" },
+  b: { kind: "stdio", label: "unsigned/local stdio" },
+  c: { kind: "stdio", label: "direct stdio" },
+  d: {
+    kind: "network",
+    label: "signed shim, prod API on both slots",
+    endpoint: "signed HTTP /mcp (prod)",
+  },
+  e: {
+    kind: "network",
+    label: "signed HTTP proxy, prod profile",
+    endpoint: "signed HTTP /mcp (prod profile)",
+  },
+};
+
+/**
+ * `--mcp-transport` values suggested in the summary. Each must be accepted by
+ * `normalizeInitMcpTransport` in index.ts (tests assert this).
+ */
+export const SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE = "stdio";
+export const SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE = "signed";
+
+/**
+ * One-line privacy/transport summary appended to setup output so privacy-conscious
+ * evaluators see it immediately. Describes the transport actually configured in this
+ * run; `null` means it could not be determined (no preset given, or nothing written).
+ */
+export function buildPrivacyTransportSummary(
+  transport: McpTransportChoice | null | undefined,
+  opts: { dryRun?: boolean } = {}
+): string {
+  const preset = transport ? MCP_TRANSPORT_PRIVACY[transport] : undefined;
+  if (!transport || !preset) {
+    return (
+      "Transport: could not be determined from this run; check your MCP client config. " +
+      `Pass --mcp-transport=${SUGGESTED_STDIO_TRANSPORT_FLAG_VALUE} for local stdio (no network egress) ` +
+      `or --mcp-transport=${SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE} for the signed HTTP /mcp proxy.`
+    );
+  }
+  const prefix = opts.dryRun ? "Transport (dry run, nothing written)" : "Transport";
+  if (preset.kind === "stdio") {
+    return (
+      `${prefix}: local stdio MCP, preset ${transport} (${preset.label}; no network egress). ` +
+      `Use --mcp-transport=${SUGGESTED_SIGNED_TRANSPORT_FLAG_VALUE} for the signed HTTP /mcp proxy.`
+    );
+  }
+  return (
+    `${prefix}: ${preset.endpoint} proxy, preset ${transport} (${preset.label}); ` +
+    "the MCP client makes signed HTTP network requests to the Neotoma /mcp endpoint."
+  );
+}
 
 export interface RunSetupOptions {
   tool?: string | ToolId | null;
@@ -82,6 +140,11 @@ export interface RunSetupOptions {
   skipSkills?: boolean;
   /** Install skills at project level or user level. */
   skillsScope?: "project" | "user";
+  /**
+   * MCP transport preset passed to the mcp-configure runner (`--mcp-transport`).
+   * Used only to describe the transport in `privacy_transport_summary`.
+   */
+  mcpTransport?: McpTransportChoice | null;
   /** Injected runners to keep setup pure + testable. */
   runners?: {
     init?: () => Promise<SetupStepResult>;
@@ -348,6 +411,10 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   }
 
   const doctorAfter = dryRun ? doctorBefore : await runDoctor({ cwd });
+  // Only describe a preset this run actually wrote (or would write, in a dry run).
+  // A skipped mcp step (e.g. already configured) leaves the existing transport unknown.
+  const mcpWritten = Boolean(mcpStep?.ok && (dryRun ? mcpStep.changed : !mcpStep.skipped));
+  const configuredTransport = mcpWritten ? (options.mcpTransport ?? null) : null;
   const overall = steps.every((s) => s.ok);
 
   return {
@@ -359,6 +426,6 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     doctor_after: doctorAfter,
     overall_ok: overall,
     verify_line: buildVerifyLine(doctorAfter),
-    privacy_transport_summary: PRIVACY_TRANSPORT_SUMMARY,
+    privacy_transport_summary: buildPrivacyTransportSummary(configuredTransport, { dryRun }),
   };
 }
